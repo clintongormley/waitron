@@ -17,6 +17,7 @@ import {
   BILL_PAYMENT_CHANGE_REFUSAL,
   captureError,
   printJobs,
+  saleReceiptGuests,
   saleSettlements,
   sales,
   invoiceSeries,
@@ -724,6 +725,35 @@ describe("settling a card payment of part of the bill", () => {
 
     expect(triggerRaised(completing, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
     expect(triggerRaised(failing, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+  });
+});
+
+describe("the guests a manager's confirmation stores", () => {
+  it("stores the party's count read when the manager confirms the card, as payments-api's attest does", async () => {
+    const billId = await tabWith("Caña");
+    suite.db.run(
+      sql`update parties set guest_count = 4
+          where id = (select party_id from working_orders where id = ${billId})`,
+    );
+    const paymentId = await insertPayment(billId, { applied: 300 });
+
+    const done = await inTx((tx) =>
+      completeBillPayment(tx, fiscal(), venue.cfg, paymentId, new Date(), {
+        attestedBy: OPERATOR,
+        note: "El datáfono muestra la operación",
+      }),
+    );
+
+    expect(done.invoice).not.toBeNull();
+    expect(
+      await inTx((tx) =>
+        tx
+          .select({ guests: saleReceiptGuests.guests })
+          .from(saleReceiptGuests)
+          .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
+          .where(eq(sales.workingOrderId, billId)),
+      ),
+    ).toEqual([{ guests: 4 }]);
   });
 });
 

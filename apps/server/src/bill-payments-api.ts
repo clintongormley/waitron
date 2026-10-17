@@ -14,6 +14,7 @@ import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { refundBillPayment, refundProvidersOf, refundTender } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertTakesTender } from "./device-session.js";
+import { readGuestsChoice } from "./receipt-guests.js";
 import type { Logger } from "./logger.js";
 import {
   overridePinAttempts,
@@ -112,6 +113,8 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     applied: moneyField(body.applied, "applied"),
     tip: moneyField(body.tip, "tip"),
   };
+  const guests = readGuestsChoice(body.guests);
+  if (guests !== undefined) request.guests = guests;
   const readerOnly = ["readerId", "allowOffline", "simulationOutcome"] as const;
   if (request.method === "card") {
     request.entry = oneOf(body.entry, ["manual", "reader"] as const, "entry");

@@ -3,7 +3,15 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentRefunds, billPayments, incidents, type SingletonRole } from "@waitron/db";
+import {
+  billPaymentRefunds,
+  billPayments,
+  incidents,
+  printJobs,
+  saleReceiptGuests,
+  sales,
+  type SingletonRole,
+} from "@waitron/db";
 import {
   insertCapturedPayment,
   insertFailedPayment,
@@ -20,6 +28,8 @@ import {
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { withPendingBillPayments } from "./boot.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
+import { printSaleReceipt } from "./till-sale.js";
 import type { Logger } from "./logger.js";
 import type { PassReport } from "./pass.js";
 import {
@@ -536,6 +546,66 @@ describe("the invoice a finished card payment issues", () => {
         ]),
       );
       expect(printed).toHaveLength(2);
+    } finally {
+      for (const row of held) {
+        venue.db.run(
+          sql`update devices set receipt_printer_id = ${row.receipt_printer_id} where id = ${row.id}`,
+        );
+      }
+    }
+  });
+});
+
+describe("the guests a finished card payment's receipt prints", () => {
+  async function countGuests(billId: string, guestCount: number): Promise<void> {
+    const [party] = venue.db.all<{ id: string; revision: number }>(
+      sql`select parties.id, parties.revision from parties
+          join working_orders on working_orders.party_id = parties.id
+          where working_orders.id = ${billId}`,
+    );
+    const counted = await send(venue.app, venue.cookie, "PUT", `/api/parties/${party!.id}/guests`, {
+      expectedPartyRevision: party!.revision,
+      guestCount,
+    });
+    expect(counted.status).toBe(200);
+  }
+
+  it("stores the party's count when the loop files it, and a Reprint after a change prints that count", async () => {
+    const r = await inTx(venue, (tx) =>
+      createPrinter(tx, { locationId: venue.cfg.locationId }, receiptPrinter("Comensales")),
+    );
+    const held = venue.db.all<{ id: string; receipt_printer_id: string | null }>(
+      sql`select id, receipt_printer_id from devices where id = ${venue.cfg.origin.deviceId}`,
+    );
+    venue.db.run(
+      sql`update devices set receipt_printer_id = ${r.id} where id = ${venue.cfg.origin.deviceId}`,
+    );
+    try {
+      const billId = await tabWith(venue, "Paella");
+      await countGuests(billId, 4);
+      await capturedPending(billId, 3500, { deviceId: venue.cfg.origin.deviceId });
+
+      expect(await settle()).toMatchObject({ received: 1 });
+      const stored = await inTx(venue, (tx) =>
+        tx
+          .select({ saleId: sales.id, guests: saleReceiptGuests.guests })
+          .from(saleReceiptGuests)
+          .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
+          .where(eq(sales.workingOrderId, billId)),
+      );
+      expect(stored).toEqual([{ saleId: expect.any(String), guests: 4 }]);
+
+      await countGuests(billId, 6);
+      await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, true);
+      const copies = await inTx(venue, (tx) =>
+        tx
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .where(eq(printJobs.saleId, stored[0]!.saleId))
+          .orderBy(sql`rowid`),
+      );
+      expect(copies).toHaveLength(2);
+      expect(decodeTicket(copies.at(-1)!.payload)).toContain("4 comensales");
     } finally {
       for (const row of held) {
         venue.db.run(

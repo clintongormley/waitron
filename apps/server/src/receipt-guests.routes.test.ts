@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  billPayments,
   deviceProfiles,
   devices,
   printJobs,
@@ -21,6 +22,7 @@ import { insertCapturedPayment, payments, SimulatorPaymentProvider } from "@wait
 import { createPrinter } from "@waitron/printing";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
+import { retryShapeOf, type BillPaymentRequest } from "./bill-payments.js";
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { ALL_MODULES } from "./modules.js";
@@ -32,7 +34,7 @@ import { decimal } from "@waitron/shared";
 import { offerProducts } from "./testing/zone-offers.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 import { createTable } from "./testing/live-table.js";
-import { seatTable } from "./parties.js";
+import { fingerprint, seatTable } from "./parties.js";
 import { payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
 import { addTabRound, createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import "./errors.js";
@@ -239,6 +241,8 @@ async function venue(db: Database): Promise<Venue> {
 }
 
 const CASH = { method: "cash", amount: "12.00" };
+
+const BASE_FINGERPRINT = "13f0e57e4ee5aeb6378c0fb791c1778c4cc7cd95712930833a0596fcfef4df90";
 
 /** Sells eight at 1,50 € (12,00 €) on `/api/sales`, with `extra` merged into the body. */
 async function sell(
@@ -680,5 +684,164 @@ describe("/api/pay with nothing to charge on a placed party bill", () => {
     expect((pay.body as { outcome: string }).outcome).toBe("captured");
     expect(await paymentsOf(suite.db, billId)).toEqual([]);
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 2 }]);
+  });
+});
+
+/** A part payment of the bill on `/payments`, with `extra` merged into the body. */
+async function payPart(
+  v: Venue,
+  billId: string,
+  extra: Record<string, unknown>,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const res = await v.app.request(`/api/working-orders/${billId}/payments`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: v.till },
+    body: JSON.stringify({
+      submissionId: randomUUID(),
+      kind: "contribution",
+      tip: "0.00",
+      ...extra,
+    }),
+  });
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+function cashPart(amount: string, extra: Record<string, unknown> = {}) {
+  return { amount, method: "cash", tendered: amount, applied: amount, ...extra };
+}
+
+/** A party of 4 on one bill of fourteen at 1,50 € (21,00 €), 10,00 € of it paid in cash. */
+async function partlyPaidBill(v: Venue): Promise<string> {
+  const billId = await partyBill(v, 4, { quantity: "14" });
+  expect((await payPart(v, billId, cashPart("10.00"))).status).toBe(200);
+  return billId;
+}
+
+describe("/payments keeps the guests of the payment that completes the bill", () => {
+  it("ignores the guests of a payment that leaves the bill unpaid, and stores the completing one's", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyBill(v, 4, { quantity: "14" });
+    expect((await payPart(v, billId, cashPart("10.00", { guests: 5 }))).status).toBe(200);
+    expect(await storedGuests(suite.db, billId)).toEqual([]);
+    const last = await payPart(v, billId, cashPart("11.00", { guests: 3 }));
+    expect(last.status).toBe(200);
+    expect(last.body.invoice).toBeDefined();
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 3 }]);
+    const [receipt] = await receipts(suite.db);
+    expect(receipt).toContain("3 comensales · por persona");
+    expect(receipt).toContain("7,00 €");
+  });
+
+  it("stores no line when a hand-keyed card completes it with null", async () => {
+    const v = await venue(suite.db);
+    const billId = await partlyPaidBill(v);
+    const last = await payPart(v, billId, {
+      amount: "11.00",
+      method: "card",
+      entry: "manual",
+      applied: "11.00",
+      guests: null,
+    });
+    expect(last.status).toBe(200);
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
+  });
+
+  it("stores the party's 4 when the completing payment sends no guests", async () => {
+    const v = await venue(suite.db);
+    const billId = await partlyPaidBill(v);
+    expect((await payPart(v, billId, cashPart("11.00"))).status).toBe(200);
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 4 }]);
+  });
+
+  it("stores the count of a reader card that completes it while the till waits", async () => {
+    const v = await venue(suite.db);
+    const billId = await partlyPaidBill(v);
+    const last = await payPart(v, billId, {
+      amount: "11.00",
+      method: "card",
+      entry: "reader",
+      applied: "11.00",
+      simulationOutcome: "captured",
+      guests: 2,
+    });
+    expect(last.status).toBe(200);
+    expect(last.body.outcome).toBe("received");
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 2 }]);
+  });
+
+  it("refuses guests 2.5 and writes no payment", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyBill(v, 4, { quantity: "14" });
+    const refused = await payPart(v, billId, cashPart("10.00", { guests: 2.5 }));
+    expect(refused).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "guests" } } },
+    });
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        tx.select().from(billPayments).where(eq(billPayments.workingOrderId, billId)),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("a bill payment's retry is matched on the payment alone, never its guests", () => {
+  async function storedPayments(db: Database, billId: string) {
+    return withTransaction(db, (tx) =>
+      tx
+        .select({ id: billPayments.id, fingerprint: billPayments.fingerprint })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, billId)),
+    );
+  }
+
+  it("replays a payment that leaves the bill unpaid whatever guests the resend carries", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyBill(v, 4, { quantity: "14" });
+    const submissionId = randomUUID();
+    const first = await payPart(v, billId, { submissionId, ...cashPart("10.00", { guests: 3 }) });
+    expect(first.status).toBe(200);
+    const paymentId = (first.body.payment as { id: string }).id;
+    for (const guests of [{ guests: 9 }, { guests: null }, {}]) {
+      const again = await payPart(v, billId, { submissionId, ...cashPart("10.00", guests) });
+      expect([again.status, (again.body.payment as { id: string } | undefined)?.id]).toEqual([
+        200,
+        paymentId,
+      ]);
+    }
+    const request: BillPaymentRequest = {
+      kind: "contribution",
+      method: "cash",
+      amount: "10.00",
+      tendered: "10.00",
+      submissionId,
+      applied: "10.00",
+      tip: "0.00",
+    };
+    expect(await storedPayments(suite.db, billId)).toEqual([
+      { id: paymentId, fingerprint: fingerprint(retryShapeOf(request)) },
+    ]);
+  });
+
+  it("stores the fingerprint a request with no guests was stored under before guests existed", async () => {
+    const v = await venue(suite.db);
+    const billId = await partyBill(v, 4, { quantity: "14" });
+    expect((await payPart(v, billId, cashPart("10.00"))).status).toBe(200);
+    // Measured on e3b6e09bb, before `/payments` read guests, for this same body.
+    expect((await storedPayments(suite.db, billId))[0]!.fingerprint).toBe(BASE_FINGERPRINT);
+  });
+
+  it("replays a completing payment re-sent with other guests, and the row keeps its count", async () => {
+    const v = await venue(suite.db);
+    const billId = await partlyPaidBill(v);
+    const submissionId = randomUUID();
+    const first = await payPart(v, billId, { submissionId, ...cashPart("11.00", { guests: 3 }) });
+    expect(first.status).toBe(200);
+    const again = await payPart(v, billId, { submissionId, ...cashPart("11.00", { guests: 9 }) });
+    expect(again.status).toBe(200);
+    expect((again.body.payment as { id: string }).id).toBe(
+      (first.body.payment as { id: string }).id,
+    );
+    expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 3 }]);
   });
 });

@@ -59,6 +59,7 @@ import { issueMoment } from "./issue-moment.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
+import { recordReceiptGuests, type GuestsChoice } from "./receipt-guests.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import {
@@ -135,6 +136,8 @@ export interface BillPaymentRequest extends BillPaymentAsk {
   simulationOutcome?: "captured" | "declined";
   applied: string;
   tip: string;
+  /** What the receipt prints if this payment completes the bill; absent stores the default then. */
+  guests?: number | null;
 }
 
 /** Money given back from one bill payment before the invoice. */
@@ -640,7 +643,12 @@ async function issueWhenFullyPaid(
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId: string | undefined,
-  options: { moneyMoved?: boolean; total?: Decimal; printers?: PrinterLookup },
+  options: {
+    moneyMoved?: boolean;
+    total?: Decimal;
+    printers?: PrinterLookup;
+    guests?: GuestsChoice;
+  },
 ): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
   const notYet = { invoice: null, total: options.total };
   const [order] = await tx
@@ -711,6 +719,7 @@ async function issueWhenFullyPaid(
   });
   const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
   await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
+  await recordReceiptGuests(tx, saleId, options.guests);
   await settleSale(tx, { saleId, tenders: tendersOfBill });
 
   const provided = await findPaymentsByBillPayments(
@@ -961,12 +970,13 @@ async function resultOf(
 
 /** A payment request as its retry fingerprint reads it: the lines in line order and every amount at
  * the money scale, an absent added tip as none, so a resend that spells the same request another
- * way is the same request. */
-function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
+ * way is the same request. `guests` is left out: a resend is matched on the payment alone. */
+export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
   const scaled = (value: string | undefined) =>
     value === undefined ? undefined : money(decimal(value));
   return {
     ...req,
+    guests: undefined,
     lines: req.lines?.slice().sort((a, b) => a.lineNo - b.lineNo),
     amount: scaled(req.amount),
     tendered: scaled(req.tendered),
@@ -1174,6 +1184,7 @@ export async function takeBillPayment(
       {
         total: begun.total,
         printers,
+        guests: req.guests,
       },
     );
     return resultOf(tx, deps, cfg, payment, invoice, total);
@@ -1227,6 +1238,7 @@ export async function completeBillPayment(
   billPaymentId: string,
   receivedAt: Date,
   attestation?: Attestation,
+  guests?: GuestsChoice,
 ): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
   const [payment] = await tx
     .update(billPayments)
@@ -1245,7 +1257,7 @@ export async function completeBillPayment(
     { ...cfg, origin: storedDeviceOrigin(payment!) },
     payment!.workingOrderId,
     payment!.requestedBy,
-    { moneyMoved: true },
+    { moneyMoved: true, guests },
   );
   return { payment: payment!, ...issued };
 }
@@ -1362,7 +1374,15 @@ export async function takeReaderBillPayment(
     return await withTransaction(deps.db, async (tx) => {
       if (result.state === "captured") {
         // A captured result carries its time (`PaymentResult`, provider.ts).
-        const done = await completeBillPayment(tx, deps, cfg, payment.id, result.settledAt!);
+        const done = await completeBillPayment(
+          tx,
+          deps,
+          cfg,
+          payment.id,
+          result.settledAt!,
+          undefined,
+          req.guests,
+        );
         return resultOf(tx, deps, cfg, done.payment, done.invoice, done.total);
       }
       if (!NOT_CHARGED.has(result.state)) {

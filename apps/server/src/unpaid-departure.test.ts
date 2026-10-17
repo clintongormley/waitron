@@ -1660,6 +1660,45 @@ describe("the guests its invoice's receipts print", () => {
     expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 4 }]);
   });
 
+  it("refuses a part payment on the departed bill, so its invoice is never filed again and the row stands", async () => {
+    const party = await seatedFor(4, "Botella tinto");
+    expect(
+      (
+        await depart(party.partyId, {
+          expectedPartyRevision: revisionOf(party.partyId),
+          reason: REASON,
+        })
+      ).status,
+    ).toBe(200);
+    const before = await salesOf(party.tabId);
+
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "10.00",
+        method: "cash",
+        tendered: "10.00",
+        applied: "10.00",
+        tip: "0.00",
+        guests: 2,
+      },
+    );
+
+    expect(paid).toEqual({
+      status: 409,
+      json: { code: "working_order.not_open", params: { workingOrderId: party.tabId } },
+    });
+    expect(await statusOf(venue, party.tabId)).toBe("placed");
+    expect(await salesOf(party.tabId)).toEqual(before);
+    expect(await paymentRows(venue, party.tabId)).toEqual([]);
+    expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 4 }]);
+  });
+
   it("stores the party's count on an invoice issued unpaid without a departure", async () => {
     const party = await seatedFor(3, "Botella tinto");
     await issueOrderInvoice(venue, venue.cfg, party.tabId, venue.operatorId);

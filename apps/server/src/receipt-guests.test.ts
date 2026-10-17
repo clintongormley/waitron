@@ -403,6 +403,16 @@ describe("the guests row written beside a recorded sale", () => {
     expect(await storedRows(saleId)).toEqual([{ guests: null }]);
   });
 
+  it("never clamps a sent count: 1000 is refused by the table's rule and writes nothing", async () => {
+    const { partyId, tabId } = await seat(v, await v.table("Fila 1001"), 4);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+    const saleId = await saleWithNoRow(tabId);
+    await expect(inTx(v, (tx) => recordReceiptGuests(tx, saleId, 1000))).rejects.toThrow(
+      /CHECK constraint failed/,
+    );
+    expect(await storedRows(saleId)).toEqual([]);
+  });
+
   it("writes nothing for a full invoice", async () => {
     const saleId = await fullInvoiceOfFour("Fila 6");
     await inTx(v, (tx) => recordReceiptGuests(tx, saleId, 5));
