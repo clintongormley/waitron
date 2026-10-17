@@ -25,6 +25,8 @@ export interface SeasonDraft {
   rows: readonly SeasonRow[];
   /** Ids of stored seasons the person has binned. */
   deleted: readonly string[];
+  /** The number the next new row's key takes; it only grows, so a key is never reused. */
+  next: number;
 }
 
 type RowError = "required" | "taken";
@@ -51,17 +53,17 @@ export function draftOf(seasons: readonly Season[]): SeasonDraft {
   const sorted = byStart(seasons);
   const first = seasonOnSorted(sorted, "2001-01-01");
   const at = first ? sorted.indexOf(first) : 0;
-  return { rows: [...sorted.slice(at), ...sorted.slice(0, at)].map(rowOf), deleted: [] };
+  return { rows: [...sorted.slice(at), ...sorted.slice(0, at)].map(rowOf), deleted: [], next: 1 };
 }
 
 const sameRow = (a: SeasonRow, b: SeasonRow): boolean =>
   a.id === b.id &&
-  a.name === b.name &&
+  a.name.trim() === b.name.trim() &&
   a.day === b.day &&
   a.month === b.month &&
   a.colour === b.colour;
 
-/** Whether two drafts hold the same rows, matched by key, and bin the same seasons. */
+/** Whether two drafts hold the same rows, matched by key and names trimmed, and bin the same seasons. */
 export function sameDraft(a: SeasonDraft, b: SeasonDraft): boolean {
   if (a.rows.length !== b.rows.length || a.deleted.length !== b.deleted.length) return false;
   const others = new Map(b.rows.map((row) => [row.key, row]));
@@ -75,10 +77,14 @@ export function sameDraft(a: SeasonDraft, b: SeasonDraft): boolean {
 
 /** The draft with a blank new row at the end, in the first colour no row has. */
 export function addRow(draft: SeasonDraft): SeasonDraft {
-  const taken = draft.rows.map((row) => Number(/^new-(\d+)$/.exec(row.key)?.[1] ?? 0));
-  const key = `new-${Math.max(0, ...taken) + 1}`;
-  const colour = firstUnusedCalendarColour(draft.rows);
-  return { ...draft, rows: [...draft.rows, { key, name: "", day: "", month: "", colour }] };
+  const row: SeasonRow = {
+    key: `new-${draft.next}`,
+    name: "",
+    day: "",
+    month: "",
+    colour: firstUnusedCalendarColour(draft.rows),
+  };
+  return { ...draft, rows: [...draft.rows, row], next: draft.next + 1 };
 }
 
 /** The draft without the row; a stored season still in `stored` is binned to be deleted. */
@@ -90,7 +96,7 @@ export function removeRow(draft: SeasonDraft, key: string, stored: readonly Seas
     id !== undefined && stored.some((season) => season.id === id)
       ? [...draft.deleted, id]
       : draft.deleted;
-  return { rows, deleted };
+  return { ...draft, rows, deleted };
 }
 
 /** The `MM-DD` the row's season runs until among the rows with a whole start, or null. */
@@ -179,11 +185,11 @@ export function mergeSeasonDraft(
   latest: readonly Season[],
 ): { draft: SeasonDraft; baseline: SeasonDraft; gone: string[] } {
   const fresh = draftOf(latest);
-  if (sameDraft(draft, baseline)) return { draft: fresh, baseline: fresh, gone: [] };
+  if (sameDraft(draft, baseline))
+    return { draft: { ...fresh, next: draft.next }, baseline: fresh, gone: [] };
 
   const was = new Map(baseline.rows.map((row) => [row.key, row]));
   const now = new Map(fresh.rows.map((row) => [row.key, row]));
-  const gone: string[] = [];
   const rows: SeasonRow[] = [];
   for (const row of draft.rows) {
     if (row.id === undefined) {
@@ -194,16 +200,13 @@ export function mergeSeasonDraft(
     const after = now.get(row.key);
     if (after === undefined) {
       // A row with no baseline row is one already kept as gone by an earlier merge.
-      if (before === undefined || !sameRow(row, before)) {
-        rows.push(row);
-        gone.push(row.key);
-      }
+      if (before === undefined || !sameRow(row, before)) rows.push(row);
       continue;
     }
     const base = before ?? after;
     rows.push({
       ...after,
-      name: row.name === base.name ? after.name : row.name,
+      name: row.name.trim() === base.name.trim() ? after.name : row.name,
       ...(sameStart(row, base) ? {} : { day: row.day, month: row.month }),
       colour: row.colour === base.colour ? after.colour : row.colour,
     });
@@ -212,15 +215,20 @@ export function mergeSeasonDraft(
   const placed = new Set([...rows.map((row) => row.key), ...deleted]);
   const added = fresh.rows.filter((row) => !placed.has(row.key));
   const kept = new Set(rows.map((row) => row.key));
-  return {
-    draft: { rows: [...rows, ...added], deleted },
-    baseline: {
-      rows: [
-        ...rows.flatMap((row) => now.get(row.key) ?? []),
-        ...fresh.rows.filter((row) => !kept.has(row.key)),
-      ],
-      deleted: [],
-    },
-    gone,
+  const merged: SeasonDraft = { rows: [...rows, ...added], deleted, next: draft.next };
+  const nextBaseline: SeasonDraft = {
+    rows: [
+      ...rows.flatMap((row) => now.get(row.key) ?? []),
+      ...fresh.rows.filter((row) => !kept.has(row.key)),
+    ],
+    deleted: [],
+    next: fresh.next,
   };
+  return { draft: merged, baseline: nextBaseline, gone: goneKeys(merged, nextBaseline) };
+}
+
+/** The stored rows in the draft whose season the baseline no longer holds. */
+export function goneKeys(draft: SeasonDraft, baseline: SeasonDraft): string[] {
+  const held = new Set(baseline.rows.map((row) => row.key));
+  return draft.rows.flatMap((row) => (row.id !== undefined && !held.has(row.key) ? [row.key] : []));
 }
