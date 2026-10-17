@@ -28,6 +28,7 @@ import {
   printers,
   printJobs,
   readTenant,
+  saleReceiptGuests,
   sales,
   tenantReceipts,
   tenants,
@@ -114,10 +115,12 @@ import {
   nameParty,
   orderForParty,
   pay,
+  revisionOf,
   seat,
   setupPartyVenue,
   split,
 } from "./testing/party-venue.js";
+import { setPartyGuests } from "./parties.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { printingAlertSource } from "./alert-sources.js";
@@ -2225,6 +2228,85 @@ describe("a party's receipt prints its guests and the amount per person", () => 
 
   it("prints no guests for a party seated with no count", async () => {
     expect(await receiptOfParty(null)).not.toContain("comensal");
+  });
+
+  /**
+   * A party of 4 that paid one Burger at 12,00 € in a department printing on request, whose sale
+   * holds `stored` as its receipt's guests.
+   */
+  async function partyWithStoredGuests(stored: number | null) {
+    const v = await setupPartyVenue(suite.db);
+    await configureReceipt(v.cfg, { mode: "on_request", printerId: await makePrinter(v.cfg) });
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 13"), 4);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+    await pay(v, tabId, "12.00");
+    await inTx(v, async (tx) => {
+      const [sale] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.workingOrderId, tabId));
+      await tx.insert(saleReceiptGuests).values({ saleId: sale!.id, guests: stored });
+    });
+    const deps = { db: v.db, backend: v.backend };
+    /** Each receipt printed since the last call. */
+    let seen = 0;
+    const newReceipts = async () => {
+      const jobs = await inTx(v, (tx) =>
+        tx
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .orderBy(sql`rowid`),
+      );
+      const all = jobs
+        .map((job) => decodeTicket(new Uint8Array(job.payload)))
+        .filter((text) => text.includes("TOTAL"));
+      const fresh = all.slice(seen);
+      seen = all.length;
+      return fresh;
+    };
+    const changeCountTo = async (guestCount: number) => {
+      const expectedPartyRevision = await revisionOf(v, partyId);
+      await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount, expectedPartyRevision }));
+    };
+    return {
+      newReceipts,
+      changeCountTo,
+      print: () => printSaleReceipt(deps, v.cfg, tabId, false),
+      reprint: () => reprintSale(deps, v.cfg, tabId),
+    };
+  }
+
+  it("prints the stored guests on Print receipt and every Reprint, whatever the party's count becomes", async () => {
+    const sale = await partyWithStoredGuests(5);
+    expect(await sale.newReceipts()).toEqual([]);
+
+    await sale.print();
+    const [original] = await sale.newReceipts();
+    expect(original).toContain("5 comensales · por persona");
+    expect(original).toContain("2,40 €");
+    expect(original).not.toContain("DUPLICADO");
+
+    await sale.reprint();
+    const [copy] = await sale.newReceipts();
+    expect(copy).toContain("5 comensales · por persona");
+    expect(copy).toContain("2,40 €");
+    expect(copy).toContain("DUPLICADO");
+
+    await sale.changeCountTo(6);
+    await sale.reprint();
+    const [later] = await sale.newReceipts();
+    expect(later).toContain("5 comensales · por persona");
+    expect(later).toContain("2,40 €");
+  });
+
+  it("prints no guests on Print receipt or Reprint when the stored row says none", async () => {
+    const sale = await partyWithStoredGuests(null);
+
+    await sale.print();
+    await sale.reprint();
+    const receipts = await sale.newReceipts();
+    expect(receipts).toHaveLength(2);
+    for (const receipt of receipts) expect(receipt).not.toContain("comensal");
   });
 });
 

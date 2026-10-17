@@ -11,6 +11,7 @@ import {
   printJobs,
   printers,
   receiptReprints,
+  saleReceiptGuests,
   sales,
   tenants,
 } from "@waitron/db";
@@ -155,6 +156,22 @@ describe("dashboard receipt reprint", () => {
     expect(detail.json).toMatchObject({
       reprints: [{ personName: "Administradora", printerName: "Recibos" }],
     });
+  });
+
+  it("prints the guests stored with the sale on the copy", async () => {
+    const billId = await placedIssuedBill(venue, "Caña");
+    expect((await collect(venue, billId, "3.00")).status).toBe(200);
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
+    );
+    await inTx(venue, (tx) => tx.insert(saleReceiptGuests).values({ saleId: sale!.id, guests: 5 }));
+    const answer = await post(venue.adminDashboard, billId, venue.printerId);
+    expect(answer.status).toBe(202);
+    const jobId = (answer.json as { jobId: string }).jobId;
+    const [job] = await inTx(venue, (tx) =>
+      tx.select().from(printJobs).where(eq(printJobs.id, jobId)),
+    );
+    expect(decodeTicket(job!.payload)).toContain("5 comensales · por persona");
   });
 
   it("prints on a second printer chosen for this copy", async () => {

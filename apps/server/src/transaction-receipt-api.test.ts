@@ -15,6 +15,7 @@ import {
   printJobs,
   receiptReprints,
   saleLines,
+  saleReceiptGuests,
   sales,
   saleSettlements,
   saleSubstitutions,
@@ -214,6 +215,18 @@ it("reprints a duplicate document with an audit row and no drawer or fiscal chan
   expect(after.prints.at(-1)).toMatchObject({ saleId: id, kind: "document" });
   expect(after.reprints.at(-1)).toMatchObject({ saleId: id, personId: venue.operatorId });
   expect(await snapshot()).toEqual(before);
+});
+it("prints the guests stored with the sale on its copy", async () => {
+  const id = await billlessSale(venue);
+  await inTx(venue, (tx) => tx.insert(saleReceiptGuests).values({ saleId: id, guests: 5 }));
+  const printed = (await jobs()).prints.length;
+  expect((await reprint(id)).status).toBe(200);
+  const { prints } = await jobs();
+  expect(prints).toHaveLength(printed + 1);
+  const { decodeTicket } = await import("./testing/decode-ticket.js");
+  const copy = decodeTicket(prints.at(-1)!.payload);
+  expect(copy).toContain("DUPLICADO");
+  expect(copy).toContain("5 comensales · por persona");
 });
 let projectionNumber = 900100;
 async function projectionInvoice(
