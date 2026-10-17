@@ -513,7 +513,7 @@ describe("saving a draft", () => {
     expect(draft.lines).toEqual([
       {
         ...sent,
-        course: { id: v.courseId, name: "Mains", displayOrder: 1 },
+        course: { id: v.courseId, name: "Mains", displayOrder: 1, heldUntilFired: true },
         id: draft.lines[0]!.id,
         quantity: "1.500",
         note: "no salt",
@@ -552,7 +552,7 @@ describe("saving a draft", () => {
     expect(draft.lines).toEqual([
       {
         ...item(v, "burger", lower),
-        course: { id: v.courseId, name: "Mains", displayOrder: 1 },
+        course: { id: v.courseId, name: "Mains", displayOrder: 1, heldUntilFired: true },
         id: draft.lines[0]!.id,
         quantity: "2.000",
         makeAt: null,
@@ -1523,6 +1523,23 @@ describe("a refused save writes nothing", () => {
     );
   });
 
+  it.each([true, false])(
+    "retains a deleted draft course's held setting (%s) for placement after reload",
+    async (heldUntilFired) => {
+      const v = await setupVenue();
+      const { partyId } = await seated(v);
+      await db
+        .update(kitchenCourses)
+        .set({ heldUntilFired })
+        .where(eq(kitchenCourses.id, v.courseId));
+      await save(v, partyId, ALEX, null, 0, [item(v, "beer", { courseId: v.courseId })]);
+      await inTx((tx) => deleteCourse(tx, v.cfg, v.courseId));
+
+      const [draft] = await draftsOf(v, partyId);
+      expect(draft!.lines[0]!.course).toMatchObject({ id: v.courseId, heldUntilFired });
+    },
+  );
+
   it("reads authoritative retained course metadata and ignores spoofed read metadata on new selections", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
@@ -1534,6 +1551,7 @@ describe("a refused save writes nothing", () => {
         id: kitchenCourses.id,
         name: kitchenCourses.name,
         displayOrder: kitchenCourses.displayOrder,
+        heldUntilFired: kitchenCourses.heldUntilFired,
       })
       .from(kitchenCourses)
       .where(eq(kitchenCourses.id, v.courseId));

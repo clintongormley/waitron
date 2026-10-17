@@ -3679,6 +3679,7 @@ describe("TillApi: a seated party", () => {
 
   const groups = [
     {
+      courseIds: [],
       id: "g1",
       position: 1,
       state: "fired",
@@ -3688,6 +3689,7 @@ describe("TillApi: a seated party", () => {
       summary: "2 × Caña",
     },
     {
+      courseIds: [],
       id: "g2",
       position: 2,
       state: "held",
@@ -3871,6 +3873,8 @@ describe("TillApi: a seated party", () => {
 
   it("readCurrentOrders GETs the party's Current orders", async () => {
     const answer = {
+      hasGroups: true,
+      retainedCourses: [],
       revision: 6,
       reminder: { groupId: "g2", dueAt: "2026-09-28T20:15:00.000Z" },
       groups: [
@@ -4347,6 +4351,7 @@ describe("TillApi: a party's drafts", () => {
       revision: 5,
       groups: [
         {
+          courseIds: [],
           id: "g1",
           position: 1,
           state: "fired",

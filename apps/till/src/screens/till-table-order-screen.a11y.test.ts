@@ -461,6 +461,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
 
     it("has no violations in a later addition's destination and held-group picker", async () => {
       const group = (id: string, position: number, state: OrderGroup["state"]): OrderGroup => ({
+        courseIds: [],
         id,
         position,
         state,
@@ -487,6 +488,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       state: OrderGroup["state"],
       lineIds: string[],
     ): OrderGroup => ({
+      courseIds: [],
       id,
       position,
       state,

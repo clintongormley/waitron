@@ -96,10 +96,11 @@ export function heldViews(
     .map((group) => ({
       id: group.id,
       position: group.position,
-      courseIds: new Set(
-        (current?.groups.find((entry) => entry.id === group.id)?.rows ?? []).flatMap((row) =>
+      courseIds: new Set([
+        ...group.courseIds,
+        ...(current?.groups.find((entry) => entry.id === group.id)?.rows ?? []).flatMap((row) =>
           row.courseId === null ? [] : [row.courseId],
         ),
-      ),
+      ]),
     }));
 }

@@ -180,6 +180,7 @@ describe("POST /api/parties/:id/groups", () => {
           firedAt: expect.any(String),
           remindAt: null,
           lineIds: [lines[0]!.id],
+          courseIds: [],
           summary: "2 × Caña",
         },
         {
@@ -189,6 +190,7 @@ describe("POST /api/parties/:id/groups", () => {
           firedAt: null,
           remindAt: null,
           lineIds: [lines[1]!.id, lines[2]!.id],
+          courseIds: [],
           summary: "1 × Tarta, 1 × Croquetas",
         },
       ],
@@ -788,6 +790,7 @@ describe("GET /api/parties/:id/groups", () => {
           firedAt: expect.any(String),
           remindAt: null,
           lineIds: [lines[0]!.id],
+          courseIds: [],
           summary: "1 × Caña",
         },
         {
@@ -797,6 +800,7 @@ describe("GET /api/parties/:id/groups", () => {
           firedAt: null,
           remindAt: null,
           lineIds: [lines[1]!.id],
+          courseIds: [],
           summary: "1 × Tarta",
         },
         {
@@ -806,6 +810,7 @@ describe("GET /api/parties/:id/groups", () => {
           firedAt: null,
           remindAt: null,
           lineIds: [lines[2]!.id],
+          courseIds: [],
           summary: "1 × Croquetas",
         },
       ],

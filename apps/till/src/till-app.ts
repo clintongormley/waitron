@@ -3,6 +3,7 @@ import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/ven
 import "./widgets/device-zones-dialog.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
+import { heldViews, placeFor } from "./state/draft-place.js";
 import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import type { BillRow, TransactionRow } from "./api/find-bill-types.js";
 import "./screens/till-find-bill-screen.js";
@@ -8851,7 +8852,7 @@ export class TillApp extends LitElement {
           if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
           // A restart with no sign-out keeps the session counter, so the next person may be in by now.
           if (carried && opened?.sync?.personId === carried.carrier && carried.lines.length > 0)
-            opened.sync.store.appendLines(carried.lines);
+            opened.sync.store.appendLines(this.#placeFirstOrder(carried.lines));
           this.#showDraft(opened);
         } catch (error) {
           if (session !== this.#operatorSession) return;
@@ -8881,6 +8882,27 @@ export class TillApp extends LitElement {
     } finally {
       if (offerRequest === this.#tableOfferRequest) this.tableOpening = false;
     }
+  }
+
+  #placeFirstOrder(lines: readonly OrderLine[]): OrderLine[] {
+    const placed: OrderLine[] = [];
+    for (const line of lines) {
+      const placement = placeFor(line.courseId ?? line.product.courseId ?? null, {
+        courses: this.courses,
+        held: [],
+        firstOrder: true,
+        placed: placed.map((row) => ({
+          courseId: row.courseId ?? row.product.courseId ?? null,
+          place: row.place!,
+        })),
+      });
+      if (placement.shift !== undefined) {
+        for (const row of placed)
+          if (row.place?.kind === "new" && row.place.slot >= placement.shift.from) row.place.slot++;
+      }
+      placed.push({ ...line, place: { ...placement.place } });
+    }
+    return placed;
   }
 
   /** A failed read, or no tab id, leaves an empty tab rather than blocking the operator. */
@@ -9145,6 +9167,32 @@ export class TillApp extends LitElement {
         }),
       requestLimitMs: TABLE_REQUEST_LIMIT_MS,
     });
+    sync.store.placer = (courseId, exceptIndex) => {
+      const courses = new Map([
+        ...sync.store.lines.flatMap((line) =>
+          line.course === undefined ? [] : [[line.course.id, line.course] as const],
+        ),
+        ...(this.currentOrders?.retainedCourses ?? []).map(
+          (course) => [course.id, course] as const,
+        ),
+        ...this.courses.map((course) => [course.id, course] as const),
+      ]);
+      return placeFor(courseId, {
+        courses: [...courses.values()],
+        held: heldViews(this.currentOrders, this.tabGroups),
+        firstOrder: this.currentOrders?.hasGroups === false,
+        placed: sync.store.lines.flatMap((line, index) =>
+          index === exceptIndex
+            ? []
+            : [
+                {
+                  courseId: line.courseId ?? line.product.courseId ?? null,
+                  place: line.place ?? { kind: "fire" as const },
+                },
+              ],
+        ),
+      });
+    };
     this.#draftSync = sync;
     // Subscribed before any screen, so a line's mark is set before the draft is drawn.
     sync.store.subscribe(() => {

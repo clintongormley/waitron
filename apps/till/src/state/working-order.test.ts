@@ -85,6 +85,68 @@ describe("WorkingOrderStore", () => {
     expect(changes).toBe(0);
   });
 
+  it("appends already-chosen lines as one unsaved edit without merging their places or metadata", () => {
+    const store = new WorkingOrderStore();
+    let changes = 0;
+    store.subscribe(() => changes++);
+    const lines: OrderLine[] = [
+      {
+        product: cafe,
+        quantity: "2",
+        note: "decaf",
+        courseId: "mains",
+        noMerge: true,
+        place: { kind: "new", slot: 2 },
+      },
+      { product: cafe, quantity: "1", place: { kind: "fire" } },
+    ];
+    store.appendLines(lines);
+    expect(
+      store.lines.map(({ product, quantity, note, courseId, noMerge, place }) => ({
+        productId: product.id,
+        quantity,
+        note,
+        courseId,
+        noMerge,
+        place,
+      })),
+    ).toEqual([
+      {
+        productId: "cafe",
+        quantity: "2",
+        note: "decaf",
+        courseId: "mains",
+        noMerge: true,
+        place: { kind: "new", slot: 2 },
+      },
+      {
+        productId: "cafe",
+        quantity: "1",
+        note: undefined,
+        courseId: undefined,
+        noMerge: undefined,
+        place: { kind: "fire" },
+      },
+    ]);
+    expect(store.dirty).toBe(true);
+    expect(changes).toBe(1);
+  });
+
+  it.each(["sending", "reload"] as const)(
+    "does not append chosen lines while %s holds edits",
+    (gate) => {
+      const store = new WorkingOrderStore();
+      if (gate === "sending") store.sending = true;
+      else store.lockEdits();
+      let changes = 0;
+      store.subscribe(() => changes++);
+      store.appendLines([{ product: cafe, quantity: "1" }]);
+      expect(store.lines).toEqual([]);
+      expect(store.dirty).toBe(false);
+      expect(changes).toBe(0);
+    },
+  );
+
   it("moves selected lines together, shifts later slots and emits one change", () => {
     const store = new WorkingOrderStore();
     store.loadFrom("draft", [

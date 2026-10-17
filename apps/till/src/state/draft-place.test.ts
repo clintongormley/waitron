@@ -313,6 +313,7 @@ const row = (lineId: string, courseId: string | null): CurrentOrderRow => ({
   extras: [],
 });
 const group = (id: string, position: number, state: "held" | "fired" = "held"): OrderGroup => ({
+  courseIds: [],
   id,
   position,
   state,
@@ -323,8 +324,16 @@ const group = (id: string, position: number, state: "held" | "fired" = "held"): 
 });
 
 describe("heldViews", () => {
+  it("keeps the retained course set when the group's dishes are hidden from Sent", () => {
+    expect(
+      heldViews(null, [{ ...group("g3", 3), courseIds: ["mains", "retained", "mains"] }]),
+    ).toEqual([{ id: "g3", position: 3, courseIds: new Set(["mains", "retained"]) }]);
+  });
+
   it("keeps held groups in firing order and collects recorded courses from every bill", () => {
     const current: CurrentOrders = {
+      hasGroups: true,
+      retainedCourses: [],
       revision: 3,
       reminder: null,
       ungrouped: [row("ungrouped", "desserts")],

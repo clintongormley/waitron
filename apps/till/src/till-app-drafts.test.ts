@@ -405,6 +405,59 @@ describe("W69 unassigned table draft", () => {
     await flush(el, 6);
   }
 
+  it("places carried dishes as a first table order only when the table is seated", async () => {
+    const { el } = await opening({
+      getTill: vi.fn().mockResolvedValue({
+        ...till(drillFormFactor),
+        courses: [
+          { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: false },
+          { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
+          { id: "desserts", name: "Desserts", displayOrder: 2, heldUntilFired: true },
+        ],
+      }),
+      seatTable: vi.fn(async () => {
+        api.getTablesState!.mockResolvedValue([
+          mesa4,
+          table(
+            "t9",
+            "9",
+            party({ id: "v-new", mainBillId: "wo-new", revision: 0, tableIds: ["t9"] }),
+          ),
+        ]);
+        return { partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+      }),
+    });
+    await tap(el, "Flan");
+    await tap(el, "Steak");
+    await tap(el, "Beer");
+    expect(draft(el).lines.map((line) => line.place)).toEqual([undefined, undefined, undefined]);
+    await back(el);
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el, 6);
+
+    expect(draft(el).lines.map((line) => ({ name: line.product.name, place: line.place }))).toEqual(
+      [
+        { name: "Flan", place: { kind: "new", slot: 2 } },
+        { name: "Steak", place: { kind: "new", slot: 1 } },
+        { name: "Beer", place: { kind: "fire" } },
+      ],
+    );
+    await back(el);
+    expect(server.drafts).toHaveLength(1);
+    expect(
+      server.drafts[0]!.lines.map(({ menuItemId, slot, joinGroupId, afterGroupId }) => ({
+        menuItemId,
+        slot,
+        joinGroupId,
+        afterGroupId,
+      })),
+    ).toEqual([
+      { menuItemId: "offer-flan", slot: 2, joinGroupId: null, afterGroupId: null },
+      { menuItemId: "offer-steak", slot: 1, joinGroupId: null, afterGroupId: null },
+      { menuItemId: "offer-beer", slot: 0, joinGroupId: null, afterGroupId: null },
+    ]);
+  });
+
   it("protects memory-only lines and clears unload protection when the edit is reverted", async () => {
     const { el } = await opening();
     expect(unloadCancelled()).toBe(false);
@@ -1752,6 +1805,7 @@ describe("till-app: sending the draft", () => {
 
   it("adds a later addition to the held group picked, naming it", async () => {
     const held: OrderGroup = {
+      courseIds: [],
       id: "g-mains",
       position: 1,
       state: "held",
@@ -2691,8 +2745,149 @@ describe("till-app: how long a send may take", () => {
 });
 
 describe("till-app: a later addition is decided from the table's own groups", () => {
+  const placementCourses = [
+    { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: false },
+    { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
+    { id: "desserts", name: "Desserts", displayOrder: 2, heldUntilFired: true },
+  ];
+  const placementGroup = (id: string, position: number, courseIds: string[]): OrderGroup => ({
+    id,
+    position,
+    courseIds,
+    state: "held",
+    firedAt: null,
+    remindAt: null,
+    lineIds: [],
+    summary: id,
+  });
+  async function placementApp(
+    hasGroups: boolean,
+    groups: OrderGroup[] = [],
+    retainedCourses = placementCourses,
+  ) {
+    const mounted = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till(drillFormFactor), courses: placementCourses }),
+      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups }),
+      readCurrentOrders: vi.fn().mockResolvedValue({
+        revision: 3,
+        hasGroups,
+        retainedCourses,
+        groups: [],
+        ungrouped: [],
+        reminder: null,
+      }),
+    });
+    await openMesa(mounted.el);
+    return mounted;
+  }
+
+  it.each([
+    { story: "first drinks", hasGroups: false, groups: [], dish: "Beer", place: { kind: "fire" } },
+    {
+      story: "first main",
+      hasGroups: false,
+      groups: [],
+      dish: "Steak",
+      place: { kind: "new", slot: 1 },
+    },
+    {
+      story: "removed groups",
+      hasGroups: true,
+      groups: [],
+      dish: "Steak",
+      place: { kind: "fire" },
+    },
+    {
+      story: "matching Mains",
+      hasGroups: true,
+      groups: [placementGroup("g-main", 2, ["mains"])],
+      dish: "Steak",
+      place: { kind: "join", groupId: "g-main" },
+    },
+    {
+      story: "a drink beside held Mains",
+      hasGroups: true,
+      groups: [placementGroup("g-main", 2, ["mains"])],
+      dish: "Beer",
+      place: { kind: "fire" },
+    },
+    {
+      story: "Desserts after Mains",
+      hasGroups: true,
+      groups: [placementGroup("g-main", 2, ["mains"])],
+      dish: "Flan",
+      place: { kind: "new", slot: 1 },
+    },
+    {
+      story: "late main beside Desserts",
+      hasGroups: true,
+      groups: [placementGroup("g-dessert", 3, ["desserts"])],
+      dish: "Steak",
+      place: { kind: "fire" },
+    },
+    {
+      story: "matching Desserts",
+      hasGroups: true,
+      groups: [placementGroup("g-dessert", 3, ["desserts"])],
+      dish: "Flan",
+      place: { kind: "join", groupId: "g-dessert" },
+    },
+  ])(
+    "places a tapped dish using the server's table history: $story",
+    async ({ hasGroups, groups, dish, place }) => {
+      const { el } = await placementApp(hasGroups, groups);
+      await tap(el, dish);
+      expect(draft(el).lines.map((line) => line.place)).toEqual([place]);
+    },
+  );
+
+  it("sorts first-order courses even when dessert is tapped before a main, and emits one change per tap", async () => {
+    const { el } = await placementApp(false);
+    const changed = vi.fn();
+    draft(el).subscribe(changed);
+    await tap(el, "Flan");
+    await tap(el, "Steak");
+    expect(draft(el).lines.map((line) => ({ name: line.product.name, place: line.place }))).toEqual(
+      [
+        { name: "Flan", place: { kind: "new", slot: 2 } },
+        { name: "Steak", place: { kind: "new", slot: 1 } },
+      ],
+    );
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses retained course ordering when a held course is absent from the active course list", async () => {
+    const { el } = await placementApp(
+      true,
+      [placementGroup("g-retained", 2, ["retained-starter"])],
+      [{ id: "retained-starter", name: "Old starter", displayOrder: 0, heldUntilFired: true }],
+    );
+    await tap(el, "Flan");
+    expect(draft(el).lines[0]!.place).toEqual({ kind: "new", slot: 1 });
+  });
+
+  it("replaces only a changed line's destination and keeps manual placement across a table refresh", async () => {
+    const { el } = await placementApp(false);
+    await tap(el, "Steak");
+    await tap(el, "Flan");
+    draft(el).setLinePlaces([1], { kind: "new", slot: 4 });
+    draft(el).setLineCourse(0, "desserts");
+    expect(draft(el).lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 4 },
+      { kind: "new", slot: 4 },
+    ]);
+    await back(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    expect(draft(el).lines.map((line) => line.place)).toEqual([
+      { kind: "new", slot: 4 },
+      { kind: "new", slot: 4 },
+    ]);
+  });
+
   it("treats a restored draft as a first order when the table it opens has no group", async () => {
     const held: OrderGroup = {
+      courseIds: [],
       id: "g-7",
       position: 1,
       state: "held",
@@ -2828,6 +3023,7 @@ describe("till-app: a table open that another overtakes", () => {
 describe("till-app: an order that moves to a party whose groups answer late", () => {
   it("decides a later addition from the new party's groups, not the old party's", async () => {
     const held: OrderGroup = {
+      courseIds: [],
       id: "g-9",
       position: 1,
       state: "held",

@@ -582,9 +582,14 @@ it("moves a table dish with one submission id and reloads its current orders", a
     stationId: "kitchen",
     moved: [{ workingOrderLineId: "line-1", fromStationId: "bar" }],
   });
-  const readCurrentOrders = vi
-    .fn()
-    .mockResolvedValue({ revision: 1, reminder: null, groups: [], ungrouped: [] });
+  const readCurrentOrders = vi.fn().mockResolvedValue({
+    hasGroups: false,
+    retainedCourses: [],
+    revision: 1,
+    reminder: null,
+    groups: [],
+    ungrouped: [],
+  });
   const { el } = await mountApp({
     ...seatedFloor(),
     listStations,

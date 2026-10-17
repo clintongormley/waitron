@@ -13,6 +13,7 @@ import {
 } from "@waitron/catalogue";
 import {
   orderGroups,
+  kitchenCourses,
   serviceCommands,
   parties,
   withTransaction,
@@ -41,6 +42,7 @@ import {
   fireGroup,
   moveLinesToGroup,
   readCurrentOrders,
+  listOrderGroups,
   releaseReminder,
   reorderHeldGroups,
   snoozeReminder,
@@ -1015,6 +1017,73 @@ describe("readCurrentOrders (spec §4)", () => {
     });
   });
 
+  it("distinguishes a first order from a table whose groups have all been removed", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    expect(await currentOrders(s.partyId)).toMatchObject({ hasGroups: false, groups: [] });
+    const sent = await group(v, s.partyId, "hold", [line(v, "steak")]);
+    await suite.db.update(orderGroups).set({ state: "removed" }).where(eq(orderGroups.id, sent.id));
+
+    expect(await currentOrders(s.partyId)).toMatchObject({ hasGroups: true, groups: [] });
+    const other = await seated(v);
+    expect(await currentOrders(other.partyId)).toMatchObject({ hasGroups: false, groups: [] });
+  });
+
+  it("reads a held group's distinct recorded courses across bills, including a deleted course", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const mains = await inTx((tx) => createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 }));
+    const desserts = await inTx((tx) =>
+      createCourse(tx, v.cfg, { name: "Desserts", displayOrder: 3 }),
+    );
+    const held = await group(v, s.partyId, "hold", [
+      { ...line(v, "steak", "2"), courseId: mains.id },
+      { ...line(v, "flan"), courseId: desserts.id },
+      line(v, "water"),
+    ]);
+    const steak = (await linesByName(s.partyId)).find((row) => row.name === "steak")!;
+    await inTx(async (tx) =>
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: steak.lineNo, quantity: "1" }], {
+        expectedPartyRevision: await revisionOf(s.partyId),
+        operatorId: MIA,
+      }),
+    );
+    await inTx((tx) => deleteCourse(tx, v.cfg, mains.id));
+    const read = await inTx((tx) => listOrderGroups(tx, s.partyId));
+    expect(read.groups).toEqual([
+      expect.objectContaining({
+        id: held.id,
+        courseIds: [mains.id, desserts.id],
+      }),
+    ]);
+  });
+
+  it("carries retained course ordering and held settings even when the course is no longer active", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const mains = await inTx((tx) => createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 }));
+    const starter = await inTx((tx) =>
+      createCourse(tx, v.cfg, { name: "Starter", displayOrder: 1, heldUntilFired: false }),
+    );
+    const unused = await inTx((tx) => createCourse(tx, v.cfg, { name: "Unused", displayOrder: 0 }));
+    await group(v, s.partyId, "hold", [
+      { ...line(v, "steak"), courseId: mains.id },
+      { ...line(v, "water"), courseId: starter.id },
+    ]);
+    await inTx((tx) => deleteCourse(tx, v.cfg, mains.id));
+    await inTx((tx) => deleteCourse(tx, v.cfg, starter.id));
+    expect(await currentOrders(s.partyId)).toMatchObject({
+      retainedCourses: [
+        { id: starter.id, name: "Starter", displayOrder: 1, heldUntilFired: false },
+        { id: mains.id, name: "Mains", displayOrder: 2, heldUntilFired: true },
+      ],
+    });
+    expect(
+      (await suite.db.select().from(kitchenCourses).where(eq(kitchenCourses.id, unused.id)))[0]!
+        .active,
+    ).toBe(true);
+  });
+
   it.each([
     { dish: "steak", deleted: false },
     { dish: "steak", deleted: true },
@@ -1095,6 +1164,8 @@ describe("readCurrentOrders (spec §4)", () => {
 
     expect(read).toEqual({
       revision: await revisionOf(s.partyId),
+      hasGroups: true,
+      retainedCourses: [],
       reminder: { groupId: mains.id, dueAt: null },
       groups: [
         {
@@ -1250,6 +1321,8 @@ describe("readCurrentOrders (spec §4)", () => {
 
     expect(await currentOrders(s.partyId)).toEqual({
       revision: await revisionOf(s.partyId),
+      hasGroups: false,
+      retainedCourses: [],
       reminder: null,
       groups: [],
       ungrouped: [],

@@ -91,6 +91,7 @@ export interface OrderGroup {
   away?: true;
   /** The group's dish lines, whichever of the party's bills they sit on. */
   lineIds: string[];
+  courseIds: string[];
   /** The dishes by staff name, e.g. "2 × Steak, 1 × Fish". */
   summary: string;
 }
@@ -1047,6 +1048,7 @@ async function readGroups(
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
       quantity: workingOrderLines.quantity,
+      courseId: workingOrderLines.courseId,
     })
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
@@ -1090,6 +1092,9 @@ async function readGroups(
       ...(readyGroups.has(group.id) ? { ready: true as const } : {}),
       ...(awayGroups.has(group.id) ? { away: true as const } : {}),
       lineIds: own.map((line) => line.id),
+      courseIds: [
+        ...new Set(own.flatMap((line) => (line.courseId === null ? [] : [line.courseId]))),
+      ],
       summary: [...counts]
         .map(
           ([label, quantity]) =>
@@ -1259,6 +1264,8 @@ export interface CurrentOrderGroup {
 /** What the party has ordered and what is known of it (spec §4 Current orders). */
 export interface CurrentOrders {
   revision: number;
+  hasGroups: boolean;
+  retainedCourses: { id: string; name: string; displayOrder: number; heldUntilFired: boolean }[];
   reminder: ReleaseReminder | null;
   /** In sequence, removed ones left out. */
   groups: CurrentOrderGroup[];
@@ -1308,7 +1315,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       devices,
       and(eq(orderGroups.state, "fired"), eq(devices.id, orderGroups.firedByDeviceId)),
     )
-    .where(and(eq(orderGroups.partyId, partyId), ne(orderGroups.state, "removed")))
+    .where(eq(orderGroups.partyId, partyId))
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
   const lines = await tx
     .select({
@@ -1316,6 +1323,12 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       workingOrderId: workingOrderLines.workingOrderId,
       lineNo: workingOrderLines.lineNo,
       courseId: workingOrderLines.courseId,
+      course: {
+        id: kitchenCourses.id,
+        name: kitchenCourses.name,
+        displayOrder: kitchenCourses.displayOrder,
+        heldUntilFired: kitchenCourses.heldUntilFired,
+      },
       parentLineId: workingOrderLines.parentLineId,
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
@@ -1337,6 +1350,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(and(inArray(workingOrders.partyId, family), onShownBill()))
     .orderBy(
@@ -1369,21 +1383,25 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       },
     ]);
   }
-  const shown: CurrentOrderGroup[] = groups.map(({ createdAt, ...group }) => ({
-    ...group,
-    state: group.state as "held" | "fired",
-    // `order_groups_fired_at_ck` requires `fired_at` exactly when the group is fired.
-    sentAt: group.state === "fired" ? group.firedAt! : createdAt,
-    rows: [],
-  }));
+  const shown: CurrentOrderGroup[] = groups
+    .filter((group) => group.state !== "removed")
+    .map(({ createdAt, ...group }) => ({
+      ...group,
+      state: group.state as "held" | "fired",
+      // `order_groups_fired_at_ck` requires `fired_at` exactly when the group is fired.
+      sentAt: group.state === "fired" ? group.firedAt! : createdAt,
+      rows: [],
+    }));
   const byId = new Map(shown.map((group) => [group.id, group]));
   const ungrouped: CurrentOrderRow[] = [];
   const dishes: { groupId: string | null; servedAt: string | null }[] = [];
+  const retainedCourses = new Map<string, CurrentOrders["retainedCourses"][number]>();
   for (const line of lines) {
     if (line.parentLineId !== null) continue;
     const group = line.groupId === null ? undefined : byId.get(line.groupId);
     if (line.groupId !== null && group === undefined) continue;
     dishes.push(line);
+    if (line.course !== null) retainedCourses.set(line.course.id, line.course);
     const row: CurrentOrderRow = {
       lineId: line.id,
       ...(nutrition.has(line.id) ? { nutrition: nutrition.get(line.id)! } : {}),
@@ -1418,6 +1436,10 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     party.state === "open" ? await VENUE_SERVICE.readReleaseReminderMinutes(tx) : null;
   return {
     revision: party.revision,
+    hasGroups: groups.length > 0,
+    retainedCourses: [...retainedCourses.values()].sort(
+      (a, b) => a.displayOrder - b.displayOrder || a.id.localeCompare(b.id),
+    ),
     reminder: releaseReminder(shown, dishes, minutes),
     groups: shown,
     ungrouped,

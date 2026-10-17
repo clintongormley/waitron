@@ -5855,6 +5855,7 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     const receiptLanguages = ["es-ES", "ca-ES"];
     const groups = [
       {
+        courseIds: [],
         id: "g-1",
         position: 1,
         state: "held",

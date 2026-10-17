@@ -567,6 +567,7 @@ export interface OrderGroup {
   /** Present only when every fired kitchen item of the group has left the pass. */
   away?: true;
   lineIds: string[];
+  courseIds: string[];
   summary: string;
 }
 
@@ -629,6 +630,8 @@ export interface CurrentOrderGroup {
 /** What the party has ordered and what is known of it, groups in sequence. */
 export interface CurrentOrders {
   revision: number;
+  hasGroups: boolean;
+  retainedCourses: TillCourse[];
   reminder: ReleaseReminder | null;
   groups: CurrentOrderGroup[];
   /** Dish rows in no group. */

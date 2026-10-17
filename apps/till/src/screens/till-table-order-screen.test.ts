@@ -203,6 +203,7 @@ function underTapSize(controls: Iterable<Element>): string[] {
 
 function orderGroup(id: string, state: OrderGroup["state"]): OrderGroup {
   return {
+    courseIds: [],
     id,
     position: 1,
     state,

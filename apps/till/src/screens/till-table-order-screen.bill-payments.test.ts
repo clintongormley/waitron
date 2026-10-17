@@ -259,6 +259,7 @@ describe("till-table-order-screen: items already paid for", () => {
 
   it("keeps a held dish paid for held in Current orders, marked paid", async () => {
     const held: OrderGroup = {
+      courseIds: [],
       id: "g-2",
       position: 2,
       state: "held",
@@ -268,6 +269,8 @@ describe("till-table-order-screen: items already paid for", () => {
       remindAt: null,
     };
     const currentOrders: CurrentOrders = {
+      hasGroups: true,
+      retainedCourses: [],
       groups: [
         currentGroup("g-2", 2, "held", [
           row("line-3", "Tiramisu", "1.000", {

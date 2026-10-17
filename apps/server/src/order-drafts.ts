@@ -50,7 +50,7 @@ export interface DraftLine {
   note: string | null;
   quantity: string;
   courseId: string | null;
-  course?: { id: string; name: string; displayOrder: number };
+  course?: { id: string; name: string; displayOrder: number; heldUntilFired: boolean };
   makeAt?: string | null;
   noMerge: boolean;
   slot: number;
@@ -834,6 +834,7 @@ async function storedLines(
         id: kitchenCourses.id,
         name: kitchenCourses.name,
         displayOrder: kitchenCourses.displayOrder,
+        heldUntilFired: kitchenCourses.heldUntilFired,
       },
     })
     .from(orderDraftLines)

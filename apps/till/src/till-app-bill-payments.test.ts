@@ -2684,6 +2684,7 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
       state: null,
     });
     const held: OrderGroup = {
+      courseIds: [],
       id: "g-2",
       position: 2,
       state: "held",
@@ -2693,6 +2694,8 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
       summary: "1 × Tiramisu",
     };
     const currentOrders: CurrentOrders = {
+      hasGroups: true,
+      retainedCourses: [],
       revision: 3,
       reminder: null,
       groups: [

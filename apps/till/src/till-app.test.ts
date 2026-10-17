@@ -8839,6 +8839,7 @@ describe("till-app", () => {
         firedAt: null,
       };
       const heldGroup = {
+        courseIds: [],
         id: "g1",
         position: 1,
         state: "held" as const,

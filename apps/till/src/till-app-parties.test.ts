@@ -4581,6 +4581,7 @@ describe("till-app: the order's groups", () => {
 
   function groupOf(id: string, position: number, state: OrderGroup["state"]): OrderGroup {
     return {
+      courseIds: [],
       id,
       position,
       state,
@@ -5224,6 +5225,7 @@ describe("till-app: the order's groups", () => {
               firedAt: group.state === "fired" ? at : null,
               remindAt: null,
               lineIds: own.map((line) => line.id),
+              courseIds: [],
               summary: own.map((line) => `${Number(line.quantity)} × ${line.name}`).join(", "),
             };
           });
@@ -6066,6 +6068,7 @@ describe("till-app: submitting the draft", () => {
             continue;
           }
           groups.push({
+            courseIds: [],
             id: `g${groups.length + 1}`,
             position: groups.length + 1,
             state: group.release === "fire" ? "fired" : "held",
@@ -6207,6 +6210,7 @@ describe("till-app: submitting the draft", () => {
       order.shadowRoot!.querySelector<WtCombobox>(`[data-round-course="${index}"]`)!.value;
 
     const firedGroup = (id: string, summary: string): OrderGroup => ({
+      courseIds: [],
       id,
       position: 1,
       state: "fired",
@@ -6654,11 +6658,18 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
 // groups fall back to this bill's lines.
 describe("till-app: Current orders", () => {
   const noCurrentOrders = () => ({
-    readCurrentOrders: vi
-      .fn()
-      .mockResolvedValue({ revision: 3, reminder: null, groups: [], ungrouped: [] }),
+    readCurrentOrders: vi.fn().mockResolvedValue({
+      hasGroups: false,
+      retainedCourses: [],
+      revision: 3,
+      reminder: null,
+      groups: [],
+      ungrouped: [],
+    }),
   });
   const orders: CurrentOrders = {
+    hasGroups: true,
+    retainedCourses: [],
     revision: 3,
     reminder: { groupId: "g2", dueAt: "2026-09-28T20:15:00.000Z" },
     groups: [
@@ -6827,6 +6838,8 @@ describe("till-app: Current orders", () => {
 
   it("moves a held row on another open bill of the party from Current orders", async () => {
     const heldOnCheck: CurrentOrders = {
+      hasGroups: true,
+      retainedCourses: [],
       revision: 3,
       reminder: null,
       groups: [
@@ -6866,6 +6879,7 @@ describe("till-app: Current orders", () => {
         revision: 3,
         groups: [
           {
+            courseIds: [],
             id: "g1",
             position: 1,
             state: "held",
