@@ -1408,9 +1408,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
     editor, and the long press then drag that picks a run (`day-picking.ts`), were checked only
     under headless Chromium's touch emulation. Check on an Android and an iOS phone that the page
     stops scrolling, no number is selected, and no click or menu follows the lift.
-  - Add `to` to Opening hours' address words. `apps/dashboard/src/navigation.ts` does not list the
-    special-day address's new `to`. Nothing breaks, because that list keeps words it does not name,
-    but adding it changes an exact-match check in `navigation.test.ts`.
+  - Add `to` and `week` to Opening hours' address words. `apps/dashboard/src/navigation.ts` does not
+    list the special-day address's new `to` or the Week's `week`. Nothing breaks, because that list
+    keeps words it does not name, but adding them changes an exact-match check in
+    `navigation.test.ts`.
   - Move the pointer-gesture commands' type declarations into `packages/ui`. They live in
     `packages/venue-service/src/dashboard/pointer-gestures.d.ts`, beside their one user; the commands
     themselves are in `packages/ui/src/vitest-pointer-gestures.ts`. Move them when a second package

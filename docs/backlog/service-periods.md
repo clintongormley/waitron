@@ -236,8 +236,6 @@ the season schema and routes. Migration: a colour per season (pre-live, so no da
 **A722 (owner, 2026-10-15).** Mockups: [Week](mockups/a718-a727-calendar-and-stations/04-week-view.png),
 [on a phone](mockups/a718-a727-calendar-and-stations/05-week-view-phone.png).
 
-Registered in page search as `venue-service:week` (Part 1).
-
 4. **On a phone, one day at a time:** each row as its times in words over a thin bar, ‹ › or a swipe
    for the next day.
 6. **Show lists prep stations too** (here and in the Month view): choosing one draws one row per
@@ -348,7 +346,7 @@ Re-check when a new year's list is added.
 - **Every block in the Week shows its whole label on pointing or tapping, not only the clipped ones
   ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 4; plan default, sent to the owner as an FYI, 2026-10-17).** Telling which labels are clipped would mean measuring text, and a
   label that fits, shown again in full, says nothing wrong. The tip sits above the block, and below
-  it only when there is no room above.
+  it only when there is no room above it inside the area the Week scrolls in.
 
 - **The Week draws every day on one scale, the week's longest day ([A722 Part 1](../superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 5; plan default, sent to the owner as an FYI, 2026-10-17).** Each
   block sits on its own day from that day's changeover, so a shorter day's track ends early and the

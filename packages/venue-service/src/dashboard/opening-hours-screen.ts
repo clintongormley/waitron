@@ -1065,7 +1065,7 @@ export class OpeningHoursScreen extends LitElement {
   private dayBoxContent(date: LocalDate) {
     const year = this.view === "year" ? this.yearModel : undefined;
     const read = year ? this.boxMonth : this.monthModel;
-    // The Month's own alert already announces a failed reread of its month.
+    // The Month's and the Week's own alert already announces a failed reread of their month.
     const error = year ? this.boxMonthError : "";
     const day = read?.days.find((row) => row.date === date);
     if (day && read) {

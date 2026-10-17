@@ -4065,7 +4065,7 @@ Opening hours' Year.
   ends early. The ruler above the days is labelled every two hours from Monday's changeover, so a
   week whose days have different changeovers is labelled by Monday's; where the track is too narrow
   for that it is labelled every four, six, eight, twelve or twenty-four hours, and the label before
-  the last is left out when the last, kept inside the track, would touch it. A department's blocks carry
+  the last is left out when the last, kept inside the track, would come within `--wt-space-2` of it. A department's blocks carry
   their period's colour, name and times; a zone's piece that only follows its department is faded
   and unlabelled, and a piece of its own, or a closed time inside its department's hours, is
   labelled. A row with no hours is an empty grey track; only a day closed all day writes "Closed
