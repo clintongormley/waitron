@@ -2,7 +2,10 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { styleMap } from "lit/directives/style-map.js";
+import { saveActionState } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import {
   ColumnStroke,
@@ -211,8 +214,22 @@ export class StaffingGrid extends LitElement {
         color: var(--wt-color-text-muted);
         pointer-events: none;
       }
-      .menu .how-many {
-        padding-block: var(--wt-space-1);
+      .menu .fields {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--wt-space-2);
+      }
+      .menu .fields wt-combobox {
+        flex: 1;
+        min-inline-size: calc(var(--wt-space-6) * 5);
+      }
+      .menu wt-form-actions wt-button {
+        width: auto;
+      }
+      .menu .cancel-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
       }
     `,
   ];
@@ -243,8 +260,10 @@ export class StaffingGrid extends LitElement {
   /** Adds "Follow the season" to each column's ⋮. */
   @property({ type: Boolean }) followable = false;
 
-  /** The block the menu was opened on, as it was then, or as the menu last changed it. */
+  /** The block the menu was opened on, as it was then. */
   @state() private selected: { key: string; index: number; block: StaffingBlock } | null = null;
+  /** The menu's staged role and How many, kept only by Save. */
+  @state() private draft: { staffRoleId: string; headcount: number } | null = null;
   /** The one block whose edges exist, as it was picked or as the grid last changed it. */
   @state() private picked: { key: string; index: number; block: StaffingBlock } | null = null;
   /** Set while the grid moves the focus out of its own menu to the picked block. */
@@ -446,14 +465,25 @@ export class StaffingGrid extends LitElement {
     const block = this.#day(key)[index]!;
     this.picked = { key, index, block };
     trigger.focus();
+    if (this.selected?.key === key && this.selected.index === index) {
+      // A press on the menu's own block light-dismisses it before this click; showing it again
+      // in the same task keeps the draft, as the close's toggle event then reads "open".
+      if (!this.menu.matches(":popover-open")) placePopover(this.menu, trigger, false);
+      return;
+    }
     this.selected = { key, index, block };
+    this.draft = {
+      staffRoleId: this.#role(block.staffRoleId) === undefined ? "" : block.staffRoleId,
+      headcount: block.headcount,
+    };
     await this.updateComplete;
     placePopover(this.menu, trigger, false);
-    this.menu.querySelector<HTMLElement>("wt-button:not([disabled])")?.focus();
+    this.menu.querySelector<HTMLElement>("wt-combobox")?.focus();
   }
   #closeMenu(): void {
     if (this.menu?.matches(":popover-open")) this.menu.hidePopover();
     this.selected = null;
+    this.draft = null;
   }
   #unpick(): void {
     this.picked = null;
@@ -504,33 +534,47 @@ export class StaffingGrid extends LitElement {
     if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();
-    this.#closeOwn();
-    void this.#focusAfter(selected.key, selected.index);
+    this.#cancel();
   }
-  #changeRole(staffRoleId: string): void {
-    const selected = this.selected!;
-    const blocks = changeBlock(this.#day(selected.key), selected.index, { staffRoleId });
+  #saveState(): ReturnType<typeof saveActionState> {
+    return saveActionState({
+      isDirty: () => {
+        const { selected, draft } = this;
+        return (
+          selected !== null &&
+          draft !== null &&
+          this.#role(draft.staffRoleId) !== undefined &&
+          !sameBlock({ ...selected.block, ...draft }, selected.block)
+        );
+      },
+    });
+  }
+  #save(): void {
+    const { selected, draft } = this;
+    if (selected === null || draft === null || this.#saveState().unchanged) return;
+    const blocks = changeBlock(this.#day(selected.key), selected.index, draft);
     this.#closeOwn();
     if (this.picked?.key === selected.key && this.picked.index === selected.index)
       this.picked = { ...this.picked, block: blocks[selected.index]! };
     this.#emit(selected.key, blocks);
     void this.#focusAfter(selected.key, selected.index);
   }
-  #changeHeadcount(value: string): number | undefined {
-    const selected = this.selected;
-    if (selected === null) return undefined;
+  #cancel(): void {
+    const selected = this.selected!;
+    this.#closeOwn();
+    void this.#focusAfter(selected.key, selected.index);
+  }
+  #setRole(staffRoleId: string): void {
+    if (this.draft !== null) this.draft = { ...this.draft, staffRoleId };
+  }
+  #setHeadcount(value: string): number | undefined {
+    const draft = this.draft;
+    if (draft === null) return undefined;
     const number = Number(value);
     const headcount = Number.isInteger(number)
       ? Math.min(Math.max(number, 1), MAX_HEADCOUNT)
-      : selected.block.headcount;
-    this.selected = { ...selected, block: { ...selected.block, headcount } };
-    const day = this.#day(selected.key);
-    if (day[selected.index]?.headcount !== headcount) {
-      const blocks = changeBlock(day, selected.index, { headcount });
-      if (this.picked?.key === selected.key && this.picked.index === selected.index)
-        this.picked = { ...this.picked, block: blocks[selected.index]! };
-      this.#emit(selected.key, blocks);
-    }
+      : draft.headcount;
+    this.draft = { ...draft, headcount };
     return headcount;
   }
   #deleteAt(key: string, index: number): void {
@@ -679,8 +723,9 @@ export class StaffingGrid extends LitElement {
     </div>`;
   }
   #menu() {
-    const selected = this.selected;
+    const { selected, draft } = this;
     const block = selected === null ? undefined : this.#day(selected.key)[selected.index];
+    const state = this.#saveState();
     return html`<div
       class="menu"
       id="block-menu"
@@ -691,57 +736,78 @@ export class StaffingGrid extends LitElement {
       @keydown=${(event: KeyboardEvent) => this.#onMenuKeydown(event)}
       @focusout=${(event: FocusEvent) => this.#onFocusout(event)}
       @toggle=${(event: ToggleEvent) => {
-        if (event.newState === "closed") this.selected = null;
+        if (event.newState !== "closed") return;
+        this.selected = null;
+        this.draft = null;
       }}
     >
       ${
-        block === undefined
+        block === undefined || draft === null
           ? nothing
-          : html`<p>${t("staffing.grid.staff_role")}</p>
-              ${this.staffRoles.map(
-                (role) =>
-                  html`<wt-button
+          : html`<div class="fields">
+                <wt-combobox
+                  name="staff-role"
+                  label=${t("staffing.grid.staff_role")}
+                  required
+                  searchPlaceholder=${t("staffing.role.search")}
+                  noResultsLabel=${t("staffing.role.no_results")}
+                  .value=${draft.staffRoleId}
+                  .options=${this.staffRoles.map((role) => ({ value: role.id, label: role.name }))}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    this.#setRole(event.detail.value);
+                  }}
+                ></wt-combobox>
+                <wt-number-stepper
+                  name="headcount"
+                  label=${t("staffing.grid.how_many")}
+                  min="1"
+                  max=${MAX_HEADCOUNT}
+                  .value=${String(draft.headcount)}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (event.detail.value === "") return;
+                    const next = this.#setHeadcount(event.detail.value);
+                    if (next !== undefined) {
+                      const control =
+                        event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"];
+                      showHeadcount(control, next);
+                    }
+                  }}
+                  @focusout=${(event: FocusEvent) => {
+                    if (this.draft !== null) {
+                      const control =
+                        event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"];
+                      showHeadcount(control, this.draft.headcount);
+                    }
+                  }}
+                ></wt-number-stepper>
+              </div>
+              <wt-form-actions>
+                <div slot="cancel" class="cancel-group">
+                  <wt-button
+                    data-test="cancel-block"
                     variant="secondary"
-                    align="start"
-                    ?disabled=${role.id === block.staffRoleId}
-                    @click=${() => this.#changeRole(role.id)}
-                    >${role.name}</wt-button
-                  >`,
-              )}
-              <wt-number-stepper
-                class="how-many"
-                name="headcount"
-                label=${t("staffing.grid.how_many")}
-                min="1"
-                max=${MAX_HEADCOUNT}
-                .value=${String(block.headcount)}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  event.stopPropagation();
-                  if (event.detail.value === "") return;
-                  const next = this.#changeHeadcount(event.detail.value);
-                  if (next !== undefined) {
-                    const control =
-                      event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"];
-                    showHeadcount(control, next);
-                  }
-                }}
-                @focusout=${(event: FocusEvent) => {
-                  if (this.selected !== null) {
-                    const control =
-                      event.currentTarget as HTMLElementTagNameMap["wt-number-stepper"];
-                    showHeadcount(control, this.selected.block.headcount);
-                  }
-                }}
-              ></wt-number-stepper>
-              <wt-button
-                variant="danger"
-                align="start"
-                @click=${() => {
-                  this.#closeMenu();
-                  this.#deleteAt(selected!.key, selected!.index);
-                }}
-                >${t("staffing.grid.delete")}</wt-button
-              >`
+                    @click=${() => this.#cancel()}
+                    >${t("staffing.role.cancel")}</wt-button
+                  >
+                  <wt-button
+                    variant="danger"
+                    @click=${() => {
+                      this.#closeMenu();
+                      this.#deleteAt(selected!.key, selected!.index);
+                    }}
+                    >${t("staffing.grid.delete")}</wt-button
+                  >
+                </div>
+                <wt-button
+                  data-test="save-block"
+                  variant=${state.variant}
+                  ?disabled=${state.unchanged}
+                  @click=${() => this.#save()}
+                  >${t("staffing.role.save")}</wt-button
+                >
+              </wt-form-actions>`
       }
     </div>`;
   }
