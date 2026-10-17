@@ -30,8 +30,8 @@ primitive in `packages/ui`, which is mutation-tested). No migration, no route, n
 
 Revised after the plan review (2026-10-17): a first draft refitted the view on every drag move and
 kept the grabbed point under the finger; a model of it ran the table out to x 999 once the finger
-neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` and
-`wt-floor-map.today.test.ts`, whose fixed-size hosts drag tables past the crop.
+neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` (modelled) and
+`wt-floor-map.today.test.ts` (reasoned), whose fixed-size hosts drag tables past the crop.
 
 1. **During a drag the map behaves as though the held group already stood where it is drawn — but
    only ever GROWS.** The drag's crop is the union, over every move of this drag, of the tables'
@@ -47,7 +47,7 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` and
 3. **The view is refitted only by a resize, as on release today.** `#fitView` fits the effective
    crop. A host whose CSS reads the ratio (the till) is resized when the ratio changes, and the
    `ResizeObserver` refits it unless the view was touched. A host of fixed size — every existing
-   suite's 600 × 300 box — is never refitted during a drag, so those suites keep their assertions.
+   suite's box, fixed in both dimensions (600 × 300, 480 × 240, 400 × 200) — is never refitted during a drag, so those suites keep their assertions.
 4. **The drag follows the finger's travel, never a view the drag itself caused.** Today the squares
    are `snapToSquare(dx, view.scale)`; with the scale changing under a drag that would feed back.
    The map banks the travel each time the scale changes: it keeps the squares travelled at the scale
@@ -62,15 +62,16 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` and
    publishes the tables' ratio, so nothing changes during the drag; release behaves as today.
 6. **A fixed group does not grow the plan.** Its drag draws a copy that can only be dropped on
    another table (`dropAction`), which is already inside the plan.
-7. **Release refits nothing itself.** `#endDrag` only ends the drag. On an outward move the new
-   tables' crop equals the drag's crop, so the ratio does not change and the view stays fitted to
-   it; on a refused drop, or a drag that went out and came back, the ratio returns to the tables'
+7. **Release refits nothing itself.** `#endDrag` only ends the drag. Where the new tables' crop
+   equals the drag's crop, the ratio does not change and the view stays fitted to it; where it
+   differs (a refused drop, a drag out and back, a move off the opposite edge), the ratio changes
    and the observer refits.
 8. **Residuals, recorded as short backlog entries in Task 5:** a crop that grows in proportion (a
    diagonal drag, 12 × 8 to 15 × 10) changes no ratio, so nothing refits — as on release today; and
    after the view has rescaled during a drag the drawn table lags the finger, while the drop target
-   and its highlight stay the table under the finger (`#targetAt`, unchanged), so the highlight
-   always names the table the drop will use.
+   and its highlight stay the table under the finger (`#targetAt`, unchanged); the highlight is
+   worked out on each move and the drop's target again at release, so after a refit that follows
+   the last move the highlight can lag by that one refit.
 9. **Nothing else changes.** No new event, no change to what `wt-table-drag-end` carries, no change
    to the dashboard editor (`wt-floor-plan-canvas`, whose grid already grows during a drag through
    `gridExtent`; the two share `bounds` and `cropToTables` and nothing else that applies here).
@@ -116,16 +117,19 @@ Files: `packages/ui/src/components/wt-floor-map.ts`, a new `packages/ui/src/comp
   existing case `till-floor-screen.map.test.ts:345` ("sizes the map to a W by H zone") must pass
   unedited — it is the till-side test; add none.
 - Run: `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-map` and
-  `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen`.
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen src/screens/device-screens.phone-margin`
+  (the phone-margin case at `:149–176` measures the map's box straight after mounting).
 
 ### Task 2 — The drag banks its travel when the scale changes
 
 Files: `packages/ui/src/components/wt-floor-map.ts`, `wt-floor-map.grow.test.ts`.
 
 - Test first: hold a table, move it (say 2 squares), Ctrl+wheel to double the scale, send the same
-  pointer position again: the table does not move (today it jumps to 4 squares); move a further
+  pointer position again: the table does not move (today it jumps back to 1 square); move a further
   `2 × newScale` px: it moves 2 more squares; release sends that place.
-- Implement decision 4. The existing suites (every drag at one scale) pass unedited.
+- Implement decision 4. Record the move's travel on EVERY move, before `#onHoldDrag`'s early
+  return for an unchanged place (`:553–562`), or travel since the last stored move is banked at the
+  wrong scale. The existing suites (every drag at one scale) pass unedited.
 
 ### Task 3 — The plan grows while a table is dragged past its edge
 
@@ -141,7 +145,8 @@ Tests first, in a ratio-reading host, driving the real pointer gesture the other
 - the same past the bottom edge;
 - dragging the edge table inward does not change the ratio during the drag;
 - releasing an outward move whose new `tables` (the parent sets the moved place, as the till's
-  pending place does) has the drag's crop: the table stays drawn wholly inside the host;
+  pending place does) has the drag's crop — another table holds the opposite edge, so the crops
+  really are equal: the table stays drawn wholly inside the host;
 - a drag out and back, then release with `tables` unchanged (a refused drop): the ratio and the fit
   return to the tables';
 - after a pan, a drag past the edge changes neither the ratio nor the scale;
