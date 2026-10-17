@@ -221,3 +221,13 @@ it.each(["light", "dark"] as const)(
     }
   },
 );
+
+it("A725 leaves station names and status without a retired Times link", async () => {
+  const el = await mount([bar, station({ id: "grill", name: "Grill" })]);
+  const rows = [...table(el)!.querySelectorAll("tbody tr")];
+  expect(rows).toHaveLength(2);
+  expect(rows[0]!.textContent).toContain("Default");
+  expect(rows[0]!.textContent).toContain("Closed for today → Grill");
+  expect(rows[1]!.textContent).toContain("Grill");
+  expect(rows.flatMap((row) => [...row.querySelectorAll('a[href*="/view/times"]')])).toEqual([]);
+});

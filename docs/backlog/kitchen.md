@@ -180,7 +180,9 @@ list does not exist.
 **Branch checkpoint (2026-10-17; not yet landed):** editor wording/layout, transactional unused
 colours, the Add/Edit shared popup, row swatches and sidebar placement are implemented. The
 Stations table and Calendar choices use name order, and the station row drag controls are removed.
-Times retirement, the Add form's order field and backend/storage order retirement remain open.
+The Times tab and row links are retired, with their range, empty-day, station-change, recovery,
+reconnect and themed accessibility checks exercised through Calendar. The Add form's order field
+and backend/storage order retirement remain open.
 The complete branch still needs its final review, push, CI and landing.
 
 ## Whole-order note correction volume

@@ -3,15 +3,7 @@ import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
-import {
-  registerIcons,
-  applyTokens,
-  NavigationGuard,
-  type WtCombobox,
-  type WtInput,
-} from "@waitron/ui";
-import type { OpeningHoursApi } from "./opening-hours-client.js";
-import type { PrepStationTimes } from "./station-times-tab.js";
+import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
 import type { PrepStationsApi } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
@@ -130,10 +122,6 @@ async function mount(a: PrepStationsApi, theme?: "light" | "dark"): Promise<Prep
   hosts.push(host);
   const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
   el.api = a;
-  el.hoursApi = {
-    watchMonth: () => () => {},
-    watchStationTimes: () => () => {},
-  } as unknown as OpeningHoursApi;
   host.append(el);
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
@@ -1557,7 +1545,6 @@ it("opens the default Stations tab and places Add station, the only create actio
   expect(tabs!.items).toEqual([
     { key: "stations", label: "Stations" },
     { key: "routing", label: "Routes" },
-    { key: "times", label: "Times" },
   ]);
   expect(tabs!.value).toBe("stations");
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
@@ -1657,184 +1644,40 @@ it("replaces invalid tabs with Stations and ignores nested tab changes", async (
   expect(location.pathname).toBe("/manage/prep-stations/view/stations");
 });
 
-describe("the Times tab", () => {
-  /** Terrace is second by display order, so the Upstairs bar is the first non-default after Bar. */
-  const timesView = (): PrepStationsView => {
-    const loaded = withUpstairs({ open: true, why: "open" });
-    loaded.stations.push(
-      { ...upstairs, id: "terrace", name: "Terrace", displayOrder: 3 },
-      { ...upstairs, id: "disabled", name: "Disabled bar", active: false, displayOrder: 0 },
-    );
-    return loaded;
-  };
-  const hoursApi = () =>
-    ({
-      liveData: undefined,
-      watchMonth: vi.fn(() => () => {}),
-      watchStationTimes: vi.fn(() => () => {}),
-    }) as unknown as OpeningHoursApi;
-  async function mountTimes(loaded: PrepStationsView = timesView()) {
-    const host = document.createElement("div");
-    applyTokens(host);
-    document.body.append(host);
-    hosts.push(host);
-    const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
-    el.api = api({ load: vi.fn().mockResolvedValue(loaded) });
-    el.hoursApi = hoursApi();
-    host.append(el);
-    await settle(el);
-    await settle(el);
-    return el;
-  }
-  const times = (el: PrepStationsScreen) =>
-    el.shadowRoot!.querySelector<PrepStationTimes>("prep-station-times");
-  const tabs = (el: PrepStationsScreen) => el.shadowRoot!.querySelector("wt-tabs")!;
-
+describe("A725 retired Times destinations", () => {
   it.each([
-    ["en", "Times"],
-    ["es", "Horarios"],
-  ] as const)(
-    "is the third tab, labelled in %s, and opens on the station its address names through a reload",
-    async (locale, label) => {
-      setLocale(locale);
-      history.replaceState(null, "", "/manage/prep-stations/view/times/station/terrace");
-      let el = await mountTimes();
-      expect(tabs(el).items.map((item) => item.key)).toEqual(["stations", "routing", "times"]);
-      expect(tabs(el).items[2]!.label).toBe(label);
-      expect(tabs(el).value).toBe("times");
-      expect(times(el)?.closest('[slot="times"]')).not.toBeNull();
-      expect(times(el)!.stationId).toBe("terrace");
-      expect(times(el)!.stations.map((station) => station.id)).toEqual(
-        expect.arrayContaining(["bar", "upstairs", "terrace"]),
-      );
-      expect(times(el)!.api).toBe(el.hoursApi);
-      el.parentElement!.remove();
-      el = await mountTimes();
-      expect(tabs(el).value).toBe("times");
-      expect(times(el)!.stationId).toBe("terrace");
-      expect(location.pathname).toBe("/manage/prep-stations/view/times/station/terrace");
-    },
-  );
-
-  it("choosing a station writes it to the address as a new history entry", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/times/station/upstairs");
-    const el = await mountTimes();
+    "/manage/prep-stations/view/times",
+    "/manage/prep-stations/view/times/station/gone",
+    "/manage/prep-stations/view/times/station/disabled",
+    "/manage/prep-stations/view/times/station/terrace",
+  ])("replaces %s, including after reloading, without pushing history", async (address) => {
+    history.replaceState(null, "", address);
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    times(el)!.dispatchEvent(
-      new CustomEvent("station-change", {
-        detail: { stationId: "terrace" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    let el = await mount(api());
     await settle(el);
-    expect(location.pathname).toBe("/manage/prep-stations/view/times/station/terrace");
-    expect(writtenPaths(push)).toEqual(["/manage/prep-stations/view/times/station/terrace"]);
-    expect(replace).not.toHaveBeenCalled();
-    expect(times(el)!.stationId).toBe("terrace");
-    history.back();
-    await expect.poll(() => times(el)?.stationId).toBe("upstairs");
-  });
-
-  it.each([
-    ["no station", "/manage/prep-stations/view/times"],
-    ["an unknown station", "/manage/prep-stations/view/times/station/gone"],
-    ["a switched-off station", "/manage/prep-stations/view/times/station/disabled"],
-  ])(
-    "replaces %s with the first active station without a history entry",
-    async (_case, address) => {
-      history.replaceState(null, "", address);
-      const push = vi.spyOn(history, "pushState");
-      const replace = vi.spyOn(history, "replaceState");
-      const el = await mountTimes();
-      await expect
-        .poll(() => location.pathname)
-        .toBe("/manage/prep-stations/view/times/station/bar");
-      expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/times/station/bar"]);
-      expect(push).not.toHaveBeenCalled();
-      expect(times(el)!.stationId).toBe("bar");
-    },
-  );
-
-  it("replaces the shown station with the first one when a refresh no longer lists it", async () => {
-    const liveData = new LiveData();
-    const loaded = timesView();
-    const without = { ...loaded, stations: loaded.stations.filter((s) => s.id !== "terrace") };
-    history.replaceState(null, "", "/manage/prep-stations/view/times/station/terrace");
-    const host = document.createElement("div");
-    document.body.append(host);
-    hosts.push(host);
-    const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
-    el.api = api({
-      liveData,
-      load: vi.fn().mockResolvedValueOnce(loaded).mockResolvedValue(without),
-    });
-    el.hoursApi = hoursApi();
-    host.append(el);
-    await expect.poll(() => times(el)?.stationId).toBe("terrace");
-    const push = vi.spyOn(history, "pushState");
-    const replace = vi.spyOn(history, "replaceState");
-    liveData.invalidate([{ type: "kitchen_stations", id: "terrace" }]);
-    await expect.poll(() => location.pathname).toBe("/manage/prep-stations/view/times/station/bar");
-    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/times/station/bar"]);
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("stations");
+    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
     expect(push).not.toHaveBeenCalled();
-    expect(times(el)!.stationId).toBe("bar");
+    el.parentElement!.remove();
+    el = await mount(api());
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("stations");
+    expect(push).not.toHaveBeenCalled();
+    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
   });
-
-  it.each(["stations", "routing"] as const)(
-    "switching to %s clears the station from the address",
-    async (key) => {
-      history.replaceState(null, "", "/manage/prep-stations/view/times/station/terrace");
-      const el = await mountTimes();
-      tabs(el).shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!.click();
-      await settle(el);
-      expect(tabs(el).value).toBe(key);
-      expect(location.pathname).toBe(`/manage/prep-stations/view/${key}`);
-      expect(times(el)).toBeNull();
-    },
-  );
-
-  it("an address naming a station on another tab drops the station without a history entry", async () => {
+  it("keeps Routes and drops a station child without pushing history", async () => {
     history.replaceState(null, "", "/manage/prep-stations/view/routing/station/terrace");
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    const el = await mountTimes();
-    expect(tabs(el).value).toBe("routing");
+    const el = await mount(api());
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("routing");
     expect(location.pathname).toBe("/manage/prep-stations/view/routing");
     expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/routing"]);
     expect(push).not.toHaveBeenCalled();
-  });
-
-  it("a station's link on the Stations table opens Times on that station on the same page", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/stations");
-    const guard = new NavigationGuard(window, {
-      isDirty: () => false,
-      request: async () => "proceeded",
-    });
-    // What the dashboard shell does with a click on a /manage link (`dashboard-app.ts`, `#onAppLink`).
-    const follow = (event: MouseEvent) => {
-      const anchor = event
-        .composedPath()
-        .find((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
-      if (!anchor) return;
-      event.preventDefault();
-      void guard.write(new URL(anchor.href));
-    };
-    document.addEventListener("click", follow, true);
-    try {
-      const el = await mountTimes();
-      const link = stationTable(el)!.querySelector<HTMLAnchorElement>(
-        'a[href="/manage/prep-stations/view/times/station/terrace"]',
-      )!;
-      link.click();
-      await expect.poll(() => tabs(el).value).toBe("times");
-      expect(location.pathname).toBe("/manage/prep-stations/view/times/station/terrace");
-      await expect.poll(() => times(el)?.stationId).toBe("terrace");
-    } finally {
-      document.removeEventListener("click", follow, true);
-      guard.dispose();
-    }
+    expect(await routingGrid(el)).not.toBeNull();
   });
 });
 
@@ -1956,7 +1799,6 @@ it("shows Add station on the Stations tab alone, and no action on the other tabs
   for (const [key, actions] of [
     ["stations", ["new-station"]],
     ["routing", []],
-    ["times", []],
     ["stations", ["new-station"]],
   ] as const) {
     tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!.click();
@@ -1988,7 +1830,7 @@ it("at 320 px in Spanish, every tab shows whole and the tab row does not overflo
   const boxes = [...strip.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) =>
     tab.getBoundingClientRect(),
   );
-  expect(boxes).toHaveLength(3);
+  expect(boxes).toHaveLength(2);
   for (const box of boxes) {
     expect(box.left).toBeGreaterThanOrEqual(bounds.left - 1);
     expect(box.right).toBeLessThanOrEqual(bounds.right + 1);
@@ -2596,7 +2438,7 @@ it("Stations names each station's printers and the screens that show it, with a 
 });
 
 it.each(["light", "dark"] as const)(
-  "paints the Devices link in the link token, as the When it gets orders link is (%s)",
+  "paints the Devices link in the link token (%s)",
   async (theme) => {
     history.replaceState(null, "", "/manage/prep-stations/view/stations");
     const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }), theme);
@@ -2606,8 +2448,6 @@ it.each(["light", "dark"] as const)(
     el.parentElement!.append(probe);
     const token = getComputedStyle(probe).color;
     const devices = q(el, '[data-test="screens-bar"] a[href="/manage/devices"]')!;
-    const serviceTimes = q(el, '[part="service-times"]')!;
-    expect(getComputedStyle(serviceTimes).color).toBe(token);
     expect(getComputedStyle(devices).color).toBe(token);
   },
 );
@@ -5021,11 +4861,9 @@ it.each([
   },
 );
 
-describe.each([
-  ["en", "When it gets orders"],
-  ["es", "Cuándo recibe pedidos"],
-] as const)("station service-times links (%s)", (locale, label) => {
-  it("links active non-default stations", async () => {
+it.each(["en", "es"] as const)(
+  "A725 station rows omit retired service-times links in %s",
+  async (locale) => {
     setLocale(locale);
     const loaded = withUpstairs({ open: false, why: "closed_by_hand" });
     loaded.stations.push(
@@ -5034,24 +4872,19 @@ describe.each([
     );
     const el = await mount(api({ load: vi.fn().mockResolvedValue(loaded) }));
     await settle(el);
-    const links = [
-      ...stationTable(el)!.querySelectorAll<HTMLAnchorElement>('a[href^="/manage/prep-stations"]'),
-    ];
-    expect(links.map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
-      [label, "/manage/prep-stations/view/times/station/terrace"],
-      [label, "/manage/prep-stations/view/times/station/upstairs"],
+    expect(stationTable(el)!.querySelectorAll('a[href^="/manage/prep-stations"]')).toHaveLength(0);
+    const rows = [...stationTable(el)!.querySelectorAll("tbody tr")];
+    expect(rows.map((row) => row.querySelector('[part="name"]')!.textContent?.trim())).toEqual([
+      "Bar",
+      "Terrace",
+      "Upstairs bar",
     ]);
-    expect(links.map((link) => link.getAttribute("aria-label"))).toEqual([
-      `Terrace: ${label}`,
-      `Upstairs bar: ${label}`,
-    ]);
-    expect(links.map((link) => link.closest("tr")?.textContent)).toEqual([
-      expect.stringContaining("Terrace"),
-      expect.stringContaining("Upstairs bar"),
-    ]);
-    expect(links.every((link) => link.tabIndex === 0)).toBe(true);
-  });
-});
+    expect(rows[0]!.textContent).toContain(locale === "en" ? "Default" : "Predeterminada");
+    expect(rows[2]!.textContent).toContain(
+      locale === "en" ? "Closed for today → Bar" : "Cerrada por hoy → Bar",
+    );
+  },
+);
 
 describe("a printer deleted elsewhere while a form holds it", () => {
   const withoutNext: PrepStationsView = {
@@ -5390,3 +5223,34 @@ it("A725 lists Stations by name with Default in place and no row grips", async (
   expect(a.updateStation).not.toHaveBeenCalled();
   expect(document.body.style.cursor).not.toBe("grabbing");
 });
+
+it.each(["en", "es"] as const)(
+  "A725 replaces retired Times addresses with two Prep tabs in %s",
+  async (locale) => {
+    setLocale(locale);
+    history.replaceState(null, "", "/manage/prep-stations/view/times/station/bar?dev=1#saved");
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    const el = await mount(api());
+    await settle(el);
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    expect(tabs.value).toBe("stations");
+    expect(tabs.items).toEqual(
+      locale === "en"
+        ? [
+            { key: "stations", label: "Stations" },
+            { key: "routing", label: "Routes" },
+          ]
+        : [
+            { key: "stations", label: "Estaciones" },
+            { key: "routing", label: "Rutas" },
+          ],
+    );
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(location.search).toBe("?dev=1");
+    expect(location.hash).toBe("#saved");
+    expect(push).not.toHaveBeenCalled();
+    expect(writtenPaths(replace)).toEqual(["/manage/prep-stations/view/stations"]);
+    expect(el.shadowRoot!.querySelector('[slot="times"]')).toBeNull();
+  },
+);

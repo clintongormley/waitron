@@ -1359,7 +1359,7 @@ suite ran beside other test files in one browser: a "new history entry" check fa
 2026-10-05 unsaved-changes audit had met it first
 (`docs/superpowers/plans/2026-10-05-unsaved-changes-audit.md`). A test spies on
 `history.pushState` and `history.replaceState` and reads their calls instead, as `writtenPaths` and
-the Times tab cases in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts` do.
+the retired-address cases in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts` do.
 Nothing guards it.
 
 ## The mouse cursor belongs to the shared page, so a hover outlives the test — and the file — that moved it.

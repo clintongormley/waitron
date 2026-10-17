@@ -371,7 +371,6 @@ it("opens each declared prep-station search destination on its named tab", async
   expect(destinations?.map((x) => x.path)).toEqual([
     "/manage/prep-stations/view/stations",
     "/manage/prep-stations/view/routing",
-    "/manage/prep-stations/view/times",
   ]);
   for (const destination of destinations!) {
     history.replaceState(null, "", destination.path);
@@ -440,4 +439,12 @@ it("A725 puts Prep stations immediately after Departments and zones, before Cale
     "opening-hours",
     "periods",
   ]);
+});
+
+it("A725 offers only Stations and Routes as Prep search destinations", () => {
+  expect(
+    VENUE_SERVICE_DASHBOARD.searchDestinations!.filter((row) => row.screen === "prep-stations").map(
+      (row) => row.path,
+    ),
+  ).toEqual(["/manage/prep-stations/view/stations", "/manage/prep-stations/view/routing"]);
 });

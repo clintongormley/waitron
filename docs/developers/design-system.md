@@ -3830,24 +3830,14 @@ commit with Save, bind it to that Save even when its preview updates as you type
 
 ### Worked-out prep-station times
 
-Prep stations' Times tab (`station-times-tab.ts`) shows one station's month, read-only. A
-Station picker at the top lists the active stations in the Stations table's order, the default
-station included. The month is Opening hours' month in its station mode (`stationMode` on
-`opening-hours-month.ts`): ‹ › step months, the month's year is plain text, and there is no
-department picker. A station one department or none feeds draws one bar per date of the times it
-gets orders, worked out from routed products and the zones that can order them, and a date it gets
-none reads "No orders". When more than one department sends the station orders in the weeks
-shown, each date draws one track per department in department order, a Rows key names them, a
-department with nothing that date draws an empty track, a date none of them sends on reads "No
-orders" once, and hovering a range names its department ("Lunch (Restaurant)"). Dates show their
-special day's and public holiday's names, as in Opening hours, and the season chips are only a
-key to the tints, not buttons (`keyOnly` on `season-chips.ts`). These are planned times; today's
-station closures and service extensions do not change them. A default station shows "Always open: this is the default
-station" and no month. A failed read shows "This station's times could not be loaded. It will be
-tried again." above the month until that read succeeds again. The month is not kept in the
-address: the tab opens on the browser's current month. The Calendar's Show picker draws a station's
-times in the Month and the Week (below). Special days are made and painted in Opening hours' special-day painter, opened
-from the Year, the Month or the Week.
+Choose a prep station in the Calendar's Month or Week Show picker to see its planned service
+times (see Calendar below). Each sending department gets its own row, even when only one sends
+to the station. A date with no orders says so once, and the default station shows "Always open:
+this is the default station" in place of the dates. The station choices require
+`venue_service.manage`; a read-only Calendar keeps its department choices.
+
+Prep stations itself has only Stations and Routes. The former Times tab and each station's
+"When it gets orders" link are retired.
 
 ### Tabbed management pages
 
@@ -3895,18 +3885,17 @@ leave that tab clear" cases in `packages/ui/src/components/wt-tabs.test.ts`). Hi
 remain mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 
-Prep stations uses `stations`, `routing` and `times` (Stations, Routes and Times) at
-`/manage/prep-stations/view/<key>`; any other key, such as an old `settings`, `tickets` or
-`watchers` address, opens Stations and replaces the address without adding a history entry. Its tab
-strip wraps onto a second line when the labels do not fit, on every tab. Times takes
-`/station/<id>`: choosing a station in its picker adds a history entry, and a Times address naming
-no active station is replaced by the first one without adding one; moving to Stations or Routes
-drops the station from the address (`prep-stations-screen.ts`). Stations shows no live kitchen numbers: each station's name with its
+Prep stations uses `stations` and `routing` (Stations and Routes) at
+`/manage/prep-stations/view/<key>`. Any other key, including `times`, opens Stations and replaces
+the address without adding a history entry. A retired `/station/<id>` child is dropped; Routes
+keeps its own tab when an old address names a station. The tab strip wraps onto a second line
+when the labels do not fit.
+
+Stations shows no live kitchen numbers: each station's name with its
 Default mark, Printed on (its printers, or "No printer"), Shown on (the devices whose kitchen screens
 show it, and a link to Devices) and Actions, the row's menu.
 A closure note beside its name reads Closed for today and its destination;
 open and default stations need no closure note (`packages/venue-service/src/dashboard/station-table.ts`).
-Each non-default station's "When it gets orders" link opens Times on that station.
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
 Closing asks where new work goes and offers the default station first. With unfinished dishes,
 the same dialog asks whether waiting dishes move there or stay to finish; started dishes stay.
@@ -4133,8 +4122,7 @@ Opening hours' Year.
   dates, with one Tab stop. Clicking a date picks it and opens the day box (below), for a viewer
   too; days are picked as Picking days (below) says, and
   a picked date is ringed outside in `--wt-color-text`, twice as wide on today so it shows beside
-  today's own inner ring in `--wt-color-primary`. In station mode (the Times tab of Prep stations)
-  the dates are plain and nothing is picked. Unless the Calendar is read-only, Show also lists the
+  today's own inner ring in `--wt-color-primary`. Unless the Calendar is read-only, Show also lists the
   active prep stations under their own heading; the Calendar is read-only for anyone without
   `venue_service.manage`, the permission Prep stations needs, and a read-only Calendar reads no
   station list and ignores a `station` in its address. Choosing a station writes `/station/<id>`

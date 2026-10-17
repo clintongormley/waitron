@@ -46,12 +46,10 @@ export class StationTable extends LitElement {
         border-radius: var(--wt-radius-sm);
         vertical-align: middle;
       }
-      wt-data-table::part(station-status),
-      wt-data-table::part(service-times) {
+      wt-data-table::part(station-status) {
         display: block;
         white-space: normal;
       }
-      wt-data-table::part(service-times),
       wt-data-table::part(devices-link) {
         color: var(--wt-color-primary-text);
       }
@@ -80,8 +78,7 @@ export class StationTable extends LitElement {
         ><span part="name">${station.name}</span>
         ${station.isDefault ? html`<span part="badge">${t("prep.default")}</span>` : nothing}
         ${this.statusNotes[station.id] ? html`<span part="station-status">${this.statusNotes[station.id]}</span>` : nothing}
-        ${!station.isDefault ? html`<a part="service-times" aria-label=${`${station.name}: ${t("prep.when_gets_orders")}`} href=${`/manage/prep-stations/view/times/station/${encodeURIComponent(station.id)}`}>${t("prep.when_gets_orders")}</a>` : nothing}</span
-      ></span
+      </span></span
     >`;
   }
   #columns(): DataTableColumn<PrepStation>[] {

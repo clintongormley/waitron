@@ -1674,7 +1674,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   station takes an unused colour; the late-flag minutes on one row, plainer wording, and its colour
   picked with the shared `wt-colour-chooser` (#1828). The branch checkpoint has those colour/editor
   changes, swatches, sidebar placement, name-sorted Stations/Calendar choices and no row drag
-  controls; Times, the Add form's order field and backend order retirement remain. [Implementation plan](superpowers/plans/2026-10-17-a725-prep-stations.md). [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
+  controls. The Times tab and row links are retired with Calendar coverage; the Add form's order
+  field and backend order retirement remain. [Implementation plan](superpowers/plans/2026-10-17-a725-prep-stations.md). [Detail](backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [mockups](backlog/mockups/a718-a727-calendar-and-stations/)
 
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).** Courses
   get a page under Products and menus, with A773's "Held until fired" column. After A725. Check the
@@ -1686,21 +1687,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   acknowledgement should remain per dish. [Detail](backlog/kitchen.md#whole-order-note-correction-volume).
 
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
-  show in Prep stations' Times tab and in the Calendar's Show picker, and both are offered only to
-  someone with `venue_service.manage`: a read-only Calendar offers no stations. The stations
-  service-times route still lets `venue.view` read them (`routes.ts`). Owner to decide whether a
+  show in the Calendar's Show picker, offered only to someone with `venue_service.manage`: a
+  read-only Calendar offers no stations. The stations service-times route still lets `venue.view` read them (`routes.ts`). Owner to decide whether a
   supervisor gets a read-only view, which would now mean offering stations in a read-only
   Calendar's Show — left open by A506-12.
 
 - **Browser tests still read `history.length` to tell whether a push happened, and Chromium stops
   it at 50**, so past that a test cannot see a push (`git grep -l 'history\.length;' -- '*.test.ts'`,
   Prep stations' older address cases among them). Move them to `pushState`/`replaceState` spies, as
-  the Times tab tests do — left open by A506-12.
-
-- **The Times tab opens on the browser's current month** (`browserToday`,
-  `station-times-tab.ts`), where Opening hours' month opens on the venue's business date, so
-  just after midnight before the changeover on the 1st the two can show different months — left
-  open by A506-12.
+  the retired-address tests do — left open by A506-12.
 
 - **A routing period line naming another location's period is flagged but never drawn** (left open
   by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the

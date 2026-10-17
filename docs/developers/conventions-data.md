@@ -466,7 +466,7 @@ including held dishes when released (`apps/server/src/station-closing.ts`). The 
 moves with the authenticated person's id and no device; till and device closures record their
 actors in `ticket_item_moves`.
 
-Prep stations' Times tab is read-only. `stationServiceTimes` uses the shared
+The Calendar's Show picker displays planned prep-station times. `stationServiceTimes` uses the shared
 `readPlannedServiceGuides` reader to combine routed products on period menus with department
 hours. The forecast applies each period's signed last-order offset before subtracting zone closed
 times, and joins overlapping shares of the same period. Positive grace can appear at the start
