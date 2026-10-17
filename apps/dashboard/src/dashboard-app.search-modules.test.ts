@@ -251,6 +251,29 @@ it.each(["light", "dark"] as const)(
   },
 );
 it.each(["light", "dark"] as const)(
+  "searching peri finds Periods in the Calendar and opens its window (%s)",
+  async (theme) => {
+    const { el } = await mount({ theme });
+    expect(el.shadowRoot!.querySelector("[data-test=nav-periods]")).toBeNull();
+    await search(el, "peri");
+    expect(result(el, "venue-service:periods")).not.toBeNull();
+    await userEvent.click(result(el, "venue-service:periods")!);
+    await vi.waitFor(() =>
+      expect(
+        calendar(el)
+          .shadowRoot!.querySelector(
+            "[data-test=calendar-window][data-window=periods] periods-list",
+          )
+          ?.shadowRoot?.querySelector("wt-data-table"),
+      ).toBeTruthy(),
+    );
+    expect(location.pathname).toBe("/manage/opening-hours/view/year/window/periods");
+    await expectNoA11yViolations(
+      calendar(el).shadowRoot!.querySelector("[data-test=calendar-window]")!,
+    );
+  },
+);
+it.each(["light", "dark"] as const)(
   "real search destinations fit phones and desktops in both languages (%s)",
   async (theme) => {
     for (const width of [390, 1280])

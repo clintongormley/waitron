@@ -15,6 +15,7 @@ import {
 import { DepartmentsZonesDrag } from "./departments-zones-drag.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
+import { periodsWindowPath } from "./opening-hours-paths.js";
 
 export type DepartmentZoneRow =
   ({ kind: "department" } & Department) | ({ kind: "zone" } & ServiceZone);
@@ -185,7 +186,7 @@ export class DepartmentsList extends LitElement {
       if (issue.code === "department.no_periods" && issue.departmentId === row.id)
         return html`<div part="setup-issue">
           ${issue.departmentName} ${t("venue.readiness.department_no_periods")}
-          <a part="link" href="/manage/periods">${t("venue.set_up_periods")}</a>
+          <a part="link" href=${periodsWindowPath}>${t("venue.set_up_periods")}</a>
         </div>`;
       if (
         (issue.code === "zone.menu_unpublished" || issue.code === "zone.menu_empty") &&

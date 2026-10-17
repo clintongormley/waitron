@@ -289,31 +289,47 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
   });
 });
 
-it("registers Periods between Opening hours and Prep stations, readable with venue.view", async () => {
+it("the Periods destination opens the Calendar's window, read-only for a viewer", async () => {
   const model = {
     dayCutover: "06:00",
+    clockRevision: 0,
     menus: [],
     seasons: [],
     departments: [{ id: "d1", name: "Restaurant", active: true, periods: [] }],
   };
+  const yearRead = (year: number) => ({
+    businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+    clockRevision: 0,
+    currentBusinessDay: `${year}-10-07`,
+    pending: null,
+    year,
+    timeZone: "Europe/Madrid",
+    today: `${year}-10-07`,
+    seasons: [],
+    days: [],
+    publicHolidaysAvailable: true,
+    missingHolidays: [],
+    holidayCoverage: [],
+    area: { addressKey: "fixture", readiness: "ready", options: [], required: false, chosen: null },
+  });
   const fetchImpl = vi.fn((path: string) =>
     Promise.resolve({
       ok: true,
       status: 200,
-      text: async () => JSON.stringify(path.endsWith("/menu-periods/painted-in") ? [] : model),
+      text: async () =>
+        JSON.stringify(
+          path === "/management-api/stations" ||
+            path.endsWith("/menu-periods/painted-in") ||
+            path.endsWith("/special-days")
+            ? []
+            : path.includes("/opening-hours/year?")
+              ? yearRead(Number(new URL(path, location.href).searchParams.get("year")))
+              : model,
+        ),
     } as Response),
   );
-  const entry = VENUE_SERVICE_DASHBOARD.moreScreens![1]!;
-  expect(entry.screen).toEqual({
-    id: "periods",
-    navLabelKey: "nav.periods",
-    group: "operations",
-    order: 20,
-    requiresPermission: "venue_service.manage",
-    readPermission: "venue.view",
-  });
-  expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.periods"]).toBe("Periods");
-  expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.periods"]).toBe("Periodos");
+  history.replaceState(null, "", "/manage/opening-hours/view/year/window/periods");
+  const entry = VENUE_SERVICE_DASHBOARD.moreScreens!.find((x) => x.screen.id === "opening-hours")!;
   const liveData = new LiveData();
   const handle = entry.create({
     request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
@@ -323,15 +339,21 @@ it("registers Periods between Opening hours and Prep stations, readable with ven
   document.body.append(container);
   containers.push(container);
   render(handle.render(true), container);
-  const screen = container.querySelector<PeriodsList>("periods-list")!;
-  expect(screen.readOnly).toBe(true);
-  expect(screen.api.liveData).toBe(liveData);
-  await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
-  expect(screen.shadowRoot!.querySelector("[data-test=add-period]")).toBeNull();
+  const calendar = container.querySelector<OpeningHoursScreen>("dashboard-opening-hours-screen")!;
+  const list = () =>
+    calendar.shadowRoot!.querySelector<PeriodsList>(
+      "[data-test=calendar-window][data-window=periods] periods-list",
+    );
+  await vi.waitFor(() => expect(list()).not.toBeNull());
+  expect(list()!.readOnly).toBe(true);
+  expect(list()!.api.liveData).toBe(liveData);
+  await vi.waitFor(() => expect(list()!.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
+  expect(list()!.shadowRoot!.querySelector("[data-test=add-period]")).toBeNull();
   render(handle.render(false), container);
-  await screen.updateComplete;
-  expect(screen.readOnly).toBe(false);
-  expect(screen.shadowRoot!.querySelector("[data-test=add-period]")).not.toBeNull();
+  await calendar.updateComplete;
+  await list()!.updateComplete;
+  expect(list()!.readOnly).toBe(false);
+  expect(list()!.shadowRoot!.querySelector("[data-test=add-period]")).not.toBeNull();
 });
 
 it("registers Opening hours without a separate Station hours page", () => {
@@ -342,7 +364,6 @@ it("registers Opening hours without a separate Station hours page", () => {
   expect(screens.map((screen) => screen.id)).toEqual([
     "venue-operations",
     "prep-stations",
-    "periods",
     "opening-hours",
   ]);
   expect(customElements.get("dashboard-hours-screen")).toBeUndefined();

@@ -715,7 +715,6 @@ const en = {
   "menu.offset_timetable": "Change this period’s end offset to fit these time ranges.",
   "menu.offset_timetable_named": "Change the end offset of {period} to fit these times.",
   "menu.actions": "Actions",
-  "nav.periods": "Periods",
   "period.title": "Periods",
   "period.open_window": "Periods…",
   "period.add_button": "+ Add period",
@@ -1571,7 +1570,6 @@ const es: Record<keyof typeof en, string> = {
   "menu.offset_timetable_named":
     "Cambia el desfase del final de {period} para ajustarlo a estos horarios.",
   "menu.actions": "Acciones",
-  "nav.periods": "Periodos",
   "period.title": "Periodos",
   "period.open_window": "Periodos…",
   "period.add_button": "+ Añadir periodo",
