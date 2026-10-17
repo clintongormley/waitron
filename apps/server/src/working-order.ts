@@ -533,6 +533,9 @@ const REQUIRES_PERIOD_SELECTION = Symbol("requiresPeriodSelection");
 const FROZEN_OPTIONS = Symbol("frozenOptions");
 const FROZEN_EXTRAS = Symbol("frozenExtras");
 
+// Only the server may use an existing dish as the discarded carrier of newly priced extras.
+const RECALLED_EXTRAS_SOURCE = Symbol("recalledExtrasSource");
+
 /**
  * Price requested lines from the order's zone's live menu versions — the dish, variant, extras and
  * options alike, each at the VAT class the version froze — and classify each line's product as it
@@ -557,6 +560,10 @@ export async function priceOrderLines(
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
     [REQUIRES_PERIOD_SELECTION]?: true;
+    [RECALLED_EXTRAS_SOURCE]?: {
+      line: typeof workingOrderLines.$inferSelect;
+      unit: { precision: number; hardwareUnit: "kg" | "g" | "mg" | null };
+    };
   } & LineExtras &
     RetainedCourseLine)[],
   zoneId?: string,
@@ -656,7 +663,7 @@ export async function priceOrderLines(
     ) {
       throw new AppError("management.request_invalid", { field: "menuVersionId" });
     }
-    if (!offer.available) {
+    if (!offer.available && line[RECALLED_EXTRAS_SOURCE] === undefined) {
       throw new AppError("product.unavailable", { productId: offer.productId });
     }
     if (offer.ordering === "not_sold_separately" && line[ADDED_EXTRAS_ONLY] !== true) {
@@ -728,7 +735,24 @@ export async function priceOrderLines(
   const lineMeta: LineMeta[] = [];
   for (const line of lines) {
     const { offer } = line;
-    const selection = selectMenuVariant(offer, line.variantId ?? null);
+    const source = line[RECALLED_EXTRAS_SOURCE];
+    const selection =
+      source === undefined
+        ? selectMenuVariant(offer, line.variantId ?? null)
+        : {
+            productId: source.line.productId!,
+            name: source.line.name,
+            customerName: source.line.descriptions,
+            kitchenName: source.line.kitchenName,
+            variantName: source.line.variantName,
+            variantCustomerName: source.line.variantDescriptions,
+            variantKitchenName: source.line.variantKitchenName,
+            unitPrice: centsToDecimal(source.line.unitPriceGross),
+            unit: { ...offer.unit, ...source.unit },
+            vatClass: source.line.vatClass,
+            category: source.line.category,
+            courseId: source.line.courseId,
+          };
     const customerText = customerPresentationText(selection, contentConfig.defaultLanguage);
     const product = {
       name: selection.name,
@@ -914,6 +938,156 @@ export async function priceOrderLines(
     ...(meta.kind === "child" && meta.unit !== undefined ? { unit: meta.unit } : {}),
   }));
   return { lineRows, gross, identities, lineContexts, offers };
+}
+
+function recalledModifierPlan(
+  parent: typeof workingOrderLines.$inferSelect,
+  children: (typeof workingOrderLines.$inferSelect)[],
+) {
+  const dish = thousandthsToDecimal(parent.quantity);
+  const snapshots = children.map((child) => ({
+    ...child,
+    quantity: thousandthsToDecimal(child.quantity),
+    unitPriceGross: centsToDecimal(child.unitPriceGross),
+    priceQuantity: thousandthsToDecimal(child.priceQuantity),
+  }));
+  return {
+    options: parent.optionSnapshots,
+    kept: snapshots.map((child) => ({
+      child,
+      perDish: perDishExtraPicks(child.quantity, dish, child.priceQuantity),
+    })),
+    removed: [] as typeof children,
+    added: null as Pick<
+      Awaited<ReturnType<typeof priceOrderLines>>,
+      "lineRows" | "lineContexts" | "offers"
+    > | null,
+  };
+}
+
+export type RecalledModifierPlan = ReturnType<typeof recalledModifierPlan>;
+
+export async function prepareRecalledModifiers(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  edits: {
+    parent: typeof workingOrderLines.$inferSelect;
+    children: (typeof workingOrderLines.$inferSelect)[];
+    input: { quantity: string; options?: OptionSelection[]; extras?: ExtraSelection[] };
+  }[],
+  known?: ZoneOffers,
+): Promise<Map<string, RecalledModifierPlan>> {
+  const plans = new Map(
+    edits.map(({ parent, children }) => [parent.id, recalledModifierPlan(parent, children)]),
+  );
+  const choices = edits.filter(
+    ({ input }) => input.options !== undefined || input.extras !== undefined,
+  );
+  if (choices.length === 0) return plans;
+  const retained = new Map(
+    (await VENUE_SERVICE.listLineContexts(tx, cfg, orderId)).map((line) => [
+      line.workingOrderLineId,
+      line,
+    ]),
+  );
+  for (const { parent } of choices)
+    if (!retained.has(parent.id))
+      throw new AppError("order.service_context_missing", { workingOrderId: orderId });
+  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
+  const snapshot =
+    known ??
+    (await readBasketOffers(
+      tx,
+      cfg,
+      orderId,
+      context?.zoneId,
+      [],
+      choices.map(({ parent }) => retained.get(parent.id)!.menuItemId),
+    ));
+  const language = (await readContentLanguages(tx, cfg.locale)).defaultLanguage;
+  const offers = new Map(snapshot.offers.map((offer) => [offer.id, offer]));
+  const withdrawn = choices.filter(
+    ({ parent, input }) =>
+      input.options !== undefined && !offers.has(retained.get(parent.id)!.menuItemId),
+  );
+  const productIds = [
+    ...new Set(
+      withdrawn.flatMap(({ parent }) => (parent.productId === null ? [] : [parent.productId])),
+    ),
+  ];
+  const productsById = new Map(
+    (productIds.length === 0
+      ? []
+      : await tx
+          .select({ id: products.id, parentId: products.parentId })
+          .from(products)
+          .where(inArray(products.id, productIds))
+    ).map((row) => [row.id, row.parentId ?? row.id]),
+  );
+  const ownOptions = await productOptionLists(tx, [...new Set(productsById.values())]);
+  const pricing: Parameters<typeof priceOrderLines>[3] = [];
+  const owners: string[] = [];
+  for (const { parent, children, input } of choices) {
+    const plan = plans.get(parent.id)!;
+    const held = retained.get(parent.id)!;
+    const offer = offers.get(held.menuItemId);
+    const modifiers = offer === undefined ? NO_MODIFIERS : offerModifiers(offer, language);
+    if (input.options !== undefined) {
+      const offeredOptions =
+        offer === undefined
+          ? (ownOptions.get(productsById.get(parent.productId!)!) ?? [])
+          : modifiers.options;
+      plan.options =
+        editLineOptions(offeredOptions, input.options, parent.optionSnapshots, language) ??
+        parent.optionSnapshots;
+    }
+    if (input.extras === undefined) continue;
+    const byId = new Map(children.map((row) => [row.id, row]));
+    const extras = editLineExtras(
+      extrasListsFor(modifiers.extras, {
+        precision: held.unitPrecision,
+        hardwareUnit: held.hardwareUnit,
+      }),
+      modifiers.extraProducts,
+      input.extras,
+      {
+        children: plan.kept.map(({ child }) => child),
+        dishQuantity: thousandthsToDecimal(parent.quantity),
+      },
+    );
+    plan.kept = extras.kept;
+    plan.removed = extras.removed.map((child) => byId.get(child.id)!);
+    if (extras.added.length === 0) continue;
+    owners.push(parent.id);
+    pricing.push({
+      menuItemId: held.menuItemId,
+      quantity: input.quantity,
+      [FROZEN_OPTIONS]: [],
+      [FROZEN_EXTRAS]: extras.added,
+      [ADDED_EXTRAS_ONLY]: true,
+      [RECALLED_EXTRAS_SOURCE]: {
+        line: parent,
+        unit: { precision: held.unitPrecision, hardwareUnit: held.hardwareUnit },
+      },
+    });
+  }
+  if (pricing.length > 0) {
+    const priced = await priceOrderLines(tx, cfg, orderId, pricing, context?.zoneId, snapshot);
+    const contexts = new Map(priced.lineContexts.map((row) => [row.workingOrderLineId, row]));
+    let index = -1;
+    for (const row of priced.lineRows) {
+      if (row.parentLineId === null) {
+        index++;
+        continue;
+      }
+      const plan = plans.get(owners[index]!)!;
+      plan.added ??= { lineRows: [], lineContexts: [], offers: priced.offers };
+      plan.added.lineRows.push(row);
+      plan.added.lineContexts.push(contexts.get(row.id!)!);
+    }
+  }
+  return plans;
 }
 
 /**

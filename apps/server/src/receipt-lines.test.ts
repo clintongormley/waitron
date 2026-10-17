@@ -1,6 +1,36 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
-import { ticketLinesFrom, withReceiptListPrices } from "./receipt-lines.js";
+import { groupByParent, ticketLinesFrom, withReceiptListPrices } from "./receipt-lines.js";
+
+describe("groupByParent", () => {
+  it("keeps a later added extra under its recorded parent instead of the intervening dish", () => {
+    const first = { descriptions: { en: "First dish" }, quantity: "1", gross: "10.00" };
+    const second = { descriptions: { en: "Second dish" }, quantity: "1", gross: "20.00" };
+    const extra = {
+      descriptions: { en: "First dish extra" },
+      quantity: "1",
+      gross: "4.00",
+      parentLineNo: 1,
+    };
+    expect(groupByParent([first, second, extra])).toEqual([
+      { dish: first, options: [extra] },
+      { dish: second, options: [] },
+    ]);
+  });
+  it("retains a leading orphan as a separate charged line", () => {
+    const extra = {
+      descriptions: { en: "Unmatched extra" },
+      quantity: "1",
+      gross: "4.00",
+      parentLineNo: 99,
+    };
+    const dish = { descriptions: { en: "Dish" }, quantity: "1", gross: "10.00" };
+    expect(groupByParent([extra, dish])).toEqual([
+      { dish: extra, options: [] },
+      { dish, options: [] },
+    ]);
+  });
+});
 
 // The receipt's line list, projected from the lines a sale filed (ruling R13's list prices).
 function filed(quantity: string, lineGross: string) {

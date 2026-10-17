@@ -302,15 +302,12 @@ export function buildReceiptDocument({
   const groups = groupByParent(result.lines);
   const filedGroups: FiguredGroup[] = [];
   if (!simplified) {
-    // groupByParent keeps the lines' order, so a dish's index is the count of lines before it.
-    let dishIndex = 0;
+    const filedIndex = new Map(result.lines.map((line, index) => [line, index]));
     groups.forEach(({ dish, options }, at) => {
-      const index = dishIndex;
-      dishIndex += 1 + options.length;
       if (!isFiled(dish) || !options.every(isFiled)) return;
       filedGroups.push({
         at,
-        family: dish.dishFamily ?? index,
+        family: dish.dishFamily ?? filedIndex.get(dish)!,
         lines: [dish, ...options].map(figured),
       });
     });

@@ -14,7 +14,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
-import type { ZoneMenuOffer } from "@waitron/module";
+import type { ZoneMenuOffer, ZoneOffers } from "@waitron/module";
 import {
   AppError,
   centsToDecimal,
@@ -37,7 +37,12 @@ import {
   requireOpenParty,
   runServiceCommand,
 } from "./parties.js";
-import { readTabLines, refusePaymentInFlight, screenNote } from "./working-order.js";
+import {
+  prepareRecalledModifiers,
+  readTabLines,
+  refusePaymentInFlight,
+  screenNote,
+} from "./working-order.js";
 import type { TabLine, OrderAttendance } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
@@ -293,7 +298,10 @@ export async function saveDraft(
     const source = prior as RecalledDraftLine;
     if (stringToThousandths(line.quantity) < stringToThousandths(source.quantity))
       throw invalid(`lines.${index}.quantity`);
-    if (line.options !== undefined || line.extras !== undefined)
+    if (
+      source.source.line.menuItemId === null &&
+      (line.options !== undefined || line.extras !== undefined)
+    )
       throw invalid(`lines.${index}.sourceLineId`);
     retainedSources.delete(line.id);
   }
@@ -303,12 +311,29 @@ export async function saveDraft(
   await refusePaymentInFlight(tx, [billId]);
   await validateDraftPlaces(tx, partyId, lines);
   await requireCourses(tx, cfg, freshLines, previous.filter(isFresh));
-  const offers = await offersFor(
-    tx,
-    cfg,
-    partyId,
-    freshLines.map((line) => line.menuItemId),
+  const choiceOffers = lines.flatMap((line) =>
+    line.sourceLineId !== null && (line.options !== undefined || line.extras !== undefined)
+      ? [(owned.get(line.id)! as RecalledDraftLine).source.line.menuItemId!]
+      : [],
   );
+  let snapshot: ZoneOffers | undefined;
+  if (choiceOffers.length > 0) {
+    const zoneId = await partyZone(tx, cfg, partyId);
+    if (zoneId !== null)
+      snapshot = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId, {
+        menuItemIds: [...new Set([...choiceOffers, ...freshLines.map((line) => line.menuItemId)])],
+        withDefault: false,
+      });
+  }
+  const offers =
+    snapshot === undefined
+      ? await offersFor(
+          tx,
+          cfg,
+          partyId,
+          freshLines.map((line) => line.menuItemId),
+        )
+      : new Map(snapshot.offers.map((offer) => [offer.id, offer]));
   for (const line of freshLines) {
     const offer = offers.get(line.menuItemId);
     if (offer?.ordering === "not_sold_separately") {
@@ -355,9 +380,40 @@ export async function saveDraft(
     if (held > 0) priorChoices.set(key, held - 1);
     else await requireMakeAtStation(tx, cfg, line.makeAt);
   }
+  const sources = lines.filter((line) => line.sourceLineId !== null);
+  const families =
+    sources.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, billId));
+  const sourcePlans = await prepareRecalledModifiers(
+    tx,
+    cfg,
+    billId,
+    sources.map((line) => {
+      const parent = families.find((row) => row.id === line.sourceLineId);
+      if (parent === undefined) throw invalid("sourceLineId");
+      return {
+        parent,
+        children: families.filter((child) => child.parentLineId === parent.id),
+        input: line,
+      };
+    }),
+    snapshot,
+  );
   for (const line of lines) {
     if (line.sourceLineId !== null)
-      await saveRecalledLine(tx, cfg, partyId, line.sourceLineId, line, operatorId);
+      await saveRecalledLine(
+        tx,
+        cfg,
+        partyId,
+        line.sourceLineId,
+        line,
+        operatorId,
+        sourcePlans.get(line.sourceLineId),
+      );
   }
   const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
   const assigned = new Set(

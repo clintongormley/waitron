@@ -1,4 +1,5 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, max } from "drizzle-orm";
+import { isDeepStrictEqual } from "node:util";
 import {
   orderDraftRecalledLines,
   orderDrafts,
@@ -35,11 +36,12 @@ import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
 import {
   bumpRevision,
   extraQuantityFor,
-  keptExtrasOf,
+  prepareRecalledModifiers,
   partyAfterEdit,
   refuseOrderOverSimplifiedLimit,
   refusePaymentInFlight,
   storedOrderTotal,
+  type RecalledModifierPlan,
   type OrderAttendance,
 } from "./working-order.js";
 import "./errors.js";
@@ -51,6 +53,7 @@ export async function saveRecalledLine(
   sourceLineId: string,
   input: DraftLineInput,
   operatorId: string,
+  prepared?: RecalledModifierPlan,
 ): Promise<void> {
   const [owned] = await tx
     .select({ line: workingOrderLines })
@@ -76,7 +79,21 @@ export async function saveRecalledLine(
   const { line } = owned;
   const quantity = stringToThousandths(input.quantity);
   if (quantity < line.quantity) throw invalid("quantity");
+  const children = await tx
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.parentLineId, line.id));
+  const modifiers =
+    prepared ??
+    (
+      await prepareRecalledModifiers(tx, cfg, line.workingOrderId, [
+        { parent: line, children, input },
+      ])
+    ).get(line.id)!;
+  const extrasChanged = modifiers.removed.length > 0 || modifiers.added !== null;
   const changed =
+    !isDeepStrictEqual(modifiers.options, line.optionSnapshots) ||
+    extrasChanged ||
     quantity !== line.quantity ||
     line.note !== input.note ||
     line.courseId !== input.courseId ||
@@ -87,10 +104,6 @@ export async function saveRecalledLine(
   assertQuantityPrecision(input.quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, {
     positive: true,
   });
-  const children = await tx
-    .select()
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.parentLineId, line.id));
   await refusePaidLines(
     tx,
     line.workingOrderId,
@@ -101,7 +114,7 @@ export async function saveRecalledLine(
   if (input.makeAt != null && input.makeAt !== line.makeAtStationId)
     await requireMakeAtStation(tx, cfg, input.makeAt);
   const before =
-    quantity !== line.quantity && cfg.simplifiedInvoiceLimit !== null
+    (quantity !== line.quantity || extrasChanged) && cfg.simplifiedInvoiceLimit !== null
       ? await storedOrderTotal(tx, line.workingOrderId)
       : null;
   await tx
@@ -110,6 +123,7 @@ export async function saveRecalledLine(
       note: input.note,
       courseId: input.courseId,
       makeAtStationId: input.makeAt,
+      optionSnapshots: modifiers.options,
       ...(quantity === line.quantity
         ? {}
         : {
@@ -125,7 +139,7 @@ export async function saveRecalledLine(
     })
     .where(eq(workingOrderLines.id, sourceLineId));
   if (quantity !== line.quantity) {
-    for (const { child, perDish } of keptExtrasOf(children, line.quantity)) {
+    for (const { child, perDish } of modifiers.kept) {
       const childQuantity = extraQuantityFor(perDish, decimal(input.quantity), child.priceQuantity);
       await tx
         .update(workingOrderLines)
@@ -141,6 +155,40 @@ export async function saveRecalledLine(
         })
         .where(eq(workingOrderLines.id, child.id));
     }
+  }
+  if (modifiers.removed.length > 0)
+    await tx.delete(workingOrderLines).where(
+      inArray(
+        workingOrderLines.id,
+        modifiers.removed.map((child) => child.id),
+      ),
+    );
+  if (modifiers.added !== null) {
+    const [last] = await tx
+      .select({ number: max(workingOrderLines.lineNo) })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, line.workingOrderId));
+    let next = last!.number ?? 0;
+    const rows = modifiers.added.lineRows.filter((row) => row.parentLineId !== null);
+    await tx.insert(workingOrderLines).values(
+      rows.map((row) => ({
+        ...row,
+        parentLineId: line.id,
+        lineNo: ++next,
+        groupId: line.groupId,
+        creditedTo: line.creditedTo,
+      })),
+    );
+    const ids = new Set(rows.map((row) => row.id));
+    await VENUE_SERVICE.recordLineContexts(
+      tx,
+      cfg,
+      line.workingOrderId,
+      modifiers.added.lineContexts.filter((row) => ids.has(row.workingOrderLineId)),
+      modifiers.added.offers,
+    );
+  }
+  if (quantity !== line.quantity || extrasChanged) {
     await assertBillInvariant(tx, [line.workingOrderId]);
     await refuseOrderOverSimplifiedLimit(tx, cfg, line.workingOrderId, before);
   }

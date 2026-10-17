@@ -864,6 +864,10 @@ change to the note, options or extras of a line the kitchen already has is refus
 `product.unavailable` too, because the changed line is sent to the kitchen again — `applyLineEdits`),
 and paying bills such a line only once it has been sent; unsent, it is refused `product.unavailable`
 (`priceStoredOrderForIssuance`).
+When you edit a recalled dish, the dish and any extra you keep retain their recorded prices and
+names. An added extra uses the current offered list and price; an unavailable dish or variant does
+not block that choice (`prepareRecalledModifiers`, `apps/server/src/working-order.ts`). A dish
+without recorded choice metadata keeps its modifiers and refuses explicit replacement selections.
 `listMenuOffers` keeps an Unavailable product's offer, as it does an Available one. A variant is
 listed only under its parent's offer, only while Active, and as available only while Available; a
 menu cannot hide one (_Active and Available_, under _Variants_).
