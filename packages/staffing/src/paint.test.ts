@@ -329,8 +329,8 @@ describe("season staffing", () => {
     const read = await inTx((tx) => readSeasonStaffing(tx, v.cfg, v.seasonId));
     expect(read.cutover).toBe("03:00");
     expect(read.seasons).toEqual([
-      { id: winter!.id, name: "Winter", startsOn: "01-15" },
-      { id: v.seasonId, name: "Summer", startsOn: "06-01" },
+      { id: winter!.id, name: "Winter", startsOn: "01-15", colour: "grey" },
+      { id: v.seasonId, name: "Summer", startsOn: "06-01", colour: "grey" },
     ]);
     expect(read.seasons.map((s) => s.id)).not.toContain(other.seasonId);
     expect((await inTx((tx) => readSeasonStaffing(tx, v.cfg, winter!.id))).seasons).toEqual(

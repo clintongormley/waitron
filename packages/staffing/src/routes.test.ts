@@ -574,7 +574,7 @@ describe("the staffing paint routes", () => {
     );
     await answers(await p.call("GET", path, p.supervisor), 200, {
       cutover: "06:00",
-      seasons: [{ id: p.seasonId, name: "Summer", startsOn: "06-01" }],
+      seasons: [{ id: p.seasonId, name: "Summer", startsOn: "06-01", colour: "grey" }],
       areas: [
         { area: p.dept, name: "Dining room", weekdays: week({ 0: [lunch] }) },
         { area: p.grill, name: "Grill", weekdays: week({ 6: [night] }) },

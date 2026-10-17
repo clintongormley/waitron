@@ -39,11 +39,12 @@ export async function readStaffingMonth(
     month,
     today: frame.today,
     areas,
-    seasons: frame.seasons.map(({ id, name, startsOn, lastDay }) => ({
+    seasons: frame.seasons.map(({ id, name, startsOn, lastDay, colour }) => ({
       id,
       name,
       startsOn,
       lastDay,
+      colour,
     })),
     days: frame.days.map((day) => {
       const byArea = resolved.get(day.date)!;
