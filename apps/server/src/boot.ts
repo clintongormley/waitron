@@ -565,6 +565,8 @@ export function connectedCardProviderSweep(deps: {
   };
 }
 
+const listenerBindFailures = new WeakMap<ReturnType<typeof serve>, Error>();
+
 /**
  * Bind the one HTTP listener and wire its listen-failure handler. Called LAST in each branch, so the
  * mounted app is complete before it binds.
@@ -596,6 +598,7 @@ function startListening(
     /* v8 ignore start */
     if (bound) return;
     /* v8 ignore stop */
+    listenerBindFailures.set(server, error);
     const failure = new AppError("server.listen_failed", {
       port: config.httpPort,
       // `code` is optional on the error TYPE; the fallback is type-required.
@@ -729,7 +732,11 @@ function makeStartedServer(
         teardown.stopWork,
         // closeListener drops idle keep-alive sockets (then all, after a grace) so this resolves —
         // Node's server.close() otherwise waits forever on the setup page's poll connection.
-        () => closeListener(server),
+        async () => {
+          await closeListener(server);
+          const failure = listenerBindFailures.get(server);
+          if (failure !== undefined) throw failure;
+        },
         teardown.settleRequests,
         () => landing?.close().catch(() => {}),
         teardown.closePools,

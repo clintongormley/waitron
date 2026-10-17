@@ -2226,6 +2226,16 @@ unsubscribe. Against the changed suite, removing `.reverse()` timed out in the t
 cases, and removing `liveEvents.close()` failed its assertion. Removing `await loop` still passed
 all 15 cases. The 2026-09-26 deletion results above describe the suite as it stood then.
 
+On 2026-10-17, A764's independent card loop exposed an early close in the secondary boot and
+promotion tests. A real `node:http` listener on Node v26.11.1, closed immediately after
+`listen(0, "127.0.0.1")`, reported `ERR_SERVER_NOT_RUNNING` and remained stopped after an event-loop
+turn. `closeListener` now accepts that result; its real-listener regression failed before the
+change, and its other-error checks remain. Boot retains an actual bind failure and reports it
+from shutdown; the existing address-in-use and unknown-host shutdown checks remain unchanged.
+The pending-card failed-start test also holds the loop
+after abort: removing its specific `await pendingCardLoop` now fails. This does not establish that
+the suite catches a missing wait for every other duty.
+
 The landing listener, started last, is the one step not on the list.
 
 **What the guard does not see.** `apps/server/src/boot.failed-start.test.ts` is weaker than its

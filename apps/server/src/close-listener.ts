@@ -35,7 +35,10 @@ export async function closeListener(
   // Register close() before arming the grace timer, so the forced closeAllConnections fires into a
   // close() already waiting to resolve.
   const closed = new Promise<void>((resolve, reject) =>
-    server.close((error) => (error ? reject(error) : resolve())),
+    server.close((error) => {
+      if (error && !("code" in error && error.code === "ERR_SERVER_NOT_RUNNING")) reject(error);
+      else resolve();
+    }),
   );
   const setTimer = deps.setTimer ?? unrefTimer;
   const timer = setTimer(deps.graceMs ?? DEFAULT_GRACE_MS, () => server.closeAllConnections?.());
