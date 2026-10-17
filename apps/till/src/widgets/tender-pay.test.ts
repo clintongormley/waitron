@@ -1958,14 +1958,70 @@ describe("the receipt's guests field", () => {
     expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 4 });
   });
 
-  it("carries a stepped-up count, then starts again on the default after the payment", async () => {
-    const { el } = await mount();
+  it("carries a stepped-up count, then starts again on the default for the next order", async () => {
+    const { el, store } = await mount();
     await step(el, "1");
     expect(guests(el)!.value).toBe("5");
     const spy = listen(el, "confirm-payment");
     await payCash(el);
     expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 5 });
+    store.clear();
+    store.addProduct(cafe, "1");
+    await el.updateComplete;
     expect(guests(el)!.value).toBe("4");
+  });
+
+  it("keeps the waiter's count after a payment while the order stays the same", async () => {
+    const { el } = await mount();
+    await step(el, "1");
+    await payCash(el);
+    expect(guests(el)!.value).toBe("5");
+    const spy = listen(el, "confirm-payment");
+    click(el, ".pay-card");
+    await el.updateComplete;
+    click(el, ".confirm");
+    await el.updateComplete;
+    expect(spy).toHaveBeenCalledWith({ method: "card", amount: "1.50", guests: 5 });
+    expect(guests(el)!.value).toBe("5");
+  });
+
+  it("ignores a change while a payment is being sent", async () => {
+    const { el } = await mount();
+    el.busy = true;
+    await el.updateComplete;
+    guests(el)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "9" }, bubbles: true, composed: true }),
+    );
+    el.busy = false;
+    await el.updateComplete;
+    expect(guests(el)!.value).toBe("4");
+    const spy = listen(el, "confirm-payment");
+    await payCash(el);
+    expect(spy).toHaveBeenCalledWith({ method: "cash", amount: "5", guests: 4 });
+  });
+
+  it.each([
+    ["en-GB", "No line"],
+    ["es-ES", "Sin línea"],
+  ])("the empty field in %s has room for «%s»", async (locale, placeholder) => {
+    const previous = currentLocale();
+    setLocale(locale);
+    onTestFinished(() => setLocale(previous));
+    const { el } = await mount({ receiptGuests: null });
+    const stepper = guests(el)!;
+    await stepper.updateComplete;
+    const input = stepper.shadowRoot!.querySelector("input")!;
+    expect(input.placeholder).toBe(placeholder);
+    const style = getComputedStyle(input);
+    const probe = document.createElement("span");
+    probe.textContent = placeholder;
+    probe.style.font = style.font;
+    probe.style.position = "absolute";
+    probe.style.whiteSpace = "pre";
+    document.body.append(probe);
+    onTestFinished(() => probe.remove());
+    const room = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    expect(probe.getBoundingClientRect().width).toBeLessThanOrEqual(room);
   });
 
   it.each([
@@ -2073,6 +2129,7 @@ describe("the receipt's guests field", () => {
     await el.updateComplete;
     expect(spy).not.toHaveBeenCalled();
     expect(guests(el)!.error).toBe(t("seat.guest_count_invalid"));
+    expect(el.shadowRoot!.activeElement).toBe(guests(el));
   });
 
   it("a new order puts the field back on the default and clears the messages", async () => {

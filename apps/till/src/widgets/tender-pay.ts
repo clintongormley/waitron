@@ -241,6 +241,11 @@ export class TillTenderPay extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      /* Room for the empty field's placeholder between the two buttons. */
+      .guests {
+        --wt-stepper-field-width: calc(var(--wt-tap-min) * 3);
+      }
+
       .reader-name,
       .cash-at-till {
         margin: 0;
@@ -744,7 +749,6 @@ export class TillTenderPay extends LitElement {
       amount: this.#enteredDecimal(),
       ...this.#guestsDetail(),
     };
-    this.#resetGuests();
     this.dispatchEvent(
       new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
         detail,
@@ -767,7 +771,6 @@ export class TillTenderPay extends LitElement {
       ...(ref === "" ? {} : { externalRef: ref }),
       ...this.#guestsDetail(),
     };
-    this.#resetGuests();
     this.view = "idle";
     this.refEntry = "";
     this.dispatchEvent(

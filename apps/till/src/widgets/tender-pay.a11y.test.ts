@@ -48,6 +48,17 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with the guests field empty", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, asksGuests: true, receiptGuests: null },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with the guests field marked invalid", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
