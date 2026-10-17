@@ -12,6 +12,7 @@ import type {
   OpeningHoursMonthView,
 } from "./opening-hours-month.js";
 import "./opening-hours-month.js";
+import type { ShowStation, StationShow } from "./station-show.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -1226,5 +1227,224 @@ describe("Opening hours month", () => {
     const tracks = [...root(el).querySelectorAll<HTMLElement>("button.day .track")];
     expect(tracks.length).toBeGreaterThan(0);
     for (const track of tracks) expect(track.getAttribute("aria-hidden")).toBe("true");
+  });
+});
+
+const STATIONS: ShowStation[] = [
+  { id: "grill", name: "Grill" },
+  { id: "cold", name: "Cold kitchen" },
+];
+const SENDERS = DEPARTMENTS.map(({ id, name, periods }) => ({
+  id,
+  name,
+  zones: [],
+  periods: periods.map(({ id, name, colour }) => ({ id, name, colour })),
+}));
+/** The Grill's month: the Restaurant and the Bar both send it orders, neither on 15 December. */
+function grill(): StationShow {
+  const model = monthModel();
+  return {
+    id: "grill",
+    state: "ready",
+    model: {
+      ...model,
+      days: model.days.map((day) => ({
+        ...day,
+        departments: day.departments.map((d) => ({
+          departmentId: d.departmentId,
+          ranges: day.date === "2026-12-15" ? [] : d.ranges,
+          zones: [],
+        })),
+      })),
+    },
+    departments: SENDERS,
+  };
+}
+const show = (el: OpeningHoursMonthView) =>
+  root(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=departmentId]")!;
+const choose = (el: OpeningHoursMonthView, value: string) =>
+  show(el).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+
+describe("Opening hours month, a station shown", () => {
+  it("Show lists stations in their own group, after the departments", async () => {
+    for (const [locale, departments, stations] of [
+      ["en", "Departments", "Prep stations"],
+      ["es", "Departamentos", "Estaciones de preparación"],
+    ] as const) {
+      setLocale(locale);
+      const el = await mount(monthModel(), { stations: STATIONS });
+      expect(show(el).options.map(({ value, label, group }) => ({ value, label, group }))).toEqual([
+        {
+          value: "all",
+          label: locale === "en" ? "All departments" : "Todos los departamentos",
+          group: undefined,
+        },
+        { value: "rest", label: "Restaurant", group: departments },
+        { value: "bar", label: "Bar", group: departments },
+        { value: "station:grill", label: "Grill", group: stations },
+        { value: "station:cold", label: "Cold kitchen", group: stations },
+      ]);
+      el.remove();
+    }
+  });
+
+  it("with no stations Show is as before", async () => {
+    const el = await mount(monthModel(), { departmentId: "bar" });
+    expect(show(el).options).toEqual([
+      { value: "all", label: "All departments" },
+      { value: "rest", label: "Restaurant" },
+      { value: "bar", label: "Bar" },
+    ]);
+    expect(show(el).value).toBe("bar");
+  });
+
+  it("choosing a station sends month-station-change", async () => {
+    const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
+    expect(show(el).value).toBe("station:grill");
+    const stations = events<{ stationId: string }>(el, "month-station-change");
+    const departments = events<{ departmentId: string }>(el, "month-department-change");
+    choose(el, "station:grill");
+    choose(el, "station:cold");
+    expect(stations).toEqual([{ stationId: "cold" }]);
+    choose(el, "rest");
+    expect(departments).toEqual([{ departmentId: "rest" }]);
+    expect(show(el).value).toBe("station:grill");
+  });
+
+  it("a station draws a row per sending department, its dates still buttons that open the box", async () => {
+    const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
+    expect(testId(el, "rows")).toBeNull();
+    const monday = cell(el, "2026-12-07");
+    const tracks = [...monday.querySelectorAll<HTMLElement>(".track")];
+    expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
+    expect(
+      tracks.map((track) =>
+        [...track.querySelectorAll<HTMLElement>(".segment")].map((s) => s.title),
+      ),
+    ).toEqual([
+      [
+        "Breakfast (Restaurant) 08:00–11:00",
+        "Lunch (Restaurant) 13:00–16:00",
+        "Dinner (Restaurant) 20:00–23:00",
+      ],
+      ["All day (Bar) 10:00–02:00"],
+    ]);
+    const sunday = cell(el, "2026-12-06");
+    expect(sunday.querySelectorAll('.track[data-row="rest"] .segment')).toHaveLength(0);
+    expect(sunday.querySelector('[data-test="no-orders"]')).toBeNull();
+    await named(dayButton(el, "2026-12-06")).toHaveAccessibleName(
+      containing("Restaurant: No orders, Bar: All day 10:00–02:00"),
+    );
+    expect(root(el).querySelectorAll("td[data-date] button.day")).toHaveLength(
+      monthModel().days.length,
+    );
+    const sent = events<CalendarDayOpen>(el, "calendar-day-open");
+    await userEvent.click(dayButton(el, "2026-12-07"));
+    expect(sent.map(({ date }) => date)).toEqual(["2026-12-07"]);
+  });
+
+  it("names a lone sending department beside each period", async () => {
+    const station = grill() as Extract<StationShow, { state: "ready" }>;
+    const el = await mount(monthModel(), {
+      stations: STATIONS,
+      station: {
+        ...station,
+        model: {
+          ...station.model,
+          days: station.model.days.map((day) => ({
+            ...day,
+            departments: day.departments.slice(1),
+          })),
+        },
+        departments: SENDERS.slice(1),
+      },
+    });
+    expect(
+      [...cell(el, "2026-12-07").querySelectorAll<HTMLElement>(".segment")].map((s) => s.title),
+    ).toEqual(["All day (Bar) 10:00–02:00"]);
+  });
+
+  it("a date no department sends on reads No orders once", async () => {
+    for (const [locale, words] of [
+      ["en", "No orders"],
+      ["es", "Sin pedidos"],
+    ] as const) {
+      setLocale(locale);
+      const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
+      const none = cell(el, "2026-12-15");
+      expect([...none.querySelectorAll('[data-test="no-orders"]')].map(text)).toEqual([words]);
+      expect(none.querySelectorAll(".track")).toHaveLength(0);
+      await named(dayButton(el, "2026-12-15")).toHaveAccessibleName(containing(words));
+      expect(dayButton(el, "2026-12-15").ariaLabel ?? "").not.toContain("Restaurant");
+      el.remove();
+    }
+    setLocale("en");
+    const station = grill() as Extract<StationShow, { state: "ready" }>;
+    const el = await mount(monthModel(), {
+      stations: STATIONS,
+      station: {
+        ...station,
+        model: {
+          ...station.model,
+          days: station.model.days.map((day) => ({ ...day, departments: [] })),
+        },
+        departments: [],
+      },
+    });
+    for (const day of monthModel().days)
+      expect(
+        [...cell(el, day.date).querySelectorAll('[data-test="no-orders"]')].map(text),
+        day.date,
+      ).toEqual(["No orders"]);
+  });
+
+  it("the default station reads Always open in place of the dates", async () => {
+    for (const [locale, words] of [
+      ["en", "Always open: this is the default station"],
+      ["es", "Siempre abierta: es la estación predeterminada"],
+    ] as const) {
+      setLocale(locale);
+      const el = await mount(monthModel(), {
+        stations: STATIONS,
+        station: { id: "grill", state: "always" },
+      });
+      expect(root(el).querySelector("table")).toBeNull();
+      expect(text(testId(el, "always-open"))).toBe(words);
+      expect(show(el).value).toBe("station:grill");
+      el.remove();
+    }
+  });
+
+  it("loading draws only the head", async () => {
+    const el = await mount(monthModel(), {
+      stations: STATIONS,
+      station: { id: "grill", state: "loading" },
+    });
+    expect(root(el).querySelector("table")).toBeNull();
+    expect(testId(el, "always-open")).toBeNull();
+    expect([...root(el).children].map((child) => child.className)).toEqual(["head"]);
+    expect(show(el).value).toBe("station:grill");
+  });
+
+  it("keeps Show inside a phone's window with a long unbroken department name", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
+    await page.viewport(390, 800);
+    try {
+      expect(window.innerWidth).toBe(390);
+      const long = "W".repeat(60);
+      const departments = DEPARTMENTS.map((d) => (d.id === "bar" ? { ...d, name: long } : d));
+      const el = await mount(monthModel(), {
+        departments,
+        departmentId: "bar",
+        stations: STATIONS,
+      });
+      await show(el).updateComplete;
+      expect(show(el).getBoundingClientRect().right).toBeLessThanOrEqual(390);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 });
