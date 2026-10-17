@@ -1540,15 +1540,24 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           device.deviceId,
         );
         const counters = selection.zones.filter(
-          (zone) => zone.serviceMode !== "table_tab" && selection.selectedZoneIds.includes(zone.id),
+          (zone) =>
+            zone.serviceMode !== "table_tab" &&
+            (device.formFactor !== "till" || selection.selectedZoneIds.includes(zone.id)),
         );
-        const zoneId =
-          counters.find((zone) => zone.id === selection.startingZoneId)?.id ?? counters[0]?.id;
-        if (zoneId === undefined)
-          throw new AppError("device_profile.no_service_zone", {
+        let context: Awaited<ReturnType<typeof VENUE_SERVICE.resolveZoneContext>>;
+        if (device.formFactor === "till") {
+          const zoneId =
+            counters.find((zone) => zone.id === selection.startingZoneId)?.id ?? counters[0]?.id;
+          if (zoneId === undefined)
+            throw new AppError("device_profile.no_service_zone", {
+              profileId: device.deviceProfileId,
+            });
+          context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
+        } else {
+          context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
             profileId: device.deviceProfileId,
           });
-        const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
+        }
         const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, context.zoneId);
         return {
           context: {

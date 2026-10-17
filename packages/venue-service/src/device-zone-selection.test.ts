@@ -109,8 +109,20 @@ describe("device zone selection", () => {
       profileId: f.profileId,
       snapshot: expect.any(String),
       zones: [
-        { id: f.dining, name: "Dining", serviceMode: "table_tab" },
-        { id: f.terrace, name: "Terrace", serviceMode: "table_tab" },
+        {
+          id: f.dining,
+          name: "Dining",
+          serviceMode: "table_tab",
+          departmentId: f.restaurant,
+          departmentName: "Restaurant",
+        },
+        {
+          id: f.terrace,
+          name: "Terrace",
+          serviceMode: "table_tab",
+          departmentId: f.restaurant,
+          departmentName: "Restaurant",
+        },
       ],
       selectedZoneIds: [f.dining, f.terrace],
       startingZoneId: f.dining,
@@ -405,4 +417,27 @@ it("enforces parent and child foreign keys and both composite primary keys on ac
         .values({ deviceId: f.deviceId, deviceProfileId: f.profileId, zoneId: randomUUID() }),
     ),
   ).rejects.toThrow(/FOREIGN KEY constraint failed/);
+});
+
+it("retains every permitted zone's department metadata when the display subset hides one", async () => {
+  const f = await fixture();
+  await save(f, [f.terrace], f.terrace);
+  const answer = await read(f);
+  expect(answer.selectedZoneIds).toEqual([f.terrace]);
+  expect(answer.zones).toEqual([
+    {
+      id: f.dining,
+      name: "Dining",
+      serviceMode: "table_tab",
+      departmentId: f.restaurant,
+      departmentName: "Restaurant",
+    },
+    {
+      id: f.terrace,
+      name: "Terrace",
+      serviceMode: "table_tab",
+      departmentId: f.restaurant,
+      departmentName: "Restaurant",
+    },
+  ]);
 });

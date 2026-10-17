@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget, servedMenus, draftServer } from "./widgets/test-helpers.js";
@@ -152,6 +153,7 @@ function listing(revision: number, canaPrice = "2.50", canaQuantity = "1.000"): 
 
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, [])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

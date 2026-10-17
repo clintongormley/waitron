@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "../test/device-zones.js";
 import { page } from "vitest/browser";
 import { setLocale } from "./i18n/t.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -36,6 +37,7 @@ const products: TillProduct[] = [
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
     // Without it the boot fails and the till never leaves its lock screen.
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

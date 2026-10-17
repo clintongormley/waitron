@@ -1,3 +1,4 @@
+import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import {
   transactionRow,
   billOptions,
@@ -158,6 +159,7 @@ const zone = (id: string, serviceMode: ServiceZoneSummary["serviceMode"]): Servi
 let api: TillApi;
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["look-zone"])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
@@ -239,7 +241,12 @@ function emit(source: Element, type: string, detail?: unknown): void {
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
 const shell = (el: TillApp) =>
   el.shadowRoot!.querySelector<
-    HTMLElement & { activeScreen?: string; loadLocales?: () => Promise<unknown> }
+    HTMLElement & {
+      activeScreen?: string;
+      loadLocales?: () => Promise<unknown>;
+      showCounter: boolean;
+      counterZones: readonly { id: string; name: string }[];
+    }
   >("till-shell");
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
@@ -1643,6 +1650,7 @@ describe("till-app receipt issuance", () => {
     );
     delete catalogue.zones;
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
     });
     const c = await toCounter(el);
@@ -1654,6 +1662,7 @@ describe("till-app receipt issuance", () => {
     const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
     catalogue.context.receiptPrintMode = "on_request";
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
     });
     const c = await toCounter(el);
@@ -1671,6 +1680,7 @@ describe("till-app receipt issuance", () => {
     const deli = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-deli");
     deli.context.receiptPrintMode = "auto";
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(initial)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(initial),
       listZoneOffers: vi.fn().mockResolvedValue(deli),
     });
@@ -1690,6 +1700,7 @@ describe("till-app receipt issuance", () => {
     const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
     catalogue.context.receiptPrintMode = "on_request";
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       printReceipt,
     });
@@ -1787,7 +1798,7 @@ describe("till-app counter menus and service zones", () => {
     expect(c.selectedServiceZoneId).toBe("zone-counter");
   });
 
-  it("keeps the counter's pay timing when the new zone serves by table tab, and falls back to its marked default menu", async () => {
+  it("keeps the current counter and pay timing when a forged counter pick names a table zone", async () => {
     const catalogue = zoneOffers(
       { menus: [defaultMenu], products: [cafe] },
       "zone-counter",
@@ -1807,6 +1818,7 @@ describe("till-app counter menus and service zones", () => {
       null,
     );
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       listZoneOffers: vi.fn().mockResolvedValue(terrace),
     });
@@ -1816,9 +1828,10 @@ describe("till-app counter menus and service zones", () => {
     emit(c, "counter-zone-selected", { zoneId: "zone-terrace" });
     await flush(el);
 
-    expect(c.selectedServiceZoneId).toBe("zone-terrace");
+    expect(c.selectedServiceZoneId).toBe("zone-counter");
     expect(c.orderFlow).toBe("ticket_then_pay");
-    expect(c.selectedMenuId).toBe("menu-drinks");
+    expect(c.selectedMenuId).toBe("cat-default");
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
   });
 
   it("shows service_zone.load_error when the new zone's menus cannot load, but not for a superseded request", async () => {
@@ -1838,6 +1851,7 @@ describe("till-app counter menus and service zones", () => {
         }),
     );
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       listZoneOffers,
     });
@@ -1859,6 +1873,7 @@ describe("till-app counter menus and service zones", () => {
     const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
     catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-a", "prepay")];
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       listZoneOffers: vi
         .fn()
@@ -1900,6 +1915,7 @@ describe("till-app counter menus and service zones", () => {
       "zone-b",
     );
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(zoneA)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneA),
       listZoneOffers: vi.fn().mockResolvedValue(zoneB),
     });
@@ -2218,6 +2234,7 @@ describe("till-app retrieving a held order", () => {
       "zone-counter",
     );
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         kitchenNote: {
@@ -2379,6 +2396,7 @@ describe("till-app fits the page it is given", () => {
         capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
       }),
       pay: vi.fn().mockRejectedValue({ code: "device.forbidden_action", status: 403 }),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(fullMenu)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(fullMenu),
     });
     host.style.height = `${PAGE_HEIGHT}px`;
@@ -2417,6 +2435,7 @@ describe("till-app fits the page it is given", () => {
           capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
         }),
         pay: vi.fn().mockRejectedValue({ code: "device.forbidden_action", status: 403 }),
+        getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(fullMenu)),
         listDefaultZoneOffers: vi.fn().mockResolvedValue(fullMenu),
       });
       const el = Object.assign(document.createElement("till-app"), { api });
@@ -2903,6 +2922,7 @@ describe("till-app logout while a request is waiting for the server", () => {
     catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
     let answer!: (catalogue: ZoneOfferCatalogue) => void;
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       listZoneOffers: vi.fn(() => new Promise<ZoneOfferCatalogue>((resolve) => (answer = resolve))),
     });
@@ -2929,6 +2949,7 @@ describe("till-app logout while a request is waiting for the server", () => {
     );
     let answerStations!: (rows: []) => void;
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       listZoneOffers: vi.fn().mockResolvedValue(deli),
     });
@@ -3675,6 +3696,7 @@ describe("department transfers across operator lifetimes", () => {
     });
     const { el } = await mountApp({
       ...desk.calls,
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       listIncomingDepartmentTransfers: vi.fn(async () => ({
         receiving: true,
@@ -4776,10 +4798,11 @@ describe("hierarchy deletion service choices", () => {
     "an explicit empty service bound leaves no unscoped counter fallback after %s",
     async (code) => {
       const { el } = await mountApp({ listDefaultZoneOffers: vi.fn().mockRejectedValue({ code }) });
-      const c = await toCounter(el);
-      expect(c.selectedServiceZoneId).toBe("");
-      expect(c.products).toEqual([]);
-      expect(c.serviceZones).toEqual([]);
+      await toCounter(el);
+      expect(counter(el)).toBeNull();
+      expect(shell(el)!.showCounter).toBe(false);
+      expect(shell(el)!.counterZones).toEqual([]);
+      expect(el.shadowRoot!.querySelector("[data-device-zones-empty]")).not.toBeNull();
       expect(banner(el)!.textContent).toContain(
         code === "device_profile.no_service_zone"
           ? codeMessage(code)
@@ -5976,7 +5999,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                   displayOrder: 0,
                   active: true,
                   hasPlan: false,
-                  serviceMode: "table",
+                  serviceMode: "table_tab",
                   closesAt: null,
                   closed: false,
                 },

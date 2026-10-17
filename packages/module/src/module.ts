@@ -467,7 +467,13 @@ export interface DepartmentTransferReceiver extends DepartmentTransferActor {
 export interface DeviceZoneSelection {
   profileId: string;
   snapshot: string;
-  zones: readonly { id: string; name: string; serviceMode: ServiceMode }[];
+  zones: readonly {
+    id: string;
+    name: string;
+    serviceMode: ServiceMode;
+    departmentId: string;
+    departmentName: string;
+  }[];
   selectedZoneIds: readonly string[];
   startingZoneId: string | null;
   adjusted: boolean;

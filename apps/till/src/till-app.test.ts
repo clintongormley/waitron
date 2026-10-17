@@ -1,3 +1,4 @@
+import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import type { TillFindBillScreen } from "./screens/till-find-bill-screen.js";
 import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import {
@@ -417,6 +418,7 @@ function fixtureOffers(
  */
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   const api = {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
@@ -1584,7 +1586,22 @@ describe("till-app", () => {
       ],
     });
     const recordSale = vi.fn().mockResolvedValue(saleResult);
-    const { el } = await mountApp({ listDefaultZoneOffers, recordSale });
+    const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue({
+        ...deviceZonesFixture(),
+        zones: [
+          {
+            id: "zone-counter",
+            name: "Bar",
+            departmentId: "department-default",
+            departmentName: "Restaurant",
+            serviceMode: "prepay",
+          },
+        ],
+      }),
+      listDefaultZoneOffers,
+      recordSale,
+    });
     const c = await toCounter(el);
 
     expect(listDefaultZoneOffers).toHaveBeenCalledOnce();
@@ -1644,14 +1661,16 @@ describe("till-app", () => {
       listDefaultZoneOffers: vi.fn().mockRejectedValue({ code: "device_profile.no_service_zone" }),
     });
 
-    const c = await toCounter(el);
-    expect(c.products).toEqual([]);
+    await toCounter(el);
+    expect(counter(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-device-zones-empty]")).not.toBeNull();
     const alert = el.shadowRoot!.querySelector('[role="alert"]')?.textContent;
     expect(alert).toContain(codeMessage("device_profile.no_service_zone"));
     expect(alert).not.toContain(t("service_zone.load_error"));
   });
 
-  it("changes and manually refreshes the counter's service zone", async () => {
+  it("changes the counter zone and accepts a re-selection of the current zone", async () => {
     const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
     defaultCatalogue.zones = [
       {
@@ -1681,6 +1700,7 @@ describe("till-app", () => {
     };
     const listZoneOffers = vi.fn().mockResolvedValue(deliCatalogue);
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultCatalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
       listZoneOffers,
     });
@@ -1719,17 +1739,22 @@ describe("till-app", () => {
     ];
     const listZoneOffers = vi.fn();
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       listZoneOffers,
     });
     const c = await toCounter(el);
     c.store.addProduct(c.products[0]!, "1");
     await c.updateComplete;
-    const select = c.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="service-zone"]')!;
-    await chooseOption(select, "zone-deli");
+    const zoneMenu = shell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-counter-zones]")!;
+    await (zoneMenu as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    await userEvent.click(zoneMenu.shadowRoot!.querySelector("button")!);
+    await userEvent.click(zoneMenu.querySelector<HTMLElement>('[data-counter-zone="zone-deli"]')!);
     await flush(el);
 
-    expect(select.value).toBe("zone-counter");
+    expect(
+      zoneMenu.querySelector('[data-counter-zone="zone-counter"]')!.getAttribute("aria-checked"),
+    ).toBe("true");
     expect(c.selectedServiceZoneId).toBe("zone-counter");
     expect(listZoneOffers).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
@@ -1763,6 +1788,7 @@ describe("till-app", () => {
       deli: new Promise<ZoneOfferCatalogue>((resolve) => (resolveDeli = resolve)),
     };
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(defaultCatalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(defaultCatalogue),
       listZoneOffers: vi.fn((zoneId: "upstairs" | "deli") => requests[zoneId]),
     });
@@ -2079,6 +2105,7 @@ describe("till-app", () => {
       };
       return {
         listZoneOffers: vi.fn().mockResolvedValue(offers),
+        getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(offers)),
         listDefaultZoneOffers: vi.fn().mockResolvedValue(offers),
       };
     };
@@ -7269,6 +7296,7 @@ describe("till-app", () => {
       ],
     } satisfies ZoneOfferCatalogue;
     const { el } = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         kitchenNote: {
@@ -13408,6 +13436,9 @@ describe("till-app", () => {
         return catalogue;
       };
       const zoned = () => ({
+        getDeviceZones: vi
+          .fn()
+          .mockResolvedValue(deviceZonesFixture(["zone-start", "zone-terrace"])),
         listProducts: twoMenuProducts,
         listDefaultZoneOffers: vi.fn(startOffers),
         listZoneOffers: vi.fn(async (zoneId: string) =>
@@ -13469,12 +13500,22 @@ describe("till-app", () => {
         const terraceTable: TableState = {
           ...freeTable,
           id: "table-terrace",
-          zoneId: "zone-terrace",
+          zoneId: "zone-dining",
         };
         const { el } = await mountApp({
           ...zoned(),
+          getDeviceZones: vi
+            .fn()
+            .mockResolvedValue(deviceZonesFixture(["zone-start", "zone-terrace"], ["zone-dining"])),
+          listZoneOffers: vi.fn(async (zoneId: string) => {
+            const catalogue = terraceOffers();
+            return {
+              ...catalogue,
+              context: { ...catalogue.context, zoneId, serviceMode: "table_tab" },
+            };
+          }),
           getTablesState: vi.fn().mockResolvedValue([terraceTable]),
-          listZones: vi.fn().mockResolvedValue([{ ...floorZone, id: "zone-terrace" }]),
+          listZones: vi.fn().mockResolvedValue([{ ...floorZone, id: "zone-dining" }]),
         });
         await toCounter(el);
         switcherButtons(el)[1]!.click();
@@ -13483,7 +13524,7 @@ describe("till-app", () => {
         await flush(el);
         emit(floor(el)!, "open-table", { tableId: terraceTable.id, seated: false });
         await flush(el);
-        expect(currentApi.listZoneOffers).toHaveBeenLastCalledWith("zone-terrace");
+        expect(currentApi.listZoneOffers).toHaveBeenLastCalledWith("zone-dining");
         expect(tableOrder(el)!.selectedMenuId).toBe("cat-cocktails");
         selectTab(el, "counter");
         await flush(el);
@@ -15061,6 +15102,7 @@ describe("a failed list refresh after a successful write", () => {
     return mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       getStationQueue,
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(counterZone)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(counterZone),
       listZoneOffers: vi.fn().mockResolvedValue(deli),
     });
@@ -18905,6 +18947,10 @@ describe("switching the device's profile from the header", () => {
       .mockImplementationOnce(() => offersIn("zone-start", "menu-start"))
       .mockImplementation(() => offersIn("zone-bar", "menu-bar"));
     const { el } = await mountApp({
+      getDeviceZones: vi
+        .fn()
+        .mockResolvedValueOnce(deviceZonesFixture(["zone-start", "zone-terrace"]))
+        .mockResolvedValue(deviceZonesFixture(["zone-bar"])),
       getDeviceIdentity: vi.fn().mockResolvedValue(identity),
       switchDeviceProfile: vi.fn().mockResolvedValue({
         activeProfileId: BAR.id,

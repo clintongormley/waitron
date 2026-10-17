@@ -83,6 +83,22 @@ export const probeTillReload: BrowserCommand<[scenario: Scenario, leave?: Leave]
           nodeId: "native-reload-node",
           servers: [],
         }),
+        getDeviceZones: async () => ({
+          profileId: "profile",
+          snapshot: "scope",
+          zones: [
+            {
+              id: "counter",
+              name: "Counter",
+              departmentId: "department",
+              departmentName: "Restaurant",
+              serviceMode: "prepay",
+            },
+          ],
+          selectedZoneIds: ["counter"],
+          startingZoneId: "counter",
+          adjusted: false,
+        }),
         listDefaultZoneOffers: async () => ({
           context: {
             zoneId: "counter",

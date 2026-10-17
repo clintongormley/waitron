@@ -91,7 +91,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/attendance/commands | none: own question/item/target scope | same foreign-item case in till-attendance-api.test.ts |
  * Attendance allowed control: till-attendance-api.test.ts "serves own history to clock-only staff without service zones and keeps reads passive".
  * | GET/PUT /api/device/zones | current admitted session; PUT checks live profile/selection snapshot and subset | device-zones-api.test.ts: "refuses a foreign zone or profile...", "rechecks %s %s..."; allowed: "serves admitted staff..." |
- * | GET  /api/default-service-zone/offers                   | selected counters within current profile | "starts Counter in a selected counter...", "refuses a fresh Counter read..." |
+ * | GET  /api/default-service-zone/offers                   | Till selection / handheld profile start | "starts Counter in a selected counter...", "keeps its profile..." |
  * | GET  /api/service-zones/:zoneId/offers                  | path zone              | refuses GET /api/service-zones/:zoneId/offers        |
  * | GET  /api/service-zones/:zoneId/keep-open               | path zone              | till-api.keep-open.test.ts: refuses GET for a zone outside the profile department |
  * | PUT  /api/service-zones/:zoneId/period-extension        | path zone              | till-api.keep-open.test.ts: refuses PUT for a zone outside the profile department |
@@ -1796,3 +1796,53 @@ describe("the bill and invoice lookups", () => {
     );
   });
 });
+
+it.each(["phone-portrait", "tablet-landscape"] as const)(
+  "%s keeps its profile's table starting zone when it has no counter",
+  async (formFactor) => {
+    const profileId = await profile();
+    await inTx(v, async (tx) => {
+      await tx.update(deviceProfiles).set({ formFactor }).where(eq(deviceProfiles.id, profileId));
+      await setProfileServiceAccess(tx, v.cfg, profileId, {
+        departmentId: await departmentOf(tx, f.restTables),
+        allowedZoneIds: [f.restTables],
+        startingZoneId: f.restTables,
+      });
+    });
+    const cookie = await signIn(profileId);
+    const answer = await send(cookie, "GET", "/api/default-service-zone/offers");
+    expect(answer.status).toBe(200);
+    expect(answer.body.context).toMatchObject({ zoneId: f.restTables, serviceMode: "table_tab" });
+    expect(answer.body.zones).toEqual([]);
+  },
+);
+
+it.each(["phone-portrait", "tablet-landscape"] as const)(
+  "%s keeps its profile start instead of a stored Till display preference",
+  async (formFactor) => {
+    const profileId = await profile();
+    await inTx(v, async (tx) => {
+      await tx.update(deviceProfiles).set({ formFactor }).where(eq(deviceProfiles.id, profileId));
+      await setProfileServiceAccess(tx, v.cfg, profileId, {
+        departmentId: await departmentOf(tx, f.restTables),
+        allowedZoneIds: [f.restTables, f.counter],
+        startingZoneId: f.restTables,
+      });
+    });
+    const cookie = await signIn(profileId);
+    const current = await send(cookie, "GET", "/api/device/zones");
+    expect(
+      (
+        await send(cookie, "PUT", "/api/device/zones", {
+          ...current.body,
+          selectedZoneIds: [f.counter],
+          startingZoneId: f.counter,
+        })
+      ).status,
+    ).toBe(200);
+    const answer = await send(cookie, "GET", "/api/default-service-zone/offers");
+    expect(answer.status).toBe(200);
+    expect(answer.body.context).toMatchObject({ zoneId: f.restTables, serviceMode: "table_tab" });
+    expect((answer.body.zones as { id: string }[]).map((zone) => zone.id)).toEqual([f.counter]);
+  },
+);

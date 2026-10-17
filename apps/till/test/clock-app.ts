@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "./device-zones.js";
 import { expect, vi, type Mock } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { TillApi, TillClockState, TillInfo } from "../src/api/client.js";
@@ -135,6 +136,7 @@ export async function clockApp(
       return { personId, permissions: [], locale: null };
     }),
     logout: vi.fn().mockResolvedValue(undefined),
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(["zone"], ["z1"])),
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
       offers: [],
       menus: [],

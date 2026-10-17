@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, draftServer, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -184,6 +185,9 @@ let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
   return {
+    getDeviceZones: vi
+      .fn()
+      .mockResolvedValue(deviceZonesFixture(["zone-barra", "zone-terraza"], ["z1"])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

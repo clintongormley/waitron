@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -116,6 +117,7 @@ function waitingServer(first: CounterWaitingOrder[] = [paid]) {
 
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, [])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

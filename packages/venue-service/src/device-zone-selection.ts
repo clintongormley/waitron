@@ -44,7 +44,13 @@ export async function readDeviceZoneSelection(
   const profileScope = await readProfileServiceScopes(tx, [profile.id]);
   const zones = (await listServiceZones(tx, cfg))
     .filter((zone) => scope.allowedZoneIds === null || scope.allowedZoneIds.includes(zone.id))
-    .map(({ id, name, serviceMode }) => ({ id, name, serviceMode }));
+    .map(({ id, name, serviceMode, departmentId, departmentName }) => ({
+      id,
+      name,
+      serviceMode,
+      departmentId,
+      departmentName,
+    }));
   const [stored] = await tx
     .select()
     .from(deviceZoneSelections)

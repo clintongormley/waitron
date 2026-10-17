@@ -17,6 +17,13 @@ writing implementation or tests. No agents are needed for these sequential tasks
 **Status:** Planning only. Source observations below are from `eb8726bcedb930577458200849ade0d383bc05d7`, read on 2026-10-16. The board was viewed.
 No tests, migration generation, reset, or implementation were run for this plan.
 
+2026-10-17 execution note: each selection zone also carries `departmentId` and `departmentName`. The till keeps
+that complete permitted-zone metadata for transfer destinations, independently of the Counter/Floor display subset.
+The database-backed `device-zone-selection.test.ts` case “retains every permitted zone's department metadata when
+the display subset hides one” and the existing shell transfer-acceptance case exercise those two consumers.
+Floor input is filtered in `TillApp` before the shared screen builds its tabs; the screen's existing non-seating
+refusals and occupied-table recovery remain available to the other form factors.
+
 ## Implementation start gate
 
 - [ ] Reorient from every lane's current queue, blockers, handoff and actual worktree, including committed **and dirty/untracked** changes. Use

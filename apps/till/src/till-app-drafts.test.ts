@@ -1,3 +1,4 @@
+import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { leaveCoordinatorFor, type WtCombobox } from "@waitron/ui";
@@ -210,6 +211,7 @@ let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
   return {
+    getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),

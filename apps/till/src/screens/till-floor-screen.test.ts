@@ -104,7 +104,10 @@ describe("till-floor-screen", () => {
 
   it("groups tables by zone and shows occupancy + to-serve badges", async () => {
     const { el } = await mount({
-      zones: [zone({ id: "z1", name: "Comedor" })],
+      zones: [
+        zone({ id: "z1", name: "Comedor" }),
+        zone({ id: "z2", name: "Terrace", displayOrder: 1 }),
+      ],
       tables: [
         table({
           id: "t1",
@@ -526,7 +529,12 @@ describe("closed floor zones", () => {
     const previous = currentLocale();
     try {
       setLocale(locale);
-      const { el } = await mount({ zones: [zone({ name: "Terrace", closed: true })] });
+      const { el } = await mount({
+        zones: [
+          zone({ name: "Terrace", closed: true }),
+          zone({ id: "z2", name: "Room", displayOrder: 1 }),
+        ],
+      });
       const open = vi.fn();
       el.addEventListener("open-table", open);
       expect(el.shadowRoot!.querySelector("[data-zone]")!.textContent?.trim()).toBe(

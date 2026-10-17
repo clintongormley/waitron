@@ -2,9 +2,7 @@ import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js
 import type { MenuState } from "../api/client.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { live } from "lit/directives/live.js";
-import { type WtCombobox, baseStyles } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-combobox.js";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { StoreChangeController } from "../state/store-controller.js";
@@ -175,18 +173,6 @@ export class TillCounterScreen extends LitElement {
           overflow: visible;
         }
       }
-
-      .service-zone {
-        max-width: 100%;
-        flex-wrap: wrap;
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
-      .service-zone wt-combobox {
-        min-width: min(100%, calc(var(--wt-tap-min) * 4));
-        max-width: 100%;
-      }
     `,
   ];
 
@@ -303,62 +289,12 @@ export class TillCounterScreen extends LitElement {
     this.selectedDiet = predicate;
   }
 
-  #pickServiceZone(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    const requestedZoneId = event.detail.value;
-    if (this.store.lines.length > 0) {
-      (event.currentTarget as WtCombobox).value = this.selectedServiceZoneId;
-    }
-    this.dispatchEvent(
-      new CustomEvent<{ zoneId: string }>("counter-zone-selected", {
-        detail: { zoneId: requestedZoneId },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
-  #refreshServiceZone(): void {
-    if (this.selectedServiceZoneId === "" || this.store.lines.length > 0) return;
-    this.dispatchEvent(
-      new CustomEvent<{ zoneId: string }>("counter-zone-selected", {
-        detail: { zoneId: this.selectedServiceZoneId },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
   #hasDietData(): boolean {
     return hasDietData(this.products);
   }
 
   #menuControls(): TemplateResult {
     return html`
-      ${
-        this.serviceZones.length > 0
-          ? html`<div class="service-zone">
-              <wt-combobox
-                name="service-zone"
-                label=${t("service_zone.label")}
-                search="auto"
-                searchPlaceholder=${t("form.combobox_search")}
-                noResultsLabel=${t("form.combobox_no_results")}
-                .options=${this.serviceZones.map((zone) => ({ value: zone.id, label: zone.name }))}
-                .value=${live(this.selectedServiceZoneId)}
-                @wt-change=${this.#pickServiceZone}
-              ></wt-combobox>
-              <wt-button
-                class="service-zone-refresh"
-                variant="secondary"
-                ?disabled=${this.store.lines.length > 0}
-                @click=${this.#refreshServiceZone}
-              >
-                ${t("service_zone.refresh")}
-              </wt-button>
-            </div>`
-          : nothing
-      }
       ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId, this.zoneName)}
       ${this.service?.open === true && this.service.zoneOpen && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
       ${

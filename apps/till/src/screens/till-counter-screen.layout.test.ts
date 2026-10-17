@@ -447,25 +447,23 @@ it("keeps the cash-at-till explanation across the payment card", async () => {
   expect(note.width).toBe(inShadow(el, ".idle-actions").getBoundingClientRect().width);
 });
 
-it.each([390, 1280])("shows the full Spanish service-area label at %i px", async (width) => {
+it.each([390, 1280])("shows the Spanish Counter zone in the header at %i px", async (width) => {
   setLocale("es-ES");
   await page.viewport(width, 844);
-  const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
-    store: new WorkingOrderStore(),
-    embedded: true,
-    serviceZones: [
-      { id: "bar", name: "Barra", departmentId: "d", departmentName: "Bar", serviceMode: "prepay" },
+  const { el } = await mountWidget<TillShell>("till-shell", {
+    counterZones: [
+      { id: "bar", name: "Barra" },
+      { id: "deli", name: "Deli" },
     ],
-    selectedServiceZoneId: "bar",
-    products: [],
-    menus: [],
+    selectedCounterZoneId: "bar",
+    activeScreen: "counter",
   });
-  const combo = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
-    'wt-combobox[name="service-zone"]',
-  )!;
-  await combo.updateComplete;
-  const label = combo.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
-  expect(label.textContent).toBe("Zona de servicio");
-  expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
-  expect(combo.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+  const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-counter-zones]")!;
+  await (menu as TillShell).updateComplete;
+  const label = menu.querySelector<HTMLElement>('[slot="trigger"]')!;
+  expect(label.textContent!.trim()).toBe("Mostrador: Barra ▾");
+  expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+  expect(menu.shadowRoot!.querySelector("button")!.scrollWidth).toBeLessThanOrEqual(
+    menu.shadowRoot!.querySelector("button")!.clientWidth,
+  );
 });
