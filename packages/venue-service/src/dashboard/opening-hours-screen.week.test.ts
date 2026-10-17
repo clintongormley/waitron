@@ -786,7 +786,7 @@ describe("a prep station in the Calendar", () => {
     ].map((row) => row.dataset["row"]);
   const timesReads = (paths: readonly string[]) =>
     paths.filter((path) => path.includes("/service-times"));
-  const LOAD_ERROR = "Opening hours could not be loaded. It will be tried again.";
+  const STATION_LOAD_ERROR = "This station's times could not be loaded. It will be tried again.";
 
   it("choosing a station in the Week's Show writes it and draws its rows", async () => {
     const { el } = await mount("/manage/opening-hours/view/week/week/2026-12-09");
@@ -874,7 +874,7 @@ describe("a prep station in the Calendar", () => {
   ])("a station-times read that %s shows the load error above the view", async (_, error) => {
     const { el } = await mount(grillWeek, undefined, false, { timesFail: error });
     const alert = () => el.shadowRoot!.querySelector("[data-test=station-read-error]");
-    await expect.poll(() => alert()?.textContent).toBe(LOAD_ERROR);
+    await expect.poll(() => alert()?.textContent).toBe(STATION_LOAD_ERROR);
     expect(alert()!.getAttribute("role")).toBe("alert");
     expect(alert()!.nextElementSibling).toBe(week(el));
     expect(week(el)!.station?.state).toBe("loading");

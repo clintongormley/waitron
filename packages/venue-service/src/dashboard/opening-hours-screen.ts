@@ -734,7 +734,7 @@ export class OpeningHoursScreen extends LitElement {
           this.stationReadError = "";
         },
         () => {
-          if (current()) this.stationReadError = t("opening.load_error");
+          if (current()) this.stationReadError = t("prep.times.load_error");
         },
         () => {
           if (current()) this.stationReadError = "";
