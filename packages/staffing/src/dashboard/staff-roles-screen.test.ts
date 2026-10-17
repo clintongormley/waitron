@@ -433,7 +433,7 @@ describe("the staff roles page", () => {
     const colour = dialog().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
       "wt-colour-chooser[name=colour]",
     )!;
-    expect(colour.value).toBe("amber");
+    expect(colour.value).toBe("orange");
   });
 
   it("hands an edited staff role's dialog every staff role, its own included", async () => {

@@ -440,8 +440,25 @@ it("blocks opening a second dialog from another row and from departed controls",
 
 it.each([
   [[], "red"],
-  [["red", "green"], "amber"],
-  [["red", "amber", "grey", "blue", "green", "purple"], "red"],
+  [["red", "orange"], "amber"],
+  [
+    [
+      "red",
+      "orange",
+      "amber",
+      "lime",
+      "green",
+      "teal",
+      "cyan",
+      "blue",
+      "indigo",
+      "purple",
+      "pink",
+      "brown",
+      "grey",
+    ],
+    "red",
+  ],
 ] as const)(
   "starts a new period with the first unused colour of the chosen department (%j → %s)",
   async (used, expected) => {
@@ -499,7 +516,7 @@ it("keeps a new period's selected colour through background reads and uses fresh
   dialog.dispatchEvent(new CustomEvent("period-close", { bubbles: true, composed: true }));
   await el.updateComplete;
   const reopened = await edit(el);
-  expect(checkedColour(reopened)).toBe("amber");
+  expect(checkedColour(reopened)).toBe("orange");
   expect(saveButton(reopened).disabled).toBe(true);
 });
 
@@ -623,7 +640,7 @@ it("+ Add period on a venue with two departments asks for the department and cre
       body: {
         expectedClockRevision: 0,
         name: "Dinner",
-        colour: "amber",
+        colour: "orange",
         menuId: "lunch",
         staffMenuIds: [],
         endOffsetMinutes: 0,

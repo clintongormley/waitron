@@ -36,7 +36,7 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
       el.period = {
         id: "p1",
         name: "Lunch",
-        colour: state === "colour-invalid" ? ("pink" as never) : "green",
+        colour: state === "colour-invalid" ? ("magenta" as never) : "green",
         menuId: "lunch",
         staffMenuIds: ["deli"],
         endOffsetMinutes: 0,
@@ -97,7 +97,7 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
           "wt-colour-chooser[name=colour]",
         )!.choices,
-      ).toHaveLength(6);
+      ).toHaveLength(13);
       expect(
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=floorPlanId]")!
           .disabled,
