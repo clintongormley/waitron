@@ -131,8 +131,7 @@ export interface TillClockState {
 }
 
 /**
- * `GET /api/till` — the public boot info the app reads before login, and again when `/api/menu-state`
- * names a `setupRevision` it has not applied. `cardProvider`/`tipsEnabled` decide whether the
+ * `GET /api/till` — the public boot info the app reads before login. `cardProvider`/`tipsEnabled` decide whether the
  * integrated-card pay control renders at all and whether it prompts for a tip (`cardProvider: "none"`
  * for a till with no integrated reader).
  */

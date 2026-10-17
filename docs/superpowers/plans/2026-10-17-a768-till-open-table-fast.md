@@ -664,6 +664,10 @@ baseline on another, and an answer from the old `api` is already refused by `#re
   `#savesOutFor(partyId: string | undefined): Promise<void>`, which awaits every entry whose
   `sync.partyId === partyId` and resolves at once when there is none.
 
+(2026-10-17, finish-branch review: a save that gets no answer no longer drops the sync. It is kept
+by party for the person who made it, shown and saved again when that party's table opens for them,
+and sent at their sign-out; see the A768 pull request.)
+
 `#releaseDraft` takes the sync off the screen (`#draftSync = undefined`, `#draftReady = false`,
 `requestUpdate()`) without dropping it. It stores `sync.flush().then(...)` in `#leavingDrafts`.
 That continuation removes the entry, calls `sync.drop()`, and, when the session is unchanged, says
@@ -675,7 +679,7 @@ the outcome: `"failed"` → `errorKey = "table.draft_save_failed"`; a refusal ot
 In `#openTableFromEvent`, replace `await this.#flushDraft()` with: if `#draftSync` is set and its
 `partyId` differs from the party of the table being opened (`this.tables.find(t => t.id === tableId)?.party?.id`;
 a free table has none, so it always differs), call `#releaseDraft(this.#draftSync)` and carry on at
-once. Otherwise keep `await this.#flushDraft()` (owner decision 3). The `left()` / session check
+once. Otherwise keep `await this.#flushDraft()` (default 3). The `left()` / session check
 after it stays.
 
 **Coming back to a party whose save is still out.** Opening A, then B, then A again releases A's
@@ -986,7 +990,7 @@ when a read sent after it has already applied its own, so an older answer never 
     read needs to know which bill opens (`billToOpen`). Opening one takes two round trips (Task 8's
     number).
   - **Profile values on an open till** refresh only on a profile switch or a change of zone
-    selection (owner decision 4).
+    selection (default 4).
 - [ ] **Step 3:** In `docs/developers/conventions-ui.md`, add `## What an open till keeps current`.
   It covers two things. First, each zone's menu: held, checked by `/api/menu-state` (versions,
   service, `unavailable`, `liveFields`), and re-read only when one of them moved. Second, the start
@@ -1004,7 +1008,7 @@ when a read sent after it has already applied its own, so an older answer never 
     available): applied by `#applyProfileSetup` at boot, on a profile switch and when the zone
     selection changes, and at no other time. They change the layout and which screens the till
     offers, and applied mid-session they could remove the screen the person is on; at those three
-    points the till already lays itself out again (owner decision 4).
+    points the till already lays itself out again (default 4).
   - A kitchen screen in device mode: nothing refreshes.
   Say that a table opened from Find a bill does not show the loading screen at once: the order
   screen appears when the open completes, because leaving Find a bill abandons the open it started.
