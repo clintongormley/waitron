@@ -173,7 +173,7 @@ export class WtColourChooser extends LitElement {
   override disconnectedCallback(): void {
     // A popover removed from the page closes without a toggle event.
     this.expanded = false;
-    removeEventListener("resize", this.onWindowResize);
+    window.removeEventListener("resize", this.onWindowResize);
     super.disconnectedCallback();
   }
 
@@ -262,10 +262,11 @@ export class WtColourChooser extends LitElement {
     else this.show();
   }
 
-  private onToggle(event: ToggleEvent): void {
-    this.expanded = event.newState === "open";
-    if (this.expanded) addEventListener("resize", this.onWindowResize);
-    else removeEventListener("resize", this.onWindowResize);
+  private onToggle(): void {
+    // Not the event's newState: an open event queued before a removal arrives after it.
+    this.expanded = this.popup!.matches(":popover-open");
+    if (this.expanded) window.addEventListener("resize", this.onWindowResize);
+    else window.removeEventListener("resize", this.onWindowResize);
   }
 
   private onTileClick(choice: ColourChoice, event: MouseEvent): void {

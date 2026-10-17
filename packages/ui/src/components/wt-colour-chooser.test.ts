@@ -669,6 +669,36 @@ describe("position", () => {
       await page.viewport(width, height);
     }
   });
+
+  test("removed in the task that opened it, the chooser is not left expanded or placed by a resize", async () => {
+    const [width, height] = [innerWidth, innerHeight];
+    await page.viewport(1280, 800);
+    try {
+      const { el, trigger, panel } = await mountChooser();
+      el.style.cssText = "position: fixed; right: 8px; top: 80px; width: 160px";
+      el.show();
+      el.remove();
+      const placed = {
+        left: panel.style.left,
+        top: panel.style.top,
+        maxWidth: panel.style.maxWidth,
+      };
+      // The open toggle event was queued by show() and arrives after the removal.
+      await new Promise((resolve) => setTimeout(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await el.updateComplete;
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+      await page.viewport(1000, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect({
+        left: panel.style.left,
+        top: panel.style.top,
+        maxWidth: panel.style.maxWidth,
+      }).toEqual(placed);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
 });
 
 describe("keys that the chooser prevents", () => {
