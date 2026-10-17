@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { applyTokens, registerIcons, DROPDOWN_ICONS } from "@waitron/ui";
-import { setLocale } from "@waitron/dashboard-kit";
+import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { StaffingApi } from "./client.js";
 import type { StaffingBlock } from "../slots.js";
 import type { SpecialDayStaffing, SpecialDayStaffingEdit } from "../staffing-types.js";
 import type { StaffingGrid } from "./staffing-grid.js";
@@ -38,9 +39,13 @@ afterEach(() => {
 interface Options extends SpecialDayApiOptions {
   area?: string;
   readOnly?: boolean;
+  liveData?: LiveData;
 }
 async function mount(options: Options = {}) {
-  const { api, request } = specialDayApi(options);
+  const { api: fixtureApi, request } = specialDayApi(options);
+  const api = options.liveData
+    ? new StaffingApi(request as unknown as DashboardRequest, options.liveData)
+    : fixtureApi;
   const open = vi.fn();
   painter = document.createElement("staffing-special-day-painter");
   painter.api = api;
@@ -901,4 +906,17 @@ it("A710 restores the native paint-row How many text, including a correction equ
   await settle(painter);
   expect(input.value).toBe("50");
   expect(grid(painter).headcount).toBe(50);
+});
+
+it("reads the staff roles again when a role changes, not when a person does", async () => {
+  const liveData = new LiveData();
+  const { painter, request } = await mount({ liveData });
+  const roleReads = () => request.mock.calls.filter(([path]) => path.endsWith("/staff-roles"));
+  expect(roleReads()).toHaveLength(1);
+  liveData.invalidate([{ type: "persons" }]);
+  await settle(painter);
+  expect(roleReads()).toHaveLength(1);
+  liveData.invalidate([{ type: "staff_roles" }]);
+  await vi.waitFor(() => expect(roleReads()).toHaveLength(2));
+  liveData.clear();
 });

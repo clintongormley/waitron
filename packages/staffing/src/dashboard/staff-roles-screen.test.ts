@@ -952,9 +952,10 @@ describe("the staff roles page", () => {
 
   it("speaks Spanish", async () => {
     setLocale("es");
-    await mount(fakeRequest(() => [waiter]));
+    await mount(fakeRequest(() => [waiter, runner]));
     expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Roles de personal");
     expect(cells("role-w").slice(0, 2)).toEqual(["Waiter", "Ana, Marc"]);
+    expect(cells("role-r").slice(0, 2)).toEqual(["Runner", "Nadie"]);
     expect(el.shadowRoot!.querySelector("[data-test=new-staff-role]")!.textContent!.trim()).toBe(
       "Añadir rol de personal",
     );

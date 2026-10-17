@@ -62,6 +62,21 @@ describe("StaffingApi", () => {
     },
   );
 
+  it("watches the painters' staff roles without re-reading when only a person changes", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ staffRoles: [waiter] }));
+    const liveData = new LiveData();
+    const queries = new QueryController(host(), () => liveData, vi.fn());
+    const apply = vi.fn();
+    await api(fetchImpl, liveData).watchStaffRoles(queries, apply, "painter-staff-roles");
+    expect(liveData.interests).toEqual([{ type: "staff_roles" }, { type: "person_staff_roles" }]);
+    liveData.invalidate([{ type: "persons" }]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    liveData.invalidate([{ type: "person_staff_roles" }]);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    queries.hostDisconnected();
+  });
+
   it("reads the staff roles once when there is no live data", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ staffRoles: [waiter] }));
     const client = api(fetchImpl);

@@ -60,12 +60,13 @@ export class StaffingApi {
   watchStaffRoles(
     queries: QueryController,
     apply: (staffRoles: ListedStaffRole[]) => void | Promise<void>,
+    query: "staff-roles" | "painter-staff-roles" = "staff-roles",
   ): Promise<void> {
     return queries.watch(
       "staff-roles",
       {
-        key: "staffing:staff-roles",
-        dependencies: QUERY_DEPENDENCIES["staff-roles"].map((type) => ({ type })),
+        key: `staffing:${query}`,
+        dependencies: QUERY_DEPENDENCIES[query].map((type) => ({ type })),
         read: async () =>
           (
             await this.request<{ staffRoles: ListedStaffRole[] }>(BASE, "GET", undefined, {
