@@ -3082,6 +3082,9 @@ describe("till-app logout while a request is waiting for the server", () => {
   it("does not show a card refusal to the next operator", async () => {
     let refuse!: (reason: unknown) => void;
     const { el } = await mountApp({
+      listZoneOffers: vi
+        .fn()
+        .mockResolvedValue(zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter")),
       pay: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
     });
     const c = await toCounter(el);
@@ -3278,6 +3281,9 @@ describe("till-app logout while a request is waiting for the server", () => {
   it("does not show a place refusal to the next operator", async () => {
     let refuse!: (reason: unknown) => void;
     const { el } = await mountApp({
+      listZoneOffers: vi
+        .fn()
+        .mockResolvedValue(zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter")),
       parkOrder: vi.fn().mockResolvedValue(undefined),
       placeOrder: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
     });

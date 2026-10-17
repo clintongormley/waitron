@@ -1996,7 +1996,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A740 — zones on a device (owner, 2026-10-15; open).** A zone's menus, prices and trading name
   come from its department; what differs per zone is how it is paid, collection numbers, receipt
   printing and kitchen routing.
-  [Implementation plan](superpowers/plans/2026-10-16-a740-zones-on-device.md) records the device-selection migration and tests. The implementation branch has device selection, its session-bound API, service-period occurrence identity, zone navigation, the Settings zone editor and live scope reconciliation. The period-menu memory resolver has isolated tests; wiring it through login, zone changes and refreshes, then full-stack acceptance, remain open.
+  [Implementation plan](superpowers/plans/2026-10-16-a740-zones-on-device.md) records the device-selection migration and tests. The implementation branch has device selection, its session-bound API, service-period occurrence identity, zone navigation, the Settings zone editor and live scope reconciliation. The period-menu memory resolver is wired through Counter/table offers, login, zone changes and refreshes, with occurrence expiry and deferred menu selection while baskets or drafts have lines. Full-stack/provider acceptance and final branch validation remain open.
   [Detail](backlog/till.md#a740-zones-on-a-device), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`

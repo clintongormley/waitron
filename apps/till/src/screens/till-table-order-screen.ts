@@ -1178,6 +1178,7 @@ export class TillTableOrderScreen extends LitElement {
   @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
   @property() selectedMenuId = "";
+  @property({ type: Boolean }) menuSelectionRequired = false;
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
   /** The venue's ACTIVE kitchen courses, in `displayOrder`. */
   @property({ attribute: false }) courses: TillCourse[] = [];
@@ -2595,7 +2596,10 @@ export class TillTableOrderScreen extends LitElement {
     store.canSelectProduct = (product) =>
       this.orderingAllowed &&
       this.menus.some((menu) => menu.id === product.catalogueId && menu.orderable);
-    const menu = shownMenu(this.menus, this.selectedMenuId);
+    const menu = this.menuSelectionRequired
+      ? this.menus.find((menu) => menu.id === this.selectedMenuId && menu.orderable)
+      : shownMenu(this.menus, this.selectedMenuId);
+    if (this.menuSelectionRequired && menu === undefined) return html``;
     return html`<till-menu-browser
       class="round-control"
       ?inert=${store.sending || !this.orderingAllowed}

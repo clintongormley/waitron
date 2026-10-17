@@ -911,6 +911,9 @@ describe("an offers load", () => {
     api.listDefaultZoneOffers.mockResolvedValue(
       catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
     );
+    api.listZoneOffers.mockResolvedValue(
+      catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]),
+    );
     await toCounter(el);
     expect(dialogText(el)).toContain("Lemonade €3.00 → €2.50");
   });
@@ -1304,6 +1307,7 @@ describe("a sign-in whose offers fail to load", () => {
     emit(counter(el), "logout");
     await flush(el);
     api.listDefaultZoneOffers.mockRejectedValue(new TypeError("Failed to fetch"));
+    api.listZoneOffers.mockRejectedValue(new TypeError("Failed to fetch"));
     await toCounter(el);
 
     expect(counter(el).store.lines[0]!.blocked).toBeUndefined();

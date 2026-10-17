@@ -198,6 +198,7 @@ export class TillCounterScreen extends LitElement {
   @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected` for it to update. */
   @property() selectedMenuId = "";
+  @property({ type: Boolean }) menuSelectionRequired = false;
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
   @property() selectedServiceZoneId = "";
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
@@ -321,7 +322,9 @@ export class TillCounterScreen extends LitElement {
 
   #menu(): TemplateResult | typeof nothing {
     if (this.service?.open !== true || !this.service.zoneOpen) return nothing;
-    const menu = shownMenu(this.menus, this.selectedMenuId);
+    const menu = this.menuSelectionRequired
+      ? this.menus.find((menu) => menu.id === this.selectedMenuId && menu.orderable)
+      : shownMenu(this.menus, this.selectedMenuId);
     if (menu === undefined) return nothing;
     const served = this.products.filter((product) =>
       this.menus.some((each) => each.id === product.catalogueId && each.orderable),

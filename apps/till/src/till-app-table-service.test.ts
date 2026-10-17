@@ -208,7 +208,6 @@ const counterOffers = zoneOffers(
   "cat-default",
 );
 
-/** A dining zone with two menus, neither named as the zone's default — the second is MARKED default. */
 const diningMenus = [
   { id: "menu-lunch", name: "Lunch", isDefault: false },
   { id: "menu-dinner", name: "Dinner", isDefault: true },
@@ -221,7 +220,7 @@ const diningOffers = zoneOffers(
       { ...cafe, id: "cordero", name: "Cordero", catalogueId: "menu-dinner" },
     ],
   },
-  null,
+  "menu-dinner",
 );
 
 let api: TillApi;
@@ -421,13 +420,16 @@ describe("till-app table ordering: the table's menus", () => {
     );
   });
 
-  it("falls back to the menu marked default when the table's zone names none", async () => {
-    const { el } = await mountApp();
+  it("does not invent a table default when the server explicitly names none", async () => {
+    const { el } = await mountApp({
+      listZoneOffers: vi.fn(async () => ({ ...diningOffers, defaultMenuId: null })),
+    });
     const screen = await toTableOrder(el);
 
     expect(api.listZoneOffers).toHaveBeenCalledWith(floorZone.id);
     expect(screen.menus).toEqual(diningOffers.menus);
-    expect(screen.selectedMenuId).toBe("menu-dinner");
+    expect(screen.selectedMenuId).toBe("");
+    expect(screen.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
   });
 
   it("switches the TABLE's menu on a pick, leaving the counter's menu and its stored preference alone", async () => {

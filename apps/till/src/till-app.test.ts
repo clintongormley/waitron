@@ -391,7 +391,7 @@ function fixtureOffers(
       open: true,
       zoneOpen: true,
       periodName: null,
-      periodOccurrenceKey: null,
+      periodOccurrenceKey: "fixture-period-1",
       keepOpen: null,
       zoneKeepOpen: null,
     },
@@ -722,6 +722,8 @@ async function ringCafe(
 }
 
 beforeEach(() => {
+  for (const key of Object.keys(localStorage))
+    if (key.startsWith("waitron.zoneMenu.")) localStorage.removeItem(key);
   setLocale("es-ES");
   drafts = draftServer(() => ({ tabId: "wo-7", revision: 4, groups: [] }));
 });
@@ -13330,12 +13332,12 @@ describe("till-app", () => {
           .shadowRoot!.querySelectorAll(".name"),
       ].map((n) => n.textContent);
 
-    it("resets a stored menu on login while menu changes stay out of history and leave the basket intact", async () => {
+    it("ignores the retired session menu key on login while menu changes stay out of history and leave the basket intact", async () => {
       sessionStorage.setItem("waitron.lastMenu", "cat-drinks");
       const { el } = await mountApp({ listProducts: twoMenuProducts });
       const c = await toCounter(el);
       expect(gridNames(el)).toEqual(["Bocadillo"]);
-      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
+      expect(counter(el)!.selectedMenuId).toBe("cat-food");
       c.store.addProduct(bocadillo, "1");
       const pushHistory = vi.spyOn(history, "pushState");
       const path = location.pathname;
@@ -13343,13 +13345,13 @@ describe("till-app", () => {
       await flush(el);
       expect(location.pathname).toBe(path);
       expect(pushHistory).not.toHaveBeenCalled();
-      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+      expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
       expect(c.store.lines[0]!.product.id).toBe("bocadillo");
       el.remove();
       const refreshed = await mountApp({ listProducts: twoMenuProducts });
       await toCounter(refreshed.el);
-      expect(gridNames(refreshed.el)).toEqual(["Bocadillo"]);
-      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
+      expect(gridNames(refreshed.el)).toEqual(["Cerveza"]);
+      expect(counter(refreshed.el)!.selectedMenuId).toBe("cat-drinks");
       expect(location.pathname).not.toContain("/menu/");
     });
 
@@ -13369,27 +13371,30 @@ describe("till-app", () => {
       await flush(el);
       expect(gridNames(el)).toEqual(["Cerveza"]);
       expect(switcherButtons(el)[1]!.getAttribute("aria-pressed")).toBe("true");
-      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+      expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
     });
 
-    it.each(["p2"])("resets the menu after logout and a new login as %s", async (personId) => {
-      const { el } = await mountApp({ listProducts: twoMenuProducts });
-      const c = await toCounter(el);
-      switcherButtons(el)[1]!.click();
-      await flush(el);
-      expect(gridNames(el)).toEqual(["Cerveza"]);
-      emit(c, "logout");
-      await flush(el);
-      emit(lock(el)!, "logged-in", {
-        personId,
-        displayName: "Operator",
-        permissions: [],
-      });
-      await flush(el);
-      expect(gridNames(el)).toEqual(["Bocadillo"]);
-      expect(switcherButtons(el)[0]!.getAttribute("aria-pressed")).toBe("true");
-      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
-    });
+    it.each(["p2"])(
+      "keeps the device menu after logout and a new login as %s",
+      async (personId) => {
+        const { el } = await mountApp({ listProducts: twoMenuProducts });
+        const c = await toCounter(el);
+        switcherButtons(el)[1]!.click();
+        await flush(el);
+        expect(gridNames(el)).toEqual(["Cerveza"]);
+        emit(c, "logout");
+        await flush(el);
+        emit(lock(el)!, "logged-in", {
+          personId,
+          displayName: "Operator",
+          permissions: [],
+        });
+        await flush(el);
+        expect(gridNames(el)).toEqual(["Cerveza"]);
+        expect(switcherButtons(el)[1]!.getAttribute("aria-pressed")).toBe("true");
+        expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
+      },
+    );
 
     describe("browsing state across sign-ins, zones and screens", () => {
       const zone = (id: string, name: string): ServiceZoneSummary => ({
@@ -13460,14 +13465,14 @@ describe("till-app", () => {
         expect(gridNames(el)).toEqual(["Rioja"]);
       };
 
-      it("brings the same person back to the zone they left, with its manual menu", async () => {
+      it("starts the same person at the saved starting zone with an empty basket", async () => {
         const { el } = await mountApp(zoned());
         await toCounter(el);
         await toTerraceWine(el);
         await signInAgain(el, "p1");
-        expect(counter(el)!.selectedServiceZoneId).toBe("zone-terrace");
-        expect(currentApi.setServiceZone).toHaveBeenLastCalledWith("zone-terrace");
-        expect(gridNames(el)).toEqual(["Rioja"]);
+        expect(counter(el)!.selectedServiceZoneId).toBe("zone-start");
+        expect(currentApi.setServiceZone).toHaveBeenLastCalledWith("zone-start");
+        expect(gridNames(el)).toEqual(["Bocadillo"]);
       });
 
       it("starts another person at the profile's starting zone and its default menu", async () => {
@@ -13482,7 +13487,7 @@ describe("till-app", () => {
         expect(gridNames(el)).toEqual(["Bocadillo"]);
       });
 
-      it("selects each zone's default menu on a zone change, the zone left included", async () => {
+      it("restores each zone's manual menu within the same occurrence", async () => {
         const { el } = await mountApp(zoned());
         await toCounter(el);
         switcherButtons(el)[1]!.click();
@@ -13491,9 +13496,9 @@ describe("till-app", () => {
         await toTerraceWine(el);
         emit(counter(el)!, "counter-zone-selected", { zoneId: "zone-start" });
         await flush(el);
-        expect(gridNames(el)).toEqual(["Bocadillo"]);
+        expect(gridNames(el)).toEqual(["Cerveza"]);
         await signInAgain(el, "p1");
-        expect(gridNames(el)).toEqual(["Bocadillo"]);
+        expect(gridNames(el)).toEqual(["Cerveza"]);
       });
 
       it("keeps the manual menu across a screen change and a table opened in another zone", async () => {
@@ -13567,10 +13572,10 @@ describe("till-app", () => {
       await toCounter(live);
       switcherButtons(live)[1]!.click();
       await flush(live);
-      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+      expect(counter(live)!.selectedMenuId).toBe("cat-drinks");
       resolve({ menus: [foodMenu], products: [bocadillo] });
       await flush(el);
-      expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+      expect(counter(live)!.selectedMenuId).toBe("cat-drinks");
       expect(gridNames(live)).toEqual(["Cerveza"]);
     });
 
@@ -18822,10 +18827,17 @@ describe("switching the device's profile from the header", () => {
       .fn()
       .mockResolvedValueOnce(till)
       .mockResolvedValue({ ...till, formFactor: "till" });
-    const { el } = await openProfile({ listProducts: twoMenus, getTill });
+    const { el } = await openProfile({
+      listProducts: twoMenus,
+      getTill,
+      getDeviceZones: vi
+        .fn()
+        .mockResolvedValueOnce({ ...deviceZonesFixture(undefined, ["z1"]), profileId: COUNTER.id })
+        .mockResolvedValue({ ...deviceZonesFixture(undefined, ["z1"]), profileId: BAR.id }),
+    });
     emit(counter(el)!, "menu-selected", { id: "cat-drinks" });
     await flush(el);
-    expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-drinks");
+    expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
     const zoneReads = vi.mocked(currentApi.listDefaultZoneOffers).mock.calls.length;
 
     emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
@@ -18838,7 +18850,7 @@ describe("switching the device's profile from the header", () => {
     expect((shell(el) as HTMLElement & { formFactor: string }).formFactor).toBe("till");
     expect(shell(el)!.shadowRoot!.querySelectorAll(".tab")).toHaveLength(2);
     expect(vi.mocked(currentApi.listDefaultZoneOffers).mock.calls.length).toBe(zoneReads + 1);
-    expect(sessionStorage.getItem("waitron.lastMenu")).toBe("cat-food");
+    expect(counter(el)!.selectedMenuId).toBe("cat-food");
     expect(counter(el)).not.toBeNull();
     expect(lock(el)).toBeNull();
   });
