@@ -1,5 +1,8 @@
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import type { CancellationRead } from "./api/line-cancel-types.js";
+import type { TillCancelItemDialog } from "./widgets/cancel-item-dialog.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   cleanupWidgets,
@@ -1370,5 +1373,647 @@ describe("till-app: a box update while an adjustment still waits for the server"
 
     expect(reload).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
+  });
+});
+
+describe("till-app: service cancellation consent", () => {
+  const consent = (
+    status: CancellationRead["context"]["billStatus"] = "open",
+    stage: CancellationRead["context"]["stage"] = "started",
+  ): CancellationRead => ({
+    billId: "wo-4",
+    revision: 3,
+    billRevision: 6,
+    context: {
+      billStatus: status,
+      stage,
+      components: [
+        {
+          id: "kitchen-1",
+          lineId: "line-1",
+          state: stage === "started" ? "preparing" : "queued",
+          firedAt: "2026-10-17T10:00:00Z",
+          quantity: "1.000",
+          kitchenQuantity: "1.000",
+          servedQuantity: "0.000",
+          cancelledQuantity: "0.000",
+        },
+      ],
+    },
+  });
+  const cancelDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillCancelItemDialog>("till-cancel-item-dialog");
+  async function openCancel(el: TillApp) {
+    emit(tableOrder(el), "cancel-item", { lineId: "line-1" });
+    await flush(el);
+  }
+  async function clickChoice(el: TillApp, selector: string) {
+    const widget = cancelDialog(el)!;
+    await widget.updateComplete;
+    await userEvent.click(
+      page.elementLocator(widget.shadowRoot!.querySelector<HTMLElement>(selector)!),
+    );
+    await flush(el);
+  }
+  const apiFor = (read: CancellationRead = consent(), more: Record<string, unknown> = {}) => ({
+    getCancellation: vi.fn().mockResolvedValue(read),
+    cancelItem: vi.fn().mockResolvedValue({ revision: 4 }),
+    ...more,
+  });
+
+  it("reads the kitchen facts before opening and sends the exact explicit keep-charge consent", async () => {
+    const read = consent();
+    const methods = apiFor(read);
+    const { el } = await mountApp(methods);
+    const order = await openMesa4(el);
+    await openCancel(el);
+    expect(methods.getCancellation).toHaveBeenCalledWith("v1", "line-1", expect.any(Object));
+    expect(cancelDialog(el)?.name).toBe("Wine");
+    expect(cancelDialog(el)?.consent).toEqual(read);
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    expect(methods.cancelItem).toHaveBeenCalledWith(
+      "v1",
+      "line-1",
+      {
+        quantity: "1",
+        outcome: "keep_charge",
+        expectedPartyRevision: 3,
+        expectedBillRevision: 6,
+        expectedContext: read.context,
+        submissionId: expect.any(String),
+      },
+      expect.any(Object),
+    );
+    expect(cancelDialog(el)).toBeNull();
+    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(api.getTabLines).toHaveBeenCalledTimes(2);
+    expect(order.lines[0]!.unitPriceGross).toBe("30.00");
+  });
+
+  it("refreshes a raced kitchen context and requires a new explicit choice", async () => {
+    const fresh = consent("settled");
+    const methods = apiFor(consent(), {
+      getCancellation: vi.fn().mockResolvedValueOnce(consent()).mockResolvedValue(fresh),
+      cancelItem: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "tab.cancel_context_changed" })
+        .mockResolvedValue({ revision: 4 }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    expect(cancelDialog(el)?.consent).toEqual(fresh);
+    expect(methods.cancelItem).toHaveBeenCalledTimes(1);
+    const widget = cancelDialog(el)!;
+    expect(
+      widget.shadowRoot!.querySelector<HTMLInputElement>('input[value="keep_charge"]')!.checked,
+    ).toBe(false);
+    expect(
+      widget.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-confirm]")!
+        .disabled,
+    ).toBe(true);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    expect(methods.cancelItem).toHaveBeenCalledTimes(2);
+    expect(methods.cancelItem.mock.calls[1]![2]).toMatchObject({ expectedContext: fresh.context });
+  });
+
+  it("drops a context read after leaving the bill and allows a later opening", async () => {
+    let answer!: (value: CancellationRead) => void;
+    const methods = apiFor(consent(), {
+      getCancellation: vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<CancellationRead>((resolve) => {
+              answer = resolve;
+            }),
+        )
+        .mockResolvedValue(consent()),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    answer(consent());
+    await flush(el);
+    expect(cancelDialog(el)).toBeNull();
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    await openCancel(el);
+    expect(cancelDialog(el)?.name).toBe("Wine");
+  });
+
+  it("retains a refusal beside an enabled retry and makes no financial adjustment", async () => {
+    const methods = apiFor(consent(), {
+      cancelItem: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "permission.denied" })
+        .mockResolvedValue({ revision: 4 }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    expect(cancelDialog(el)?.refusal).toBe(codeMessage("permission.denied"));
+    expect(
+      cancelDialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-confirm]",
+      )!.disabled,
+    ).toBe(false);
+    await clickChoice(el, "[data-confirm]");
+    expect(methods.cancelItem).toHaveBeenCalledTimes(2);
+    expect(cancelDialog(el)).toBeNull();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  async function removeCharge(el: TillApp) {
+    await clickChoice(el, "[data-confirm]");
+    expect(dialog(el)?.kind).toBe("cancel");
+    await chooseReason(el, "Mistake");
+    const note = inDialog(el, 'wt-input[name="note"]').shadowRoot!.querySelector("input")!;
+    await userEvent.fill(page.elementLocator(note), "Wrong dish");
+    await flush(el);
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+  }
+
+  it("removes the charge through the existing reason and note preview but confirms against the kitchen facts", async () => {
+    const read = consent("open", "not_started");
+    const methods = apiFor(read);
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await removeCharge(el);
+    expect(cancelDialog(el)).toBeNull();
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", {
+      expectedRevision: 6,
+      lineId: "line-1",
+      action: "cancel",
+      reasonId: "r-mistake",
+      note: "Wrong dish",
+      quantity: "1",
+    });
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(methods.cancelItem).toHaveBeenCalledWith(
+      "v1",
+      "line-1",
+      {
+        quantity: "1",
+        outcome: "remove_charge",
+        expectedPartyRevision: 3,
+        expectedBillRevision: 6,
+        expectedContext: read.context,
+        submissionId: expect.any(String),
+        reasonId: "r-mistake",
+        note: "Wrong dish",
+      },
+      expect.any(Object),
+    );
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("keeps the existing manager PIN retry when off-bill cancellation needs approval", async () => {
+    const methods = apiFor(consent("open", "not_started"), {
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      cancelItem: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "pin.invalid" })
+        .mockResolvedValue({ revision: 4 }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await removeCharge(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(approval(el)?.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
+    await pinPad(el, "1234");
+    expect(approval(el)?.error).toBe("pin.invalid");
+    expect(dialog(el)).not.toBeNull();
+    const retry = approval(el)!;
+    for (const digit of "5678") {
+      await userEvent.click(
+        page.elementLocator(
+          retry
+            .shadowRoot!.querySelector("till-numeric-pad")!
+            .shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!,
+        ),
+      );
+      await retry.updateComplete;
+    }
+    await press(el, retry.shadowRoot!.querySelector<HTMLElement>(".authorize")!);
+    expect(methods.cancelItem).toHaveBeenCalledTimes(2);
+    expect(methods.cancelItem.mock.calls[1]![2]).toMatchObject({
+      approver: { personId: "m-1", pin: "5678" },
+    });
+    expect(approval(el)).toBeNull();
+    expect(dialog(el)).toBeNull();
+    expect(lock(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+  });
+
+  it("returns a raced pre-start remove confirmation to the refreshed explicit money choices", async () => {
+    const fresh = consent();
+    const methods = apiFor(consent("open", "not_started"), {
+      getCancellation: vi
+        .fn()
+        .mockResolvedValueOnce(consent("open", "not_started"))
+        .mockResolvedValue(fresh),
+      cancelItem: vi.fn().mockRejectedValue({ code: "tab.cancel_context_changed" }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await removeCharge(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(dialog(el)).toBeNull();
+    expect(cancelDialog(el)?.consent).toEqual(fresh);
+    expect(
+      cancelDialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-confirm]",
+      )!.disabled,
+    ).toBe(true);
+    expect(methods.cancelItem).toHaveBeenCalledTimes(1);
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("reads a paid bill's dish from Current orders even when the open-only bill line read is empty", async () => {
+    const methods = apiFor(consent("settled"), {
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([
+          { ...bill, status: "settled", outstanding: "0.00", hasPayments: true },
+        ]),
+      getTabLines: vi.fn().mockRejectedValue({ code: "working_order.not_open" }),
+      readCurrentOrders: vi.fn().mockResolvedValue({
+        revision: 3,
+        hasGroups: false,
+        nextDisplayNumber: 1,
+        retainedCourses: [],
+        reminder: null,
+        groups: [],
+        ungrouped: [
+          {
+            lineId: "line-1",
+            workingOrderId: "wo-4",
+            lineNo: 1,
+            name: "Recorded wine",
+            quantity: "1.000",
+            unitPrecision: 0,
+            courseId: null,
+            servedQuantity: "0.000",
+            servedAt: null,
+            released: true,
+            kitchen: null,
+            note: null,
+            extras: [],
+          },
+        ],
+      }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    expect(cancelDialog(el)?.name).toBe("Recorded wine");
+    expect(cancelDialog(el)?.consent?.context.billStatus).toBe("settled");
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    expect(cancelDialog(el)).toBeNull();
+    expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({
+      outcome: "keep_charge",
+      expectedContext: { billStatus: "settled" },
+    });
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("a successful keep closes before a failed refresh and never offers another confirmation", async () => {
+    const methods = apiFor();
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    vi.mocked(api.getPartyBills).mockRejectedValue({ code: "server.internal" });
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    expect(cancelDialog(el)).toBeNull();
+    expect(banner(el)?.textContent).toContain(t("table.reread_failed"));
+    expect(methods.cancelItem).toHaveBeenCalledOnce();
+  });
+
+  it("never revives the old confirmation after disconnect and reconnect", async () => {
+    const methods = apiFor();
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await flush(el);
+    expect(cancelDialog(el)).toBeNull();
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+  });
+
+  it("does not open an adjustment behind the active cancellation chooser", async () => {
+    const { el } = await mountApp(apiFor());
+    await openMesa4(el);
+    await openCancel(el);
+    emit(tableOrder(el), "adjust", {
+      kind: "discount",
+      target: {
+        lineId: "line-1",
+        name: "Wine",
+        quantity: "1",
+        total: "30.00",
+        unitTotal: null,
+      },
+    });
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+    expect(cancelDialog(el)?.name).toBe("Wine");
+  });
+
+  it("keeps duplicate clicks inert while the service request waits", async () => {
+    let answer!: (value: { revision: number }) => void;
+    const methods = apiFor(consent(), {
+      cancelItem: vi.fn().mockImplementation(
+        () =>
+          new Promise<{ revision: number }>((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    const widget = cancelDialog(el)!;
+    expect(widget.busy).toBe(true);
+    widget.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+    emit(widget, "cancel-item-choice", {
+      lineId: "line-1",
+      quantity: "1",
+      outcome: "keep_charge",
+      consent: consent(),
+    });
+    await flush(el);
+    expect(methods.cancelItem).toHaveBeenCalledOnce();
+    answer({ revision: 4 });
+    await flush(el);
+    expect(cancelDialog(el)).toBeNull();
+  });
+
+  it("resends a lost answer with exactly the same kitchen consent and submission identity", async () => {
+    const methods = apiFor(consent(), {
+      cancelItem: vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue({ revision: 4 }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    await expect.poll(() => cancelDialog(el), { timeout: 4000 }).toBeNull();
+    expect(methods.cancelItem).toHaveBeenCalledTimes(2);
+    expect(methods.cancelItem.mock.calls[1]![2]).toEqual(methods.cancelItem.mock.calls[0]![2]);
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("closes an unanswered service cancellation and asks the operator to check the reread bill", async () => {
+    const methods = apiFor(consent(), {
+      cancelItem: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    await expect
+      .poll(() => banner(el)?.textContent, { timeout: 4000 })
+      .toBe(t("adjust.unconfirmed"));
+    expect(cancelDialog(el)).toBeNull();
+    expect(methods.cancelItem).toHaveBeenCalledTimes(3);
+    const commands = methods.cancelItem.mock.calls.map((call) => call[2]);
+    expect(commands[1]).toEqual(commands[0]);
+    expect(commands[2]).toEqual(commands[0]);
+    expect(api.getTabLines).toHaveBeenCalledTimes(2);
+  });
+
+  it("a context-refresh failure closes the stale choices and reports the changed dish", async () => {
+    const methods = apiFor(consent(), {
+      getCancellation: vi
+        .fn()
+        .mockResolvedValueOnce(consent())
+        .mockRejectedValue({ code: "server.internal" }),
+      cancelItem: vi.fn().mockRejectedValue({ code: "tab.cancel_context_changed" }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    expect(cancelDialog(el)).toBeNull();
+    expect(banner(el)?.textContent).toBe(
+      "The dish changed. Check its current kitchen state and choose again.",
+    );
+    expect(methods.cancelItem).toHaveBeenCalledOnce();
+  });
+
+  it("never applies a pending read to a replacement API, and can read again", async () => {
+    let answer!: (value: CancellationRead) => void;
+    const oldRead = vi.fn().mockImplementation(
+      () =>
+        new Promise<CancellationRead>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountApp(apiFor(consent(), { getCancellation: oldRead }));
+    await openMesa4(el);
+    await openCancel(el);
+    const replacement = stubApi(apiFor());
+    el.api = replacement;
+    await flush(el);
+    answer(consent());
+    await flush(el);
+    expect(cancelDialog(el)).toBeNull();
+    await openCancel(el);
+    expect(cancelDialog(el)?.name).toBe("Wine");
+  });
+
+  it("drops a successful old request after leaving and reopening the same bill", async () => {
+    let answer!: (value: { revision: number }) => void;
+    const methods = apiFor(consent(), {
+      cancelItem: vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<{ revision: number }>((resolve) => {
+              answer = resolve;
+            }),
+        )
+        .mockResolvedValue({ revision: 5 }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    await openCancel(el);
+    const later = cancelDialog(el);
+    expect(later).not.toBeNull();
+    answer({ revision: 4 });
+    await flush(el);
+    expect(cancelDialog(el)).toBe(later);
+    expect(cancelDialog(el)?.busy).toBe(false);
+    expect(methods.cancelItem).toHaveBeenCalledOnce();
+  });
+
+  it("does not admit a second opening while its context read waits", async () => {
+    let answer!: (value: CancellationRead) => void;
+    const methods = apiFor(consent(), {
+      getCancellation: vi.fn().mockImplementation(
+        () =>
+          new Promise<CancellationRead>((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await openCancel(el);
+    expect(methods.getCancellation).toHaveBeenCalledOnce();
+    expect(cancelDialog(el)).toBeNull();
+    answer(consent());
+    await flush(el);
+    expect(cancelDialog(el)?.name).toBe("Wine");
+  });
+
+  it("reports a refused context read and lets the next press read again", async () => {
+    const methods = apiFor(consent(), {
+      getCancellation: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "permission.denied" })
+        .mockResolvedValue(consent()),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    expect(cancelDialog(el)).toBeNull();
+    expect(banner(el)?.textContent).toBe(codeMessage("permission.denied"));
+    await openCancel(el);
+    expect(cancelDialog(el)?.name).toBe("Wine");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("never confirms a dish whose context now belongs to another bill", async () => {
+    const methods = apiFor({ ...consent(), billId: "other-bill" });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    expect(cancelDialog(el)).toBeNull();
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+  });
+
+  it("preserves the chosen partial quantity through the reason preview and service command", async () => {
+    const read = consent("open", "not_started");
+    read.context.components[0]!.quantity = "3.000";
+    read.context.components[0]!.kitchenQuantity = "3.000";
+    const methods = apiFor(read, {
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...wine, quantity: "3.000" }],
+        revision: 6,
+        editSentLines: true,
+      }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    const quantity = cancelDialog(el)!.shadowRoot!.querySelector("wt-number-stepper")!;
+    await quantity.updateComplete;
+    await userEvent.fill(page.elementLocator(quantity.shadowRoot!.querySelector("input")!), "2");
+    await flush(el);
+    await removeCharge(el);
+    expect(dialog(el)?.target).toMatchObject({ quantity: "2", unitTotal: null, total: "60.00" });
+    expect(api.previewAdjustment).toHaveBeenCalledWith(
+      "wo-4",
+      expect.objectContaining({ quantity: "2" }),
+    );
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({
+      quantity: "2",
+      outcome: "remove_charge",
+    });
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("lets a failed reasons read retry without retaining a busy chooser", async () => {
+    const methods = apiFor(consent("open", "not_started"), {
+      listAdjustmentReasons: vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue([mistake]),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, "[data-confirm]");
+    expect(cancelDialog(el)?.refusal).toBe(t("adjust.reasons_error"));
+    expect(cancelDialog(el)?.busy).toBe(false);
+    await removeCharge(el);
+    expect(dialog(el)?.preview?.reduction).toBe("30.00");
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+  });
+
+  it("keeps a reason refusal under its field and returns to the editable form", async () => {
+    const methods = apiFor(consent("open", "not_started"), {
+      cancelItem: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "adjustment.note_required" })
+        .mockResolvedValue({ revision: 4 }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await removeCharge(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(dialog(el)?.refusal).toBe("adjustment.note_required");
+    expect(dialog(el)?.preview).toBeNull();
+    const note = inDialog(el, 'wt-input[name="note"]');
+    expect(note.getAttribute("name")).toBe("note");
+    expect(note.shadowRoot!.textContent).toContain(codeMessage("adjustment.note_required"));
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("closes off-bill consent when the API is replaced before confirmation", async () => {
+    const methods = apiFor(consent("open", "not_started"));
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await removeCharge(el);
+    const replacement = stubApi(apiFor());
+    el.api = replacement;
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(cancelDialog(el)).toBeNull();
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+    expect(replacement.cancelItem).not.toHaveBeenCalled();
   });
 });
