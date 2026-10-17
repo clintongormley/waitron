@@ -1936,10 +1936,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   name and every order list shows it: Held, Waiting, Transfers, the Pass and the payment panel.
   [Detail](backlog/till.md#a765-say-which-table-an-order-belongs-to)
 
-- **A766. The till's floor plan grows while a table is dragged past its edge (owner,
-  2026-10-16).** Today it grows only when the table is let go.
-  [Detail](backlog/till.md#a766-the-tills-floor-plan-grows-while-a-table-is-dragged-past-its-edge)
-
 - **A768. The till: open a table fast, and stop needing a reload (owner, 2026-10-16).** Opening a
   table waits on up to four requests in a row, one re-reading the zone's whole menu; keep each
   zone's menu and check it with `/api/menu-state`. Courses, and other settings read once when the

@@ -255,6 +255,14 @@ screen is designed.
   - From the look pass: at 390 px a fixed stool shows no name; the refusal line is plain text; two
     tables' labels overlap while they line up mid-drag.
   - The new floor test files repeat their setup; shared helpers were left out to avoid churn.
+  - Left open by A766 (the plan grows while a table is dragged past its edge): a drag that grows
+    the plan in proportion, say 12 × 8 squares to 15 × 10, changes no ratio, so nothing resizes or
+    refits the map, during the drag or at release, as before A766.
+  - Left open by A766: once the view has rescaled during a drag, the drawn table lags the finger
+    (seen on the demo stack, `~/waitron-campaign-b/a766-shots`). The drop's target and its
+    highlight stay the table under the finger, but the highlight is worked out on each move and
+    the target again at release, so after a refit that follows the last move the highlight can
+    lag the drop's target by that one refit.
 
 ## A561. A 2 × 2 table's name is cut short on the till map
 
@@ -2040,12 +2048,6 @@ the party id and no table name. The server sends the table's name (a joined tabl
 name) with each order, and every list that shows orders names it: Held orders first, then Waiting,
 Transfers, the Pass and the payment panel — check each. A757's item counts change the same rows;
 build after A757's board if it has been decided, else name the table alone.
-
-## A766. The till's floor plan grows while a table is dragged past its edge
-
-**A766 (owner, 2026-10-16).** Dragging a table beyond the plan's edge on the till's floor leaves the
-plan its old size until the table is let go, so the waiter cannot see where it will land. Grow it
-as the table moves. Related open notes on the same drag are in A474 above.
 
 ## A768. The till: open a table fast, and stop needing a reload
 
