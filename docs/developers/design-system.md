@@ -4737,8 +4737,9 @@ painters' link points at `/manage/opening-hours/view/year/window/periods` and ca
 `data-own-click`, so the dashboard shell's link handler leaves it alone; a plain click on it is
 handled by the link itself (`periodsLink`, `period-editing.ts`), which sends `calendar-window-open`
 as the Year's button does, and the screen pushes the current address with `window/periods` added,
-so the window opens over the painter and its unsaved paint stays. A click with a modifier key, a
-click other than the left button and a click already cancelled are left to the browser. The window is an unsized, so wide,
+so the window opens over the painter and its unsaved paint stays. A click with a modifier key or
+with a button other than the left is left to the browser, and a click something above the link has
+already cancelled opens nothing. The window is an unsized, so wide,
 `wt-modal` with no heading, named "Periods" by its `aria-label` (`data-window="periods"`; the
 Seasons window is the compact one, `data-window="seasons"`), and both end with a footer Close.
 
