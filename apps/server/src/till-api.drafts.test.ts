@@ -23,7 +23,7 @@ import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 
 // The HTTP layer of the draft routes: body parsing, the operator taken from the session, the draft
 // scoped to the party in the path, and the status each refusal maps to. What the commands do is

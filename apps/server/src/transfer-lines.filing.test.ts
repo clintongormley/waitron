@@ -31,7 +31,7 @@ import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { transferItems } from "./bill-actions.js";
+import { transferItems } from "./testing/bill-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { createOpenOrder } from "./working-order.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";

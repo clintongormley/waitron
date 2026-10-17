@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -892,11 +893,17 @@ describe("made-here route wiring", () => {
     const [line] = await inTx(venue, (tx) =>
       tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, item!.workingOrderLineId)),
     );
-    const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${party.tabId}/split`, {
-      submissionId: randomUUID(),
-      expectedPartyRevision: await revisionOf(party.partyId),
-      transfers: [{ lineNo: line!.lineNo, quantity: "1" }],
-    });
+    const split = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/bills/${party.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${party.tabId}/split`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+        transfers: [{ lineNo: line!.lineNo, quantity: "1" }],
+      }),
+    );
     expect(split.status).toBe(200);
     const [splitItem] = await inTx(venue, (tx) =>
       tx

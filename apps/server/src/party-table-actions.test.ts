@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { readDrafts } from "./order-drafts.js";
 import { placeGroups } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";

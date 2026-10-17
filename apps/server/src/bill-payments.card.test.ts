@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -889,10 +890,16 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
 
   it("refuses a void, a round and abandoning the bill while its card is at the reader, and leaves another bill of the party alone", async () => {
     const billId = await tabWithDishes("Paella", "Tarta", "Caña", "Caña");
-    const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${billId}/split`, {
-      transfers: [{ lineNo: 3 }, { lineNo: 4 }],
-      expectedPartyRevision: await partyRevisionOf(venue, billId),
-    });
+    const split = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/bills/${billId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${billId}/split`, {
+        transfers: [{ lineNo: 3 }, { lineNo: 4 }],
+        expectedPartyRevision: await partyRevisionOf(venue, billId),
+      }),
+    );
     const otherBill = split.json.billId as string;
     const card = await heldCard(billId, "10.00");
 

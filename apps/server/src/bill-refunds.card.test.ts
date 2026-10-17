@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
@@ -267,10 +268,16 @@ async function lockedWrites(billId: string, paymentId: string) {
       `/api/working-orders/${billId}/adjustments`,
       await cancelBody(venue.db, billId, 2),
     ),
-    billSplit: await send(venue.app, venue.cookie, "POST", `/api/bills/${billId}/split`, {
-      transfers: [{ lineNo: 3 }],
-      expectedPartyRevision: await partyRevisionOf(venue, billId),
-    }),
+    billSplit: await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/bills/${billId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${billId}/split`, {
+        transfers: [{ lineNo: 3 }],
+        expectedPartyRevision: await partyRevisionOf(venue, billId),
+      }),
+    ),
     abandon: await send(venue.app, venue.cookie, "DELETE", `/api/working-orders/${billId}`),
     secondRefund: (await refund(billId, paymentId, { applied: "1.00" })).answer,
   };
@@ -580,10 +587,16 @@ describe("design §8 test 18: a new id while a refund is pending", () => {
 
   it("leaves another bill of the same party alone", async () => {
     const billId = await bill("Pulpo", "Croquetas", "Croquetas", "Caña");
-    const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${billId}/split`, {
-      transfers: [{ lineNo: 4 }],
-      expectedPartyRevision: await partyRevisionOf(venue, billId),
-    });
+    const split = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/bills/${billId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${billId}/split`, {
+        transfers: [{ lineNo: 4 }],
+        expectedPartyRevision: await partyRevisionOf(venue, billId),
+      }),
+    );
     const otherBill = split.json.billId as string;
     const card = await pay(billId, "card", "20.00");
     venue.card.scriptNextRefund({ made: false, answer: LOST });

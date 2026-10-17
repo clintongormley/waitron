@@ -53,7 +53,7 @@ import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { writePrintHeldWork } from "@waitron/venue-service";
 import "./errors.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";

@@ -70,7 +70,7 @@ import {
   recallLines,
 } from "./working-order.js";
 import "./errors.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";

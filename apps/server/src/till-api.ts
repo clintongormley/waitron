@@ -3846,7 +3846,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const saleCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: billId }]);
-        const split = await splitBill(tx, cfg, billId, transfers, command);
+        const split = await splitBill(tx, cfg, billId, transfers, {
+          ...command,
+          expectedEdit: parseBillEditExpected(body.expectedEdit),
+        });
         await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);
         await captureKitchenActivity(
           tx,
@@ -3910,7 +3913,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const command = billCommand(personId, body);
       await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: fromBillId }, { orderId: toBillId }]);
-        await transferItems(tx, cfg, fromBillId, toBillId, transfers, command);
+        await transferItems(tx, cfg, fromBillId, toBillId, transfers, {
+          ...command,
+          expectedEdits: parseBillEditExpecteds(body.expectedEdits),
+        });
         await captureKitchenActivity(
           tx,
           deps.attendance === undefined

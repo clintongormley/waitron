@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -109,10 +110,13 @@ function revisionOf(partyId: string): number {
 async function splitAtTwoParties(names: string[], lineNos: number[]) {
   const ana = await seatedWith(venue, ...names);
   const luis = await seatedWith(venue, "Caña");
-  const split = await post(`/api/bills/${ana.tabId}/split`, {
-    transfers: lineNos.map((lineNo) => ({ lineNo })),
-    expectedPartyRevision: ana.revision,
-  });
+  const split = await post(
+    `/api/bills/${ana.tabId}/split`,
+    await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
+      transfers: lineNos.map((lineNo) => ({ lineNo })),
+      expectedPartyRevision: ana.revision,
+    }),
+  );
   expect(split.status).toBe(200);
   return { ana, luis, billId: split.json.billId as string };
 }
@@ -352,10 +356,16 @@ describe("money on a moved bill", () => {
   it("finishes a card payment still at the reader on the bill it began on, after the bill moved party", async () => {
     const ana = await seatedWith(venue, "Tarta", "Pulpo"); // €18.00 + €20.00
     const luis = await seatedWith(venue, "Caña");
-    const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${ana.tabId}/split`, {
-      transfers: [{ lineNo: 2 }],
-      expectedPartyRevision: ana.revision,
-    });
+    const split = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/bills/${ana.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
+        transfers: [{ lineNo: 2 }],
+        expectedPartyRevision: ana.revision,
+      }),
+    );
     const billId = split.json.billId as string; // Pulpo, €20.00
     const body: Body = {
       submissionId: randomUUID(),
@@ -697,10 +707,13 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
   it("keeps the moved bill separate from a receiving main bill with a card refund in progress", async () => {
     const ana = await seatedWith(venue, "Tarta", "Pulpo");
     const luis = await seatedWith(venue, "Croquetas");
-    const split = await post(`/api/bills/${ana.tabId}/split`, {
-      transfers: [{ lineNo: 2 }],
-      expectedPartyRevision: ana.revision,
-    });
+    const split = await post(
+      `/api/bills/${ana.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
+        transfers: [{ lineNo: 2 }],
+        expectedPartyRevision: ana.revision,
+      }),
+    );
     const billId = split.json.billId as string;
     const card = await cardContribution(luis.tabId, "3.00");
     const paymentId = (card.json.payment as { id: string }).id;

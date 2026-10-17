@@ -26,7 +26,7 @@ import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { readPaidQuantities } from "./bill-payments.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { cancelBody } from "./testing/cancel-line.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the

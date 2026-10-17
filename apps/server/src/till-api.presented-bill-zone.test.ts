@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -157,10 +158,13 @@ async function indoorContext() {
 /** Ana's party on the terrace, with `names` split off her main bill and presented. */
 async function presentedSplit(...names: string[]) {
   const ana = await seatedWith(venue, "Caña", ...names);
-  const split = await post(`/api/bills/${ana.tabId}/split`, {
-    transfers: names.map((_, i) => ({ lineNo: i + 2 })),
-    expectedPartyRevision: ana.revision,
-  });
+  const split = await post(
+    `/api/bills/${ana.tabId}/split`,
+    await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
+      transfers: names.map((_, i) => ({ lineNo: i + 2 })),
+      expectedPartyRevision: ana.revision,
+    }),
+  );
   expect(split.status).toBe(200);
   const presented = split.json.billId as string;
   const placed = await post(`/api/working-orders/${presented}/place`, {});

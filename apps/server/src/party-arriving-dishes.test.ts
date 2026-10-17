@@ -17,7 +17,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { writePrintHeldWork } from "@waitron/venue-service";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { createCourse } from "./kitchen.js";
 import { moveBill, type MoveBillOptions, type MoveTarget } from "./testing/move-bill-fixture.js";
 import {

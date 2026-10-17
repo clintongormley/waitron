@@ -34,7 +34,7 @@ import {
   writePrintHeldWork,
 } from "@waitron/venue-service";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup, readCurrentOrders, submitGroups } from "./order-groups.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";

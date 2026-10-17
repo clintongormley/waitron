@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -509,10 +510,14 @@ describe("a receipt-language change while orders are open", () => {
   it("does not count a seated party's abandoned bill, which is no longer open", async () => {
     reset();
     const party = await seatedWith(venue, "Paella", "Tarta");
-    const split = await till("POST", `/api/bills/${party.tabId}/split`, {
-      expectedPartyRevision: revisionOf(party.partyId),
-      transfers: [{ lineNo: 2 }],
-    });
+    const split = await till(
+      "POST",
+      `/api/bills/${party.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${party.tabId}/split`, {
+        expectedPartyRevision: revisionOf(party.partyId),
+        transfers: [{ lineNo: 2 }],
+      }),
+    );
     expect(split.status).toBe(200);
     const billId = split.json.billId as string;
     expect((await till("DELETE", `/api/working-orders/${billId}`)).status).toBe(200);
@@ -551,10 +556,14 @@ describe("a receipt-language change while orders are open", () => {
     venue.db.run(
       sql`update locations set invoice_locales = '["gl-ES"]' where id = ${venue.cfg.locationId}`,
     );
-    const split = await till("POST", `/api/bills/${party.tabId}/split`, {
-      expectedPartyRevision: revisionOf(party.partyId),
-      transfers: [{ lineNo: 2 }],
-    });
+    const split = await till(
+      "POST",
+      `/api/bills/${party.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${party.tabId}/split`, {
+        expectedPartyRevision: revisionOf(party.partyId),
+        transfers: [{ lineNo: 2 }],
+      }),
+    );
     expect(split).toMatchObject({ status: 500, json: { code: "server.internal" } });
     expect(dishLines(party.tabId)).toEqual(before);
   });

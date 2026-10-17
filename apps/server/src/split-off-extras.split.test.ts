@@ -15,7 +15,7 @@ import { hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { transferItems } from "./bill-actions.js";
+import { transferItems } from "./testing/bill-action-fixture.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { moveGuests } from "./testing/table-action-fixture.js";

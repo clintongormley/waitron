@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -73,10 +74,13 @@ async function anaAtTwo() {
     expectedPartyRevision: revisionOf(ana.partyId),
   });
   expect(joined.status).toBe(200);
-  const split = await post(`/api/bills/${ana.tabId}/split`, {
-    transfers: [{ lineNo: 2 }],
-    expectedPartyRevision: revisionOf(ana.partyId),
-  });
+  const split = await post(
+    `/api/bills/${ana.tabId}/split`,
+    await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
+      transfers: [{ lineNo: 2 }],
+      expectedPartyRevision: revisionOf(ana.partyId),
+    }),
+  );
   expect(split.status).toBe(200);
   return { ana, second, billId: split.json.billId as string };
 }

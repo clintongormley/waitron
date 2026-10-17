@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -79,10 +80,16 @@ async function prepare(action: Action) {
     );
   }
   const [party] = await suite.db.select().from(parties).where(eq(parties.id, source.partyId));
-  const split = await send(v.app, v.cookie, "POST", `/api/bills/${source.tabId}/split`, {
-    transfers: [{ lineNo: 2 }],
-    expectedPartyRevision: party!.revision,
-  });
+  const split = await send(
+    v.app,
+    v.cookie,
+    "POST",
+    `/api/bills/${source.tabId}/split`,
+    await observedBillActionBody(v.db, `/api/bills/${source.tabId}/split`, {
+      transfers: [{ lineNo: 2 }],
+      expectedPartyRevision: party!.revision,
+    }),
+  );
   expect(split.status).toBe(200);
   const destination = action === "move-party" ? await seatedWith(v) : null;
   const [updated] = await suite.db.select().from(parties).where(eq(parties.id, source.partyId));

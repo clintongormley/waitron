@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
@@ -248,13 +249,13 @@ describe("draft-event attendance in table combines", () => {
         v.cookie,
         "POST",
         `/api/bills/${p.source.tabId}/merge`,
-        {
+        await observedBillActionBody(v.db, `/api/bills/${p.source.tabId}/merge`, {
           fromBillId: p.target.tabId,
           expectedPartyRevision: party.revision,
           partyId: party.id,
           operatorId: v.adminId,
           at: "2026-01-06T20:00:00Z",
-        },
+        }),
       );
       if (refused) {
         expect(response).toMatchObject({ status: 400, json: { code: "attendance.invalid" } });

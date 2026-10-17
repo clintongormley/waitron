@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -259,11 +260,16 @@ describe("existing service in a closed zone", () => {
     expect(added.status).toBe(200);
     const [party] = await suite.db.select().from(parties).where(eq(parties.id, seated.partyId));
     at("23:45");
-    const answer = await request(v, "POST", `/api/bills/${seated.tabId}/split`, {
-      partyId: seated.partyId,
-      expectedPartyRevision: party!.revision,
-      transfers: [{ lineNo: 2 }],
-    });
+    const answer = await request(
+      v,
+      "POST",
+      `/api/bills/${seated.tabId}/split`,
+      await observedBillActionBody(v.db, `/api/bills/${seated.tabId}/split`, {
+        partyId: seated.partyId,
+        expectedPartyRevision: party!.revision,
+        transfers: [{ lineNo: 2 }],
+      }),
+    );
     expect(answer.status).toBe(200);
     expect(
       await suite.db

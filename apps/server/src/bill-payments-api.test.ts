@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
@@ -428,10 +429,14 @@ async function splitOff(
   billId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<{ status: number; json: Record<string, unknown> }> {
-  return request("POST", `/api/bills/${billId}/split`, {
-    transfers,
-    expectedPartyRevision: await partyRevisionOf(billId),
-  });
+  return request(
+    "POST",
+    `/api/bills/${billId}/split`,
+    await observedBillActionBody(suite.db, `/api/bills/${billId}/split`, {
+      transfers,
+      expectedPartyRevision: await partyRevisionOf(billId),
+    }),
+  );
 }
 
 interface PaymentBody {
@@ -3567,10 +3572,14 @@ describe("the single-payment routes on a bill holding bill payments (design §7)
     const checkId = split.json.billId as string;
     expect((await contribute(checkId, "5.00")).status).toBe(200);
 
-    const refused = await request("POST", `/api/bills/${tabId}/merge`, {
-      fromBillId: checkId,
-      expectedPartyRevision: await partyRevisionOf(tabId),
-    });
+    const refused = await request(
+      "POST",
+      `/api/bills/${tabId}/merge`,
+      await observedBillActionBody(suite.db, `/api/bills/${tabId}/merge`, {
+        fromBillId: checkId,
+        expectedPartyRevision: await partyRevisionOf(tabId),
+      }),
+    );
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({

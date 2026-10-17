@@ -18,7 +18,7 @@ import {
 } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { createOpenOrder, parkOrder } from "./working-order.js";
-import { splitBill } from "./bill-actions.js";
+import { splitBill } from "./testing/bill-action-fixture.js";
 import { payWorkingOrder, payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 

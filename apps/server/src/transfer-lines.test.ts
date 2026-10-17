@@ -29,7 +29,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { transferItems } from "./bill-actions.js";
+import { transferItems } from "./testing/bill-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { VENUE_SERVICE } from "./modules.js";
 

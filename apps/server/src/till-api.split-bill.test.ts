@@ -1,3 +1,4 @@
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -241,10 +242,12 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
     const split = await app.request(`/api/bills/${tabA}/split`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        transfers: [{ lineNo: 2 }],
-        expectedPartyRevision: await partyRevisionOf(suite.db, tabA),
-      }),
+      body: JSON.stringify(
+        await observedBillActionBody(suite.db, `/api/bills/${tabA}/split`, {
+          transfers: [{ lineNo: 2 }],
+          expectedPartyRevision: await partyRevisionOf(suite.db, tabA),
+        }),
+      ),
     });
     const { billId: checkId } = (await split.json()) as { billId: string };
     return { app, tabA, checkId, cookie, printerId, ticket: ticket! };
@@ -298,10 +301,12 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
     const res = await app.request(`/api/bills/${tabA}/merge`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        fromBillId: checkId,
-        expectedPartyRevision: await partyRevisionOf(suite.db, tabA),
-      }),
+      body: JSON.stringify(
+        await observedBillActionBody(suite.db, `/api/bills/${tabA}/merge`, {
+          fromBillId: checkId,
+          expectedPartyRevision: await partyRevisionOf(suite.db, tabA),
+        }),
+      ),
     });
 
     expect(res.status).toBe(204);
@@ -323,10 +328,12 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
     const res = await app.request(`/api/bills/${tabA}/merge`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        fromBillId: checkId,
-        expectedPartyRevision: await partyRevisionOf(suite.db, tabA),
-      }),
+      body: JSON.stringify(
+        await observedBillActionBody(suite.db, `/api/bills/${tabA}/merge`, {
+          fromBillId: checkId,
+          expectedPartyRevision: await partyRevisionOf(suite.db, tabA),
+        }),
+      ),
     });
 
     expect(res.status).toBe(409);
@@ -382,10 +389,13 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
       ],
     });
     expect(round.status).toBe(200);
-    const split = await post(`/api/bills/${tabId}/split`, {
-      transfers: [{ lineNo: 1, quantity: "1" }],
-      expectedPartyRevision: ((await round.json()) as { revision: number }).revision,
-    });
+    const split = await post(
+      `/api/bills/${tabId}/split`,
+      await observedBillActionBody(suite.db, `/api/bills/${tabId}/split`, {
+        transfers: [{ lineNo: 1, quantity: "1" }],
+        expectedPartyRevision: ((await round.json()) as { revision: number }).revision,
+      }),
+    );
     expect(split.status).toBe(200);
     const { billId: checkId } = (await split.json()) as { billId: string };
     const floor = await app.request("/api/tables/state", { headers: { cookie } });
@@ -419,10 +429,13 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
     const { post, tabId, checkId, partyId, revision } = await seatedSplit();
     const before = await partyOf(partyId);
 
-    const res = await post(`/api/bills/${tabId}/merge`, {
-      fromBillId: checkId,
-      expectedPartyRevision: revision,
-    });
+    const res = await post(
+      `/api/bills/${tabId}/merge`,
+      await observedBillActionBody(suite.db, `/api/bills/${tabId}/merge`, {
+        fromBillId: checkId,
+        expectedPartyRevision: revision,
+      }),
+    );
 
     expect(res.status).toBe(204);
     expect(await quantitiesOn(checkId)).toEqual([]);
@@ -434,7 +447,10 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
   it("refuses the merge sent without a revision, leaving the check's line on it", async () => {
     const { post, tabId, checkId } = await seatedSplit();
 
-    const res = await post(`/api/bills/${tabId}/merge`, { fromBillId: checkId });
+    const res = await post(
+      `/api/bills/${tabId}/merge`,
+      await observedBillActionBody(suite.db, `/api/bills/${tabId}/merge`, { fromBillId: checkId }),
+    );
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
@@ -517,10 +533,12 @@ describe("a split-off check after the till that made it has forgotten it", () =>
     const split = await app.request(`/api/bills/${tabId}/split`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        transfers: [{ lineNo: 1, quantity: "1" }],
-        expectedPartyRevision: await partyRevisionOf(venueSuite.db, tabId),
-      }),
+      body: JSON.stringify(
+        await observedBillActionBody(venueSuite.db, `/api/bills/${tabId}/split`, {
+          transfers: [{ lineNo: 1, quantity: "1" }],
+          expectedPartyRevision: await partyRevisionOf(venueSuite.db, tabId),
+        }),
+      ),
     });
     expect(split.status).toBe(200);
     const { billId: checkId } = (await split.json()) as { billId: string };
