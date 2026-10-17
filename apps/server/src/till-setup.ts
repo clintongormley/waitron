@@ -70,7 +70,7 @@ export async function readTillSetup(
   /* v8 ignore start */
   if (taxpayer === null || loc === undefined) {
     // Unreachable once provisioned: the taxpayer row and the till's own location both exist.
-    throw new Error(`GET /api/till: no taxpayer/location row for ${deps.cfg.locationId}`);
+    throw new Error(`readTillSetup: no taxpayer/location row for ${deps.cfg.locationId}`);
   }
   /* v8 ignore stop */
   const simulator = deps.cardProvider?.provider === "simulator";
