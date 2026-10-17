@@ -76,7 +76,7 @@ interface Drag {
   dy: number;
   x: number;
   y: number;
-  /** The first other table under the pointer. */
+  /** The first other table under the pointer at the latest move `canDrag` allowed. */
   targetId: string | null;
 }
 

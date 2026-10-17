@@ -79,9 +79,9 @@ neared the edge, and it changed assertions in `wt-floor-map.view.test.ts` (model
    disconnecting cancels it. Where the view was never fitted to a drag's crop — as in a fixed-size
    host, which no drag resizes, unless `fitKey` changes mid-drag — release refits nothing, and a new
    `tables` alone still keeps the view.
-8. **Residual, recorded as a short backlog entry in Task 5:** a crop that grows in proportion (a
-   diagonal drag, 12 × 8 to 15 × 10) changes no ratio, so nothing refits — as on release today.
-   After the view has rescaled during a drag the drawn table lags the finger (decision 4). The
+8. **Residuals, recorded as short backlog entries in Task 5:** a crop that grows in proportion (a
+   diagonal drag, 12 × 8 to 15 × 10) changes no ratio, so nothing refits — as on release today;
+   and after the view has rescaled during a drag the drawn table lags the finger (decision 4). The
    drop-target highlight is the table under the pointer at the latest move (`#targetAt`), and the
    drop sends the table the highlight marks (`#sendDrop` reads `drag.targetId`), so after a refit
    that follows the last move the highlight can be on a table the finger has left, and the drop
@@ -190,5 +190,5 @@ equivalent. Record the score in the ledger.
   must not be overwritten; the prose at `:806–810` ("Its size is its parent's choice", the fit
   rules) says that during a drag it fits as if the held table already stood where it is drawn,
   growing only, and that a pan turns that off.
-- `docs/backlog.md`: delete the A766 entry, and add decision 8's residual as a short entry of its
-  own beside A474; `docs/backlog/till.md`: delete its A766 section.
+- `docs/backlog.md`: delete the A766 entry, and add decision 8's two residuals as two short entries
+  of their own beside A474; `docs/backlog/till.md`: delete its A766 section.

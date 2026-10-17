@@ -179,7 +179,7 @@ function centreOf(el: WtFloorMap, id: string): { x: number; y: number } {
   return { x: box.left - outer.left + box.width / 2, y: box.top - outer.top + box.height / 2 };
 }
 
-/** Holds `id` at its centre and moves the pointer `squares` across and down at the drawn scale. */
+/** Holds `id` at its centre and moves the pointer `across` and `down` squares at the drawn scale. */
 async function holdAndMove(el: WtFloorMap, id: string, across: number, down: number) {
   const scale = button(el, id).getBoundingClientRect().width / 8;
   const from = centreOf(el, id);

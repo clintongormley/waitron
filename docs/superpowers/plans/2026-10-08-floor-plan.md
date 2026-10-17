@@ -1,3 +1,7 @@
+> 2026-10-17, A766: `wt-floor-map` sets `--floor-map-ratio` on its own host and the till only
+> reads it, and `wt-table-drag-end`'s `targetId` is the table the drop-target highlight marks, not
+> the table under the release point. See [the A766 plan](2026-10-17-a766-till-floor-grows-on-drag.md).
+
 > 2026-10-16: A671 supersedes the editor side-panel arrangement, placement click targets and
 
 2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
