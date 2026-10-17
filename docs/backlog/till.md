@@ -925,6 +925,9 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     **2026-10-10 update:** A435 step 5's retained metadata now gives saved drafts their recorded
     course section and fired lines their recorded label, including when the active list is empty.
     The earlier C80 reading above is historical; the move/send comparison remains unverified here.
+    **2026-10-17:** the owner chose Fire now, listed first, for a switched-off course on both paths.
+    A773-1 tests the new placement/send model and arriving-bill grouping; T11 must still replace the
+    active screen's legacy grouping controls. [Current follow-up](kitchen.md#left-by-c80-a-dish-whose-course-the-till-does-not-list).
   - **Task 10 (#875).** Unchecked Send to radios are Chromium's own dark-theme control, dim grey on
     the dark dialog (seen in the 390 px Spanish dark screenshot).
   - **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a

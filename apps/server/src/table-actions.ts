@@ -432,6 +432,7 @@ export async function splitTable(
       await moveBillDraftsToParty(tx, billId, newParty, options.expectedEdits[0]!);
       const { held } = await groupArrivingDishes(
         tx,
+        cfg,
         newParty,
         billId,
         options.operatorId,

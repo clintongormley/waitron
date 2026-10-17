@@ -34,7 +34,7 @@ import {
   refuseMovedParty,
   setMainBill,
 } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import {
   assertSendable,
   clearGroups,
@@ -87,7 +87,7 @@ type Destination =
  */
 export async function moveBill(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   billId: string,
   to: MoveTarget,
   options: MoveBillOptions,
@@ -168,6 +168,7 @@ export async function moveBill(
     await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
     ({ held } = await groupArrivingDishes(
       tx,
+      cfg,
       partyId,
       billId,
       options.operatorId,
@@ -186,6 +187,7 @@ export async function moveBill(
     // whose own lines keep theirs.
     ({ held } = await groupArrivingDishes(
       tx,
+      cfg,
       partyId,
       billId,
       options.operatorId,

@@ -22,6 +22,7 @@ import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capt
 import { readAttendanceFacts } from "./attendance-facts.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { groupArrivingDishes } from "./order-groups.js";
+import { createCourse } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { createTable } from "./testing/live-table.js";
 import {
@@ -170,9 +171,16 @@ describe("attendance for dishes arriving in a party", () => {
       .update(ticketItems)
       .set({ firedAt: null, madeHere: false })
       .where(eq(ticketItems.workingOrderLineId, lines[1]!.id));
+    await run(async (tx) => {
+      const course = await createCourse(tx, v.cfg, { name: "Held arrival", displayOrder: 1 });
+      await tx
+        .update(workingOrderLines)
+        .set({ courseId: course.id })
+        .where(eq(workingOrderLines.id, lines[1]!.id));
+    });
     const before = await state();
     const made = await run((tx) =>
-      groupArrivingDishes(tx, p.partyId, p.tabId, v.operatorId, new Map(), {
+      groupArrivingDishes(tx, v.cfg, p.partyId, p.tabId, v.operatorId, new Map(), {
         recorder: recordAttendanceFact,
         at: "2026-01-05T16:40:00.987Z",
       }),

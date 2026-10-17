@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { CurrentOrderRow, CurrentOrders, OrderGroup, TillCourse } from "../api/client.js";
+import type {
+  CurrentOrderRow,
+  CurrentOrders,
+  OrderGroup,
+  TillCourse,
+  TillProduct,
+} from "../api/client.js";
 import { heldViews, placeFor, type PlaceContext } from "./draft-place.js";
+import { draftLayout, sendAllGroups } from "./draft-layout.js";
+import { DraftStore } from "./draft-sync.js";
 
 const courses: TillCourse[] = [
   { id: "starters", name: "Starters", displayOrder: 1, heldUntilFired: false },
@@ -17,6 +25,61 @@ const context = (changes: Partial<PlaceContext> = {}): PlaceContext => ({
 });
 
 describe("placeFor: the first order", () => {
+  it("sends a switched-off product course first as Fire now, ahead of live held Mains", () => {
+    const store = new DraftStore();
+    store.placer = (courseId) => placeFor(courseId, context());
+    const product: TillProduct = {
+      id: "live",
+      name: "Main",
+      courseId: "mains",
+      unitPrice: "2.00",
+      vatClass: "general",
+      pricingUnit: "each",
+      category: null,
+      allergens: null,
+    };
+    store.addProduct(product, "1");
+    store.addProduct(
+      { ...product, id: "inactive", name: "Switched-off course", courseId: "switched-off" },
+      "2",
+    );
+    expect(sendAllGroups(store.lines, [], () => true)).toEqual([
+      { release: "fire", indexes: [1] },
+      { release: "hold", indexes: [0] },
+    ]);
+    expect(
+      draftLayout({
+        lines: store.lines,
+        courses,
+        groups: [],
+        locale: "en",
+        nextDisplayNumber: 1,
+      }).map((group) => ({
+        kind: group.kind,
+        indexes: group.sections.flatMap((section) => section.indexes),
+      })),
+    ).toEqual([
+      { kind: "fire", indexes: [1] },
+      { kind: "new", indexes: [0] },
+    ]);
+  });
+
+  it.each([true, false])(
+    "fires an unlisted course before considering matching held work (first order: %s)",
+    (firstOrder) => {
+      expect(
+        placeFor(
+          "switched-off",
+          context({
+            firstOrder,
+            held: [{ id: "old-held", position: 1, courseIds: new Set(["switched-off"]) }],
+            placed: [{ courseId: "switched-off", place: { kind: "new", slot: 2 } }],
+          }),
+        ),
+      ).toEqual({ place: { kind: "fire" } });
+    },
+  );
+
   it.each([null, "starters"])("puts %s in Fire now", (id) => {
     expect(placeFor(id, context())).toEqual({ place: { kind: "fire" } });
   });
@@ -69,7 +132,7 @@ describe("placeFor: the first order", () => {
     ).toEqual({ place: { kind: "new", slot: 1 }, shift: { from: 1 } });
   });
 
-  it("treats a course no longer listed as held and sorts it last", () => {
+  it("fires a course no longer listed instead of allocating a held slot", () => {
     expect(
       placeFor(
         "retained",
@@ -77,7 +140,7 @@ describe("placeFor: the first order", () => {
           placed: [{ courseId: "desserts", place: { kind: "new", slot: 3 } }],
         }),
       ),
-    ).toEqual({ place: { kind: "new", slot: 4 } });
+    ).toEqual({ place: { kind: "fire" } });
   });
 
   it("uses course order rather than the input array order", () => {
@@ -192,7 +255,7 @@ describe("placeFor: later additions", () => {
     ).toEqual({ place: { kind: "fire" } });
   });
 
-  it("still joins an unknown retained course in its existing held group", () => {
+  it("fires an unlisted retained course instead of joining its old held group", () => {
     expect(
       placeFor(
         "retained",
@@ -201,10 +264,10 @@ describe("placeFor: later additions", () => {
           held: [{ id: "retained-group", position: 5, courseIds: new Set(["retained"]) }],
         }),
       ),
-    ).toEqual({ place: { kind: "join", groupId: "retained-group" } });
+    ).toEqual({ place: { kind: "fire" } });
   });
 
-  it("still joins an unknown retained course in its existing manually placed slot", () => {
+  it("fires an unlisted retained course instead of joining its old draft slot", () => {
     expect(
       placeFor(
         "retained",
@@ -214,7 +277,7 @@ describe("placeFor: later additions", () => {
           placed: [{ courseId: "retained", place: { kind: "new", slot: 2, afterGroupId: "g3" } }],
         }),
       ),
-    ).toEqual({ place: { kind: "new", slot: 2, afterGroupId: "g3" } });
+    ).toEqual({ place: { kind: "fire" } });
   });
 
   it("joins draft Desserts and keeps its manually chosen anchor", () => {

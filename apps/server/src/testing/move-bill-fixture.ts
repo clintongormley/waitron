@@ -7,7 +7,7 @@ import {
 } from "../move-bill.js";
 import type { BillEditExpected } from "../order-drafts.js";
 import { holderOf } from "../parties.js";
-import type { TillConfig } from "../till-config.js";
+import type { OriginConfig } from "../till-config.js";
 import type { OrderAttendance } from "../working-order.js";
 export * from "../move-bill.js";
 export type MoveBillOptions = Omit<Options, "expectedEdits"> & {
@@ -17,7 +17,7 @@ export type MoveBillOptions = Omit<Options, "expectedEdits"> & {
 // Preserve existing content scenarios while ownership/race cases pass the captured request directly.
 export async function moveBill(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   billId: string,
   to: MoveTarget,
   options: MoveBillOptions,

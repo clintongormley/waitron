@@ -2198,20 +2198,10 @@ export async function recordGroupEvent(
   });
 }
 
-/**
- * A bill that has just arrived in the party gets groups for its dishes that have none, so the pass
- * can mark them and the waiter can release what is unsent: its released dishes ({@link isReleased})
- * go in one new fired group, and the rest in one new held group per course, because firing a course
- * releases whole every held group holding one of its dishes on that bill. A dish with no course
- * goes in the held group of the earliest active course among the waiting dishes; with none
- * active, the earliest course's, and in a held group of its own when no waiting dish has a course.
- * The groups follow the party's last one in firing order: fired, then held by course. An extras
- * line takes its dish's group. The fired group takes its earliest-fired dish's firing — its kitchen
- * item's, else its sent time — and, as its firer, the person or kitchen display `firers` says fired
- * that dish's group in the party it left (by line id), else the operator. The caller has moved the party's revision on.
- */
+// Relocation preserves fired history; only a live held course keeps arriving unfired food held.
 export async function groupArrivingDishes(
   tx: Transaction,
+  cfg: OriginConfig,
   partyId: string,
   billId: string,
   operatorId: string,
@@ -2223,6 +2213,7 @@ export async function groupArrivingDishes(
       id: workingOrderLines.id,
       courseId: workingOrderLines.courseId,
       courseActive: kitchenCourses.active,
+      heldUntilFired: kitchenCourses.heldUntilFired,
       sentAt: workingOrderLines.sentAt,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
@@ -2250,36 +2241,53 @@ export async function groupArrivingDishes(
       asc(workingOrderLines.lineNo),
     );
   const released: typeof dishes = [];
+  const immediate: typeof dishes = [];
   const heldByCourse = new Map<string | null, typeof dishes>();
   for (const line of dishes) {
     if (isReleased({ ...line, groupState: null })) released.push(line);
+    else if (line.courseActive !== true || line.heldUntilFired !== true) immediate.push(line);
     else {
       const course = heldByCourse.get(line.courseId);
       if (course === undefined) heldByCourse.set(line.courseId, [line]);
       else course.push(line);
     }
   }
-  const loose = heldByCourse.get(null);
-  const courses = [...heldByCourse.values()].filter((lines) => lines[0]!.courseId !== null);
-  const earliest = courses.find((lines) => lines[0]!.courseActive === true) ?? courses[0];
-  if (loose !== undefined && earliest !== undefined) {
-    earliest.push(...loose);
-    heldByCourse.delete(null);
-  }
+  const routing = immediate.length === 0 ? undefined : routingOnce(tx, cfg, new Date());
   const fired = await groupArrived(
     tx,
     partyId,
     billId,
-    released,
+    [
+      ...released.map((line) => ({ id: line.id, firedAt: line.ticketFiredAt ?? line.sentAt })),
+      ...immediate.map((line) => ({ id: line.id, firedAt: routing!.at.toISOString() })),
+    ],
     "fire",
     operatorId,
     firers,
     attendance,
   );
+  if (immediate.length > 0)
+    await fireOrderLines(
+      tx,
+      cfg,
+      billId,
+      immediate.map((line) => line.id),
+      undefined,
+      routing,
+    );
   const held: string[] = [];
   for (const lines of heldByCourse.values()) {
     held.push(
-      (await groupArrived(tx, partyId, billId, lines, "hold", operatorId, firers, attendance))!,
+      (await groupArrived(
+        tx,
+        partyId,
+        billId,
+        lines.map((line) => ({ id: line.id, firedAt: null })),
+        "hold",
+        operatorId,
+        firers,
+        attendance,
+      ))!,
     );
   }
   return { fired, held };
@@ -2289,7 +2297,7 @@ async function groupArrived(
   tx: Transaction,
   partyId: string,
   billId: string,
-  lines: readonly { id: string; ticketFiredAt: string | null; sentAt: string | null }[],
+  lines: readonly { id: string; firedAt: string | null }[],
   release: GroupRelease,
   operatorId: string,
   firers: ReadonlyMap<string, Firer>,
@@ -2298,8 +2306,7 @@ async function groupArrived(
   if (lines.length === 0) return null;
   let fired: { at: string; by: Firer } | undefined;
   if (release === "fire") {
-    // A released dish ({@link isReleased}) has a fired kitchen item or, lacking one, a sent time.
-    const at = (line: (typeof lines)[number]) => (line.ticketFiredAt ?? line.sentAt)!;
+    const at = (line: (typeof lines)[number]) => line.firedAt!;
     const first = lines.reduce((earliest, line) => (at(line) < at(earliest) ? line : earliest));
     fired = { at: at(first), by: firers.get(first.id) ?? { personId: operatorId } };
   }

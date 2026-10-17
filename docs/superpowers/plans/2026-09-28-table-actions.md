@@ -1,5 +1,10 @@
 # Tables, parties and bills: the till's table actions — Implementation Plan
 
+2026-10-17: [A773](../specs/2026-10-16-a773-courses-and-groups-design.md#1-courses)
+replaces the arriving-dish rule for no course, a switched-off course and a course that is not held:
+those dishes fire on arrival. The earliest-course holding rules below describe this plan's older
+design. A773-1's active screen integration remains in progress.
+
 2026-10-16: A182 part 2 replaces authored screen canvases, their editor and the generic card grid
 with [fixed device screens](../../developers/design-system.md#fixed-device-screens). References below to those retired
 interfaces describe this document's source snapshot. Menu Home Page, receipt configuration and

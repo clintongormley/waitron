@@ -100,6 +100,8 @@ preparing or ready. A dish that no station makes has no kitchen state; it goes f
   Typical: Starters no, Mains yes, Desserts yes. It is shown as a column on A756's Courses page
   (picture 9). Until A756 lands it is a column on today's course list (section 14, point 5).
 - **A dish with no course behaves like a course that is not held.** Drinks normally have no course.
+  A switched-off course follows the same rule (owner, 2026-10-17): Fire now, listed first,
+  whether you send the dish or move its bill.
 - **Counter orders ignore courses entirely** (section 8).
 - The course stays a label everywhere else: kitchen screens, A655's Course column and filter on
   Products, and the group headings below.

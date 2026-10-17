@@ -196,6 +196,12 @@ this section once A773 covers it. The reading below is what A773 has to change.
   fired lines with their recorded label, even with no active courses. The C80 reading above is
   historical; its move/send comparison remains unverified here.
 
+**2026-10-17 owner decision:** a switched-off course behaves like no course: Fire now,
+listed first, for send and move. A773-1 covers automatic new placement and the arriving-bill
+writer. The new placement/store/layout/submission model has focused tests, but the active table
+screen still calls the legacy draft grouping helpers. Keep the send integration open until T11
+replaces those controls; the tests do not establish the rendered screen's behavior.
+
 ## A long word in a routing-grid row name still splits at 390 px
 
 - **A long word in a routing-grid row name still splits at 390 px** — since A507 part 2 a name

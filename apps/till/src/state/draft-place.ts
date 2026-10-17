@@ -25,7 +25,8 @@ export function placeFor(
   ctx: PlaceContext,
 ): { place: Place; shift?: { from: number } } {
   const course = ctx.courses.find((candidate) => candidate.id === courseId);
-  if (courseId === null || course?.heldUntilFired === false) return { place: { kind: "fire" } };
+  if (courseId === null || course === undefined || course.heldUntilFired === false)
+    return { place: { kind: "fire" } };
 
   const slots = new Map<number, Extract<Place, { kind: "new" }>>();
   for (const { place } of ctx.placed) {
