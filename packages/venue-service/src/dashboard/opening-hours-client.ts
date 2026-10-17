@@ -8,6 +8,7 @@ import type { ClosedRange } from "../service-day.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { SpecialDaysApi } from "./special-days-client.js";
 import { ModelWatches } from "./model-watch.js";
+import type { PrepStation } from "./routing-client.js";
 
 import type { StationServiceTimes } from "../station-service-times.js";
 
@@ -165,6 +166,23 @@ export class OpeningHoursApi {
           undefined,
           { passive: true },
         ),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+  watchStations(
+    apply: (stations: PrepStation[]) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      "venue-service:prep-stations-list",
+      QUERY_DEPENDENCIES["prep-stations-list"],
+      () =>
+        this.request<PrepStation[]>("/management-api/stations", "GET", undefined, {
+          passive: true,
+        }),
       apply,
       failed,
       recovered,
