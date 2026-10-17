@@ -1568,6 +1568,7 @@ async function finalizeCapture(
       });
       const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
       await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
+      await recordReceiptGuests(tx, saleId, req.guests);
 
       // The provider already recorded the payment row; this only points its `sale_id` at the sale.
       await associatePaymentWithSale(tx, {
@@ -1728,6 +1729,7 @@ async function finalizeRecovery(
     });
     const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
     await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
+    await recordReceiptGuests(tx, saleId, req.guests);
 
     await associatePaymentWithSale(tx, {
       provider: deps.provider.provider,

@@ -1815,6 +1815,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.receiptLanguage !== undefined) {
         requireString(body.receiptLanguage, "receiptLanguage");
       }
+      readGuestsChoice(body.guests);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
