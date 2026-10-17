@@ -90,9 +90,10 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
    plan.** Today a part is "still joined" whenever its joined table has a live table, wherever
    either stands (`stillJoinedPart`, `packages/db/src/joined-parts.ts:9-29`), so a layout that
    stands 4 and 5 and leaves 4+5 off would leave 4 and 5 out of service and 4+5 offered as a spare
-   — the reverse of spec §4.2. The rule becomes: a part is still joined only while its joined
-   table is drawn on today's map, or while none of the joined table's parts that were not split
-   off today is drawn there. So under Standard (4 and 5 drawn, 4+5 off) 4 and 5 are free tables
+   — the reverse of spec §4.2. The rule becomes two branches (Task 7b): a part is still joined
+   while its joined table is drawn on today's map, whether or not the part's own reset row still
+   waits; or, when the joined table is not drawn, while the part's reset row has been applied (as
+   today) and none of the joined table's parts that were not split off today is drawn. So under Standard (4 and 5 drawn, 4+5 off) 4 and 5 are free tables
    and 4+5 has "come apart" (`joinedTableApart`, `joined-parts.ts:32-44`), which keeps it out of
    every spare list and picker (`sparesOf`, `apps/till/src/state/floor-today.ts:288-297`); under
    Dinner (4+5 drawn) 4 and 5 are out of service as today; with 4+5 and its tables all off, 4+5
@@ -101,9 +102,11 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
    keeps copying every shared part (the link is shared; whether it holds is the map's question).
    `savedPart` (`joined-parts.ts:52-58`), which hides parts from `GET /api/tables`
    (`apps/server/src/tables.ts:51`) and makes bookings refuse them (`packages/bookings/src/bookings.ts:55-69`),
-   reads the zone's recorded layout instead of every layout: a table is a saved part when its
-   joined table is placed in that layout, or when none of the joined table's parts is (a zone with
-   no recorded set keeps today's reading). A part's place in a layout that places its joined table
+   reads the zone's recorded layout, and only a record of the business day asked about (spec
+   decision 2): a part is a saved part when that layout places its joined table, or places none
+   of its parts; a joined table that layout leaves off while placing one of its parts is a saved
+   part too, so under Standard 4+5 is neither listed nor bookable, as the till cannot seat it.
+   With no usable record the pre-A504 reading holds. A part's place in a layout that places its joined table
    reads as off, so a change of parts saved in one set never makes another set's layout invalid.
 10. **A table off today's map never shows "Needs moving".** A table in store, or taken off for
     today, is not drawn, so there is nothing to carry. Such a table whose new place is taken waits
@@ -145,22 +148,39 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
     extension's end (`packages/venue-service/src/service-day.ts:161-184`), which changes the run's
     occurrence key. Without a rule, Update layout at 16:05 records Dinner 20:00, Lunch kept open
     at 16:10 until 20:30 turns Dinner into a 20:30 run, the recorded occurrence counts as gone, and
-    Lunch's layout is offered again — which answer 7(a) rules out. DEFAULT: when no run of the
-    recorded period starts at the recorded time today, the recorded occurrence is the earliest run
-    of the same period on the same business day that starts later than the recorded time; only
-    when there is none does it count as gone. A run moved earlier, or a period with no later run,
-    is gone as before.
+    Lunch's layout is offered again — which answer 7(a) rules out. **This amends the spec's
+    definition of "gone"** (spec decision 1, "A key whose period has been deleted, or that has no
+    run starting at that time today, counts as 'the recorded occurrence is gone'", and §7.1, "its
+    period deleted, or no run of it starting at that time today after a repaint"). DEFAULT, kept
+    as narrow as `withExtension` itself: when no run of the recorded period R starts at the
+    recorded time S today, the record still matches a run when, and only when, today's stored
+    keep open (`period_extensions`, `packages/venue-service/src/schema/period-extensions.ts:7`,
+    one per department and business day) runs from E1 to E2 with E1 ≤ S < E2, the day's PAINTED
+    ranges (before `withExtension`) hold a range of R starting at S and ending after E2, and the
+    runs hold a run of R starting at E2 — exactly the run `withExtension` made by cutting that
+    range at the keep open's end (`service-day.ts:180`). It matches that run. Every other missing
+    start is gone, as the spec says: a repaint that moves or removes the run, with no keep open
+    covering it, makes it gone (Task 4's control: Bar 10:00 recorded, the morning Bar run repainted
+    away and Lunch painted from 10:00 → gone, and the running Lunch is due).
 23. **"Back to its saved place" on a table that needs moving is Mark moved**: the same place
     check (`table.new_place_taken`), the whole joined group's change, and the mark cleared. Today
     it would put the table at its new place and leave the mark (`backToSaved` reads the reset row,
     `apps/server/src/floor-today-store.ts:740-758`).
-24. **At the day's first read, a zone with tables but no due layout** (its department has no set,
-    or it is in none — decision 5) **is left as it is**: no reset, no record, no map on the till
-    (`hasPlan` false). Its first read after its department gains a set resets it onto the due
-    layout.
-25. **Bookings judge a part by today's recorded layout** (decision 9's `savedPart`), whatever the
-    booking's time. A booking for tonight made while Lunch's layout is recorded is judged by
-    Lunch's. Spec §11 leaves bookings across layouts to the bookings work.
+24. **At the day's first read, a zone is reset only onto a SAVED layout.** A zone whose due
+    layout is null (its department has no set, or it is in none — decision 5), or whose due
+    `(set, zone)` has no `floor_plans` row yet, is left as it is: no reset, no new record. Without
+    the second condition, a zone moved into a department and read just after that department's
+    first set is made (which starts empty, spec decision 18) would put every free table in store
+    before anyone has drawn the zone. The first read after a layout row exists for the due set
+    resets it. The rows exist once any save of the zone in that department (decision 2 writes the
+    other sets' rows on a shared change) or a copy has run. A zone with a record whose due set has
+    a row is reset as normal.
+25. **Bookings judge a part by the recorded layout of the booking's own date, when there is one**
+    (decision 9's `savedPart`). A booking for today is judged by today's recorded layout, whatever
+    its time: one for tonight made while Lunch's layout is recorded is judged by Lunch's. A
+    booking for another day, or for today before the day's first till read, gets the pre-A504
+    reading (every part refused, a joined table bookable). Spec §11 leaves bookings across layouts
+    to the bookings work.
 
 ## Global constraints
 
@@ -393,7 +413,16 @@ Behaviour does not change: each zone still has one saved plan. Core code stops r
   `zonesWithPlacedTables` 151-162, `namesTaken` 231-243, `saveZonePlan` 319-428),
   `apps/server/src/floor-today-store.ts` (`resetZoneFor`'s master read 128-143, `copyParts`
   177-202), `apps/server/src/floor-delete.ts` (the plan reads at 63-68, the deletes at 225-235),
-  `apps/server/src/testing/floor-today-venue.ts` (`giveKeptSize` 98-105)
+  `apps/server/src/testing/floor-today-venue.ts` (`giveKeptSize` 98-105); and the fixtures that
+  insert `floorPlanTables` rows directly (`grep -rln "insert(floorPlanTables)" apps packages --include='*.test.ts'`
+  at `9d6ccd7b8`): `apps/server/src/floor-today-store.test.ts` (`masterRow` 99-107, used at 120 and 149),
+  `apps/server/src/floor-plan.test.ts`, `apps/server/src/floor-delete.test.ts`,
+  `apps/server/src/table-removal.test.ts`, `apps/server/src/service-delete.integration.test.ts`,
+  `apps/server/src/management-api.service-delete.test.ts`, `packages/bookings/src/bookings.test.ts`,
+  `packages/db/src/joined-parts.test.ts` (`planId: PLAN`, 307-310) and
+  `packages/db/src/schema/floor-plans.test.ts`. Those that write a place on the table row move it to a
+  `floorPlanPlacements` row and add `zoneId`; setup only, no assertion changes. (Without this the
+  code, which now reads places from `floor_plan_placements`, finds none of their places.)
 - Test: `apps/server/src/floor-plan.test.ts`, `apps/server/src/floor-delete.test.ts`
 
 **Interfaces:** none new. `ZonePlan` and `ZonePlanSave` (`floor-plan.ts:22-56`) keep their shape.
@@ -510,19 +539,25 @@ export async function readFloorPlanSets(
 
 ```ts
 export interface RecordedRun { periodId: string; startsAt: string } // parsed from today's occurrence key
+/** The day as the rule reads it. `painted` is the business day's ranges as painted (what
+ *  `departmentDay` answers, `menu-timetable.ts:264`); `extension` is today's stored keep open or
+ *  null; `runs` is `serviceRuns(withExtension(painted, extension, cutover))` — the JOINED form, so
+ *  Lunch 13:00–16:00 kept open 16:00–20:30, which `withExtension` returns as two Lunch ranges
+ *  (13:00–16:00 and the extension 16:00–20:30), is one run 13:00–20:30. */
+export interface DueDay { painted: readonly ServiceRange[]; extension: ServiceRange | null; runs: readonly ServiceRange[] }
 /** The run whose layout is due at `minute`: running ("keep open" included) → next later today →
  *  last that ran today → null. Never one starting earlier in the service day than the run
  *  `recorded` matches (spec decision 4); when `recorded` matches none, the rule does not apply. */
 export function dueRun(input: {
-  runs: readonly ServiceRange[]; minute: number; context: ServiceDayContext;
-  recorded: RecordedRun | null;
+  day: DueDay; minute: number; context: ServiceDayContext; recorded: RecordedRun | null;
 }): ServiceRange | null;
 /** Parses venue-service's occurrence key; null for another department, another business day, or not a key. */
 export function recordedRun(key: string | null, departmentId: string, businessDay: string): RecordedRun | null;
-/** The run today that `recorded` is: the run of its period starting at its time, else the
- *  earliest run of its period starting later the same business day (plan decision 22), else null (gone). */
+/** The run today that `recorded` is: the run of its period starting at its time; else, only when
+ *  today's keep open covers that time and cut a painted range of the period that started there,
+ *  the run of the period starting at the keep open's end (plan decision 22); else null (gone). */
 export function matchRecorded(
-  runs: readonly ServiceRange[], recorded: RecordedRun, context: ServiceDayContext,
+  day: DueDay, recorded: RecordedRun, context: ServiceDayContext,
 ): ServiceRange | null;
 export function occurrenceKey(departmentId: string, businessDay: string, run: ServiceRange): string;
 // Same format as resolveDepartmentService's periodOccurrenceKey (menu-timetable.ts:455-462);
@@ -548,10 +583,15 @@ export function occurrenceKey(departmentId: string, businessDay: string, run: Se
   - "ignores a record whose run is gone": record L 14:00 after a repaint made Lunch 13:00–16:00
     (no Lunch run starts at or after 14:00) at 14:30 → L 13:00, the exception not applying.
   - "keeps a run whose start a keep open pushed later" (plan decision 22): record D 20:00 at
-    16:05; L kept open 16:00–20:30 (which `withExtension` turns into L 13:00–20:30 and D
-    20:30–23:30); at 16:10 → D 20:30, not L; `matchRecorded` returns D 20:30. Control: without
-    `matchRecorded`'s later-start branch the same case returns L 13:00 — run it once with the
-    branch removed and see it fail.
+    16:05; L kept open 16:00–20:30 (`withExtension` returns L 13:00–16:00, L 16:00–20:30 and D
+    20:30–23:30; the runs are L 13:00–20:30 and D 20:30–23:30); at 16:10 → D 20:30, not L;
+    `matchRecorded` returns D 20:30. Control: with `matchRecorded`'s keep-open branch removed the
+    same case returns L 13:00 — run it once that way and see it fail.
+  - "a repaint is not a keep open" (the narrowing's control): Bar painted 10:00–13:00 and
+    16:00–23:00; record Bar 10:00 at 10:30; then the day is repainted to Lunch 10:00–13:00 and Bar
+    16:00–23:00, no keep open; at 11:00 → L 10:00 (`matchRecorded` returns null: gone, so the
+    exception does not apply). A rule matching "any later run of the same period" would return
+    Bar 16:00 here and keep the running Lunch from ever being due (spec decision 3).
   - `recordedRun` cases: another department's key → null; yesterday's key → null; `"[1,2"` → null;
     today's key → `{ periodId, startsAt }`.
   - `occurrenceKey` equals `resolveDepartmentService`'s `periodOccurrenceKey` for a running run.
@@ -604,7 +644,8 @@ export interface DueFloorLayout {
   - "reads each department's day once": spy on the day reader; three zones of one department and
     one of another → two reads.
 - [ ] **Step 2:** `pnpm --filter @waitron/venue-service exec vitest run src/floor-layout-due.db.test.ts` — FAIL (`dueFloorLayouts` not a function).
-- [ ] **Step 3:** Implement with `departmentDay` (`menu-timetable.ts:264`) and the clock reading
+- [ ] **Step 3:** Implement with `departmentDay` (`menu-timetable.ts:264`), building Task 4's
+  `DueDay` from its `ranges` and `extension` (`menu-timetable.ts:296-321`), and the clock reading
   `resolveDepartmentService` uses (`menu-timetable.ts:373-386`); group zones by department
   through `zone_service_policies`. Add both methods to the contract and the seat object.
 - [ ] **Step 4:** Run the file; then `pnpm --filter @waitron/module exec vitest run` and
@@ -725,7 +766,8 @@ export async function resetZone(
   columns with the room's revision, and `copyParts` copies the zone's parts (shared). `ensureToday`
   starts from active zones with a table or a layout row (not from `floor_plans` alone,
   `floor-today-store.ts:541-545`), asks `zoneLayouts` only for the zones it will reset, and resets
-  onto the due layout; a zone whose due is null keeps today's behaviour on its set-less row until
+  onto the due layout when that `(set, zone)` has a `floor_plans` row (plan decision 24; a zone
+  whose due layout has no row is left as it is); a zone whose due is null keeps today's behaviour on its set-less row until
   Task 9b removes it. `saveLayout` and `saveZonePlan` reset with `"due"`. `partsOf` stops
   reading `floor_plan_tables`' old place columns (lines 36-37) and reads the part's place and
   kept size from the zone's recorded layout: `floor_plan_placements` and `floor_plan_table_sizes`
@@ -737,18 +779,60 @@ export async function resetZone(
 ### Task 7b: Joined tables follow today's map; saved parts follow the recorded layout
 
 Builds spec §4.2 and owner answer 2 ("Dinner places 4+5, Standard has 4 and 5 apart") on the
-till and for bookings, by plan decision 9. Runs after Task 7, before Task 12.
+till and for bookings, by plan decision 9. Runs after Task 7, before Task 8 (so before Task 12).
 
 **Files:**
-- Modify: `packages/db/src/joined-parts.ts` (`stillJoinedPart` 9-29, `savedPart` 52-58)
+- Modify: `packages/db/src/joined-parts.ts` (`stillJoinedPart` 9-29, `savedPart` 52-58),
+  `apps/server/src/tables.ts:51` and `packages/bookings/src/bookings.ts:50-69` (`savedPart`'s two
+  callers pass the business day, below)
 - Test: `packages/db/src/joined-parts.test.ts`, `apps/server/src/joined-parts.test.ts` (its
   "a part still in a joined table" cases, from line 70, stay unchanged: they describe a layout
   that places the joined table), `packages/bookings/src/bookings.test.ts` (beside the
   `table.in_joined_table` cases at 812 and 834), `apps/server/src/floor-today-state.test.ts`
+- Sets in these tests are made by hand — a `floorPlanSets` row and Task 3's `linkFloorPlanSet` —
+  because Task 8's `defaultLayout` helper does not exist yet.
 
-**Interfaces:** the three SQL helpers keep their signatures. Unchanged on purpose: `copyParts`
-(Task 7) still copies every shared part into `floor_reset_table_parts`; `joinedTableApart` and
-`joinedOutOfService` (32-49) are unchanged and follow from the new `stillJoinedPart`.
+**Interfaces — Produces:**
+
+```ts
+export function stillJoinedPart(tableId: SQLWrapper): SQL; // signature unchanged, rule below
+/** Reads the zone's record only when its business day is `businessDay` (spec decision 2); else,
+ *  and with no recorded set, every part of a joined table is a saved part, as before A504. */
+export function savedPart(tableId: SQLWrapper, businessDay: string | null): SQL;
+```
+
+**The rule `stillJoinedPart` adopts** (replacing the "the reset has applied that row" condition,
+`joined-parts.ts:16`, with two branches; every other condition — a live joined table, not split
+off, no open party at the part, in no merge — stays):
+- **Branch A, the joined table holds its tables:** its today's row is drawn (`floor_today_tables`
+  with `x` not null and `taken_off = 0`) — whether or not the part's own reset row still waits.
+  This is what keeps 4 and 5 out of service while 4+5 has guests and waits to be taken apart.
+- **Branch B, as today, for a joined table not drawn:** the part's reset row has been applied
+  (`placed = 1 or pending = 0`, today's condition) and no part of the same joined reset row
+  (other than one split off today) has a drawn today's row. The waiting exception stays here, for
+  the other direction: "taking 4 into 4+5 waits while 4 has guests" (Task 12) leaves 4+5 off the
+  map, so 4 and 5 stay usable.
+`packages/db/src/joined-parts.test.ts:99-105` ("names no part whose reset row still waits to be
+applied") keeps its assertion: its fixture writes no today's rows (`joined-parts.test.ts:1-40`,
+no `floorTodayTables` import), so its joined table is not drawn and branch B decides, as today.
+If running it shows otherwise, STOP.
+
+**`savedPart`** (hidden from `GET /api/tables`, refused by bookings) reads the zone's recorded
+layout `(floor_today_zones.set_id, zone_id)`, used only when `floor_today_zones.business_day`
+equals the `businessDay` passed. A table is a saved part when it is a part of a joined table and
+that layout places the joined table or places none of its parts; **and also when it is a joined
+table that layout leaves off while placing one of its parts** (minor-item default: under
+Standard, 4+5 is neither listed nor bookable, matching the till, which cannot seat it). With no
+usable record, the pre-A504 reading holds: every part is a saved part, a joined table is not.
+Callers: `listTables` (`tables.ts:51`) passes `todayBusinessDay(tx, cfg, now)`
+(`floor-today-store.ts:80-86`), taking `now` from each of its callers (`grep -rn "listTables(" apps/server/src`); the
+existing test call at `packages/db/src/joined-parts.test.ts:352` passes `null`, which keeps its
+pre-A504 reading and its assertion;
+bookings pass the booking's date (`CreateBookingInput.bookingDate`,
+`packages/bookings/src/bookings.ts:19`; for `updateBooking`, the patch's `bookingDate` when it has
+one, else the stored booking's), so a booking for another day gets the pre-A504 reading (plan
+decision 25). `bookingDate` is a calendar date, not a business day: a booking after midnight and
+before the changeover is judged as the next day's, which is the pre-A504 reading — accepted.
 
 - [ ] **Step 1: Write the failing tests.** Zone Inside, tables 4, 5 and the joined table 4+5
   made of them; Standard places 4 and 5 and leaves 4+5 off; Dinner places 4+5 and leaves 4 and 5
@@ -756,40 +840,40 @@ till and for bookings, by plan decision 9. Runs after Task 7, before Task 12.
   - `packages/db/src/joined-parts.test.ts`, with today's rows written as each reset leaves them:
     "under Standard 4 and 5 are free and 4+5 has come apart" (`stillJoinedPart(4)` false,
     `joinedTableApart(4+5)` true); "under Dinner 4 and 5 are still joined" (true, false, as
-    today); "with all three off, 4+5 is a spare and 4 and 5 are still joined" (today's
-    behaviour kept); "a part split off today does not count as standing" (Dinner, 4 split off and
-    drawn: 5 is still joined); `savedPart(4)`: false with Standard recorded, true with Dinner
-    recorded, true with no recorded set.
+    today); "a part whose row still waits is joined while its joined table is drawn" (4+5 drawn,
+    4's reset row `pending: true, placed: false`, 4 free → true; the control with 4+5's today's
+    row taken off the map → false); "with all three off, 4+5 is a spare and 4 and 5 are still
+    joined" (today's behaviour kept); "a part split off today does not count as standing"
+    (Dinner, 4 split off and drawn: 5 is still joined); `savedPart(4, today)`: false with
+    Standard recorded today, true with Dinner, true with no recorded set, and true with Standard
+    recorded for YESTERDAY; `savedPart(4+5, today)`: true with Standard recorded today, false with
+    Dinner.
   - `apps/server/src/joined-parts.test.ts`, new describe "a layout that stands a joined table's
     tables": after a reset onto Standard, seating a party at 4 succeeds; joining 5 to that party
-    succeeds; `GET /api/tables` lists 4 and 5; `GET /api/tables/state` reads 4+5 with
+    succeeds; `GET /api/tables` lists 4 and 5 and not 4+5; `GET /api/tables/state` reads 4+5 with
     `today.joined.apart: true`, so the till's `sparesOf` leaves it out
     (`apps/till/src/state/floor-today.ts:288-297`); placing 4+5 on today's map is refused
     `table.in_joined_table`.
-  - Same file, "4+5 with guests waits joined under a layout that leaves it off" (spec §7.3's
-    take-apart row, up to the wait): Dinner recorded, a party at 4+5, reset onto Standard → 4+5
-    keeps its place, 4 and 5 stay off the map and seating either is refused
-    `table.in_joined_table`. (When the party leaves: Task 13 marks it; Task 16 finishes it.)
-  - `packages/bookings/src/bookings.test.ts`: "books table 4 while its zone's recorded layout
-    stands it": with Standard recorded the booking is accepted; with Dinner recorded it is
-    refused `table.in_joined_table` as today.
+  - `packages/bookings/src/bookings.test.ts`: "books table 4 while today's recorded layout stands
+    it": with Standard recorded today a booking for today at 4 is accepted and one at 4+5 is
+    refused `table.in_joined_table`; with Dinner recorded, 4 is refused as today; a booking for
+    tomorrow at 4 is refused (pre-A504 reading).
   Failing run: seating 4 under Standard refused `table.in_joined_table`; `GET /api/tables` leaves
-  4 and 5 out; the booking refused.
+  4 and 5 out and lists 4+5; the booking at 4 refused.
+  (The take-apart wait — 4+5 with guests, 4 and 5 kept off the map — cannot be tested here:
+  before Task 12 nothing makes the group wait, so 4 and 5 take their Standard places at once. It
+  is tested in Task 12.)
 - [ ] **Step 2:** `pnpm --filter @waitron/db exec vitest run src/joined-parts.test.ts`,
   `pnpm --filter @waitron/server exec vitest run src/joined-parts.test.ts src/floor-today-state.test.ts`,
   `pnpm --filter @waitron/bookings exec vitest run src/bookings.test.ts` — FAIL.
-- [ ] **Step 3:** In `stillJoinedPart`, add to the `where`: the joined table's today's row is
-  drawn (`floor_today_tables` with `x` not null and `taken_off = 0`), or no part of the same
-  joined reset row whose table is not in `floor_today_split_parts` has a drawn today's row. In
-  `savedPart`, add: the zone's recorded set (`floor_today_zones.set_id`) is null, or its
-  `(set_id, zone_id)` layout places the joined table, or places none of its parts (a part's place
-  in a layout that places the joined table counts as off, decision 9). Read the emitted SQL with
-  `.toSQL()` for one call of each (CLAUDE.md §3: a correlated subquery against the outer table
-  breaks silently).
+- [ ] **Step 3:** Implement the two rules above. Read the emitted SQL with `.toSQL()` for one call
+  of each (CLAUDE.md §3: a scalar subquery correlated to the outer table breaks silently).
 - [ ] **Step 4:** Run the files above, then every joined and split suite:
   `pnpm --filter @waitron/server exec vitest run src/joined src/floor-today-split src/floor-today-reset-table src/floor-today-merges src/floor-today-flatten src/floor-catch-up src/tables.test.ts src/booking-seat.test.ts`.
-  An existing assertion that changes is a STOP unless it pins a part being out of service under
-  a layout that stands it, which this plan removes.
+  Branch A newly counts as joined a FREE part whose row waits while its joined table is drawn; an
+  existing assertion that changes because of that, or for any other reason, is a STOP (report the
+  file, line and case). The only assertions this task may change are ones pinning a part out of
+  service, or a joined table bookable, under a layout that stands the parts.
 - [ ] **Step 5:** Commit: "Floor plan sets, step 7b: a layout that stands a joined table's tables makes them usable".
 
 ### Task 8: Move the test helpers, seeds and floor-plan tests to sets
@@ -821,7 +905,8 @@ export async function defaultLayout(tx: Transaction, cfg: TillConfig, zoneId: st
 
 ### Task 9a: Move the first group of server test callers to sets
 
-Runs after Tasks 25a and 25b. Arguments only; no assertion changes.
+Can run any time after Task 8 (only 9b removes the old routes); the dispatch order puts it after
+25a/25b only to keep the list simple. Arguments only; no assertion changes.
 
 **Files** (call counts of `saveZonePlan`/`readZonePlan` at `9d6ccd7b8`, `apps/server/src/`):
 `service-delete.integration.test.ts` (11), `floor-catch-up.test.ts` (7), `joined-parts.test.ts`
@@ -846,10 +931,12 @@ Runs after Tasks 25a and 25b. Arguments only; no assertion changes.
 
 - [ ] **Step 1: Write the failing tests.** In `management-api.floor-plan-sets.test.ts`: "no longer
   serves the zone-only floor plan routes": `GET /management-api/zones/:id/floor-plan` answers
-  404. In `floor-today-store.test.ts` (plan decision 24): "leaves a zone with tables but no due
-  layout as it is at the day's first read": a zone moved into a department with no set keeps
+  404. In `floor-today-store.test.ts` (plan decision 24): "leaves a zone with tables but no saved
+  due layout as it is at the day's first read": a zone moved into a department with no set keeps
   yesterday's today's rows and record after the first read of a new business day; after its
-  department gains a set, the next read resets it onto that set and records it. Run — FAIL (the
+  department gains its first set (empty, no layout row), the next read STILL leaves it as it is,
+  every free table where it stood; after a layout of that set is saved for the zone, the next
+  read resets it onto that set and records it. Run — FAIL (the
   route answers 200; the zone is reset from its set-less row).
 - [ ] **Step 2:** Move the ten files' calls as in 9a. Delete `readZonePlan`, `saveZonePlan`,
   `checkZonePlanSave`, the set-less `planOf` branch, the set-less reset fallback and the two old
@@ -1007,7 +1094,13 @@ export async function resetZone(tx, cfg, removals, zoneId, now, onto, options?: 
     split group with a part needing clearing waits at Reset to saved plan, and the mark stays
     (Reset table's own clearing, `floor-today-reset-table.ts:114-117`, is unchanged); "taking 4 into
     4+5 waits while 4 has guests": Dinner places 4+5, a party at 4 → 4, 5 and 4+5 all keep today's
-    rows; "a reset with keepTakenOff keeps table 9 off at its new place" — table 9 taken off
+    rows, and 4 and 5 stay usable (branch B of Task 7b: 4+5 is not drawn); "4+5 with guests waits
+    joined under a layout that leaves it off" (spec §7.3's take-apart row, up to the wait; moved
+    here from Task 7b, which runs before anything makes a group wait): Dinner recorded, a party at
+    4+5, reset onto Standard → 4+5 keeps its place, 4 and 5's reset rows wait (`pending: true`,
+    `placed: false`) and their today's rows stay off the map, and seating either is refused
+    `table.in_joined_table` (branch A of Task 7b: 4+5 is drawn); the control, the same reset
+    without the joined group in `waitingTogether`, puts 4 and 5 at their Standard places; "a reset with keepTakenOff keeps table 9 off at its new place" — table 9 taken off
     today, then `resetZone(…, onto Dinner, { keepTakenOff: true })` called directly: 9's today's
     row reads `takenOff: true` with Dinner's place; the control, the same call without the option,
     reads `takenOff: false`.
@@ -1368,7 +1461,15 @@ row cannot be deleted while a table names it (`floor_plan_tables_plan_fk`,
   `grep -rnE "floorPlanTables\.(planId|x|y|width|height|shape|rotation)\b|planId: plan|floor_plan_tables\.(plan_id|x|y|width|height|shape|rotation)" apps packages scripts --include='*.ts'`
   (at `9d6ccd7b8` that includes `apps/server/src/floor-plan.ts`, `floor-today-store.ts`,
   `floor-today-parts.ts:36-37` and `floor-delete.ts`; Tasks 2, 7 and 9b should have emptied it;
-  anything left is moved here)
+  anything left is moved here), AND every test fixture still writing `planId` on a table row:
+  `grep -rn "insert(floorPlanTables)" apps packages --include='*.test.ts'` and read each hit's
+  values — at `9d6ccd7b8` the hits are `apps/server/src/floor-today-store.test.ts` (`masterRow` 99-107, used at 120 and 149),
+  `apps/server/src/floor-plan.test.ts`, `apps/server/src/floor-delete.test.ts`,
+  `apps/server/src/table-removal.test.ts`, `apps/server/src/service-delete.integration.test.ts`,
+  `apps/server/src/management-api.service-delete.test.ts`, `packages/bookings/src/bookings.test.ts`,
+  `packages/db/src/joined-parts.test.ts` (`planId: PLAN`, 307-310) and
+  `packages/db/src/schema/floor-plans.test.ts` (the first grep cannot see `planId: PLAN` or
+  `masterRow(plan!.id, …)`). Each drops `planId` here.
 - Create: the generated SQL and snapshot
 
 The generation changes, with no column added: `floor_plan_tables` drops `plan_id`, its six place
@@ -1429,7 +1530,11 @@ before this task (so no venue holds the branch's interim shape), and the guard p
     command and the counts in the ledger and the PR description.
 - [ ] **Step 4:** Run every guard of Global constraints' migration list, the inmutabilidad file, the
   golden case (`pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts -t "as main did for the same basket"`),
-  and `pnpm --filter @waitron/server exec vitest run src/floor- src/joined`.
+  `pnpm --filter @waitron/db exec vitest run`, `pnpm --filter @waitron/server exec vitest run src/floor- src/joined src/table-removal src/service-delete src/management-api.service-delete`,
+  `pnpm --filter @waitron/bookings exec vitest run src/bookings.test.ts`, and the typechecks
+  `pnpm --filter @waitron/db typecheck`, `pnpm --filter @waitron/server typecheck` and
+  `pnpm --filter @waitron/bookings typecheck` (a dropped
+  column a test still names is a type error vitest does not report).
 - [ ] **Step 5:** Commit: "Floor plan sets, step 23: a zone's tables keep no place of their own (venue reset needed)".
 
 ### Task 24: Period dialog field and Periods column
