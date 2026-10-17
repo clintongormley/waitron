@@ -46,8 +46,8 @@ installed code, and only their number is stale.
   and nothing here was run under Vitest 5, so the question is untouched rather than resolved. A
   retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779, added when the Vitest 5
   PR #1179 was closed), and must also check whether #766's stored Dependabot ignore of
-  `@vitest/browser-playwright` 5.x holds that package back, and clear it if so (`docs/developers/workflow-guide.md` → Dependabot pull
-  requests).
+  `@vitest/browser-playwright` 5.x holds that package back, and clear it if so
+  (`docs/developers/workflow-guide.md` → Dependabot pull requests).
 
 ## Whether a declared floor follows the installed version is undecided — one decision for every manifest
 

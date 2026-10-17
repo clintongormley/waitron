@@ -7,7 +7,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    # Vitest majors wait for the Stryker retry: docs/backlog/dependencies.md, "A Vitest 5 retry".
+    # Vitest majors wait for the Stryker retry: docs/backlog/dependencies.md → A Vitest 5 retry.
     ignore:
       - dependency-name: vitest
         update-types: ["version-update:semver-major"]
