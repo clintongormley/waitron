@@ -41,6 +41,7 @@ import "../src/components/wt-notice.js";
 import "../src/components/wt-banner.js";
 import "../src/components/wt-relative-time.js";
 import "../src/components/wt-language-chooser.js";
+import "../src/components/wt-theme-chooser.js";
 
 registerIcons({
   ...DROPDOWN_ICONS,
@@ -271,6 +272,7 @@ const panel = (theme: "light" | "dark") => `
       </wt-form-actions>
     </wt-modal>
     <wt-language-chooser active="es-ES"></wt-language-chooser>
+    <wt-theme-chooser active="device"></wt-theme-chooser>
   </div>
 `;
 
