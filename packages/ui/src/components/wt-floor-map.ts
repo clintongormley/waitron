@@ -13,7 +13,6 @@ import {
   cropToTables,
   fitScale,
   showsName,
-  snapToSquare,
 } from "../floor-plan-geometry.js";
 
 /** A merge's members carry the same `fill`, `dot`, `linkId` and `description`. */
@@ -78,6 +77,22 @@ interface Drag {
   y: number;
   /** The first other table under the pointer. */
   targetId: string | null;
+}
+
+/**
+ * A drag's travel in squares: `x`, `y` made at earlier scales, plus the pointer's px since
+ * (`fromX`, `fromY`) at `scale`. Banked when the scale changes, so a view rescaled mid-drag does
+ * not rescale the travel already made.
+ */
+interface Travel {
+  x: number;
+  y: number;
+  fromX: number;
+  fromY: number;
+  scale: number;
+  /** The last move's px since the press. */
+  dx: number;
+  dy: number;
 }
 
 const MIN_ZOOM = 1 / 2;
@@ -388,6 +403,8 @@ export class WtFloorMap extends LitElement {
 
   #drag: Drag | null = null;
 
+  #travel: Travel | null = null;
+
   /** Built from `tables` when it changes: the groups in `tables`' order, in reading order, and by
    * member id. */
   #groups: Group[] = [];
@@ -450,6 +467,7 @@ export class WtFloorMap extends LitElement {
       holdStart: (at) => {
         this.#held = tableOf(at.target);
         this.#held?.setAttribute("data-held", "");
+        this.#travel = null;
       },
       longPress: (at) => {
         this.#clearHeld();
@@ -530,6 +548,7 @@ export class WtFloorMap extends LitElement {
   #endDrag(): void {
     this.#clearHeld();
     this.#drag = null;
+    this.#travel = null;
     this.requestUpdate();
   }
 
@@ -540,11 +559,11 @@ export class WtFloorMap extends LitElement {
     const members = id === undefined ? undefined : this.#groupOf.get(id)?.members;
     const first = members?.find((m) => m.id === id);
     if (first === undefined) return;
-    const scale = this.#view!.scale;
+    const squares = this.#travelled(dx, dy);
     // The whole group stays on the grid, as the server holds it when the move lands.
     const { dx: movedX, dy: movedY } = groupStep(
       members!.map((m) => m.placement),
-      { x: snapToSquare(dx, scale), y: snapToSquare(dy, scale) },
+      { x: Math.round(squares.x), y: Math.round(squares.y) },
     );
     const x = first.placement.x + movedX;
     const y = first.placement.y + movedY;
@@ -563,6 +582,25 @@ export class WtFloorMap extends LitElement {
     this.#drag = { tableId: first.id, dx: movedX, dy: movedY, x, y, targetId };
     this.requestUpdate();
   };
+
+  /** Called on every move, even one that moves nothing, or a scale change banks travel at the wrong scale. */
+  #travelled(dx: number, dy: number): { x: number; y: number } {
+    const scale = this.#view!.scale;
+    const travel = (this.#travel ??= { x: 0, y: 0, fromX: 0, fromY: 0, scale, dx: 0, dy: 0 });
+    if (travel.scale !== scale) {
+      travel.x += (travel.dx - travel.fromX) / travel.scale;
+      travel.y += (travel.dy - travel.fromY) / travel.scale;
+      travel.fromX = travel.dx;
+      travel.fromY = travel.dy;
+      travel.scale = scale;
+    }
+    travel.dx = dx;
+    travel.dy = dy;
+    return {
+      x: travel.x + (dx - travel.fromX) / scale,
+      y: travel.y + (dy - travel.fromY) / scale,
+    };
+  }
 
   #targetAt(at: GesturePoint, tableId: string): string | null {
     return (
