@@ -94,7 +94,7 @@ function requireRole(value: string | undefined): PersonRoleValue {
  * The approver whose PIN the transaction will check: the plan, read now, needs an approver. A plan
  * that cannot be made is refused inside the transaction, so it names no one here.
  */
-async function approverToCheck(
+export async function approverToCheck(
   db: Database,
   ask: AdjustmentAsk,
   approver: { personId: string; pin: string } | undefined,

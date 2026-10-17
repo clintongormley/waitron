@@ -161,6 +161,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/parties/:id/groups/move, /groups/split-line   | party                  | refuses POST /api/parties/:id/groups/<move|split-line> |
  * | PUT  /api/parties/:id/drafts                            | party                  | refuses PUT /api/parties/:id/drafts                  |
  * | POST /api/parties/:id/lines/:lineId/recall | party | own refusing row below; allowed: draft-recall.test.ts |
+ * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | party, current profile inside the transaction | line-cancel-api.test.ts: "checks the party zone for %s and admits it once allowed" |
  * | POST /api/parties/:id/drafts/:did/discard | party | own refusing row below; allowed: draft-discard.test.ts |
  * | POST /api/parties/:id/drafts/:did/take-over, /submit    | party                  | refuses POST /api/parties/:id/drafts/:did/<verb>     |
  * | POST /api/parties/:id/unpaid-departure                  | party                  | refuses POST /api/parties/:id/unpaid-departure       |

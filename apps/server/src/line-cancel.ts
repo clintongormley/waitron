@@ -9,6 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { AppError, decimal, divideDecimal, multiplyDecimal } from "@waitron/shared";
+import type { PinAttempts } from "@waitron/identity";
 import type { CancellationContext } from "./line-cancel-context.js";
 import { requireCancellationContext } from "./line-cancel-context.js";
 import type { TillConfig } from "./till-config.js";
@@ -42,6 +43,11 @@ export async function cancelItem(
   ask: CancelItemAsk,
   operatorId: string,
   attendance?: OrderAttendance,
+  policy: {
+    venueLocale: string;
+    attempts?: PinAttempts;
+    completeAdjustment?: (billId: string) => Promise<void>;
+  } = { venueLocale: cfg.locale },
 ): Promise<{ revision: number }> {
   if (ask.outcome !== "remove_charge" && ask.outcome !== "keep_charge") throw invalid("outcome");
   const expectedContext = {
@@ -157,10 +163,11 @@ export async function cancelItem(
             submissionId: ask.submissionId,
             approver: ask.approver,
           },
-          cfg.locale,
-          undefined,
+          policy.venueLocale,
+          policy.attempts,
           attendance,
         );
+        await policy.completeAdjustment?.(bill!.id);
       } else {
         const quantity = removed + (prior?.quantity ?? 0);
         const rows = await tx
@@ -266,5 +273,6 @@ export async function cancelItem(
       }
       return { revision: await partyRevision(tx, partyId) };
     },
+    cfg.madeHereSink,
   );
 }

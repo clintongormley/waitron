@@ -1,4 +1,10 @@
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
+import type { CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
+export type {
+  CancellationContext,
+  CancellationRead,
+  CancelItemRequest,
+} from "./line-cancel-types.js";
 import type {
   RefundableTender,
   TenderRefundRequest,
@@ -4079,6 +4085,33 @@ export class TillApi {
    */
   async recallLines(orderId: string, lineNos: number[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", { lineNos });
+  }
+
+  getCancellation(
+    partyId: string,
+    lineId: string,
+    options: ReadOptions = {},
+  ): Promise<CancellationRead> {
+    return this.#request(
+      `/api/parties/${partyId}/lines/${lineId}/cancellation`,
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  cancelItem(
+    partyId: string,
+    lineId: string,
+    command: CancelItemRequest,
+    options: ReadOptions = {},
+  ): Promise<{ revision: number }> {
+    return this.#request(
+      `/api/parties/${partyId}/lines/${lineId}/cancel-item`,
+      "POST",
+      command,
+      options.signal,
+    );
   }
 
   recallToDraft(

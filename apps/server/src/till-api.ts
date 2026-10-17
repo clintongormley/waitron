@@ -211,6 +211,7 @@ import {
 import { requireBodyUuid, requireString, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
+import { mountLineCancelApi } from "./line-cancel-api.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
 import { mountFloorTodayApi, requireTargetTable, whole } from "./floor-today-api.js";
 import { mountKeepOpenApi } from "./keep-open-api.js";
@@ -562,6 +563,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "party.not_open": 409,
   "party.not_found": 404,
   "party.out_of_date": 409,
+  "tab.cancel_context_changed": 409,
   "party.bill_outstanding": 409,
   "unpaid_departure.nothing_outstanding": 409,
   "unpaid_departure.unfired_dishes": 409,
@@ -740,6 +742,7 @@ export function requireRevision(
     | "revision"
     | "draftRevision"
     | "expectedRevision"
+    | "expectedBillRevision"
     | "expectedPartyRevision"
     | "expectedOtherPartyRevision" = "revision",
 ): number {
@@ -1259,6 +1262,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
   mountBillPaymentsApi(app, deps, log, run, pinThrottle);
   mountAdjustmentsApi(app, deps, log, run, pinThrottle);
+  mountLineCancelApi(app, deps, log, run, pinThrottle);
   mountUnpaidDepartureApi(app, deps, log, run, pinThrottle);
   mountStationTodayApi(app, deps, log, run, pinThrottle);
   mountOrderKitchenNoteApi(app, deps, log, run);

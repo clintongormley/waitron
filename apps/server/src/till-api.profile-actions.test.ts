@@ -81,6 +81,7 @@ import {
  * | PUT /api/working-orders/:id/make-at                       | take-orders                | take-orders           |
  * | POST /api/working-orders/:id/lines/move-station, /send, /recall | take-orders          | take-orders           |
  * | POST /api/parties/:id/lines/:lineId/recall | take-orders | own refusing row below; allowed: draft-recall.test.ts |
+ * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | take-orders | line-cancel-api.test.ts: "requires take-orders for %s and permits it once restored"; queued revocation: "refuses take-orders revoked during a manager PIN check" |
  * | POST /api/parties/:id/drafts/:did/discard | take-orders | own refusing row below; allowed: draft-discard.test.ts |
  * | PUT /api/working-orders/:id/lines/:lineNo                 | take-orders                | take-orders           |
  * | PATCH /api/working-orders/:id/lines/:lineNo/course        | take-orders                | take-orders           |
