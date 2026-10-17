@@ -1973,6 +1973,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   out as the new person (read, not run). The server takes the person from the session alone; a
   save that named its draft's person, refused when it differs, would close the gap in one place.
 
+- **A792. Two smaller points A768's last review left (2026-10-17).** Signing out with a kept,
+  unsaved order on a dead connection now waits up to 150 s before the till tells the server (the
+  screen is already locked). Two of the checks that keep one person's order away from the next
+  person have no test, and the sign-in drop compares with the person on screen rather than the one
+  signed in. Read, not run: confirm each, then test or narrow it.
+
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
   that drag** — left open by A642. The drag's override sheet is added to the document and to every
   open shadow root present when the drag starts; in a shadow root attached mid-drag, an
