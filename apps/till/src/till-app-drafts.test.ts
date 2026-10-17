@@ -1746,6 +1746,163 @@ describe("till-app: a save the server refuses", () => {
 });
 
 describe("till-app: sending the draft", () => {
+  describe("per-group draft destinations", () => {
+    const held = (id: string, position: number): OrderGroup => ({
+      id,
+      position,
+      displayNumber: position,
+      numberPartyId: "v1",
+      state: "held",
+      firedAt: null,
+      remindAt: null,
+      courseIds: [],
+      lineIds: [],
+      summary: "1 × Fish",
+    });
+    const destinations = [held("g-mains", 1), held("g-desserts", 2)];
+
+    async function arranged(overrides: Record<string, unknown> = {}) {
+      const { el } = await mountApp({
+        listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: destinations }),
+        ...overrides,
+      });
+      await openMesa(el);
+      await tap(el, "Beer");
+      await tap(el, "Steak");
+      await tap(el, "Flan");
+      const store = draft(el);
+      store.setLinePlaces([0], { kind: "join", groupId: "g-mains" });
+      store.setLinePlaces([1], { kind: "new", slot: 2, afterGroupId: "g-mains" });
+      store.setLinePlaces([2], { kind: "join", groupId: "g-desserts" });
+      const tally = { fired: 0, held: 0, joined: 0 };
+      const detail = {
+        groups: [
+          { release: "hold", lineIndexes: [2], joinGroupId: "g-desserts" },
+          { release: "hold", lineIndexes: [0], joinGroupId: "g-mains" },
+          { release: "hold", lineIndexes: [1], afterGroupId: "g-mains" },
+        ],
+        store,
+        sent: [...store.lines],
+        draft: { laterAddition: true, tally },
+      };
+      return { el, store, detail, tally };
+    }
+
+    it("sends each join and anchor with the saved ids of its own lines", async () => {
+      const { el, detail, tally } = await arranged();
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(api.submitDraft).toHaveBeenCalledOnce());
+      await flush(el, 6);
+
+      expect(api.submitDraft.mock.calls[0]![2]).toEqual({
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+        draftRevision: 1,
+        groups: [
+          { release: "hold", lineIds: ["line-4"], joinGroupId: "g-desserts" },
+          { release: "hold", lineIds: ["line-2"], joinGroupId: "g-mains" },
+          { release: "hold", lineIds: ["line-3"], afterGroupId: "g-mains" },
+        ],
+      });
+      expect(server.drafts).toEqual([]);
+      expect(tally).toEqual({ fired: 0, held: 1, joined: 2 });
+    });
+
+    it("counts joined groups separately from new held groups", async () => {
+      const { el, detail, tally } = await arranged();
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(tally).toEqual({ fired: 0, held: 1, joined: 2 }));
+    });
+
+    it("starts only one per-group send when the event is delivered twice before either save", async () => {
+      const { el, detail } = await arranged();
+      const screen = tableOrder(el)!;
+      emit(screen, "submit-draft", detail);
+      emit(screen, "submit-draft", detail);
+      await vi.waitFor(() => expect(server.drafts).toEqual([]));
+      await flush(el, 6);
+
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+    });
+
+    it("allows a Fire request with no group target when group reads failed", async () => {
+      const { el, store, detail } = await arranged({
+        listGroups: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+      emit(tableOrder(el)!, "submit-draft", {
+        ...detail,
+        groups: [{ release: "fire", lineIndexes: [0] }],
+        sent: [store.lines[1]!],
+      });
+      await vi.waitFor(() => expect(store.lineCount).toBe(2));
+
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+      expect(api.submitDraft.mock.calls[0]![2].groups).toEqual([
+        { release: "fire", lineIds: ["line-3"] },
+      ]);
+      expect(savedLines()).toEqual(["offer-beer ×1", "offer-flan ×1"]);
+    });
+
+    it("retains unselected rows and their manual placement after a partial send", async () => {
+      const { el, store, detail } = await arranged();
+      const beer = store.lines[0]!;
+      const flan = store.lines[2]!;
+      emit(tableOrder(el)!, "submit-draft", {
+        ...detail,
+        groups: [{ release: "hold", lineIndexes: [0], afterGroupId: "g-desserts" }],
+        sent: [store.lines[1]!],
+      });
+      await vi.waitFor(() => expect(store.lineCount).toBe(2));
+
+      expect(api.submitDraft.mock.calls[0]![2].groups).toEqual([
+        { release: "hold", lineIds: ["line-3"], afterGroupId: "g-desserts" },
+      ]);
+      expect(store.lines).toEqual([beer, flan]);
+      expect(store.lines[0]).toBe(beer);
+      expect(store.lines[1]).toBe(flan);
+      expect(server.drafts[0]!.lines.map((line) => line.joinGroupId)).toEqual([
+        "g-mains",
+        "g-desserts",
+      ]);
+    });
+
+    it("keeps the entire arrangement on a non-target refusal", async () => {
+      const { el, store, detail, tally } = await arranged({
+        submitDraft: vi.fn().mockRejectedValue({ code: "station.not_found", status: 404 }),
+      });
+      const before = [...store.lines];
+      const places = structuredClone(before.map((line) => line.place));
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() =>
+        expect(banner(el)?.textContent).toContain(codeMessage("station.not_found")),
+      );
+
+      expect(store.lines).toEqual(before);
+      expect(store.lines.map((line) => line.place)).toEqual(places);
+      expect(savedLines()).toEqual(["offer-beer ×1", "offer-steak ×1", "offer-flan ×1"]);
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+      expect(tally).toEqual({ fired: 0, held: 0, joined: 0 });
+    });
+
+    it.each(["joinGroupId", "afterGroupId"] as const)(
+      "sends nothing when a per-group %s names unread groups",
+      async (target) => {
+        const { el, store, detail } = await arranged({
+          listGroups: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        });
+        emit(tableOrder(el)!, "submit-draft", {
+          ...detail,
+          groups: [{ release: "hold", lineIndexes: [0], [target]: "g-mains" }],
+          sent: [store.lines[0]!],
+        });
+        await flush(el, 6);
+        expect(api.submitDraft).not.toHaveBeenCalled();
+        expect(banner(el)?.textContent ?? "").toContain(t("table.error"));
+        expect(store.lineCount).toBe(3);
+      },
+    );
+  });
+
   it("sends Send all as one held group per course, under the ids the save answered", async () => {
     const { el } = await mountApp();
     await openMesa(el);

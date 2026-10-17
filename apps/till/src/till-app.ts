@@ -135,7 +135,6 @@ import type {
   TakeOverDraftDetail,
   UnsnoozeGroupDetail,
 } from "./screens/till-table-order-screen.js";
-import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
@@ -9575,9 +9574,6 @@ export class TillApp extends LitElement {
     this.errorKey = tableWriteError(error);
   }
 
-  /** A draft lands on the bill it names, or else the party's main bill, which the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
-   * and says what the draft's submissions filed. Once the operator's session ends, the submission
-   * sends nothing more, says nothing and does not move the next person's screen. */
   async #onSubmitDraft(event: Event): Promise<void> {
     const { groups, joinGroupId, billId, store, sent, draft } = (
       event as CustomEvent<Partial<SubmitDraftDetail>>
@@ -9594,7 +9590,14 @@ export class TillApp extends LitElement {
       this.errorKey = "table.error";
       return;
     }
-    if (joinGroupId !== undefined && (await this.#refuseWithGroupsUnread())) return;
+    if (
+      (joinGroupId !== undefined ||
+        groups?.some(
+          (group) => group.joinGroupId !== undefined || group.afterGroupId !== undefined,
+        )) &&
+      (await this.#refuseWithGroupsUnread())
+    )
+      return;
     const sync = this.#draftSync;
     if (sync === undefined || store !== sync.store || groups === undefined || sent === undefined) {
       this.errorKey = "table.error";
@@ -9644,9 +9647,6 @@ export class TillApp extends LitElement {
     if (followUp === "find-tab" && onSentTable()) {
       await this.#retakePartyFromFloor();
       if (!live()) return;
-      // The server puts a draft only on a bill of its own party, the one named or else the main
-      // bill, so the table is followed only while it still holds the party the screen showed when
-      // the draft was sent.
       const now = this.tables.find((row) => row.id === tableId)?.party;
       const landed = billId ?? now?.mainBillId ?? null;
       if (landed !== null && now?.id === partyId && onSentTable()) this.#followDraft(tabId, landed);
@@ -9726,10 +9726,10 @@ export class TillApp extends LitElement {
     }
   }
 
-  #tally({ tally }: Draft, groups: readonly DraftGroup[], joinGroupId?: string): void {
+  #tally({ tally }: Draft, groups: SubmitDraftDetail["groups"], joinGroupId?: string): void {
     for (const group of groups) {
       if (group.release === "fire") tally.fired += 1;
-      else if (joinGroupId !== undefined) tally.joined += 1;
+      else if (group.joinGroupId !== undefined || joinGroupId !== undefined) tally.joined += 1;
       else tally.held += 1;
     }
   }
@@ -9743,7 +9743,7 @@ export class TillApp extends LitElement {
     tabId: string,
     party: TableParty,
     sync: DraftSync,
-    submission: { groups: readonly DraftGroup[]; joinGroupId?: string; billId?: string },
+    submission: Pick<SubmitDraftDetail, "groups" | "joinGroupId" | "billId">,
     sent: readonly OrderLine[],
     live: () => boolean,
     retried: boolean,
@@ -9782,6 +9782,8 @@ export class TillApp extends LitElement {
         groups: groups.map((group) => ({
           release: group.release,
           lineIds: group.lineIndexes.map((index) => ids[index]!),
+          ...(group.joinGroupId === undefined ? {} : { joinGroupId: group.joinGroupId }),
+          ...(group.afterGroupId === undefined ? {} : { afterGroupId: group.afterGroupId }),
         })),
         ...(joinGroupId === undefined ? {} : { joinGroupId }),
         ...(billId === undefined ? {} : { billId }),
@@ -9823,8 +9825,6 @@ export class TillApp extends LitElement {
       }
       if (isGroupGone(error)) await this.#loadTabLines();
       if (!live()) return;
-      // The server raises this for the bill a submission names (`requireBillOfParty`), or, when it
-      // names none, for the party's main bill (`partyMainBill`), which the server chose.
       this.errorKey =
         billId !== undefined && refusal?.refused === "tab.not_open"
           ? { code: "tab.not_open" }

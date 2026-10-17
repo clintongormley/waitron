@@ -139,6 +139,7 @@ import {
   type DraftPreview,
 } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
+import type { SubmitGroup } from "../state/draft-layout.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuests } from "../state/receipt-guests.js";
@@ -158,17 +159,10 @@ export type { TableServiceStatus };
  * Narrower, the draft opens on its own Review view. */
 export const DRAFT_SIDE_BY_SIDE_MIN_WIDTH = 720;
 
-/**
- * `submit-draft`: the groups a confirmed preview named, each naming its lines by their place in
- * `lines`. The draft stays in `store` until the app has the server's answer: the `sent` lines (the
- * ones `lines` was built from, in order) leave it once they are added, and a refused submission is
- * kept (D9). `joinGroupId` adds the one held group's lines to that existing group. `billId` names
- * the bill the person chose under Send to; it is absent when they chose none, or chose a new bill,
- * and the server then puts the lines on the party's main bill, making one when there is none.
- */
+/** Group `lineIndexes` refer to `sent`, which may be only part of `store.lines`. */
 export interface SubmitDraftDetail {
   lines: GroupLine[];
-  groups: DraftGroup[];
+  groups: (DraftGroup & Pick<SubmitGroup, "joinGroupId" | "afterGroupId">)[];
   joinGroupId?: string;
   billId?: string;
   store: WorkingOrderStore;
