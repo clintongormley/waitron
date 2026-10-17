@@ -91,7 +91,6 @@ declare module "@waitron/shared" {
      * address, or an edit through PATCH is accepted.
      */
     "printer.office_printer": Record<string, never>;
-    "password.throttled": { retryAfterSeconds: number };
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;
     /** The local capture inbox was requested while email uses SMTP or is not configured. */
@@ -1011,10 +1010,6 @@ declare module "@waitron/shared" {
     /** First production activation lacks an accepted test submission bound to its fiscal inputs. */
     "setup.fiscal_test_required": { module: string };
     "setup.email_required": { field: "email" };
-    /** Another handler currently holds the persistent first-boot operation lease. */
-    "setup.already_provisioning": Record<string, never>;
-    /** A different request owns the box's persisted incomplete first-boot operation. */
-    "setup.operation_conflict": Record<string, never>;
     /**
      * The same adopt request was sent again after an earlier attempt failed past its first write to
      * this node. Adopt has no resume path, and running it again mints a second standby identity, so
@@ -1026,11 +1021,6 @@ declare module "@waitron/shared" {
      * is no saved operation, it is not an adopt, or that adopt never wrote here or finished.
      */
     "setup.reset_unavailable": Record<string, never>;
-    /**
-     * A first-boot setup POST arrived before the box wired the dependencies that action needs; the
-     * box is up but cannot serve it yet.
-     */
-    "setup.not_ready": Record<string, never>;
     /**
      * A manual open-drawer request found no active cash drawer choice on the requesting device (its
      * own, else its profile's default), so there is nothing to send the kick through. `deviceId`

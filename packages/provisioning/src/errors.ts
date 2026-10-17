@@ -10,6 +10,10 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "setup.not_ready": Record<string, never>;
+    "setup.operation_conflict": Record<string, never>;
+    "setup.already_provisioning": Record<string, never>;
+    "password.throttled": { retryAfterSeconds: number };
     "setup.owner_required": Record<string, never>;
     "setup.attempt_conflict": Record<string, never>;
     "setup.attempt_uncertain": Record<string, never>;

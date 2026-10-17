@@ -2,7 +2,7 @@ import * as filesystem from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
-import { createFirstSetupCoordinator, createFirstSetupStore } from "@waitron/provisioning";
+import { createFirstSetupCoordinator, createFirstSetupStore } from "./index.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 vi.mock("node:fs/promises", { spy: true });
 const roots: string[] = [];

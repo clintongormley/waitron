@@ -383,3 +383,40 @@ named `root`, which this config does not declare; the corrected command ran the 
 This completes the command's before-open prerequisite, not Task 4. Its authenticated hour
 selection, activation and publication integration remains unfinished, along with the earlier
 recorded setup/PDF qualification. No current-head product CI, final review or landing is claimed.
+
+
+## Task 4 shared ownership services, 2026-10-17
+
+The CLI needs the same ownership services as the hosted setup. Eight implementations now live
+in `packages/provisioning/src`: ownership, ownership audit, resolution inspection, empty-database
+inspection, setup operations, password throttling, queued password attempts and atomic file writes.
+Their original server paths re-export the implementations. Four error-code declarations move
+with them; the code names and parameter types remain unchanged.
+
+An audit against `f38cbe5ebd24d06b5fbfac1ec8572eff41674138` compares every non-import
+implementation token. It also retains every original matcher expression in the moved suites.
+The inspection suite splits at its server action tests: those integration checks stay in server;
+the shared inspection and snapshot checks run in provisioning. The plain request fixture is copied
+without changing its values. New ownership checks cover malformed claims, changed frozen IDs,
+password-authorised resolution, stale writes and current-capability polling. New inspection checks
+cover exact snapshots, missing evidence and required migration sets. No existing assertion is
+removed or weakened; no fiscal writer, fiscal fixture, SQL, migration or guard changes.
+
+The first relocation run failed on server action imports left in the shared inspection test;
+splitting the suite fixes those imports. A new filesystem-fault check initially attempted to spy
+on a native module namespace; it now uses Vitest's filesystem spy module. These were test-placement
+and fixture errors, not product behavior fixes. The local receipt directory is
+`a679-cli-owned-20261017`. Removing the capability or password check in its independently installed
+checkout makes the corresponding existing refusal test fail; each restoration passes.
+
+The actual CLI claim, hour preparation, activation and publication composition remains unfinished.
+This extraction does not complete Task 4 or qualify the branch for landing.
+
+The complete provisioning run passes 772 tests across 42 files but fails coverage at
+94.98 percent statements, 92.87 branches, 98.62 functions and 97.25 lines. An independently
+installed checkout of the exact starting commit passes its 565 tests but also fails coverage
+(94.44/92.56/98.76/97.36). The source sets differ; neither run meets the package bar. The gap
+remains open. The current server-consumer checks pass 46 cases, the unchanged fiscal pair passes
+20, and eight repository guard files pass 4,768. Both package compilers, source lint/format and
+the provisioning build pass. The independently installed revised tree passes 186 focused cases.
+No package threshold, exclusion or ignore changes.

@@ -351,6 +351,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   provisioning, with focused checks through the shared host and the wizard. The provisioning command
   now checks retained setup claims before opening the store, and checks again after opening;
   interrupted-claim tests use the real opener and require the original directory to remain intact.
+  The ownership, password, inspection and setup-operation services are now shared through
+  provisioning; the server entry points forward to those implementations. Their retained checks
+  include password recovery, capability rotation, exact snapshots and interrupted operations.
   Complete wizard and CLI admission remain unfinished.
   Real hour setup/recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).

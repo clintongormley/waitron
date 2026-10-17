@@ -71,3 +71,31 @@ export {
 } from "./first-setup-workspace.js";
 export type { FirstSetupAnchor, FirstSetupBootTarget } from "./first-setup-workspace.js";
 export { createSetupPreparationHost } from "./setup-preparation-host.js";
+export { publicFirstSetupState, createFirstSetupOwner } from "./first-setup-owner.js";
+export type {
+  FirstSetupClaimPayload,
+  FirstSetupOwnerAttempt,
+  ReconfirmationPurpose,
+  PublicFirstSetupState,
+  RecoverFirstSetupOwnerRequest,
+} from "./first-setup-owner.js";
+export { createFirstSetupOwnerAudit } from "./first-setup-owner-audit.js";
+export { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
+export type {
+  FirstSetupRoots,
+  FirstSetupArtifact,
+  FirstSetupInspection,
+} from "./first-setup-resolution-inspection.js";
+export { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
+export { createSetupOperationStore } from "./setup-operation.js";
+export type {
+  SetupOperationKind,
+  SetupOperationPhase,
+  SetupOperationState,
+  ActiveSetupOperation,
+  SetupOperationStore,
+} from "./setup-operation.js";
+export { passwordThrottleBucket, createPasswordThrottle } from "./password-throttle.js";
+export type { PasswordThrottle, PasswordThrottleProbe } from "./password-throttle.js";
+export { inTurn, keysInTurn } from "./attempt-turns.js";
+export { stagedPath, stageFile, writeFileAtomic } from "./fs-atomic.js";

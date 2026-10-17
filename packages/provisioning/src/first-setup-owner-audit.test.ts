@@ -12,10 +12,10 @@ import {
   createFirstSetupResolutionStore,
   createFirstSetupStore,
   type FirstSetupFrozen,
-} from "@waitron/provisioning";
+} from "./index.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
-import { request, PASSWORD } from "../test/first-fiscal.js";
+import { request, PASSWORD } from "../test/first-setup-request.js";
 
 vi.mock("node:fs/promises", { spy: true });
 const database = useVenueDb({ migrations: [CORE_MIGRATIONS] });

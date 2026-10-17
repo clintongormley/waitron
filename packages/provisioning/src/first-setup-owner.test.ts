@@ -3,13 +3,12 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
-import {
-  createFirstSetupCoordinator,
-  createFirstSetupStore,
-  type VenueRequest,
-} from "@waitron/provisioning";
+import { createFirstSetupCoordinator, createFirstSetupStore, type VenueRequest } from "./index.js";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import { createFirstSetupOwner, type FirstSetupClaimPayload } from "./first-setup-owner.js";
+import { AppError } from "@waitron/shared";
+import * as filesystem from "node:fs/promises";
+vi.mock("node:fs/promises", { spy: true });
 const dirs: string[] = [];
 const payload: FirstSetupClaimPayload = {
   environment: "production",
@@ -567,4 +566,140 @@ it("retirement refuses existing owner capabilities and password recovery without
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
   expect(await readFile(join(current.stateDir, "first-setup.json"))).toEqual(before);
+});
+
+it("polls the latest revision with the current capability while refusing stale writes", async () => {
+  const f = await fixture();
+  const claimed = await f.claim();
+  const owner = { ...claimed.state, capability: claimed.capability };
+  await f.store.update(owner.attemptId, owner.revision, { kind: "consumption-intent" });
+  await expect(f.owner.status(owner)).resolves.toMatchObject({
+    revision: 2,
+    status: "consumption-intent",
+  });
+  await expect(f.owner.authorize(owner)).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(
+    f.owner.status({ ...owner, capability: randomBytes(32).toString("base64url") }),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  expect((await f.store.read())?.revision).toBe(2);
+});
+
+it("requires the original password before a resolution writes and preserves action errors", async () => {
+  const f = await fixture();
+  await f.claim();
+  const state = (await f.store.read())!;
+  const target = join(f.dir, "resolution-proof.txt");
+  const write = async () => {
+    await writeFile(target, "authorised resolution");
+    return "recorded";
+  };
+  for (const password of ["wrong", "x".repeat(1025), null]) {
+    await expect(
+      f.owner.withResolutionPassword(state, password as string, write),
+    ).rejects.toMatchObject({ code: "setup.owner_required" });
+    await expect(readFile(target)).rejects.toMatchObject({ code: "ENOENT" });
+  }
+  f.tick();
+  await expect(
+    f.owner.withResolutionPassword(state, payload.request.admin.password, write),
+  ).resolves.toBe("recorded");
+  expect(await readFile(target, "utf8")).toBe("authorised resolution");
+  await expect(
+    f.owner.withResolutionPassword(state, payload.request.admin.password, async () => {
+      throw new AppError("setup.attempt_conflict", {});
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await f.store.read()).toEqual(state);
+});
+
+it.each(["nonce", "password-type", "pin-type", "password-size", "pin-size"])(
+  "refuses malformed %s before creating an ownership record",
+  async (kind) => {
+    const f = await fixture();
+    const proposed = structuredClone(payload);
+    if (kind === "password-type") proposed.request.admin.password = null as unknown as string;
+    if (kind === "pin-type") proposed.request.admin.pin = null as unknown as string;
+    if (kind === "password-size") proposed.request.admin.password = "x".repeat(1025);
+    if (kind === "pin-size") proposed.request.admin.pin = "1".repeat(1025);
+    await expect(
+      f.owner.claimFirstSetup(proposed, kind === "nonce" ? "bad" : f.nonce),
+    ).rejects.toMatchObject({ code: "setup.owner_required" });
+    expect(await f.store.read()).toBeNull();
+  },
+);
+
+it.each(["attemptId", "nodeId", "administratorId", "environment"] as const)(
+  "refuses a frozen claim that changes its %s before retaining it",
+  async (field) => {
+    const f = await fixture();
+    const owner = createFirstSetupOwner({
+      ...f.options,
+      freeze: async (...args: Parameters<typeof f.options.freeze>) => ({
+        ...(await f.options.freeze(...args)),
+        [field]: field === "environment" ? "preproduction" : "changed-id",
+      }),
+    });
+    await expect(owner.claimFirstSetup(structuredClone(payload), f.nonce)).rejects.toMatchObject({
+      code: "setup.attempt_invalid",
+    });
+    expect(await f.store.read()).toBeNull();
+  },
+);
+
+it("refuses ownership lookups without a claim and never invents one", async () => {
+  const f = await fixture();
+  const owner = { attemptId: "missing", revision: 1, ownerGeneration: 1, capability: f.nonce };
+  await expect(f.owner.authorize(owner)).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(f.owner.status(owner)).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(
+    f.owner.resumeFirstSetup(f.nonce, { password: "x".repeat(1025) }),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  expect(await f.store.read()).toBeNull();
+});
+
+it("rejects unsupported reconfirmation purposes and malformed one-use grants", async () => {
+  const f = await fixture();
+  const claim = await f.claim();
+  const owner = { ...claim.state, capability: claim.capability };
+  await expect(
+    f.owner.reconfirm(owner, payload.request.admin.password, "other" as "activation"),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  await expect(f.owner.consumeReconfirmation(owner, "bad", "activation")).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
+  expect((await f.store.read())?.revision).toBe(1);
+});
+
+it("does not claim over an unreadable operation or filesystem entry", async () => {
+  const f = await fixture();
+  await mkdir(f.options.stateDir);
+  const operation = join(f.options.stateDir, "setup-operation.json");
+  await writeFile(operation, "not JSON");
+  await expect(f.claim()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  await rm(operation);
+  await writeFile(operation, "{}");
+  const spy = vi.spyOn(filesystem, "lstat").mockRejectedValueOnce(new Error("unreadable state"));
+  try {
+    await rm(operation);
+    await expect(f.claim()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  } finally {
+    spy.mockRestore();
+  }
+  expect(await f.store.read()).toBeNull();
+});
+
+it("returns selected module names and versions without their frozen private requests", async () => {
+  const f = await fixture();
+  const owner = createFirstSetupOwner({
+    ...f.options,
+    freeze: async (...args: Parameters<typeof f.options.freeze>) => ({
+      ...(await f.options.freeze(...args)),
+      modules: [
+        { module: "test-regime", version: "1.0.0", eventId: args[2].attemptId, request: null },
+      ],
+    }),
+  });
+  const claim = await owner.claimFirstSetup(structuredClone(payload), f.nonce);
+  expect(claim.state.modules).toEqual([{ module: "test-regime", version: "1.0.0" }]);
+  expect(claim.state).not.toHaveProperty("inputs");
 });
