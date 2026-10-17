@@ -3071,9 +3071,11 @@ keep one row down to 320 px (A502). The language chooser sits at the trailing
 edge too, before the alerts bell and the account menu, signed in and signed out (see "Navigation and language controls").
 Signed out, the Theme chooser (`wt-theme-chooser`) sits just before the language chooser. Signed
 in, the banner has no room for it at phone width, so Theme moves into the account menu, at every
-width: a labelled group of three toggle buttons (Light, Dark, Follow device, each with its icon,
-the current one `aria-pressed="true"` and bordered) between Account settings and Log out; a pick
-closes the menu like any other action. The group is `themeChoices` with its `themeChoicesStyles`
+width, between Account settings and Log out: one row holding the visible label "Theme", which
+names the group, and then three icon-only toggle buttons (sun, crescent and half-filled circle, the
+icons `wt-theme-chooser` draws), named Light, Dark and Follow device, each at least `--wt-tap-min`
+square, the current one `aria-pressed="true"` and filled with `--wt-color-primary`. A pick closes the
+menu like any other action. The group is `themeChoices` with its `themeChoicesStyles`
 (`packages/ui/src/theme-choices.ts`), which the till's person menu draws too. Measured 2026-10-17 in the plan review for A681: a 52 px stand-in in the
 signed-in banner shrank the lockup to 15 px at 360 px and 45 px at 390 px, below the 60 px floor
 in `apps/dashboard/src/dashboard-app.test.ts`. In Demo and Preparation, `wt-demo-bar` shows the mode,
@@ -4576,7 +4578,9 @@ dashboard's banner while nobody is signed in (signed in, Theme is in the account
 "Dashboard banner"). The counter screen's own header has none, because the till never shows that
 header. On a signed-in till the shell's bar has no Theme chooser: Theme is in the signed-in
 person's menu (the menu under their name, or inside More once their name has moved there), the same
-group of three choices as the dashboard's account menu, just before Log out. Measured 2026-10-17
+row as the dashboard's account menu, just after Log out, so Log out keeps its place. Measured
+2026-10-17 in the re-look after 96a073603: as three rows before Log out, the group pushed Log out
+below the visible More menu at 360×640, 360×740, 320×740 and 390×664. Measured 2026-10-17
 in the real-browser look for A681: with the chooser on the bar, at 360 px the tab strip got 148 px
 of the 178 px its tabs needed, and "Sala" showed as "Sa". A theme pick applies at once and never
 asks about unsaved work, unlike a language pick on the till. The dashboard banner's dark

@@ -668,17 +668,17 @@ export class TillShell extends LitElement {
               >
             `
           : nothing
-      }${themeChoices({
-        active: currentThemeChoice(),
-        labels: themeLabels(),
-        onPick: (choice) => this.#emit(THEME_SELECTED_EVENT, { choice }),
-      })}<wt-button
+      }<wt-button
         class="logout"
         variant=${variant}
         align=${variant === "ghost" ? "start" : nothing}
         @click=${() => this.#emit("logout")}
         >${t("shell.logout")}</wt-button
-      >`;
+      >${themeChoices({
+        active: currentThemeChoice(),
+        labels: themeLabels(),
+        onPick: (choice) => this.#emit(THEME_SELECTED_EVENT, { choice }),
+      })}`;
   }
 
   #menu(moved: ReadonlySet<BarItem>): TemplateResult {

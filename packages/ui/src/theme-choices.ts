@@ -9,40 +9,43 @@ import "./components/wt-icon.js";
 export const themeChoicesStyles = css`
   .theme-choices {
     display: flex;
-    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: center;
     gap: var(--wt-space-1);
+    padding-inline-start: var(--wt-space-4);
   }
 
   .theme-choices-label {
-    padding: var(--wt-space-2) var(--wt-space-4) 0;
+    flex: 1;
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
   }
 
-  /* The same box as a menu's wt-button variant="ghost" align="start". */
   .theme-choice {
     box-sizing: border-box;
-    display: flex;
+    display: inline-flex;
+    flex: none;
     align-items: center;
-    justify-content: flex-start;
-    gap: var(--wt-space-2);
-    width: 100%;
+    justify-content: center;
+    min-width: var(--wt-tap-min);
     min-height: var(--wt-tap-min);
-    padding: var(--wt-space-2) var(--wt-space-4);
+    padding: var(--wt-space-2);
     border: 1px solid transparent;
     border-radius: var(--wt-radius-md);
     background: transparent;
     color: var(--wt-color-text);
-    font: inherit;
-    font-weight: var(--wt-font-weight-bold);
-    text-align: start;
     cursor: pointer;
-  }
-  .theme-choice[aria-pressed="true"] {
-    border-color: var(--wt-color-border);
   }
   .theme-choice:hover {
     border-color: var(--wt-color-primary-text);
+  }
+  .theme-choice[aria-pressed="true"] {
+    border-color: var(--wt-color-primary);
+    background: var(--wt-color-primary);
+    color: var(--wt-color-on-primary);
+  }
+  .theme-choice > wt-icon {
+    color: inherit;
   }
   .theme-choice:focus-visible {
     outline: var(--wt-focus-ring);
@@ -51,8 +54,9 @@ export const themeChoicesStyles = css`
 `;
 
 /**
- * The Theme choices for a person's own menu: a group named by `labels.theme` holding one
- * `aria-pressed` button per choice, `active` the pressed one. It never changes the theme itself:
+ * The Theme choices for a person's own menu, on one row: the visible `labels.theme`, which names
+ * the group, then one icon-only `aria-pressed` button per choice, named by its label, `active` the
+ * pressed and filled one. It never changes the theme itself:
  * `onPick` decides what a pick means. Its label has a fixed id, so a shadow root holds one at most.
  */
 export function themeChoices(options: {
@@ -74,10 +78,11 @@ export function themeChoices(options: {
           type="button"
           class="theme-choice"
           aria-pressed=${String(choice === active)}
+          aria-label=${labels[choice]}
           data-test="theme-choice-${choice}"
           @click=${() => onPick(choice)}
         >
-          <wt-icon name="theme-${choice}"></wt-icon>${labels[choice]}
+          <wt-icon name="theme-${choice}"></wt-icon>
         </button>`,
     )}
   </div>`;

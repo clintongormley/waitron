@@ -255,7 +255,10 @@ it("labels the Theme choices in Spanish", async () => {
   await expect
     .element(q(signedIn.el, '[data-test=theme-choices][role="group"]')!)
     .toHaveAccessibleName("Tema");
-  expect(choiceButtons(signedIn.el).map((b) => b.textContent!.trim())).toEqual(words);
+  const buttons = choiceButtons(signedIn.el);
+  expect(buttons).toHaveLength(3);
+  for (const [i, word] of words.entries())
+    await expect.element(buttons[i]!).toHaveAccessibleName(word);
 });
 
 /** Runs `body` at a real viewport size inside the real page's outer margin (`index.html` pads the

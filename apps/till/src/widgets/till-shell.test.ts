@@ -349,7 +349,7 @@ describe("till-shell", () => {
     expect(el.shadowRoot!.querySelector("wt-theme-chooser")).toBeNull();
   });
 
-  it("keeps the theme chooser out of the bar, and puts Theme in the operator's menu just before Log out", async () => {
+  it("keeps the theme chooser out of the bar, and puts Theme in the operator's menu just after Log out", async () => {
     await atViewport(1280, async () => {
       const before = currentLocale();
       setLocale("en-GB");
@@ -367,7 +367,7 @@ describe("till-shell", () => {
           [...menu.children]
             .filter((c) => c.slot !== "trigger")
             .map((c) => c.getAttribute("data-test") ?? c.className),
-        ).toEqual(["theme-choices", "logout"]);
+        ).toEqual(["logout", "theme-choices"]);
         await (menu as LitElement).updateComplete;
         await userEvent.click(menu.shadowRoot!.querySelector("button")!);
         const group = menu.querySelector<HTMLElement>('[data-test=theme-choices][role="group"]')!;
@@ -405,11 +405,9 @@ describe("till-shell", () => {
         await userEvent.click(menu.shadowRoot!.querySelector("button")!);
         const group = menu.querySelector<HTMLElement>('[data-test=theme-choices][role="group"]')!;
         await expect.element(group).toHaveAccessibleName("Tema");
-        expect([...group.querySelectorAll("button")].map((b) => b.textContent!.trim())).toEqual([
-          "Claro",
-          "Oscuro",
-          "Según el dispositivo",
-        ]);
+        const buttons = [...group.querySelectorAll("button")];
+        for (const [i, name] of ["Claro", "Oscuro", "Según el dispositivo"].entries())
+          await expect.element(buttons[i]!).toHaveAccessibleName(name);
       } finally {
         setLocale(before);
       }
@@ -466,6 +464,44 @@ describe("till-shell", () => {
       }
     });
   });
+
+  it.each(["light", "dark"] as const)(
+    "fills the pressed Theme choice, unlike an unpressed one and the menu's bordered buttons, in the %s theme",
+    async (theme) => {
+      await atViewport(1280, async () => {
+        const { el } = await mountWidget<TillShell>(
+          "till-shell",
+          {
+            formFactor: "till",
+            operatorName: "Ana",
+            clockAvailable: true,
+            clockState: {
+              personId: "ana",
+              locationId: "venue",
+              businessDay: "2026-10-14",
+              state: "working",
+              activeLocationId: "venue",
+              lastEntryId: "entry",
+              firstClockIn: false,
+            },
+          },
+          theme,
+        );
+        const menu = el.shadowRoot!.querySelector<WtRowActions>("wt-row-actions.operator-menu")!;
+        await menu.updateComplete;
+        await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+        const hours = menu.querySelector<LitElement>("[data-my-hours]")!;
+        await hours.updateComplete;
+        const bg = (e: Element) => getComputedStyle(e).backgroundColor;
+        const pressed = bg(menu.querySelector("[data-test=theme-choice-device]")!);
+        const unpressed = bg(menu.querySelector("[data-test=theme-choice-light]")!);
+        const bordered = bg(hours.shadowRoot!.querySelector("button")!);
+        expect(pressed, "pressed against unpressed").not.toBe(unpressed);
+        expect(pressed, "pressed against a bordered menu button").not.toBe(bordered);
+        expect(pressed).not.toBe("rgba(0, 0, 0, 0)");
+      });
+    },
+  );
 
   it("makes the body inert while a drill-in is slotted", async () => {
     const { el } = await mountWidget<TillShell>("till-shell", {
@@ -712,6 +748,85 @@ function deepActive(): Element | null {
 }
 
 describe("till-shell at phone width", () => {
+  /** The More menu of the re-look's demo till (relook-more-360x640-control-theme-hidden.png): no
+   * Profile, no transfer count, and the clock actions of a clocked-in person. */
+  const clockedIn: Partial<TillShell> = {
+    ...full,
+    transferCount: undefined,
+    canSwitchProfile: false,
+    clockAvailable: true,
+    clockState: {
+      personId: "ana",
+      locationId: "venue",
+      businessDay: "2026-10-14",
+      state: "working",
+      activeLocationId: "venue",
+      lastEntryId: "entry",
+      firstClockIn: false,
+    },
+  };
+
+  async function openMore(el: TillShell): Promise<HTMLElement> {
+    const menu = menuOf(el)! as LitElement;
+    await menu.updateComplete;
+    await userEvent.click(triggerOf(el));
+    const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+    return popup;
+  }
+
+  it.each([
+    [360, 640],
+    [390, 664],
+  ])(
+    "shows Log out inside the open More menu without scrolling at %ix%i, in Spanish",
+    async (width, height) => {
+      const original = currentLocale();
+      setLocale("es-ES");
+      try {
+        await atViewport(
+          width,
+          async () => {
+            const { el } = await mountWidget<TillShell>("till-shell", clockedIn);
+            await frame();
+            const popup = await openMore(el);
+            expect(menuOf(el)!.querySelector(".operator")).not.toBeNull();
+            expect(popup.scrollTop).toBe(0);
+            const box = popup.getBoundingClientRect();
+            const logout = menuOf(el)!
+              .querySelector<HTMLElement>(".logout")!
+              .getBoundingClientRect();
+            expect(logout.height).toBeGreaterThan(0);
+            expect(logout.top).toBeGreaterThanOrEqual(box.top);
+            expect(logout.bottom, "Log out ends inside the menu's visible box").toBeLessThanOrEqual(
+              box.bottom,
+            );
+          },
+          height,
+        );
+      } finally {
+        setLocale(original);
+      }
+    },
+  );
+
+  it("draws the Theme choices on one row inside More at 320 px", async () => {
+    await atViewport(
+      320,
+      async () => {
+        const { el } = await mountWidget<TillShell>("till-shell", clockedIn);
+        await frame();
+        await openMore(el);
+        const tops = [
+          ...menuOf(el)!.querySelectorAll<HTMLElement>("[data-test=theme-choices] button"),
+        ].map((b) => b.getBoundingClientRect().top);
+        expect(tops).toHaveLength(3);
+        expect(new Set(tops).size, "the three choices share a top edge").toBe(1);
+      },
+      740,
+    );
+  });
+
   it.each([320, 360])(
     "shows every tab in full at %i px with a counter-zone menu, in Spanish",
     async (width) => {
@@ -801,8 +916,8 @@ describe("till-shell at phone width", () => {
         "data-open-transfers",
         "settings",
         "operator",
-        "theme-choices",
         "logout",
+        "theme-choices",
       ]);
       expect(menu.querySelector(".operator")!.textContent).toContain("Ana Fernández");
       expect(menu.querySelector('[data-test="department-transfers"]')!.textContent).toContain(
@@ -847,9 +962,7 @@ describe("till-shell at phone width", () => {
         expect(deepActive()).toBe(triggerOf(el));
         await userEvent.keyboard("{Enter}");
         await vi.waitFor(() => expect(triggerOf(el).getAttribute("aria-expanded")).toBe("true"));
-        // The three Theme choices sit between the operator's name and Log out.
-        const steps = selector === ".logout" ? index + 3 : index;
-        for (let step = 0; step <= steps; step += 1) await userEvent.tab();
+        for (let step = 0; step <= index; step += 1) await userEvent.tab();
         const target = menuOf(el)!.querySelector<HTMLElement>(selector)!;
         expect(target.contains(deepActive()) || target.shadowRoot!.contains(deepActive())).toBe(
           true,
@@ -1401,8 +1514,8 @@ describe("till-shell above phone width", () => {
         "data-open-transfers",
         "settings",
         "operator",
-        "theme-choices",
         "logout",
+        "theme-choices",
       ];
       expect(order.length).toBeGreaterThan(0);
       expect(order).toEqual(barOrder.filter((key) => order.includes(key)));
