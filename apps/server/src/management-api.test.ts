@@ -1203,9 +1203,9 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
-  it("refuses a colour outside the twelve on create and on edit, naming colour, and writes nothing", async () => {
+  it("refuses a colour outside the shared palette on create and on edit, naming colour, and writes nothing", async () => {
     const id = await createStation(unique("Kept colour"), { colour: "cyan" });
-    for (const colour of ["grey", "Teal", 7, null]) {
+    for (const colour of ["invalid-colour", "Teal", 7, null]) {
       const countBefore = (await listStations()).length;
       const created = await req(
         "/stations",

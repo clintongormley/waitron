@@ -1421,10 +1421,9 @@ Hold a dragged row or tile near the visible top or bottom edge to reach rows out
 view. `DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box
 across shadow roots, using `--wt-tap-min` for the edge band; the closer you hold to the edge, the faster it
 scrolls. Each scroll refreshes the drop target. Leaving the band, releasing, cancelling or pressing
-Escape ends the scrolling loop. Products, Menu Structure, shared reorder tables, preparation
-stations, the Customise column list and the Home page tab's shortcut preview use this helper. Shared
-reorder tables and preparation stations keep the moves already made when a drag is cancelled, as
-they do on pointer cancellation; Products, Menu Structure and the shortcut preview apply their move
+Escape ends the scrolling loop. Products, Menu Structure, shared reorder tables, the Customise
+column list and the Home page tab's shortcut preview use this helper. Shared reorder tables keep
+the moves already made when a drag is cancelled, as they do on pointer cancellation; Products, Menu Structure and the shortcut preview apply their move
 only on release.
 
 ### Remembered, searchable, filterable tables
@@ -3931,7 +3930,7 @@ cell's repair note under the station is drawn inside the button. Every table cel
 included, is filled with `--wt-color-station-<colour>` of the station it sends to (for a blank cell, the
 one it inherits), and a choice waiting to be saved paints as it will be saved; a cell stays plain when it sends nowhere (No
 preparation, no station), sends to a disabled or deleted station, or its station's stored colour is
-not one of the twelve. A painted cell beside another cell is parted from it by a 2px line in
+not in the shared palette. A painted cell beside another cell is parted from it by a 2px line in
 `--wt-color-surface` on its start edge, drawn as an inset shadow so the button still covers the
 whole cell. Pointing at a cell draws the focus outline just inside its edges and shows a hand
 pointer; a painted cell keeps its fill, and a plain one is tinted with `--wt-color-surface-lifted`
@@ -4012,13 +4011,13 @@ under that field. Printers offers every active printer, shows a
 disabled one as Disabled and lets it stay chosen only where the station already has it. The editor has
 a read-out for a person without `printer.manage`, which the screen cannot yet select. Colour is a
 required `wt-colour-chooser`: its closed field shows the chosen colour's square and name,
-and its popup offers the twelve station colours, naming the other active stations that use each.
+and its popup offers the shared calendar palette, naming the other active stations that use each.
 The editor's own station is excluded from those names. Each Stations row also shows its colour
-square beside its name; both squares use the station dot token. Add station uses the same colour
-field and sets Printers. It starts on the first colour no active station has, or Red when all twelve
+square beside its name; both squares use the station dot colour. Add station uses the same colour
+field and sets Printers. It starts on the first colour no active station has, or Red when all palette colours
 are taken. Station Edit, Make default and Delete actions belong to the Stations row menu,
 which has its own Actions column pinned to the end of the table, so it stays on screen on a phone;
-an active station's drag grip stays before its name. The Routes tab's All categories × Every zone cell
+stations appear in Spanish alphabetical order without drag grips. The Routes tab's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 

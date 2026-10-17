@@ -476,6 +476,7 @@ describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme)
           "purple",
           "pink",
           "brown",
+          "grey",
         ] as const;
         const stations = colours.map((colour, index) => ({
           id: colour,
@@ -534,6 +535,7 @@ describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme)
                 "Purple",
                 "Pink",
                 "Brown",
+                "Grey",
               ]
             : [
                 "Rojo",
@@ -548,6 +550,7 @@ describe.each(["light", "dark"] as const)("A725 Add station popup (%s)", (theme)
                 "Morado",
                 "Rosa",
                 "Marrón",
+                "Gris",
               ],
         );
         const probe = document.createElement("span");

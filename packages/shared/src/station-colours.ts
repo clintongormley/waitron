@@ -1,19 +1,7 @@
-export const STATION_COLOURS = [
-  "red",
-  "orange",
-  "amber",
-  "lime",
-  "green",
-  "teal",
-  "cyan",
-  "blue",
-  "indigo",
-  "purple",
-  "pink",
-  "brown",
-] as const;
+import { CALENDAR_COLOURS, type CalendarColour } from "./calendar-colours.js";
 
-export type StationColour = (typeof STATION_COLOURS)[number];
+export const STATION_COLOURS = CALENDAR_COLOURS;
+export type StationColour = CalendarColour;
 
 export function firstUnusedStationColour(used: Iterable<StationColour>): StationColour {
   const occupied = new Set(used);

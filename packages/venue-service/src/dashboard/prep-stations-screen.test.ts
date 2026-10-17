@@ -1,3 +1,4 @@
+import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { RetiredFallbackPrepStationsView as PrepStationsView } from "../../test/retired-routing-fixture-types.js";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -692,13 +693,14 @@ it("a new station starts on the first colour no station has, and is created with
     colour: "cyan",
   });
 });
-it("a new station starts on Red when all twelve are taken", async () => {
+it("a new station starts on Red when all shared colours are taken", async () => {
   const a = api({
     load: vi
       .fn()
       .mockResolvedValue(
         colouredView([
           "brown",
+          "grey",
           "orange",
           "amber",
           "lime",
@@ -5023,20 +5025,7 @@ it.each(["en", "es"] as const)("A725 Add station uses the shared popup in %s", a
   expect(chooser!.name).toBe("colour");
   expect(chooser!.required).toBe(true);
   expect(chooser!.value).toBe("amber");
-  expect(chooser!.choices.map(({ value }) => value)).toEqual([
-    "red",
-    "orange",
-    "amber",
-    "lime",
-    "green",
-    "teal",
-    "cyan",
-    "blue",
-    "indigo",
-    "purple",
-    "pink",
-    "brown",
-  ]);
+  expect(chooser!.choices.map(({ value }) => value)).toEqual([...CALENDAR_COLOURS]);
   expect(chooser!.choices.find(({ value }) => value === "orange")!.usedBy).toEqual(["Station 1"]);
   expect(chooser!.choices.find(({ value }) => value === "amber")!.usedBy).toEqual([]);
   const trigger = chooser!.shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!;
@@ -5085,7 +5074,11 @@ it("A725 Add station ignores a colour outside the station palette", async () => 
     "wt-modal wt-colour-chooser",
   )!;
   chooser.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "grey" }, bubbles: true, composed: true }),
+    new CustomEvent("wt-change", {
+      detail: { value: "invalid-colour" },
+      bubbles: true,
+      composed: true,
+    }),
   );
   q(el, '[data-test="name"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "Terrace" } }),

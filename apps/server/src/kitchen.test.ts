@@ -225,6 +225,7 @@ describe("kitchen-station config", () => {
       "purple",
       "pink",
       "brown",
+      "grey",
     ] as const;
     await asApp(cfg, async (tx) => {
       for (const colour of colours)

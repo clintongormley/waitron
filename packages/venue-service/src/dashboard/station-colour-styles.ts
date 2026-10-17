@@ -1,8 +1,9 @@
-import type { StationColour } from "@waitron/shared";
+import { STATION_COLOURS, type StationColour } from "@waitron/shared";
 import { css, unsafeCSS } from "lit";
+import { PERIOD_COLOUR_TOKENS } from "./period-colour-styles.js";
 
 /** The tokens that paint a station of each colour, spelt out so the token-name guard reads them. */
-export const STATION_COLOUR_TOKENS: Record<StationColour, { fill: string; dot: string }> = {
+const stationTints: Partial<Record<StationColour, { fill: string; dot: string }>> = {
   red: { fill: "var(--wt-color-station-red)", dot: "var(--wt-color-station-red-dot)" },
   orange: { fill: "var(--wt-color-station-orange)", dot: "var(--wt-color-station-orange-dot)" },
   amber: { fill: "var(--wt-color-station-amber)", dot: "var(--wt-color-station-amber-dot)" },
@@ -16,6 +17,16 @@ export const STATION_COLOUR_TOKENS: Record<StationColour, { fill: string; dot: s
   pink: { fill: "var(--wt-color-station-pink)", dot: "var(--wt-color-station-pink-dot)" },
   brown: { fill: "var(--wt-color-station-brown)", dot: "var(--wt-color-station-brown-dot)" },
 };
+
+export const STATION_COLOUR_TOKENS = Object.fromEntries(
+  STATION_COLOURS.map((colour) => [
+    colour,
+    stationTints[colour] ?? {
+      fill: `color-mix(in srgb, ${PERIOD_COLOUR_TOKENS[colour].fill} 15%, var(--wt-color-surface))`,
+      dot: PERIOD_COLOUR_TOKENS[colour].fill,
+    },
+  ]),
+) as Record<StationColour, { fill: string; dot: string }>;
 
 /** Sets `--station-fill` and `--station-dot` on each `[data-station-colour]` element. */
 export const stationColourStyles = css`

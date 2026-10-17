@@ -1,3 +1,4 @@
+import { CALENDAR_COLOURS } from "../hours-types.js";
 import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtColourChooser } from "@waitron/ui/src/components/wt-colour-chooser.js";
@@ -616,20 +617,7 @@ it("A725 editor uses the station popup and saves the chosen colour", async () =>
   expect(root.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
   expect(root.querySelector(".value")!.textContent).toContain("Orange");
   expect(chooser!.required).toBe(true);
-  expect(chooser!.choices.map(({ value }) => value)).toEqual([
-    "red",
-    "orange",
-    "amber",
-    "lime",
-    "green",
-    "teal",
-    "cyan",
-    "blue",
-    "indigo",
-    "purple",
-    "pink",
-    "brown",
-  ]);
+  expect(chooser!.choices.map(({ value }) => value)).toEqual([...CALENDAR_COLOURS]);
   const seen = saves(el);
   await userEvent.click(root.querySelector("button.trigger")!);
   expect(root.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
@@ -649,7 +637,7 @@ it("A725 ignores a colour value outside the offered station palette", async () =
   const el = await mount();
   const seen = saves(el);
   const chooser = $<WtColourChooser>(el, "wt-colour-chooser[name=colour]")!;
-  chooser.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "grey" } }));
+  chooser.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "invalid-colour" } }));
   await el.updateComplete;
   await save(el);
   expect(seen).toEqual([]);
@@ -769,3 +757,21 @@ it.each(["en", "es"] as const)("A725 phone labels remain fully readable in %s", 
     await page.viewport(previous[0]!, previous[1]!);
   }
 });
+
+it.each(["en", "es"] as const)(
+  "shared palette grey is labelled and saved in %s",
+  async (locale) => {
+    setLocale(locale);
+    const el = await mount(GRILL, { locale });
+    const seen = saves(el);
+    const chooser = $<WtColourChooser>(el, "wt-colour-chooser[name=colour]")!;
+    await chooser.updateComplete;
+    expect(chooser.choices.find(({ value }) => value === "grey")?.label).toBe(
+      locale === "en" ? "Grey" : "Gris",
+    );
+    await userEvent.click(chooser.shadowRoot!.querySelector("button.trigger")!);
+    await userEvent.click(chooser.shadowRoot!.querySelector('[data-value="grey"]')!);
+    await save(el);
+    expect(seen).toEqual([{ colour: "grey" }]);
+  },
+);

@@ -178,3 +178,15 @@ Omit was removed. The same whole-branch review is retained; no second review was
 Authenticated native checks and capture inspection cover EN/ES × light/dark × 390/1280 for
 Stations/Routes, Add/Edit and colour popups, used colours, long names, refusals, invalid fields,
 Calendar choices and Unicode ordering. Final hook/current-head CI and landing remain pending.
+
+
+### Owner palette update — 2026-10-17 15:10
+
+The owner's campaign answer supersedes the twelve-colour list: stations use the same shared palette
+as periods, staff roles and seasons. A725 adopts the existing shared thirteen; Lane B's A783 expands
+the shared list to sixteen and owns the four-column chooser layout. The palette constant moves to
+shared with the existing hours-types export retained. Station validation, allocation, choices and
+additional swatches follow the list; no station count is fixed. The station column has no colour
+CHECK, so this update adds no migration. Existing station tints remain; new shared colours use the
+period's dot and a tint over the surface. Grey/Gris allocation, import, rendering and saving have
+observed REDs before implementation. Earlier twelve-colour receipts describe the earlier tree.

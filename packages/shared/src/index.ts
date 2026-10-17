@@ -216,3 +216,5 @@ export type {
 } from "./record-export-types.js";
 
 export { compareStationNames } from "./station-names.js";
+
+export { CALENDAR_COLOURS, type CalendarColour } from "./calendar-colours.js";

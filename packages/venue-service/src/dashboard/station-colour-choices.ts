@@ -15,7 +15,7 @@ export function stationColourChoices(
 ): ColourChoice[] {
   return STATION_COLOURS.map((colour) => ({
     value: colour,
-    label: t(`prep.colour.${colour}`),
+    label: t(`hours.colour.${colour}`),
     fill: STATION_COLOUR_TOKENS[colour].dot,
     usedBy: stations
       .filter((station) => station.id !== excludeId && station.colour === colour)

@@ -398,8 +398,10 @@ native column drop and compares every recorded table value except the retired co
   periods" is read as each time the page opens: the choice is the grid's own state, never written to
   the address or to storage. Mockups:
   [mockups/a584-station-colours/](mockups/a584-station-colours/). **2026-10-17, A753 point 1:**
-  periods now pick from thirteen colours and stations still from twelve, so decision (1)'s "bigger
-  set than the periods use" no longer holds.
+  periods gained thirteen colours, retiring decision (1)'s "bigger set than the periods use".
+  **2026-10-17, owner's A725/A783 decision:** stations use the same shared palette as periods,
+  staff roles and seasons. A725 adopts the current shared list; A783 expands it to sixteen and
+  changes the shared chooser layout. The historical twelve-colour board does not set today's palette.
 
 - **A prep station set not to print MOVED slips still shows the moved notice on its kitchen screen
   (A650 question C, owner 2026-10-14: the default kept).** The venue's Print MOVED slips switch and

@@ -198,17 +198,21 @@ it.each(["light", "dark"] as const)(
       "purple",
       "pink",
       "brown",
+      "grey",
     ] as const;
     const el = await mount(
       colours.map((colour) => station({ id: colour, name: colour, colour })),
       theme,
     );
     const squares = [...table(el)!.querySelectorAll<HTMLElement>('[part~="station-colour"]')];
-    expect(squares).toHaveLength(12);
+    expect(squares).toHaveLength(colours.length);
     for (const colour of colours) {
       const square = squares.find((node) => node.dataset.stationColour === colour)!;
       const probe = document.createElement("span");
-      probe.style.backgroundColor = `var(--wt-color-station-${colour}-dot)`;
+      probe.style.backgroundColor =
+        colour === "grey"
+          ? "var(--wt-color-palette-grey)"
+          : `var(--wt-color-station-${colour}-dot)`;
       el.parentElement!.append(probe);
       const actual = getComputedStyle(square);
       expect(actual.backgroundColor).toBe(getComputedStyle(probe).backgroundColor);

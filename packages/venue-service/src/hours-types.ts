@@ -3,22 +3,7 @@
 /** A real venue-local calendar date, `YYYY-MM-DD`. */
 export type LocalDate = string;
 
-export const CALENDAR_COLOURS = [
-  "red",
-  "orange",
-  "amber",
-  "lime",
-  "green",
-  "teal",
-  "cyan",
-  "blue",
-  "indigo",
-  "purple",
-  "pink",
-  "brown",
-  "grey",
-] as const;
-export type CalendarColour = (typeof CALENDAR_COLOURS)[number];
+export { CALENDAR_COLOURS, type CalendarColour } from "@waitron/shared";
 
 export type CalendarTone = "public_holiday" | "special_day" | "closed" | "standard";
 

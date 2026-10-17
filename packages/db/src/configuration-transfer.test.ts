@@ -69,7 +69,7 @@ describe("validateCoreConfiguration", () => {
 
   it("refuses a station colour a save would refuse", () => {
     expect(() =>
-      validateCoreConfiguration({ kitchen_stations: [{ colour: "grey" }] }),
+      validateCoreConfiguration({ kitchen_stations: [{ colour: "invalid-colour" }] }),
     ).toThrowError(stationRefusal);
   });
 
@@ -168,4 +168,8 @@ it.each([0, false])("refuses a deleted floor zone with active=%j", (active) => {
   expect(() =>
     validateCoreConfiguration({ floor_zones: [{ id: "live", active: 1 }] }),
   ).not.toThrow();
+});
+
+it("accepts the shared grey station colour for import", () => {
+  expect(() => validateCoreConfiguration({ kitchen_stations: [{ colour: "grey" }] })).not.toThrow();
 });
