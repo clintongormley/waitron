@@ -138,7 +138,7 @@ and `--wt-color-danger-disabled` at Waitron's red. Set each one too, with a ligh
 `--wt-color-field-value`, `--wt-color-google-button-fill`, `--wt-color-google-button-line`,
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
 `--wt-color-palette-{red,orange,amber,lime,green,teal,cyan,blue,indigo,purple,pink,brown,grey}`, `--wt-color-day-standard` and
-`--wt-color-day-closed`, the seasons' `--wt-color-season-{1,2,3,4}` (each with a `-line` border), the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
+`--wt-color-day-closed`, the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
 and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour, and the prep stations'
 `--wt-color-station-<colour>`, each with a `-dot` and no text colour of its own
 
@@ -208,11 +208,11 @@ colours" cases in `colors.test.ts`). Like the hover tokens they hold their own v
 `THEMEABLE_TOKENS` does not list them, so a tenant theme cannot set them.
 
 Opening hours → Year (`packages/venue-service/src/dashboard/opening-hours-year.ts`) fills a day
-with its season's tint (`--wt-color-season-1` to `--wt-color-season-4`, given by start order and
-cycled, `season-tint.ts`), `--wt-color-day-standard` where no season holds it, and
-`--wt-color-day-closed` when it is closed. A public holiday is outlined red
-(`--wt-color-palette-red`) and a special day purple; a special day on a public holiday keeps the
-purple outline and adds a red dot. Text uses the matching `--wt-color-on-…` token. Each day's
+with its season's stored colour, painted with that colour's station tint (`season-tint.ts`, below),
+`--wt-color-day-standard` where no season holds it, and `--wt-color-day-closed` when it is closed.
+A public holiday is outlined red (`--wt-color-palette-red`) and a special day purple; a special day
+on a public holiday keeps the purple outline and adds a red dot. A season's day is written in
+`--wt-color-text`; the other fills' text uses the matching `--wt-color-on-…` token. Each day's
 button names its special day, its holidays and Closed in its accessible name, so a screen reader
 never relies on colour.
 
@@ -250,24 +250,22 @@ and that the `prefers-color-scheme` blocks give the same values as the explicit 
 hold that two palette colours are told apart by eye: the light standard fill, for one, is only
 about 1.2:1 against `--wt-color-surface`, which is why the words carry the meaning.
 
-Opening hours' season chips (`packages/venue-service/src/dashboard/season-chips.ts`) tint each
-season with `--wt-color-season-<n>`, its text with `--wt-color-on-season-<n>` and its border with
-`--wt-color-season-<n>-line`, where `n` is the season's place in start order, 1 to 4, repeating for
-a fifth season onwards. The season's name and dates are always written on the chip.
+A season is painted with the colour stored on it (`seasons.colour`, one of the thirteen
+`CALENDAR_COLOURS`), using that colour's station paint rather than tokens of its own: the station
+fill as its tint, the station dot as its line, and `--wt-color-text` as its text
+(`SEASON_TINT_TOKENS` and `seasonTintStyles` in `season-tint.ts`, under
+`packages/venue-service/src/dashboard/`, over `STATION_COLOUR_TOKENS`, `station-colour-styles.ts`).
+`seasonTintStyles` sets `--season-tint`, `--season-on-tint` and `--season-tint-line` on each
+`[data-tint]` element, whose value is the colour's name; `seasonTints` reads a stored value that
+names no calendar colour as grey. The season chips (`season-chips.ts`), the Year's days and the
+Seasons window's swatches take the tint, and the Month's days take the line as their top border.
+Two seasons may share a colour. A new venue's four seasons are Spring green, Summer amber, Autumn
+orange and Winter blue (`DEFAULT_SEASONS`, `packages/venue-service/src/season-rules.ts`). The
+season's name and dates are always written on its chip.
 
-| Fill                  | Light     | Line      | Text on it | Dark      | Line      | Text on it |
-| --------------------- | --------- | --------- | ---------- | --------- | --------- | ---------- |
-| `--wt-color-season-1` | `#dcf1dc` | `#3c8a4a` | `#16181d`  | `#1d3a23` | `#4ac08d` | `#eceef2`  |
-| `--wt-color-season-2` | `#fbecc0` | `#a87a12` | `#16181d`  | `#3f3315` | `#f5b34a` | `#eceef2`  |
-| `--wt-color-season-3` | `#f9dccd` | `#b8603a` | `#16181d`  | `#45281c` | `#f09a74` | `#eceef2`  |
-| `--wt-color-season-4` | `#dbe7f9` | `#3d6fc4` | `#16181d`  | `#1c2a44` | `#7aa2ff` | `#eceef2`  |
-
-The "season colours" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both themes,
-that each text colour is 4.5:1 or more on its fill, that each line is 3:1 or more from its fill and
-from `--wt-color-surface`, that the four fills differ, that they run green, amber, peach and blue
-by hue, and that the `prefers-color-scheme` blocks give the same values as the explicit themes. The
-order is chosen so a venue's default seasons, which start with Spring on 1 March, show Spring green,
-Summer amber, Autumn peach and Winter blue.
+The "season paints" cases in `season-tint.test.ts` hold, in both themes and for every calendar
+colour, grey included, that the text is 4.5:1 or more on the tint and that the line is 3:1 or more
+from the tint and from `--wt-color-surface`.
 
 A prep station's colour (`STATION_COLOURS`, `packages/shared/src/station-colours.ts`) paints its
 Routes cells and its key swatch with `--wt-color-station-<colour>` and its period-line dots with
@@ -2382,7 +2380,7 @@ and nothing guards it across screens:
   editor, new and existing; the card reader's Rename dialog; the bill attestation's Record;
 - batch 4a: adjustment reason create/edit and the bill-discount limit; booking create/edit; image
   upload and names edit;
-- Opening hours: the season painter, the special-day painter, the period dialog and the season dialog.
+- Opening hours: the season painter, the special-day painter, the period dialog and the Seasons window.
   A366 slice 4 retires the separate Station hours page and its draft editors;
 - Departments: Add and Rename department, Add and Rename zone, Move and Add to department,
   the Settings form (including transfers) and the selected zone's settings. Their sibling
@@ -3230,12 +3228,11 @@ page itself never scrolls. Before this, only `.sidebar` was self-contained
 a screen exceeded one viewport the sidebar — capped to one screen — visibly stopped short of where
 the page actually ended. Both panes now share the same bound, so they always end at the same line.
 
-The Calendar's `window/seasons` address opens its existing season chips in a compact window, and
+The Calendar's `window/seasons` address opens the Seasons window (below, "Seasons window"), and
 `window/periods` opens the Periods window (below, "Periods window").
 The window pair is independent of the underlying view and subject. Window-only traversal retains
 that view's drafts and protects edits made inside the window. The handle's `navigationScopes`
-callback supplies those draft roots; ordinary navigation retains full protection. A721 replaces
-the seasons chooser with its editable table.
+callback supplies those draft roots; ordinary navigation retains full protection.
 
 
 ### Dashboard authentication
@@ -4165,8 +4162,8 @@ Opening hours' Year.
   with `--wt-color-primary`, its number in `--wt-color-on-primary`; today stays underlined.
   ‹ › step years, a month's name, drawn as a link ending in ›, opens that
   month (below), and when the year cannot be read the Year lists the twelve month names, each
-  opening its month. The season chips rename, move, add and delete seasons
-  (`season-chips.ts`), and a chip's name opens the season painter.
+  opening its month. "Seasons…" after the season chips opens the Seasons window, where seasons are
+  renamed, recoloured, moved, added and deleted, and a chip's name opens the season painter.
   The Year keeps the address's year across refreshes and offers one keyboard Tab stop in its
   grid. On a special day that is also a public holiday, the day's accessible
   name gives the holiday's name beside the special day's; the grid itself shows only the marks,
@@ -4280,20 +4277,14 @@ Opening hours' Year.
   then. A box opened from the Week does not offer it. A
   button closes the box and then acts; Escape and a click elsewhere close it, returning focus to
   the date when focus was inside. A special day is deleted from its painter, which asks first.
-- **Seasons.** The Year's season chips (`season-chips.ts`) list the venue's seasons in start
-  order, each written as its name and first and last day. A chip's name opens the season
-  painter on that season's week, its ✎ opens the season dialog (`season-dialog.ts`) on that
-  season, and + Season opens the dialog empty; on a read-only page a chip's name opens the season's
-  week read-only, there is no ✎, and + Season is not offered. The row ends with "Periods…", which opens the Periods window, on a read-only page too. A new season starts with a copy of the department and zone weeks of the
-  season it starts inside. The dialog has a required Name and a Starts on day and month, each
-  picked from a list; Save stays quiet and disabled until the draft changes. A name or start
-  another season already holds is refused under its field. A move or a deletion that would make a
-  period's end offset run into the next day's hours is refused beside the action, naming the
-  season and weekday it would run into, or the date: with its special day's name when the screen
-  knows that special day, else the date alone. Delete is offered on an existing season while the
-  venue has more than one; it asks first, says which season the days join (the one before, or the
-  last for the first season), and names the departments whose hours in the season are lost. The
-  page re-reads its hours after every season change.
+- **Seasons.** The Year's season chips (`season-chips.ts`) are a key: in start order, each is
+  written as its season's name and first and last day, in the season's stored colour. A chip's name
+  opens the season painter on that season's week, read-only on a read-only page. The row ends with
+  "Seasons…", which opens the Seasons window, and "Periods…", which opens the Periods window, on a
+  read-only page too. Seasons are named, coloured, moved, added and deleted in the Seasons
+  window (below, "Seasons window"). A new season starts with a copy of the department and zone
+  weeks of the season that held its start before the Save; a deleted season's days join the season
+  before it.
 - **Local holidays.** Public holidays come only from the country's shipped calendar; add your
   town's holidays as special days. There is no separate Local holidays editor. Above its months
   the Year gives a coverage sentence only when the shown year's official list is not complete:
@@ -4823,8 +4814,8 @@ as the Year's button does, and the screen pushes the current address with `windo
 so the window opens over the painter and its unsaved paint stays. A click with a modifier key or
 with a button other than the left is left to the browser, and a click something above the link has
 already cancelled opens nothing. The window is an unsized, so wide,
-`wt-modal` with no heading, named "Periods" by its `aria-label` (`data-window="periods"`; the
-Seasons window is the compact one, `data-window="seasons"`), and both end with a footer Close.
+`wt-modal` with no heading, named "Periods" by its `aria-label` (`data-window="periods"`), and
+ends with a footer Close.
 
 Its body, `periods-list` (`periods-list.ts`), starts with a toolbar: an `h2` "Periods", styled as a
 modal's heading, with "+ Add period" beside it, since `wt-modal` has no header slot. Below it, it
@@ -4879,6 +4870,72 @@ is a confirmation's choice, not staged input.
 Cases: the `periods-list*.test.ts`, `period-dialog*.test.ts` and `period-delete-dialog*.test.ts`
 files, and the Periods window cases in `opening-hours-screen.painter.test.ts` and
 `opening-hours-screen.special-day.test.ts`.
+
+### Seasons window
+
+The Seasons window is the Calendar's `window/seasons` address pair, over any Calendar view or
+painter, as `window/periods` is. It opens from "Seasons…" on the Year's season row, before
+"Periods…" (the button sends `calendar-window-open` with `detail: { window: "seasons" }`), and from
+page search (`venue-service:seasons`). Opening it reads the venue's special days once, so a refusal
+can name one. Its host, `seasons-window` (`seasons-window.ts`, under
+`packages/venue-service/src/dashboard/`), carries `data-test="calendar-window"
+data-window="seasons"` and draws its own unsized, so wide, `wt-modal` headed "Seasons", unlike the
+Periods window, because its footer holds the draft's Save and the form's bottom message. The inner
+modal's `wt-close` reaches the screen, which takes the window pair out of the address.
+
+The body is a table in a scrolling region named "Seasons", with the columns Colour, Season, Starts
+on, Runs until and a bin. Rows run from the season in force on 1 January, then by start (`draftOf`,
+`season-draft.ts`); they do not re-sort while editing, and the list comes back sorted after a Save.
+Each row edits its colour (a `wt-colour-chooser` with `hide-label`, whose tiles name the other rows
+that use each colour; two seasons may share one), its name, and its start as a Day and a Month
+combobox side by side: the Day offers the chosen month's days, February always 28, and choosing a
+shorter month brings a later day down to its last. The Season and Starts on headings each carry a
+required asterisk, and the fields under them draw none. Runs until is worked out from the rows that
+have a whole start and is not typed. Under the table, at the start, "+ Season" adds an empty row at
+the end in the first calendar colour no row uses, followed by the hint "A season runs until the next
+one starts. The list re-sorts by start date when you save."
+
+The bin, named "Delete {name}" or, on a row with no name, "Delete this new season", removes the row
+from the draft; the last remaining row's bin is disabled, and Cancel is the only undo. Binning a
+stored season reads what deleting it loses (`GET …/seasons/:seasonId/delete-impact`; a newer read's
+answer wins) and adds a note under the table, in a live region: "Saving deletes {name}; its days
+join {previous}.", where {previous} is the row starting last before it, round the year; or "Saving
+deletes {name}." when that row has no name or no other row has a whole start. Once the read answers,
+the note adds "The hours of {departments} in it are lost.", "No department has hours in it." or,
+when the read fails, "Which departments lose hours could not be read."
+
+The footer is `[Cancel] … [Save]`. Save stays quiet and disabled until the draft changes, and Enter
+in a field presses it. When Save is pressed, a missing name or start, or a name or start two rows
+share, is marked beside its row with "Correct the highlighted fields to continue." at the bottom,
+and Save stays disabled until they are fixed. One Save sends `PUT …/seasons` holding only the new
+rows, the stored rows that changed and the binned seasons, with the clock revision the draft was
+last clean at. While it is being sent Save shows busy, nothing else in the window acts, Cancel is
+disabled and Escape does not close the window. When it succeeds the screen re-reads its live reads,
+special days included, and closes the window; the Save's own answer is not shown. A refusal that
+names a saved entry's field (`season.invalid`, field `save.<i>.<field>`) is shown under that field
+of the row the request named, wherever that row now sits, with the bottom message; binning that row
+takes both away, and a field refusal naming an entry the request did not hold says "The change could
+not be saved." A refusal that names no field is worded beside Save: the business-day start changed,
+a pending business-day change, the last season, or a period's end offset running into a season on a
+weekday or into a date, with its special day's name when the screen knows it. A Save refused with
+`season.not_found` for a season the person changed marks that row "This season no longer exists.",
+and Save stays disabled until the row is binned; binning it sends no delete.
+
+The window follows live data (`mergeSeasonDraft`, `season-draft.ts`). While the draft is unchanged,
+its rows follow a newer list and it takes the clock revision again. While it is changed, each stored
+season keeps the fields the person changed and takes the rest from the newer list; a season new to
+the list is appended; a season gone from it is dropped when untouched or binned, and kept with "This
+season no longer exists." under its name when touched; new rows are left alone. A list that arrives
+while a Save is being sent is kept over the Save's answer. Cancel, Escape and Back go through the
+leave question: with no changes the window closes, with changes it asks, and Discard discards. Its
+draft scope is parented under the screen's window draft root.
+
+A viewer gets "Seasons…" and a read-only window: each row's colour swatch with its colour name, its
+name, its start and Runs until as text; no inputs, no bins, no "+ Season", no Save, a footer Close,
+and no draft scope. The window does not open a season's week; the chips do. Cases:
+`seasons-window.test.ts`, `seasons-window.unsaved.test.ts`, `seasons-window.a11y.test.ts`,
+`season-draft.test.ts`, `season-refusal.test.ts`, and the Seasons window cases in
+`opening-hours-screen.painter.test.ts`.
 
 ### Permanent department and zone Delete
 
