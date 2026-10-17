@@ -83,6 +83,44 @@ describe("key-only recovery PDF", () => {
       }
     },
   );
+  it.each(["en", "es"] as const)(
+    "keeps the recovery key block together with maximum labels in %s",
+    async (locale) => {
+      const label = (prefix: string) => prefix + "W".repeat(254) + "Z";
+      const input: RecoveryDocument = {
+        ...document,
+        taxpayerName: label("L"),
+        venueName: label("V"),
+        nodeKey: { ...document.nodeKey, nodeId: label("N"), name: label("K") },
+      };
+      const task = openRecoveryPdf(await renderRecoveryPdf(input, locale));
+      try {
+        const pdf = await task.promise;
+        const texts: string[] = [];
+        for (let n = 1; n <= pdf.numPages; n++)
+          texts.push(
+            (await (await pdf.getPage(n)).getTextContent()).items
+              .map((item) => ("str" in item ? item.str : ""))
+              .join(" "),
+          );
+        for (const value of [
+          input.taxpayerName,
+          input.venueName,
+          input.nodeKey.nodeId,
+          input.nodeKey.name,
+        ])
+          expect(texts.join("").replace(/\s/g, "")).toContain(value);
+        const keyPage = texts.find((text) =>
+          text.includes(locale === "en" ? "Standard key (raw192)" : "Clave estándar (raw192)"),
+        );
+        expect(keyPage).toContain(locale === "en" ? "Key:" : "Clave:");
+        expect(keyPage).toContain(locale === "en" ? "Check:" : "Control:");
+        expect(keyPage).toContain("47");
+      } finally {
+        await task.destroy();
+      }
+    },
+  );
   it("freezes the input before font loading", async () => {
     const d = structuredClone(document);
     const pending = renderRecoveryPdf(d, "en");

@@ -72,6 +72,7 @@ export async function renderRecoveryPdf(
   write(`${en ? "Key name" : "Nombre de la clave"}: ${document.nodeKey.name}`);
   write(`${en ? "Created (UTC)" : "Creado (UTC)"}: ${document.createdAt}`);
   pdf.moveDown();
+  if (pdf.y > pdf.page.height - pdf.page.margins.bottom - 120) pdf.addPage();
   write(en ? "Standard key (raw192)" : "Clave estándar (raw192)", 14);
   const printed = await encodeNodeKey(document.nodeKey, document.scope, "raw192");
   write(`${en ? "Key" : "Clave"}: ${printed.fields.value}`, 14);
