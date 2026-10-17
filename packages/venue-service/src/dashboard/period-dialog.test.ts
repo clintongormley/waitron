@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
+import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { PeriodDialog } from "./period-dialog.js";
 import "./period-dialog.js";
 
@@ -51,29 +52,31 @@ function field(el: PeriodDialog, name: string) {
   expect(control, `period field ${name}`).not.toBeNull();
   return control!;
 }
-function swatch(el: PeriodDialog, colour: string) {
-  const button = el.shadowRoot!.querySelector<HTMLButtonElement>(
-    `[role=radio][data-colour="${colour}"]`,
+function chooser(el: PeriodDialog) {
+  const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+    "wt-colour-chooser[name=colour]",
   );
-  expect(button, `colour swatch ${colour}`).not.toBeNull();
-  return button!;
+  expect(control, "colour chooser").not.toBeNull();
+  return control!;
 }
+const chooserTrigger = (el: PeriodDialog) =>
+  chooser(el).shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!;
+const chooserPanel = (el: PeriodDialog) =>
+  chooser(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+const chooserTile = (el: PeriodDialog, colour: string) =>
+  chooser(el).shadowRoot!.querySelector<HTMLButtonElement>(`[role=radio][data-value="${colour}"]`)!;
 function checkedColour(el: PeriodDialog) {
-  return (
-    el.shadowRoot!.querySelector("[role=radio][aria-checked=true]")?.getAttribute("data-colour") ??
-    null
-  );
+  const value = chooser(el).value;
+  return (CALENDAR_COLOURS as readonly string[]).includes(value) ? value : null;
 }
 function errorOf(el: PeriodDialog, name: string) {
   if (name !== "colour") return field(el, name).error;
-  return el.shadowRoot!.querySelector("[data-test=colour-error]")?.textContent?.trim() ?? "";
+  return chooser(el).error;
 }
 async function change(el: PeriodDialog, name: string, detail: object) {
-  if (name === "colour") swatch(el, (detail as { value: string }).value).click();
-  else
-    field(el, name).dispatchEvent(
-      new CustomEvent("wt-change", { detail, bubbles: true, composed: true }),
-    );
+  (name === "colour" ? chooser(el) : field(el, name)).dispatchEvent(
+    new CustomEvent("wt-change", { detail, bubbles: true, composed: true }),
+  );
   await el.updateComplete;
 }
 function save(el: PeriodDialog) {
@@ -397,75 +400,76 @@ it("a stored colour outside the six is refused by the form's own check", async (
   expect(save(el).disabled).toBe(false);
 });
 
-it("colour is a radio group of the six period colours; choosing one checks only it and makes Save ready", async () => {
+it("colour is the shared chooser of the six period colours; choosing one makes Save ready", async () => {
   const el = await mount(true);
-  const group = el.shadowRoot!.querySelector("fieldset[name=colour] [role=radiogroup]");
-  expect(group).not.toBeNull();
-  expect(el.shadowRoot!.querySelector("fieldset[name=colour] > legend")!.textContent!.trim()).toBe(
-    "Colour",
-  );
-  const radios = [...group!.querySelectorAll<HTMLButtonElement>("button[role=radio]")];
-  expect(radios.map((radio) => radio.dataset.colour)).toEqual([
-    "red",
-    "amber",
-    "grey",
-    "blue",
-    "green",
-    "purple",
+  expect(chooser(el).label).toBe("Colour");
+  expect(chooser(el).choices.map((choice) => [choice.value, choice.label])).toEqual([
+    ["red", "Red"],
+    ["amber", "Amber"],
+    ["grey", "Grey"],
+    ["blue", "Blue"],
+    ["green", "Green"],
+    ["purple", "Purple"],
   ]);
-  expect(radios.map((radio) => radio.getAttribute("aria-label"))).toEqual([
-    "Red",
-    "Amber",
-    "Grey",
-    "Blue",
-    "Green",
-    "Purple",
-  ]);
-  expect(radios.every((radio) => radio.type === "button")).toBe(true);
-  expect(radios.filter((radio) => radio.getAttribute("aria-checked") === "true")).toHaveLength(1);
-  expect(checkedColour(el)).toBe("blue");
+  expect(chooser(el).value).toBe("blue");
   expect(save(el).disabled).toBe(true);
   await change(el, "colour", { value: "green" });
-  expect(
-    radios
-      .filter((radio) => radio.getAttribute("aria-checked") === "true")
-      .map((radio) => radio.dataset.colour),
-  ).toEqual(["green"]);
+  expect(chooser(el).value).toBe("green");
   expect(save(el).variant).toBe("primary");
   expect(save(el).disabled).toBe(false);
 });
 
-it("the colour group is one tab stop, and the arrow keys move focus and the choice round it", async () => {
+it("a pointer opens the colour chooser and picks green, which Save sends", async () => {
   const el = await mount(true);
-  const focused = () => el.shadowRoot!.activeElement?.getAttribute("data-colour") ?? null;
-  expect(
-    ["red", "amber", "grey", "blue", "green", "purple"].map(
-      (colour) => swatch(el, colour).tabIndex,
-    ),
-  ).toEqual([-1, -1, -1, 0, -1, -1]);
-  swatch(el, "blue").focus();
-  await userEvent.keyboard("{ArrowRight}");
+  const writes: { input: { colour: string } }[] = [];
+  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+  await userEvent.click(chooserTrigger(el));
+  await expect.poll(() => chooserPanel(el).matches(":popover-open")).toBe(true);
+  await userEvent.click(chooserTile(el, "green"));
   await el.updateComplete;
-  expect([checkedColour(el), focused()]).toEqual(["green", "green"]);
-  expect(swatch(el, "green").tabIndex).toBe(0);
-  expect(swatch(el, "blue").tabIndex).toBe(-1);
-  await userEvent.keyboard("{ArrowDown}");
-  await el.updateComplete;
-  await userEvent.keyboard("{ArrowRight}");
-  await el.updateComplete;
-  expect([checkedColour(el), focused()]).toEqual(["red", "red"]);
-  await userEvent.keyboard("{ArrowLeft}");
-  await el.updateComplete;
-  expect([checkedColour(el), focused()]).toEqual(["purple", "purple"]);
-  await userEvent.keyboard("{ArrowUp}");
-  await el.updateComplete;
-  expect([checkedColour(el), focused()]).toEqual(["green", "green"]);
+  expect(chooser(el).value).toBe("green");
+  expect(save(el).variant).toBe("primary");
   expect(save(el).disabled).toBe(false);
-  await userEvent.tab();
-  expect(el.shadowRoot!.activeElement?.getAttribute("role")).not.toBe("radio");
+  await userEvent.click(save(el));
+  await el.updateComplete;
+  expect(writes).toHaveLength(1);
+  expect(writes[0]!.input.colour).toBe("green");
 });
 
-it("with no colour chosen, the first swatch is the group's tab stop", async () => {
+it("Escape with the colour panel open closes only the panel, and the dialog stays", async () => {
+  const el = await mount(true);
+  await userEvent.click(chooserTrigger(el));
+  await expect.poll(() => chooserPanel(el).matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  expect(chooserPanel(el).matches(":popover-open")).toBe(false);
+  expect(el.open).toBe(true);
+  expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
+  expect(chooser(el).shadowRoot!.activeElement).toBe(chooserTrigger(el));
+});
+
+it("the colour chooser is required and draws its mark", async () => {
+  const el = await mount(true);
+  expect(chooser(el).required).toBe(true);
+  await chooser(el).updateComplete;
+  expect(chooser(el).shadowRoot!.querySelector("[data-required]")).not.toBeNull();
+});
+
+it("the keyboard opens the colour chooser, an arrow chooses the next colour and Escape closes it", async () => {
+  const el = await mount(true);
+  chooserTrigger(el).focus();
+  await userEvent.keyboard("{ArrowDown}");
+  await expect.poll(() => chooserPanel(el).matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{ArrowRight}");
+  await el.updateComplete;
+  await userEvent.keyboard("{Escape}");
+  await el.updateComplete;
+  expect(chooserPanel(el).matches(":popover-open")).toBe(false);
+  expect(checkedColour(el)).toBe("green");
+  expect(save(el).disabled).toBe(false);
+});
+
+it("with no colour chosen, the chooser shows none and its first tile is the tab stop", async () => {
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
@@ -476,29 +480,21 @@ it("with no colour chosen, the first swatch is the group's tab stop", async () =
   document.body.append(el);
   await el.updateComplete;
   expect(checkedColour(el)).toBeNull();
+  await userEvent.click(chooserTrigger(el));
+  await expect.poll(() => chooserPanel(el).matches(":popover-open")).toBe(true);
   expect(
     ["red", "amber", "grey", "blue", "green", "purple"].map(
-      (colour) => swatch(el, colour).tabIndex,
+      (colour) => chooserTile(el, colour).tabIndex,
     ),
   ).toEqual([0, -1, -1, -1, -1, -1]);
 });
 
-it("draws the chosen swatch's ring outside the swatch, clear of its fill", async () => {
+it("LOOK L9: the end-offset explanation is small muted hint text", async () => {
   const el = await mount(true);
-  const chosen = getComputedStyle(swatch(el, "blue"));
-  expect(chosen.outlineStyle).toBe("solid");
-  expect(chosen.outlineOffset).toBe("2px");
-  expect(getComputedStyle(swatch(el, "green")).outlineStyle).toBe("none");
-});
-
-it("LOOK L1, L2, L9: the Colour label stands clear of its swatches, the chosen swatch is ringed in the text colour, and the end-offset explanation is small muted hint text", async () => {
-  const el = await mount(true);
-  const legend = el.shadowRoot!.querySelector("fieldset[name=colour] > legend")!;
-  expect(
-    swatch(el, "blue").getBoundingClientRect().top - legend.getBoundingClientRect().bottom,
-  ).toBeGreaterThanOrEqual(4);
-  const text = getComputedStyle(legend).color;
-  expect(getComputedStyle(swatch(el, "blue")).outlineColor).toBe(text);
+  const name =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=name]")!;
+  await name.updateComplete;
+  const text = getComputedStyle(name.shadowRoot!.querySelector("label")!).color;
   const explanation = getComputedStyle(
     el.shadowRoot!.querySelector("[data-test=offset-explanation]")!,
   );
@@ -509,7 +505,7 @@ it("LOOK L1, L2, L9: the Colour label stands clear of its swatches, the chosen s
   expect(parseFloat(explanation.marginTop)).toBeLessThan(0);
 });
 
-it("a Save refused only for its colour moves focus to the first swatch", async () => {
+it("a Save refused only for its colour moves focus to the colour field", async () => {
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
@@ -521,24 +517,17 @@ it("a Save refused only for its colour moves focus to the first swatch", async (
   await el.updateComplete;
   await change(el, "name", { value: "Dinner" });
   save(el).click();
-  await expect.poll(() => el.shadowRoot!.activeElement).toBe(swatch(el, "red"));
+  await expect.poll(() => chooser(el).shadowRoot!.activeElement).toBe(chooserTrigger(el));
 });
 
-it("a refusal naming colour shows under the colour group", async () => {
+it("a refusal naming colour shows on the colour field", async () => {
   const el = await mount(true);
   await change(el, "name", { value: "Dinner" });
   el.refusal = { code: "menu_period.invalid", params: { field: "colour" } };
   await el.updateComplete;
-  const message = el.shadowRoot!.querySelector(
-    "fieldset[name=colour] [role=radiogroup] ~ [data-test=colour-error]",
-  );
-  expect(message).not.toBeNull();
-  expect(message!.textContent!.trim()).toBe("Check this value.");
-  expect(
-    el
-      .shadowRoot!.querySelector("fieldset[name=colour] [role=radiogroup]")!
-      .getAttribute("aria-invalid"),
-  ).toBe("true");
+  expect(chooser(el).error).toBe("Check this value.");
+  await chooser(el).updateComplete;
+  expect(chooserTrigger(el).getAttribute("aria-invalid")).toBe("true");
 });
 
 it("the floor plan field is shown disabled with Not available yet, and is never sent", async () => {
@@ -604,7 +593,7 @@ it("an included menu absent from a read still leaves the customer menu selectabl
 it("departed controls cannot edit, submit or close a reopened period", async () => {
   const el = await mount(true);
   const oldName = field(el, "name");
-  const oldColour = swatch(el, "red");
+  const oldColour = chooser(el);
   const oldMenu = field(el, "menuId");
   const oldStaffMenus = field(el, "staffMenuIds");
   const oldSave = save(el);
@@ -619,7 +608,7 @@ it("departed controls cannot edit, submit or close a reopened period", async () 
   const writes: unknown[] = [];
   el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
   oldName.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Stale" } }));
-  oldColour.click();
+  oldColour.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "red" } }));
   oldMenu.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "drinks" } }));
   oldStaffMenus.dispatchEvent(new CustomEvent("wt-change", { detail: { values: [] } }));
   oldSave.click();

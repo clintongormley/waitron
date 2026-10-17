@@ -4,6 +4,7 @@ import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController, type WtDataTable } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
 import type { PeriodDialog } from "./period-dialog.js";
@@ -129,14 +130,11 @@ async function edit(el: PeriodsScreen, existing?: string) {
   return dialog!;
 }
 async function change(dialog: PeriodDialog, name: string, value: string) {
-  if (name === "colour")
-    dialog.shadowRoot!.querySelector<HTMLElement>(`[role=radio][data-colour="${value}"]`)!.click();
-  else
-    dialog
-      .shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`)!
-      .dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-      );
+  dialog
+    .shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`)!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
   await dialog.updateComplete;
 }
 const saveButton = (dialog: PeriodDialog) =>
@@ -146,8 +144,13 @@ function submit(dialog: PeriodDialog) {
 }
 const nameField = (dialog: PeriodDialog) =>
   dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
-const checkedColour = (dialog: PeriodDialog) =>
-  dialog.shadowRoot!.querySelector("[role=radio][aria-checked=true]")?.getAttribute("data-colour");
+const checkedColour = (dialog: PeriodDialog) => {
+  const value =
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
+      "wt-colour-chooser[name=colour]",
+    )?.value ?? "";
+  return (CALENDAR_COLOURS as readonly string[]).includes(value) ? value : null;
+};
 const isHoursRead = (path: string, method: string) =>
   method === "GET" && path.endsWith("/opening-hours");
 
