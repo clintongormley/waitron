@@ -1902,3 +1902,47 @@ describe.each(["light", "dark"] as const)("the Rota's warning colours (%s)", (th
     expect(getComputedStyle(heading).color).toBe(barCount(el));
   });
 });
+
+describe("the phone's day strip", () => {
+  it("a day's attention dot sits clear of its weekday, for every weekday in English and Spanish", async () => {
+    await useViewport(390, 844);
+    const el = await mount(
+      rotaApi(async (w) => {
+        const r = rotaWeek(w);
+        const empty = r.days[4]!.areas[0]!.match.slots[0]!;
+        r.days.forEach((day, n) => {
+          day.hasHours = true;
+          day.areas[0]!.match.slots.push({
+            slot: { ...empty.slot, key: `unfilled-${n}`, businessDay: day.businessDay },
+            status: { kind: "unfilled" },
+          });
+        });
+        return r;
+      }).api,
+      "390px",
+    );
+    const clashes: string[] = [];
+    for (const language of ["en", "es"]) {
+      setLocale(language);
+      el.requestUpdate();
+      await el.updateComplete;
+      const buttons = [...el.shadowRoot!.querySelectorAll("[data-test=strip] button")];
+      expect(buttons).toHaveLength(7);
+      for (const button of buttons) {
+        const weekday = button.querySelector("span")!;
+        const range = document.createRange();
+        range.selectNodeContents(weekday);
+        const text = range.getBoundingClientRect();
+        const dot = button.querySelector(".dot")!.getBoundingClientRect();
+        const overlap =
+          dot.left < text.right &&
+          text.left < dot.right &&
+          dot.top < text.bottom &&
+          text.top < dot.bottom;
+        expect(text.width).toBeGreaterThan(0);
+        if (overlap) clashes.push(`${language} ${weekday.textContent}`);
+      }
+    }
+    expect(clashes).toEqual([]);
+  });
+});

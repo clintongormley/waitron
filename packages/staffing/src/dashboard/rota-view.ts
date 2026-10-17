@@ -252,10 +252,11 @@ export class RotaView extends LitElement {
         font-size: var(--wt-font-size-lg);
         font-weight: var(--wt-font-weight-bold);
       }
+      /* Centred on the button's top corner, above the padding, so no weekday reaches it. */
       .strip .dot {
         position: absolute;
-        inset-block-start: var(--wt-space-1);
-        inset-inline-end: var(--wt-space-1);
+        inset-block-start: calc(-1 * var(--wt-space-1));
+        inset-inline-end: calc(-1 * var(--wt-space-1));
         width: var(--wt-space-2);
         height: var(--wt-space-2);
         border-radius: var(--wt-radius-full);
