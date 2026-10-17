@@ -142,9 +142,11 @@ reads what the Periods page reads today (`watchOpeningHours`, `watchPaintedIn`,
    `<wt-icon name="bin">`, as `apps/dashboard/src/screens/floor-plan-tables-panel.ts:263-269` draws
    one; its label reuses `period.delete_named`. "Open in Calendar" goes: the window is in the
    Calendar, and Painted in's chips still open each painter.
-5. **Delete… keeps its `secondary` look in the bottom row** (picture 11 and 13 draw it plain). It
-   opens a confirmation whose own button is the danger one (`period-delete-dialog.ts:239`). See
-   "Open question" below.
+5. **Delete… takes `variant="danger"` in the bottom row** (decided by the house rule, not an owner
+   question). `docs/developers/design-system.md:2500-2503` says a destructive action in the row
+   "goes in the `cancel` slot after Cancel, keeping its danger look" (owner, 2026-10-16). Pictures 11
+   and 13 draw it plain, but they date from 2026-10-15, before the rule. Precedent: Routes' "Clear
+   setting", `variant="danger"` at `packages/venue-service/src/dashboard/routing-cell-editor.ts:703`.
 6. **A viewer** (`venue.view` without `venue_service.manage`) sees "Periods…" and the list, with no
    "+ Add period", no bin, and rows that do not open, as the read-only page does today
    (`periods-screen.ts:314-316`, `:328-329`).
@@ -171,13 +173,6 @@ reads what the Periods page reads today (`watchOpeningHours`, `watchPaintedIn`,
     `baseHref`, `opening-hours-screen.ts:1029-1035`). Its backlog entry (`docs/backlog.md:1457-1458`)
     is reworded, not fixed.
 
-## Open question for the owner (with the default this plan uses)
-
-- **Delete…'s look in the bottom row.** The house rule says a destructive action there keeps "its
-  danger look"; the period dialog's Delete… has always been `secondary`, because it only opens the
-  delete dialog, and both mockups draw it plain. **Default: keep `secondary`** (Decision 5). If the
-  owner wants red, it is one attribute and one assertion (Task 1).
-
 ---
 
 ## Global constraints
@@ -197,9 +192,10 @@ reads what the Periods page reads today (`watchOpeningHours`, `watchPaintedIn`,
   pnpm --filter @waitron/dashboard exec vitest run --project browser src/<file>.test.ts
   ```
 
-  Read the `Tests` count; a run without one proves nothing. Before the PR, run
-  `pnpm --filter @waitron/venue-service test:coverage` once (new and renamed files must hold
-  98/98/98/95); CI owns the package suites.
+  Read the `Tests` count; a run without one proves nothing. Each task runs only its focused tests;
+  CI runs the package suites and coverage (new and renamed files must hold 98/98/98/95), per
+  CLAUDE.md §2: "Do not add a whole-workspace local run solely to finish a branch". Run a package's
+  `test:coverage` locally only when chasing a failure.
 - **Every implementer dispatch** also runs `pnpm format:check`, and
   `pnpm --filter <pkg> typecheck` and `lint` for each package it touched.
 - **Changing an existing test check** is allowed only where the spec changes what it checks. Each
@@ -244,9 +240,9 @@ reads what the Periods page reads today (`watchOpeningHours`, `watchPaintedIn`,
    window, the painter's paint row offers the new period, and the painter's earlier paint is still
    there. Pinned in Task 6.
 4. **A viewer opens the window.** Expected: the list, with no "+ Add period", no bin column, and a
-   row press opens nothing. Pinned in Tasks 3 and 4.
+   row press opens nothing. Pinned in Tasks 3b and 4.
 5. **A phone (390 px).** Expected: the window fits the screen width, every bin is on screen, and a
-   tap on a row opens its dialog. Pinned in Task 3.
+   tap on a row opens its dialog. Pinned in Task 3b.
 
 ---
 
@@ -279,8 +275,8 @@ reads what the Periods page reads today (`watchOpeningHours`, `watchPaintedIn`,
     `closest("wt-form-actions")).toBeNull()` with: the button's `closest("wt-form-actions")` is the
     dialog's footer row; its slotted cancel group holds, in order, Cancel then Delete… (read the
     group's `wt-button` texts: `["Cancel", "Delete…"]`); Save is the only `wt-button` in the
-    default slot; the body (`.form`) holds no `[data-test=delete-period]`. `variant` stays
-    `"secondary"`.
+    default slot; the body (`.form`) holds no `[data-test=delete-period]`. The `variant` assertion
+    (`:945`) becomes `"danger"` (Decision 5).
   - Add **"Delete… sits left of Save, after Cancel, at 1280 and 390 px"**: with `page.viewport`,
     Cancel's right ≤ Delete…'s left and Delete…'s right < Save's left at 1280; at 390 all three
     buttons are inside `window.innerWidth`.
@@ -298,7 +294,8 @@ reads what the Periods page reads today (`watchOpeningHours`, `watchPaintedIn`,
 
 - [ ] **Step 3: Implement.** In `period-dialog.ts`: delete the Floor plan block and `fromPainter`;
   move Delete… out of `.form` into the footer as `<div slot="cancel" class="cancel-group">` holding
-  Cancel then Delete… (the pattern and CSS of `routing-cell-editor.ts:84-88`, `:688-715`); pass
+  Cancel then Delete…, with Delete…'s `variant="secondary"` (`:544`) becoming `variant="danger"`
+  (the pattern and CSS of `routing-cell-editor.ts:84-88`, `:688-715`); pass
   `parent: this.draftParent` to `draftScopeFor`. In `period-editing.ts`: stop passing
   `.fromPainter`; add the `draftParent` option and pass it.
 
@@ -311,7 +308,8 @@ reads what the Periods page reads today (`watchOpeningHours`, `watchPaintedIn`,
 
 **Existing checks that change:** `period-dialog.test.ts:131-138` (order loses `floorPlanId`),
 `:553-581` (Floor plan shown → absent; save keys kept), `:583-588` (deleted, covered by the
-all-states case), `:938` (Delete… not in the footer → in the footer's cancel group);
+all-states case), `:938` (Delete… not in the footer → in the footer's cancel group), `:945`
+(`variant` `"secondary"` → `"danger"`, Decision 5);
 `period-dialog.a11y.test.ts:100-104` (disabled Floor plan → Delete… in the footer).
 
 ## Task 2: Rename the Periods page element to `periods-list` (no behaviour change)
@@ -339,25 +337,19 @@ all-states case), `:938` (Delete… not in the footer → in the footer's cancel
 
 **Existing checks that change:** none (names only).
 
-## Task 3: The list fits a window — heading and Add on top, a bin, rows that open, no Floor plan, filled swatches
+## Task 3a: The list fits a window — heading and Add on top, no Floor plan, filled swatches
 
 **Files:**
-- Modify: `packages/venue-service/src/dashboard/periods-list.ts` (`:64-74`, `:85-92`, `:129-145`,
-  `:205-250`, `:272-357`)
-- Modify: `packages/venue-service/src/dashboard/strings.ts` (remove `period.floor_plan`,
-  `period.floor_plan_later`, `period.open_hours`, `menu.row_actions`, `menu.edit` in en and es once
-  `git grep` shows no reader)
-- Test: `periods-list.test.ts`, `periods-list.a11y.test.ts`, `periods-list.editing.test.ts`,
-  `periods-list.delete.test.ts`, `periods-list.unsaved.test.ts`
+- Modify: `packages/venue-service/src/dashboard/periods-list.ts` (`:64-74`, `:85-92`, `:205-208`,
+  `:272-357`)
+- Modify: `packages/venue-service/src/dashboard/strings.ts` (remove `period.floor_plan` and
+  `period.floor_plan_later` in en and es once `git grep` shows no reader)
+- Test: `periods-list.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1's `PeriodEditing` option `draftParent`.
-- Produces: `PeriodsList.draftParent?: object` (`@property({ attribute: false })`), handed to
-  `PeriodEditing` as `draftParent: () => this.draftParent`. Markup the later tasks select:
-  `h2` (the heading), `[data-test=add-period]`, `tr[data-row-key="period:<id>"] button.row-activate`
-  (the row's activator, drawn by `wt-data-table`), `[data-test=delete-period]` (the bin).
+- Produces: markup the later tasks select: `h2` (the heading), `[data-test=add-period]`.
 
-- [ ] **Step 1: Write the failing tests** (in `periods-list.test.ts` unless named).
+- [ ] **Step 1: Write the failing tests** (in `periods-list.test.ts`).
   - **"heading and + Add period share the top row"**: `h2` reads "Periods" (es "Periodos"); the add
     button's top is within the `h2`'s vertical extent and its left is right of the `h2`'s right; no
     `h1`.
@@ -371,6 +363,46 @@ all-states case), `:938` (Delete… not in the footer → in the footer's cancel
   - **"no Floor plan column"** (replaces `:179-193`'s floor-plan half): `grid.columns` keys are
     `["period", "customerMenu", "staffMenus", "paintedIn", "actions"]`; no `[part=unavailable]`. The
     case's menu, staff-menu and swatch assertions stay word for word.
+  - `:278-298`: its `h1` assertion becomes `h2`; the rest of the case is Task 3b's.
+  - **Spanish** (`:377-404`): `h2` in place of `h1`; the headers no longer contain "Plano de sala"
+    (assert `not.stringContaining`). Its `open-hours` assertion is Task 3b's.
+  - **M1 fit** (`:406-476`): mount the list inside an open, unsized `wt-modal` (the window's real
+    width) instead of the 898 px frame, at `page.viewport(1280, 900)`; every assertion after the
+    mount stays.
+
+- [ ] **Step 2: Run the file and see the new and changed cases fail** for the reasons above:
+  `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/periods-list.test.ts`
+
+- [ ] **Step 3: Implement** in `periods-list.ts`: `h1` → `h2` with the modal heading's size; drop
+  the Floor plan column, `unpainted()`, the `swatch-unpainted`/`unpainted` parts and their CSS.
+  Remove the strings that lost their readers.
+
+- [ ] **Step 4: Run the five `periods-list*` files, then `index.test.ts`**: all pass.
+
+- [ ] **Step 5: Commit** — `git commit -s -m "Periods list: Add beside the heading, no Floor plan, unused periods in colour (A719)"`
+
+**Existing checks that change:** `periods-list.test.ts:179-193` (greyed Floor plan → no Floor plan
+column), `:258-269` (unpainted parts → filled swatch, plain name), `:278-298` (`h1` → `h2`),
+`:377-404` (`h1`, "Plano de sala" → `h2`, absent), `:406-476` (898 px frame → real window).
+
+## Task 3b: The list's rows open the dialog, and a bin replaces the row menu
+
+**Files:**
+- Modify: `packages/venue-service/src/dashboard/periods-list.ts` (`:129-145`, `:231-250`,
+  `:314-323`)
+- Modify: `packages/venue-service/src/dashboard/strings.ts` (remove `period.open_hours`,
+  `menu.row_actions`, `menu.edit` in en and es once `git grep` shows no reader)
+- Test: `periods-list.test.ts`, `periods-list.a11y.test.ts`, `periods-list.editing.test.ts`,
+  `periods-list.delete.test.ts`, `periods-list.unsaved.test.ts`
+
+**Interfaces:**
+- Consumes: Task 1's `PeriodEditing` option `draftParent`.
+- Produces: `PeriodsList.draftParent?: object` (`@property({ attribute: false })`), handed to
+  `PeriodEditing` as `draftParent: () => this.draftParent`. Markup the later tasks select:
+  `tr[data-row-key="period:<id>"] button.row-activate` (the row's activator, drawn by
+  `wt-data-table`), `[data-test=delete-period]` (the bin).
+
+- [ ] **Step 1: Write the failing tests** (in `periods-list.test.ts` unless named).
   - **"a period row opens its dialog; a department row opens nothing"** (replaces `:278-298`):
     `rowActivation` gives `"click"` for every period row and `"none"` for every department row; the
     activator in `period:p1` is named "Edit Lunch"; `userEvent.click` on a period's Customer menu cell
@@ -378,14 +410,17 @@ all-states case), `:938` (Delete… not in the footer → in the footer's cancel
     holds, per period, one `[data-test=delete-period]` named "Delete Lunch" containing
     `wt-icon[name=bin]`, and department rows hold none; no `wt-row-actions` anywhere; clicking the bin
     opens `period-delete-dialog` for that period and **no** period dialog.
+  - **"a Painted in chip in a clickable row follows its link and opens no period dialog"**: in
+    `period:p1`'s Painted in cell, a bubbling listener on `window` records the chip click's
+    `event.defaultPrevented` and then prevents it so the test page does not navigate;
+    `userEvent.click` on the season chip (`a[part~=chip]`) records one click whose target is that
+    chip and whose `defaultPrevented` is `false` (nothing in the list cancels the link), and no
+    `period-dialog` opens. The table lifts links above the
+    row-wide click area (`packages/ui/src/components/wt-data-table.ts:352-361`). Control: a
+    `userEvent.click` on the same row's Customer menu cell opens the dialog.
   - **"a viewer…"** (`:300-307`): keep every assertion; add: no row has an activator
     (`button.row-activate` count 0).
-  - **Spanish** (`:377-404`): `h2` in place of `h1`; the headers no longer contain "Plano de sala"
-    (assert `not.stringContaining`); the `open-hours` assertion becomes the bin's name "Eliminar
-    Lunch".
-  - **M1 fit** (`:406-476`): mount the list inside an open, unsized `wt-modal` (the window's real
-    width) instead of the 898 px frame, at `page.viewport(1280, 900)`; every assertion after the
-    mount stays.
+  - **Spanish** (`:377-404`): the `open-hours` assertion becomes the bin's name "Eliminar Lunch".
   - `periods-list.a11y.test.ts:192-213` "row menus stay on screen" becomes **"bins stay on screen at
     1280 and 390"**: inside an open unsized `wt-modal`, 4 bins, each with width > 0 and inside
     `[0, window.innerWidth]`. Its states loop (`:174-190`) stays; the `delete*` states already click
@@ -399,22 +434,19 @@ all-states case), `:938` (Delete… not in the footer → in the footer's cancel
 
 - [ ] **Step 2: Run the five files and see the new and changed cases fail** for the reasons above.
 
-- [ ] **Step 3: Implement** in `periods-list.ts`: `h1` → `h2` with the modal heading's size; drop
-  the Floor plan column, `unpainted()`, the `swatch-unpainted`/`unpainted` parts and their CSS;
-  replace `actions()` with the bin; when not read-only set `.rowClick=${(row) => this.edit(row)}`,
-  `.rowClickLabel` and `.rowActivation`; add `draftParent`. Remove the strings that lost their
-  readers.
+- [ ] **Step 3: Implement** in `periods-list.ts`: replace `actions()` with the bin; when not
+  read-only set `.rowClick=${(row) => this.edit(row)}`, `.rowClickLabel` and `.rowActivation`; add
+  `draftParent`. Remove the strings that lost their readers.
 
 - [ ] **Step 4: Run the five files, then `index.test.ts`**: all pass.
 
-- [ ] **Step 5: Commit** — `git commit -s -m "Periods list: Add beside the heading, a bin, rows that open, no Floor plan (A719)"`
+- [ ] **Step 5: Commit** — `git commit -s -m "Periods list: rows open the dialog and a bin replaces the menu (A719)"`
 
-**Existing checks that change:** `periods-list.test.ts:179-193` (greyed Floor plan → no Floor plan
-column), `:258-269` (unpainted parts → filled swatch, plain name), `:278-298` (row menu with Edit,
-Open in Calendar, Delete; `h1` → bin, row activator; `h2`), `:300-307` (adds no activator),
-`:377-404` (`h1`, "Plano de sala", "Abrir en Calendario" → `h2`, absent, bin name), `:406-476`
-(898 px frame → real window); `periods-list.a11y.test.ts:192-213` (row menus → bins);
-`periods-list.editing.test.ts:401-418` (menu → row tap).
+**Existing checks that change:** `periods-list.test.ts:278-298` (row menu with Edit, Open in
+Calendar, Delete → bin, row activator), `:300-307` (adds no activator), `:377-404` ("Abrir en
+Calendario" → bin name); `periods-list.a11y.test.ts:192-213` (row menus → bins);
+`periods-list.editing.test.ts:401-418` (menu → row tap). Setup: the row selectors in
+`periods-list.editing.test.ts`, `periods-list.delete.test.ts` and `periods-list.unsaved.test.ts`.
 
 ## Task 4: The Calendar's `periods` window
 
@@ -613,7 +645,9 @@ the painted-in read.
 - [ ] **Step 1: Write the failing tests.**
   - `index.test.ts`: replace "registers Periods between Opening hours and Prep stations, readable
     with venue.view" (`:292-331`) with **"the Periods destination opens the Calendar's window,
-    read-only for a viewer"**: at `/manage/opening-hours/view/year/window/periods`, render the
+    read-only for a viewer"**: setup sets the window address
+    (`/manage/opening-hours/view/year/window/periods`) and stubs the Calendar's reads (year,
+    stations, special days, painted in) before rendering. At that address, render the
     `opening-hours` entry's `handle.render(true)`; its window's `periods-list` has `readOnly` true,
     its `api.liveData` is the context's, and no `[data-test=add-period]` once the table draws;
     `render(false)` → `readOnly` false and the add button present. In "registers Opening hours
@@ -674,8 +708,8 @@ loses `nav-periods`), `:8197-8241` (destination; `history.length` → `pushState
   every receipt").
 - [ ] `docs/backlog.md:1356-1359`: delete the A719 entry. `docs/backlog/service-periods.md:184-213`:
   delete the section. Add to its "## Decisions and deliberate limits": Decisions 2 (Add beside the
-  heading, owner 2026-10-17), 4 (no Open in Calendar; rows open the dialog), 5 (Delete… stays
-  secondary) and 9 (no redirect for `/manage/periods`).
+  heading, owner 2026-10-17), 4 (no Open in Calendar; rows open the dialog), 5 (Delete… keeps
+  the danger look in the bottom row, by design-system.md → Forms) and 9 (no redirect for `/manage/periods`).
 - [ ] A504: `docs/backlog.md:2380-2382` "Until it lands, the Periods page's Floor plan column shows a
   muted dash, and the period dialog a disabled Floor plan field except when a painter's + New period
   opens it (`periods-screen.ts`, `period-dialog.ts`)" → "A504 adds a Floor plan column to the Periods
@@ -718,6 +752,5 @@ loses `nav-periods`), `:8197-8241` (destination; `history.length` → `pushState
 - First line in plain words: the Periods page is now a window in the Calendar.
 - "Changed test checks": the union of every task's "Existing checks that change", each with its
   reason (spec point 1, 2, 3, 4 or 5).
-- "Open question": Delete…'s look (Decision 5).
 - "LOOK": what Task 9 captured.
 - No migration; no server change.
