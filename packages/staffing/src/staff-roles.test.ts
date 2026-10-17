@@ -386,19 +386,27 @@ describe("staff roles", () => {
   it("names every holder of each role in label order, for this location only", async () => {
     const v = await seedVenue(suite.db);
     const other = await seedVenue(suite.db);
-    const person = (displayName: string, status: "active" | "suspended" = "active") =>
+    const person = (
+      displayName: string,
+      status: "active" | "pending" | "suspended" = "active",
+      id: string = randomUUID(),
+    ) =>
       inTx(async (tx) => {
         const [row] = await tx
           .insert(persons)
-          .values({ displayName, role: "staff", status })
+          .values({ id, displayName, role: "staff", status })
           .returning({ id: persons.id });
         return row!.id;
       });
     const marc = await person("Marc");
     const alvaro = await person("Álvaro", "suspended");
-    const ana = await person("ana");
-    const twinA = await person("Pau");
-    const twinB = await person("Pau", "suspended");
+    const ana = await person("ana", "pending");
+    // The label comparator ignores case, so "Pau" and "pau" tie and only the person id orders
+    // them. The holder query scans `person_staff_roles` in the order its rows were written, so
+    // the higher id is written first: that order cannot pass for id order.
+    const [lowId, highId] = [randomUUID(), randomUUID()].sort();
+    const twinA = await person("Pau", "active", highId);
+    const twinB = await person("pau", "suspended", lowId);
     const sous = await inTx((tx) =>
       createStaffRole(tx, v.cfg, { name: "Sous chef", colour: "green" }),
     );
@@ -412,14 +420,16 @@ describe("staff roles", () => {
       createStaffRole(tx, other.cfg, { name: "Theirs", colour: "red" }),
     );
     await inTx((tx) => setStaffRoleHolders(tx, v.cfg, sous.id, [marc, alvaro, ana]));
-    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, waiter.id, [twinB, ana, twinA]));
+    await inTx((tx) => setStaffRoleHolders(tx, v.cfg, waiter.id, [twinA, ana, twinB]));
     await inTx((tx) => setStaffRoleHolders(tx, other.cfg, theirs.id, [marc]));
 
     const listed = await inTx((tx) => listStaffRolesWithHolderNames(tx, v.cfg));
     const plain = await inTx((tx) => listStaffRoles(tx, v.cfg));
     const compare = createLabelComparator();
     const sousNames = ["Marc", "Álvaro", "ana"].sort(compare);
-    const waiterNames = ["Pau", "ana", "Pau"].sort(compare);
+    expect(compare("Pau", "pau")).toBe(0);
+    expect(twinB < twinA).toBe(true);
+    const waiterNames = ["ana", "pau", "Pau"];
     expect(listed).toEqual([
       { ...plain[0]!, holderNames: sousNames },
       { ...plain[1]!, holderNames: [] },
