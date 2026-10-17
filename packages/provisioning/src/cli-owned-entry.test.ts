@@ -339,3 +339,189 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     }
   },
 );
+
+it("the built production command checks readiness and seals settings without sending a live test sale", async () => {
+  const root = join(directory!, "production");
+  const target = join(root, "venue");
+  const stateDir = join(root, "state");
+  await mkdir(target, { recursive: true });
+  await mkdir(stateDir);
+  const databases = await venue.db.execute<{ name: string; file: string }>("pragma database_list");
+  const source = databases.rows.find((row) => row.name === "main")!.file;
+  for (const name of ["venue.db", "venue.db-wal"])
+    await copyFile(join(dirname(source), name), join(target, name));
+  const preload = join(root, "clock.mjs");
+  await writeFile(
+    preload,
+    `import https from "node:https";
+import { syncBuiltinESMExports } from "node:module";
+https.request = () => { throw new Error("synthetic offline clock"); };
+syncBuiltinESMExports();
+const RealDate = Date;
+globalThis.Date = class extends RealDate {
+  constructor(...args) { super(...(args.length ? args : ["2026-10-18T11:40:00Z"])); }
+  static now() { return RealDate.parse("2026-10-18T11:40:00Z"); }
+};
+Object.defineProperty(performance, "now", { value: () => 0 });
+`,
+  );
+  const certificate = {
+    pfxBase64: "c3ludGhldGlj",
+    passphrase: "SYNTHETIC-certificate",
+    certKind: "sello",
+  };
+  const settingsPath = join(root, "settings.json");
+  await writeFile(
+    settingsPath,
+    JSON.stringify({
+      aeatCert: certificate,
+      email: {
+        server: "smtp.example.test",
+        port: 465,
+        encryption: "tls",
+        from: "owner@example.test",
+      },
+    }),
+    { mode: 0o600 },
+  );
+  const { ALL_MODULES } = await import("@waitron/composition");
+  const { venueFiscalSelection } = await import("./venue-fiscal.js");
+  const { enabledModules } = await import("@waitron/module");
+  const { appliedSchemaVersion } = await import("@waitron/migrations");
+  const { request } = await import("../test/first-setup-request.js");
+  const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
+  const versions: Record<string, number> = {};
+  for (const module of enabledModules(ALL_MODULES, selected.config))
+    versions[module.name] = await appliedSchemaVersion(venue.db, module.migrations);
+  const { createFiscalReadinessStore } = await import("./fiscal-readiness.js");
+  const { fiscalReadinessInput } = await import("./fiscal-readiness-input.js");
+  await createFiscalReadinessStore(
+    stateDir,
+    async () => ({ status: "accepted" }),
+    Buffer.alloc(32, 73),
+  ).run(
+    fiscalReadinessInput({
+      venue: {
+        ...request,
+        admin: {
+          displayName: "Elena",
+          email: "owner@example.test",
+          pinHash: "synthetic",
+          passwordHash: "synthetic",
+        },
+      },
+      contribution: selected.contribution!,
+      secret: certificate,
+      moduleVersions: versions,
+      applicationVersion: "synthetic-production-build",
+    }),
+  );
+  const values = {
+    "venue-dir": target,
+    country: request.country,
+    "tax-id": request.taxId,
+    "legal-name": request.legalName,
+    "taxpayer-domicile": request.taxpayerDomicile,
+    "location-name": request.location.name,
+    territory: "ES-common",
+    locale: "es-ES",
+    "operation-description": request.location.operationDescription,
+    "address-line1": request.location.addressLine1,
+    "address-line2": "Local 2",
+    "postal-code": request.location.postalCode,
+    city: request.location.city,
+    province: request.location.province,
+    "time-zone": request.location.timeZone,
+    "day-cutover": "06:00",
+    "series-code": "A",
+    "full-series-code": "FF",
+    "rectificative-code": "R",
+    "admin-name": "Elena",
+    "admin-email": "owner@example.test",
+    "recovery-pdf": join(root, "recovery.pdf"),
+  };
+  const child = spawn(
+    process.execPath,
+    [
+      "--import",
+      preload,
+      binary,
+      "venue",
+      ...Object.entries(values).flatMap(([name, value]) => [`--${name}`, value]),
+      "--yes",
+    ],
+    {
+      env: {
+        ...process.env,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_ENV: "production",
+        WAITRON_ADMIN_PIN: "4826",
+        WAITRON_ADMIN_PASSWORD: "SYNTHETIC-owner-password",
+        WAITRON_INITIAL_VENUE_INPUT: "",
+        WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        WAITRON_BUILD_ID: "synthetic-production-build",
+        WAITRON_SETUP_SETTINGS_FILE: settingsPath,
+      },
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
+  const answers = [
+    ["The box's displayed date and time are correct? [y/N]: ", "yes"],
+    [
+      "Has anyone set up a Waitron box for this business in the last hour? [no/yes/unknown]: ",
+      "no",
+    ],
+    ["Confirm setup password: ", "SYNTHETIC-owner-password"],
+    ["Have you kept this recovery PDF? [y/N]: ", "yes"],
+  ] as const;
+  const answered = new Map<string, number>();
+  let output = "",
+    errors = "";
+  child.stdout.on("data", (chunk: Buffer) => {
+    output += chunk.toString();
+    for (const [question, answer] of answers) {
+      const count = output.split(question).length - 1;
+      for (let i = answered.get(question) ?? 0; i < count; i++) child.stdin.write(`${answer}\n`);
+      answered.set(question, count);
+    }
+  });
+  child.stderr.on("data", (chunk: Buffer) => {
+    errors += chunk.toString();
+  });
+  let childError: string | undefined;
+  const code = await new Promise<number | null>((resolve) => {
+    child.once("error", (error) => {
+      childError = error.name;
+    });
+    child.once("close", resolve);
+  });
+  expect({ code, errors, childError }, output).toEqual({
+    code: 0,
+    errors: "",
+    childError: undefined,
+  });
+  const state = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+  expect(state.status).toBe("complete");
+  expect(JSON.stringify(state)).not.toContain(certificate.passphrase);
+  expect(output).not.toContain(certificate.passphrase);
+  const stored = await openVenueDatabase(target);
+  try {
+    expect(await readDeploymentEnvironment(stored.venue)).toBe("production");
+    const { invoiceSeries, sales, withTransaction } = await import("@waitron/db");
+    expect(await stored.venue.select().from(sales)).toEqual([]);
+    const series = await stored.venue.select().from(invoiceSeries);
+    expect(series.map((row) => row.code).sort()).toEqual(["A-06SV", "FF-06SV", "R-06SV"]);
+    expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+    const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
+    const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64") });
+    expect(
+      await withTransaction(stored.venue, (tx) =>
+        tryGetCredential(tx, ring, { purpose: "fiscal.aeat" }),
+      ),
+    ).toEqual(certificate);
+  } finally {
+    await stored.close();
+  }
+});

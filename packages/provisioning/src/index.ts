@@ -139,3 +139,14 @@ export { prepareFirstSetupFinishAudit } from "./first-setup-finish-audit.js";
 export { recoverProvisionedVenue } from "./recover-provisioned-venue.js";
 
 export { firstSetupPublicationDigest } from "./first-setup-publication-digest.js";
+
+export { parseEmailSettings } from "./email-settings.js";
+
+export { createFiscalReadinessStore, fiscalReadinessBinding } from "./fiscal-readiness.js";
+export { fiscalReadinessInput } from "./fiscal-readiness-input.js";
+export type {
+  FiscalReadinessInput,
+  FiscalTestStatus,
+  FiscalTestResult,
+  FiscalReadinessResult,
+} from "./fiscal-readiness.js";

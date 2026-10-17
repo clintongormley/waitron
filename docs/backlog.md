@@ -375,11 +375,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   adapters, including signed node membership, module/trading publication and exact Finish after an
   interrupted write without a new hour or changed counters. Inspection samples file fingerprints after
   its SQLite read, which otherwise creates an empty WAL and invalidates password recovery's snapshot.
-  Production command certificate/email/readiness adapters and retained configuration imports remain open.
+  The built production command now has local checks for certificate/email validation, authenticated
+  readiness evidence, sealed credentials and exact Finish. It reads a separate settings file and
+  checks the existing readiness receipt; running the readiness submission from the command and
+  retained configuration imports remain open.
   Twelve retained provision cases
   still fail at unowned legacy preparation; the same failures were measured at the preceding checkpoint.
   Package coverage also remains below its gate. Password recovery after selection but before activation
-  still refuses the changed clock/owner context; its authenticated resume exception awaits the owner.
+  still refuses the changed clock/owner context; the owner approved a separate authenticated
+  same-hour resume on 2026-10-17. That operation is not built yet.
   Hour retirement and exact publication-only Finish have focused checks, including real HTTPS
   resolution boot and preservation of an issued record, chain, outbox and advanced counter.
   Key-only recovery PDF components now have generated-document and transient-delivery checks.
@@ -388,7 +392,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   this replacement delivery path without changing their earlier behavioral assertions.
   Retained interruption, Finish, unused-PDF and empty-selection fixtures now use the hour/key-only
   flow. Their combined local qualification passes, including exact publication after password
-  recovery and whole-hour exclusion across changed bases. Production command composition, the complete
+  recovery and whole-hour exclusion across changed bases. The remaining command composition, the complete
   wizard, remaining hour recovery consumers and generated-PDF acceptance remain open.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route).
 

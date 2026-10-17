@@ -684,3 +684,26 @@ hash, immutability, invoice-counter, permission and root-guard checks remain unc
 Verification receipts are in the lane's local
 `receipts/a679-command-document-20261017` directory. Whole-package coverage and remaining
 A679 acceptance gates are recorded separately; a focused pass is not a readiness claim.
+
+
+## Production command publication (2026-10-17)
+
+This checkpoint adds `WAITRON_SETUP_SETTINGS_FILE`, a bounded JSON file holding `aeatCert` and
+`email`. The command validates these before the venue write, checks the existing authenticated
+readiness receipt for the certificate, taxpayer, submission target, current schema versions and
+build, and seals the validated snapshot into the vault during publication. Exact Finish checks
+the original publication digest and does not require another readiness submission. Running a
+readiness submission from the command itself remains open; the receipt fixture uses a controlled
+accepted result and makes no claim about a real AEAT submission.
+
+No existing test assertion or fixture changes. New cases extend `cli-first-setup.test.ts` and
+`cli-owned-entry.test.ts`; both original file bodies remain byte-identical. The existing email
+parser, readiness store and readiness-input builder move to provisioning without body changes,
+and their server entry points forward there. The readiness suite is also retained at its server
+path and copied unchanged beside the shared implementation. New publication-settings tests cover
+validation and bounded file reads. Protected fiscal source/tests and root guards remain unchanged.
+
+Receipts: the lane's `receipts/a679-production-command-20261017` directory. Task 4 and the whole
+A679 branch remain incomplete. The owner approved explicit same-hour resume before activation;
+that separate operation, command readiness submission, retained imports, recovery/wizard work,
+coverage repair, generated-PDF acceptance and final branch gates remain.

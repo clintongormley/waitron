@@ -95,7 +95,6 @@ declare module "@waitron/shared" {
     "account_action.rate_limited": Record<string, never>;
     /** The local capture inbox was requested while email uses SMTP or is not configured. */
     "email.test_inbox_unavailable": Record<string, never>;
-    "email.settings_invalid": { field: string };
     "email.settings_not_allowed": Record<string, never>;
     /** A required environment variable is absent or empty. `variable` is our own declared name. */
     "server.config_missing": { variable: string };
@@ -996,15 +995,6 @@ declare module "@waitron/shared" {
      * never its value, because certificate fields can contain credentials. */
     "setup.request_invalid": { field: string };
     "setup.configuration_outdated": Record<string, never>;
-    /**
-     * A provision of an environment for which the fiscal regime demands its provisioning secret
-     * (`provisioningSecret.required(environment)`) arrived without it; refused before
-     * `provisionVenue` runs. `module` is the fiscal module's id. The secret itself is never echoed.
-     */
-    "setup.provisioning_secret_required": { module: string };
-    /** First production activation lacks an accepted test submission bound to its fiscal inputs. */
-    "setup.fiscal_test_required": { module: string };
-    "setup.email_required": { field: "email" };
     /**
      * The same adopt request was sent again after an earlier attempt failed past its first write to
      * this node. Adopt has no resume path, and running it again mints a second standby identity, so

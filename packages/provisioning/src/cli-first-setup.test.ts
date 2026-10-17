@@ -867,3 +867,254 @@ it("a refusal after stamping retains the environment without writing the venue",
   expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
 });
+
+const productionCertificate = {
+  pfxBase64: "c3ludGhldGlj",
+  passphrase: "SYNTHETIC-production-cert",
+  certKind: "sello",
+};
+const productionEmail = {
+  server: "smtp.example.test",
+  port: 587,
+  encryption: "starttls",
+  user: "elena",
+  password: "SYNTHETIC-production-smtp",
+  from: "elena@example.test",
+};
+
+async function productionFixture(accepted: boolean) {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const f = await realActivationFixture({ WAITRON_BUILD_ID: "synthetic-production-build" });
+  f.deps.env.WAITRON_ENV = "production";
+  f.env.WAITRON_ENV = "production";
+  const settingsPath = join(f.root, "publication-settings.json");
+  f.env.WAITRON_SETUP_SETTINGS_FILE = settingsPath;
+  await writeFile(
+    settingsPath,
+    JSON.stringify({ aeatCert: productionCertificate, email: productionEmail }),
+    { mode: 0o600 },
+  );
+  const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
+  const modules = enabledModules(ALL_MODULES, selected.config);
+  const versions: Record<string, number> = {};
+  const { appliedSchemaVersion } = await import("@waitron/migrations");
+  for (const module of modules)
+    versions[module.name] = await appliedSchemaVersion(venue.db, module.migrations);
+  const { fiscalReadinessInput } = await import("./fiscal-readiness-input.js");
+  const readiness = fiscalReadinessInput({
+    venue: {
+      ...request,
+      admin: {
+        displayName: request.admin.displayName,
+        email: request.admin.email,
+        pinHash: "synthetic",
+        passwordHash: "synthetic",
+      },
+    },
+    contribution: selected.contribution!,
+    secret: productionCertificate,
+    moduleVersions: versions,
+    applicationVersion: "synthetic-production-build",
+  });
+  if (accepted) {
+    await mkdir(join(f.root, "state"), { recursive: true });
+    const { createFiscalReadinessStore } = await import("./fiscal-readiness.js");
+    await createFiscalReadinessStore(
+      join(f.root, "state"),
+      async () => ({ status: "accepted" }),
+      Buffer.alloc(32, 73),
+    ).run(readiness);
+  }
+  return { ...f, settingsPath, readiness };
+}
+
+it("the production venue command checks accepted readiness and seals its exact publication settings", async () => {
+  const f = await productionFixture(true);
+  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  const state = (await f.runtime.store.read())!;
+  expect(state.status).toBe("complete");
+  expect(await readDeploymentEnvironment(venue.db)).toBe("production");
+  const series = await venue.db.select().from(invoiceSeries);
+  expect(series.map((row) => row.code).sort()).toEqual(["A-06RB", "FF-06RB", "R-06RB"]);
+  expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+  const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
+  const { withTransaction } = await import("@waitron/db");
+  const ring = loadKeyRing(f.env);
+  expect(
+    await withTransaction(venue.db, (tx) => tryGetCredential(tx, ring, { purpose: "fiscal.aeat" })),
+  ).toEqual(productionCertificate);
+  expect(
+    await withTransaction(venue.db, (tx) => tryGetCredential(tx, ring, { purpose: "email.smtp" })),
+  ).toEqual({
+    url: "smtp://elena:SYNTHETIC-production-smtp@smtp.example.test:587?requireTLS=true",
+    from: "elena@example.test",
+  });
+  const trading = await readFile(join(f.root, "state/trading.env"), "utf8");
+  expect(trading).toContain("WAITRON_ENV=production\n");
+  for (const secret of [
+    productionCertificate.passphrase,
+    productionEmail.password,
+    productionCertificate.pfxBase64,
+  ]) {
+    expect(JSON.stringify(state)).not.toContain(secret);
+    expect(f.output.join("\n")).not.toContain(secret);
+    expect(trading).not.toContain(secret);
+  }
+});
+
+it("the production venue command refuses missing readiness before stamping or activating", async () => {
+  const f = await productionFixture(false);
+  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+  expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
+  expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+  expect(await readTenantIdentities(venue.db)).toEqual([]);
+  expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
+  expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
+});
+
+it.each(["certificate", "build", "key"] as const)(
+  "the production command refuses readiness bound to a different %s",
+  async (change) => {
+    const f = await productionFixture(true);
+    const { writeFile } = await import("node:fs/promises");
+    if (change === "certificate")
+      await writeFile(
+        f.settingsPath,
+        JSON.stringify({
+          aeatCert: { ...productionCertificate, pfxBase64: "YW5vdGhlcg==" },
+          email: productionEmail,
+        }),
+      );
+    if (change === "build") f.env.WAITRON_BUILD_ID = "another-build";
+    if (change === "key") f.env.WAITRON_CREDENTIALS_KEY = Buffer.alloc(32, 74).toString("base64");
+    expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+    expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
+    expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+    expect(await readTenantIdentities(venue.db)).toEqual([]);
+  },
+);
+
+it.each([false, true])(
+  "production command Finish keeps its original settings and counters (change settings=%s)",
+  async (changed) => {
+    const f = await productionFixture(true);
+    f.interrupt(true);
+    await expect(runCli(f.args, f.deps)).rejects.toThrow("synthetic before trading publication");
+    const before = (await f.runtime.store.read())!;
+    expect(before.status).toBe("committed");
+    const counters = await venue.db.select().from(invoiceSeries);
+    const { rm, writeFile } = await import("node:fs/promises");
+    await rm(join(f.root, "state/fiscal-readiness.json"));
+    if (changed)
+      await writeFile(
+        f.settingsPath,
+        JSON.stringify({
+          aeatCert: productionCertificate,
+          email: { ...productionEmail, password: "SYNTHETIC-changed" },
+        }),
+      );
+    f.interrupt(false);
+    f.prompts.length = 0;
+    const result = await runCli(f.args, f.deps);
+    expect(result, JSON.stringify(f.output)).toBe(changed ? 1 : 0);
+    expect((await f.runtime.store.read())!.status).toBe(changed ? "committed" : "complete");
+    if (changed) expect(f.output).toContain("setup.attempt_uncertain {}");
+    expect(await venue.db.select().from(invoiceSeries)).toEqual(counters);
+    expect((await f.runtime.store.read())!.frozen).toEqual(before.frozen);
+    expect(f.prompts).toEqual([]);
+  },
+);
+
+it("production activation seals the checked settings snapshot if its source file changes before readiness", async () => {
+  const f = await productionFixture(true);
+  const factory = f.deps.firstSetupDeployment!;
+  f.deps.firstSetupDeployment = (context) => {
+    const deployment = factory(context);
+    return {
+      ...deployment,
+      assertReady: async (state) => {
+        const { writeFile } = await import("node:fs/promises");
+        await writeFile(
+          f.settingsPath,
+          JSON.stringify({
+            aeatCert: { ...productionCertificate, pfxBase64: "YW5vdGhlcg==" },
+            email: { ...productionEmail, password: "SYNTHETIC-raced" },
+          }),
+        );
+        await deployment.assertReady(state);
+      },
+    };
+  };
+  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  const { tryGetCredential, loadKeyRing } = await import("@waitron/credentials");
+  const { withTransaction } = await import("@waitron/db");
+  expect(
+    await withTransaction(venue.db, (tx) =>
+      tryGetCredential(tx, loadKeyRing(f.env), { purpose: "fiscal.aeat" }),
+    ),
+  ).toEqual(productionCertificate);
+  const { firstSetupPublicationDigest } = await import("./first-setup-publication-digest.js");
+  const state = (await f.runtime.store.read())!;
+  expect(state.inputs.$publication).toEqual({
+    digest: firstSetupPublicationDigest(state, {
+      aeatCert: productionCertificate,
+      email: {
+        url: "smtp://elena:SYNTHETIC-production-smtp@smtp.example.test:587?requireTLS=true",
+        from: "elena@example.test",
+      },
+    }),
+  });
+});
+
+it.each(["taxpayer", "schema", "target"] as const)(
+  "production readiness from another %s cannot authorise the command",
+  async (change) => {
+    const f = await productionFixture(true);
+    const { createFiscalReadinessStore } = await import("./fiscal-readiness.js");
+    const altered = {
+      ...f.readiness,
+      ...(change === "taxpayer" ? { taxId: "B12345674" } : {}),
+      ...(change === "schema"
+        ? { moduleVersions: { ...f.readiness.moduleVersions, core: 0 } }
+        : {}),
+      ...(change === "target" ? { submissionTarget: "https://different.example.test/soap" } : {}),
+    };
+    await createFiscalReadinessStore(
+      join(f.root, "state"),
+      async () => ({ status: "accepted" }),
+      Buffer.alloc(32, 73),
+    ).run(altered);
+    expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
+    expect(f.output).toContain('setup.fiscal_test_required {"module":"verifactu"}');
+    expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+    expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
+  },
+);
+
+it.each([
+  [{ email: productionEmail }, 'setup.provisioning_secret_required {"module":"verifactu"}'],
+  [{ aeatCert: productionCertificate }, 'setup.email_required {"field":"email"}'],
+  [
+    { aeatCert: { ...productionCertificate, pfxBase64: "!" }, email: productionEmail },
+    'setup.request_invalid {"field":"pfxBase64"}',
+  ],
+  [
+    { aeatCert: productionCertificate, email: { ...productionEmail, encryption: "none" } },
+    'email.settings_invalid {"field":"encryption"}',
+  ],
+] as const)(
+  "invalid production publication settings refuse before any venue write %#",
+  async (settings, message) => {
+    const f = await productionFixture(true);
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(f.settingsPath, JSON.stringify(settings));
+    expect(await runCli(f.args, f.deps)).toBe(1);
+    expect(f.output).toContain(message);
+    expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+    expect(await readTenantIdentities(venue.db)).toEqual([]);
+    expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
+    expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
+    expect(f.output.join("\n")).not.toContain(productionCertificate.passphrase);
+    expect(f.output.join("\n")).not.toContain(productionEmail.password);
+  },
+);

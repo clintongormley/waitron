@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { parseEnv, isDeepStrictEqual } from "node:util";
 import { loadKeyRing, putCredential, tryGetCredential } from "@waitron/credentials";
 import {
+  applicationVersion,
   readMembershipTrustSet,
   readNodeMembershipRow,
   setNodePublicKeyTx,
@@ -20,6 +21,7 @@ import {
   verifyBytes,
   verifyMembershipDocument,
 } from "@waitron/membership";
+import { appliedSchemaVersion } from "@waitron/migrations";
 import { enabledModules, serializeModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { FirstSetupCommandDeployment } from "./first-setup-command-activation.js";
@@ -32,6 +34,10 @@ import { planVenue } from "./venue-plan.js";
 import { recoverProvisionedVenue } from "./recover-provisioned-venue.js";
 import { readTenantIdentities } from "./tenant-guard.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
+import { createFiscalReadinessStore } from "./fiscal-readiness.js";
+import { fiscalReadinessInput } from "./fiscal-readiness-input.js";
+import { parseFirstSetupSettings, readFirstSetupSettings } from "./first-setup-settings.js";
+import type { KeyRing } from "@waitron/credentials";
 import "./errors.js";
 
 const keyPurpose = "membership.node_key";
@@ -44,15 +50,31 @@ export function createFirstSetupCommandDeployment(options: {
   db: Database;
   environment: Record<string, string | undefined>;
 }): FirstSetupCommandDeployment {
-  const { runtime, db, environment } = options;
+  const { runtime, db } = options;
+  const environment = Object.freeze({ ...options.environment });
+  let publication:
+    | {
+        digest: string;
+        settings: ReturnType<typeof parseFirstSetupSettings>;
+        ring: KeyRing;
+      }
+    | undefined;
   return {
     async publication(state) {
-      // These journeys require their settings, readiness and configuration-import adapters.
-      if (
-        state.frozen.environment === "production" ||
-        state.frozen.configurationImport !== undefined
-      )
+      if (state.frozen.configurationImport !== undefined) throw new AppError("setup.not_ready", {});
+      const path = environment.WAITRON_SETUP_SETTINGS_FILE;
+      if (!path && state.frozen.environment === "production")
         throw new AppError("setup.not_ready", {});
+      const selection = venueFiscalSelection(
+        runtime.modules,
+        state.frozen.request.location.fiscalTerritory,
+      );
+      if (selection.contribution === undefined) conflict();
+      const settings = parseFirstSetupSettings(
+        selection.contribution,
+        state.frozen.environment,
+        path ? await readFirstSetupSettings(path) : {},
+      );
       let storedEnvironment: Record<string, string | undefined> = {};
       try {
         storedEnvironment = parseEnv(await readFile(join(state.stateDir, "secrets.env"), "utf8"));
@@ -76,18 +98,17 @@ export function createFirstSetupCommandDeployment(options: {
       } catch {
         throw new AppError("setup.not_ready", {});
       }
-      const config = venueFiscalSelection(
-        runtime.modules,
-        state.frozen.request.location.fiscalTerritory,
-      ).config;
+      const config = selection.config;
       const identity = async () => ({
         trust: await readMembershipTrustSet(db),
         credential: await withTransaction(db, (tx) =>
           tryGetCredential(tx, ring, { purpose: keyPurpose }),
         ),
       });
+      const digest = firstSetupPublicationDigest(state, settings);
+      publication = { digest, settings, ring };
       return {
-        digest: firstSetupPublicationDigest(state, {}),
+        digest,
         deps: {
           publishSelection: async () => {
             await writeFileAtomic(
@@ -143,7 +164,13 @@ export function createFirstSetupCommandDeployment(options: {
             )
               conflict();
           },
-          sealSettings: async () => {},
+          sealSettings: async () => {
+            if (settings.required) await settings.secret!.seal({ db, ring }, settings.aeatCert);
+            if (settings.email !== undefined)
+              await withTransaction(db, (tx) =>
+                putCredential(tx, ring, { purpose: "email.smtp", value: settings.email! }),
+              );
+          },
           persistTrading: async (result, current) => {
             const accountKey = createHmac("sha256", ring.current.key)
               .update("waitron.account-key.v1")
@@ -167,7 +194,34 @@ export function createFirstSetupCommandDeployment(options: {
       };
     },
     async assertReady(state) {
-      if (state.frozen.environment === "production") throw new AppError("setup.not_ready", {});
+      if (state.frozen.environment !== "production") return;
+      if (
+        publication === undefined ||
+        firstSetupPublicationDigest(state, publication.settings) !== publication.digest
+      )
+        throw new AppError("setup.not_ready", {});
+      const selected = venueFiscalSelection(
+        runtime.modules,
+        state.frozen.request.location.fiscalTerritory,
+      );
+      if (selected.contribution === undefined) conflict();
+      const modules = enabledModules(runtime.modules, selected.config);
+      const versions: Record<string, number> = {};
+      for (const module of modules)
+        versions[module.name] = await appliedSchemaVersion(db, module.migrations);
+      await createFiscalReadinessStore(
+        state.stateDir,
+        async () => ({ status: "uncertain" }),
+        publication.ring.current.key,
+      ).assertReady(
+        fiscalReadinessInput({
+          venue: state.frozen.request,
+          contribution: selected.contribution,
+          secret: publication.settings.aeatCert,
+          moduleVersions: versions,
+          applicationVersion: applicationVersion(environment),
+        }),
+      );
     },
     async provision(request, beforeTransaction) {
       const state = await runtime.store.read();

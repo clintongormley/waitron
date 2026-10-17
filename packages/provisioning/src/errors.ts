@@ -10,6 +10,10 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "email.settings_invalid": { field: string };
+    "setup.provisioning_secret_required": { module: string };
+    "setup.fiscal_test_required": { module: string };
+    "setup.email_required": { field: "email" };
     "setup.already_provisioned": Record<string, never>;
     "setup.not_ready": Record<string, never>;
     "setup.operation_conflict": Record<string, never>;

@@ -97,6 +97,8 @@ const USAGE = [
   "Missing venue details are prompted for. --full-series-code defaults to FF.",
   "The admin's real name is left unset when --admin-first-names and --admin-last-names",
   "are omitted. Select --recovery-pdf explicitly; --yes never confirms that you kept it.",
+  "Production reads certificate and email settings from WAITRON_SETUP_SETTINGS_FILE (JSON).",
+  "It requires an accepted readiness test for the same certificate, venue and build.",
   "",
   "--venue-dir is the directory holding this node's two SQLite files. Omitted, it is",
   "read from WAITRON_VENUE_DIR — the same variable the server reads — and only then",
