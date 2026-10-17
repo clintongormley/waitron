@@ -998,3 +998,29 @@ Archive preview now uses validation's captured digest; its new case changes the 
 buffer while validation is suspended and still expects the original source. Bucket preview uses
 the exact-point digest returned by validation rather than hashing the same file a second time.
 No protected writer, restore hook, existing SQL, schema, guard or existing fiscal assertion changes.
+
+
+## Surviving destination history (2026-10-18)
+
+Existing assertions and fixture values changed: none. Eight new cases append inside the
+selected-placement section of `apps/server/src/hour-recovery-host.test.ts`; a separate
+`packages/fiscal-verifactu/src/hour-surviving-history.test.ts` adds four module-reader cases.
+The selected service uses the module's opaque history reader while holding its existing
+preparation exclusion. It retains captured snapshots in that service instance, including
+through the placement callback. Snapshot-qualified record references let the module combine
+an earlier row and its later retirement without reporting a contradictory copy.
+
+The new archive/bucket refusal cases create a genuine newer database after the earlier clock
+comparison, then check `hour_not_later` and unchanged destination rows and identity. The valid
+older-target cases check exact recovered counters and the fresh series. Missing/refusing module
+readers, a directory at the database path and a damaged database refuse before replacement.
+The module cases include a higher retired other-node hour, separate taxpayer/environment scopes,
+incomplete scope evidence and an empty migrated database. Their clocks, external replies and
+release stamps are controlled fixtures.
+
+This qualifies explicitly supplied selected runners, not default HTTP/CLI preparation or real
+staged-process restart. Captured target snapshots are retained in memory by the service; this
+change adds no separate durable journal for them. The shared preparation journal remains the
+durable selected-hour authority. Actual historical invoice-row preservation, managed-Cloud
+placement and the remaining Task 7 entry-path work remain open. No protected writer, restore
+hook, SQL, schema, existing fiscal fixture/assertion or guard changes are part of this unit.

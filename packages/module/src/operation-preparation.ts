@@ -78,6 +78,7 @@ export function configureModuleOperations(
 
 export interface ModuleOperationPreparation {
   configure?(host: ModuleOperationHost): ModuleOperationPreparation;
+  readRecoveryHistory?(db: Database): Promise<readonly unknown[]>;
   readRecoveryState?(
     db: Database,
     node: ProvisionedNode,

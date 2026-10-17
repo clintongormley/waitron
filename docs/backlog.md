@@ -406,8 +406,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   its facts reader. The selected runner now reads module-owned bases/history from that database
   and checks admission before archive/file/bucket placement. Local cases preserve recovered counters,
   reject changed sources and retain exact committed archive replay after service reconstruction.
-  These cases supply the selected runner explicitly; default HTTP/CLI composition, surviving-target
-  history capture and source-specific staged recovery remain part of Task 7.
+  The selected service now reads surviving destination history under its preparation hold and keeps
+  the captured evidence through placement. Local archive/bucket cases refuse a newer target before
+  replacement, admit older target history and retain the recovered counters. Module checks include
+  retired other-node hours and snapshots taken across retirement. These cases still supply the
+  selected runner explicitly; default HTTP/CLI composition and source-specific staged recovery
+  remain part of Task 7.
   Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,

@@ -21,7 +21,7 @@ import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { locationId } from "@waitron/shared";
+import { AppError, locationId } from "@waitron/shared";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestoreHooks, restoreFromArtifact, restoreFromArtifactFile } from "./restore.js";
@@ -1021,6 +1021,203 @@ describe("selected-hour admission before archive placement", () => {
       "original destination database",
     );
   });
+
+  it.each(["archive", "stream"] as const)(
+    "refuses an older selected hour before replacing a newer surviving %s destination",
+    async (kind) => {
+      const f = await archiveHost(kind);
+      vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
+      const newerState = join(root, "newer-state");
+      await mkdir(newerState);
+      const newer = createSelectedRecoveryPreparation({
+        ...f.options,
+        stateDir: newerState,
+        binding: { ...f.options.binding, eventId: "newer-surviving-target" },
+      });
+      const challenge = (await newer.prepare({ action: "clock-challenge" })) as { id: string };
+      await newer.prepare({
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      });
+      const selected = (await newer.prepare({ action: "select", answer: "no" })) as {
+        identity: string;
+        input: unknown;
+      };
+      expect(selected.identity).toBe("06RD");
+      await runRestoreHooks({
+        db: suite.db,
+        node,
+        modules: newer.modules,
+        log: () => {},
+        withModuleOperations: newer.runner(selected.input),
+      });
+      const before = await suite.db.select().from(invoiceSeries);
+      const fresh = (await f.service.prepare({ action: "clock-challenge" })) as { id: string };
+      await f.service.prepare({
+        action: "compare-clocks",
+        browser: { challengeId: fresh.id, instantMs: Date.now() },
+      });
+      await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
+      await writeFile(join(f.roots.stateDir, "trading.env"), "surviving destination identity");
+      await expect(
+        kind === "archive"
+          ? restoreFromArtifact({
+              ...f.restore,
+              modules: f.service.modules,
+              withModuleOperations: f.service.runner(f.outcome.input),
+            })
+          : writeStreamRestore({
+              ...f.restore,
+              databasePath: f.database,
+              entries: f.entries,
+              modules: f.service.modules,
+              withModuleOperations: f.service.runner(f.outcome.input),
+            }),
+      ).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "hour_not_later" },
+      });
+      const retained = await openVenueDatabase(f.roots.venueDir);
+      try {
+        expect(await retained.venue.select().from(invoiceSeries)).toEqual(before);
+        expect(await retained.venue.select().from(fiscalAllocations)).toHaveLength(2);
+      } finally {
+        await retained.close();
+      }
+      expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+        "surviving destination identity",
+      );
+    },
+  );
+
+  it.each(["archive", "stream"] as const)(
+    "allows a lower surviving %s history while retaining the recovered counters",
+    async (kind) => {
+      const f = await archiveHost(kind);
+      await suite.db.update(invoiceSeries).set({ nextNumber: 456 });
+      await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
+      if (kind === "archive")
+        await restoreFromArtifact({
+          ...f.restore,
+          modules: f.service.modules,
+          withModuleOperations: f.service.runner(f.outcome.input),
+        });
+      else
+        await writeStreamRestore({
+          ...f.restore,
+          databasePath: f.database,
+          entries: f.entries,
+          modules: f.service.modules,
+          withModuleOperations: f.service.runner(f.outcome.input),
+        });
+      const result = await openVenueDatabase(f.roots.venueDir);
+      try {
+        const rows = await result.venue.select().from(invoiceSeries);
+        expect(
+          rows
+            .filter((row) => row.retiredAt !== null)
+            .map(({ code, nextNumber }) => ({ code, nextNumber })),
+        ).toEqual([
+          { code: "A-06RB", nextNumber: 123 },
+          { code: "FF-06RB", nextNumber: 123 },
+          { code: "R-06RB", nextNumber: 123 },
+        ]);
+        expect(
+          rows
+            .filter((row) => row.retiredAt === null)
+            .map(({ code, nextNumber }) => ({ code, nextNumber })),
+        ).toEqual([
+          { code: "A-06RC", nextNumber: 1 },
+          { code: "FF-06RC", nextNumber: 1 },
+          { code: "R-06RC", nextNumber: 1 },
+        ]);
+        expect(await result.venue.select().from(fiscalAllocations)).toHaveLength(2);
+      } finally {
+        await result.close();
+      }
+    },
+  );
+
+  it("refuses unreadable surviving history before changing the destination or its identity", async () => {
+    const f = await archiveHost();
+    await writeFile(join(f.roots.venueDir, "venue.db"), "damaged surviving database");
+    await writeFile(join(f.roots.stateDir, "trading.env"), "surviving destination identity");
+    await expect(
+      restoreFromArtifact({
+        ...f.restore,
+        modules: f.service.modules,
+        withModuleOperations: f.service.runner(f.outcome.input),
+      }),
+    ).rejects.toMatchObject({ code: "module.operation_invalid" });
+    expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe(
+      "damaged surviving database",
+    );
+    expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+      "surviving destination identity",
+    );
+  });
+
+  it("refuses a destination whose database path is a directory", async () => {
+    const f = await archiveHost();
+    await mkdir(join(f.roots.venueDir, "venue.db"));
+    await writeFile(join(f.roots.stateDir, "trading.env"), "surviving destination identity");
+    await expect(
+      restoreFromArtifact({
+        ...f.restore,
+        modules: f.service.modules,
+        withModuleOperations: f.service.runner(f.outcome.input),
+      }),
+    ).rejects.toMatchObject({ code: "module.operation_invalid" });
+    expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+      "surviving destination identity",
+    );
+  });
+
+  it.each(["missing", "refusing"] as const)(
+    "refuses a %s module history reader without replacing the surviving database",
+    async (kind) => {
+      const f = await archiveHost();
+      await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
+      const before = await suite.db.select().from(invoiceSeries);
+      const modules = f.options.modules.map((module) =>
+        module.name !== binding.module
+          ? module
+          : {
+              ...module,
+              operations: {
+                ...module.operations!,
+                readRecoveryHistory:
+                  kind === "missing"
+                    ? undefined
+                    : async () => {
+                        throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });
+                      },
+              },
+            },
+      );
+      const service = createSelectedRecoveryPreparation({ ...f.options, modules });
+      await expect(
+        restoreFromArtifact({
+          ...f.restore,
+          modules: service.modules,
+          withModuleOperations: service.runner(f.outcome.input),
+        }),
+      ).rejects.toMatchObject(
+        kind === "missing"
+          ? { code: "module.operation_invalid" }
+          : {
+              code: "sif.allocation_invalid",
+              params: { reason: "history_invalid" },
+            },
+      );
+      const retained = await openVenueDatabase(f.roots.venueDir);
+      try {
+        expect(await retained.venue.select().from(invoiceSeries)).toEqual(before);
+      } finally {
+        await retained.close();
+      }
+    },
+  );
 
   it("places an admitted archive and retires recovered series without changing their counters", async () => {
     const f = await archiveHost();

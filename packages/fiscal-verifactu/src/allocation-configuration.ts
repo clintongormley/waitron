@@ -1,6 +1,6 @@
 import { hostedHourPreparation } from "./hour-preparation.js";
 import { hostedHourRecovery } from "./hosted-hour-recovery.js";
-import { readHourRecoveryState } from "./hour-recovery-state.js";
+import { readHourRecoveryHistory, readHourRecoveryState } from "./hour-recovery-state.js";
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import type { ModuleOperationHost, ModuleOperationPreparation } from "@waitron/module";
@@ -51,6 +51,7 @@ function configuredOperations(
 ): ModuleOperationPreparation {
   const setup = host === undefined ? FISCAL_INITIAL_SETUP : FISCAL_INITIAL_SETUP.configure!(host);
   return {
+    readRecoveryHistory: readHourRecoveryHistory,
     readRecoveryState: readHourRecoveryState,
     async recovery(operation, proposal) {
       if (host === undefined)
@@ -256,6 +257,7 @@ function configuredOperations(
   };
 }
 export const FISCAL_OPERATIONS: ModuleOperationPreparation = {
+  readRecoveryHistory: readHourRecoveryHistory,
   readRecoveryState: readHourRecoveryState,
   configure(host) {
     return configuredOperations(Object.freeze({ ...host.environment }), host);

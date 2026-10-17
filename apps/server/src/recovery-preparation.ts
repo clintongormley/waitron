@@ -1,4 +1,9 @@
-import { lockVenueDatabase, readBreakGlassKeyName, type Database } from "@waitron/db";
+import {
+  lockVenueDatabase,
+  openVenueDatabase,
+  readBreakGlassKeyName,
+  type Database,
+} from "@waitron/db";
 import {
   configureModuleOperations,
   type ModuleRecoveryFacts,
@@ -12,9 +17,12 @@ import {
   type FirstSetupCoordinator,
   type FirstSetupHold,
 } from "@waitron/provisioning";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { lstat } from "node:fs/promises";
+import { join } from "node:path";
+import { VENUE_FILE } from "@waitron/store";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import type { RestoreOperationRunner } from "./restore.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
@@ -59,8 +67,33 @@ export function createSelectedRecoveryPreparation(options: Options): {
   const secret = options.secret;
   const databases = new AsyncLocalStorage<Database>();
   const database = () => databases.getStore() ?? options.database();
+  const survivingHistory: unknown[] = [];
   const refuse = (): never => {
     throw new AppError("module.operation_invalid", { module: binding.module });
+  };
+  const captureSurvivingHistory = async () => {
+    try {
+      if (!(await lstat(join(options.venueDir, VENUE_FILE))).isFile()) return refuse();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+    const reader = options.modules.find((module) => module.name === binding.module)?.operations
+      ?.readRecoveryHistory;
+    if (reader === undefined) return refuse();
+    try {
+      const target = await openVenueDatabase(options.venueDir);
+      try {
+        for (const evidence of await reader(target.venue))
+          if (!survivingHistory.some((known) => isDeepStrictEqual(known, evidence)))
+            survivingHistory.push(structuredClone(evidence));
+      } finally {
+        await target.close();
+      }
+    } catch (error) {
+      if (isAppError(error)) throw error;
+      return refuse();
+    }
   };
   const checkSelection = () => {
     if (
@@ -125,10 +158,17 @@ export function createSelectedRecoveryPreparation(options: Options): {
         current.environment !== selected.environment
       )
         return refuse();
+      if (
+        current.oldMachineOffline === true &&
+        current.oldMachineAbsent === false &&
+        current.noParallelRecovery === true
+      )
+        await captureSurvivingHistory();
       return {
         ...current,
         history: [
           ...current.history,
+          ...survivingHistory,
           ...Object.values(selected.moduleEvidence?.[binding.module] ?? {}),
         ],
         contextKey: JSON.stringify([
