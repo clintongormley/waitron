@@ -118,7 +118,6 @@ export interface RotaWeek {
   days: {
     businessDay: string;
     cutover: string;
-    closedAllDay: boolean;
     /** Some active department has opening hours that business day. */
     hasHours: boolean;
     seasonId: string | null;

@@ -101,7 +101,6 @@ export async function readRotaWeek(tx: Transaction, cfg: Cfg, week: string): Pro
       return {
         businessDay,
         cutover: cutover(businessDay),
-        closedAllDay: special?.closedAllDay ?? false,
         hasHours: [...opening.values()].some((d) => d.get(businessDay)!.ranges.length > 0),
         seasonId: plan.seasonIdOn.get(businessDay) ?? null,
         specialDay: special && { id: special.specialDayId, name: special.name },

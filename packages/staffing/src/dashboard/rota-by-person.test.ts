@@ -209,3 +209,27 @@ it("shows a daily warning once on its calendar date when the shift starts before
     "daily maximum 9 h",
   );
 });
+it("Everyone's day headers name their attention across areas and a closed day reads Closed once", async () => {
+  const { root } = await mount();
+  const head = (day: string) =>
+    root.querySelector(`th[data-day-head="${day}"]`)!.textContent!.replace(/\s+/g, " ");
+  expect(head("2026-12-04")).toContain("1 unfilled");
+  expect(head("2026-12-03")).toContain("1 over");
+  expect(head("2026-11-30")).toContain("Closed");
+  expect([...root.querySelectorAll("td")].filter((c) => c.textContent!.includes("Closed"))).toEqual(
+    [],
+  );
+});
+it("a grid reports a target it does not draw", async () => {
+  const { el, grid } = await mount();
+  const people = grid as unknown as { focusTarget(t: object): boolean };
+  expect(people.focusTarget({ businessDay: "2026-12-04", slotKey: "empty" })).toBe(false);
+  expect(people.focusTarget({ businessDay: "2026-12-04", shiftId: "gone" })).toBe(false);
+  el.params = { area: "station:kitchen" };
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("rota-by-area")).toBeTruthy());
+  const byArea = el.shadowRoot!.querySelector("rota-by-area") as unknown as {
+    focusTarget(t: object): boolean;
+  };
+  expect(byArea.focusTarget({ businessDay: "2026-12-04", slotKey: "gone" })).toBe(false);
+  expect(byArea.focusTarget({ businessDay: "2026-12-04", slotKey: "empty" })).toBe(true);
+});

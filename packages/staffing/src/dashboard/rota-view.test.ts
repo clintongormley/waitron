@@ -964,3 +964,86 @@ describe("the Rota's slot picker beside its slot", () => {
     expect(box(title).height).toBeGreaterThan(0);
   });
 });
+
+/** A second unfilled slot, on Tuesday in the Head chef row, beside the fixture's Friday one. */
+function twoUnfilled(published = false) {
+  return rotaApi(async (w) => {
+    const r = rotaWeek(w);
+    const empty = r.days[4]!.areas[0]!.match.slots[0]!;
+    r.days[1]!.areas[0]!.match.slots.push({
+      slot: { ...empty.slot, key: "tue", businessDay: r.days[1]!.businessDay, staffRoleId: "head" },
+      status: { kind: "unfilled" },
+    });
+    if (published) r.version = { id: "pub", status: "published", changedSincePublished: false };
+    return r;
+  }).api;
+}
+const countButton = (el: View, kind: string) =>
+  q<HTMLButtonElement>(el, `[data-test=attention] .count[data-kind=${kind}]`)!;
+const dayHead = (root: ShadowRoot, day: string) =>
+  root.querySelector<HTMLElement>(`th[data-day-head="${day}"]`)!;
+
+describe("the Rota's count buttons and day headers", () => {
+  it("each count button focuses the next such slot, wrapping", async () => {
+    const el = await mount(twoUnfilled());
+    const r = area(el).shadowRoot!;
+    for (const key of ["tue", "empty", "tue"]) {
+      countButton(el, "unfilled").click();
+      await vi.waitFor(() => expect(r.activeElement).toBe(r.querySelector(`[data-slot=${key}]`)));
+    }
+    countButton(el, "partly").click();
+    await vi.waitFor(() => expect(r.activeElement).toBe(r.querySelector("[data-slot=part]")));
+    countButton(el, "over").click();
+    await vi.waitFor(() => expect(r.activeElement).toBe(r.querySelector("[data-shift=over]")));
+    countButton(el, "unfilled").click();
+    await vi.waitFor(() => expect(r.activeElement).toBe(r.querySelector("[data-slot=empty]")));
+  });
+  it("in a published week a count focuses a card that is not a button", async () => {
+    const el = await mount(twoUnfilled(true));
+    const r = area(el).shadowRoot!;
+    countButton(el, "unfilled").click();
+    const card = r.querySelector<HTMLElement>("[data-slot=tue]")!;
+    expect(card.localName).toBe("div");
+    await vi.waitFor(() => expect(r.activeElement).toBe(card));
+    expect(card.getAttribute("tabindex")).toBe("-1");
+    countButton(el, "over").click();
+    const over = r.querySelector<HTMLElement>("[data-shift=over]")!;
+    await vi.waitFor(() => expect(r.activeElement).toBe(over));
+    expect(over.getAttribute("tabindex")).toBe("-1");
+  });
+  it("in Everyone the unfilled count steps to the next day header that says it has unfilled slots", async () => {
+    const el = await mount(twoUnfilled(), "1280px", { area: "everyone" }, "rota-by-person");
+    const r = await everyone(el);
+    for (const day of ["2026-12-01", "2026-12-04", "2026-12-01"]) {
+      countButton(el, "unfilled").click();
+      await vi.waitFor(() => expect(r.activeElement).toBe(dayHead(r, day)));
+      expect(r.activeElement!.textContent).toContain("unfilled");
+      expect(r.activeElement!.getAttribute("tabindex")).toBe("-1");
+    }
+    countButton(el, "over").click();
+    await vi.waitFor(() => expect(r.activeElement).toBe(r.querySelector("[data-shift=over]")));
+    countButton(el, "partly").click();
+    await vi.waitFor(() => expect(r.activeElement).toBe(r.querySelector("[data-shift=part]")));
+    expect(el.open).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("rota-by-person")).toBeTruthy();
+  });
+  it("a day header names its attention and a closed day reads Closed once", async () => {
+    const el = await mount();
+    const r = area(el).shadowRoot!;
+    expect(normal(dayHead(r, "2026-12-04").textContent!)).toContain("1 unfilled");
+    expect(normal(dayHead(r, "2026-12-01").textContent!)).toContain("1 partly uncovered");
+    expect(normal(dayHead(r, "2026-12-03").textContent!)).toContain("1 over");
+    expect(normal(dayHead(r, "2026-12-02").textContent!)).toBe("Wed 2");
+    expect(normal(dayHead(r, "2026-11-30").textContent!)).toContain("Closed");
+    expect([...r.querySelectorAll("td")].filter((c) => c.textContent!.includes("Closed"))).toEqual(
+      [],
+    );
+    expect(normal(r.textContent!).match(/Closed/g)).toHaveLength(1);
+  });
+  it("a day header joins several counts with a dot", async () => {
+    const el = await mount(twoUnfilled());
+    expect(normal(dayHead(area(el).shadowRoot!, "2026-12-01").textContent!)).toContain(
+      "1 unfilled · 1 partly uncovered",
+    );
+  });
+});

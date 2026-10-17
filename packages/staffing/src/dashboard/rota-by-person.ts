@@ -3,8 +3,8 @@ import { customElement, property } from "lit/decorators.js";
 import type { RosterBreach } from "@waitron/workforce/roster-validation";
 import { areaKey } from "../slots.js";
 import type { RotaWeek } from "../staffing-types.js";
-import { RotaByArea } from "./rota-by-area.js";
-import { dateFormat, utc } from "./format.js";
+import { RotaByArea, dayHead, focusIn } from "./rota-by-area.js";
+import type { Target } from "./rota-model.js";
 import { hours, shiftTime } from "./rota-format.js";
 import { breachText, shiftBreaches } from "./rota-warnings.js";
 import { t } from "./strings.js";
@@ -16,6 +16,9 @@ export class RotaByPerson extends LitElement {
   @property({ type: Boolean }) editable = false;
   /** False when the venue has no active area, since a shift needs one. */
   @property({ attribute: false }) canAdd = true;
+  focusTarget(target: Target): boolean {
+    return focusIn(this.renderRoot as ShadowRoot, target, false);
+  }
   private emit(name: string, detail: unknown) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
@@ -62,7 +65,7 @@ export class RotaByPerson extends LitElement {
         <thead>
           <tr>
             <th scope="col">${t("staffing.shift.personId")}</th>
-            ${this.week.days.map((d) => html`<th scope="col">${dateFormat({ weekday: "short", day: "numeric" }).format(utc(d.businessDay))}</th>`)}
+            ${this.week.days.map((d) => dayHead(this.week, { kind: "everyone" }, d.businessDay))}
           </tr>
         </thead>
         <tbody>
@@ -86,7 +89,7 @@ export class RotaByPerson extends LitElement {
                         day.notInSlot.some((n) => n.shiftId === s.shiftId)),
                   );
                   return html`<td data-day=${day.businessDay}>
-                    ${day.closedAllDay ? html`<small>${t("staffing.rota.closed")}</small>` : nothing}${shifts.map((s) => this.shift(s))}
+                    ${shifts.map((s) => this.shift(s))}
                     ${this.warnings(this.breaches.filter((b) => b.personId === p.personId && b.kind === "exceeds_daily_max" && b.workDate === day.businessDay))}
                     ${this.editable && this.canAdd ? html`<button class="card" data-test="add-shift" @click=${() => this.emit("add-shift", { personId: p.personId, businessDay: day.businessDay })}>${t("staffing.shift.add")}</button>` : nothing}
                   </td>`;

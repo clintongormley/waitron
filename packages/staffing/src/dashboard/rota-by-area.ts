@@ -8,7 +8,40 @@ import { areaKey, type AreaRef, type Slot, type SlotStatus } from "../slots.js";
 import type { RotaWeek, StaffRole } from "../staffing-types.js";
 import { dateFormat, utc } from "./format.js";
 import { minuteTime, shiftTime } from "./rota-format.js";
-import { t, tf } from "./strings.js";
+import { dayCounts, isClosed, type Show, type Target } from "./rota-model.js";
+import { countWords, t, tf } from "./strings.js";
+
+/** A day's header: the date, then what needs attention in scope, or Closed. */
+export function dayHead(week: RotaWeek, show: Show, businessDay: string) {
+  const counts = dayCounts(week, show, businessDay);
+  const words = isClosed(week, show, businessDay)
+    ? t("staffing.rota.closed")
+    : (["unfilled", "partly", "over"] as const)
+        .filter((k) => counts[k] > 0)
+        .map((k) => countWords(k, counts[k]))
+        .join(" · ");
+  return html`<th scope="col" data-day-head=${businessDay}>
+    ${dateFormat({ weekday: "short", day: "numeric" }).format(utc(businessDay))}${words ? html`<small>${words}</small>` : nothing}
+  </th>`;
+}
+
+/** Focuses a target's slot, card or day header, letting focus land on one that is not a button.
+ *  False when the grid does not draw it. */
+export function focusIn(root: ShadowRoot, target: Target, bySlot: boolean): boolean {
+  const selector = target.header
+    ? `th[data-day-head="${target.businessDay}"]`
+    : bySlot && target.slotKey
+      ? `[data-slot="${target.slotKey}"]`
+      : target.shiftId
+        ? `[data-shift="${target.shiftId}"]`
+        : undefined;
+  const found = selector ? root.querySelector<HTMLElement>(selector) : null;
+  if (!found) return false;
+  if (!(found instanceof HTMLButtonElement)) found.tabIndex = -1;
+  found.focus();
+  found.scrollIntoView({ block: "nearest", inline: "nearest" });
+  return true;
+}
 
 @customElement("rota-by-area")
 export class RotaByArea extends LitElement {
@@ -81,7 +114,8 @@ export class RotaByArea extends LitElement {
       button.card {
         cursor: pointer;
       }
-      button:focus-visible {
+      button:focus-visible,
+      [tabindex="-1"]:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
       }
@@ -110,6 +144,12 @@ export class RotaByArea extends LitElement {
   @property({ attribute: false }) breaches: RosterBreach[] = [];
   @property({ attribute: false }) area!: AreaRef;
   @property({ type: Boolean }) editable = false;
+  #show(): Show {
+    return { kind: "area", area: this.area, key: areaKey(this.area), name: "" };
+  }
+  focusTarget(target: Target): boolean {
+    return focusIn(this.renderRoot as ShadowRoot, target, true);
+  }
   #person(shiftId: string) {
     const s = this.week.shifts.find((s) => s.shiftId === shiftId)!;
     return this.week.people.find((p) => p.personId === s.personId)?.name ?? "";
@@ -174,7 +214,7 @@ export class RotaByArea extends LitElement {
   }
   #cell(role: StaffRole, day: RotaWeek["days"][number]) {
     const match = day.areas.find((a) => areaKey(a.area) === areaKey(this.area))?.match;
-    return html`${day.closedAllDay ? html`<small>${t("staffing.rota.closed")}</small>` : nothing}${match?.slots.filter((s) => s.slot.staffRoleId === role.id).map((s) => this.#slot(s.slot, s.status, day.cutover))}${match?.over
+    return html`${match?.slots.filter((s) => s.slot.staffRoleId === role.id).map((s) => this.#slot(s.slot, s.status, day.cutover))}${match?.over
       .map((id) => this.week.shifts.find((s) => s.shiftId === id)!)
       .filter((s) => s.staffRoleId === role.id)
       .map((s) =>
@@ -199,7 +239,7 @@ export class RotaByArea extends LitElement {
         <thead>
           <tr>
             <th scope="col">${t("staffing.rota.staff_role")}</th>
-            ${this.week.days.map((d) => html`<th scope="col">${dateFormat({ weekday: "short", day: "numeric" }).format(utc(d.businessDay))}</th>`)}
+            ${this.week.days.map((d) => dayHead(this.week, this.#show(), d.businessDay))}
           </tr>
         </thead>
         <tbody>

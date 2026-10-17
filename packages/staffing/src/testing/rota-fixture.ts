@@ -40,7 +40,6 @@ export function rotaWeek(week = "2026-11-30"): RotaWeek {
     days: Array.from({ length: 7 }, (_, n) => ({
       businessDay: day(n),
       cutover: "06:00",
-      closedAllDay: n === 0,
       hasHours: n !== 0,
       seasonId: "winter",
       specialDay: null,

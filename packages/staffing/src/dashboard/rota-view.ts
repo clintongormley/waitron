@@ -12,11 +12,13 @@ import type { StaffingApi } from "./client.js";
 import { weekTitleParts } from "./format.js";
 import {
   EVERYONE,
+  attentionTargets,
   chosenShow,
   summary,
   weekCounts,
   weekShiftCount,
   type Show,
+  type Target,
 } from "./rota-model.js";
 import { STAFFING_STRINGS, countWords, t, tf } from "./strings.js";
 import "./rota-by-area.js";
@@ -182,6 +184,8 @@ export class RotaView extends LitElement {
   /** The slot key the popup was last opened for. */
   #shownFor: string | undefined;
   #generation = 0;
+  /** The target each count button last focused, to step on from. */
+  #stepped: Partial<Record<"unfilled" | "partly" | "over", Target>> = {};
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -399,11 +403,28 @@ export class RotaView extends LitElement {
       words: kinds.map((k) => countWords(k, counts[k])).join(" · "),
       body: kinds.map(
         (k, i) =>
-          html`${i ? " · " : nothing}<button type="button" class="count" data-kind=${k}>
+          html`${i ? " · " : nothing}<button
+              type="button"
+              class="count"
+              data-kind=${k}
+              @click=${() => void this.#step(read, show, k)}
+            >
               ${countWords(k, counts[k])}
             </button>`,
       ),
     };
+  }
+  async #step(read: RotaWeek, show: Show, kind: "unfilled" | "partly" | "over") {
+    const targets = attentionTargets(read, show, kind);
+    const same = (a: Target, b: Target | undefined) =>
+      !!b && (["businessDay", "slotKey", "shiftId", "header"] as const).every((k) => a[k] === b[k]);
+    const next =
+      targets[(targets.findIndex((t) => same(t, this.#stepped[kind])) + 1) % targets.length]!;
+    const grid = this.renderRoot.querySelector<
+      LitElement & { focusTarget(target: Target): boolean }
+    >(show.kind === "everyone" ? "rota-by-person" : "rota-by-area")!;
+    await grid.updateComplete;
+    if (grid.focusTarget(next)) this.#stepped[kind] = next;
   }
   #labour() {
     if (!this.warnings) return nothing;
