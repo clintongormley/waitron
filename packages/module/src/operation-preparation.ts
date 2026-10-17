@@ -9,7 +9,21 @@ import {
   type ModuleOperations,
 } from "./operation-input.js";
 
+export interface ModuleRecoveryFacts {
+  readonly country: string;
+  readonly taxId: string;
+  readonly environment: "production" | "preproduction";
+  readonly bases: readonly { readonly code: string; readonly purpose: string }[];
+  readonly contextKey: string;
+  readonly history: readonly unknown[];
+  readonly oldMachineOffline: boolean;
+  readonly oldMachineAbsent: boolean;
+  readonly noParallelRecovery: boolean;
+  readonly priorActivation: "none" | "committed";
+}
+
 export interface ModuleOperationHost {
+  readRecoveryFacts?(binding: OperationBinding): Promise<ModuleRecoveryFacts>;
   readSetupFacts?(binding: OperationBinding): Promise<{
     readonly context: InitialSetupContext;
     readonly contextKey: string;
@@ -62,6 +76,10 @@ export function configureModuleOperations(
 
 export interface ModuleOperationPreparation {
   configure?(host: ModuleOperationHost): ModuleOperationPreparation;
+  recovery?(
+    operation: Pick<ModuleOperationInput, "binding" | "authority">,
+    proposal: unknown,
+  ): Promise<unknown>;
   prepare<T>(
     operation: ModuleOperationInput,
     run: (prepared: ModuleOperationInput) => Promise<T>,

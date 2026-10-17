@@ -23,13 +23,14 @@ export interface HourRecoveryFacts extends HourSelectionFacts {
   readonly noParallelRecovery: boolean;
   readonly priorActivation: "none" | "committed";
 }
+type RecoveryContext = Omit<HourRecoveryFacts, "clock" | "confirmation">;
 type Selector = ReturnType<typeof createHourSelection>;
 type Selection = Awaited<ReturnType<Selector["selected"]>>;
 type Request = Parameters<Selector["select"]>[0];
 function refuse(reason: string): never {
   throw new AppError("sif.allocation_invalid", { reason });
 }
-function authenticated(
+export function recoveryHourOperator(
   binding: OperationBinding,
   authority: OperationAuthority,
 ): RecoveryKeyOperator {
@@ -79,35 +80,35 @@ function inputFor(selected: Selection, operatorId: RecoveryKeyOperator) {
 export function createHourRecoveryPreparation(options: {
   withState: HourSelectionStore;
   read(binding: ModuleOperationInput["binding"]): Promise<HourRecoveryFacts>;
+  readContext?(binding: ModuleOperationInput["binding"]): Promise<RecoveryContext>;
   monotonicNow(): number;
 }) {
-  const read = async (binding: OperationBinding) => {
-    const current = { ...(await options.read(binding)) };
+  const checked = <T extends RecoveryContext>(current: T): T => {
     if (current.oldMachineAbsent !== false) return refuse("old_machine_absence_unconfirmed");
     if (current.oldMachineOffline !== true) return refuse("old_machine_active");
     if (current.noParallelRecovery !== true) return refuse("parallel_recovery");
     if (!["none", "committed"].includes(current.priorActivation)) return refuse("event_mismatch");
     return current;
   };
+  const read = async (binding: OperationBinding) => checked({ ...(await options.read(binding)) });
   const engine = createHourSelection({ ...options, read });
   const within = async <T>(
     request: Pick<Request, "binding" | "authority">,
-    run: (
-      selector: Selector,
-      facts: HourRecoveryFacts,
-      operator: RecoveryKeyOperator,
-    ) => Promise<T>,
+    run: (selector: Selector, facts: RecoveryContext, operator: RecoveryKeyOperator) => Promise<T>,
   ): Promise<T> => {
     const binding = Object.freeze({ ...request.binding });
     const authority = request.authority;
-    authenticated(binding, authority);
+    recoveryHourOperator(binding, authority);
     return options.withState(binding, async (state) => {
-      const current = await read(binding);
-      const operator = authenticated(binding, authority);
+      const context =
+        options.readContext === undefined ? undefined : checked(await options.readContext(binding));
+      const current = context?.priorActivation === "committed" ? context : await read(binding);
+      const operator = recoveryHourOperator(binding, authority);
       const selector = createHourSelection({
         ...options,
         withState: async (_binding, body) => body(state),
-        read: async () => current,
+        read: async () => ("clock" in current ? (current as HourRecoveryFacts) : read(binding)),
+        readCommitted: async () => current,
       });
       return run(selector, current, operator);
     });
@@ -115,18 +116,18 @@ export function createHourRecoveryPreparation(options: {
   return {
     async select(supplied: Request) {
       const request = { ...supplied, binding: { ...supplied.binding } };
-      authenticated(request.binding, request.authority);
+      recoveryHourOperator(request.binding, request.authority);
       const selected = await engine.select(request);
-      const operator = authenticated(request.binding, request.authority);
+      const operator = recoveryHourOperator(request.binding, request.authority);
       return selected.status === "selected"
         ? { ...selected, input: inputFor(selected, operator) }
         : selected;
     },
     async preview(supplied: Omit<Request, "answer">) {
       const request = { ...supplied, binding: { ...supplied.binding } };
-      authenticated(request.binding, request.authority);
+      recoveryHourOperator(request.binding, request.authority);
       const result = await engine.preview(request);
-      authenticated(request.binding, request.authority);
+      recoveryHourOperator(request.binding, request.authority);
       return result;
     },
     async prepare<T>(
@@ -144,10 +145,11 @@ export function createHourRecoveryPreparation(options: {
         return refuse("malformed_allocation");
       }
       return within(held, async (selector, facts, operator) => {
-        const selected = await selector.selected({
+        const selected = await selector[
+          facts.priorActivation === "committed" ? "committed" : "selected"
+        ]({
           binding: held.binding,
           authority: held.authority,
-          confirmation: facts.confirmation,
         });
         if (!isDeepStrictEqual(inputFor(selected, operator), held.input))
           return refuse("event_mismatch");

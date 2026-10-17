@@ -940,3 +940,23 @@ admission, matching-secret authentication, destructive placement, durable recove
 source-specific HTTP/CLI Finish. The existing restore hook, writer, SQL, schema, fiscal assertions
 and recovery-pack contribution stay unchanged. The prior provisioning coverage failure remains
 open; isolated coverage of the new fiscal projector is not package coverage.
+
+## Durable recovery preparation and configured dispatch (2026-10-17)
+
+Existing assertions and fixtures changed: none. New server and provisioning suites exercise
+the shared preparation journal, bound fact-read scopes, fresh key authentication and configured
+module dispatch through the existing restore runner. A real encrypted archive supplies one
+validated preview and public spent-hour floor. Clock transport and the release stamp are controlled
+fixtures. The service combines the selected module's opaque evidence with the host's history;
+its fact reader receives the database supplied by the restore runner.
+
+Refreshing history from the committed database exposed a replay refusal that the earlier static
+history fixture did not exercise. Committed replay now validates the retained event and input
+before the unchanged writer checks its recorded result; it does not select a fresh hour. A new
+host can finish that exact result without another clock comparison. The suites also retain
+fresh-selection clock checks and wrong-key, changed-source, missing-selection and isolation refusals.
+
+These are preparation-service and restore-hook checks, including durable host reconstruction.
+They do not qualify default recovery HTTP/CLI composition, validation before database replacement,
+actual staged-placement restart or bucket/managed-Cloud restoration. Task 7 remains open. No
+protected writer, restore hook, SQL, schema, guard or existing fiscal assertion changes here.

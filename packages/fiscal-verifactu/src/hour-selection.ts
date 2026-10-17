@@ -244,13 +244,16 @@ function resumedIntent(entries: readonly Entry[]) {
 export function createHourSelection(options: {
   withState: HourSelectionStore;
   read(binding: OperationBinding): Promise<HourSelectionFacts>;
+  readCommitted?(
+    binding: OperationBinding,
+  ): Promise<Omit<HourSelectionFacts, "clock" | "confirmation">>;
   monotonicNow(): number;
 }) {
   // Monotonic readings are process-local; persisted waits carry only their original UTC target.
   const timers = new Map<string, { start: number; duration: number }>();
   const perform = async (
     supplied: Omit<SelectionRequest, "answer"> & { answer?: Answer } & Partial<ResumeRequest>,
-    mode: "select" | "preview" | "selected" | "resume",
+    mode: "select" | "preview" | "selected" | "resume" | "committed",
   ) => {
     const persist = mode === "select";
     const request = { ...supplied, binding: { ...supplied.binding } };
@@ -266,13 +269,17 @@ export function createHourSelection(options: {
     };
     const operatorId = authorize();
     if (
-      !["selected", "resume"].includes(mode) &&
+      !["selected", "resume", "committed"].includes(mode) &&
       !["no", "yes", "unknown"].includes(request.answer!)
     )
       refuse("event_mismatch");
     return options.withState(request.binding, async (state) => {
       authorize();
-      const fresh = await options.read({ ...request.binding });
+      const fresh: Omit<HourSelectionFacts, "clock" | "confirmation"> &
+        Partial<Pick<HourSelectionFacts, "clock" | "confirmation">> =
+        mode === "committed" && options.readCommitted !== undefined
+          ? await options.readCommitted({ ...request.binding })
+          : await options.read({ ...request.binding });
       authorize();
       if (
         !validScope(fresh.scope) ||
@@ -324,7 +331,7 @@ export function createHourSelection(options: {
       const original = sameEvent.find((entry): entry is Intent => entry.kind === "intent");
       const resumptions = sameEvent.filter((entry): entry is Resumption => entry.kind === "resume");
       const intent = resumedIntent(sameEvent);
-      if (["selected", "resume"].includes(mode) && intent === undefined)
+      if (["selected", "resume", "committed"].includes(mode) && intent === undefined)
         return refuse("reservation_missing");
       if (
         mode === "resume" &&
@@ -336,7 +343,7 @@ export function createHourSelection(options: {
       )
         return refuse("event_mismatch");
       const answer =
-        mode === "selected" || mode === "resume"
+        mode === "selected" || mode === "resume" || mode === "committed"
           ? intent!.answer
           : mode === "preview" && sameEvent.length > 0
             ? sameEvent[0]!.answer
@@ -372,7 +379,14 @@ export function createHourSelection(options: {
           )
       )
         return refuse("event_mismatch");
+      // Exact restore replay validates the committed writer result; it selects no fresh hour.
+      if (mode === "committed") {
+        if (!["restore", "re-register"].includes(request.binding.action))
+          return refuse("event_mismatch");
+        return material(intent!);
+      }
       let wait = sameEvent.find((entry): entry is Wait => entry.kind === "wait");
+      if (facts.clock === undefined) return refuse("clock_unconfirmed");
       const permitted = canSelectHour(facts.clock, request.confirmation ?? facts.confirmation);
       if (!permitted) {
         if (wait !== undefined && intent === undefined)
@@ -480,6 +494,11 @@ export function createHourSelection(options: {
     });
   };
   return {
+    async committed(request: Omit<SelectionRequest, "answer">) {
+      const result = await perform(request, "committed");
+      if (result.status !== "selected") return refuse("event_mismatch");
+      return result;
+    },
     async resume(request: ResumeRequest) {
       const result = await perform(request, "resume");
       if (result.status !== "selected") return refuse("clock_unconfirmed");

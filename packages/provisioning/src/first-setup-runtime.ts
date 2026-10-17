@@ -33,22 +33,26 @@ import "./errors.js";
 export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
   evidence?: {
-    read: ModuleOperationHost["readPublicEvidence"];
+    read?: ModuleOperationHost["readPublicEvidence"];
     withPreparationState?: ModuleOperationHost["withPreparationState"];
     readRetiredSetup?: ModuleOperationHost["readRetiredSetup"];
     readSetupFacts?: ModuleOperationHost["readSetupFacts"];
+    readRecoveryFacts?: ModuleOperationHost["readRecoveryFacts"];
   },
 ): ModuleOperationHost {
   return Object.freeze({
     environment: Object.freeze({ ...environment }),
     ...(evidence?.readSetupFacts === undefined ? {} : { readSetupFacts: evidence.readSetupFacts }),
+    ...(evidence?.readRecoveryFacts === undefined
+      ? {}
+      : { readRecoveryFacts: evidence.readRecoveryFacts }),
     ...(evidence?.withPreparationState === undefined
       ? {}
       : { withPreparationState: evidence.withPreparationState }),
     ...(evidence?.readRetiredSetup === undefined
       ? {}
       : { readRetiredSetup: evidence.readRetiredSetup }),
-    readPublicEvidence: async (binding: OperationBinding) => evidence?.read(binding),
+    readPublicEvidence: async (binding: OperationBinding) => evidence?.read?.(binding),
   });
 }
 

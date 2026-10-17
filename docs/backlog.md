@@ -398,9 +398,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   fresh-hour activation, retained counters, exact committed replay, isolation and retained waits.
   Declared module backup sources now project public spent-hour evidence into archives and sealed
   bucket state, including evidence retained at the original workspace anchor. Selected archive,
-  bucket and managed-Cloud previews carry that evidence through local checks. The recovery adapter
-  is not yet wired into the recovery hosts; admission, restart and source-specific recovery remain
-  part of Task 7.
+  bucket and managed-Cloud previews carry that evidence through local checks. Configured recovery
+  preparation now has local checks using the shared durable journal, actual named-key authentication
+  and the existing restore runner, including a validated archive preview. Checked committed replay
+  retains its hour and counters after a new host is constructed, without another clock comparison.
+  The selected-source service uses the runner's database for key checks and gives that handle to
+  its facts reader. Default HTTP/CLI composition, validation before destructive placement and
+  source-specific staged recovery remain part of Task 7.
   Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,

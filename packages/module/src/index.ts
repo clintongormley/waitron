@@ -98,7 +98,7 @@ export type {
 export { readOperationAuthority, withOperationAuthority } from "./operation-authority.js";
 export type { ModuleOperationInput, ModuleOperations } from "./operation-input.js";
 export { moduleOperationFor, snapshotModuleOperations } from "./operation-input.js";
-export type { ModuleOperationPreparation } from "./operation-preparation.js";
+export type { ModuleOperationPreparation, ModuleRecoveryFacts } from "./operation-preparation.js";
 export { withPreparedModuleOperations } from "./operation-preparation.js";
 export type { Reconciliation } from "./reconcile.js";
 export { reconcile } from "./reconcile.js";
