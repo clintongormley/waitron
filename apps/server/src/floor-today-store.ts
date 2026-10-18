@@ -515,7 +515,8 @@ async function catchUpPass(
     if (rowOf.get(target)!.placed) continue;
     placedNow.add(target);
     await leaveMerges(tx, [tableId]);
-    // A marked table was on the map when marked, so it is off now only because staff took it off.
+    // A marked row's table taken off now stays off at its new place (owner ruling: staff took it
+    // off after the reset).
     const keepOff = keepTakenOff || rowOf.get(target)!.readyToMove;
     const columns = todayColumns(target, keepOff && todayRows.get(tableId)?.takenOff === true);
     await tx
@@ -572,27 +573,22 @@ async function catchUpPass(
   return changed;
 }
 
-/** The marked rows whose group (plan decision 8) still holds a row whose table would move. */
+/**
+ * Each marked row whose table would still move, with every row of its joined group (plan decision
+ * 8). A group is marked whole, so a member that moves is itself a marked row here.
+ */
 function stillToMove(
   rowOf: ReadonlyMap<Target, { id: string; placed: boolean; readyToMove: boolean }>,
   groups: readonly ResetGroup[],
   moves: (target: Target) => boolean,
 ): Set<string> {
-  const targetOf = new Map([...rowOf].map(([target, row]) => [row.id, target]));
-  const moving = (rowId: string) => {
-    const target = targetOf.get(rowId);
-    return target !== undefined && !rowOf.get(target)!.placed && moves(target);
-  };
   const waiting = new Set<string>();
-  for (const row of rowOf.values()) {
-    if (!row.readyToMove) continue;
-    const members = [
-      row.id,
-      ...groups
-        .filter((g) => g.rows.some((r) => r.id === row.id))
-        .flatMap((g) => g.rows.map((r) => r.id)),
-    ];
-    if (members.some(moving)) for (const id of members) waiting.add(id);
+  for (const [target, row] of rowOf) {
+    if (!row.readyToMove || row.placed || !moves(target)) continue;
+    waiting.add(row.id);
+    for (const group of groups) {
+      if (group.rows.some((r) => r.id === row.id)) for (const r of group.rows) waiting.add(r.id);
+    }
   }
   return waiting;
 }
@@ -807,26 +803,48 @@ export async function ensureToday(
   await moveChangedRooms(tx, await roomRevisions(tx, changed), before, after);
 }
 
+const dueRow = alias(floorResetTables, "due_row");
+const dueMember = alias(floorResetTables, "due_member");
+
 /**
- * Whether the zone holds a pending reset row a catch-up could apply: one not marked ready to move,
- * or a marked one whose own table no longer moves (movesTable's rule, in SQL). Weaker than "will
- * apply": a marked row's group can still hold a table that moves.
+ * movesTable's rule in SQL, for the reset row `row`: true when its table has a today's row,
+ * drawn and not taken off, and is in a merge, split off, or not exactly at the row's placement.
  */
-export function catchUpDue(zoneId: SQLWrapper): SQL {
-  const r = floorResetTables;
+function movesInSql(row: typeof dueRow | typeof dueMember): SQL {
   const t = floorTodayTables;
   return sql`exists (
-    select 1 from ${r} left join ${t} on ${t.tableId} = ${r.tableId}
+    select 1 from ${t}
+    where ${t.tableId} = ${row.tableId} and ${t.takenOff} = 0 and ${t.x} is not null and (
+      ${t.x} is not ${row.x} or ${t.y} is not ${row.y} or ${t.width} is not ${row.width}
+      or ${t.height} is not ${row.height} or ${t.shape} is not ${row.shape}
+      or ${t.rotation} is not ${row.rotation}
+      or exists (select 1 from ${floorTodayJoinTables} where ${floorTodayJoinTables.tableId} = ${row.tableId})
+      or exists (select 1 from ${floorTodaySplitParts} where ${floorTodaySplitParts.partTableId} = ${row.tableId})
+    )
+  )`;
+}
+
+/**
+ * Whether the zone holds a pending reset row a catch-up could apply: one not marked ready to
+ * move, or a marked one whose table, and every pending table of its joined group (plan decision
+ * 8), no longer moves. Weaker than "will apply": a row can still wait for its guests or its name.
+ */
+export function catchUpDue(zoneId: SQLWrapper): SQL {
+  const r = dueRow;
+  const m = dueMember;
+  const p = floorResetTableParts;
+  return sql`exists (
+    select 1 from ${floorResetTables} ${sql.identifier("due_row")}
     where ${r.zoneId} = ${zoneId} and ${r.pending} = 1 and (
-      ${r.readyToMove} = 0 or (${t.id} is not null and (
-        ${t.takenOff} = 1 or ${t.x} is null or (
-          ${r.x} is not null
-          and ${t.x} = ${r.x} and ${t.y} = ${r.y} and ${t.width} = ${r.width}
-          and ${t.height} = ${r.height} and ${t.shape} = ${r.shape} and ${t.rotation} = ${r.rotation}
-          and not exists (select 1 from ${floorTodayJoinTables} where ${floorTodayJoinTables.tableId} = ${r.tableId})
-          and not exists (select 1 from ${floorTodaySplitParts} where ${floorTodaySplitParts.partTableId} = ${r.tableId})
+      ${r.readyToMove} = 0 or (
+        not ${movesInSql(r)}
+        and not exists (
+          select 1 from ${p}
+          inner join ${floorResetTables} ${sql.identifier("due_member")} on ${m.id} in (${p.joinedResetTableId}, ${p.partResetTableId})
+          where ${r.id} in (${p.joinedResetTableId}, ${p.partResetTableId})
+            and ${m.pending} = 1 and ${m.placed} = 0 and ${movesInSql(m)}
         )
-      ))
+      )
     )
   )`;
 }

@@ -1353,4 +1353,58 @@ describe("a table that frees up after a reset needs moving", () => {
     );
     expect(await due()).toBe(1);
   });
+
+  /** Whether the till's floor read would catch the room up. */
+  async function dueIn(zoneId: string): Promise<number> {
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ id: floorZones.id })
+        .from(floorZones)
+        .where(and(eq(floorZones.id, zoneId), catchUpDue(floorZones.id))),
+    );
+    return rows.length;
+  }
+
+  const setToday = (tableId: string, values: Partial<typeof floorTodayTables.$inferInsert>) =>
+    inTx(v, (tx) =>
+      tx.update(floorTodayTables).set(values).where(eq(floorTodayTables.tableId, tableId)),
+    );
+
+  it("a marked table moved by hand onto its new place applies by itself, but not while turned", async () => {
+    await clearingWorkflow(false);
+    const z = await threeSeatedAcrossDinner();
+    await finish(z.partyId);
+    await readStates();
+
+    await setToday(z.t3, { x: 40, rotation: 15 });
+    expect(await dueIn(z.d.zoneId)).toBe(0);
+    expect((await readStates()).get(z.t3)!.today.needsMoving).toBe(true);
+    expect(await readyOf(z.t3)).toEqual({ pending: true, readyToMove: true });
+
+    await setToday(z.t3, { rotation: 0 });
+    expect(await dueIn(z.d.zoneId)).toBe(1);
+    await readStates();
+    expect(await readyOf(z.t3)).toEqual({ pending: false, readyToMove: false });
+  });
+
+  it("a marked table that loses its place applies by itself at its new place", async () => {
+    await clearingWorkflow(false);
+    const z = await threeSeatedAcrossDinner();
+    await finish(z.partyId);
+    await readStates();
+
+    await setToday(z.t3, {
+      x: null,
+      y: null,
+      width: null,
+      height: null,
+      shape: null,
+      rotation: null,
+    });
+    expect(await dueIn(z.d.zoneId)).toBe(1);
+    await readStates();
+
+    expect(await readyOf(z.t3)).toEqual({ pending: false, readyToMove: false });
+    expect(await todayRow(z.t3)).toMatchObject({ x: 40, takenOff: false });
+  });
 });

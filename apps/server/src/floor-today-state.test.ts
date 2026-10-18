@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -20,7 +20,7 @@ import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
-import { ensureToday } from "./floor-today-store.js";
+import { catchUpDue, ensureToday } from "./floor-today-store.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { finishTable } from "./parties.js";
 import { inTx, OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -531,6 +531,17 @@ describe("the till's table-state answer says what needs moving", () => {
       expect(states.get(part)!.today.needsMoving).toBe(false);
       expect((await todayRow(v, part))!.x).toBeNull();
     }
+
+    const due = await inTx(v, (tx) =>
+      tx
+        .select({ id: floorZones.id })
+        .from(floorZones)
+        .where(and(eq(floorZones.id, s.d.zoneId), catchUpDue(floorZones.id))),
+    );
+    expect(due).toEqual([]);
+    await catchUp();
+    for (const id of [t45, t4, t5]) expect(await readyToMoveOf(id)).toBe(true);
+    expect((await todayRow(v, t4))!.x).toBeNull();
   });
 
   it("a member of a marked group whose own change is seats only (seats changed today) reads false", async () => {

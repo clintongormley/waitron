@@ -360,6 +360,17 @@ describe("movesTable", () => {
     expect(movesTable(drawn(0, { splitOff: true }), t("a", "T1", { placement: at(0) }))).toBe(true);
   });
 
+  it("is true for each placement field alone: y, height, shape and rotation", () => {
+    for (const change of [
+      { y: 5 },
+      { height: 10 },
+      { shape: "round" as const },
+      { rotation: 15 },
+    ]) {
+      expect(movesTable(drawn(0), t("a", "T1", { placement: { ...at(0), ...change } }))).toBe(true);
+    }
+  });
+
   it("is false for a seats-only change, a table not drawn and a taken-off table", () => {
     expect(movesTable(drawn(0), t("a", "T1", { placement: at(0), seats: 8, fixed: true }))).toBe(
       false,
