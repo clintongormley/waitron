@@ -72,6 +72,7 @@ const HIERARCHY_DELETE_READS = [
   "department_transfer_desks",
   "department_transfer_destinations",
   "department_transfer_requests",
+  "department_floor_plan_sets",
 ] as const;
 
 export const QUERY_DEPENDENCIES = {

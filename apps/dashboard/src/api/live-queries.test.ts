@@ -1059,6 +1059,7 @@ it.each(["Zone", "Department"] as const)(
       "department_transfer_desks",
       "department_transfer_destinations",
       "department_transfer_requests",
+      "department_floor_plan_sets",
     ];
     let revision = 0;
     const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
