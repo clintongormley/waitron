@@ -4,6 +4,8 @@ import {
   diningTables,
   floorResetTableParts,
   floorResetTables,
+  floorTodayJoinTables,
+  floorTodaySplitParts,
   floorTodayTables,
   joinedOutOfService,
   needsMoving,
@@ -12,8 +14,8 @@ import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { standsIn } from "./joined-split-layout.js";
-import { catchUpZone, placementOf } from "./floor-today-store.js";
-import { zoneOfTable } from "./floor-today-table.js";
+import { catchUpZone, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
+import { refuseHeld, refuseUnfree, zoneOfTable } from "./floor-today-table.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -130,4 +132,52 @@ export async function markMoved(
     keepTakenOff: false,
     carry: new Set(group.map(({ row }) => row.id)),
   });
+  if (await tableNeedsMoving(tx, tableId)) await refuseHeldBack(tx, tableId, [...groupTables]);
+}
+
+/**
+ * Throws what still holds back the group of `tables`, which Mark moved could not apply: a party,
+ * food on its way or a table needing clearing at one of them, or at a table tied to them by
+ * today's merges and splits, as the catch-up's waiting rules tie them.
+ */
+async function refuseHeldBack(
+  tx: Transaction,
+  tableId: string,
+  tables: readonly string[],
+): Promise<never> {
+  const tied = new Set(tables);
+  for (let size = 0; size !== tied.size;) {
+    size = tied.size;
+    const ids = [...tied];
+    const joins = tx
+      .select({ id: floorTodayJoinTables.joinId })
+      .from(floorTodayJoinTables)
+      .where(inArray(floorTodayJoinTables.tableId, ids));
+    const merged = await tx
+      .select({ id: floorTodayJoinTables.tableId })
+      .from(floorTodayJoinTables)
+      .where(inArray(floorTodayJoinTables.joinId, joins));
+    const split = await tx
+      .select({
+        part: floorTodaySplitParts.partTableId,
+        joined: floorTodaySplitParts.joinedTableId,
+      })
+      .from(floorTodaySplitParts)
+      .where(
+        or(
+          inArray(floorTodaySplitParts.partTableId, ids),
+          inArray(floorTodaySplitParts.joinedTableId, ids),
+        ),
+      );
+    for (const row of merged) tied.add(row.id);
+    for (const row of split) {
+      tied.add(row.part);
+      tied.add(row.joined);
+    }
+  }
+  const ids = [tableId, ...[...tied].filter((id) => id !== tableId)];
+  await refuseHeld(tx, ids);
+  for (const id of ids) await refuseDeliveryPending(tx, id);
+  await refuseUnfree(tx, ids);
+  throw new AppError("table.needs_moving", { tableId });
 }

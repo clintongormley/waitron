@@ -282,6 +282,84 @@ describe("Mark moved", () => {
     expect(await everything()).toEqual(before);
   });
 
+  it("takes 4+5 apart keeping 4 off, taken off before the layouts changed, where nothing stands in its way", async () => {
+    const s = await standardAndDinner([
+      { key: "t4", standard: 0, dinner: null },
+      { key: "t5", standard: 20, dinner: null },
+      { key: "t45", standard: null, dinner: 60, partKeys: ["t4", "t5"] },
+      { key: "t8", standard: 120, dinner: 120 },
+    ]);
+    await s.onto(s.d.standard);
+    const [t4, t5, t45, t8] = [s.live("t4"), s.live("t5"), s.live("t45"), s.live("t8")];
+    await setToday(t4, { takenOff: true });
+    await s.onto(s.d.dinner, { keepTakenOff: true });
+    const partyId = await seatAt(t45);
+    await s.onto(s.d.standard, { keepTakenOff: true });
+    await finish(partyId);
+    expect(await needsMoving(t45)).toBe(true);
+    expect(await todayRow(t4)).toMatchObject({ takenOff: true });
+    await setToday(t8, { x: 0 });
+
+    await expectRevision(v, markMoved(t45), s.d.zoneId);
+
+    expect(await todayRow(t4)).toMatchObject({ x: 0, takenOff: true });
+    expect(await todayRow(t5)).toMatchObject({ x: 20, takenOff: false });
+    expect(await todayRow(t45)).toMatchObject({ x: null });
+  });
+
+  it("names the table pressed when the place taken is a joined table's still to be made", async () => {
+    const z = await plannedZone(
+      v,
+      [
+        { key: "c3", place: { x: 0, y: 0 } },
+        { key: "c4", place: { x: 20, y: 0 } },
+        { key: "t8", place: { x: 80, y: 0 } },
+      ],
+      NOW,
+    );
+    const [c3, c4, t8] = [z.table.c3!, z.table.c4!, z.table.t8!];
+    const partyId = await seatAt(c3);
+    await inTx(v, async (tx) => {
+      const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+      const plan = await readLayout(tx, v.cfg, layout);
+      await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        layout,
+        {
+          revision: plan.revision,
+          tables: [
+            ...plan.tables.map((t) => ({
+              id: t.id,
+              key: t.id,
+              label: t.label,
+              seats: t.seats,
+              fixed: t.fixed,
+              placement: t.id === z.master.t8 ? t.placement : null,
+              partKeys: t.partIds,
+            })),
+            {
+              key: "long",
+              label: fresh("Long"),
+              seats: 8,
+              fixed: false,
+              placement: { x: 0, y: 40, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
+              partKeys: [z.master.c3!, z.master.c4!],
+            },
+          ],
+        },
+        NOW,
+      );
+      await resetZone(tx, v.cfg, REMOVALS, z.zoneId, NOW, "due");
+    });
+    await finish(partyId);
+    expect(await needsMoving(c4)).toBe(true);
+    await setToday(t8, { x: 0, y: 40 });
+
+    expect(await refusal(markMoved(c4))).toEqual(newPlaceTaken(c4, t8));
+  });
+
   it("Back to its saved place on a table that needs moving is Mark moved", async () => {
     const z = await threeNeedsMoving();
 

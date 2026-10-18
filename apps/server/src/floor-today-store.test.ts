@@ -1906,6 +1906,60 @@ describe("a reset over a joined table split today", () => {
     expect(await pendingRows(zoneId)).toEqual([]);
   });
 
+  it("Mark moved is refused, writing nothing, while food is on its way to a part of the marked group", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    const { partyId } = await seat(v, table.c5!);
+    await reset(zoneId);
+    await finish(partyId);
+    await catchUp(zoneId);
+    const marked = [table.long!, table.c3!, table.c4!, table.c5!].sort();
+    expect(await readyToMoveIn(zoneId)).toEqual(marked);
+    const order = await counterOrder(v, "Paella");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table.c5! })
+        .where(eq(workingOrders.id, order)),
+    );
+    await pay(v, order, "20.00");
+    const c5Before = await todayRow(table.c5!);
+
+    const refused = await markMovedOn(table.c5!).then(
+      () => null,
+      (error: unknown) => error as AppError,
+    );
+
+    expect({ code: refused?.code, params: refused?.params }).toEqual({
+      code: "table.delivery_pending",
+      params: { tableId: table.c5! },
+    });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await todayRow(table.c5!)).toEqual(c5Before);
+    expect(await readyToMoveIn(zoneId)).toEqual(marked);
+  });
+
+  it("Mark moved is refused while a table of the marked group needs clearing", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    const { partyId } = await seat(v, table.c5!);
+    await reset(zoneId);
+    await finish(partyId);
+    await catchUp(zoneId);
+    await markNeedsClearing(table.c5!);
+
+    const refused = await markMovedOn(table.long!).then(
+      () => null,
+      (error: unknown) => error as AppError,
+    );
+
+    expect({ code: refused?.code, params: refused?.params }).toEqual({
+      code: "table.needs_clearing",
+      params: { tableId: table.c5! },
+    });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+  });
+
   it("Mark moved on Long table, marked while the saved plan drops Counter 5, puts Long table back and keeps Counter 5 off the map for its unpaid order", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
