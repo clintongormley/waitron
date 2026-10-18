@@ -47,6 +47,7 @@ export class VenueDepartmentsShell extends LitElement {
   @property({ attribute: false }) model!: VenueServiceView;
   @state() private departmentId = "";
   @state() private view: View = "settings";
+  @state() private unknownView: string | null = null;
   @state() private zone = "";
   @state() private dialog?: DepartmentDialog;
   @state() private busy = false;
@@ -98,7 +99,7 @@ export class VenueDepartmentsShell extends LitElement {
       !this.#replacingTab &&
       tab &&
       this.#openDepartment() &&
-      !offeredDepartmentTabs(this.model).includes(tab)
+      (this.unknownView !== null || !offeredDepartmentTabs(this.model).includes(tab))
     ) {
       this.#replacingTab = true;
       void this.#navigate({ view: null }, true).finally(() => (this.#replacingTab = false));
@@ -347,6 +348,7 @@ export class VenueDepartmentsShell extends LitElement {
       view === "zones" || view === "receipt" || view === "service" || view === "transfers"
         ? view
         : "settings";
+    this.unknownView = this.view === "settings" ? view : null;
     this.zone = this.#url.read("zone") ?? "";
     if (
       this.departmentId &&

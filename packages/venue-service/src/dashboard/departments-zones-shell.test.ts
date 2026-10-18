@@ -233,6 +233,31 @@ it("an address naming Transfers with one department opens Details and replaces t
   expect(written(replace)).toContain("/manage/venue-operations/department/d1");
   expect(push).not.toHaveBeenCalled();
 });
+it.each(["unknown", "details"])(
+  "an address naming the unrecognised view %s opens Details and replaces the address",
+  async (view) => {
+    const replace = vi.spyOn(history, "replaceState");
+    const push = vi.spyOn(history, "pushState");
+    const shell = await mount(`/manage/venue-operations/department/d1/view/${view}`);
+    const form = await departmentSettings(shell);
+    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    expect(form.tab).toBe("details");
+    expect(written(replace)).toContain("/manage/venue-operations/department/d1");
+    expect(push).not.toHaveBeenCalled();
+  },
+);
+it("moving from Details to an unrecognised view replaces the address with Details", async () => {
+  const shell = await mount("/manage/venue-operations/department/d1");
+  const form = await departmentSettings(shell);
+  history.pushState(null, "", "/manage/venue-operations/department/d1/view/missing?source=saved");
+  const replace = vi.spyOn(history, "replaceState");
+  const push = vi.spyOn(history, "pushState");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+  expect(form.tab).toBe("details");
+  expect(written(replace)).toEqual(["/manage/venue-operations/department/d1"]);
+  expect(push).not.toHaveBeenCalled();
+});
 it("when Transfers stops being offered the address returns to Details by replacement", async () => {
   const shell = await mount("/manage/venue-operations/department/d1/view/transfers");
   const form = await departmentSettings(shell);

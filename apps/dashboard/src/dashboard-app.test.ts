@@ -8047,6 +8047,18 @@ describe("mounted public department dialogs", () => {
     expect(box.isConnected).toBe(true);
     expect(box.value).toBe("Draft restaurant");
   });
+  it("Back from Service to an opening address naming an unknown view returns to Details with no question and the draft kept", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1/view/missing");
+    const box = await draft(app);
+    await chooseTab(app, "service");
+    await noQuestionAt(app, "/manage/venue-operations/department/d1/view/service");
+    history.back();
+    await noQuestionAt(app, "/manage/venue-operations/department/d1");
+    const form = find(app, "department-settings") as HTMLElement & { tab: string };
+    await expect.poll(() => form.tab).toBe("details");
+    expect(box.isConnected).toBe(true);
+    expect(box.value).toBe("Draft restaurant");
+  });
   it("Forward after Back returns to Service with no question and the draft kept", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1");
     const box = await draft(app);
