@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import { createRequest, LiveData } from "@waitron/dashboard-kit";
 import type { DepartmentReceiptWrite } from "@waitron/shared";
 import { createDepartmentReceiptClient } from "./department-receipts.js";
-import { receiptModel, preview } from "../testing/department-receipt-dialog-fixture.js";
+import { receiptModel, preview } from "../testing/department-receipt-editor-fixture.js";
 
 const input: DepartmentReceiptWrite = {
   receipt: {

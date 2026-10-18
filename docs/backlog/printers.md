@@ -493,7 +493,7 @@ just a green typecheck.
 
 - **Left open by #1261's review:** no database trigger protects the logo image; the app-level
   department receipt usage refuses a library delete. The phone and email length limits (30 and
-  254) are copied into `apps/dashboard/src/screens/department-receipt-dialog.ts`, separately
+  254) are copied into `apps/dashboard/src/screens/department-receipt-editor.ts`, separately
   from `packages/layouts/src/validate.ts`.
 
 **2026-10-12, A493:** the venue receipt is no longer a configuration-transfer entry. The
@@ -745,7 +745,9 @@ construct a friendly computer name from a printer label. See the
   positioned absolutely, and the dialog's scrolling `.body` is not its positioning parent, so the
   hint counts towards the native `<dialog>`'s scroll height. Measured 2026-10-16 in headless
   Chromium at 1280 × 900: the Edit receipt dialog 1078/864 on main and 1017/850 on the branch; a
-  plain dialog of 16 hinted fields 953/864, the same fields without hints none. A
+  plain dialog of 16 hinted fields 953/864, the same fields without hints none. (2026-10-18: A756
+  retired the Edit receipt dialog; its fields are now in the department dialog's Receipts tab,
+  which is where to measure again.) A
   `scrollIntoView({ block: "start" })` at 390 wide lifted the footer and left a gap under it; Tab,
   the mouse wheel, End/PageDown and a validation error never did. `.body { position: relative }`
   removed the excess in the probe. Untested: a screen reader's cursor or find-in-page landing on a

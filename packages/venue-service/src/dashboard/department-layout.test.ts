@@ -5,6 +5,7 @@ import {
   cleanupDepartmentEditors,
   mountDepartmentEditor,
   selectDepartmentTab,
+  supplyReceiptEditor,
 } from "../testing/department-edit-fixture.js";
 import { cleanupZoneEditors, mountZoneEditor } from "../testing/zone-edit-fixture.js";
 
@@ -137,4 +138,34 @@ describe.each(["light", "dark"] as const)("department phone bounds (%s)", (theme
       }
     },
   );
+});
+
+it("on a wide screen the Receipts tab uses the wide dialog's width while Details stays form-width", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(1280, 900);
+    const { el, form, modal } = await mountDepartmentEditor();
+    await supplyReceiptEditor(el, form);
+    await modal.updateComplete;
+    expect(window.innerWidth).toBe(1280);
+    const body = modal.shadowRoot!.querySelector(".body")!.getBoundingClientRect();
+    const details = form.shadowRoot!.querySelector("[slot=details]")!.getBoundingClientRect();
+    const probe = form.shadowRoot!.appendChild(document.createElement("div"));
+    probe.style.width = "var(--wt-form-max-width)";
+    const formWidth = probe.getBoundingClientRect().width;
+    probe.remove();
+    expect(formWidth).toBeGreaterThan(0);
+    expect(details.width).toBeLessThanOrEqual(formWidth + 1);
+    await selectDepartmentTab(form, "receipt");
+    const strip = form.shadowRoot!.querySelector("wt-tabs")!.getBoundingClientRect();
+    const receipt = form.shadowRoot!.querySelector("[slot=receipt]")!.getBoundingClientRect();
+    expect(receipt.width).toBeGreaterThan(formWidth + 1);
+    expect(receipt.right).toBeLessThanOrEqual(body.right + 1);
+    await selectDepartmentTab(form, "details");
+    expect(form.shadowRoot!.querySelector("wt-tabs")!.getBoundingClientRect().width).toBe(
+      strip.width,
+    );
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
 });

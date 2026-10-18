@@ -64,8 +64,8 @@ What constrains the next change to the wizard:
   default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**
   (rectificativa). Nothing in the dashboard can change or add a series today.
 - **`operation_description` comes from the installed fiscal contribution.** Setup supplies its
-  bootstrap value internally. Product sales use the description you save in each department's
-  **Edit receipt** dialog, or the fiscal module's default description when the department has
+  bootstrap value internally. Product sales use the description you save in the **Receipts** tab
+  of each department's dialog, or the fiscal module's default description when the department has
   none; the generic location field is not their fallback.
 
 ## Open owner call — setup always stores a language on the account

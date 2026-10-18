@@ -2157,12 +2157,6 @@ build after A757's board if it has been decided, else name the table alone.
 - **`wt-input` has no visible description.** The Add tables names preview is a polite live region
   after Prefix, so it is not heard when the field takes focus; the fix is a visible description in
   the shared `wt-input`. Left open by A466 (A429 slice 2) / A502 part 3.
-- **The Departments list's "Floor plan" link is shown without `venue.configure`.** The floor-plan
-  screen needs it (`UNLISTED_SCREENS`, `apps/dashboard/src/dashboard-app.ts`), so a session without
-  it that follows the link lands on Overview. Every role with `venue_service.manage` has
-  `venue.configure` today, and a module screen's context does not say whether the person holds it
-  (`DashboardModuleContext`, `packages/dashboard-kit/src/contract.ts`). Revisit beside the
-  permissions review. Left open by A466 (A429 slice 2) / A502 part 3.
 - **On computers whose scrollbars take space, a size reading just after a floor plan drop may
   shift the plan by the extra room.** Seen only with a stand-in scrollbar; headless Chromium's
   scrollbars take none, so it is not measurable there. Left open by A466 (A429 slice 2) / A502 part 3.
@@ -2195,8 +2189,9 @@ build after A757's board if it has been decided, else name the table alone.
   its `--wt-floor-plan-preview-max-height` token in `packages/ui-core/src/tokens/structure.css` and
   its row in `docs/developers/design-system.md`. Retire it, or record why it is kept. Left open by A718.
 - **Check "closing the editor returns focus to its originating row menu"** in
-  `docs/developers/design-system.md` (Departments and zones) now that Edit receipt opens from the
-  Receipt link: a review saw focus return to the link. Left open by A718.
+  `docs/developers/design-system.md` (Departments and zones): a review saw focus return to the
+  Receipt link, which A756 has since removed; the department dialog still opens from the row and
+  from "Set up the tax-agency description". Left open by A718.
 - **The pinned Actions column's left divider showed a gap between two zone rows** in a 1280 px
   light-theme screenshot of Departments and zones (`~/waitron-campaign-c/a718-shots/list-en-light-1280.png`,
   between Bar and Same). Not known whether it predates A718. Left open by A718.

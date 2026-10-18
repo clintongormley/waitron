@@ -76,7 +76,7 @@ import "./screens/modifiers-screen.js";
 import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
 import "./screens/courses-screen.js";
-import "./screens/department-receipt-dialog.js";
+import "./screens/department-receipt-editor.js";
 import "./screens/venue-details-panel.js";
 import "./screens/venue-defaults-panel.js";
 import "./screens/content-languages-screen.js";
@@ -1412,11 +1412,11 @@ export class DashboardApp extends LitElement {
         liveData: this.api.liveData,
         renderPanel: (panel: string, subject: { id: string; name: string }) =>
           panel === "department-receipt" && this.#sessionPermissions.includes("layout.configure")
-            ? html`<dashboard-department-receipt-dialog
+            ? html`<dashboard-department-receipt-editor
                 .api=${this.api}
                 .subject=${subject}
                 .canManagePolicy=${this.#sessionPermissions.includes("venue_service.manage")}
-              ></dashboard-department-receipt-dialog>`
+              ></dashboard-department-receipt-editor>`
             : null,
         calendarViews,
       };

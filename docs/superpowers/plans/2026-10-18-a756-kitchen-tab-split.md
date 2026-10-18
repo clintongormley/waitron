@@ -432,6 +432,8 @@ Branch `feat/a756-department-receipts`, from `main` after PR 1. No migration. In
   the department Save for any Enter from a single-line input (`packages/ui-core/src/submit-on-enter.ts:20-38`);
   the receipt editor stops an Enter only when its own Save is enabled. So the wrapper's listener
   returns early when the event's `composedPath()` holds the Receipts panel.
+  (2026-10-18, A756 PR 3: superseded — the listener now sits on the Details, Service and Transfers
+  panels, so Enter from Receipts never reaches it.)
 - The departments list's Receipt link goes (A756 point 2). The "Set up the tax-agency description"
   button (`departments-list.ts:171-184`) still sends `edit-receipt`, which now opens the department
   dialog on Receipts. `/view/receipt` opens that tab; without `layout.configure` it opens Details and
@@ -590,7 +592,8 @@ commit and hand over; Task 10 is separate on purpose.
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/departments-list.ts:214-231` (a department row's
-  Also edit cell is empty; zones keep Floor plan); `departments-list.test.ts`,
+  Also edit cell is empty; zones keep Floor plan — 2026-10-18: A504 removed the zones' Floor plan
+  link first, so the column is empty on every row); `departments-list.test.ts`,
   `departments-list.a11y.test.ts`, `departments-zones-list.test.ts` (cases asserting the link —
   changed checks, authorised by A756 point 2, "the departments table's Receipt link … goes"; a new
   case `"a department row has no Receipt link and the description button opens Receipts"`);

@@ -7,7 +7,12 @@ import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import { t } from "./strings.js";
 import "./departments-list.js";
 import "./department-edit-dialog.js";
-import { offeredDepartmentTabs, type DepartmentTab } from "./department-settings.js";
+import {
+  offeredDepartmentTabs,
+  offersReceiptEditor,
+  type DepartmentTab,
+  type ReceiptEditorPanel,
+} from "./department-settings.js";
 import "./zone-edit-dialog.js";
 import "./department-dialogs.js";
 import type { DepartmentDialog } from "./department-dialogs.js";
@@ -16,7 +21,7 @@ type View = "settings" | "service" | "transfers" | "zones" | "receipt";
 const tabOf = (view: View | null): DepartmentTab | undefined =>
   view === "settings" || view === null
     ? "details"
-    : view === "service" || view === "transfers"
+    : view === "service" || view === "transfers" || view === "receipt"
       ? view
       : undefined;
 
@@ -91,6 +96,7 @@ export class VenueDepartmentsShell extends LitElement {
           );
       }
     }
+    this.#offer = this.#offerFor(this.#openDepartment());
   }
   protected override updated() {
     this.setAttribute("aria-busy", String(this.busy));
@@ -98,14 +104,27 @@ export class VenueDepartmentsShell extends LitElement {
     if (
       !this.#replacingTab &&
       tab &&
-      this.#openDepartment() &&
-      (this.unknownView !== null || !offeredDepartmentTabs(this.model).includes(tab))
+      this.#offer &&
+      (this.unknownView !== null || !this.#offer.tabs.includes(tab))
     ) {
       this.#replacingTab = true;
       void this.#navigate({ view: null }, true).finally(() => (this.#replacingTab = false));
     }
   }
   #replacingTab = false;
+  /** The open department's receipt editor and offered tabs, as of the latest update. */
+  #offer?: { receiptEditor: ReceiptEditorPanel; tabs: DepartmentTab[] };
+  #offerFor(department?: { id: string; name: string }) {
+    if (!department) return undefined;
+    const receiptEditor = this.renderPanel?.("department-receipt", {
+      id: department.id,
+      name: department.name,
+    });
+    return {
+      receiptEditor,
+      tabs: offeredDepartmentTabs(this.model, offersReceiptEditor(receiptEditor)),
+    };
+  }
   #openDepartment() {
     return this.model?.departments.find((row) => row.id === this.departmentId && row.active);
   }
@@ -138,7 +157,7 @@ export class VenueDepartmentsShell extends LitElement {
     return pairs.size === 1 &&
       pairs.get("department") === this.departmentId &&
       next &&
-      offeredDepartmentTabs(this.model).includes(next)
+      this.#offer?.tabs.includes(next)
       ? []
       : undefined;
   }
@@ -444,15 +463,6 @@ export class VenueDepartmentsShell extends LitElement {
     await this.updateComplete;
     await this.#returnEditorFocus();
   }
-  async #receiptClosed(event: CustomEvent<{ departmentId: string }>) {
-    event.stopPropagation();
-    if (this.departmentId !== event.detail.departmentId || this.view !== "receipt") return;
-    await this.#navigate({ department: null, view: null, zone: null }, true);
-  }
-  async #receiptSaved(event: CustomEvent<{ departmentId: string }>) {
-    await this.#receiptClosed(event);
-    await this.#written(event);
-  }
   #content(): unknown {
     if (!this.model) return nothing;
     const department = this.model.departments.find(
@@ -465,14 +475,10 @@ export class VenueDepartmentsShell extends LitElement {
         row.active !== false &&
         this.model.floorZones.find((floor) => floor.id === row.id)?.active !== false,
     );
-    const receipt = department
-      ? (this.renderPanel?.("department-receipt", { id: department.id, name: department.name }) ??
-        nothing)
-      : nothing;
     return html`<departments-list
         .api=${this.api}
         .model=${this.model}
-        .receiptAvailable=${(row: { id: string; name: string }) => this.renderPanel?.("department-receipt", row) != null}
+        .receiptAvailable=${(row: { id: string; name: string }) => offersReceiptEditor(this.renderPanel?.("department-receipt", row))}
         @open-department=${this.#open}
         @edit-zone=${this.#openZone}
         @edit-receipt=${this.#openReceipt}
@@ -480,39 +486,38 @@ export class VenueDepartmentsShell extends LitElement {
       ${this.departmentId && !department ? html`<p role="status">${t("venue.department_not_found")}</p>` : nothing}
       ${
         department
-          ? this.view === "receipt" && receipt !== nothing
-            ? keyed(department.id, receipt)
-            : this.view === "zones"
-              ? zone
-                ? keyed(
-                    zone.id,
-                    html`<zone-edit-dialog
-                      .api=${this.api}
-                      .model=${this.model}
-                      .zoneId=${zone.id}
-                      .refreshing=${this.busy}
-                      @closed=${this.#editorClosed}
-                      @gone=${this.#editorClosed}
-                      @saved=${this.#editorSaved}
-                      @written=${this.#written}
-                    ></zone-edit-dialog>`,
-                  )
-                : nothing
-              : keyed(
-                  department.id,
-                  html`<department-edit-dialog
+          ? this.view === "zones"
+            ? zone
+              ? keyed(
+                  zone.id,
+                  html`<zone-edit-dialog
                     .api=${this.api}
                     .model=${this.model}
-                    .departmentId=${department.id}
+                    .zoneId=${zone.id}
                     .refreshing=${this.busy}
-                    .tab=${tabOf(this.view) ?? "details"}
-                    @department-tab-change=${this.#tabChange}
                     @closed=${this.#editorClosed}
                     @gone=${this.#editorClosed}
                     @saved=${this.#editorSaved}
                     @written=${this.#written}
-                  ></department-edit-dialog>`,
+                  ></zone-edit-dialog>`,
                 )
+              : nothing
+            : keyed(
+                department.id,
+                html`<department-edit-dialog
+                  .api=${this.api}
+                  .model=${this.model}
+                  .departmentId=${department.id}
+                  .refreshing=${this.busy}
+                  .tab=${tabOf(this.view) ?? "details"}
+                  .receiptEditor=${this.#offer?.receiptEditor}
+                  @department-tab-change=${this.#tabChange}
+                  @closed=${this.#editorClosed}
+                  @gone=${this.#editorClosed}
+                  @saved=${this.#editorSaved}
+                  @written=${this.#written}
+                ></department-edit-dialog>`,
+              )
           : nothing
       }`;
   }
@@ -526,8 +531,6 @@ export class VenueDepartmentsShell extends LitElement {
         @saved=${this.#saved}
         @zone-moved=${this.#moved}
         @zone-change=${this.#openZone}
-        @department-receipt-closed=${this.#receiptClosed}
-        @department-receipt-saved=${this.#receiptSaved}
         ?inert=${this.busy}
       >
         ${this.actionError || this.loadError ? html`<p role="alert">${this.actionError || this.loadError}</p>` : nothing}${this.#content()}

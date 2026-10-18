@@ -73,11 +73,6 @@ describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
         await menu.updateComplete;
         expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
       }
-      if (state === "also-edit") {
-        expect(
-          table!.shadowRoot!.querySelector('[data-test="receipt-department-d1"]'),
-        ).not.toBeNull();
-      }
       if (state === "deleted-row")
         expect(table!.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
       await expectNoA11yViolations(host);

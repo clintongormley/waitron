@@ -57,7 +57,10 @@ it.each([
   expect(shell.shadowRoot!.querySelector("department-page")).toBeNull();
   expect(shell.shadowRoot!.querySelector("department-zones")).toBeNull();
   if (suffix.endsWith("receipt"))
-    expect(shell.shadowRoot!.querySelector("[data-test=receipt-panel]")!.textContent).toBe("d1");
+    expect(
+      (await departmentSettings(shell)).shadowRoot!.querySelector("[data-test=receipt-panel]")!
+        .textContent,
+    ).toBe("d1");
   else if (suffix.includes("/zone/"))
     expect(shell.shadowRoot!.querySelector("zone-edit-dialog")!.zoneId).toBe("z1");
   else if (suffix === "/department/d1")
@@ -323,10 +326,42 @@ it("closing from the Service tab returns focus to that row's menu", async () => 
     .poll(() => menu.shadowRoot!.activeElement)
     .toBe(menu.shadowRoot!.querySelector("button"));
 });
-it("/view/receipt still opens Edit receipt", async () => {
+it("the list's tax-agency description button opens the department dialog on Receipts", async () => {
+  const model = structuredClone(zonesModel);
+  model.readiness.push({
+    code: "department.operation_description_required",
+    departmentId: "d2",
+    departmentName: "Deli",
+  } as (typeof model.readiness)[number]);
+  const shell = await mount("/manage/venue-operations", undefined, model);
+  const list = shell.shadowRoot!.querySelector("departments-list")!;
+  await list.updateComplete;
+  const table = list.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  await userEvent.click(
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=receipt-setup-d2]")!,
+  );
+  const form = await departmentSettings(shell);
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d2");
+  await expect.poll(() => form.tab).toBe("receipt");
+  expect(form.shadowRoot!.querySelector("[data-test=receipt-panel]")!.textContent).toBe("d2");
+  expect(location.pathname).toBe("/manage/venue-operations/department/d2/view/receipt");
+});
+it("/view/receipt opens the department dialog on its Receipts tab", async () => {
   const shell = await mount("/manage/venue-operations/department/d1/view/receipt");
-  expect(shell.shadowRoot!.querySelector("[data-test=receipt-panel]")!.textContent).toBe("d1");
-  expect(shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
+  const form = await departmentSettings(shell);
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d1");
+  expect(form.tab).toBe("receipt");
+  expect(form.shadowRoot!.querySelector("[data-test=receipt-panel]")!.textContent).toBe("d1");
+  const panels = (root: ShadowRoot): Element[] => [
+    ...root.querySelectorAll("[data-test=receipt-panel]"),
+    ...[...root.querySelectorAll("*")].flatMap((node) =>
+      node.shadowRoot ? panels(node.shadowRoot) : [],
+    ),
+  ];
+  expect(panels(shell.shadowRoot!)).toEqual([
+    form.shadowRoot!.querySelector("[data-test=receipt-panel]"),
+  ]);
   expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/receipt");
 });
 it("navigationScopes is [] for another offered tab of the open department and undefined for another department, a zone or receipt", async () => {
@@ -337,6 +372,8 @@ it("navigationScopes is [] for another offered tab of the open department and un
   );
   list.remove();
   const shell = await mount("/manage/venue-operations/department/d1/view/service");
+  shell.renderPanel = undefined;
+  await shell.updateComplete;
   await departmentSettings(shell);
   for (const path of [
     "/department/d1",
@@ -371,5 +408,20 @@ it("navigationScopes is [] for another offered tab of the open department and un
     single.navigationScopes(
       at("/manage/venue-operations/department/d1/view/transfers?source=saved"),
     ),
+  ).toBe(undefined);
+});
+it("navigationScopes is [] for receipt when the dialog offers it", async () => {
+  const at = (path: string) => new URL(path, location.origin);
+  const shell = await mount("/manage/venue-operations/department/d1/view/service");
+  shell.renderPanel = undefined;
+  await shell.updateComplete;
+  await departmentSettings(shell);
+  const receipt = "/manage/venue-operations/department/d1/view/receipt?source=saved";
+  expect(shell.navigationScopes(at(receipt))).toBe(undefined);
+  shell.renderPanel = (_panel, subject) => html`<p data-test="receipt-panel">${subject?.id}</p>`;
+  await shell.updateComplete;
+  expect(shell.navigationScopes(at(receipt))).toEqual([]);
+  expect(
+    shell.navigationScopes(at("/manage/venue-operations/department/d2/view/receipt?source=saved")),
   ).toBe(undefined);
 });

@@ -2833,7 +2833,9 @@ and downloads keep browser handling. Fragment-only form links keep their target'
 which owns any leave request. The dashboard catches a link click before the link's own handler
 sees it, so a link that handles a plain click itself (the product swatch that opens Edit in
 place) carries `data-own-click` to keep it, and a link with `aria-disabled="true"` is cancelled
-there and goes nowhere. The department receipt dialog protects its authored draft. A tab or
+there and goes nowhere. The department dialog's Receipts tab protects its authored draft: the
+receipt editor (`dashboard-department-receipt-editor`) takes a draft scope of its own, and closing
+the dialog asks one question covering it and the department form's draft. A tab or
 management-link departure asks about all outstanding drafts; Venue settings keeps receipt
 language separate from its other settings.
 
@@ -4759,10 +4761,9 @@ Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`. Departments always opens its list
 at `/manage/venue-operations`. A department opens at
-`/manage/venue-operations/department/<id>` in its edit dialog; its Service and Transfers tabs add
-`/view/service` and `/view/transfers`, a zone editor adds `/view/zones/zone/<id>` and the receipt
-editor adds `/view/receipt`. The list stays beneath
-these dialogs. Closing one returns to the list; a removed subject closes its editor.
+`/manage/venue-operations/department/<id>` in its edit dialog; its Service, Receipts and Transfers tabs add
+`/view/service`, `/view/receipt` and `/view/transfers`, and a zone editor adds
+`/view/zones/zone/<id>`. The list stays beneath these dialogs. Closing one returns to the list; a removed subject closes its editor.
 Old top-level tab addresses are replaced with the list URL. Venue settings
 (`/manage/venue-settings`) starts with `venue-details`, followed by `tables`,
 `adjustment-reasons` and `kitchen`; a tab
@@ -4969,34 +4970,40 @@ shows the same message; its Save remains available. Cases: `floor-plan-tables-pa
 `apps/dashboard/src/screens/`.
 
 A department's menu offers Edit, Add a zone and Delete. A zone's menu offers Edit and Delete.
-The list has no column picker. Its Also edit column links each row's other editor: Receipt, which
-opens Edit receipt, on a department whose receipt can be edited; a zone's is empty, as a zone's
-layouts are reached from the Floor plans page. Unassigned zones keep their Add to department action.
+The list has no column picker. Its Also edit column is empty: a department's receipt is edited on its
+dialog's Receipts tab, and a zone's layouts are reached from the Floor plans page. Unassigned zones keep their Add to department action.
 The sidebar returns to the bare list. An editor's deep link keeps that list underneath it;
 closing the editor returns focus to its originating row menu, or Add when that row is gone.
 
 Edit department is tabbed. Details holds name and trading name. Service holds one section per
 topic, each under its own heading; today the one section is “Orders and payment”, with the service
-settings and the zones that differ. Transfers holds the allowed destinations and the receiving
-desk profile, and is offered only while two or more departments are active. One draft and one
-Save, in a row below the strip, cover every tab, so changing tab keeps the draft. It never asks
-about unsaved changes, because the screen's `navigationScopes` (`venue-departments-shell.ts`) lets
-an address change between the open department's offered tabs through. The address keeps the open
-tab (`view` is `service` or `transfers`; Details has none), and an address naming an unknown view,
+settings and the zones that differ. Receipts, between Service and Transfers, holds the department's
+receipt editor, and is offered only to someone with `layout.configure`. Transfers holds the allowed
+destinations and the receiving desk profile, and is offered only while two or more departments are
+active. The dialog is wide whenever it offers Receipts, and standard otherwise, so changing tab
+never changes its width. Details, Service and Transfers share one draft and one Save, in a row
+below the strip; Receipts has its own draft and its own Cancel and Save, and the shared row is
+hidden while it shows. Changing tab keeps both drafts. A Save closes the dialog only when the other
+draft is clean, and closing asks one question covering both. Changing tab never asks about unsaved
+changes, because the screen's `navigationScopes` (`venue-departments-shell.ts`) lets an address
+change between the open department's offered tabs through. The address keeps the open tab (`view`
+is `service`, `receipt` or `transfers`; Details has none); the list's “Set up the tax-agency
+description” and the image library's receipt-logo link open Receipts, and an address naming an unknown view,
 or a tab not offered, opens Details and replaces the address without adding a history entry. A
-refusal naming a field, or an invalid Save, shows the first tab holding a marked field, and marks
-every tab that holds one. A strip too wide for the dialog scrolls sideways inside it. Edit zone
+refusal naming a field, or an invalid Save, of the shared draft shows the first of Details, Service
+and Transfers holding a marked field; a mark appearing in the receipt editor, such as a refusal naming a
+field, while another tab shows brings back Receipts (`department-receipt-invalid`). A tab shown this way replaces the
+address, the field takes focus, and every tab holding a marked field is marked. A strip too wide for the dialog scrolls sideways inside it. Edit zone
 holds its name and four raw service overrides. Each override offers “Same as department (…)”, and saving that choice writes null. How
 orders start chooses Table service or Counter service. Counter service has a paid-when choice and
 a collection-ticket choice. The zone's name and policy save in one request. Edit department preserves the department's receipt policy.
 
-Edit receipt holds receipt printing, trading-name printing, address printing, logo, phone,
-email, the installed tax-agency description field, subtitle and footer. It is a wide `wt-modal`,
-so it has its final width from its first frame, before its fields or preview load, and opens with
-focus on its scrolling body; its fields stop at the form width. The form and printed preview sit
+The Receipts tab (`dashboard-department-receipt-editor`) holds receipt printing, trading-name
+printing, address printing, logo, phone, email, the installed tax-agency description field,
+subtitle and footer. Its fields stop at the form width, and the form and printed preview sit
 beside each other where they fit and stack on a phone; the preview column holds an empty strut as
 wide as 80 mm paper (`paperStrut`, `apps/dashboard/src/widgets/print-paper.ts`), so it keeps its
-width before a preview draws. The dialog does not repeat the venue's address; when the location
+width before a preview draws. The tab does not repeat the venue's address; when the location
 has none, one sentence under the address switch says so. The logo is `dashboard-image-upload`'s
 `logo` presentation: the picture on paper white, in a fixed box the size it prints on 80 mm paper
 at 203 dpi (about 238 × 76 px; a smaller logo is enlarged, as printing enlarges it), which opens

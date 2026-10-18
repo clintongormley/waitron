@@ -13,9 +13,6 @@ import {
   submitOnEnter,
   focusFirstInvalid,
   type DraftScope,
-  type LeaveCoordinator,
-  type LeaveReason,
-  type WtDialog,
 } from "@waitron/ui";
 import type { ReceiptPreview, PrintPaperWidth } from "../api/client.js";
 import { sameValue } from "../widgets/product-editor-model.js";
@@ -25,7 +22,6 @@ import { receiptLanguageName } from "../widgets/receipt-language.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import "../widgets/image-upload.js";
-import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -33,13 +29,9 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 
-export type {
-  DepartmentReceiptModel as DepartmentReceiptDialogModel,
-  DepartmentReceiptClient as DepartmentReceiptDialogApi,
-} from "../api/department-receipts.js";
 import type {
-  DepartmentReceiptModel as DepartmentReceiptDialogModel,
-  DepartmentReceiptClient as DepartmentReceiptDialogApi,
+  DepartmentReceiptModel,
+  DepartmentReceiptClient,
 } from "../api/department-receipts.js";
 function comparableReceipt(value: DepartmentReceiptWrite): DepartmentReceiptWrite {
   return {
@@ -47,14 +39,15 @@ function comparableReceipt(value: DepartmentReceiptWrite): DepartmentReceiptWrit
     receipt: { ...value.receipt, printAddress: value.receipt.printAddress === true },
   };
 }
-@customElement("dashboard-department-receipt-dialog")
-export class DepartmentReceiptDialog extends LitElement {
+@customElement("dashboard-department-receipt-editor")
+export class DepartmentReceiptEditor extends LitElement {
   static override styles = [
     baseStyles,
     paperStyles,
     css`
       :host {
-        display: contents;
+        display: grid;
+        gap: var(--wt-space-4);
       }
       .layout {
         display: flex;
@@ -95,33 +88,36 @@ export class DepartmentReceiptDialog extends LitElement {
       }
     `,
   ];
-  @property({ attribute: false }) api!: DepartmentReceiptDialogApi;
+  @property({ attribute: false }) api!: DepartmentReceiptClient;
   @property({ attribute: false }) subject?: { id: string; name: string };
-  #subjectId?: string;
+  /** The host builds a fresh subject on every render; the open department's again changes nothing. */
+  protected override shouldUpdate(changed: PropertyValues<this>): boolean {
+    return !(
+      changed.size === 1 &&
+      changed.has("subject") &&
+      this.department !== null &&
+      this.subject?.id === this.department.id
+    );
+  }
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (!changed.has("subject")) return;
     if (!this.subject) {
-      if (this.department === null) this.#subjectId = undefined;
+      this.#close();
       return;
     }
-    if (this.department?.id === this.subject.id) {
-      this.department = { ...this.department, name: this.subject.name };
-      return;
-    }
-    if (this.department === null && this.subject.id !== this.#subjectId) {
-      this.#subjectId = this.subject.id;
-      this.show(this.subject);
-    }
+    if (this.department?.id === this.subject.id) return;
+    this.#close();
+    this.#open(this.subject.id);
   }
   @property({ type: Boolean }) canManagePolicy = true;
   @property({ type: Boolean }) requiresDescription = true;
-  @state() private department: { id: string; name: string } | null = null;
-  @state() private model?: DepartmentReceiptDialogModel;
+  @state() private department: { id: string } | null = null;
+  @state() private model?: DepartmentReceiptModel;
   @state() private draft: DepartmentReceiptWrite = {
     receipt: {},
     policy: { receiptPrintMode: "auto", printTradingName: true },
   };
-  @state() private saving = false;
+  @state() private busy = false;
   @state() private attempted = false;
   @state() private errors: Record<string, string> = {};
   @state() private actionError = "";
@@ -133,7 +129,6 @@ export class DepartmentReceiptDialog extends LitElement {
   @state() private focusedField = "";
   #scope?: DraftScope<DepartmentReceiptWrite>;
   #baseline?: DepartmentReceiptWrite;
-  #leave?: LeaveCoordinator;
   #opening = 0;
   #previewGeneration = 0;
   #explicitPreviewLanguage = false;
@@ -142,11 +137,13 @@ export class DepartmentReceiptDialog extends LitElement {
   #previewDue = false;
   #previewSource?: unknown;
   #paper = new PrintPaper();
+  #marked = false;
+  #announcedMarked = false;
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
     (error) => {
-      if (codeOf(error) === "department.not_found") this.dismiss();
+      if (codeOf(error) === "department.not_found") this.#close(true);
       else this.readError = codeMessage(codeOf(error));
     },
     () => {
@@ -154,13 +151,30 @@ export class DepartmentReceiptDialog extends LitElement {
     },
   );
 
-  show(department: { id: string; name: string }): void {
-    if (this.department !== null || !this.isConnected) return;
+  get leaveScope(): object | undefined {
+    return this.#scope?.id;
+  }
+  get hasUnsavedChanges(): boolean {
+    return this.#scope?.isDirty() ?? false;
+  }
+  get saving(): boolean {
+    return this.busy;
+  }
+  /** Whether a field shows a mark, as of the last render. */
+  get invalid(): boolean {
+    return this.#marked;
+  }
+  protected override updated(): void {
+    if (this.#marked === this.#announcedMarked) return;
+    this.#announcedMarked = this.#marked;
+    this.#notify("department-receipt-invalid", this.department?.id, { invalid: this.#marked });
+  }
+  #open(id: string): void {
     this.#opening++;
-    this.department = { ...department };
+    this.department = { id };
     this.model = undefined;
     this.#baseline = undefined;
-    this.saving = false;
+    this.busy = false;
     this.attempted = false;
     this.errors = {};
     this.actionError = this.readError = this.previewError = "";
@@ -170,10 +184,6 @@ export class DepartmentReceiptDialog extends LitElement {
     this.previewWidth = undefined;
     this.focusedField = "";
     void this.#load();
-  }
-  dismiss(): void {
-    this.#dialog()?.closeAfter("security");
-    this.#close(true);
   }
   override connectedCallback(): void {
     super.connectedCallback();
@@ -187,7 +197,7 @@ export class DepartmentReceiptDialog extends LitElement {
     this.requestUpdate();
     this.#opening++;
     this.#release();
-    this.saving = false;
+    this.busy = false;
     super.disconnectedCallback();
   }
   #close(notifyHost = false): void {
@@ -196,15 +206,23 @@ export class DepartmentReceiptDialog extends LitElement {
     this.#release();
     this.#baseline = undefined;
     this.department = null;
-    this.saving = false;
+    this.busy = false;
     if (notifyHost && departmentId && this.isConnected)
-      this.dispatchEvent(
-        new CustomEvent("department-receipt-closed", {
-          detail: { departmentId },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      this.#notify("department-receipt-closed", departmentId);
+  }
+  #notify(
+    type:
+      | "department-receipt-saved"
+      | "department-receipt-cancel"
+      | "department-receipt-closed"
+      | "department-receipt-invalid",
+    departmentId = this.department?.id,
+    detail: { invalid?: boolean } = {},
+  ): void {
+    if (!departmentId) return;
+    this.dispatchEvent(
+      new CustomEvent(type, { detail: { departmentId, ...detail }, bubbles: true, composed: true }),
+    );
   }
   #release(): void {
     this.#previewGeneration++;
@@ -215,11 +233,10 @@ export class DepartmentReceiptDialog extends LitElement {
     this.#queries.release("receipt");
     this.#scope?.dispose();
     this.#scope = undefined;
-    this.#leave = undefined;
   }
   #registerDraft(): void {
     if (this.#scope || !this.#baseline) return;
-    const { scope, coordinator } = draftScopeFor<DepartmentReceiptWrite>(this, {
+    const { scope } = draftScopeFor<DepartmentReceiptWrite>(this, {
       id: {},
       current: () => this.#body(),
       snapshot: (value) => structuredClone(value),
@@ -233,21 +250,8 @@ export class DepartmentReceiptDialog extends LitElement {
       },
     });
     this.#scope = scope;
-    this.#leave = coordinator;
     scope.commit(this.#baseline);
   }
-  #dialog(): WtDialog | null {
-    return this.shadowRoot?.querySelector("wt-modal") ?? null;
-  }
-  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
-    if (this.saving) return false;
-    return (
-      !this.#scope ||
-      !this.#leave ||
-      (await this.#leave.request({ scopes: [this.#scope.id], reason, proceed() {} })) ===
-        "proceeded"
-    );
-  };
   async #load(): Promise<void> {
     const department = this.department;
     if (!department) return;
@@ -257,7 +261,7 @@ export class DepartmentReceiptDialog extends LitElement {
       .watch(
         "receipt",
         {
-          key: `department-receipt-dialog:${department.id}:${opening}`,
+          key: `department-receipt-editor:${department.id}:${opening}`,
           dependencies: [
             { type: "department_receipts" },
             { type: "departments" },
@@ -275,10 +279,10 @@ export class DepartmentReceiptDialog extends LitElement {
           if (opening !== this.#opening) return;
           this.readError = "";
           const first = this.model === undefined;
-          if (!first && !this.saving && this.#scope?.isDirty()) this.#adoptUntouched(model);
+          if (!first && !this.busy && this.#scope?.isDirty()) this.#adoptUntouched(model);
           this.model = model;
           this.requiresDescription = model.operationDescriptionRequired;
-          if (first || (!this.saving && !this.#scope?.isDirty())) {
+          if (first || (!this.busy && !this.#scope?.isDirty())) {
             const previous = this.#baseline;
             const registered = this.#scope !== undefined;
             this.draft = structuredClone({ receipt: model.receipt, policy: model.policy });
@@ -300,7 +304,7 @@ export class DepartmentReceiptDialog extends LitElement {
       )
       .catch(() => {});
   }
-  #adoptUntouched(model: DepartmentReceiptDialogModel): void {
+  #adoptUntouched(model: DepartmentReceiptModel): void {
     const current = comparableReceipt(this.#body());
     const baseline = comparableReceipt(this.#baseline!);
     const next = comparableReceipt({ receipt: model.receipt, policy: model.policy });
@@ -380,7 +384,7 @@ export class DepartmentReceiptDialog extends LitElement {
     value: string | null,
     language?: string,
   ): void {
-    if (this.saving) return;
+    if (this.busy) return;
     const receipt = structuredClone(this.draft.receipt);
     if (field === "headerSubtitle" || field === "footerMessage") {
       const map = { ...receipt[field], [language!]: value ?? "" };
@@ -398,7 +402,7 @@ export class DepartmentReceiptDialog extends LitElement {
     this.#queuePreview();
   }
   #policy(field: "receiptPrintMode" | "printTradingName", checked: boolean): void {
-    if (!this.canManagePolicy || this.saving) return;
+    if (!this.canManagePolicy || this.busy) return;
     this.draft = {
       ...this.draft,
       policy: {
@@ -499,7 +503,7 @@ export class DepartmentReceiptDialog extends LitElement {
     }
   }
   async #save(): Promise<void> {
-    if (this.saving || !this.department || !this.#scope || saveActionState(this.#scope).unchanged)
+    if (this.busy || !this.department || !this.#scope || saveActionState(this.#scope).unchanged)
       return;
     this.attempted = true;
     this.errors = {};
@@ -513,12 +517,12 @@ export class DepartmentReceiptDialog extends LitElement {
     const opening = this.#opening;
     const scope = this.#scope;
     const id = this.department.id;
-    this.saving = true;
+    this.busy = true;
     try {
       await this.api.putDepartmentReceipt(id, submitted);
     } catch (error) {
       if (opening !== this.#opening) return;
-      this.saving = false;
+      this.busy = false;
       const params = (error as { params?: Record<string, unknown> } | null)?.params;
       const field =
         codeOf(error) === "image.invalid_file"
@@ -554,15 +558,12 @@ export class DepartmentReceiptDialog extends LitElement {
     }
     if (opening !== this.#opening || scope !== this.#scope) return;
     scope.commit(submitted);
-    this.#dialog()?.closeAfter("saved");
-    this.#close();
-    this.dispatchEvent(
-      new CustomEvent("department-receipt-saved", {
-        detail: { departmentId: id },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    this.#baseline = submitted;
+    this.draft = structuredClone(submitted);
+    this.attempted = false;
+    this.busy = false;
+    this.#queuePreview();
+    this.#notify("department-receipt-saved", id);
   }
   #text(field: "headerSubtitle" | "footerMessage", language: string) {
     const name = `${field}-${language}`;
@@ -579,7 +580,7 @@ export class DepartmentReceiptDialog extends LitElement {
           .value=${value}
           hint=${t("receipts.header_subtitle_hint")}
           error=${this.errors[name] ?? ""}
-          ?disabled=${this.saving}
+          ?disabled=${this.busy}
           @wt-change=${change}
         ></wt-input>`
       : html`<wt-textarea
@@ -588,15 +589,18 @@ export class DepartmentReceiptDialog extends LitElement {
           .value=${value}
           hint=${t("receipts.footer_message_hint")}
           error=${this.errors[name] ?? ""}
-          ?disabled=${this.saving}
+          ?disabled=${this.busy}
           @wt-change=${change}
         ></wt-textarea>`;
   }
   override render() {
+    this.#marked = false;
+    if (!this.department) return nothing;
     const action = saveActionState(this.#scope);
     const problems = this.attempted ? this.#problems() : {};
     const errors = { ...problems, ...this.errors };
     const hasErrors = Object.keys(errors).length > 0;
+    this.#marked = hasErrors;
     const warnings = this.model
       ? untranslatedLanguages(
           [this.draft.receipt.headerSubtitle, this.draft.receipt.footerMessage],
@@ -620,19 +624,7 @@ export class DepartmentReceiptDialog extends LitElement {
             : [],
         )
       : [];
-    return html`<wt-modal
-      size="wide"
-      heading=${t("receipts.edit")}
-      description=${this.department?.name ?? ""}
-      .open=${this.isConnected && this.department !== null}
-      .dismissible=${!this.saving}
-      .beforeClose=${this.#beforeClose}
-      @wt-close=${(event: Event) => {
-        event.stopPropagation();
-        if (this.isConnected && event.target === event.currentTarget) this.#close(true);
-      }}
-    >
-      ${
+    return html` ${
         this.readError
           ? html`<p class="error" role="alert">${this.readError}</p>
               <wt-button variant="secondary" @click=${() => void this.#load()}
@@ -666,7 +658,7 @@ export class DepartmentReceiptDialog extends LitElement {
                     label=${t("receipts.print_receipt")}
                     .description=${errors.receiptPrintMode ?? ""}
                     .checked=${this.draft.policy.receiptPrintMode === "auto"}
-                    ?disabled=${this.saving || !this.canManagePolicy}
+                    ?disabled=${this.busy || !this.canManagePolicy}
                     @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                       event.stopPropagation();
                       this.#policy("receiptPrintMode", event.detail.checked);
@@ -680,7 +672,7 @@ export class DepartmentReceiptDialog extends LitElement {
                     label=${t("receipts.print_trading_name")}
                     .description=${errors.printTradingName ?? ""}
                     .checked=${this.draft.policy.printTradingName}
-                    ?disabled=${this.saving || !this.canManagePolicy}
+                    ?disabled=${this.busy || !this.canManagePolicy}
                     @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                       event.stopPropagation();
                       this.#policy("printTradingName", event.detail.checked);
@@ -694,10 +686,10 @@ export class DepartmentReceiptDialog extends LitElement {
                     label=${t("receipts.print_address")}
                     .description=${errors.printAddress ?? ""}
                     .checked=${this.draft.receipt.printAddress === true}
-                    ?disabled=${this.saving}
+                    ?disabled=${this.busy}
                     @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                       event.stopPropagation();
-                      if (this.saving) return;
+                      if (this.busy) return;
                       this.draft = {
                         ...this.draft,
                         receipt: { ...this.draft.receipt, printAddress: event.detail.checked },
@@ -718,7 +710,7 @@ export class DepartmentReceiptDialog extends LitElement {
                   .api=${this.api}
                   .image=${this.draft.receipt.logo ?? null}
                   .draftParent=${this.#scope?.id}
-                  .disabled=${this.saving}
+                  .disabled=${this.busy}
                   .invalid=${!!errors.logo}
                   @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
                     event.stopPropagation();
@@ -735,7 +727,7 @@ export class DepartmentReceiptDialog extends LitElement {
                       .value=${this.draft.receipt[field] ?? ""}
                       hint=${t(field === "phone" ? "receipts.phone_hint" : "receipts.email_hint")}
                       error=${errors[field] ?? ""}
-                      ?disabled=${this.saving}
+                      ?disabled=${this.busy}
                       @wt-change=${(event: CustomEvent<{ value: string }>) => {
                         event.stopPropagation();
                         this.#edit(field, event.detail.value);
@@ -751,7 +743,7 @@ export class DepartmentReceiptDialog extends LitElement {
                         hint=${t("receipts.operation_description_hint")}
                         .value=${this.draft.receipt.operationDescription ?? ""}
                         error=${errors.operationDescription ?? ""}
-                        ?disabled=${this.saving}
+                        ?disabled=${this.busy}
                         @wt-change=${(event: CustomEvent<{ value: string }>) => {
                           event.stopPropagation();
                           this.#edit("operationDescription", event.detail.value);
@@ -806,34 +798,32 @@ export class DepartmentReceiptDialog extends LitElement {
           : nothing
       }
       <wt-form-actions
-        slot="footer"
         .error=${[hasErrors ? t("form.fix_fields") : "", this.actionError].filter(Boolean).join(" ")}
       >
         <wt-button
           slot="cancel"
           variant="secondary"
           data-test="cancel-receipt"
-          ?disabled=${this.saving}
-          @click=${() => void this.#dialog()?.requestClose("cancel")}
+          ?disabled=${this.busy}
+          @click=${() => this.#notify("department-receipt-cancel")}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
           data-test="save-receipt"
           variant=${action.variant}
-          ?loading=${this.saving}
-          ?disabled=${action.unchanged || this.saving || Object.keys(problems).length > 0}
+          ?loading=${this.busy}
+          ?disabled=${action.unchanged || this.busy || Object.keys(problems).length > 0}
           @click=${() => void this.#save()}
           >${t("action.save")}</wt-button
         >
-      </wt-form-actions>
-    </wt-modal>`;
+      </wt-form-actions>`;
   }
 }
-function receiptButton(host: DepartmentReceiptDialog): HTMLElement | null {
+function receiptButton(host: DepartmentReceiptEditor): HTMLElement | null {
   return host.shadowRoot!.querySelector("[data-test=save-receipt]");
 }
 declare global {
   interface HTMLElementTagNameMap {
-    "dashboard-department-receipt-dialog": DepartmentReceiptDialog;
+    "dashboard-department-receipt-editor": DepartmentReceiptEditor;
   }
 }

@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import {
   cleanupDepartmentEditors,
   mountDepartmentEditor,
   editDepartmentField,
   departmentSave,
+  selectDepartmentTab,
+  supplyReceiptEditor,
+  editReceipt,
+  receiptInput,
 } from "../testing/department-edit-fixture.js";
+
 beforeEach(() => setLocale("en"));
 afterEach(() => {
   cleanupDepartmentEditors();
@@ -57,4 +63,51 @@ it("a pending Save prevents Escape and preserves a newer native draft after the 
   expect(
     form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
   ).toBe("Later draft");
+});
+it("Escape with both drafts dirty asks one question; Discard closes without writing either", async () => {
+  const { el, app, form, modal, writes } = await mountDepartmentEditor();
+  const editor = await supplyReceiptEditor(el, form);
+  await editDepartmentField(form, "name", "Restaurant draft");
+  await selectDepartmentTab(form, "receipt");
+  await editReceipt(editor, "Thanks");
+  const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  const closing = modal.requestClose("escape");
+  await expect.poll(() => question.open).toBe(true);
+  await question.updateComplete;
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  expect(await closing).toBe(true);
+  expect(modal.open).toBe(false);
+  expect(question.open).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(editor.hasUnsavedChanges).toBe(false);
+  expect(form.hasUnsavedChanges).toBe(false);
+  expect(writes).toEqual([]);
+});
+it("a pending receipt Save blocks Escape and Cancel", async () => {
+  const { el, form, modal } = await mountDepartmentEditor();
+  const editor = await supplyReceiptEditor(el, form);
+  await selectDepartmentTab(form, "receipt");
+  await editReceipt(editor, "Thanks");
+  editor.hold = true;
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-receipt]")!.click();
+  await expect.poll(() => !!editor.finish).toBe(true);
+  expect(await modal.requestClose("escape")).toBe(false);
+  expect(await modal.requestClose("cancel")).toBe(false);
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-receipt]")!.click();
+  await selectDepartmentTab(form, "details");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await form.updateComplete;
+  expect(modal.open).toBe(true);
+  editor.finish!();
+  await expect.poll(() => modal.open).toBe(false);
+});
+it("untouched Escape on the Receipts tab closes without a leave question", async () => {
+  const { el, app, form, modal } = await mountDepartmentEditor();
+  const editor = await supplyReceiptEditor(el, form);
+  await selectDepartmentTab(form, "receipt");
+  receiptInput(editor).focus();
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => modal.open).toBe(false);
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });

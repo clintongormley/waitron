@@ -1,19 +1,20 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import "@waitron/dashboard-modules";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
   deferred,
   clickReceiptSave,
   editReceipt,
-  mountReceiptDialog,
+  mountReceiptEditor,
   receiptApi,
   receiptField,
   receiptModel,
   receiptSave,
-} from "../testing/department-receipt-dialog-fixture.js";
+  receiptRoot,
+} from "../testing/department-receipt-editor-fixture.js";
 
 beforeEach(() => setLocale("en-GB"));
 afterEach(() => {
@@ -29,7 +30,7 @@ it("clears one authored map entry without losing other visible or hidden transla
       footerMessage: { "es-ES": "Thanks", "ca-ES": "Gràcies", "eu-ES": "Agur" },
     },
   });
-  const { el } = await mountReceiptDialog(api);
+  const { el } = await mountReceiptEditor(api);
   await editReceipt(el, "footerMessage-ca-ES", "");
   await clickReceiptSave(el);
   expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt).toEqual({
@@ -38,7 +39,7 @@ it("clears one authored map entry without losing other visible or hidden transla
   });
 });
 it("typing then clearing an absent translation returns to a clean draft", async () => {
-  const { el, app, api } = await mountReceiptDialog();
+  const { el, app, api } = await mountReceiptEditor();
   await editReceipt(el, "footerMessage-ca-ES", "New");
   expect(receiptSave(el).disabled).toBe(false);
   await editReceipt(el, "footerMessage-ca-ES", "");
@@ -48,7 +49,7 @@ it("typing then clearing an absent translation returns to a clean draft", async 
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
 });
 it("trims contacts on save and omits blank contact keys", async () => {
-  const { el, api } = await mountReceiptDialog(
+  const { el, api } = await mountReceiptEditor(
     receiptApi({
       ...receiptModel,
       receipt: { ...receiptModel.receipt, phone: "910000000", email: "old@example.com" },
@@ -63,13 +64,13 @@ it("trims contacts on save and omits blank contact keys", async () => {
   });
 });
 it("marks both invalid contacts and enables Save only after both are repaired", async () => {
-  const { el, api } = await mountReceiptDialog();
+  const { el, api } = await mountReceiptEditor();
   await editReceipt(el, "phone", "not yet");
   await editReceipt(el, "email", "a@");
   await clickReceiptSave(el);
   expect(receiptField(el, "phone").error).toBe(t("receipts.invalid_phone"));
   expect(receiptField(el, "email").error).toBe(t("receipts.invalid_email"));
-  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
   expect(receiptSave(el).disabled).toBe(true);
   await editReceipt(el, "phone", "910000000");
   expect(receiptSave(el).disabled).toBe(true);
@@ -81,7 +82,7 @@ it.each([
   { field: "phone", at: `123${" ".repeat(24)}456`, over: `123${" ".repeat(25)}456`, max: 30 },
   { field: "email", at: "a".repeat(248) + "@b.com", over: "a".repeat(249) + "@b.com", max: 254 },
 ] as const)("holds $field to its exact trimmed save bound", async ({ field, at, over, max }) => {
-  const { el, api } = await mountReceiptDialog();
+  const { el, api } = await mountReceiptEditor();
   await editReceipt(el, field, " " + over + " ");
   await clickReceiptSave(el);
   expect(receiptField(el, field).error).toBe(
@@ -93,8 +94,8 @@ it.each([
   expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt[field]).toBe(at);
 });
 it("choosing and clearing a previously absent logo restores a clean draft without inheritance", async () => {
-  const { el, api, app } = await mountReceiptDialog();
-  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  const { el, api, app } = await mountReceiptEditor();
+  const upload = receiptRoot(el).querySelector("dashboard-image-upload")!;
   upload.dispatchEvent(
     new CustomEvent("image-changed", { detail: { image: LOGO }, bubbles: true, composed: true }),
   );
@@ -113,10 +114,10 @@ it("choosing and clearing a previously absent logo restores a clean draft withou
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
 });
 it("clearing a saved logo previews and saves no logo", async () => {
-  const { el, api } = await mountReceiptDialog(
+  const { el, api } = await mountReceiptEditor(
     receiptApi({ ...receiptModel, receipt: { ...receiptModel.receipt, logo: LOGO } }),
   );
-  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  const upload = receiptRoot(el).querySelector("dashboard-image-upload")!;
   await upload.updateComplete;
   await userEvent.click(
     page.elementLocator(upload.shadowRoot!.querySelector("[data-test=remove-image]")!),
@@ -133,19 +134,18 @@ it("a last-language footer refusal focuses its textarea and survives edits to an
     code: "receipt.invalid",
     params: { field: "footerMessage", language: "ca-ES", maxLength: 300 },
   });
-  const { el, dialog } = await mountReceiptDialog(api);
+  const { el } = await mountReceiptEditor(api);
   await editReceipt(el, "footerMessage-ca-ES", "Draft");
   await clickReceiptSave(el);
   const refused = receiptField(el, "footerMessage-ca-ES");
   await expect.poll(() => refused.error).toBe(t("receipts.trim_too_long").replace("{max}", "300"));
   expect(refused.shadowRoot!.activeElement).toBe(refused.shadowRoot!.querySelector("textarea"));
-  expect(dialog.shadowRoot!.querySelector(".body")!.scrollTop).toBeGreaterThan(0);
   await editReceipt(el, "email", "bar@example.com");
   expect(refused.error).not.toBe("");
-  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
   await editReceipt(el, "footerMessage-ca-ES", "Fixed");
   expect(refused.error).toBe("");
-  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
   expect(receiptSave(el).disabled).toBe(false);
 });
 it("an unknown refused language is summarized without marking fields or creating hostile markup", async () => {
@@ -155,11 +155,11 @@ it("an unknown refused language is summarized without marking fields or creating
     code: "receipt.invalid",
     params: { field: "footerMessage", language: hostile, reason: "invalid_language" },
   });
-  const { el } = await mountReceiptDialog(api);
+  const { el } = await mountReceiptEditor(api);
   await editReceipt(el, "footerMessage-ca-ES", "Draft");
   await clickReceiptSave(el);
   await expect
-    .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+    .poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error)
     .toBe(codeMessage("receipt.invalid"));
   for (const name of [
     "footerMessage-ca-ES",
@@ -168,8 +168,8 @@ it("an unknown refused language is summarized without marking fields or creating
     "email",
   ])
     expect(receiptField(el, name).error).toBe("");
-  expect(el.shadowRoot!.querySelector("img")).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain(hostile);
+  expect(receiptRoot(el).querySelector("img")).toBeNull();
+  expect(receiptRoot(el).textContent).not.toContain(hostile);
   expect(receiptSave(el).disabled).toBe(false);
 });
 it("a refused address switch is explained beside it and clears when the switch is fixed", async () => {
@@ -178,37 +178,37 @@ it("a refused address switch is explained beside it and clears when the switch i
     code: "receipt.invalid",
     params: { field: "printAddress", reason: "not_boolean" },
   });
-  const { el } = await mountReceiptDialog(api);
+  const { el } = await mountReceiptEditor(api);
   await editReceipt(el, "email", "bar@example.com");
   await clickReceiptSave(el);
   await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-field-error=printAddress]")?.textContent)
+    .poll(() => receiptRoot(el).querySelector("[data-field-error=printAddress]")?.textContent)
     .toBe(codeMessage("receipt.invalid"));
-  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
-  const toggle = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+  const toggle = receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>(
     "wt-switch[name=printAddress]",
   )!;
   await toggle.updateComplete;
   await userEvent.click(page.elementLocator(toggle.shadowRoot!.querySelector("label")!));
-  expect(el.shadowRoot!.querySelector("[data-field-error=printAddress]")).toBeNull();
+  expect(receiptRoot(el).querySelector("[data-field-error=printAddress]")).toBeNull();
   expect(receiptSave(el).disabled).toBe(false);
 });
 it("a failed initial read offers native Retry and uses the localized fallback for an uncoded rejection", async () => {
   const api = receiptApi();
   api.getDepartmentReceipt.mockRejectedValueOnce(new Error("internal details"));
   const { el, host: app } = await mountWidget<
-    HTMLElementTagNameMap["dashboard-department-receipt-dialog"]
-  >("dashboard-department-receipt-dialog", { api, subject: { id: "bar", name: "Bar" } });
+    HTMLElementTagNameMap["dashboard-department-receipt-editor"]
+  >("dashboard-department-receipt-editor", { api, subject: { id: "bar", name: "Bar" } });
   await expect
-    .poll(() => el.shadowRoot!.querySelector(".error[role=alert]")?.textContent)
+    .poll(() => receiptRoot(el).querySelector(".error[role=alert]")?.textContent)
     .toBe(codeMessage("server.internal_error"));
   expect(app.textContent).not.toContain("internal details");
-  await userEvent.click(page.elementLocator(el.shadowRoot!.querySelector("wt-button")!));
-  await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
+  await userEvent.click(page.elementLocator(receiptRoot(el).querySelector("wt-button")!));
+  await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
   expect(receiptField(el, "operationDescription").value).toBe("Dining service");
 });
 it("Enter on an unchanged receipt sends nothing and Enter on an edited description saves exactly once", async () => {
-  const { el, api, dialog } = await mountReceiptDialog();
+  const { el, api, events } = await mountReceiptEditor();
   const description = receiptField(el, "operationDescription");
   await description.updateComplete;
   const input = description.shadowRoot!.querySelector("input");
@@ -217,10 +217,9 @@ it("Enter on an unchanged receipt sends nothing and Enter on an edited descripti
   await userEvent.keyboard("{Enter}");
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
   await editReceipt(el, "operationDescription", "Counter service");
-  const closed = dialogClosed(dialog);
   await userEvent.click(page.elementLocator(input!));
   await userEvent.keyboard("{Enter}");
-  await closed;
+  await expect.poll(() => events).toEqual(["department-receipt-saved:bar"]);
   expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
   expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt.operationDescription).toBe(
     "Counter service",
@@ -229,14 +228,14 @@ it("Enter on an unchanged receipt sends nothing and Enter on an edited descripti
 it("an unassigned save refusal stays visible when another authored field changes", async () => {
   const api = receiptApi();
   api.putDepartmentReceipt.mockRejectedValue({ code: "management.failed" });
-  const { el } = await mountReceiptDialog(api);
+  const { el } = await mountReceiptEditor(api);
   await editReceipt(el, "email", "bar@example.com");
   await clickReceiptSave(el);
   await expect
-    .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+    .poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error)
     .toBe(codeMessage("management.failed"));
   await editReceipt(el, "phone", "910000000");
-  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(
     codeMessage("management.failed"),
   );
   expect(receiptSave(el).disabled).toBe(false);
@@ -257,8 +256,8 @@ it.each([
   async ({ error, key }) => {
     const api = receiptApi();
     api.putDepartmentReceipt.mockRejectedValue(error);
-    const { el } = await mountReceiptDialog(api);
-    const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+    const { el } = await mountReceiptEditor(api);
+    const upload = receiptRoot(el).querySelector("dashboard-image-upload")!;
     upload.dispatchEvent(
       new CustomEvent("image-changed", { detail: { image: LOGO }, bubbles: true, composed: true }),
     );
@@ -276,7 +275,7 @@ it.each([
       )
       .toBe(sentence);
     expect(upload.invalid).toBe(true);
-    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+    expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
     expect(receiptSave(el).disabled).toBe(false);
     await editReceipt(el, "email", "bar@example.com");
     expect(
@@ -294,7 +293,7 @@ it.each([
 );
 
 it("adopts untouched receipt fields and translations while retaining typed values and their original baseline", async () => {
-  const { el, api } = await mountReceiptDialog();
+  const { el, api } = await mountReceiptEditor();
   await editReceipt(el, "headerSubtitle-es-ES", "Typed");
   api.getDepartmentReceipt.mockResolvedValue({
     ...receiptModel,
@@ -312,9 +311,9 @@ it("adopts untouched receipt fields and translations while retaining typed value
   expect(receiptField(el, "headerSubtitle-es-ES").value).toBe("Typed");
   expect(receiptField(el, "headerSubtitle-ca-ES").value).toBe("Cafè");
   expect(receiptField(el, "footerMessage-ca-ES").value).toBe("Remote footer");
-  expect(el.shadowRoot!.querySelector("dashboard-image-upload")!.image).toBe(LOGO);
+  expect(receiptRoot(el).querySelector("dashboard-image-upload")!.image).toBe(LOGO);
   expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=printAddress]")!
+    receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=printAddress]")!
       .checked,
   ).toBe(true);
   await editReceipt(el, "headerSubtitle-es-ES", "Bar");
@@ -337,8 +336,8 @@ it("pending Save freezes the saved logo and closes an already open picker", asyn
   const api = receiptApi({ ...receiptModel, receipt: { ...receiptModel.receipt, logo: LOGO } });
   const pending = deferred<void>();
   api.putDepartmentReceipt.mockImplementation(() => pending.promise);
-  const { el } = await mountReceiptDialog(api);
-  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  const { el } = await mountReceiptEditor(api);
+  const upload = receiptRoot(el).querySelector("dashboard-image-upload")!;
   await editReceipt(el, "email", "bar@example.com");
   await upload.updateComplete;
   await userEvent.click(
@@ -367,8 +366,8 @@ it("pending Save freezes the saved logo and closes an already open picker", asyn
   expect(upload.image).toBe(LOGO);
 });
 it("shows no copy of the address and previews its live replacement without changing authored receipt fields", async () => {
-  const { el, api } = await mountReceiptDialog();
-  expect(el.shadowRoot!.textContent).not.toContain("Calle Mayor 1");
+  const { el, api } = await mountReceiptEditor();
+  expect(receiptRoot(el).textContent).not.toContain("Calle Mayor 1");
   await editReceipt(el, "email", "bar@example.com");
   await expect
     .poll(() => api.previewReceiptDraft.mock.lastCall?.[0].receipt.email)
@@ -382,13 +381,13 @@ it("shows no copy of the address and previews its live replacement without chang
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(before + 1);
   expect(api.previewReceiptDraft.mock.lastCall![0].receipt.email).toBe("bar@example.com");
-  expect(el.shadowRoot!.textContent).not.toContain("Plaza Nueva 2");
+  expect(receiptRoot(el).textContent).not.toContain("Plaza Nueva 2");
   expect(receiptField(el, "email").value).toBe("bar@example.com");
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
 });
 
 it("marks exactly the offered languages missing authored translations, including the receipt language", async () => {
-  const { el } = await mountReceiptDialog(
+  const { el } = await mountReceiptEditor(
     receiptApi({
       ...receiptModel,
       languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
@@ -396,15 +395,15 @@ it("marks exactly the offered languages missing authored translations, including
     }),
   );
   const missing = () =>
-    [...el.shadowRoot!.querySelectorAll("h3")]
+    [...receiptRoot(el).querySelectorAll("h3")]
       .filter((heading) => heading.parentElement!.querySelector("[aria-label]"))
       .map((heading) => heading.lang);
   expect(missing()).toEqual([]);
-  expect(el.shadowRoot!.querySelector("[data-test=translation-warning]")).toBeNull();
+  expect(receiptRoot(el).querySelector("[data-test=translation-warning]")).toBeNull();
   await editReceipt(el, "footerMessage-eu-ES", "Eskerrik asko");
   expect(missing()).toEqual(["es-ES", "ca-ES", "gl-ES"]);
   expect(
-    el.shadowRoot!.querySelector("[data-test=translation-warning]")!.getAttribute("role"),
+    receiptRoot(el).querySelector("[data-test=translation-warning]")!.getAttribute("role"),
   ).toBe("note");
   for (const language of ["es-ES", "ca-ES", "gl-ES", "eu-ES"])
     for (const field of ["headerSubtitle", "footerMessage"])
@@ -421,8 +420,8 @@ it("the real logo library keeps an upload refusal visible without changing the r
     if (method === "POST") throw { code: "image.too_large", params: {}, status: 413 };
     return { images: [], total: 0 } as T;
   }) as typeof api.imageLibraryRequest;
-  const { el } = await mountReceiptDialog(api);
-  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  const { el } = await mountReceiptEditor(api);
+  const upload = receiptRoot(el).querySelector("dashboard-image-upload")!;
   await upload.updateComplete;
   await userEvent.click(
     page.elementLocator(upload.shadowRoot!.querySelector("[data-test=choose-image]")!),
@@ -468,20 +467,20 @@ it("the real logo library keeps an upload refusal visible without changing the r
 it("keeps a request failure beside the local correction summary when the draft becomes invalid", async () => {
   const api = receiptApi();
   api.putDepartmentReceipt.mockRejectedValue({ code: "management.failed" });
-  const { el } = await mountReceiptDialog(api);
+  const { el } = await mountReceiptEditor(api);
   await editReceipt(el, "email", "bar@example.com");
   await clickReceiptSave(el);
   await expect
-    .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+    .poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error)
     .toBe(codeMessage("management.failed"));
   await editReceipt(el, "operationDescription", "");
   expect(receiptField(el, "operationDescription").error).toBe(t("location_settings.required"));
-  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(
     `${t("form.fix_fields")} ${codeMessage("management.failed")}`,
   );
   expect(receiptSave(el).disabled).toBe(true);
   await editReceipt(el, "operationDescription", "Repaired");
-  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(
     codeMessage("management.failed"),
   );
   expect(receiptSave(el).disabled).toBe(false);
@@ -490,13 +489,13 @@ it("keeps a request failure beside the local correction summary when the draft b
 it("an uncoded save refusal uses the localized fallback and leaves the exact draft available to retry", async () => {
   const api = receiptApi();
   api.putDepartmentReceipt.mockRejectedValueOnce(new Error("private internal detail"));
-  const { el } = await mountReceiptDialog(api);
+  const { el } = await mountReceiptEditor(api);
   await editReceipt(el, "email", "bar@example.com");
   await clickReceiptSave(el);
   await expect
-    .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+    .poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error)
     .toBe(codeMessage("server.internal_error"));
-  expect(el.shadowRoot!.textContent).not.toContain("private internal detail");
+  expect(receiptRoot(el).textContent).not.toContain("private internal detail");
   expect(receiptField(el, "email").error).toBe("");
   expect(receiptField(el, "email").value).toBe("bar@example.com");
   expect(receiptSave(el).disabled).toBe(false);
@@ -521,7 +520,7 @@ it("an uncoded save refusal uses the localized fallback and leaves the exact dra
 it.each(["phone", "email", "operationDescription", "headerSubtitle-es-ES", "footerMessage-ca-ES"])(
   "contains the native %s field change event",
   async (name) => {
-    const { el } = await mountReceiptDialog();
+    const { el } = await mountReceiptEditor();
     const leaked = vi.fn();
     el.addEventListener("wt-change", leaked);
     await editReceipt(el, name, "Updated");
@@ -534,22 +533,22 @@ it.each(["en-GB", "es-ES"] as const)(
   "shows no address line and words an absent address in %s",
   async (locale) => {
     setLocale(locale);
-    const { el, api } = await mountReceiptDialog(
+    const { el, api } = await mountReceiptEditor(
       receiptApi({ ...receiptModel, venueAddress: ["Calle Mayor 1", "28013 Madrid"] }),
     );
-    expect(el.shadowRoot!.querySelector("[data-test=venue-address]")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain("Calle Mayor 1");
-    expect(el.shadowRoot!.textContent).not.toContain("28013 Madrid");
+    expect(receiptRoot(el).querySelector("[data-test=venue-address]")).toBeNull();
+    expect(receiptRoot(el).textContent).not.toContain("Calle Mayor 1");
+    expect(receiptRoot(el).textContent).not.toContain("28013 Madrid");
     api.getDepartmentReceipt.mockResolvedValue({ ...receiptModel, venueAddress: [] });
     api.liveData.invalidate([{ type: "locations" }]);
     await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=venue-address]")?.textContent?.trim())
+      .poll(() => receiptRoot(el).querySelector("[data-test=venue-address]")?.textContent?.trim())
       .toBe(t("receipts.no_address"));
   },
 );
 
 it("focuses a server-refused description and keeps its refusal until that field changes", async () => {
-  const { el, api } = await mountReceiptDialog();
+  const { el, api } = await mountReceiptEditor();
   api.putDepartmentReceipt.mockRejectedValue({
     code: "management.request_invalid",
     params: { field: "operationDescription" },
@@ -567,6 +566,6 @@ it("focuses a server-refused description and keeps its refusal until that field 
   expect(description.error).toBe(t("location_settings.invalid"));
   await editReceipt(el, "operationDescription", "Corrected service");
   expect(description.error).toBe("");
-  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
   expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
 });

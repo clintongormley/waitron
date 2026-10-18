@@ -1,6 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
-import { registerIcons, type WtFormActions, type WtInput, type WtTabs } from "@waitron/ui";
+import {
+  leaveCoordinatorFor,
+  registerIcons,
+  type WtFormActions,
+  type WtInput,
+  type WtTabs,
+} from "@waitron/ui";
 import { DASHBOARD_ICONS } from "./icons.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, VenueDefaults } from "./api/client.js";
@@ -9,13 +15,15 @@ import { DashboardApp } from "./dashboard-app.js";
 import { setLocale } from "./i18n/t.js";
 import { receiptLanguageName } from "./widgets/receipt-language.js";
 import {
-  mountReceiptDialog,
+  mountReceiptEditor,
   receiptApi,
   receiptField,
   editReceipt,
   preview,
-} from "./testing/department-receipt-dialog-fixture.js";
+  receiptRoot,
+} from "./testing/department-receipt-editor-fixture.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
+import { departmentDialog, mountReceiptTab } from "./testing/department-receipt-app-fixture.js";
 
 afterEach(() => {
   cleanupWidgets();
@@ -501,7 +509,7 @@ for (const locale of ["en-GB", "es-ES"]) {
           api.previewReceiptDraft.mockImplementation(async (draft) =>
             preview(draft.receipt.headerSubtitle?.["es-ES"] ?? "Bar"),
           );
-          const { app, host, el } = await mountReceiptDialog(api, theme);
+          const { app, host, el } = await mountReceiptEditor(api, theme);
           const input = receiptField(el, "headerSubtitle-es-ES");
           await editReceipt(el, "headerSubtitle-es-ES", "Edited heading");
           expect(input.value).toBe("Edited heading");
@@ -515,7 +523,7 @@ for (const locale of ["en-GB", "es-ES"]) {
               receipt: { headerSubtitle: { "es-ES": "Edited heading" } },
             });
           await expect
-            .poll(() => el.shadowRoot!.querySelector(".paper")?.textContent)
+            .poll(() => receiptRoot(el).querySelector(".paper")?.textContent)
             .toContain("Edited heading");
           let left = false;
           for (const decision of ["keep", "discard"] as const) {
@@ -550,13 +558,14 @@ for (const locale of ["en-GB", "es-ES"]) {
   }
 }
 
-it("the receipt dialog's Cancel protects the appearance before closing", async () => {
-  const { app, el, dialog } = await mountReceiptDialog();
+it("the Receipts tab's Cancel protects the appearance before closing", async () => {
+  const { app, editor: el } = await mountReceiptTab();
+  const dialog = departmentDialog(app)!.shadowRoot!.querySelector("wt-modal")!;
   await editReceipt(el, "headerSubtitle-es-ES", "Edited heading");
   const input = receiptField(el, "headerSubtitle-es-ES");
   for (const decision of ["keep", "discard"] as const) {
     await userEvent.click(
-      page.elementLocator(el.shadowRoot!.querySelector("[data-test=cancel-receipt]")!),
+      page.elementLocator(receiptRoot(el).querySelector("[data-test=cancel-receipt]")!),
     );
     const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => warning.open).toBe(true);
@@ -568,7 +577,9 @@ it("the receipt dialog's Cancel protects the appearance before closing", async (
     if (decision === "keep") expect(input.value).toBe("Edited heading");
   }
   expect(input.isConnected).toBe(false);
-  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(leaveCoordinatorFor(app.shadowRoot!.querySelector("wt-unsaved-changes")!)!.isDirty()).toBe(
+    false,
+  );
 });
 
 it("an obsolete receipt department query cannot bypass a venue draft leave decision", async () => {

@@ -5,34 +5,52 @@ import { setLocale, t } from "../i18n/t.js";
 import {
   clickReceiptSave,
   editReceipt,
-  mountReceiptDialog,
+  mountReceiptEditor,
   receiptApi,
   receiptField,
   receiptModel,
   preview,
-} from "../testing/department-receipt-dialog-fixture.js";
+  receiptRoot,
+} from "../testing/department-receipt-editor-fixture.js";
+import { mountReceiptTab } from "../testing/department-receipt-app-fixture.js";
 
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
+  history.replaceState(null, "", "/manage");
 });
 const cases = (["light", "dark"] as const).flatMap((theme) =>
   ["en-GB", "es-ES"].flatMap((locale) => [390, 1280].map((width) => ({ theme, locale, width }))),
 );
 it.each(cases)(
-  "department receipt states $locale $theme $width are accessible and fit",
+  "department receipt states on the Receipts tab $locale $theme $width are accessible and fit",
   async ({ theme, locale, width }) => {
     const before = { width: innerWidth, height: innerHeight };
     await page.viewport(width, 900);
     try {
       for (const state of ["open", "dirty", "invalid", "refused"] as const) {
-        setLocale(locale);
-        const api = receiptApi();
-        api.putDepartmentReceipt.mockRejectedValue({
-          code: "receipt.invalid",
-          params: { field: "email", reason: "invalid_email" },
+        const {
+          editor: el,
+          host,
+          modal: dialog,
+        } = await mountReceiptTab({
+          locale,
+          theme,
+          respond: (path, init) =>
+            path.endsWith("/bar/receipt") && init.method === "PUT"
+              ? Promise.resolve(
+                  new Response(
+                    JSON.stringify({
+                      error: {
+                        code: "receipt.invalid",
+                        params: { field: "email", reason: "invalid_email" },
+                      },
+                    }),
+                    { status: 422, headers: { "content-type": "application/json" } },
+                  ),
+                )
+              : undefined,
         });
-        const { el, host, dialog } = await mountReceiptDialog(api, theme);
         if (state !== "open")
           await editReceipt(el, "email", state === "invalid" ? "invalid" : "bar@example.com");
         if (state === "invalid" || state === "refused") {
@@ -41,7 +59,7 @@ it.each(cases)(
           await receiptField(el, "email").updateComplete;
         }
         await expectNoA11yViolations(host);
-        await expect.poll(() => el.shadowRoot!.querySelector(".paper")).toBeTruthy();
+        await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
         const native = dialog.shadowRoot!.querySelector("dialog")!;
         expect(native.getBoundingClientRect().right).toBeLessThanOrEqual(width);
         expect(native.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
@@ -82,7 +100,7 @@ function contrastRatio(a: string, b: string): number {
 it.each(["light", "dark"] as const)(
   "the receipt footer placeholder stays readable in %s",
   async (theme) => {
-    const { el } = await mountReceiptDialog(receiptApi(), theme);
+    const { el } = await mountReceiptEditor(receiptApi(), theme);
     const footer = receiptField(el, "footerMessage-es-ES");
     await footer.updateComplete;
     const textarea = footer.shadowRoot!.querySelector("textarea")!;
@@ -145,16 +163,16 @@ it.each(cases)(
               ...(state === "footerMessage" ? { language: "es-ES", maxLength: 200 } : {}),
             },
           });
-        const { el, host } = await mountReceiptDialog(api, theme);
-        const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+        const { el, host } = await mountReceiptEditor(api, theme);
+        const upload = receiptRoot(el).querySelector("dashboard-image-upload")!;
         expect(upload.image).toBe(logo);
         expect(
-          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>(
             "wt-switch[name=printAddress]",
           )!.checked,
         ).toBe(state !== "address-off");
         if (state === "no-address")
-          expect(el.shadowRoot!.querySelector("[data-test=venue-address]")!.textContent).toContain(
+          expect(receiptRoot(el).querySelector("[data-test=venue-address]")!.textContent).toContain(
             t("receipts.no_address"),
           );
         if (refused) {
@@ -163,7 +181,7 @@ it.each(cases)(
           if (state === "logo") await expect.poll(() => upload.invalid).toBe(true);
           else if (state === "printAddress")
             await expect
-              .poll(() => el.shadowRoot!.querySelector("[data-field-error=printAddress]"))
+              .poll(() => receiptRoot(el).querySelector("[data-field-error=printAddress]"))
               .toBeTruthy();
           else
             await expect
@@ -174,13 +192,13 @@ it.each(cases)(
               .not.toBe("");
           if (state === "footerMessage") {
             await expect
-              .poll(() => el.shadowRoot!.querySelector("[data-mark=headerSubtitle]"))
+              .poll(() => receiptRoot(el).querySelector("[data-mark=headerSubtitle]"))
               .toBeTruthy();
             receiptField(el, "headerSubtitle-es-ES").focus();
             await expect
               .poll(() =>
-                el
-                  .shadowRoot!.querySelector("[data-mark=headerSubtitle]")!
+                receiptRoot(el)
+                  .querySelector("[data-mark=headerSubtitle]")!
                   .hasAttribute("data-active"),
               )
               .toBe(true);
@@ -206,7 +224,7 @@ it.each(retirementLooks)(
     try {
       setLocale(locale);
       await page.viewport(width, 900);
-      const { el, host, dialog } = await mountReceiptDialog(receiptApi(), theme);
+      const { editor: el, host, modal: dialog } = await mountReceiptTab({ locale, theme });
       expect(receiptField(el, "email").shadowRoot!.querySelector("input")).not.toBeNull();
       expect(dialog.open).toBe(true);
       expect(window.innerWidth).toBe(width);

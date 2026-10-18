@@ -149,39 +149,35 @@ See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-de
 [department Service tab](mockups/a756-kitchen-settings/03-department-service-tab.png),
 [Prep stations](mockups/a756-kitchen-settings/04-prep-stations-every-station.png); the canvas they
 were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owner's account only).
-After A725, which changes the same station editor.
 
-Every setting on Venue settings' Kitchen tab is stored once for the venue today: bump mode and
-fire control on `locations` (`packages/db/src/schema/tenants.ts:84-85`); late flags in
-`kitchen_timing_defaults`, which a station may override in `kitchen_station_timing`
-(`packages/db/src/schema/kitchen-timing.ts`); and `service_settings`
-(`packages/venue-service/src/schema/settings.ts`) — `edit_sent_lines`, `kitchen_ticket_grouping`,
-`print_held_work`, `print_moved_slips` (a station may override it), `release_reminder_minutes`, and
-`clearing_workflow`, which is A757's. Moving them to departments and stations is a migration; before
-go-live nothing is carried forward.
+What waits. Each part is planned when its blocker lands; the starting decisions are in the plan,
+`docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md` → "Parts that wait".
 
-1. Courses page: now recorded under [Decisions](#a756-point-1-courses-have-their-own-page-under-products-and-menus-owner-2026-10-16).
-2. **The department dialog becomes tabbed — Details, Service, Receipts, Transfers.** Details,
-   Service (with its "Orders and payment" section) and Transfers landed in A756's first pull
-   request (#1852). Still left: the Receipts tab, into which receipt editing
-   (`apps/dashboard/src/screens/department-receipt-dialog.ts`) moves while the departments table's
-   Receipt link (`packages/venue-service/src/dashboard/departments-list.ts:215-226`) goes; and
-   Service's "Courses and the kitchen" section, holding the reminder to send the next course
-   (who sends a held course is dropped, per the A773 block above). A757 adds its optional table
-   states to Service.
-3. **Prep stations gets an "Every station" card**, and each setting on it can differ per station:
-   late flags; done on the screen (today's bump mode: one item at a time or the whole ticket);
-   identical dishes on a ticket; held courses (print in advance marked HOLD, or when sent); MOVED
-   slips; changes after sending. The stations table gains a "Differs from every station" column.
-   **Changes after sending and held-course printing are per station** (owner, 2026-10-16): the
-   switch exists for a printer-only station, which cannot see a change. A dish is believed to go
-   to exactly one station (routing is single-target, A9), so one station answers whether an item
-   may change; check that against the code.
-4. **The Kitchen tab goes.**
+- **PR 4 — the reminder to send the next course, per department**, in a "Courses and the kitchen"
+  section of the department's Service tab. Waits for A773-1, which rewrites both of its readers in
+  `apps/server/src/order-groups.ts`.
+- **PR 5 — late flags on each station.** Waits for A773-1, which edits `working-order.ts`'s timing
+  imports and many of the files that read or seed the timing tables.
+- **PR 6 — identical dishes, held courses and MOVED slips on each station.** Waits for A773-1, which
+  rewrites `planKitchenTickets`, `printMovedSlips` and `printHoldTickets`.
+- **PR 7 — done on the screen on each station.** Waits for A773-1, which edits the till files the
+  mode travels through (`till-app.ts`, `till-station-screen.ts`, `station-queue.ts`).
+- **PR 8 — changes after sending, three values, on each station.** Waits for A773-1, whose Recall
+  reads `edit_sent_lines` in the meantime.
+- **The Kitchen tab goes** in whichever change removes its last control: after PRs 4–8 only fire
+  control is left, which A773-2 removes with `locations.fire_control`.
 
-Wording: in the mock-ups a station's inherited choice reads "Same as every station". A725 point 6's
-"Venue setting: Print" was chosen when the default lived on Venue settings; the owner is asked to
-confirm the new wording when A756 is picked up.
+The Courses page's "Held until fired" column comes with A773-1 Task 1, which adds it to the shared
+course list widget; nothing is left for A756 there.
+
+Open points:
+
+- From #1852: the Transfers panel's heading is an `h2`, the dialog title's level, beside Service's
+  `h3` sections — an existing accessibility check selects `h2`.
+- From #1854: once A773-1 lands, rename the two `kitchen-screen.a11y.test.ts` cases that still name
+  a course list. On the Courses page the row dividers stop short of the card's sides (mock-up 02
+  runs them to the edge; needs `course-list.ts` styles), and an error under the list would sit on
+  the card's bottom border (read from the code, not seen).
 
 ## Left by C80: a dish whose course the till does not list
 
@@ -251,6 +247,12 @@ this section once A773 covers it. The reading below is what A773 has to change.
 Courses get their own page under Products and menus, because products name them: a list with drag
 handles, Add course, and Delete in each row's menu (courses already delete through
 `wt-delete-dialog`).
+
+### A756 point 3. Changes after sending and held-course printing are set per station (owner, 2026-10-16)
+
+The switch exists for a printer-only station, which cannot see a change. A dish is believed to go
+to exactly one station (routing is single-target, A9), so one station answers whether an item may
+change; check that against the code when PR 8 is picked up.
 
 ### A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer station editor
 

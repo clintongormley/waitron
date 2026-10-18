@@ -1,12 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent, page } from "vitest/browser";
 import { DashboardApi } from "../api/client.js";
-import {
-  cleanupWidgets,
-  mountWidget,
-  dialogClosed,
-  expectNoA11yViolations,
-} from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import {
   receiptModel,
@@ -14,16 +9,18 @@ import {
   receiptField,
   receiptSave,
   editReceipt,
-} from "../testing/department-receipt-dialog-fixture.js";
-import type { DepartmentReceiptDialog } from "./department-receipt-dialog.js";
-import "./department-receipt-dialog.js";
+  receiptRoot,
+} from "../testing/department-receipt-editor-fixture.js";
+import { mountReceiptTab } from "../testing/department-receipt-app-fixture.js";
+import type { DepartmentReceiptEditor } from "./department-receipt-editor.js";
+import "./department-receipt-editor.js";
 
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
+  history.replaceState(null, "", "/manage");
 });
-async function mount(locale = "en-GB", theme: "light" | "dark" = "light") {
-  setLocale(locale);
+async function mount() {
   let model = structuredClone(receiptModel);
   const activity = vi.fn();
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
@@ -36,18 +33,13 @@ async function mount(locale = "en-GB", theme: "light" | "dark" = "light") {
   );
   const api = new DashboardApi("", fetchImpl, undefined, activity);
   const liveData = api.liveData;
-  const { el, host } = await mountWidget<DepartmentReceiptDialog>(
-    "dashboard-department-receipt-dialog",
-    { api, subject: { id: "bar", name: "Bar" } },
-    theme,
-  );
-  await expect.poll(() => el.shadowRoot?.querySelector("[name=email]")).toBeTruthy();
-  const dialog = el.shadowRoot!.querySelector("wt-modal")!;
-  await expect.poll(() => dialog.shadowRoot?.querySelector("dialog")?.matches(":modal")).toBe(true);
+  const { el } = await mountWidget<DepartmentReceiptEditor>("dashboard-department-receipt-editor", {
+    api,
+    subject: { id: "bar", name: "Bar" },
+  });
+  await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
   return {
     el,
-    host,
-    dialog,
     fetchImpl,
     liveData,
     activity,
@@ -56,7 +48,7 @@ async function mount(locale = "en-GB", theme: "light" | "dark" = "light") {
     },
   };
 }
-it("a host-selected dialog reads the initial model actively and its live refresh passively", async () => {
+it("the host-supplied editor reads the initial model actively and its live refresh passively", async () => {
   const { el, fetchImpl, liveData, activity } = await mount();
   await expect
     .poll(() => fetchImpl.mock.calls.some(([path]) => path.endsWith("receipt-preview")))
@@ -71,7 +63,7 @@ it("a host-selected dialog reads the initial model actively and its live refresh
   expect(new Headers(reads[1]![1].headers).get("x-waitron-live")).toBe("1");
   expect(activity.mock.calls.filter(([path]) => path.endsWith("/bar/receipt"))).toHaveLength(1);
 });
-it("a live policy and receipt read preserves the host-selected dialog's authored dirty draft", async () => {
+it("a live policy and receipt read preserves the host-supplied editor's authored dirty draft", async () => {
   const { el, fetchImpl, liveData, changeModel } = await mount();
   await editReceipt(el, "email", "draft@example.com");
   changeModel({
@@ -86,19 +78,18 @@ it("a live policy and receipt read preserves the host-selected dialog's authored
   await expect.poll(() => receiptField(el, "operationDescription").value).toBe("New elsewhere");
   expect(receiptField(el, "email").value).toBe("draft@example.com");
   expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=receiptPrintMode]")!
+    receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=receiptPrintMode]")!
       .checked,
   ).toBe(false);
   expect(receiptSave(el).disabled).toBe(false);
 });
-it("the host-selected dialog writes the exact model envelope through the real client and closes", async () => {
-  const { el, dialog, fetchImpl } = await mount();
+it("the host-supplied editor writes the exact model envelope through the real client and stays with Save quiet", async () => {
+  const { el, fetchImpl } = await mount();
   await editReceipt(el, "email", "  counter@example.com  ");
   const saved = vi.fn();
   el.addEventListener("department-receipt-saved", saved);
-  const closed = dialogClosed(dialog);
   await userEvent.click(page.elementLocator(receiptSave(el)));
-  await closed;
+  await expect.poll(() => saved.mock.calls.length).toBe(1);
   const writes = fetchImpl.mock.calls.filter(([, init]) => init.method === "PUT");
   expect(writes).toHaveLength(1);
   expect(writes[0]![0]).toBe("/management-api/venue-service/departments/bar/receipt");
@@ -107,16 +98,14 @@ it("the host-selected dialog writes the exact model envelope through the real cl
     policy: receiptModel.policy,
   });
   expect((saved.mock.calls[0]![0] as CustomEvent).detail).toEqual({ departmentId: "bar" });
-  expect(dialog.open).toBe(false);
+  await el.updateComplete;
+  expect(receiptSave(el).variant).toBe("secondary");
+  expect(receiptSave(el).disabled).toBe(true);
 });
 
-it("a declarative selection can reopen the same department after its closed subject is cleared", async () => {
-  const { el, dialog, fetchImpl } = await mount();
-  const closed = dialogClosed(dialog);
-  await userEvent.click(
-    page.elementLocator(el.shadowRoot!.querySelector("[data-test=cancel-receipt]")!),
-  );
-  await closed;
+it("a cleared then re-set subject loads afresh through the real client", async () => {
+  const { el, fetchImpl } = await mount();
+  await editReceipt(el, "email", "draft@example.com");
   el.subject = undefined;
   await el.updateComplete;
   el.subject = { id: "bar", name: "Bar" };
@@ -124,28 +113,28 @@ it("a declarative selection can reopen the same department after its closed subj
   await expect
     .poll(() => fetchImpl.mock.calls.filter(([path]) => path.endsWith("/bar/receipt")).length)
     .toBe(2);
-  await expect.poll(() => dialog.open).toBe(true);
+  await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
+  expect(receiptField(el, "email").value).toBe("");
 });
 
 const hostCases = (["light", "dark"] as const).flatMap((theme) =>
   ["en-GB", "es-ES"].flatMap((locale) => [390, 1280].map((width) => ({ theme, locale, width }))),
 );
 it.each(hostCases)(
-  "host-selected receipt client fits $locale/$theme/$width",
+  "the receipt client fits inside the department dialog's Receipts tab $locale/$theme/$width",
   async ({ theme, locale, width }) => {
     const before = { width: innerWidth, height: innerHeight };
     await page.viewport(width, 900);
     try {
-      const { host, el, dialog } = await mount(locale, theme);
+      const { host, editor: el, modal: dialog } = await mountReceiptTab({ locale, theme });
       expect(innerWidth).toBe(width);
-      expect(dialog.description).toBe("Bar");
       await expectNoA11yViolations(host);
       const native = dialog.shadowRoot!.querySelector("dialog")!;
       expect(native.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
       expect(native.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
       expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
-      await expect.poll(() => el.shadowRoot!.querySelector(".paper")).toBeTruthy();
+      await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
       if (import.meta.env.VITE_A493_PORT_CAPTURE === "1")
         await page.screenshot({
           path: `__screenshots__/look/a493-port/${locale}-${theme}-${width}.png`,

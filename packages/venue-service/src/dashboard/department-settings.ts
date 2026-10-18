@@ -1,3 +1,4 @@
+import type { DashboardPanelRenderer } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -27,10 +28,23 @@ import type {
 } from "./client.js";
 import { t } from "./strings.js";
 
-export type DepartmentTab = "details" | "service" | "transfers";
-export function offeredDepartmentTabs(model?: VenueServiceView): DepartmentTab[] {
+export type DepartmentTab = "details" | "service" | "receipt" | "transfers";
+export function offeredDepartmentTabs(model?: VenueServiceView, receipts = false): DepartmentTab[] {
   const transfers = (model?.departments.filter((d) => d.active).length ?? 0) >= 2;
-  return ["details", "service", ...(transfers ? (["transfers"] as const) : [])];
+  return [
+    "details",
+    "service",
+    ...(receipts ? (["receipt"] as const) : []),
+    ...(transfers ? (["transfers"] as const) : []),
+  ];
+}
+export type ReceiptEditorPanel = ReturnType<DashboardPanelRenderer> | undefined;
+export const offersReceiptEditor = (editor: ReceiptEditorPanel) => editor != null;
+interface ReceiptEditor {
+  leaveScope?: object;
+  hasUnsavedChanges?: boolean;
+  saving?: boolean;
+  invalid?: boolean;
 }
 type Field = keyof DepartmentSettingsInput | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
@@ -77,9 +91,15 @@ export class DepartmentSettings extends LitElement {
         min-width: 0;
       }
       .form,
-      .panel {
+      .panel:not(.receipt) {
         display: grid;
         gap: var(--wt-space-5);
+        max-width: var(--wt-form-max-width);
+      }
+      .form.wide {
+        max-width: none;
+      }
+      .form.wide > :not(wt-tabs) {
         max-width: var(--wt-form-max-width);
       }
       section {
@@ -138,6 +158,7 @@ export class DepartmentSettings extends LitElement {
   @property() departmentId = "";
   @property({ type: Boolean }) refreshing = false;
   @property() tab: DepartmentTab = "details";
+  @property({ attribute: false }) receiptEditor: ReceiptEditorPanel;
   @state() private draft?: DepartmentSettingsInput;
   @state() private busy = false;
   @state() private attempted = false;
@@ -176,7 +197,19 @@ export class DepartmentSettings extends LitElement {
     return offeredDepartmentTabs(this.model).includes("transfers");
   }
   get offeredTabs(): DepartmentTab[] {
-    return offeredDepartmentTabs(this.model);
+    return offeredDepartmentTabs(this.model, offersReceiptEditor(this.receiptEditor));
+  }
+  private get receiptPanel() {
+    return this.shadowRoot?.querySelector<HTMLElement>("[slot=receipt]") ?? null;
+  }
+  private get receipt(): ReceiptEditor | undefined {
+    return (this.receiptPanel?.firstElementChild ?? undefined) as ReceiptEditor | undefined;
+  }
+  private get scopes() {
+    return [this.scope?.id, this.receipt?.leaveScope].filter((id): id is object => !!id);
+  }
+  private get pending() {
+    return this.busy || this.refreshing || !!this.receipt?.saving;
   }
   private get shownErrors(): Partial<Record<Field, string>> {
     return { ...(this.attempted ? this.errors : {}), ...this.refused };
@@ -185,13 +218,23 @@ export class DepartmentSettings extends LitElement {
     this.tab = tab;
     this.emit("department-tab-change", { tab, replace });
   }
-  private showFirstInvalid() {
-    const marked = new Set(Object.keys(this.shownErrors).map((field) => fieldTab[field as Field]));
+  private showFirstInvalid(
+    marked = new Set(Object.keys(this.shownErrors).map((field) => fieldTab[field as Field])),
+  ) {
     const first = this.offeredTabs.find((tab) => marked.has(tab));
     if (first && first !== this.tab) this.selectTab(first, true);
     void this.updateComplete.then(() => {
       if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
     });
+  }
+  private submitOnEnter(event: KeyboardEvent) {
+    submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-editor]"));
+  }
+  private receiptInvalid(event: CustomEvent<{ departmentId?: string; invalid?: boolean }>) {
+    event.stopPropagation();
+    if (event.detail?.departmentId !== this.departmentId) return;
+    this.requestUpdate();
+    if (event.detail.invalid && this.tab !== "receipt") this.showFirstInvalid(new Set(["receipt"]));
   }
   protected override willUpdate() {
     if (!this.offeredTabs.includes(this.tab)) this.tab = "details";
@@ -464,7 +507,7 @@ export class DepartmentSettings extends LitElement {
     }
   }
   private async cancel() {
-    if (this.busy || this.refreshing || !this.scope) return;
+    if (this.pending || !this.scope) return;
     const id = this.departmentId,
       generation = this.generation;
     const proceed = () => {
@@ -476,19 +519,21 @@ export class DepartmentSettings extends LitElement {
         this.emit("cancelled", { departmentId: id });
       }
     };
-    if (this.leave)
-      await this.leave.request({ scopes: [this.scope.id], reason: "cancel", proceed });
+    if (this.leave) await this.leave.request({ scopes: this.scopes, reason: "cancel", proceed });
     else proceed();
   }
   get hasUnsavedChanges() {
     return this.scope?.isDirty() ?? false;
   }
+  get receiptHasUnsavedChanges() {
+    return !!this.receipt?.hasUnsavedChanges;
+  }
   async requestLeave(reason: LeaveReason): Promise<boolean> {
-    if (!this.isConnected || this.busy || this.refreshing) return false;
-    if (!this.scope || !this.leave || !this.scope.isDirty()) return true;
+    if (!this.isConnected || this.pending) return false;
+    if (!this.scope || !this.leave || !this.leave.isDirty(this.scopes)) return true;
     const id = this.departmentId,
       generation = this.generation;
-    const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
+    const outcome = await this.leave.request({ scopes: this.scopes, reason, proceed() {} });
     return !!this.current(id, generation) && outcome === "proceeded";
   }
   private get differing() {
@@ -550,15 +595,14 @@ export class DepartmentSettings extends LitElement {
     for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
       if (errors[field]) serviceErrors[field] = errors[field];
     const marked = new Set(Object.keys(errors).map((field) => fieldTab[field as Field]));
-    const tabs: TabItem[] = this.offeredTabs.map((key) => ({
+    if (this.receipt?.invalid) marked.add("receipt");
+    const offered = this.offeredTabs;
+    const tabs: TabItem[] = offered.map((key) => ({
       key,
       label: t(`venue.department_tab.${key}`),
       ...(marked.has(key) ? { marked: t("venue.tab_needs_fixing") } : {}),
     }));
-    return html`<div
-      class="form"
-      @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-editor]"))}
-    >
+    return html`<div class=${offered.includes("receipt") ? "form wide" : "form"}>
       ${
         !row.active
           ? html`<p class="readonly">${t("venue.enable_department_settings")}</p> `
@@ -574,7 +618,7 @@ export class DepartmentSettings extends LitElement {
           this.selectTab(e.detail.value, false);
         }}
       >
-        <div class="panel" slot="details">
+        <div class="panel" slot="details" @keydown=${this.submitOnEnter}>
           <wt-input
             name="name"
             label=${t("venue.name")}
@@ -601,7 +645,7 @@ export class DepartmentSettings extends LitElement {
             }}
           ></wt-input>
         </div>
-        <div class="panel" slot="service">
+        <div class="panel" slot="service" @keydown=${this.submitOnEnter}>
           <section aria-label=${t("venue.orders_and_payment")}>
             <h3>${t("venue.orders_and_payment")}</h3>
             <dashboard-service-settings-fields
@@ -641,8 +685,19 @@ export class DepartmentSettings extends LitElement {
           </section>
         </div>
         ${
+          offered.includes("receipt")
+            ? html`<div
+                class="panel receipt"
+                slot="receipt"
+                @department-receipt-invalid=${this.receiptInvalid}
+              >
+                ${this.receiptEditor}
+              </div>`
+            : nothing
+        }
+        ${
           this.showsTransfers
-            ? html`<div class="panel" slot="transfers">
+            ? html`<div class="panel" slot="transfers" @keydown=${this.submitOnEnter}>
                 <section data-test="transfers-section" aria-label=${t("venue.tab_transfers")}>
                   <h2>${t("venue.tab_transfers")}</h2>
                   ${
@@ -698,7 +753,7 @@ export class DepartmentSettings extends LitElement {
             : nothing
         }
       </wt-tabs>
-      ${row.active ? html`<wt-form-actions .error=${[this.failure, Object.keys(errors).length ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
+      ${row.active && this.tab !== "receipt" ? html`<wt-form-actions .error=${[this.failure, Object.keys(errors).length ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
     </div>`;
   }
 }

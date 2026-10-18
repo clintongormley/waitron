@@ -318,7 +318,6 @@ describe("department list", () => {
     ["open-department-d1", "open-department", { departmentId: "d1" }],
     ["open-department-name-d2", "open-department", { departmentId: "d2" }],
     ["add-zone-d1", "add-zone", { departmentId: "d1" }],
-    ["receipt-department-d1", "edit-receipt", { departmentId: "d1" }],
     ["edit-zone-z1", "edit-zone", { zoneId: "z1" }],
     ["delete-zone-z1", "delete-zone", { zoneId: "z1" }],
     ["delete-department-d1", "delete-department", { departmentId: "d1" }],
