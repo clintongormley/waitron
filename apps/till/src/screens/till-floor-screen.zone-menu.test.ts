@@ -344,6 +344,13 @@ describe("till-floor-screen: the zone menu on a phone and wider", () => {
     });
   }
 
+  /** The ⋮ button's accessible name. */
+  async function menuName(el: TillFloorScreen): Promise<string | null> {
+    const actions = menuOf(el)!.shadowRoot!.querySelector("wt-row-actions")!;
+    await actions.updateComplete;
+    return actions.shadowRoot!.querySelector("button")!.getAttribute("aria-label");
+  }
+
   async function chooseItem(el: TillFloorScreen, item: string): Promise<void> {
     const menu = menuOf(el)!;
     menu.shadowRoot!.querySelector<HTMLElement>(`[data-menu-item="${item}"]`)!.click();
@@ -398,6 +405,16 @@ describe("till-floor-screen: the zone menu on a phone and wider", () => {
     expect(await entries(el)).toEqual(["List"]);
     await chooseItem(el, "view");
     expect(await entries(el)).toEqual(["Map"]);
+  });
+
+  it("at 390 names the menu for today's plan while it holds the plan's items", async () => {
+    const el = await mountAt(390);
+    expect(await menuName(el)).toBe("Today's plan");
+  });
+
+  it("at 390 names the menu for the floor's view when it holds only List or Map", async () => {
+    const el = await mountAt(390, { canChangeToday: false });
+    expect(await menuName(el)).toBe("Floor view");
   });
 
   it("at 390 gives a zone with no plan a menu holding only List or Map", async () => {

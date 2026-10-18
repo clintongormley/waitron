@@ -5,6 +5,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TillShell } from "./till-shell.js";
 import type { TillFloorScreen } from "../screens/till-floor-screen.js";
 import type { TableState } from "../api/client.js";
+import { PHONE_WIDTH } from "./language-chooser-styles.js";
 import "../till-app.js";
 import "./till-shell.js";
 import "../screens/till-floor-screen.js";
@@ -108,7 +109,7 @@ for (const locale of ["en-GB", "es-ES"]) {
         await zoneActions.updateComplete;
         // Below the phone width the List/Map toggle is the zone menu's first item.
         const pressView = async () => {
-          if (width < 640) {
+          if (matchMedia(PHONE_WIDTH).matches) {
             await userEvent.click(zoneActions.shadowRoot!.querySelector("button")!);
             await userEvent.click(
               zoneMenu.shadowRoot!.querySelector<HTMLElement>('[data-menu-item="view"]')!,

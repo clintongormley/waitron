@@ -185,7 +185,10 @@ export class TillFloorZoneMenu extends LitElement {
     const zone = this.zone;
     const planned = zone !== null && this.canChangeToday;
     if (!planned && !this.phone) return nothing;
-    return html`<wt-row-actions label=${t("floor.zone_menu")} align="end">
+    return html`<wt-row-actions
+        label=${planned ? t("floor.zone_menu") : t("floor.view_menu")}
+        align="end"
+      >
         ${
           this.phone
             ? html`<wt-button

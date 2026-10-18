@@ -867,6 +867,8 @@ export const en = {
   "floor.back_to_saved": "Back to saved place",
   "floor.take_off": "Take off for today",
   "floor.zone_menu": "Today's plan",
+  // The phone's ⋮ when it holds only the List/Map toggle.
+  "floor.view_menu": "Floor view",
   "floor.zone_menu_heading": "Today's plan · {zone}",
   "floor.add_spare": "Add a spare table",
   "floor.no_spares": "No spare tables",
@@ -2420,6 +2422,7 @@ export const es: Record<StringKey, string> = {
   "floor.back_to_saved": "Volver a su sitio",
   "floor.take_off": "Quitar por hoy",
   "floor.zone_menu": "Plano de hoy",
+  "floor.view_menu": "Vista de la sala",
   "floor.zone_menu_heading": "Plano de hoy · {zone}",
   "floor.add_spare": "Añadir mesa de reserva",
   "floor.no_spares": "No hay mesas de reserva",
