@@ -2314,6 +2314,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   a nonempty group and retains its held anchor. New group headings can be dragged among new groups,
   with Move earlier and Move later in their keyboard-accessible More menu. Focused browser checks
   cover touch input, short taps, context changes, cancellation and drops outside this table screen.
+  With no current-orders snapshot, Sent now retains this bill's stored names, prices, extras,
+  notes and nutrition without service controls. Focused browser checks cover its replacement by a
+  complete snapshot and exclusion of recalled families in a saved outbox held by you or a colleague.
   A physical till trial, the old drawer's retirement and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and

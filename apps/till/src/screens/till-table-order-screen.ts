@@ -644,6 +644,41 @@ export class TillTableOrderScreen extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
+      .sent-fallback {
+        border: var(--wt-field-line-width) solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        padding: var(--wt-space-3);
+        margin-bottom: var(--wt-space-3);
+      }
+
+      .sent-fallback ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .sent-fallback li ul {
+        padding-inline-start: var(--wt-space-3);
+      }
+
+      .sent-fallback-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: var(--wt-space-3);
+        padding-block: var(--wt-space-2);
+      }
+
+      .sent-fallback-name {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .sent-fallback-price {
+        flex: 0 0 auto;
+        font-variant-numeric: tabular-nums;
+      }
+
       .bill {
         display: grid;
         grid-template-columns: 1fr auto;
@@ -2844,6 +2879,7 @@ export class TillTableOrderScreen extends LitElement {
           ? html`<p role="status" data-sent-unread>${t("table.current_orders_unread")}</p>`
           : nothing
       }
+      ${this.currentOrders === null ? this.#sentFallback() : nothing}
       <till-sent-orders
         .scope=${scope}
         .billId=${billId}
@@ -2891,6 +2927,42 @@ export class TillTableOrderScreen extends LitElement {
           if (group !== undefined) this.#requestFireGroup(group);
         }}
       ></till-sent-orders>
+    </div>`;
+  }
+
+  #sentFallback(): TemplateResult | typeof nothing {
+    const recalled = new Set(
+      [
+        ...(this.#draftStore?.lines ?? []),
+        ...this.otherDrafts.flatMap((draft) => draft.lines),
+      ].flatMap((line) => (line.source === undefined ? [] : [line.source.line.id])),
+    );
+    const dishes = this.lines.filter((line) => !this.#isChild(line) && !recalled.has(line.id));
+    if (dishes.length === 0) return nothing;
+    // Bill lines lack partial serving quantities, so this fallback offers no actions.
+    return html`<section class="sent-fallback" data-sent-fallback>
+      <h2>${t("table.sent_title")}</h2>
+      <ul>
+        ${dishes.map(
+          (dish) =>
+            html`<li data-sent-fallback-line=${dish.id}>
+              ${this.#sentFallbackLine(dish)}
+              <ul>
+                ${this.lines.filter((line) => line.parentLineNo === dish.lineNo).map((extra) => html`<li data-sent-fallback-extra=${extra.id}>${this.#sentFallbackLine(extra)}</li>`)}
+              </ul>
+            </li>`,
+        )}
+      </ul>
+    </section>`;
+  }
+
+  #sentFallbackLine(line: TabLine): TemplateResult {
+    return html`<div class="sent-fallback-row">
+      <span class="sent-fallback-name"
+        >${this.#nameForLine(line)}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}
+        ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}
+      </span>
+      <span class="sent-fallback-price" data-sent-fallback-price>${this.#lineTotal(line)}</span>
     </div>`;
   }
 

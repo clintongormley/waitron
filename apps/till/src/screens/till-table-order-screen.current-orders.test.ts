@@ -573,7 +573,7 @@ describe("Current orders and Sent service", () => {
     expect(undoes).toEqual([]);
   });
 
-  it("without Current orders, shows this bill's rows and offers no serving", async () => {
+  it("without Current orders, keeps this bill's rows read-only in Sent", async () => {
     const lines: TabLine[] = [
       {
         stationId: null,
@@ -597,15 +597,16 @@ describe("Current orders and Sent service", () => {
         parentProductId: null,
       },
     ];
-    const { el } = await mountCurrent({
+    const { el } = await mountSent({
       currentOrders: null,
       lines,
       groups: [{ ...orderGroup("g1", 1, "fired"), lineIds: ["l-beer"] }],
     });
-    expect(text(rowOf(el, "l-beer"))).toContain("Beer ×1");
+    expect(text(q(el, '[data-sent-fallback-line="l-beer"]')!)).toContain("Beer ×1");
     expect(q(el, "[data-serve-row]")).toBeNull();
     expect(q(el, "[data-serve-group]")).toBeNull();
-    expect(text(q(el, "[data-group-summary]")!)).toBe("summary of g1");
+    expect(q(el, "[data-group-summary]")).toBeNull();
+    expect(q(el, "[data-sent-fallback] wt-button")).toBeNull();
   });
 });
 

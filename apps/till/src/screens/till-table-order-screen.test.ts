@@ -5828,8 +5828,9 @@ it("shows a retained table line's recorded name and modifier answer after live n
       },
     ],
   });
-  await openDrawer(el);
-  const row = el.shadowRoot!.querySelector(".pending-line")!;
+  el.style.width = "1280px";
+  await resized(el);
+  const row = el.shadowRoot!.querySelector("[data-sent-fallback-line]")!;
   expect(row.textContent).toContain("Nombre guardado");
   // The saved snapshot resolves the modifier name and the chosen label, not the live catalogue name.
   expect(row.textContent).toContain("Cortar");
@@ -5857,9 +5858,12 @@ it("shows a tab line's frozen options answers in the STAFF wording", async () =>
       },
     ],
   });
-  await openDrawer(el);
+  el.style.width = "1280px";
+  await resized(el);
   expect(
-    [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
+    [...el.shadowRoot!.querySelectorAll("[data-sent-fallback] .modifier-answer")].map(
+      (answer) => answer.textContent,
+    ),
   ).toEqual(["Punto personal: Poco personal"]);
 });
 
@@ -6063,7 +6067,7 @@ describe("A668 nutrition after table-order names", () => {
     ).not.toBeNull();
   });
 
-  it("shows nutrition in a group row before Current orders has been read", async () => {
+  it("shows stored nutrition in Sent before Current orders has been read", async () => {
     const line: TabLine = {
       ...pendingLine,
       groupId: "held",
@@ -6074,8 +6078,9 @@ describe("A668 nutrition after table-order names", () => {
       groups: [{ ...orderGroup("held", "held"), lineIds: [line.id] }],
       currentOrders: null,
     });
-    await openDrawer(el);
-    const name = el.shadowRoot!.querySelector("[data-group-line] .group-line-name")!;
+    el.style.width = "1280px";
+    await resized(el);
+    const name = el.shadowRoot!.querySelector("[data-sent-fallback-line] .sent-fallback-name")!;
     expect(name.querySelector('wt-icon[name="allergen-gluten"]')?.getAttribute("label")).toMatch(
       /rye|centeno/i,
     );
@@ -6095,18 +6100,27 @@ describe("A668 nutrition after table-order names", () => {
         { ...servedLine, nutrition: { allergens: { eggs: {} }, dietaryDeclarations: ["halal"] } },
       ],
     });
-    await openDrawer(el);
+    el.style.width = "1280px";
+    await resized(el);
     expect(
-      el.shadowRoot!.querySelector('.pending-line .name wt-icon[name="allergen-milk"]'),
+      el.shadowRoot!.querySelector(
+        '[data-sent-fallback-line="line-1"] .sent-fallback-name wt-icon[name="allergen-milk"]',
+      ),
     ).not.toBeNull();
     expect(
-      el.shadowRoot!.querySelector('.pending-line .name wt-icon[name="diet-no_fish"]'),
+      el.shadowRoot!.querySelector(
+        '[data-sent-fallback-line="line-1"] .sent-fallback-name wt-icon[name="diet-no_fish"]',
+      ),
     ).not.toBeNull();
     expect(
-      el.shadowRoot!.querySelector('.served-line .name wt-icon[name="allergen-eggs"]'),
+      el.shadowRoot!.querySelector(
+        '[data-sent-fallback-line="line-2"] .sent-fallback-name wt-icon[name="allergen-eggs"]',
+      ),
     ).not.toBeNull();
     expect(
-      el.shadowRoot!.querySelector('.served-line .name wt-icon[name="diet-halal"]'),
+      el.shadowRoot!.querySelector(
+        '[data-sent-fallback-line="line-2"] .sent-fallback-name wt-icon[name="diet-halal"]',
+      ),
     ).not.toBeNull();
   });
   it("shows sent dishes from other bills with their own nutrition in Current orders", async () => {
