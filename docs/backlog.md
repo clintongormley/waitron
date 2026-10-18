@@ -5126,13 +5126,6 @@ the tree. What remains, largest first:
   is not seen by them. Export one function from `@waitron/ui` that both the shell and the tests
   use. Left open by A719 (#1838).
 
-- **The simulator suite lost its worker to the venue watchdog during A739a investigation
-  (2026-10-16; open).** The full `packages/payments/src/simulator.test.ts` run logged
-  `provisioning.database_holder_frozen` after 15 passing cases; the isolated expiry case passed.
-  A faked clock reaching the watchdog's stamp reproduces the logged `lastTickAt` to within 0.1 s
-  and is fixed on A769; the unchanged suite did not fail in 17 runs. Close it if it does not recur.
-  [Detail](backlog/ci.md#the-simulator-suite-lost-its-worker-to-the-venue-watchdog)
-
 - **Audit the other product-editor pointer tests for opening-section races.**
   `product-editor.test.ts:288` waits for the render, without awaiting the opening animation
   (read only). A749 reproduces the race in the nutrition suite; try the same delayed press in the
@@ -5203,9 +5196,6 @@ the tree. What remains, largest first:
 
 _Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
-- **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;
-  `wa-wt reset demo <name>` rebuilds it as the demo business, tax ID `B00000000` (W108). Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
-
 - **Test-helper debt:** `provisionTestVenue(db, overrides)` for `apps/server`'s sixty-odd suites; the
   duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/` (`freePort` has moved there,
   A80; the rest remain); a shared `useFiscalMirrorPair()` for the two-clone fiscal suites.
@@ -5274,11 +5264,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.** Keep the job log on the
   next sighting — it is the cheapest evidence there is. [Detail](backlog/ci.md#a-sixth-a-ci-shard-exited-1-with-every-test-passing-pr-414)
 
-- **Whether to add a browser rule to `pnpm reap` anyway, for a shape not observed** — owner
-  question, left open by A426 (owner 2026-10-08; measured, no code change). It would have to tell a
-  test browser from the Playwright MCP's `mcp-chrome-*` browser, which lives under the same
-  `ms-playwright` cache folder.
-
 - **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
   Either stamp the label in that rig or accept cleaning it by hand — but the rig's schema is three
   storage decisions out of date anyway (its own entry, _The PGlite throughput bench no longer matches the shape it says it matches_), so the two decisions belong
@@ -5297,13 +5282,17 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 - _Small:_ `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
 
+- **A810. Show that a product given an empty unit id is refused.** Since #611 no case in
+  `packages/venue-service/src/operations.test.ts` shows it: its unit id is a placeholder. Add one
+  case that gives a product an empty unit id and expects the refusal, which should come from the
+  `product_units.unit_id` foreign key (`packages/catalogue/src/schema/units.ts:51`; read, not run).
+  If it is not refused, fix that. Done when the case is in and passes.
+
 - **Loose ends left by the comment-pruning pull requests (#559 to #624).** Each was found while
   pruning comments.
   - Two `health.test.ts` cases … feed a clean pass, so they check less than their titles say
     (#624).
     [Detail](backlog/ci.md#two-healthtestts-cases--feed-a-clean-pass-so-they-check-less-than-their-titles-say)
-  - `operations.test.ts`'s placeholder unit id no longer shows an empty string refused: `unit_id`
-    is plain text (#611).
   - `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
     `.husky/pre-push` beside the same loop; it is not there (#602).
     [Detail](backlog/ci.md#githubworkflowsciyml-about-line-283-says-the-three-shell-receipt-sits-in-huskypre-push-beside-the-same-loop-it-is-not-there)
@@ -5335,11 +5324,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   2026-09-21, task P6). Either bring the three decisions across and re-baseline, or change the
   sentence to say what it is.
   [Detail](backlog/ci.md#the-pglite-throughput-bench-no-longer-matches-the-shape-it-says-it-matches)
-
-- **The gate never runs on a pull request, so thinning a `packages/db` test merges green** — left
-  behind by gating `packages/db`'s mutation score (#472, 2026-09-20). Either accept the overnight
-  lag and say so where a reader meets the gate, or find a cheaper per-pull-request signal.
-  [Detail](backlog/ci.md#the-gate-never-runs-on-a-pull-request-so-thinning-a-packagesdb-test-merges-green)
 
 - **`packages/db`'s static mutants are not in its mutation score** — OPEN, left by A539.
   `"ignoreStatic": true` in `packages/db/stryker.config.json` leaves out every mutant in code that
@@ -5379,11 +5363,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   the Waitron servers' own ports in the loop and pause tests are drawn the same way, and a lost one
   fails the boot loudly (`server.listen_failed`) rather than silently; not changed.
 
-- **What moved the odds before the stream pause test's fill timed out on main on 2026-10-12 (runs
-  `38203241435` and `38288894550`) is not established.** The fill raced Litestream's own
-  checkpoints; what moved the odds (pages written per sale, runner
-  speed) was not measured. Left open by A549.
-
 - **The case "refused while the run is stopping" catches a log check blind to the stop only by the
   order two pending steps finish in:** in A538, with that check reading only the deadline, it passed
   once the refusal arrived one `setImmediate` later. Left open by #668, #686, A57, A60, #723, A538.
@@ -5412,9 +5391,12 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   also affects setup's existing links.
   [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack)
 
+- **A811. Check whether a catalogue-screen case still prints "[Unhandled rejection] Error:
+  marker".** The case near line 2624 of `apps/dashboard/src/screens/catalogue-screen.test.ts`
+  (added by #1087) printed it in passing runs. Run the file once; if it still prints, catch the
+  rejection where it escapes (in the test or the screen); if not, delete this entry.
+
 - **Loose ends left by W92 (#1250).**
-  - A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2624, added by #1087
-    before W92) prints "[Unhandled rejection] Error: marker" in passing runs; the noise should go.
   - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
     during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
     its final head.
@@ -5489,6 +5471,12 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   on this engine, while its snapshot kept it**, and no guard compares a key's delete rule with the
   migrated database. Observed once by an implementer (five store tests failed with a foreign-key
   refusal), not independently re-run. Left open by A429 slice 1 (#1493).
+  - **A812. Prove the schema-conformance suite catches a lost delete rule, then correct the
+    sentence above.** `packages/db/src/testing/schema-conformance.ts` appears to compare each key's
+    delete rule with the migrated database (read, not run). In one migration set that opts into the
+    suite, drop the delete rule from one migrated key and run the suite. Only if it fails, cut "no
+    guard compares a key's delete rule with the migrated database" and say instead that the suite
+    compares it for the sets that opt in; if it passes, the sentence stays.
 
 ### Dependency upgrades
 

@@ -110,12 +110,10 @@ Vitest 4.1.11 reads it.
 
 - **Three unexplained incidents, each seen once or twice; on recurrence retain the log before
   retrying** (standing rule: a flaky test is fixed at the root): eleven UI suites failing to load with
-  "Vitest failed to find the current suite/runner" after a rebase (2026-09-11); a test PostgreSQL
-  container with no published port (2026-09-12 — capture `docker inspect` and check the Docker
-  Desktop VM's ephemeral ports); bookings' browser freeze, never reproduced locally after #291. A
-  fourth, from #334's validation run (2026-09-12): the service-status browser suite failed with
-  Playwright's "Frame was detached" during a whole-workspace run, and then passed on its own with no
-  code change. The original log and screenshot were kept; the cause is unexplained, so retain them
+  "Vitest failed to find the current suite/runner" after a rebase (2026-09-11); bookings' browser
+  freeze, never reproduced locally after #291. A third, from #334's validation run (2026-09-12):
+  the service-status browser suite failed with Playwright's "Frame was detached" during a
+  whole-workspace run, and then passed on its own with no code change. The original log and screenshot were kept; the cause is unexplained, so retain them
   again on the next sighting rather than re-running to green.
 
 ## A sixth: a CI shard exited 1 with every test passing (PR #414)
@@ -209,18 +207,6 @@ match" of the write path, and its `create table` statements are three landed sto
 behind: `numeric` money and quantity columns where the real columns are now whole-number counts
 (#475 and task P6), and a `tenant_id` column the real schema no longer has. Either bring the three
 decisions across and re-baseline, or change the sentence to say what it is.
-
-## The gate never runs on a pull request, so thinning a `packages/db` test merges green
-
-**Left behind by gating `packages/db`'s mutation score (#472, 2026-09-20).** **The gate never runs
-on a pull request, so thinning a `packages/db` test merges green.** `.github/workflows/mutation.yml`
-fires nightly and on `workflow_dispatch` only, and `mutation-db-aggregate` lives in it, so a change
-that removes an assertion the score depended on reddens the next night. The ten db shards run side
-by side, 2.9 to 12.2 minutes each on run `38241392066`, but a pull request that started them would
-take ten of the roughly 20 jobs the account was seen running at once at most
-([ci-and-gates.md](../developers/ci-and-gates.md#mutation-testing-runs-nightly-at-0500-utc)).
-Either accept the overnight lag and say so where a reader meets the gate, or find a cheaper
-per-pull-request signal.
 
 ## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests
 
@@ -379,6 +365,13 @@ failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
   shard 4 hit its 10-minute limit on a slow runner.
   [Receipt](../developers/ci-and-gates.md#the-venue-service-shards-keep-their-test-databases-in-memory).
 
+- **`packages/db`'s mutation gate runs only overnight, and that lag is accepted** (owner,
+  2026-10-17). The gate lives in `.github/workflows/mutation.yml`, which runs nightly or by hand,
+  so a pull request that thins a `packages/db` test merges green and the score drops the next
+  night. No cheaper per-pull-request signal is wanted; `ui` and `ui-core` work the same way, and
+  [ci-and-gates.md](../developers/ci-and-gates.md#mutation-testing-runs-nightly-at-0500-utc) says
+  so where a reader meets the gate.
+
 **The development stack:**
 
 - **A stale dev database is only reported AFTER the boot dies, never before it** (#343). A pre-flight
@@ -455,43 +448,6 @@ uploading objects; no hook was bypassed. Raw logs remain in Lane F's local
 `d2f9bc3de08c2a3c0d2284a03efcc342319809a1`. Its controlled 200 ms thread pause reproduced this
 failure, and the revised test limits passed the same pause. The original run's delay remains
 unobserved. See [the retained experiment](../developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in).
-
-## The simulator suite lost its worker to the venue watchdog
-
-On 2026-10-16, an A739a investigation at `6dcffc9d3` ran:
-
-```sh
-pnpm --filter @waitron/payments exec vitest run src/simulator.test.ts
-```
-
-On Node v26.11.1 and Vitest 4.1.11, the run reported 15 passing cases out of 22,
-then one unhandled worker-exit error and exit 1. Its stderr logged
-`provisioning.database_holder_frozen`, with `lockedAt` at
-`2026-10-16T15:09:44.978Z`, `lastTickAt` at `2026-08-31T07:20:36.594Z`, and a stack
-ending in a database insert. The complete log remains in Lane F's local
-`receipts/a739a/provider-20261016.log`.
-
-The focused ordinary capture, immediate decline and pretend-reader decline cases passed
-(3 cases). The expiry case, run alone with
-`-t 'expires an abandoned pretend reader' --reporter=verbose`, also passed (1 case).
-Neither result repairs or explains the full run's worker loss.
-
-The expiry case uses unrestricted `vi.useFakeTimers()` at
-`packages/payments/src/simulator.test.ts:199`. The watchdog's stamp read `process.hrtime.bigint()` on the main
-thread; the watchdog thread reads its own real clock. Next: if a full run on a commit that has the
-captured clock loses its worker again, retain per-case timing and the stamp's value, and reproduce
-before changing anything; otherwise close this entry.
-
-On 2026-10-16 (A769, branch `fix/a769-venue-service-shard-hang`, on top of `1df3f5557`) the
-unchanged suite passed 22 of 22 in each of 17 runs without the fix below, so the failure did not
-reproduce as it was. With a 1,100 ms `Atomics.wait` added after the expiry case's
-`vi.useFakeTimers()` and a 1,500 ms one in the case after it, the run printed the frozen line with
-`lastTickAt` `2026-08-31T07:20:36.668Z` and `Tests 11 passed (22)`, exit 1 — within a tenth of a
-second of the logged one, which is ten minutes, the time that case moves its fake clock, after the
-moment this machine's monotonic clock read zero. The watchdog's stamp now reads a real clock and runs
-on a real interval, both taken when `venue-liveness.ts` loads; with those waits the run then printed
-`Tests 22 passed (22)`, and three unchanged runs did too. Detail:
-[testing-guide.md](../developers/testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
 
 ## A624. The upgrade walk cannot step a new set whose first migration names another set's later table
 
