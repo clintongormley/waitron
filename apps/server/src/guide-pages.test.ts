@@ -226,6 +226,21 @@ describe("guide pages", () => {
     for (const name of Object.keys(GUIDE_PAGE_TOKENS)) expect(style).toContain(`${name}:`);
   });
 
+  it("sets inline code apart from the page background in both themes", async () => {
+    const html = await (await appFor(root).request("/help/en/products")).text();
+    const style = between(html, "<style>", "</style>");
+    const rule = /(?:^|\n)code \{([^}]*)\}/.exec(style)![1]!;
+    const painted = [...rule.matchAll(/^(?:background|border)[a-z-]*:[^;]*;/gm)].flatMap((decl) =>
+      [...decl[0].matchAll(/var\((--wt-[a-z0-9-]+)\)/g)].map((m) => m[1]!),
+    );
+    const page = GUIDE_PAGE_TOKENS["--wt-color-bg"]!;
+    const apart = painted.filter((name) => {
+      const value = GUIDE_PAGE_TOKENS[name];
+      return Array.isArray(value) && value[0] !== page[0] && value[1] !== page[1];
+    });
+    expect(apart).not.toEqual([]);
+  });
+
   it("serves the guides shipped with the server when no folder is given", async () => {
     const app = new Hono();
     mountGuidePages(app, vi.fn());

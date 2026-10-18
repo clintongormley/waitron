@@ -17,6 +17,7 @@ export interface GuidePagesDeps {
 export const GUIDE_PAGE_TOKENS: Readonly<Record<string, readonly [string, string] | string>> = {
   "--wt-color-bg": ["#f7f7f8", "#101216"],
   "--wt-color-surface-sunken": ["#d6d9e0", "#101216"],
+  "--wt-color-border": ["#d6d9e0", "#333945"],
   "--wt-color-text": ["#16181d", "#eceef2"],
   "--wt-color-text-muted": ["#5c626e", "#a1a7b3"],
   "--wt-color-primary": ["#1f6feb", "#4c8dff"],
@@ -128,6 +129,7 @@ a { color: var(--wt-color-primary-text); overflow-wrap: anywhere; }
 a:focus-visible { outline: 2px solid var(--wt-color-focus); outline-offset: 2px; }
 code {
 background: var(--wt-color-surface-sunken);
+border: 1px solid var(--wt-color-border);
 border-radius: var(--wt-radius-md);
 padding: 0 var(--wt-space-1);
 overflow-wrap: anywhere;
