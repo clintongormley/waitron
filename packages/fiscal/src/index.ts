@@ -10,6 +10,8 @@ export type {
 } from "./clock.js";
 export type {
   FiscalBackendDeps,
+  FiscalCertificateAnswer,
+  FiscalCertificateSeat,
   FiscalContribution,
   FiscalDutyDeps,
   FiscalDutyLog,

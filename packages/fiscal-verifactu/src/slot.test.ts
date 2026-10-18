@@ -1,16 +1,31 @@
 import { randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { CREDENTIALS_MIGRATIONS, getCredential, loadKeyRing } from "@waitron/credentials";
+import {
+  CREDENTIALS_MIGRATIONS,
+  credentialRevision,
+  getCredential,
+  loadKeyRing,
+} from "@waitron/credentials";
 import { hasCode, isAppError } from "@waitron/shared";
 import type { TrustedClock } from "@waitron/fiscal";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { makeAuthority } from "../test/certificate-fixtures.js";
+import { seedTenantTillSif, TENANT_A } from "../test/fixtures.js";
+import { mtlsFetch } from "./aeat-transport.js";
+import { sealAeatSecret } from "./provisioning-secret.js";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_SLOT, rejectResolveClient } from "./slot.js";
+
+// A spy over the real transport, so a case can see that no connection to the authority was opened.
+vi.mock("./aeat-transport.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./aeat-transport.js")>();
+  return { ...actual, mtlsFetch: vi.fn(actual.mtlsFetch) };
+});
 
 // `makeBackend` only CONSTRUCTS the backend (no connection is opened until a method runs).
 const STUB_DB = {} as Database;
@@ -227,5 +242,100 @@ describe("the fiscal readiness rejection reader", () => {
   it("does not manufacture details when no rejection was saved", async () => {
     await seedPendingEnvios(suite.db, { count: 1 });
     expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([]);
+  });
+});
+
+describe("FISCAL_SLOT.certificate", () => {
+  const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 120_000 });
+  const authority = makeAuthority();
+  const installed = authority.issue({ notAfter: new Date("2027-01-01T00:00:00Z") });
+  const NOW = new Date("2026-10-18T11:00:00Z");
+  const INSTALLED_AT = "2026-10-01T09:00:00.000Z";
+
+  function testRing() {
+    return loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+  }
+
+  function revision(): Promise<string | null> {
+    return withTransaction(suite.db, (tx) => credentialRevision(tx, { purpose: "fiscal.aeat" }));
+  }
+
+  async function setupSeal() {
+    await seedTenantTillSif(suite.db);
+    const ring = testRing();
+    await sealAeatSecret(
+      { db: suite.db, ring, nodeId: TENANT_A.nodeId, now: () => new Date(INSTALLED_AT) },
+      {
+        pfxBase64: installed.pfx.toString("base64"),
+        passphrase: installed.passphrase,
+        certKind: "sello",
+      },
+    );
+    return ring;
+  }
+
+  it("read answers the card for the asking node", async () => {
+    await setupSeal();
+    const card = await FISCAL_SLOT.certificate!.read(
+      {
+        db: suite.db,
+        nodeId: TENANT_A.nodeId,
+        locationId: TENANT_A.locationId,
+        authorize: async () => {},
+        nameOf: async () => null,
+      },
+      NOW,
+    );
+    expect(card).toEqual({
+      revision: await revision(),
+      timeZone: "Europe/Madrid",
+      installed: {
+        kind: "sello",
+        organisation: "WAITRON SL",
+        taxId: "89890001K",
+        taxIdMatches: true,
+        issuer: "Waitron test FNMT (Test FNMT)",
+        validFrom: "2026-01-01T00:00:00.000Z",
+        validUntil: "2027-01-01T00:00:00.000Z",
+        daysLeft: 75,
+        stage: "warning",
+        installedAt: INSTALLED_AT,
+        source: "setup",
+        installedByName: null,
+        lastAcceptedAt: null,
+      },
+    });
+  });
+
+  it("install refuses a wrong passphrase without reaching the network", async () => {
+    const ring = await setupSeal();
+    const before = await revision();
+    const candidate = authority.issue();
+    vi.mocked(mtlsFetch).mockClear();
+
+    const answer = await FISCAL_SLOT.certificate!.install(
+      {
+        db: suite.db,
+        ring,
+        nodeId: TENANT_A.nodeId,
+        locationId: TENANT_A.locationId,
+        environment: "preproduction",
+        authorize: async () => ({ personId: "p-1" }),
+      },
+      {
+        pfxBase64: candidate.pfx.toString("base64"),
+        passphrase: "not-the-pass",
+        certKind: "sello",
+        expectedRevision: before,
+      },
+      NOW,
+    );
+
+    expect(answer).toEqual({ outcome: "refused", reason: "passphrase_wrong", field: "passphrase" });
+    expect(mtlsFetch).not.toHaveBeenCalled();
+    expect(await revision()).toBe(before);
   });
 });

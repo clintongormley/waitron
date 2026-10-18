@@ -19,3 +19,13 @@ describe("FiscalContribution.drain contract", () => {
     expect(await c.drain({} as never, new Date())).toMatchObject({ nextDueAt: null });
   });
 });
+
+describe("FiscalContribution.certificate contract", () => {
+  it("a contribution can leave the certificate seat out", () => {
+    const c: Pick<FiscalContribution, "id" | "certificate"> = {
+      id: "test",
+      certificate: undefined,
+    };
+    expect(c.certificate).toBeUndefined();
+  });
+});

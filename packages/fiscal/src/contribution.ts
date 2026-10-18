@@ -1,5 +1,5 @@
 import type { KeyRing } from "@waitron/credentials";
-import type { Database, DeploymentEnvironment } from "@waitron/db";
+import type { Database, DeploymentEnvironment, Transaction } from "@waitron/db";
 import type { DrainResult, FiscalBackend } from "./backend.js";
 import type { TrustedClock } from "./clock.js";
 
@@ -31,6 +31,42 @@ export interface FiscalDutyDeps {
     sentAt: Date;
     receivedAt: Date;
   }) => void;
+}
+
+export interface FiscalCertificateAnswer {
+  readonly outcome: "installed" | "refused";
+  readonly reason: string;
+  readonly field?: string;
+  readonly details?: Readonly<Record<string, string | number>>;
+}
+
+export interface FiscalCertificateSeat {
+  /** The card, as JSON the host passes on unread. One transaction; `authorize` runs first in it. */
+  read(
+    deps: {
+      db: Database;
+      nodeId: string;
+      locationId: string;
+      authorize(tx: Transaction): Promise<void>;
+      nameOf(tx: Transaction, personId: string): Promise<string | null>;
+    },
+    now: Date,
+  ): Promise<Readonly<Record<string, unknown>>>;
+  /** Every check, then one write; a refusal is an answer, not a throw. Throws only for the request
+   * itself. `authorize` runs in the read before anything leaves the box, and again in the write. */
+  install(
+    deps: {
+      db: Database;
+      ring: KeyRing;
+      nodeId: string;
+      locationId: string;
+      environment: DeploymentEnvironment;
+      authorize(tx: Transaction): Promise<{ personId: string }>;
+      log?: FiscalDutyLog;
+    },
+    body: unknown,
+    now: Date,
+  ): Promise<FiscalCertificateAnswer>;
 }
 
 /**
@@ -88,4 +124,5 @@ export interface FiscalContribution {
       readonly operationDescription: string;
     }): void;
   };
+  readonly certificate?: FiscalCertificateSeat;
 }

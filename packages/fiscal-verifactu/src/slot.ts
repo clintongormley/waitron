@@ -5,6 +5,8 @@ import { registrosFacturacion } from "./schema/registros.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
+import { readCertificateCard } from "./certificate-card.js";
+import { installCertificate } from "./certificate-install.js";
 import { drain as runDrain, resetInFlightClaims } from "./drain.js";
 import { parseAeatCert, sealAeatSecret } from "./provisioning-secret.js";
 import {
@@ -95,5 +97,10 @@ export const FISCAL_SLOT: FiscalContribution = {
     validateOperationDescription,
     defaults: { operationDescription: "Venta en establecimiento" },
     validate: validateVenueFiscalFields,
+  },
+  certificate: {
+    // The spread gives the card's interface the index signature the seat's opaque JSON needs.
+    read: async (deps, now) => ({ ...(await readCertificateCard(deps, now)) }),
+    install: installCertificate,
   },
 };
