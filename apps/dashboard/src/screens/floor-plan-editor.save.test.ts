@@ -35,6 +35,8 @@ const t5Placement = { x: 20, y: 3, width: 8, height: 8, shape: "rect" as const, 
 function plan(m1x = 2): FloorPlan {
   return {
     zoneId: "z1",
+    setId: "s1",
+    setName: "Standard",
     revision: 3,
     savedAt: "2026-10-01T10:00:00.000Z",
     tables: [
@@ -102,7 +104,7 @@ async function flush(el: FloorPlanEditor): Promise<void> {
 }
 
 async function open(api: DashboardApi): Promise<FloorPlanEditor> {
-  history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
   const { el } = await mountWidget<FloorPlanEditor>("dashboard-floor-plan-editor", { api });
   await flush(el);
   return el;
@@ -188,8 +190,8 @@ it("Save sends the draft with a key per table", async () => {
   await move(el, "m1", 5);
   await press(el, "save");
   const moved = changePlacement(draftFromPlan(plan()), "m1", { x: 5, y: 4 });
-  expect(api.saveFloorPlan).toHaveBeenCalledWith("z1", saveFromDraft(3, moved));
-  const body = vi.mocked(api.saveFloorPlan).mock.calls[0]![1];
+  expect(api.saveFloorPlan).toHaveBeenCalledWith("s1", "z1", saveFromDraft(3, moved));
+  const body = vi.mocked(api.saveFloorPlan).mock.calls[0]![2];
   expect(body.tables[0]!.placement!.x).toBe(5);
 });
 
@@ -281,7 +283,7 @@ it("a failed re-read after a save shows as a read's failure, and the next Save s
   await move(el, "m5", 22);
   expect(message(el)).toBe("");
   await press(el, "save");
-  const body = saveFloorPlan.mock.calls[1]![1] as ReturnType<typeof saveFromDraft>;
+  const body = saveFloorPlan.mock.calls[1]![2] as ReturnType<typeof saveFromDraft>;
   expect(body.revision).toBe(4);
   expect(body.tables).toContainEqual(expect.objectContaining({ id: "m5", key: "m5", label: "T5" }));
   expect(body.tables).toContainEqual(expect.objectContaining({ id: "m9", key: "m9" }));
@@ -342,7 +344,7 @@ it("a label sent with spaces is saved trimmed, so trimming it by hand is no chan
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await fromCanvas(el, "floor-plan-change", { draft: withT5(" T5 ") });
   await press(el, "save");
-  const body = saveFloorPlan.mock.calls[0]![1] as ReturnType<typeof saveFromDraft>;
+  const body = saveFloorPlan.mock.calls[0]![2] as ReturnType<typeof saveFromDraft>;
   expect(body.tables.find((t) => t.key === "new:1")!.label).toBe("T5");
   expectSave(el, "quiet");
   const typed = patchTable(rekeyDraft(withT5(" T5 "), { ...savedIds, "new:1": "m5" }), "m5", {
@@ -407,7 +409,7 @@ it("a re-read kept from a changed draft still gives a new table its live table, 
   expectSave(el, "quiet");
   await press(el, "redo");
   await press(el, "save");
-  const body = saveFloorPlan.mock.calls[1]![1] as ReturnType<typeof saveFromDraft>;
+  const body = saveFloorPlan.mock.calls[1]![2] as ReturnType<typeof saveFromDraft>;
   expect(body.tables).toContainEqual(expect.objectContaining({ id: "m5", key: "m5" }));
 });
 
@@ -524,7 +526,7 @@ it("Reload replaces the draft and writes nothing", async () => {
   expect(saveFloorPlan).toHaveBeenCalledTimes(1);
   await move(el, "m1", 9);
   await press(el, "save");
-  expect(saveFloorPlan.mock.calls[1]![1].revision).toBe(4);
+  expect(saveFloorPlan.mock.calls[1]![2].revision).toBe(4);
 });
 
 it("an accepted save whose answer lands after another zone opened changes nothing there", async () => {
@@ -534,11 +536,13 @@ it("an accepted save whose answer lands after another zone opened changes nothin
     .mockReturnValueOnce(write.promise)
     .mockReturnValue(new Promise(() => {}));
   const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!] };
-  const getFloorPlan = vi.fn((zoneId: string) => Promise.resolve(zoneId === "z2" ? bar : plan()));
+  const getFloorPlan = vi.fn((_setId: string, zoneId: string) =>
+    Promise.resolve(zoneId === "z2" ? bar : plan()),
+  );
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await move(el, "m1", 5);
   await press(el, "save");
-  history.pushState(null, "", "/manage/floor-plan/zone/z2");
+  history.pushState(null, "", "/manage/floor-plan/set/s1/zone/z2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   await move(el, "m1", 9);
@@ -549,7 +553,7 @@ it("an accepted save whose answer lands after another zone opened changes nothin
   expect(getFloorPlan).toHaveBeenCalledTimes(2);
   await press(el, "save");
   expect(saveFloorPlan).toHaveBeenCalledTimes(2);
-  expect(saveFloorPlan.mock.calls[1]![1].revision).toBe(3);
+  expect(saveFloorPlan.mock.calls[1]![2].revision).toBe(3);
 });
 
 it("a refused save whose answer lands after the page left shows nothing", async () => {
@@ -576,11 +580,13 @@ it("a refused save whose answer lands after another zone opened shows nothing, a
     .mockReturnValueOnce(write.promise)
     .mockReturnValue(new Promise(() => {}));
   const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!] };
-  const getFloorPlan = vi.fn((zoneId: string) => Promise.resolve(zoneId === "z2" ? bar : plan()));
+  const getFloorPlan = vi.fn((_setId: string, zoneId: string) =>
+    Promise.resolve(zoneId === "z2" ? bar : plan()),
+  );
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await move(el, "m1", 5);
   await press(el, "save");
-  history.pushState(null, "", "/manage/floor-plan/zone/z2");
+  history.pushState(null, "", "/manage/floor-plan/set/s1/zone/z2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   write.reject({ code: "server.internal" });
@@ -589,7 +595,7 @@ it("a refused save whose answer lands after another zone opened shows nothing, a
   await move(el, "m1", 9);
   await press(el, "save");
   expect(saveFloorPlan).toHaveBeenCalledTimes(2);
-  expect(saveFloorPlan.mock.calls[1]![0]).toBe("z2");
+  expect(saveFloorPlan.mock.calls[1]!.slice(0, 2)).toEqual(["s1", "z2"]);
 });
 
 it("a refresh's answer that lands after a later save's refresh is dropped", async () => {
@@ -778,7 +784,7 @@ it("the save body never carries a remembered place", async () => {
   const el = await open(api);
   await toggleRow(el, "m1");
   await press(el, "save");
-  const body = vi.mocked(api.saveFloorPlan).mock.calls[0]![1];
+  const body = vi.mocked(api.saveFloorPlan).mock.calls[0]![2];
   expect(body.tables[0]).toEqual({
     id: "m1",
     key: "m1",

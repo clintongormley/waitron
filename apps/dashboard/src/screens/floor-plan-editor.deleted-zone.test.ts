@@ -9,6 +9,8 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 const originalUrl = location.href;
 const plan: FloorPlan = {
   zoneId: "z1",
+  setId: "s1",
+  setName: "Standard",
   revision: 3,
   savedAt: "2026-10-01T10:00:00Z",
   tables: [
@@ -61,7 +63,7 @@ afterEach(() => {
   history.replaceState(null, "", originalUrl);
 });
 async function mount() {
-  history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
   app = document.createElement("deleted-floor-owner-app") as App;
   applyTokens(app);
   document.body.append(app);
@@ -141,7 +143,7 @@ it("deleting another zone keeps the floor move and Save/Undo", async () => {
   ).toBe(2);
 });
 it("a plan read that finishes after deletion cannot reopen the same owner", async () => {
-  history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
   app = document.createElement("deleted-floor-owner-app") as App;
   let finish!: (value: FloorPlan) => void;
   app.read.mockReturnValueOnce(

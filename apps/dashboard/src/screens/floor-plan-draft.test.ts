@@ -25,6 +25,8 @@ const m1Placement = { x: 2, y: 3, width: 8, height: 8, shape: "rect" as const, r
 
 const plan: FloorPlan = {
   zoneId: "z1",
+  setId: "s1",
+  setName: "Standard",
   revision: 3,
   savedAt: "2026-10-01T10:00:00.000Z",
   tables: [
@@ -64,6 +66,8 @@ const plan: FloorPlan = {
 /** Long table (10 seats) made of Counter 3 (2), Counter 4 (6) and Counter 5 (4), beside T1. */
 const joinedPlan: FloorPlan = {
   zoneId: "z1",
+  setId: "s1",
+  setName: "Standard",
   revision: 3,
   savedAt: "2026-10-01T10:00:00.000Z",
   tables: [

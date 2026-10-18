@@ -3244,19 +3244,24 @@ describe("dashboard-app", () => {
   );
 
   it.each([
-    ["manager", ["venue.configure"], "dashboard-floor-plan-editor", "/manage/floor-plan/zone/z1"],
+    [
+      "manager",
+      ["venue.configure"],
+      "dashboard-floor-plan-editor",
+      "/manage/floor-plan/set/s1/zone/z1",
+    ],
     ["supervisor", ["venue.view"], "dashboard-overview-screen", "/manage/overview"],
     [
       "supervisor",
       ["venue.configure"],
       "dashboard-floor-plan-editor",
-      "/manage/floor-plan/zone/z1",
+      "/manage/floor-plan/set/s1/zone/z1",
     ],
     ["manager", ["venue.view"], "dashboard-overview-screen", "/manage/overview"],
   ])(
-    "opens the floor plan editor at /manage/floor-plan/zone/z1 as %s, only with venue.configure",
+    "opens the floor plan editor at /manage/floor-plan/set/s1/zone/z1 as %s, only with venue.configure",
     async (role, permissions, tag, path) => {
-      history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+      history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
@@ -4820,6 +4825,8 @@ describe("the floor plan editor inside the real page", () => {
       }),
       getFloorPlan: vi.fn().mockResolvedValue({
         zoneId: "z1",
+        setId: "s1",
+        setName: "Standard",
         revision: 3,
         savedAt: "2026-10-01T10:00:00.000Z",
         tables: [
@@ -4855,7 +4862,7 @@ describe("the floor plan editor inside the real page", () => {
     width: number,
     overrides: Record<string, unknown> = {},
   ) => {
-    history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+    history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
     const mounted = await mountInRealPage(floorPlanApi(locale, overrides), width, 844);
     const editor = mounted.el.shadowRoot!.querySelector<HTMLElement>(
       "dashboard-floor-plan-editor",

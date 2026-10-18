@@ -36,6 +36,8 @@ const placement = { x: 2, y: 3, width: 8, height: 8, shape: "rect" as const, rot
 function plan(): FloorPlan {
   return {
     zoneId: "z1",
+    setId: "s1",
+    setName: "Standard",
     revision: 3,
     savedAt: "2026-10-01T10:00:00.000Z",
     tables: [
@@ -105,7 +107,7 @@ async function flush(el: FloorPlanEditor): Promise<void> {
 }
 
 async function open(api: DashboardApi): Promise<FloorPlanEditor> {
-  history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
   const { el } = await mountWidget<FloorPlanEditor>("dashboard-floor-plan-editor", { api });
   await flush(el);
   return el;
@@ -399,7 +401,7 @@ it("a booked table's mark goes at the next Save, which sends it back", async () 
   expect(drawn(el, "m2")?.refused).toBe("Booked 12 Oct, 21:00");
   await press(el, "save");
   expect(saveFloorPlan).toHaveBeenCalledTimes(2);
-  expect(saveFloorPlan.mock.calls[1]![1].tables.map((t: { key: string }) => t.key)).toEqual([
+  expect(saveFloorPlan.mock.calls[1]![2].tables.map((t: { key: string }) => t.key)).toEqual([
     "m1",
     "m9",
     "m2",
@@ -825,23 +827,25 @@ it("Save does not send while a Reload read is pending", async () => {
   await change(el, changePlacement(opened(), "m1", { x: 6, y: 4 }));
   await press(el, "save");
   expect(saveFloorPlan).toHaveBeenCalledTimes(2);
-  expect(saveFloorPlan.mock.calls[1]![1].revision).toBe(4);
+  expect(saveFloorPlan.mock.calls[1]![2].revision).toBe(4);
 });
 
 it("a save still pending on one zone does not stop Save on the next", async () => {
   const saveFloorPlan = vi.fn().mockReturnValue(new Promise(() => {}));
   const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!] };
-  const getFloorPlan = vi.fn((zoneId: string) => Promise.resolve(zoneId === "z2" ? bar : plan()));
+  const getFloorPlan = vi.fn((_setId: string, zoneId: string) =>
+    Promise.resolve(zoneId === "z2" ? bar : plan()),
+  );
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
   await press(el, "save");
-  history.pushState(null, "", "/manage/floor-plan/zone/z2");
+  history.pushState(null, "", "/manage/floor-plan/set/s1/zone/z2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
   await change(el, changePlacement(draftFromPlan(bar), "m1", { x: 9, y: 4 }));
   await press(el, "save");
   expect(saveFloorPlan).toHaveBeenCalledTimes(2);
-  expect(saveFloorPlan.mock.calls[1]![0]).toBe("z2");
+  expect(saveFloorPlan.mock.calls[1]!.slice(0, 2)).toEqual(["s1", "z2"]);
 });
 
 it("at 390 px a refusal that selects a table opens the sheet", async () => {
@@ -965,7 +969,7 @@ it("a seat count typed past 999 disables Save and says so until it is fixed", as
   expect(message(el)).toBe("");
   expect(button(el, "save").disabled).toBe(false);
   await press(el, "save");
-  expect(vi.mocked(api.saveFloorPlan).mock.calls[0]![1].tables[0]!.seats).toBe(10);
+  expect(vi.mocked(api.saveFloorPlan).mock.calls[0]![2].tables[0]!.seats).toBe(10);
 });
 
 it("a seat count with a fraction is refused and keeps Save disabled", async () => {
@@ -1028,7 +1032,7 @@ it("a second table's refused seats keep the first's refused text and reason, and
   expect(message(el)).toBe("");
   expect(button(el, "save").disabled).toBe(false);
   await press(el, "save");
-  const sent = vi.mocked(api.saveFloorPlan).mock.calls[0]![1].tables;
+  const sent = vi.mocked(api.saveFloorPlan).mock.calls[0]![2].tables;
   expect(sent.slice(0, 2).map((t) => t.seats)).toEqual([12, 3]);
 });
 
