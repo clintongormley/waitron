@@ -143,7 +143,8 @@ import {
 import { decimal, locationId, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { moduleCoreServices } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
-import { saveZonePlan } from "./floor-plan.js";
+import { saveLayout } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals, VENUE_SERVICE } from "./modules.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { drawLogoRasters } from "./receipt-logo.js";
@@ -6293,11 +6294,11 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       .insert(departmentReceipts)
       .values({ departmentId: live.id, receipt: { headerSubtitle: { "es-ES": "Live subtitle" } } });
     await createTable(tx, cfg, { label: "Live table", zoneId: liveZone.id });
-    await saveZonePlan(
+    await saveLayout(
       tx,
       cfg,
       removals,
-      liveZone.id,
+      await defaultLayout(tx, cfg, liveZone.id),
       {
         revision: 0,
         tables: [
@@ -6410,11 +6411,11 @@ it("carries Long table's parts, naming the imported tables", async () => {
       name: "Joined zone",
       departmentId: department.id,
     });
-    const { ids } = await saveZonePlan(
+    const { ids } = await saveLayout(
       tx,
       cfg,
       removals,
-      zone.id,
+      await defaultLayout(tx, cfg, zone.id),
       {
         revision: 0,
         tables: [
@@ -6487,11 +6488,11 @@ it("carries a kept size, naming the imported table", async () => {
       name: "Sized zone",
       departmentId: department.id,
     });
-    const { ids } = await saveZonePlan(
+    const { ids } = await saveLayout(
       tx,
       cfg,
       enabledTableRemovals(ALL_MODULES),
-      zone.id,
+      await defaultLayout(tx, cfg, zone.id),
       {
         revision: 0,
         tables: [

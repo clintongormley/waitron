@@ -16,7 +16,8 @@ import {
 } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { resetZone } from "./floor-today-store.js";
 import { holdersOf, memberTables } from "./parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -162,7 +163,16 @@ function place(x: number, y: number) {
 }
 
 function save(zoneId: string, revision: number, tables: Entry[]) {
-  return inTx(v, (tx) => saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables }, NOW));
+  return inTx(v, async (tx) =>
+    saveLayout(
+      tx,
+      v.cfg,
+      REMOVALS,
+      await defaultLayout(tx, v.cfg, zoneId),
+      { revision, tables },
+      NOW,
+    ),
+  );
 }
 
 const reset = (zoneId: string) =>
@@ -192,7 +202,9 @@ async function tableExists(tableId: string): Promise<boolean> {
 async function plannedTable(label: string) {
   const zoneId = await zone();
   const { revision, ids } = await save(zoneId, 0, [entry("t", label)]);
-  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const plan = await inTx(v, async (tx) =>
+    readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+  );
   const tableId = plan.tables.find((t) => t.id === ids.t)!.liveTableId!;
   return { zoneId, tableId, masterId: ids.t!, revision };
 }
@@ -217,7 +229,9 @@ async function longWaitsForItsName() {
     entry("c5", c5, { seats: 4, placement: null }),
     entry("bar", bar, { placement: place(60, 0) }),
   ]);
-  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const plan = await inTx(v, async (tx) =>
+    readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+  );
   const liveOf = (key: string) => plan.tables.find((t) => t.id === first.ids[key])!.liveTableId!;
   const held = await seatAt(liveOf("t9"));
   await save(zoneId, first.revision, [
@@ -259,7 +273,9 @@ async function counter3HeldAsLongGoesLive() {
     entry("c5", c5, { seats: 4, placement: place(40, 0) }),
     entry("bar", bar, { placement: place(60, 40) }),
   ]);
-  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const plan = await inTx(v, async (tx) =>
+    readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+  );
   const liveOf = (key: string) => plan.tables.find((t) => t.id === first.ids[key])!.liveTableId!;
   const partyId = await seatAt(liveOf("c3"));
   await save(zoneId, first.revision, [
@@ -377,7 +393,9 @@ describe("the till's floor routes catch today's plan up", () => {
       entry("c4", c4, { seats: 6, placement: place(20, 0) }),
       entry("c5", c5, { seats: 4, placement: place(40, 0) }),
     ]);
-    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const plan = await inTx(v, async (tx) =>
+      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+    );
     const liveOf = (key: string) => plan.tables.find((t) => t.id === first.ids[key])!.liveTableId!;
     const [t3, t4, t5] = [liveOf("c3"), liveOf("c4"), liveOf("c5")];
     const partyId = await seatAt(t3);
@@ -635,7 +653,9 @@ describe("on a new business day, the till's floor routes reset today's plan befo
 
 /** The live table each of the first save's entries made, by entry key. */
 async function liveIdsOf(zoneId: string, ids: Record<string, string>) {
-  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const plan = await inTx(v, async (tx) =>
+    readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+  );
   return (key: string) => plan.tables.find((t) => t.id === ids[key])!.liveTableId!;
 }
 

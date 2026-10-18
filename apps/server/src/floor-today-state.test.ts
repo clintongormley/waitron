@@ -11,7 +11,8 @@ import {
   floorZones,
 } from "@waitron/db";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { ensureToday } from "./floor-today-store.js";
@@ -88,10 +89,19 @@ describe("the till's table-state answer carries today's plan", () => {
       { key: "s", label: ls, seats: null, fixed: false, placement: null, partKeys: [] },
       { key: "o", label: lo, seats: 6, fixed: false, placement: place(40, 0), partKeys: [] },
     ];
-    await inTx(v, (tx) =>
-      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables: entries }, NOW),
+    await inTx(v, async (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        await defaultLayout(tx, v.cfg, zoneId),
+        { revision: 0, tables: entries },
+        NOW,
+      ),
     );
-    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const plan = await inTx(v, async (tx) =>
+      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+    );
     const liveId = (label: string) => plan.tables.find((t) => t.label === label)!.liveTableId!;
     const [a, b, spare, off] = [la, lb, ls, lo].map(liveId) as [string, string, string, string];
     const joinId = await inTx(v, async (tx) => {
@@ -193,10 +203,19 @@ describe("the till's table-state answer carries today's plan", () => {
       },
       { key: "plain", label: plain, seats: 4, fixed: false, placement: place(30, 5), partKeys: [] },
     ];
-    await inTx(v, (tx) =>
-      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables: entries }, NOW),
+    await inTx(v, async (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        await defaultLayout(tx, v.cfg, zoneId),
+        { revision: 0, tables: entries },
+        NOW,
+      ),
     );
-    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const plan = await inTx(v, async (tx) =>
+      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+    );
     const liveId = (label: string) => plan.tables.find((t) => t.label === label)!.liveTableId!;
 
     const states = await read();
