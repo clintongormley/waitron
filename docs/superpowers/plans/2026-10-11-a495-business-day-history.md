@@ -1,5 +1,7 @@
 # A495 business-day history implementation plan
 
+> 2026-10-18, A788: dated scheduling, Replace, Cancel and `hours.clock_change_pending` are replaced: a new start takes effect at the next changeover — see `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`.
+
 > **Execution:** the driver implements inline, task by task. Read `superpowers:executing-plans` and, before writing product code or tests, `superpowers:test-driven-development`. No mandatory implementation agents. Checkboxes track execution; this planner has implemented none of them.
 
 **Goal:** schedule a future business-day start while preserving existing report grouping and recorded closes.

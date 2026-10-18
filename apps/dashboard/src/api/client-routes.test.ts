@@ -1371,7 +1371,6 @@ it("previews a dated business-day start passively and writes with the loaded rev
       startAt: "2026-11-05T06:00:00.000Z",
       endAt: "2026-11-06T06:00:00.000Z",
     },
-    locksAt: "2026-11-04T04:00:00.000Z",
     conflicts: [],
     conflictCount: 0,
     backupDeadlines: { archive: null, cloud: null },
@@ -1380,25 +1379,25 @@ it("previews a dated business-day start passively and writes with the loaded rev
   const fetchImpl = vi
     .fn()
     .mockResolvedValueOnce(jsonResponse(preview))
-    .mockResolvedValueOnce(jsonResponse(result))
     .mockResolvedValueOnce(jsonResponse(result));
   const api = new DashboardApi("", fetchImpl);
   expect(typeof api.previewBusinessDayStart).toBe("function");
-  expect(await api.previewBusinessDayStart(input)).toEqual(preview);
+  expect(
+    await api.previewBusinessDayStart({ dayCutover: "07:00", expectedClockRevision: 4 }),
+  ).toEqual(preview);
   expect(await api.putBusinessDayStart(input)).toEqual(result);
-  expect(await api.cancelBusinessDayStart({ expectedClockRevision: 5 })).toEqual(result);
+  expect(api).not.toHaveProperty("cancelBusinessDayStart");
   expect(callsOf(fetchImpl)).toEqual([
     [
-      "/management-api/venue-details/business-day-start/preview?effectiveBusinessDay=2026-11-05&dayCutover=07%3A00&expectedClockRevision=4",
+      "/management-api/venue-details/business-day-start/preview?dayCutover=07%3A00&expectedClockRevision=4",
       "GET",
       undefined,
     ],
     ["/management-api/venue-details/business-day-start", "PUT", input],
-    ["/management-api/venue-details/business-day-start", "DELETE", { expectedClockRevision: 5 }],
   ]);
   expect(
     fetchImpl.mock.calls.map(([, init]) => new Headers(init.headers).get("x-waitron-live")),
-  ).toEqual(["1", null, null]);
+  ).toEqual(["1", null]);
 });
 
 it("reads a venue clock preview passively with encoded clock values", async () => {

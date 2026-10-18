@@ -35,7 +35,6 @@ export function seasonRefusalText(
   if (seasonRefusalField(refusal)) return "";
   const params = refusal.params ?? {};
   if (refusal.code === "hours.clock_changed") return t("hours.clock_changed");
-  if (refusal.code === "hours.clock_change_pending") return t("hours.clock_change_pending");
   if (refusal.code === "season.not_found") return t("season.not_found");
   if (refusal.code !== "season.invalid") return t("prep.save_error");
   if (params.reason === "last") return t("season.last");

@@ -1,7 +1,8 @@
 # A788: the business day's start changes at the next changeover
 
-**Status:** design, waiting for the owner's answers (questions in section 9, to be asked one at a
-time). No product code is changed by this document.
+**Status:** built on branch `feat/a788-business-day-next-changeover` (2026-10-18), to the plan
+`docs/superpowers/plans/2026-10-18-a788-business-day-next-changeover.md`; answered by the owner on
+2026-10-18 (all four questions answered A; section 9). No product code is changed by this document.
 
 **Inspected base:** `ee59f461c` (main, 2026-10-18). Every `file:line` below is at that commit.
 "Probe" means a script or a temporary test that was run on 2026-10-18 on Node v26.11.1 against
@@ -411,7 +412,13 @@ can have been recorded after 03:00 yet.)
 
 - `businessDayClockConflicts` marks `range` only on the ranges that fail. When a day's ranges do
   not parse together, each range is parsed on its own under the old and new start; a range that
-  fails alone gets `range` ("Crosses the new start"). The other ranges of that day are not marked
+  parses alone under the old start and fails alone under the new one gets `range` ("Crosses the new
+  start"). A range that already fails alone under the old start gets `overlap` ("Invalid or
+  overlapping range"), because the new start is not what is wrong with it (test "marks a stored
+  range already invalid under the old start as overlap, not as crossing the new one": 04:00–06:00
+  under 05:00 → 03:00). An off-step range was tried first and could not be stored: inserting
+  17:10–20:00 into `department_day_ranges` failed `department_day_ranges_step_ck`
+  (`zone_day_ranges` declares `zone_day_ranges_step_ck`; read, not run). The other ranges of that day are not marked
   `range`; each still goes through every other check (`all_day`, `endpoint_day`, `sending_cutoff`,
   `transition_strip`) exactly as if the day had parsed, so each is listed with its own reason, or
   not at all if it has none. For `sending_cutoff`'s "a later range on the same day" comparison
@@ -437,7 +444,7 @@ can have been recorded after 03:00 yet.)
   waits (`business-day-schedule.ts:501-508`). The editors' parse check runs the waiting start
   separately, and each of the eight callers (section 2) runs the clash check after its write while
   a change waits; both refuse with a new `hours.clock_change_conflict` (409,
-  `{ dayCutover, startsAt, conflicts, conflictCount }`). `hours.clock_change_pending` and its copy
+  `{ dayCutover, startsAt, timeZone, conflicts, conflictCount }`). `hours.clock_change_pending` and its copy
   (`dashboard/strings.ts:377`, `:1228`) go; the painters' handling of it moves to the new code
   (`season-painter.ts:549`, `special-day-painter.ts:955`, `:1071`, `season-refusal.ts:38`,
   `period-delete-dialog.ts:106`).
@@ -496,8 +503,10 @@ empieza a las" (`:3794`), changes to match.
 | `venue.business_day_invalid` / `clock_transition` | The clocks change on {date}. Save again from {when}. | La hora oficial cambia el {date}. Vuelve a guardar desde {when}. |
 | `hours.clock_change_conflict` | {range} clashes with the new business-day start, {time} from {when}: {reason}. | {range} choca con el nuevo inicio del día de trabajo, {time} desde {when}: {reason}. |
 
-`{reason}` is one of the conflict labels above, or today's `business_day.conflict_all_day`,
-`conflict_sending` or `conflict_strip` (`apps/dashboard/src/i18n/strings.ts:844-846`). Removed:
+`{reason}` comes from venue-service's own copy of those labels, `hours.conflict.<reason>` in
+`packages/venue-service/src/dashboard/strings.ts`; reword both tables together
+(`apps/dashboard/src/i18n/business-day-conflict-labels.test.ts` fails when the six shared reasons
+differ, in English or Spanish). Removed:
 `business_day.scheduled`, `business_day.none`, `business_day.locks`, `business_day.locked`,
 `business_day.date`, `business_day.date_invalid`, `business_day.replace`,
 `business_day.cancel_pending`, `business_day.acknowledge`, `business_day.transition`, and
@@ -507,6 +516,18 @@ minutes, leaving out a zero part: "22 h", "19 h 30 min", "47 h 59 min", "1 min" 
 Spanish). `{when}` is a weekday, date and
 time in the venue's time zone, "Wed 21 Oct, 03:00" / "mié 21 oct, 03:00"; today's dialog formats a
 year and a zone name instead (`business-day-start-editor.ts:305-317`).
+
+Added 2026-10-18 by the plan's Task 14a, two lines the table above lacks:
+
+| Key | English | Spanish |
+| --- | --- | --- |
+| `business_day.day_runs` | Business day {day} runs {start} → {end}: {duration}. | El día de trabajo {day} va de {start} a {end}: {duration}. |
+| `venue.business_day_invalid` (generic copy) | Check the start time. | Revisa la hora de inicio. |
+
+`day_runs` replaces `today_runs` when the day whose length changes is not today's: when a Save
+falls after midnight but before today's start, the next changeover ends tomorrow's day, so "Today's
+business day" would name the wrong day (review L8). The generic copy loses "the future date"
+because the dialog no longer has a date field.
 
 ## 8. Build slices and review path
 
@@ -538,7 +559,8 @@ runs its full wave with two Codex run-it reviews.
    `docs/developers/conventions-data.md:660`, `:676`, `:1202-1210`, a dated pointer at the head of
    the A495 spec, and the backlog.
 
-If question 4 is answered "yes", it becomes slice 5, after slice 2.
+5. **Opening hours: only the start in force and a waiting one limit new hours** (question 4
+   answered A). Built after slice 2.
 
 ## 9. Questions for the owner, one at a time
 
@@ -559,6 +581,9 @@ have to be changed first; hours such as 21:30–23:30 or 02:00–04:00 could sta
 - **B.** Allow only starts from 00:00 to 12:00, so a business day is always named after the date
   most of its trading happens on. This takes back the "9pm" in your own example.
 
+**Owner's answer, 2026-10-18 (through the campaign watcher):** A — keep allowing any start time,
+evening starts such as 21:00 included.
+
 ### Question 2 of 4 — very short or very long changeover days
 
 The changeover day lasts 24 h plus the difference between the new and the old start: 05:00 → 03:00
@@ -572,6 +597,9 @@ that long; a 1-minute day gets a report of its own. (If question 1 was answered 
 - **B.** Refuse a changeover day shorter than 12 h or longer than 36 h ("Move the start in steps of
   up to 12 hours").
 
+**Owner's answer, 2026-10-18 (through the campaign watcher):** A — no limit on the changeover day's
+length.
+
 ### Question 3 of 4 — a Save after midnight, when the new time has already passed
 
 It is 01:00 on Wednesday, still Tuesday's business day, which ends at 05:00. You change the start
@@ -581,6 +609,9 @@ to 00:30. Wednesday 00:30 has already passed.
   Thursday 00:30 (19.5 h); from Thursday the day starts at 00:30. The card shows "00:30, from Thu
   22 Oct, 00:30" so you see when it takes effect.
 - **B.** Refuse: "That time has already passed tonight. Save again after 05:00."
+
+**Owner's answer, 2026-10-18 (through the campaign watcher):** A — a Save after the new time has
+already passed tonight takes effect the next night (rule 2), and the card shows when.
 
 ### Question 4 of 4 — old starts keep limiting the opening hours
 
@@ -595,6 +626,11 @@ Opening hours. This is true today, with or without A788.
   in the Opening hours calendar draw a range that does not fit their own start cut at that day's
   ends. Built as a fifth slice.
 - **B.** Keep it as it is, and leave it as a backlog entry.
+
+**Owner's answer, 2026-10-18 (through the campaign watcher):** A — the opening-hours editors check
+new hours only against the start in force and a waiting one; past days in the Opening hours calendar
+draw a range that does not fit their own start cut at that day's ends; built as slice 5, after slice
+2.
 
 ## Mockups
 

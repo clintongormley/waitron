@@ -7,13 +7,15 @@ import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-type
 import { type VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
 import type { Season } from "./season-rules.js";
+import { calendarCutAnchor } from "./calendar-cut.js";
 import { readDayPlan, resolveDepartmentsDays } from "./day-resolver.js";
 import { isReadableZone } from "./hours-clock.js";
 import "./errors.js";
 
 /** Each date's special day, public holidays and tone. A date is closed when its special day closes
  *  it all day or no active department has hours on it; a public holiday's tone wins over a special
- *  day's, and an official local holiday's does not. */
+ *  day's, and an official local holiday's does not. Given `at`, each day's hours are drawn as the
+ *  calendar draws them, cut at a past day's own ends. */
 export async function calendarDays(
   tx: Transaction,
   cfg: VenueScope,
@@ -21,6 +23,7 @@ export async function calendarDays(
   holidays: readonly HolidayFact[],
   stored?: BusinessDayClock,
   seasons?: readonly Season[],
+  at?: Date,
 ): Promise<{ days: CalendarDay[]; seasonIdOn: ReadonlyMap<LocalDate, string | null> }> {
   stored ??= await readLocationClock(tx, cfg.locationId);
   // A business day's cutover never reads the zone (`cutoverAt`, @waitron/shared
@@ -39,6 +42,7 @@ export async function calendarDays(
     dates,
     clock,
     plan,
+    at === undefined ? undefined : { anchor: calendarCutAnchor(stored, at) },
   );
   for (const days of resolved.values())
     for (const [date, day] of days) if (day.ranges.length > 0) open.add(date);

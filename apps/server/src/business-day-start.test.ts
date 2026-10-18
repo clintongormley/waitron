@@ -14,6 +14,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { venueFiscalSelection } from "@waitron/provisioning";
+import { readLocationClock } from "@waitron/reporting";
+import { businessDayBounds } from "@waitron/shared";
 import {
   createDepartment,
   saveMenuPeriod,
@@ -153,7 +155,7 @@ describe("business-day start scheduling", () => {
 });
 
 const proposal = (overrides: Record<string, unknown> = {}) => ({
-  effectiveBusinessDay: "2026-11-04",
+  effectiveBusinessDay: "2026-11-03",
   dayCutover: "03:00",
   expectedClockRevision: 0,
   ...overrides,
@@ -164,6 +166,12 @@ async function clockRows() {
     settings: await suite.db.select().from(locationBusinessDaySettings),
   };
 }
+const changeoverPassed = {
+  error: {
+    code: "venue.business_day_invalid",
+    params: { field: "dayCutover", reason: "changeover_passed" },
+  },
+};
 async function expectRefusal(response: Response, status: number, code: string) {
   expect(response.status).toBe(status);
   expect(await response.json()).toMatchObject({ error: { code } });
@@ -173,47 +181,50 @@ describe("dated route protection", () => {
     const before = await inTx((tx) => readVenueDetails(tx, venue.cfg));
     const preview = await request(
       "GET",
-      "/business-day-start/preview?effectiveBusinessDay=2026-11-04&dayCutover=03%3A00&expectedClockRevision=0",
+      "/business-day-start/preview?dayCutover=03%3A00&expectedClockRevision=0",
     );
     expect(preview.status).toBe(200);
-    expect(await preview.json()).toMatchObject({
+    const previewBody = await preview.json();
+    expect(previewBody).not.toHaveProperty("locksAt");
+    expect(previewBody).toMatchObject({
       revision: 0,
       previousDay: {
-        businessDay: "2026-11-03",
+        businessDay: "2026-11-02",
         dayCutover: "05:00",
-        startAt: "2026-11-03T04:00:00.000Z",
-        endAt: "2026-11-04T02:00:00.000Z",
+        startAt: "2026-11-02T04:00:00.000Z",
+        endAt: "2026-11-03T02:00:00.000Z",
       },
       effectiveDay: {
-        businessDay: "2026-11-04",
+        businessDay: "2026-11-03",
         dayCutover: "03:00",
-        startAt: "2026-11-04T02:00:00.000Z",
-        endAt: "2026-11-05T02:00:00.000Z",
+        startAt: "2026-11-03T02:00:00.000Z",
+        endAt: "2026-11-04T02:00:00.000Z",
       },
-      locksAt: "2026-11-03T04:00:00.000Z",
       conflicts: [],
       conflictCount: 0,
     });
     expect(await clockRows()).toEqual({ changes: [], settings: [] });
     const save = await request("PUT", "/business-day-start", proposal());
     expect(save.status).toBe(200);
-    expect(await save.json()).toMatchObject({
+    const saved = await save.json();
+    expect(saved).toMatchObject({
       changed: true,
       model: {
         details: before.details,
-        businessDayClock: {
-          revision: 1,
-          currentBusinessDay: "2026-11-02",
-          pending: { effectiveBusinessDay: "2026-11-04", dayCutover: "03:00", editable: true },
-        },
+        businessDayClock: { revision: 1, currentBusinessDay: "2026-11-02" },
       },
+    });
+    expect(saved.model.businessDayClock.pending).toEqual({
+      effectiveBusinessDay: "2026-11-03",
+      dayCutover: "03:00",
+      startsAt: "2026-11-03T02:00:00.000Z",
     });
     expect((await suite.db.select().from(locations))[0]!.dayCutover).toBe("05:00:00");
     expect(await clockRows()).toEqual({
       changes: [
         {
           locationId: venue.cfg.locationId,
-          effectiveBusinessDay: "2026-11-04",
+          effectiveBusinessDay: "2026-11-03",
           dayCutover: "03:00:00",
         },
       ],
@@ -227,9 +238,6 @@ describe("dated route protection", () => {
     { unexpected: 1 },
     proposal({ effectiveBusinessDay: null }),
     proposal({ effectiveBusinessDay: "2026-02-30" }),
-    proposal({ effectiveBusinessDay: "2026-11-02" }),
-    proposal({ effectiveBusinessDay: "2026-11-03" }),
-    proposal({ effectiveBusinessDay: "2027-11-04" }),
     proposal({ dayCutover: "24:00" }),
     proposal({ dayCutover: null }),
     proposal({ dayCutover: "02:30:01" }),
@@ -237,7 +245,7 @@ describe("dated route protection", () => {
     proposal({ expectedClockRevision: 0.5 }),
     proposal({ expectedClockRevision: "0" }),
     proposal({ extra: true }),
-  ])("rejects malformed or non-future proposal %j", async (body) => {
+  ])("rejects malformed proposal %j", async (body) => {
     await expectRefusal(
       await request("PUT", "/business-day-start", body),
       400,
@@ -245,7 +253,20 @@ describe("dated route protection", () => {
     );
     expect(await clockRows()).toEqual({ changes: [], settings: [] });
   });
-  it("replaces and cancels once, retaining the revision against stale and ABA editors", async () => {
+  it.each(["2026-11-02", "2026-11-04", "2027-11-04"])(
+    "refuses a Save naming %s when the next changeover is 2026-11-03",
+    async (effectiveBusinessDay) => {
+      const response = await request(
+        "PUT",
+        "/business-day-start",
+        proposal({ effectiveBusinessDay }),
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual(changeoverPassed);
+      expect(await clockRows()).toEqual({ changes: [], settings: [] });
+    },
+  );
+  it("replaces and undoes once, retaining the revision against stale and ABA editors", async () => {
     expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
     await expectRefusal(
       await request("PUT", "/business-day-start", proposal({ dayCutover: "07:00" })),
@@ -262,7 +283,13 @@ describe("dated route protection", () => {
       ).status,
     ).toBe(200);
     expect(
-      (await request("DELETE", "/business-day-start", { expectedClockRevision: 2 })).status,
+      (
+        await request(
+          "PUT",
+          "/business-day-start",
+          proposal({ expectedClockRevision: 2, dayCutover: "05:00" }),
+        )
+      ).status,
     ).toBe(200);
     expect(await clockRows()).toEqual({
       changes: [],
@@ -272,26 +299,21 @@ describe("dated route protection", () => {
       (await request("PUT", "/business-day-start", proposal({ expectedClockRevision: 3 }))).status,
     ).toBe(200);
     await expectRefusal(
-      await request("DELETE", "/business-day-start", { expectedClockRevision: 0 }),
+      await request(
+        "PUT",
+        "/business-day-start",
+        proposal({ expectedClockRevision: 0, dayCutover: "05:00" }),
+      ),
       409,
       "venue.business_day_changed",
     );
     expect((await clockRows()).settings[0]!.revision).toBe(4);
   });
-  it("keeps equivalence and already-cancelled operations quiet but checks revisions first", async () => {
+  it("keeps repeated Saves quiet, checks revisions first, and lets the start in force undo a waiting change", async () => {
     const same = await request("PUT", "/business-day-start", proposal({ dayCutover: "05:00:00" }));
     expect(same.status).toBe(200);
     expect(await same.json()).toMatchObject({ changed: false });
-    const absent = await request("DELETE", "/business-day-start", { expectedClockRevision: 0 });
-    expect(absent.status).toBe(200);
-    expect(await absent.json()).toMatchObject({ changed: false });
     expect(await clockRows()).toEqual({ changes: [], settings: [] });
-    await expectRefusal(
-      await request("DELETE", "/business-day-start", { expectedClockRevision: 1 }),
-      409,
-      "venue.business_day_changed",
-    );
-    expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
     await expectRefusal(
       await request(
         "PUT",
@@ -299,66 +321,90 @@ describe("dated route protection", () => {
         proposal({ expectedClockRevision: 1, dayCutover: "05:00" }),
       ),
       409,
-      "venue.business_day_locked",
+      "venue.business_day_changed",
     );
+    expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
+    const again = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ expectedClockRevision: 1 }),
+    );
+    expect(again.status).toBe(200);
+    expect(await again.json()).toMatchObject({ changed: false });
+    expect((await clockRows()).settings).toEqual([
+      { locationId: venue.cfg.locationId, revision: 1 },
+    ]);
+    const undo = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ expectedClockRevision: 1, dayCutover: "05:00" }),
+    );
+    expect(undo.status).toBe(200);
+    expect(await undo.json()).toMatchObject({
+      changed: true,
+      model: { businessDayClock: { revision: 2, pending: null } },
+    });
+    expect(await clockRows()).toEqual({
+      changes: [],
+      settings: [{ locationId: venue.cfg.locationId, revision: 2 }],
+    });
   });
-  it.each(["PUT", "DELETE"])(
-    "refuses %s at the preceding-day lock, preserves retained rows after activation",
-    async (method) => {
-      expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
-      const rows = await clockRows();
-      at = new Date("2026-11-03T04:00:00.000Z");
-      await expectRefusal(
-        await request(
-          method,
-          "/business-day-start",
-          method === "PUT"
-            ? proposal({ expectedClockRevision: 1, dayCutover: "07:00" })
-            : { expectedClockRevision: 1 },
-        ),
-        409,
-        "venue.business_day_locked",
-      );
-      expect(await clockRows()).toEqual(rows);
-      at = new Date("2026-11-04T02:00:00.000Z");
-      await expectRefusal(
+  it("replaces a waiting change up to its changeover, and after it the next Save takes the following one", async () => {
+    expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
+    at = new Date("2026-11-03T01:59:59.999Z");
+    expect(
+      (
         await request(
           "PUT",
           "/business-day-start",
-          proposal({ expectedClockRevision: 1, dayCutover: "07:00" }),
-        ),
-        400,
-        "venue.business_day_invalid",
-      );
-      const read = await request("GET", "");
-      expect(read.status).toBe(200);
-      expect(await read.json()).toMatchObject({
-        details: { dayCutover: "03:00" },
-        businessDayClock: { pending: null, currentBusinessDay: "2026-11-04" },
-      });
-      expect(
-        (
-          await request(
-            "PUT",
-            "/business-day-start",
-            proposal({
-              effectiveBusinessDay: "2026-11-06",
-              expectedClockRevision: 1,
-              dayCutover: "07:00",
-            }),
-          )
-        ).status,
-      ).toBe(200);
-      expect((await clockRows()).changes).toHaveLength(2);
-    },
-  );
-  it.each(["PUT", "DELETE", "GET"])("requires the proper permission for %s", async (method) => {
+          proposal({ expectedClockRevision: 1, dayCutover: "04:00" }),
+        )
+      ).status,
+    ).toBe(200);
+    const rows = await clockRows();
+    expect(rows.changes).toEqual([
+      {
+        locationId: venue.cfg.locationId,
+        effectiveBusinessDay: "2026-11-03",
+        dayCutover: "04:00:00",
+      },
+    ]);
+    at = new Date("2026-11-03T03:00:00.000Z");
+    const late = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ expectedClockRevision: 2, dayCutover: "07:00" }),
+    );
+    expect(late.status).toBe(400);
+    expect(await late.json()).toEqual(changeoverPassed);
+    expect(await clockRows()).toEqual(rows);
+    const read = await request("GET", "");
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({
+      details: { dayCutover: "04:00" },
+      businessDayClock: { pending: null, currentBusinessDay: "2026-11-03" },
+    });
+    expect(
+      (
+        await request(
+          "PUT",
+          "/business-day-start",
+          proposal({
+            effectiveBusinessDay: "2026-11-04",
+            expectedClockRevision: 2,
+            dayCutover: "07:00",
+          }),
+        )
+      ).status,
+    ).toBe(200);
+    expect((await clockRows()).changes).toHaveLength(2);
+  });
+  it.each(["PUT", "GET"])("requires the proper permission for %s", async (method) => {
     const path =
       method === "GET"
-        ? "/business-day-start/preview?effectiveBusinessDay=2026-11-04&dayCutover=03%3A00&expectedClockRevision=0"
+        ? "/business-day-start/preview?dayCutover=03%3A00&expectedClockRevision=0"
         : "/business-day-start";
-    const body =
-      method === "GET" ? undefined : method === "PUT" ? proposal() : { expectedClockRevision: 0 };
+    const body = method === "GET" ? undefined : proposal();
     await expectRefusal(await request(method, path, body, ""), 401, "management_session.required");
     await expectRefusal(
       await request(method, path, body, venue.staffCookie),
@@ -367,27 +413,68 @@ describe("dated route protection", () => {
     );
     expect(await clockRows()).toEqual({ changes: [], settings: [] });
   });
+  it("answers a removed cancel route as it answers any unknown route, writing nothing", async () => {
+    await request("PUT", "/business-day-start", proposal());
+    const rows = await clockRows();
+    for (const cookie of ["", venue.staffCookie, venue.managerCookie]) {
+      const removed = await request(
+        "DELETE",
+        "/business-day-start",
+        { expectedClockRevision: 1 },
+        cookie,
+      );
+      const unknown = await request(
+        "DELETE",
+        "/no-such-route",
+        { expectedClockRevision: 1 },
+        cookie,
+      );
+      expect({ status: removed.status, body: await removed.text() }).toEqual({
+        status: unknown.status,
+        body: await unknown.text(),
+      });
+    }
+    expect(await clockRows()).toEqual(rows);
+  });
   it("refuses ambiguous and skipped transitions but accepts a nearby unambiguous date", async () => {
-    at = new Date("2026-10-22T12:00:00.000Z");
-    await expectRefusal(
-      await request(
-        "PUT",
-        "/business-day-start",
-        proposal({ effectiveBusinessDay: "2026-10-25", dayCutover: "02:30" }),
-      ),
-      400,
-      "venue.business_day_invalid",
+    at = new Date("2026-10-23T01:00:00Z");
+    const autumn = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ effectiveBusinessDay: "2026-10-24", dayCutover: "02:30" }),
     );
-    at = new Date("2027-03-25T12:00:00.000Z");
-    await expectRefusal(
-      await request(
-        "PUT",
-        "/business-day-start",
-        proposal({ effectiveBusinessDay: "2027-03-28", dayCutover: "02:30" }),
-      ),
-      400,
-      "venue.business_day_invalid",
+    expect(autumn.status).toBe(400);
+    expect(await autumn.json()).toEqual({
+      error: {
+        code: "venue.business_day_invalid",
+        params: {
+          field: "dayCutover",
+          reason: "clock_transition",
+          clocksChangeOn: "2026-10-25",
+          saveFrom: "2026-10-26T01:30:00.000Z",
+        },
+      },
+    });
+    at = new Date("2027-03-27T11:00:00Z");
+    const spring = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ effectiveBusinessDay: "2027-03-28", dayCutover: "02:30" }),
     );
+    expect(spring.status).toBe(400);
+    expect(await spring.json()).toEqual({
+      error: {
+        code: "venue.business_day_invalid",
+        params: {
+          field: "dayCutover",
+          reason: "clock_transition",
+          clocksChangeOn: "2027-03-28",
+          saveFrom: "2027-03-29T00:30:00.000Z",
+        },
+      },
+    });
+    expect(await clockRows()).toEqual({ changes: [], settings: [] });
+    at = new Date("2027-03-29T01:00:00Z");
     expect(
       (
         await request(
@@ -397,6 +484,64 @@ describe("dated route protection", () => {
         )
       ).status,
     ).toBe(200);
+  });
+  const clockTransition = (clocksChangeOn: string, saveFrom: string) => ({
+    error: {
+      code: "venue.business_day_invalid",
+      params: { field: "dayCutover", reason: "clock_transition", clocksChangeOn, saveFrom },
+    },
+  });
+  async function saveAndPreview(effectiveBusinessDay: string) {
+    const save = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ effectiveBusinessDay, dayCutover: "02:30" }),
+    );
+    const preview = await request(
+      "GET",
+      "/business-day-start/preview?dayCutover=02%3A30&expectedClockRevision=0",
+    );
+    return {
+      save: { status: save.status, body: await save.json() },
+      preview: { status: preview.status, body: await preview.json() },
+    };
+  }
+  it.each([
+    ["2026-10-23T01:00:00Z", "2026-10-24", "2026-10-25", "2026-10-26T01:30:00.000Z"],
+    ["2026-10-26T01:15:00Z", "2026-10-26", "2026-10-25", "2026-10-26T01:30:00.000Z"],
+    ["2027-03-27T11:00:00Z", "2027-03-28", "2027-03-28", "2027-03-29T00:30:00.000Z"],
+  ])(
+    "at %s the Save and the preview both say the clocks change and when to save again",
+    async (moment, effectiveBusinessDay, clocksChangeOn, saveFrom) => {
+      at = new Date(moment);
+      const refusal = { status: 400, body: clockTransition(clocksChangeOn, saveFrom) };
+      expect(await saveAndPreview(effectiveBusinessDay)).toEqual({
+        save: refusal,
+        preview: refusal,
+      });
+      expect(await clockRows()).toEqual({ changes: [], settings: [] });
+    },
+  );
+  it.each([
+    ["2026-10-26T02:00:00Z", "2026-10-27"],
+    ["2027-03-29T01:00:00Z", "2027-03-30"],
+  ])("at %s a 02:30 start saves for %s", async (moment, effectiveBusinessDay) => {
+    at = new Date(moment);
+    const preview = await request(
+      "GET",
+      "/business-day-start/preview?dayCutover=02%3A30&expectedClockRevision=0",
+    );
+    expect(preview.status).toBe(200);
+    expect((await preview.json()).effectiveDay.businessDay).toBe(effectiveBusinessDay);
+    const save = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ effectiveBusinessDay, dayCutover: "02:30" }),
+    );
+    expect(save.status).toBe(200);
+    expect((await clockRows()).changes).toMatchObject([
+      { effectiveBusinessDay, dayCutover: "02:30:00" },
+    ]);
   });
 });
 
@@ -408,10 +553,10 @@ function deferred() {
   return { promise, resolve };
 }
 describe("transaction-time and persisted history checks", () => {
-  it.each(["save", "cancel", "minimum-date"])(
+  it.each(["save", "undo", "plain"])(
     "rechecks queued %s using the time after acquisition",
     async (kind) => {
-      if (kind === "cancel" || kind === "save")
+      if (kind === "undo" || kind === "save")
         expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
       const before = await clockRows();
       const entered = deferred(),
@@ -431,14 +576,14 @@ describe("transaction-time and persisted history checks", () => {
         });
       let response!: ReturnType<typeof request>;
       try {
-        response =
-          kind === "cancel"
-            ? request("DELETE", "/business-day-start", { expectedClockRevision: 1 })
-            : request(
-                "PUT",
-                "/business-day-start",
-                proposal({ expectedClockRevision: kind === "save" ? 1 : 0, dayCutover: "07:00" }),
-              );
+        response = request(
+          "PUT",
+          "/business-day-start",
+          proposal({
+            expectedClockRevision: kind === "plain" ? 0 : 1,
+            dayCutover: kind === "undo" ? "05:00" : "07:00",
+          }),
+        );
         await queued.promise;
         at = new Date("2026-11-03T04:00:00.000Z");
       } finally {
@@ -446,11 +591,9 @@ describe("transaction-time and persisted history checks", () => {
         release.resolve();
       }
       await writer;
-      await expectRefusal(
-        await response,
-        kind === "minimum-date" ? 400 : 409,
-        kind === "minimum-date" ? "venue.business_day_invalid" : "venue.business_day_locked",
-      );
+      const refused = await response;
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toEqual(changeoverPassed);
       expect(await clockRows()).toEqual(before);
       const model = await inTx((tx) => readVenueDetails(tx, venue.cfg));
       expect(
@@ -463,15 +606,19 @@ describe("transaction-time and persisted history checks", () => {
       ).toBe(200);
     },
   );
-  it("refuses a future order anchor, including cancellation after a backward clock correction", async () => {
+  it("refuses a future order anchor, including an undo after a backward clock correction", async () => {
     expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
     const before = await clockRows();
     await inTx((tx) => createOpenOrder(tx, venue.cfg, randomUUID(), [], null));
     await suite.db.execute(
-      sql`update working_orders set opened_at = '2026-11-04T02:00:00.000Z' where location_id = ${venue.cfg.locationId}`,
+      sql`update working_orders set opened_at = '2026-11-03T02:00:00.000Z' where location_id = ${venue.cfg.locationId}`,
     );
     await expectRefusal(
-      await request("DELETE", "/business-day-start", { expectedClockRevision: 1 }),
+      await request(
+        "PUT",
+        "/business-day-start",
+        proposal({ expectedClockRevision: 1, dayCutover: "05:00" }),
+      ),
       409,
       "venue.business_day_locked",
     );
@@ -485,6 +632,18 @@ describe("transaction-time and persisted history checks", () => {
       "venue.business_day_locked",
     );
     expect(await clockRows()).toEqual(before);
+  });
+  it("refuses a later start when an order was opened between the stored and the new changeover", async () => {
+    await inTx((tx) => createOpenOrder(tx, venue.cfg, randomUUID(), [], null));
+    await suite.db.execute(
+      sql`update working_orders set opened_at = '2026-11-03T05:00:00.000Z' where location_id = ${venue.cfg.locationId}`,
+    );
+    const response = await request("PUT", "/business-day-start", proposal({ dayCutover: "07:00" }));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "venue.business_day_locked", params: { reason: "future_history" } },
+    });
+    expect(await clockRows()).toEqual({ changes: [], settings: [] });
   });
   it("locks time-zone edits after clock history but permits a name edit", async () => {
     expect((await request("PUT", "/business-day-start", proposal())).status).toBe(200);
@@ -542,20 +701,24 @@ it("reads pending and activated boundaries from a reopened complete database cop
     const reopened = await openVenueDatabase(directory);
     try {
       const before = await withTransaction(reopened.venue, (tx) =>
-        readVenueDetails(tx, venue.cfg, new Date("2026-11-04T01:59:59.999Z")),
+        readVenueDetails(tx, venue.cfg, new Date("2026-11-03T01:59:59.999Z")),
       );
       expect(before.details.dayCutover).toBe("05:00");
       expect(before.businessDayClock).toMatchObject({
-        currentBusinessDay: "2026-11-03",
+        currentBusinessDay: "2026-11-02",
         revision: 1,
-        pending: { editable: false },
+      });
+      expect(before.businessDayClock.pending).toEqual({
+        effectiveBusinessDay: "2026-11-03",
+        dayCutover: "03:00",
+        startsAt: "2026-11-03T02:00:00.000Z",
       });
       const activated = await withTransaction(reopened.venue, (tx) =>
-        readVenueDetails(tx, venue.cfg, new Date("2026-11-04T02:00:00.000Z")),
+        readVenueDetails(tx, venue.cfg, new Date("2026-11-03T02:00:00.000Z")),
       );
       expect(activated.details.dayCutover).toBe("03:00");
       expect(activated.businessDayClock).toMatchObject({
-        currentBusinessDay: "2026-11-04",
+        currentBusinessDay: "2026-11-03",
         revision: 1,
         pending: null,
       });
@@ -588,7 +751,7 @@ it("keeps another location's clock rows isolated and rejects a client-selected l
       { locationId: otherId, effectiveBusinessDay: "2026-11-05", dayCutover: "07:00:00" },
       {
         locationId: venue.cfg.locationId,
-        effectiveBusinessDay: "2026-11-04",
+        effectiveBusinessDay: "2026-11-03",
         dayCutover: "03:00:00",
       },
     ]),
@@ -605,7 +768,7 @@ describe("dated start schedule refusal", () => {
   it("previews conflicts without writing and refuses incompatible PUT through the real boundary", async () => {
     const { department } = await authorRange("05:00", "05:00");
     const saved = await clockRows();
-    const query = new URLSearchParams(proposal() as unknown as Record<string, string>);
+    const query = new URLSearchParams({ dayCutover: "03:00", expectedClockRevision: "0" });
     const preview = await request("GET", `/business-day-start/preview?${query}`);
     expect(preview.status).toBe(200);
     const body = await preview.json();
@@ -623,7 +786,7 @@ describe("dated start schedule refusal", () => {
     const late = await authorRange("05:00", "05:00", { everySeason: true });
     const bar = await authorRange("05:00", "05:00", { everySeason: true, name: "Bar" });
     const saved = await clockRows();
-    const query = new URLSearchParams(proposal() as unknown as Record<string, string>);
+    const query = new URLSearchParams({ dayCutover: "03:00", expectedClockRevision: "0" });
     const preview = await request("GET", `/business-day-start/preview?${query}`);
     expect(preview.status).toBe(200);
     const body = (await preview.json()) as {
@@ -645,6 +808,159 @@ describe("dated start schedule refusal", () => {
   });
 });
 
+describe("the preview chooses the changeover itself", () => {
+  async function previewAt(instant: string, dayCutover: string) {
+    at = new Date(instant);
+    const query = new URLSearchParams({ dayCutover, expectedClockRevision: "0" });
+    const response = await request("GET", `/business-day-start/preview?${query}`);
+    expect(response.status).toBe(200);
+    return (await response.json()) as {
+      previousDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
+      effectiveDay: { businessDay: string };
+    };
+  }
+  it("takes tonight's changeover when the new start is still ahead", async () => {
+    const early = await previewAt("2026-10-20T20:00:00Z", "03:00");
+    expect(early.effectiveDay.businessDay).toBe("2026-10-21");
+    expect(early.previousDay).toEqual({
+      businessDay: "2026-10-20",
+      dayCutover: "05:00",
+      startAt: "2026-10-20T03:00:00.000Z",
+      endAt: "2026-10-21T01:00:00.000Z",
+    });
+    const late = await previewAt("2026-10-20T20:00:00Z", "21:00");
+    expect(late.effectiveDay.businessDay).toBe("2026-10-21");
+    expect(late.previousDay.endAt).toBe("2026-10-21T19:00:00.000Z");
+  });
+  it("takes the following changeover when the new start has already passed tonight", async () => {
+    const body = await previewAt("2026-10-20T23:00:00Z", "00:30");
+    expect(body.effectiveDay.businessDay).toBe("2026-10-22");
+    expect(body.previousDay).toMatchObject({
+      businessDay: "2026-10-21",
+      startAt: "2026-10-21T03:00:00.000Z",
+      endAt: "2026-10-21T22:30:00.000Z",
+    });
+  });
+  it("bounds the day the clocks go back at 23 hours", async () => {
+    const body = await previewAt("2026-10-24T20:00:00Z", "03:00");
+    expect(body.previousDay).toMatchObject({
+      startAt: "2026-10-24T03:00:00.000Z",
+      endAt: "2026-10-25T02:00:00.000Z",
+    });
+  });
+  it("refuses a query that names the effective date", async () => {
+    at = new Date("2026-10-20T20:00:00Z");
+    const response = await request(
+      "GET",
+      "/business-day-start/preview?effectiveBusinessDay=2026-10-21&dayCutover=03%3A00&expectedClockRevision=0",
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "venue.business_day_invalid",
+        params: { field: "body", reason: "unknown_field" },
+      },
+    });
+  });
+  it("leaves tonight's waiting change in place and takes the following changeover once the new start has passed today", async () => {
+    await inTx((tx) =>
+      tx.insert(locationDayCutoverChanges).values({
+        locationId: venue.cfg.locationId,
+        effectiveBusinessDay: "2026-10-21",
+        dayCutover: "21:00:00",
+      }),
+    );
+    const body = await previewAt("2026-10-21T11:00:00Z", "10:00");
+    expect(body.effectiveDay.businessDay).toBe("2026-10-22");
+    expect(body.previousDay).toMatchObject({
+      businessDay: "2026-10-21",
+      startAt: "2026-10-21T19:00:00.000Z",
+      endAt: "2026-10-22T08:00:00.000Z",
+    });
+    expect((await clockRows()).changes).toHaveLength(1);
+  });
+  describe("while tonight's 21:00 change waits, it is measured from the start in force", () => {
+    let departmentId: string;
+    beforeEach(async () => {
+      at = new Date("2026-10-20T20:00:00Z");
+      departmentId = (await authorRange("06:00", "20:00", { everySeason: true })).department.id;
+      await inTx((tx) =>
+        tx.insert(locationDayCutoverChanges).values({
+          locationId: venue.cfg.locationId,
+          effectiveBusinessDay: "2026-10-21",
+          dayCutover: "21:00:00",
+        }),
+      );
+    });
+    async function conflictsFor(dayCutover: string) {
+      const query = new URLSearchParams({ dayCutover, expectedClockRevision: "0" });
+      const response = await request("GET", `/business-day-start/preview?${query}`);
+      expect(response.status).toBe(200);
+      return (await response.json()) as {
+        conflictCount: number;
+        conflicts: { departmentId: string; startsAt: string; reason: string }[];
+      };
+    }
+    it("a replacing 23:00 clashes with a 06:00 range, as a move from 05:00 would", async () => {
+      const body = await conflictsFor("23:00");
+      expect(body.conflictCount).toBe(12);
+      expect(body.conflicts).toContainEqual(
+        expect.objectContaining({ departmentId, startsAt: "06:00", reason: "endpoint_day" }),
+      );
+    });
+    it("going back to 05:00 clashes with nothing", async () => {
+      expect(await conflictsFor("05:00")).toMatchObject({ conflictCount: 0, conflicts: [] });
+    });
+    async function orderOpenedAt(instant: string) {
+      await inTx((tx) => createOpenOrder(tx, venue.cfg, randomUUID(), [], null));
+      await suite.db.execute(
+        sql`update working_orders set opened_at = ${instant} where location_id = ${venue.cfg.locationId}`,
+      );
+    }
+    it("previews an order inside Tuesday under both the stored and the new start", async () => {
+      await orderOpenedAt("2026-10-21T10:00:00.000Z");
+      expect(await conflictsFor("23:00")).toMatchObject({ conflictCount: 12 });
+    });
+    it("refuses an order opened between the stored 21:00 and the new 23:00", async () => {
+      await orderOpenedAt("2026-10-21T19:30:00.000Z");
+      const query = new URLSearchParams({ dayCutover: "23:00", expectedClockRevision: "0" });
+      const response = await request("GET", `/business-day-start/preview?${query}`);
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "venue.business_day_locked", params: { reason: "future_history" } },
+      });
+    });
+    it("a Save replacing it with 23:00 is refused with the same clash", async () => {
+      const rows = await clockRows();
+      const response = await request(
+        "PUT",
+        "/business-day-start",
+        proposal({ effectiveBusinessDay: "2026-10-21", dayCutover: "23:00" }),
+      );
+      expect(response.status).toBe(409);
+      const body = await response.json();
+      expect(body.error.code).toBe("venue.business_day_hours_conflict");
+      expect(body.error.params.conflictCount).toBe(12);
+      expect(body.error.params.conflicts).toContainEqual(
+        expect.objectContaining({ departmentId, startsAt: "06:00", reason: "endpoint_day" }),
+      );
+      expect(await clockRows()).toEqual(rows);
+    });
+    it("a Save of 05:00 undoes it", async () => {
+      const response = await request(
+        "PUT",
+        "/business-day-start",
+        proposal({ effectiveBusinessDay: "2026-10-21", dayCutover: "05:00" }),
+      );
+      expect(response.status).toBe(200);
+      expect(await clockRows()).toEqual({
+        changes: [],
+        settings: [{ locationId: venue.cfg.locationId, revision: 1 }],
+      });
+    });
+  });
+});
+
 it("the general clock preview shows the dated start in force at the supplied instant", async () => {
   await inTx((tx) =>
     tx.insert(locationDayCutoverChanges).values({
@@ -661,4 +977,277 @@ it("the general clock preview shows the dated start in force at the supplied ins
   expect(response.status).toBe(200);
   const answer = await response.json();
   expect(answer.current).toMatchObject({ businessDay: "2026-11-04", dayCutover: "07:00" });
+});
+
+describe("a Save takes the next changeover", () => {
+  async function save(instant: string, body: Record<string, unknown>) {
+    at = new Date(instant);
+    return request("PUT", "/business-day-start", body);
+  }
+  async function ownRows() {
+    return (await clockRows()).changes.map(({ effectiveBusinessDay, dayCutover }) => ({
+      effectiveBusinessDay,
+      dayCutover,
+    }));
+  }
+  async function bounds(businessDay: string) {
+    const clock = await inTx((tx) => readLocationClock(tx, venue.cfg.locationId));
+    return businessDayBounds(clock, businessDay);
+  }
+  const tuesday = "2026-10-20T20:00:00Z";
+  it("Example 1: 03:00 at Tue 22:00 ends today", async () => {
+    const response = await save(
+      tuesday,
+      proposal({ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" }),
+    );
+    expect(response.status).toBe(200);
+    expect(await ownRows()).toEqual([
+      { effectiveBusinessDay: "2026-10-21", dayCutover: "03:00:00" },
+    ]);
+  });
+  it("Example 4: 04:00 replaces tonight's 03:00 and Tue 20 ends at 04:00", async () => {
+    await save(tuesday, proposal({ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" }));
+    const response = await save(
+      "2026-10-20T21:30:00Z",
+      proposal({
+        effectiveBusinessDay: "2026-10-21",
+        dayCutover: "04:00",
+        expectedClockRevision: 1,
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await ownRows()).toEqual([
+      { effectiveBusinessDay: "2026-10-21", dayCutover: "04:00:00" },
+    ]);
+    expect((await bounds("2026-10-20")).endAt).toBe("2026-10-21T02:00:00.000Z");
+  });
+  it("Example 5: 05:00 undoes tonight's 03:00", async () => {
+    await save(tuesday, proposal({ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" }));
+    const response = await save(
+      "2026-10-20T21:45:00Z",
+      proposal({
+        effectiveBusinessDay: "2026-10-21",
+        dayCutover: "05:00",
+        expectedClockRevision: 1,
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await clockRows()).toEqual({
+      changes: [],
+      settings: [{ locationId: venue.cfg.locationId, revision: 2 }],
+    });
+  });
+  it("replaces a far-off waiting row the old form saved", async () => {
+    await suite.db.insert(locationDayCutoverChanges).values({
+      locationId: venue.cfg.locationId,
+      effectiveBusinessDay: "2027-06-01",
+      dayCutover: "07:00:00",
+    });
+    await suite.db
+      .insert(locationBusinessDaySettings)
+      .values({ locationId: venue.cfg.locationId, revision: 1 });
+    const response = await save(
+      tuesday,
+      proposal({
+        effectiveBusinessDay: "2026-10-21",
+        dayCutover: "03:00",
+        expectedClockRevision: 1,
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await ownRows()).toEqual([
+      { effectiveBusinessDay: "2026-10-21", dayCutover: "03:00:00" },
+    ]);
+    expect((await clockRows()).settings).toEqual([
+      { locationId: venue.cfg.locationId, revision: 2 },
+    ]);
+  });
+  it.each([
+    [tuesday, "03:00", "2026-10-21T03:00:00.000Z"],
+    ["2026-10-20T22:20:00Z", "00:30", "2026-10-20T22:31:00Z"],
+  ])(
+    "refuses a Save whose previewed changeover passed before it arrived (preview at %s, %s)",
+    async (previewAt, dayCutover, saveAt) => {
+      at = new Date(previewAt);
+      const query = new URLSearchParams({ dayCutover, expectedClockRevision: "0" });
+      const preview = await request("GET", `/business-day-start/preview?${query}`);
+      const effectiveBusinessDay = (await preview.json()).effectiveDay.businessDay;
+      expect(effectiveBusinessDay).toBe("2026-10-21");
+      const response = await save(saveAt, proposal({ effectiveBusinessDay, dayCutover }));
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual(changeoverPassed);
+      expect(await clockRows()).toEqual({ changes: [], settings: [] });
+    },
+  );
+  describe("while tonight's 21:00 waits and the 05:00 changeover has passed (Wed 13:00)", () => {
+    const wednesday = "2026-10-21T11:00:00Z";
+    beforeEach(async () => {
+      // The fixture's weekday 09:00–17:00 would clash with every start these cases save.
+      await inTx(async (tx) => {
+        const departmentId = (
+          await tx.execute<{ id: string }>(sql`select id from departments limit 1`)
+        ).rows[0]!.id;
+        await replaceMenuWeek(
+          tx,
+          venue.cfg,
+          departmentId,
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
+          at,
+          0,
+          {},
+        );
+      });
+      expect(
+        (await save(tuesday, proposal({ effectiveBusinessDay: "2026-10-21", dayCutover: "21:00" })))
+          .status,
+      ).toBe(200);
+    });
+    async function tuesdayStillOpen() {
+      expect((await bounds("2026-10-20")).endAt > new Date(wednesday).toISOString()).toBe(true);
+    }
+    it("(a) a later 23:00 replaces it", async () => {
+      const response = await save(
+        wednesday,
+        proposal({
+          effectiveBusinessDay: "2026-10-21",
+          dayCutover: "23:00",
+          expectedClockRevision: 1,
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await ownRows()).toEqual([
+        { effectiveBusinessDay: "2026-10-21", dayCutover: "23:00:00" },
+      ]);
+      await tuesdayStillOpen();
+    });
+    it("(b) an earlier 10:00 keeps it and follows it", async () => {
+      const response = await save(
+        wednesday,
+        proposal({
+          effectiveBusinessDay: "2026-10-22",
+          dayCutover: "10:00",
+          expectedClockRevision: 1,
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await ownRows()).toEqual([
+        { effectiveBusinessDay: "2026-10-21", dayCutover: "21:00:00" },
+        { effectiveBusinessDay: "2026-10-22", dayCutover: "10:00:00" },
+      ]);
+      expect(await bounds("2026-10-21")).toEqual({
+        startAt: "2026-10-21T19:00:00.000Z",
+        endAt: "2026-10-22T08:00:00.000Z",
+      });
+      await tuesdayStillOpen();
+    });
+    it("(c) the start in force keeps it and follows it", async () => {
+      const response = await save(
+        wednesday,
+        proposal({
+          effectiveBusinessDay: "2026-10-22",
+          dayCutover: "05:00",
+          expectedClockRevision: 1,
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await ownRows()).toEqual([
+        { effectiveBusinessDay: "2026-10-21", dayCutover: "21:00:00" },
+        { effectiveBusinessDay: "2026-10-22", dayCutover: "05:00:00" },
+      ]);
+      await tuesdayStillOpen();
+    });
+    describe("history is measured from the stored 21:00, not from the passed 05:00", () => {
+      async function orderOpenedAt(instant: string) {
+        await inTx((tx) => createOpenOrder(tx, venue.cfg, randomUUID(), [], null));
+        await suite.db.execute(
+          sql`update working_orders set opened_at = ${instant} where location_id = ${venue.cfg.locationId}`,
+        );
+      }
+      const replace = proposal({
+        effectiveBusinessDay: "2026-10-21",
+        dayCutover: "23:00",
+        expectedClockRevision: 1,
+      });
+      const query = new URLSearchParams({ dayCutover: "23:00", expectedClockRevision: "1" });
+      it("previews and saves 23:00 with an order opened Wed 10:00, inside Tuesday under both", async () => {
+        await orderOpenedAt("2026-10-21T08:00:00.000Z");
+        at = new Date(wednesday);
+        expect((await request("GET", `/business-day-start/preview?${query}`)).status).toBe(200);
+        expect((await save(wednesday, replace)).status).toBe(200);
+        expect(await ownRows()).toEqual([
+          { effectiveBusinessDay: "2026-10-21", dayCutover: "23:00:00" },
+        ]);
+      });
+      it("refuses 23:00 with an order opened between 21:00 and 23:00 Wednesday", async () => {
+        await orderOpenedAt("2026-10-21T19:30:00.000Z");
+        const refusal = {
+          error: { code: "venue.business_day_locked", params: { reason: "future_history" } },
+        };
+        at = new Date(wednesday);
+        const preview = await request("GET", `/business-day-start/preview?${query}`);
+        expect(preview.status).toBe(409);
+        expect(await preview.json()).toEqual(refusal);
+        const response = await save(wednesday, replace);
+        expect(response.status).toBe(409);
+        expect(await response.json()).toEqual(refusal);
+        expect(await ownRows()).toEqual([
+          { effectiveBusinessDay: "2026-10-21", dayCutover: "21:00:00" },
+        ]);
+      });
+    });
+    it("(d) 21:00 again changes nothing", async () => {
+      const response = await save(
+        wednesday,
+        proposal({
+          effectiveBusinessDay: "2026-10-21",
+          dayCutover: "21:00",
+          expectedClockRevision: 1,
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ changed: false });
+      expect(await ownRows()).toEqual([
+        { effectiveBusinessDay: "2026-10-21", dayCutover: "21:00:00" },
+      ]);
+      expect((await clockRows()).settings[0]!.revision).toBe(1);
+      await tuesdayStillOpen();
+    });
+  });
+});
+
+describe("a keep-open for tonight past the new changeover", () => {
+  it("lists it in the preview and refuses the Save", async () => {
+    const { department, period } = await authorRange("13:00", "16:00");
+    await inTx((tx) =>
+      tx.execute(
+        sql`insert into period_extensions (id, department_id, business_day, period_id, starts_at, ends_at)
+            values (${randomUUID()}, ${department.id}, '2026-10-20', ${period.id}, '22:00:00', '04:30:00')`,
+      ),
+    );
+    at = new Date("2026-10-20T20:00:00Z");
+    const query = new URLSearchParams({ dayCutover: "03:00", expectedClockRevision: "0" });
+    const preview = await request("GET", `/business-day-start/preview?${query}`);
+    expect(preview.status).toBe(200);
+    expect(await preview.json()).toMatchObject({
+      conflictCount: 1,
+      conflicts: [expect.objectContaining({ reason: "kept_open", endsAt: "04:30" })],
+    });
+    const saved = await clockRows();
+    const response = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" }),
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "venue.business_day_hours_conflict",
+        params: {
+          conflictCount: 1,
+          conflicts: [expect.objectContaining({ reason: "kept_open", endsAt: "04:30" })],
+        },
+      },
+    });
+    expect(await clockRows()).toEqual(saved);
+  });
 });

@@ -4,6 +4,7 @@ import { readLocationClock } from "@waitron/reporting";
 import { AppError, cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
+  assertWaitingChangeFits,
   readBusinessDayScheduleRevision,
 } from "./business-day-schedule.js";
 import { resolveDepartmentDays } from "./day-resolver.js";
@@ -24,6 +25,7 @@ import {
 import { departments } from "./schema/service.js";
 import { joinTouching } from "./season-weeks.js";
 import { rangeSpan, serviceMomentAt } from "./service-day.js";
+import { inForceClock, lastOrdersClock } from "./service-day-context.js";
 import "./errors.js";
 
 export interface PaintedIn {
@@ -211,7 +213,7 @@ export async function deletePeriod(
       throw new AppError("menu_period.invalid", { field: "replacementPeriodId" });
   }
   const clock = await readLocationClock(tx, cfg.locationId);
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision, clock);
+  await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
   const dayIds = (
     await tx
       .selectDistinct({ dayId: departmentDayRanges.dayId })
@@ -242,7 +244,7 @@ export async function deletePeriod(
       .update(departmentDayRanges)
       .set({ periodId: replacementId })
       .where(eq(departmentDayRanges.periodId, periodId));
-    await joinTouchingRanges(tx, dayIds, clock);
+    await joinTouchingRanges(tx, dayIds, clock, at);
     await fitExtensionsToReplacement(tx, cfg, period.departmentId, periodId, replacementId, clock);
     await tx
       .update(periodExtensions)
@@ -250,12 +252,18 @@ export async function deletePeriod(
       .where(eq(periodExtensions.periodId, periodId));
   }
   await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
-  const clash = await departmentEndOffsetClash(tx, cfg, period.departmentId, clock);
+  const clash = await departmentEndOffsetClash(
+    tx,
+    cfg,
+    period.departmentId,
+    lastOrdersClock(clock, at),
+  );
   if (clash !== null)
     invalidTimetable(replacementId === null ? "periodId" : "replacementPeriodId", {
       reason: "end_offset",
       ...clash,
     });
+  await assertWaitingChangeFits(tx, cfg, at, clock);
 }
 
 async function fitExtensionsToReplacement(
@@ -309,12 +317,13 @@ async function fitExtensionsToReplacement(
   }
 }
 
-/** Joins touching ranges of one period within each of `dayIds`' days, ordered from the day's
- *  changeover. */
+/** Joins touching ranges of one period within each of `dayIds`' days, ordered from a dated day's
+ *  own start, or an undated day's start in force at `at`. */
 async function joinTouchingRanges(
   tx: Transaction,
   dayIds: readonly string[],
   clock: BusinessDayClock,
+  at: Date,
 ): Promise<void> {
   if (dayIds.length === 0) return;
   const rows = await tx
@@ -330,6 +339,7 @@ async function joinTouchingRanges(
     .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
     .leftJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
     .where(inArray(departmentDayRanges.dayId, [...dayIds]));
+  const undated = inForceClock(clock, at).dayCutover;
   const byDay = new Map<string, typeof rows>();
   for (const row of rows) {
     const day = byDay.get(row.dayId);
@@ -338,7 +348,7 @@ async function joinTouchingRanges(
   }
   for (const ranges of byDay.values()) {
     const date = ranges[0]!.date;
-    const cutover = date === null ? clock.dayCutover : cutoverForBusinessDay(clock, date);
+    const cutover = date === null ? undated : cutoverForBusinessDay(clock, date);
     ranges.sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
     const joined = joinTouching(ranges, (a, b) => a.periodId === b.periodId);
     if (joined.length === ranges.length) continue;

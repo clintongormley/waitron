@@ -72,7 +72,7 @@ and hours proposals; the historical spec keeps its dated pointers.
 Left open by A506-3, #1591.
 
 The Business day start dialog works out its conflict count by repeating the server's rule for
-counting a conflict once whatever its season (`rangeKey`,
+counting a conflict once whatever its season (`#conflictLines`,
 `apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
 would make the dialog miscount without any test noticing. The server could return how many conflicts
 it left off its list instead, which adds a field to the shared preview type.
@@ -342,6 +342,58 @@ business-day helpers in `@waitron/reporting` and `@waitron/shared`. A504 took th
 read take the clock and the day once (median about 3.1 to 2.0 ms on another bench); re-measure
 before acting. Next: keep one formatter per time zone. Left open by A504.
 
+## Loose ends left by A788
+
+Found while building A788 (the business-day start changes at the next changeover). Unless an entry
+says it was run, it comes from a per-task review recorded in the build's ledger and was read in the
+code, not run again here.
+
+- **A864, the clash list.** `businessDayClockConflicts`
+  (`packages/venue-service/src/business-day-schedule.ts`) keeps the first 20 distinct ranges with
+  the season set aside, then returns every conflict row for those ranges, one per season the range
+  is painted in; `conflictCount` counts distinct ranges. The dialog shows each row as its own line
+  and adds what was counted beyond the list to the count (`#conflictLines`,
+  `apps/dashboard/src/screens/business-day-start-editor.ts`), with no "and N more" line. On the demo
+  venue a 21:00 start listed 91 lines under a count of 105 (A788's look check, Task 15). The cap
+  predates A788 (`git blame`: 061240c87, A506-2, 2026-10-12). The A506-3 loose end about the dialog
+  repeating the server's counting rule is the same seam.
+- **A865, the clash order.** One implementer saw the order between departments vary from run to
+  run, and a review traced the order of one special day's dates to their random row ids.
+- **A867, a crossing range hides an overlap.** A range that fails on its own is listed as crossing
+  the new start; the day's other ranges are marked overlapping only when no range fails on its own
+  (`overlapping` in `businessDayClockConflicts`). A review's probe: 13:00–16:00, 15:00–17:00 and
+  22:00–04:30 moving 05:00 → 03:00 lists only 22:00–04:30.
+- **A869, a one-off day after the change.** While 03:00 waits, a one-off special day on 2026-11-05
+  with 04:00–12:00, which fits the 03:00 start that date will have, is refused
+  `special_day.invalid` (reason `order`): `saveSpecialDay` parses one-off dates under the starts
+  already in force (`settledClock`). Task 11 left it unchanged, per its implementer, read in the
+  code.
+- **A870, past one-off days.** On a date before today's business day, the last-orders check counts
+  weekly, season and repeating special-day ranges as absent only on a venue holding a start change
+  (a waiting one included); on a venue holding none it checks a past one-off day over its season's
+  ranges as before, so the same paint can be refused on one venue and accepted on the other.
+- **A872, repeated work.** A preview or a Save (`apps/server/src/business-day-start.ts`) works the
+  plan out with `planBusinessDayStart`, and `clockTransitionAt`
+  (`apps/server/src/business-day-changeover.ts`) works it out again, then once more for each of up
+  to 20 moments when it looks for when a Save refused across a clocks change can be made.
+- **A876, a long day under a special day's paint.** On a day a start change makes longer than 24
+  hours, a season range past the 24th hour is cut at it when any special day is painted on that
+  date, and kept whole when none is: `cutSeason` (`packages/venue-service/src/day-resolver.ts`)
+  caps the day at 1440 minutes for the paint layer, which works on one 1440-minute day. Found by
+  A788's finish review, which ran it: 03:00 changing back to 05:00 on 2026-10-28, a 22:00–04:30
+  dinner on 2026-10-27 drew as 22:00–03:00 beside an unrelated special-day lunch. The test
+  "cuts a longer-than-24-hour special day's season at its own changeover, so the paint keeps it"
+  (`day-resolver.test.ts`) pins the cut. Next: teach the paint layer a day longer than 1440
+  minutes, or decide the cut is the intended drawing.
+- **A877, one answer for "settled or waiting".** A788's finish review (read only) found the
+  question "which start changes have taken effect at this moment, and which still wait" answered
+  five ways: `planBusinessDayStart`, `settledClock`, `inForceClock`, the server's
+  `readBusinessDayClockModel` and venue-service's `readBusinessDayScheduleStatus`, plus the
+  editor's `#waiting()`. Each hours writer also derives its clocks and then calls
+  `assertWaitingChangeFits` by hand, and `assertWaitingChangeFits` re-reads the venue's hours once
+  per waiting change. Next: one browser-safe helper in `@waitron/shared` beside `businessDayAt`
+  that every caller uses, and a write gate that runs the waiting-start check itself.
+
 ## Decisions and deliberate limits
 
 - **`seasons.colour` has no CHECK and no trigger (A721 plan, Decision 1; plan default).** A CHECK
@@ -598,6 +650,10 @@ before acting. Next: keep one formatter per time zone. Left open by A504.
   UTC-clock limits. `apps/server/src/business-day-history.test.ts` compares recorded fiscal,
   invoice-series and close rows before and after scheduling; it does not establish external
   filing behavior.
+  2026-10-18, A788: dated scheduling, Replace, Cancel and the pause on hours edits are retired. A new
+  start takes effect at the next changeover, and opening hours stay editable while it waits; a write
+  that clashes with the waiting start is refused `hours.clock_change_conflict`. See
+  [the design](../superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md).
 
 
 - **Hierarchy Delete is permanent (A435 step 6, 2026-10-11).** One complete impact is rechecked

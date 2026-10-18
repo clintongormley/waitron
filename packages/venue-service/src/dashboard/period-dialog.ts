@@ -31,6 +31,7 @@ import { format } from "./hours-view.js";
 import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
+import { clockChangeConflictText } from "./clock-change-conflict.js";
 
 type Draft = Omit<MenuPeriodInput, "endOffsetMinutes" | "floorPlanSetId"> & {
   colour: CalendarColour;
@@ -478,7 +479,7 @@ export class PeriodDialog extends LitElement {
           ? t("menu.period_gone")
           : this.refusal.code === "department.not_found"
             ? t("menu.department_gone")
-            : t("menu.save_error")
+            : (clockChangeConflictText(this.refusal) ?? t("menu.save_error"))
         : "";
     const includes = this.menus.find((menu) => menu.id === this.draft.menuId)?.includes ?? [];
     const generation = this.generation;

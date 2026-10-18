@@ -20,11 +20,7 @@ import {
   readVenueDetails,
   writeVenueDetails,
 } from "./venue-details.js";
-import {
-  previewBusinessDayStart,
-  writeBusinessDayStart,
-  cancelBusinessDayStart,
-} from "./business-day-start.js";
+import { previewBusinessDayStart, writeBusinessDayStart } from "./business-day-start.js";
 
 import { venueClockPreview } from "./venue-clock-preview.js";
 import type { VenueClockPreview, VenueDefaults, VenueDetailWrite } from "./venue-detail-types.js";
@@ -209,16 +205,6 @@ export function mountLocationSettingsApi(
       const body = await readJsonBody<unknown>(c);
       const result = await gated(session, (tx) =>
         writeBusinessDayStart(tx, deps.cfg, body, (deps.now ?? (() => new Date()))()),
-      );
-      return c.json(result);
-    }),
-  );
-  app.delete("/management-api/venue-details/business-day-start", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const body = await readJsonBody<unknown>(c);
-      const result = await gated(session, (tx) =>
-        cancelBusinessDayStart(tx, deps.cfg, body, (deps.now ?? (() => new Date()))()),
       );
       return c.json(result);
     }),

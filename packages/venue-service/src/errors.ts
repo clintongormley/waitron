@@ -20,7 +20,13 @@ declare module "@waitron/shared" {
     "kitchen_note.invalid": { field: "note" | "scope" | "revision" };
     "kitchen_note.too_long": { length: number; limit: number };
     "kitchen_note.out_of_date": { revision: number };
-    "hours.clock_change_pending": { effectiveBusinessDay: string };
+    "hours.clock_change_conflict": {
+      dayCutover: string;
+      startsAt: string;
+      timeZone: string;
+      conflicts: BusinessDayClockConflict[];
+      conflictCount: number;
+    };
     "hours.clock_changed": Record<string, never>;
     "venue.business_day_hours_conflict": {
       conflicts: BusinessDayClockConflict[];

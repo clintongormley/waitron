@@ -11,6 +11,7 @@ import type { PeriodDeleteImpact } from "./opening-hours-client.js";
 import type { Refusal } from "./refusal.js";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
+import { clockChangeConflictText } from "./clock-change-conflict.js";
 
 const cellLabel = (use: PeriodRoutingUse) =>
   format("opening.routing_use", {
@@ -103,8 +104,8 @@ export class PeriodDeleteDialog extends LitElement {
     switch (refusal.code) {
       case "hours.clock_changed":
         return t("period.delete_clock_changed");
-      case "hours.clock_change_pending":
-        return t(refusal.code);
+      case "hours.clock_change_conflict":
+        return clockChangeConflictText(refusal)!;
       case "menu_period.not_found":
         return t("menu.period_gone");
       case "department.not_found":

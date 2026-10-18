@@ -19,6 +19,8 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import type { Department, FloorZone, VenueServiceApi, VenueServiceView } from "./client.js";
 import { t } from "./strings.js";
 import { format } from "./hours-view.js";
+import { clockChangeConflictText } from "./clock-change-conflict.js";
+import { refusalOf } from "./refusal.js";
 import type { DeleteImpact } from "@waitron/shared";
 import { serviceDeleteCopy, serviceDeleteError } from "./service-delete-copy.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
@@ -281,6 +283,8 @@ export class DepartmentDialogs extends LitElement {
   private refusal(error: unknown): string {
     const code = (error as { code?: string } | undefined)?.code;
     if (code === "department.last_active") return t("venue.department_last_active");
+    const conflict = clockChangeConflictText(refusalOf(error));
+    if (conflict) return conflict;
     const table = (error as { params?: { tableName?: unknown } } | undefined)?.params?.tableName;
     if (code === "zone.table_in_use" && typeof table === "string")
       return format("venue.table_in_use", { table });

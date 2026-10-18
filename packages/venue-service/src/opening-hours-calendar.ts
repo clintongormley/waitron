@@ -6,6 +6,7 @@ import {
   type LocationPlace,
 } from "@waitron/reporting";
 import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
+import { calendarCutAnchor } from "./calendar-cut.js";
 import {
   readDayPlan,
   resolveDepartmentsDays,
@@ -70,7 +71,15 @@ export async function readOpeningHoursYear(
   const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
   const { read: holidays, area, dates: holidayDates } = await readHolidayYear(tx, cfg, year);
   const seasons = await readSeasons(tx, cfg);
-  const { days, seasonIdOn } = await calendarDays(tx, cfg, dates, holidays.facts, clock, seasons);
+  const { days, seasonIdOn } = await calendarDays(
+    tx,
+    cfg,
+    dates,
+    holidays.facts,
+    clock,
+    seasons,
+    at,
+  );
   const missing = await missingHolidaysIn(tx, cfg, [year], holidayDates);
   return {
     ...status,
@@ -220,6 +229,7 @@ export async function readOpeningHoursMonth(
   const status = await readBusinessDayScheduleStatus(tx, cfg, frame.clock, at);
   const departments = await readActiveDepartments(tx, cfg);
   const zones = await readServiceZones(tx, cfg);
+  const cut = { anchor: calendarCutAnchor(frame.clock, at) };
   const hours = await resolveDepartmentsDays(
     tx,
     cfg,
@@ -227,6 +237,7 @@ export async function readOpeningHoursMonth(
     dates,
     clock,
     plan,
+    cut,
   );
   const closures = await resolveZoneClosedDays(
     tx,
@@ -235,6 +246,7 @@ export async function readOpeningHoursMonth(
     dates,
     clock,
     plan,
+    cut,
   );
   const factsOn = new Map<LocalDate, HolidayFact[]>();
   for (const fact of await readHolidayFacts(tx, cfg, dates[0]!, dates.at(-1)!, frame.place))

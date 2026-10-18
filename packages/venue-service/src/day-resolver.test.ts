@@ -942,3 +942,147 @@ describe("readSpecialDayPlan", () => {
     expect(await scoped((tx) => readSpecialDayPlan(tx, v.cfg, randomUUID()))).toBeNull();
   });
 });
+
+describe("a past day's range that misfits its own start", () => {
+  /** 05:00, then 03:00 from 2026-10-21, then 05:00 again from 2026-10-28. */
+  const HOURS_BACK: BusinessDayClock = {
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    cutoverChanges: [
+      { effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" },
+      { effectiveBusinessDay: "2026-10-28", dayCutover: "05:00" },
+    ],
+  };
+  const DAYS = ["2026-10-24", "2026-10-31"];
+  async function lateSaturday() {
+    const v = await venue();
+    await menuSeason(v, v.seasons.Autumn!, {
+      [SATURDAY]: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" }],
+    });
+    await zoneSeason(v, v.sala, v.seasons.Autumn!, {
+      [SATURDAY]: [{ startsAt: "23:00", endsAt: "04:00" }],
+    });
+    await specialDay(v, "2026-10-24", {
+      paint: { [v.departmentId]: [{ periodId: v.breakfast, startsAt: "12:00", endsAt: "15:00" }] },
+    });
+    return v;
+  }
+  const resolve = (v: Venue, cut?: { anchor: string }) =>
+    scoped(async (tx) => ({
+      hours: (
+        await resolveDepartmentsDays(tx, v.cfg, [v.departmentId], DAYS, HOURS_BACK, undefined, cut)
+      ).get(v.departmentId)!,
+      closed: (
+        await resolveZoneClosedDays(tx, v.cfg, [v.sala], DAYS, HOURS_BACK, undefined, cut)
+      ).get(v.sala)!,
+    }));
+
+  it("is drawn as stored when no cut is asked for, a special day's paint dropping it and its closure", async () => {
+    const v = await lateSaturday();
+    const { hours, closed } = await resolve(v);
+    expect(hours.get("2026-10-24")!.ranges).toEqual([
+      { periodId: v.breakfast, startsAt: "12:00", endsAt: "15:00" },
+    ]);
+    expect(hours.get("2026-10-31")!.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" },
+    ]);
+    expect(closed.get("2026-10-24")).toEqual([]);
+    expect(closed.get("2026-10-31")).toEqual([{ startsAt: "23:00", endsAt: "04:00" }]);
+  });
+
+  it("is cut at the day's own changeover when asked, under a special day's paint too", async () => {
+    const v = await lateSaturday();
+    const { hours, closed } = await resolve(v, { anchor: "05:00" });
+    expect(hours.get("2026-10-24")!.ranges).toEqual([
+      { periodId: v.breakfast, startsAt: "12:00", endsAt: "15:00" },
+      { periodId: v.dinner, startsAt: "22:00", endsAt: "03:00" },
+    ]);
+    expect(hours.get("2026-10-31")!.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" },
+    ]);
+    expect(closed.get("2026-10-24")).toEqual([{ startsAt: "23:00", endsAt: "03:00" }]);
+    expect(closed.get("2026-10-31")).toEqual([{ startsAt: "23:00", endsAt: "04:00" }]);
+  });
+
+  it("cuts a longer-than-24-hour special day's season at its own changeover, so the paint keeps it", async () => {
+    // 27 Oct 2026, a Tuesday, is the last day starting at 03:00: it runs to 05:00, 1560 minutes.
+    const v = await venue();
+    const TUESDAY = 2;
+    await menuSeason(v, v.seasons.Autumn!, {
+      [TUESDAY]: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" }],
+    });
+    await zoneSeason(v, v.sala, v.seasons.Autumn!, {
+      [TUESDAY]: [{ startsAt: "23:00", endsAt: "04:00" }],
+    });
+    await specialDay(v, "2026-10-27", {
+      paint: { [v.departmentId]: [{ periodId: v.breakfast, startsAt: "12:00", endsAt: "15:00" }] },
+    });
+    const days = ["2026-10-27"];
+    const cut = { anchor: "05:00" };
+    const [hours, closed] = await scoped(async (tx) => [
+      (
+        await resolveDepartmentsDays(tx, v.cfg, [v.departmentId], days, HOURS_BACK, undefined, cut)
+      ).get(v.departmentId)!,
+      (await resolveZoneClosedDays(tx, v.cfg, [v.sala], days, HOURS_BACK, undefined, cut)).get(
+        v.sala,
+      )!,
+    ]);
+    expect(hours.get("2026-10-27")!.ranges).toEqual([
+      { periodId: v.breakfast, startsAt: "12:00", endsAt: "15:00" },
+      { periodId: v.dinner, startsAt: "22:00", endsAt: "03:00" },
+    ]);
+    expect(closed.get("2026-10-27")).toEqual([{ startsAt: "23:00", endsAt: "03:00" }]);
+  });
+
+  it("keeps a longer-than-24-hour ordinary day's range to the day's end", async () => {
+    const v = await venue();
+    await menuSeason(v, v.seasons.Autumn!, {
+      [2]: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" }],
+    });
+    const days = await scoped((tx) =>
+      resolveDepartmentDays(tx, v.cfg, v.departmentId, ["2026-10-27"], HOURS_BACK),
+    );
+    const cut = await scoped(async (tx) =>
+      (
+        await resolveDepartmentsDays(
+          tx,
+          v.cfg,
+          [v.departmentId],
+          ["2026-10-27"],
+          HOURS_BACK,
+          undefined,
+          { anchor: "05:00" },
+        )
+      ).get(v.departmentId)!,
+    );
+    expect(days.get("2026-10-27")!.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" },
+    ]);
+    expect(cut.get("2026-10-27")!.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" },
+    ]);
+  });
+
+  it("drops a range nothing of which falls inside its day", async () => {
+    // 20 Oct 2026 starts at 05:00 and ends at 03:00, 1320 minutes; read under a 07:00 anchor,
+    // 04:00–05:30 is placed at 1380–1470.
+    const v = await venue();
+    await menuSeason(v, v.seasons.Autumn!, {
+      [2]: [{ periodId: v.dinner, startsAt: "04:00", endsAt: "05:30" }],
+    });
+    const days = await scoped(async (tx) =>
+      (
+        await resolveDepartmentsDays(
+          tx,
+          v.cfg,
+          [v.departmentId],
+          ["2026-10-20"],
+          HOURS_BACK,
+          undefined,
+          { anchor: "07:00" },
+        )
+      ).get(v.departmentId)!,
+    );
+    expect(days.get("2026-10-20")!.ranges).toEqual([]);
+  });
+});

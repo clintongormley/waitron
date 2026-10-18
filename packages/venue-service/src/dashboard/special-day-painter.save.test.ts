@@ -21,6 +21,10 @@ import {
   type Write,
 } from "../testing/special-day-painter-fixture.js";
 import "./special-day-painter.js";
+import {
+  clockChangeConflict,
+  clockChangeConflictSentence,
+} from "../testing/clock-change-conflict.js";
 
 let painter: SpecialDayPainter | undefined;
 beforeEach(() => setLocale("en"));
@@ -869,6 +873,7 @@ describe("a refused save", () => {
     ],
     [{ code: "service_zone.not_found", params: { zoneId: "z2" } }, "This zone no longer exists."],
     [{ code: "hours.clock_changed", params: {} }, "hours.clock_changed"],
+    [clockChangeConflict, clockChangeConflictSentence],
   ])("%o shows beside Save only and keeps the draft", async (refusal, text) => {
     const { painter, writes } = await mount({ refusals: [refusal] });
     await paintDinner(painter, DEC_14);

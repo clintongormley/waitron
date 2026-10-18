@@ -133,7 +133,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "station.destination_invalid": 400,
   "time_zone.unreadable": 409,
   "hours.invalid": 400,
-  "hours.clock_change_pending": 409,
+  "hours.clock_change_conflict": 409,
   "hours.clock_changed": 409,
   "venue.business_day_hours_conflict": 409,
   "season.not_found": 404,
@@ -1321,6 +1321,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             zoneId: id,
             days: days as readonly ClosedWeekDay[],
           }));
+          const at = new Date();
           await saveSeasonWeeks(
             tx,
             ctx.cfg,
@@ -1332,7 +1333,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               })),
               zones: zoneWeeks,
             },
-            new Date(),
+            at,
             revision,
             (read) =>
               assertSeasonClosuresInHours(
@@ -1340,6 +1341,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
                 ctx.cfg,
                 seasonId,
                 (zoneWeeks ?? []).map((zone, i) => ({ ...zone, field: `zones.${i}.` })),
+                at,
                 read,
               ),
           );
@@ -1356,13 +1358,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         onlyKeys(body, ["days", "seasonId", "expectedClockRevision"]);
         await gated(sessionId, async (tx) => {
           const seasonId = requireBodyUuid(body.seasonId, "seasonId");
+          const at = new Date();
           await replaceZoneClosedWeek(
             tx,
             ctx.cfg,
             zoneId,
             body.days,
             body.expectedClockRevision as number,
-            new Date(),
+            at,
             {
               seasonId,
               afterWrite: (read) =>
@@ -1371,6 +1374,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
                   ctx.cfg,
                   seasonId,
                   [{ zoneId, field: "", days: body.days as readonly ClosedWeekDay[] }],
+                  at,
                   read,
                 ),
             },

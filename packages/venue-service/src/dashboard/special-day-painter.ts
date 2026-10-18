@@ -48,6 +48,8 @@ import {
   formatWeekday,
 } from "./hours-view.js";
 import { t } from "./strings.js";
+import { clockChangeConflictText } from "./clock-change-conflict.js";
+import { refusalOf } from "./refusal.js";
 import { formatDateRuns, runsOf } from "./date-runs.js";
 import "./add-dates-calendar.js";
 import "./painter-frame.js";
@@ -952,8 +954,11 @@ export class SpecialDayPainter extends LitElement {
       date !== undefined && this.draft.dates.some((entry) => entry.date === date)
         ? date
         : undefined;
-    if (code === "hours.clock_changed" || code === "hours.clock_change_pending") {
+    const conflict = clockChangeConflictText(refusalOf(error));
+    if (code === "hours.clock_changed") {
       this.refused = { message: t(code) };
+    } else if (conflict) {
+      this.refused = { message: conflict };
     } else if (code === "special_day.date_taken" && isLocalDate(params.date)) {
       this.refused = {
         message: format("special.date_taken", {
@@ -1068,9 +1073,9 @@ export class SpecialDayPainter extends LitElement {
       this.deleting = {
         busy: false,
         message:
-          code === "hours.clock_changed" || code === "hours.clock_change_pending"
+          code === "hours.clock_changed"
             ? t(code)
-            : t("hours.save_error"),
+            : (clockChangeConflictText(refusalOf(error)) ?? t("hours.save_error")),
       };
       return;
     }

@@ -113,8 +113,6 @@ export interface BusinessDayClockModel {
     effectiveBusinessDay: string;
     dayCutover: string;
     startsAt: string;
-    locksAt: string;
-    editable: boolean;
   };
 }
 export interface BusinessDayStartInput {
@@ -126,7 +124,6 @@ export interface BusinessDayStartPreview {
   revision: number;
   previousDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
   effectiveDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
-  locksAt: string;
   conflicts: readonly {
     departmentId: string;
     departmentName?: string;
@@ -143,7 +140,14 @@ export interface BusinessDayStartPreview {
     startsAt?: string;
     endsAt?: string;
     rangeIndex: number;
-    reason: "range" | "endpoint_day" | "all_day" | "sending_cutoff" | "transition_strip";
+    reason:
+      | "range"
+      | "endpoint_day"
+      | "all_day"
+      | "sending_cutoff"
+      | "transition_strip"
+      | "overlap"
+      | "kept_open";
   }[];
   conflictCount: number;
   backupDeadlines: VenueClockPreview["backupDeadlines"];
@@ -2951,9 +2955,11 @@ export class DashboardApi {
     return this.#request("/management-api/venue-details/legal-name", "PUT", input);
   }
 
-  previewBusinessDayStart(input: BusinessDayStartInput): Promise<BusinessDayStartPreview> {
+  previewBusinessDayStart(input: {
+    dayCutover: string;
+    expectedClockRevision: number;
+  }): Promise<BusinessDayStartPreview> {
     const query = new URLSearchParams({
-      effectiveBusinessDay: input.effectiveBusinessDay,
       dayCutover: input.dayCutover,
       expectedClockRevision: String(input.expectedClockRevision),
     });
@@ -2967,12 +2973,6 @@ export class DashboardApi {
     input: BusinessDayStartInput,
   ): Promise<{ changed: boolean; model: VenueDetailsModel }> {
     return this.#request("/management-api/venue-details/business-day-start", "PUT", input);
-  }
-
-  cancelBusinessDayStart(input: {
-    expectedClockRevision: number;
-  }): Promise<{ changed: boolean; model: VenueDetailsModel }> {
-    return this.#request("/management-api/venue-details/business-day-start", "DELETE", input);
   }
 
   async getProfileScopeChoices(): Promise<ProfileScopeChoices> {

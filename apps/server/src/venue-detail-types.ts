@@ -70,8 +70,6 @@ export interface BusinessDayClockModel {
     effectiveBusinessDay: string;
     dayCutover: string;
     startsAt: string;
-    locksAt: string;
-    editable: boolean;
   };
 }
 export interface BusinessDayStartInput {
@@ -83,7 +81,6 @@ export interface BusinessDayStartPreview {
   revision: number;
   previousDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
   effectiveDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
-  locksAt: string;
   conflicts: readonly unknown[];
   conflictCount: number;
   backupDeadlines: VenueClockPreview["backupDeadlines"];

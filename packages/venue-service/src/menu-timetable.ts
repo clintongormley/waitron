@@ -1,5 +1,6 @@
 import {
   assertBusinessDayScheduleWrite,
+  assertWaitingChangeFits,
   sameScheduleRanges,
   readBusinessDayScheduleRevision,
   readBusinessDayScheduleStatus,
@@ -59,6 +60,9 @@ import { readSeasons } from "./seasons.js";
 import {
   scheduleCutovers,
   serviceDayContext,
+  inForceClock,
+  lastOrdersClock,
+  type LastOrdersClock,
   type ServiceDayContext,
 } from "./service-day-context.js";
 import "./errors.js";
@@ -177,7 +181,7 @@ async function endOffsetClash(
   cfg: VenueScope,
   only?: readonly string[],
   validateZeroOffsets = false,
-  acquiredClock?: BusinessDayClock,
+  acquiredClock?: BusinessDayClock | LastOrdersClock,
 ) {
   const periods = await tx
     .select({
@@ -194,7 +198,8 @@ async function endOffsetClash(
       ),
     );
   if (!validateZeroOffsets && periods.every((period) => period.offset === 0)) return null;
-  const clock = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
+  const read = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
+  const { clock, from } = "clock" in read ? read : { clock: read, from: undefined };
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
   const departmentIds =
     only === undefined
@@ -229,6 +234,7 @@ async function endOffsetClash(
       })),
       offsets,
       clock,
+      from,
     );
     if (clash !== null) {
       return {
@@ -245,7 +251,7 @@ async function endOffsetClash(
 }
 
 /** The first sending cutoff that runs into what follows it, over every department. */
-export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope, clock?: BusinessDayClock) {
+export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope, clock?: LastOrdersClock) {
   return endOffsetClash(tx, cfg, undefined, false, clock);
 }
 
@@ -254,7 +260,7 @@ export function departmentEndOffsetClash(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
-  clock?: BusinessDayClock,
+  clock: LastOrdersClock,
 ) {
   return endOffsetClash(tx, cfg, [departmentId], false, clock);
 }
@@ -526,13 +532,8 @@ async function writeMenuPeriod(
   await assertDepartment(tx, cfg, departmentId);
   const oldOffset =
     periodId === null ? 0 : (await requirePeriod(tx, cfg, periodId)).endOffsetMinutes;
-  await assertBusinessDayScheduleWrite(
-    tx,
-    cfg,
-    oldOffset === endOffsetMinutes ? "metadata" : "time",
-    at,
-    expectedClockRevision,
-  );
+  const changeKind = oldOffset === endOffsetMinutes ? "metadata" : "time";
+  await assertBusinessDayScheduleWrite(tx, cfg, changeKind, expectedClockRevision);
   if (
     period.colour !== undefined &&
     (typeof period.colour !== "string" || !CALENDAR_COLOURS.includes(period.colour))
@@ -610,7 +611,8 @@ async function writeMenuPeriod(
         displayOrder,
       })),
     );
-  const clash = await endOffsetClash(tx, cfg, [departmentId]);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const clash = await endOffsetClash(tx, cfg, [departmentId], false, lastOrdersClock(clock, at));
   if (clash !== null)
     throw new AppError("menu_period.invalid", {
       field: "endOffsetMinutes",
@@ -622,6 +624,7 @@ async function writeMenuPeriod(
       date: clash.date,
       ...(clash.specialDayId === undefined ? {} : { specialDayId: clash.specialDayId }),
     });
+  if (changeKind === "time") await assertWaitingChangeFits(tx, cfg, at, clock);
   return { id: id! };
 }
 
@@ -674,17 +677,17 @@ export async function replaceMenuWeek(
   options: { seasonId?: string } = {},
 ): Promise<void> {
   const clock = await readLocationClock(tx, cfg.locationId);
-  const staged = await stageMenuWeek(tx, cfg, departmentId, days, clock, options.seasonId);
+  const inForce = inForceClock(clock, at);
+  const staged = await stageMenuWeek(tx, cfg, departmentId, days, inForce, options.seasonId);
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,
     staged.changed ? "time" : "metadata",
-    at,
     expectedClockRevision,
-    clock,
   );
   await staged.write();
-  await assertWeekEndOffsets(tx, cfg, clock, [{ departmentId, ...staged }]);
+  await assertWeekEndOffsets(tx, cfg, lastOrdersClock(clock, at), [{ departmentId, ...staged }]);
+  if (staged.changed) await assertWaitingChangeFits(tx, cfg, at, clock);
 }
 
 /** Refuses the first sending cutoff in the listed departments that runs into what follows it,
@@ -692,7 +695,7 @@ export async function replaceMenuWeek(
 export async function assertWeekEndOffsets(
   tx: Transaction,
   cfg: VenueScope,
-  clock: BusinessDayClock,
+  clock: LastOrdersClock,
   weeks: readonly { departmentId: string; clashField: (clash: EndOffsetClash) => string }[],
 ): Promise<void> {
   const clash = await endOffsetClash(

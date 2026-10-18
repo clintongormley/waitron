@@ -6,7 +6,7 @@ import type { LocalDate } from "./hours-types.js";
 import type { ClosedWeekDay } from "./menu-timetable-types.js";
 import type { VenueScope } from "./operations.js";
 import { readDepartmentSeasonWeeks, type ServingRead } from "./season-weeks.js";
-import { serviceDayContext } from "./service-day-context.js";
+import { inForceClock, serviceDayContext } from "./service-day-context.js";
 import { readServiceZones } from "./zone-closed-times.js";
 import { closureOutsideHours } from "./zone-own-hours.js";
 import "./errors.js";
@@ -21,13 +21,15 @@ function departmentIn(departmentOf: ReadonlyMap<string, string>) {
 }
 
 /** After a season-week write, inside its transaction: each listed zone's closures against its
- *  department's week in `seasonId` as now stored. `field` is the request path up to `days.`
- *  ("" or "zones.<i>."). Without `read`, the clock and the zones are read here. */
+ *  department's week in `seasonId` as now stored, read from the start in force at `at`. `field`
+ *  is the request path up to `days.` ("" or "zones.<i>."). Without `read`, the clock and the
+ *  zones are read here. */
 export async function assertSeasonClosuresInHours(
   tx: Transaction,
   cfg: VenueScope,
   seasonId: string,
   zones: readonly { zoneId: string; field: string; days: readonly ClosedWeekDay[] }[],
+  at: Date,
   read?: ServingRead,
 ): Promise<void> {
   if (zones.length === 0) return;
@@ -38,13 +40,14 @@ export async function assertSeasonClosuresInHours(
     ),
   };
   const department = departmentIn(departmentOf);
+  const { dayCutover } = inForceClock(clock, at);
   const weeks = await readDepartmentSeasonWeeks(
     tx,
     cfg,
     [...new Set(zones.map((zone) => department(zone.zoneId)))],
-    clock.dayCutover,
+    dayCutover,
   );
-  const day = { dayCutover: clock.dayCutover, endMinute: 1440 };
+  const day = { dayCutover, endMinute: 1440 };
   for (const { zoneId, field, days } of zones) {
     const week = weeks.get(department(zoneId))?.get(seasonId);
     for (const [j, { weekday, ranges }] of days.entries()) {

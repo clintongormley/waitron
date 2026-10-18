@@ -5,6 +5,10 @@ import { applyTokens } from "@waitron/ui";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SeasonsWindow } from "./seasons-window.js";
 import "./seasons-window.js";
+import {
+  clockChangeConflict,
+  clockChangeConflictSentence,
+} from "../testing/clock-change-conflict.js";
 
 const seasons = [
   { id: "spring", name: "Spring", startsOn: "03-01", colour: "green" as const },
@@ -701,10 +705,7 @@ it.each([
     "A period’s end offset would run into Thu, 24 Dec 2026.",
   ],
   [{ code: "hours.clock_changed" }, "The business-day start changed. Reload hours."],
-  [
-    { code: "hours.clock_change_pending" },
-    "Cancel the pending business-day change before editing hours.",
-  ],
+  [clockChangeConflict, clockChangeConflictSentence],
   [
     { code: "season.invalid", params: { field: "delete", reason: "last" } },
     "A venue keeps at least one season.",
@@ -715,7 +716,7 @@ it.each([
   ],
   [{ code: "network.unavailable" }, "The change could not be saved."],
 ])(
-  "says an end-offset clash, a changed or pending business-day start and the last season at the bottom (%o)",
+  "says an end-offset clash, a changed business-day start, a clash with a waiting one and the last season at the bottom (%o)",
   async (refusal, message) => {
     const saveSeasons = vi.fn(async () => {
       throw refusal;

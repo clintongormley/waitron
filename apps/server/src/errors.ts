@@ -42,7 +42,12 @@ declare module "@waitron/shared" {
     "page_printer.rediscover": Record<string, never>;
     /** The page printer has no print agent to send it a test page; adding it again re-points it. */
     "page_printer.no_agent": Record<string, never>;
-    "venue.business_day_invalid": { field: string; reason: string };
+    "venue.business_day_invalid": {
+      field: string;
+      reason: string;
+      clocksChangeOn?: string;
+      saveFrom?: string | null;
+    };
     "venue.business_day_changed": Record<string, never>;
     "venue.business_day_locked": { reason: string };
     "venue.detail_invalid": { field: string; reason: string };

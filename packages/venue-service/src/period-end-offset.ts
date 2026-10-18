@@ -5,7 +5,7 @@ import { byStart, seasonOnSorted } from "./season-rules.js";
 import { rangeSpan, type ServiceRange } from "./service-day.js";
 import { scheduleCutovers, serviceDayWallContext } from "./service-day-context.js";
 import { standingInYear } from "./repeat-rules.js";
-import type { BusinessDayClock } from "@waitron/shared";
+import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 
@@ -82,11 +82,15 @@ export interface DatedSchedule {
   specialDayId?: string;
 }
 
+/** With `from`, the business day an hours save falls in: the weeks are judged under the start in
+ *  force on `from`, and before `from` only a one-off date's own paint is present, under its own
+ *  start on `clock`. */
 export function findSeasonEndOffsetClash(
   seasons: readonly SeasonSchedule[],
   dated: readonly DatedSchedule[],
   offsets: ReadonlyMap<string, number>,
   clock: string | BusinessDayClock,
+  from?: LocalDate,
 ): {
   periodId: string;
   slotIndex: number;
@@ -103,7 +107,12 @@ export function findSeasonEndOffsetClash(
     pairs.push(
       ...ordered.map((season, index) => [season, ordered[(index + 1) % ordered.length]!] as const),
     );
-  const cutovers = typeof clock === "string" ? [clock] : scheduleCutovers(clock);
+  const cutovers =
+    typeof clock === "string"
+      ? [clock]
+      : from !== undefined
+        ? [cutoverForBusinessDay(clock, from)]
+        : scheduleCutovers(clock);
   for (const [first, second] of pairs)
     for (const cutover of cutovers)
       for (let weekday = 0; weekday < 7; weekday++) {
@@ -172,10 +181,12 @@ export function findSeasonEndOffsetClash(
   const effective = (date: LocalDate, cutover: string): readonly ServiceRange[] => {
     const index = storedIndex(date);
     const stored = dated[index];
-    if (stored === undefined) return seasonal(date);
+    const past = from !== undefined && date < from;
+    if (past && stored?.occursIn !== undefined) return [];
+    if (stored === undefined) return past ? [] : seasonal(date);
     if (stored.closeWholeVenue) return [];
-    const key = `${index}|${seasonOf(date)?.seasonId}|${weekdayOf(date)}|${cutover}`;
-    const day = layered.get(key) ?? layerPaint(seasonal(date), stored.paint, cutover);
+    const key = past ? date : `${index}|${seasonOf(date)?.seasonId}|${weekdayOf(date)}|${cutover}`;
+    const day = layered.get(key) ?? layerPaint(past ? [] : seasonal(date), stored.paint, cutover);
     layered.set(key, day);
     return day;
   };

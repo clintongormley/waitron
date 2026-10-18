@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { cutoverForBusinessDay } from "@waitron/shared";
+import { businessDayBoundaryAt, businessDayBounds, cutoverForBusinessDay } from "@waitron/shared";
+import {
+  dateTimeFormat,
+  formatBusinessDate,
+  formatChangeoverMoment,
+  formatDayLength,
+} from "@waitron/dashboard-kit";
 import {
   baseStyles,
   draftScopeFor,
@@ -16,14 +22,18 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import type {
   DashboardApi,
   BusinessDayClockModel,
-  BusinessDayStartInput,
   BusinessDayStartPreview,
 } from "../api/client.js";
-import { t, fill, currentLocale } from "../i18n/t.js";
+import { t, fill } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 
-type Draft = { effectiveBusinessDay: string; dayCutover: string };
+type Draft = { dayCutover: string };
+type Waiting = { effectiveBusinessDay: string; dayCutover: string; startsAt: string };
+// A longer setTimeout delay fires at once: measured 2026-10-18 in HeadlessChrome 156, 2_147_483_648 ms
+// fired within 200 ms and 2_147_483_647 ms did not.
+const LONGEST_TIMER_MS = 2_147_483_647;
+const DAY_MS = 86_400_000;
 @customElement("dashboard-business-day-start-editor")
 export class BusinessDayStartEditor extends LitElement {
   static override styles = [
@@ -54,6 +64,19 @@ export class BusinessDayStartEditor extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      .day-length {
+        display: block;
+        color: var(--wt-color-text-muted);
+      }
+      .preview p {
+        margin: 0 0 var(--wt-space-2);
+      }
+      .history {
+        color: var(--wt-color-text-muted);
+      }
+      .preview a {
+        color: var(--wt-color-primary-text);
+      }
       .preview {
         padding: var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
@@ -72,21 +95,25 @@ export class BusinessDayStartEditor extends LitElement {
   @state() private errors: Partial<Record<keyof Draft, string>> = {};
   @state() private actionError = "";
   @state() private previewError = "";
-  @state() private acknowledged = "";
   #baseline?: Draft;
   #revision = 0;
   #clockIdentity = "";
   #previewIdentity = "";
+  #previewRefusal = "";
   #sequence = 0;
   #generation = 0;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
+  #changeoverTimer?: ReturnType<typeof setTimeout>;
+  #rereadPassed?: string;
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation++;
     this.#register();
+    this.#scheduleReread();
   }
   override disconnectedCallback(): void {
+    this.#clearReread();
     this.#generation++;
     this.#sequence++;
     this.#scope?.dispose();
@@ -94,21 +121,79 @@ export class BusinessDayStartEditor extends LitElement {
     this.#leave = undefined;
     this.busy = false;
     this.preview = undefined;
-    this.acknowledged = "";
     super.disconnectedCallback();
   }
   protected override willUpdate(changes: PropertyValues): void {
     if (changes.has("model") && this.draft && this.#clockIdentity !== this.#identity()) {
       this.#sequence++;
       this.preview = undefined;
-      this.acknowledged = "";
-      if (!this.actionError) this.actionError = t("business_day.changed");
+      if (!this.actionError || this.actionError === this.#previewRefusal) {
+        if (this.#previewRefusal && this.errors.dayCutover === this.#previewRefusal)
+          this.errors = {};
+        this.#previewRefusal = "";
+        this.actionError = t("business_day.changed");
+      }
     }
     if (changes.has("readOnly") && this.readOnly) {
       this.#sequence++;
       this.preview = undefined;
-      this.acknowledged = "";
     }
+  }
+  protected override updated(changes: PropertyValues): void {
+    if (changes.has("model")) this.#scheduleReread();
+  }
+  #waiting(): Waiting[] {
+    const model = this.model;
+    const today = model?.currentBusinessDay;
+    if (!today) return [];
+    return model.clock.cutoverChanges
+      .filter((change) => change.effectiveBusinessDay > today)
+      .map((change) => ({
+        effectiveBusinessDay: change.effectiveBusinessDay,
+        dayCutover: change.dayCutover.slice(0, 5),
+        startsAt: businessDayBoundaryAt(model.clock, change.effectiveBusinessDay),
+      }));
+  }
+  #clearReread(): void {
+    clearTimeout(this.#changeoverTimer);
+    this.#changeoverTimer = undefined;
+  }
+  // The panel's live query reads this table through the background client, so the re-read is passive.
+  #scheduleReread(): void {
+    this.#clearReread();
+    const next = this.isConnected ? this.#waiting()[0] : undefined;
+    if (!next) return;
+    const delay = Date.parse(next.startsAt) - Date.now();
+    if (delay <= 0) {
+      // A model read just before the changeover can arrive after it; remembering the changeover
+      // keeps a model still stale after that re-read from asking again.
+      if (this.#rereadPassed === next.startsAt) return;
+      this.#rereadPassed = next.startsAt;
+      this.api.liveData.invalidate([{ type: "location_day_cutover_changes" }]);
+      return;
+    }
+    if (delay > LONGEST_TIMER_MS) return;
+    this.#changeoverTimer = setTimeout(() => {
+      this.#changeoverTimer = undefined;
+      this.api.liveData.invalidate([{ type: "location_day_cutover_changes" }]);
+    }, delay);
+  }
+  #newStart(change: Waiting) {
+    const day = new Date(Date.parse(`${change.effectiveBusinessDay}T00:00:00.000Z`) - DAY_MS)
+      .toISOString()
+      .slice(0, 10);
+    const { startAt, endAt } = businessDayBounds(this.model.clock, day);
+    return html`<span data-test="new-start-value"
+        >${fill("business_day.new_start_value", {
+          time: change.dayCutover,
+          when: formatChangeoverMoment(change.startsAt, this.model.clock.timeZone),
+        })}</span
+      ><span class="day-length" data-test="day-length"
+        >${fill("business_day.day_length", {
+          day: formatBusinessDate(day),
+          duration: formatDayLength((Date.parse(endAt) - Date.parse(startAt)) / 60_000),
+        })}</span
+      >`;
   }
   #identity(): string {
     return JSON.stringify([this.model.revision, this.model.clock, this.model.pending]);
@@ -119,8 +204,7 @@ export class BusinessDayStartEditor extends LitElement {
       id: this,
       current: () => this.draft!,
       snapshot: (value) => ({ ...value }),
-      equal: (a, b) =>
-        a.effectiveBusinessDay === b.effectiveBusinessDay && a.dayCutover === b.dayCutover,
+      equal: (a, b) => a.dayCutover === b.dayCutover,
       restore: (value) => {
         this.draft = value;
         this.errors = {};
@@ -134,14 +218,11 @@ export class BusinessDayStartEditor extends LitElement {
     scope.commit(this.#baseline);
   }
   #begin(): void {
-    if (this.readOnly || this.busy || this.model.pending?.editable === false) return;
+    if (this.readOnly || this.busy) return;
     this.#generation++;
     this.#revision = this.model.revision;
     this.#clockIdentity = this.#identity();
-    this.#baseline = {
-      effectiveBusinessDay: this.model.pending?.effectiveBusinessDay ?? "",
-      dayCutover: this.model.pending?.dayCutover.slice(0, 5) ?? "",
-    };
+    this.#baseline = { dayCutover: this.#waiting().at(-1)?.dayCutover ?? this.#inForce() };
     this.draft = { ...this.#baseline };
     this.actionError = "";
     this.errors = {};
@@ -158,7 +239,6 @@ export class BusinessDayStartEditor extends LitElement {
     this.draft = undefined;
     this.#baseline = undefined;
     this.preview = undefined;
-    this.acknowledged = "";
     this.actionError = "";
     this.errors = {};
   }
@@ -174,25 +254,12 @@ export class BusinessDayStartEditor extends LitElement {
   }
   #problems(): Partial<Record<keyof Draft, string>> {
     const errors: Partial<Record<keyof Draft, string>> = {};
-    const draft = this.draft!;
-    const date = draft.effectiveBusinessDay;
-    if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
-      !Number.isFinite(Date.parse(`${date}T12:00:00Z`)) ||
-      new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) !== date
-    )
-      errors.effectiveBusinessDay = t("business_day.date_invalid");
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(draft.dayCutover))
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(this.draft!.dayCutover))
       errors.dayCutover = t("venue_details.cutover");
     return errors;
   }
   #key(): string {
-    return JSON.stringify([
-      this.draft?.effectiveBusinessDay,
-      this.draft?.dayCutover,
-      this.#revision,
-      this.#clockIdentity,
-    ]);
+    return JSON.stringify([this.draft?.dayCutover, this.#revision, this.#clockIdentity]);
   }
   #ready(): boolean {
     return (
@@ -200,38 +267,53 @@ export class BusinessDayStartEditor extends LitElement {
       this.#previewIdentity === this.#key() &&
       this.#clockIdentity === this.#identity() &&
       this.preview.revision === this.#revision &&
-      this.preview.effectiveDay.businessDay === this.draft?.effectiveBusinessDay &&
       this.preview.effectiveDay.dayCutover.slice(0, 5) === this.draft?.dayCutover &&
       this.preview.conflictCount === 0
     );
   }
-  #input(): BusinessDayStartInput {
-    return { ...this.draft!, expectedClockRevision: this.#revision };
+  #inForce(): string {
+    const model = this.model;
+    return (
+      model.currentBusinessDay
+        ? cutoverForBusinessDay(model.clock, model.currentBusinessDay)
+        : model.clock.dayCutover
+    ).slice(0, 5);
   }
   #refreshPreview(): void {
     const sequence = ++this.#sequence;
     this.preview = undefined;
     this.previewError = "";
-    this.acknowledged = "";
+    if (this.#previewRefusal && this.actionError === this.#previewRefusal) this.actionError = "";
+    this.#previewRefusal = "";
     if (
       !this.draft ||
       this.readOnly ||
       Object.keys(this.#problems()).length ||
+      this.draft.dayCutover === this.#baseline?.dayCutover ||
       this.#clockIdentity !== this.#identity()
     )
       return;
     const identity = this.#key();
-    const input = this.#input();
     void this.api
-      .previewBusinessDayStart(input)
+      .previewBusinessDayStart({
+        dayCutover: this.draft.dayCutover,
+        expectedClockRevision: this.#revision,
+      })
       .then((preview) => {
         if (sequence !== this.#sequence || !this.isConnected) return;
         this.#previewIdentity = identity;
         this.preview = preview;
       })
       .catch((error: unknown) => {
-        if (sequence === this.#sequence && this.isConnected)
-          this.previewError = codeMessage(codeOf(error));
+        if (sequence !== this.#sequence || !this.isConnected) return;
+        const message = this.#refusal(error);
+        if (this.#params(error)?.field !== "dayCutover") {
+          this.previewError = message;
+          return;
+        }
+        this.#previewRefusal = message;
+        this.errors = { dayCutover: message };
+        this.actionError = message;
       });
   }
   #change(field: keyof Draft, event: CustomEvent<{ value: string }>): void {
@@ -252,12 +334,16 @@ export class BusinessDayStartEditor extends LitElement {
       this.actionError = t("form.fix_fields");
       return;
     }
-    if (!this.#ready() || this.acknowledged !== this.#key()) return;
+    if (!this.#ready()) return;
     const generation = this.#generation;
     this.busy = true;
     this.actionError = "";
     try {
-      const result = await this.api.putBusinessDayStart(this.#input());
+      const result = await this.api.putBusinessDayStart({
+        effectiveBusinessDay: this.preview!.effectiveDay.businessDay,
+        dayCutover: this.draft.dayCutover,
+        expectedClockRevision: this.#revision,
+      });
       if (generation !== this.#generation || !this.isConnected) return;
       this.#close();
       this.dispatchEvent(
@@ -265,56 +351,69 @@ export class BusinessDayStartEditor extends LitElement {
       );
     } catch (error) {
       if (generation !== this.#generation || !this.isConnected) return;
-      const params =
-        typeof error === "object" && error !== null
-          ? (error as { params?: Record<string, unknown> }).params
-          : undefined;
       const code = codeOf(error);
-      const message = codeMessage(code);
-      const field = params?.field;
-      if (field === "effectiveBusinessDay" || field === "dayCutover")
-        this.errors = { [field]: message };
+      const params = this.#params(error);
+      const message = this.#refusal(error);
+      if (params?.field === "dayCutover") this.errors = { dayCutover: message };
       this.actionError = message;
       if (code === "venue.business_day_changed" || code === "venue.business_day_locked") {
         this.preview = undefined;
-        this.acknowledged = "";
       }
+      if (params?.reason === "changeover_passed") this.#refreshPreview();
     } finally {
       if (generation === this.#generation || !this.draft) this.busy = false;
     }
   }
-  async #cancelPending(): Promise<void> {
-    if (this.readOnly || this.busy || !this.model.pending?.editable) return;
-    const generation = this.#generation;
-    const revision = this.model.revision;
-    this.busy = true;
-    this.actionError = "";
-    try {
-      const result = await this.api.cancelBusinessDayStart({ expectedClockRevision: revision });
-      if (generation !== this.#generation || !this.isConnected) return;
-      this.dispatchEvent(
-        new CustomEvent("saved", { detail: result.model, bubbles: true, composed: true }),
-      );
-    } catch (error) {
-      if (generation === this.#generation && this.isConnected)
-        this.actionError = codeMessage(codeOf(error));
-    } finally {
-      if (generation === this.#generation) this.busy = false;
-    }
+  #params(error: unknown): Record<string, unknown> | undefined {
+    return typeof error === "object" && error !== null
+      ? (error as { params?: Record<string, unknown> }).params
+      : undefined;
   }
-  #instant(at: string) {
-    return html`<time datetime=${at}
-      >${new Intl.DateTimeFormat(currentLocale(), {
-        timeZone: this.model.clock.timeZone,
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hourCycle: "h23",
-        timeZoneName: "short",
-      }).format(new Date(at))}</time
-    >`;
+  #refusal(error: unknown): string {
+    const code = codeOf(error);
+    const params = this.#params(error);
+    if (code === "venue.business_day_invalid" && params?.reason === "changeover_passed")
+      return t("business_day.changeover_passed");
+    if (
+      code === "venue.business_day_invalid" &&
+      params?.reason === "clock_transition" &&
+      typeof params.clocksChangeOn === "string" &&
+      typeof params.saveFrom === "string"
+    )
+      return fill("business_day.clock_transition", {
+        date: formatBusinessDate(params.clocksChangeOn),
+        when: formatChangeoverMoment(params.saveFrom, this.model.clock.timeZone),
+      });
+    return codeMessage(code);
+  }
+  #clockTime(at: string): string {
+    return dateTimeFormat("en-GB", {
+      timeZone: this.model.clock.timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date(at));
+  }
+  #previewLines(preview: BusinessDayStartPreview) {
+    const [before, after] = t("business_day.takes_effect").split("{when}");
+    const day = preview.previousDay;
+    const runs = {
+      day: formatBusinessDate(day.businessDay),
+      start: this.#clockTime(day.startAt),
+      end: this.#clockTime(day.endAt),
+      duration: formatDayLength((Date.parse(day.endAt) - Date.parse(day.startAt)) / 60_000),
+    };
+    return html`<p data-test="takes-effect">
+        ${before}<strong>${formatChangeoverMoment(preview.effectiveDay.startAt, this.model.clock.timeZone)}</strong>${after}
+      </p>
+      <p data-test="day-runs">
+        ${
+          day.businessDay === this.model.currentBusinessDay
+            ? fill("business_day.today_runs", runs)
+            : fill("business_day.day_runs", runs)
+        }
+      </p>
+      <p class="history">${t("business_day.history")}</p>`;
   }
   #conflict(conflict: BusinessDayStartPreview["conflicts"][number]): string {
     const weekday =
@@ -333,17 +432,19 @@ export class BusinessDayStartEditor extends LitElement {
               ] as const
             )[(conflict.weekday + 6) % 7]!,
           );
-    const reason = t(
-      (
-        {
-          range: "business_day.conflict_range",
-          endpoint_day: "business_day.conflict_endpoint",
-          all_day: "business_day.conflict_all_day",
-          sending_cutoff: "business_day.conflict_sending",
-          transition_strip: "business_day.conflict_strip",
-        } as const
-      )[conflict.reason],
-    );
+    const key = (
+      {
+        range: "business_day.conflict_range",
+        endpoint_day: "business_day.conflict_endpoint",
+        all_day: "business_day.conflict_all_day",
+        sending_cutoff: "business_day.conflict_sending",
+        transition_strip: "business_day.conflict_strip",
+        overlap: "business_day.conflict_overlap",
+        kept_open: "business_day.conflict_kept_open",
+      } as const
+    )[conflict.reason];
+    const reason =
+      conflict.reason === "kept_open" ? fill(key, { time: conflict.endsAt ?? "" }) : t(key);
     const line = [
       conflict.departmentName ?? conflict.departmentId,
       conflict.zoneName ?? conflict.zoneId,
@@ -374,10 +475,6 @@ export class BusinessDayStartEditor extends LitElement {
   override render() {
     const model = this.model;
     if (!model) return nothing;
-    const current = model.currentBusinessDay
-      ? cutoverForBusinessDay(model.clock, model.currentBusinessDay)
-      : model.clock.dayCutover;
-    const pending = model.pending;
     const draft = this.draft;
     const generation = this.#generation;
     const active = () => this.isConnected && generation === this.#generation;
@@ -386,27 +483,16 @@ export class BusinessDayStartEditor extends LitElement {
     const preview = this.preview;
     const conflicts = preview && this.#conflictLines(preview);
     const action =
-      !this.readOnly && !draft && pending?.editable !== false
+      !this.readOnly && !draft
         ? html`<div class="actions">
             <wt-button
-              data-test=${pending ? "replace" : "change"}
+              data-test="change"
               ?disabled=${this.busy}
               @click=${() => {
                 if (active()) this.#begin();
               }}
-              >${t(pending ? "business_day.replace" : "business_day.change")}</wt-button
-            >${
-              pending
-                ? html`<wt-button
-                    data-test="cancel-pending"
-                    ?disabled=${this.busy}
-                    @click=${() => {
-                      if (active()) void this.#cancelPending();
-                    }}
-                    >${t("business_day.cancel_pending")}</wt-button
-                  >`
-                : nothing
-            }
+              >${t("business_day.change")}</wt-button
+            >
           </div>`
         : nothing;
     return html`${settingsCard({
@@ -414,30 +500,18 @@ export class BusinessDayStartEditor extends LitElement {
         heading: t("venue_settings.card.business_day"),
         editing: false,
         action,
-        body: html`${settingsRows([
+        body: settingsRows([
           {
             label: t("business_day.starts_at"),
-            value: current.slice(0, 5),
+            value: this.#inForce(),
             dataTest: "saved-dayCutover",
           },
-          {
-            label: t("business_day.scheduled"),
-            value: pending
-              ? `${pending.effectiveBusinessDay} · ${pending.dayCutover.slice(0, 5)}`
-              : t("business_day.none"),
-            dataTest: "saved-pending",
-          },
-          ...(pending
-            ? [
-                {
-                  label: t("business_day.locks"),
-                  value: this.#instant(pending.locksAt),
-                  dataTest: "saved-locksAt",
-                },
-              ]
-            : []),
-        ])}
-        ${pending?.editable === false ? html`<p data-test="locked">${t("business_day.locked")}</p>` : nothing}`,
+          ...this.#waiting().map((change) => ({
+            label: t("business_day.new_start"),
+            value: this.#newStart(change),
+            dataTest: "saved-new-start",
+          })),
+        ]),
       })}
       ${this.actionError && !draft ? html`<p class="error" role="alert">${this.actionError}</p>` : nothing}
       <wt-dialog
@@ -453,98 +527,57 @@ export class BusinessDayStartEditor extends LitElement {
         ${
           draft
             ? html`<form
-                @submit=${(event: Event) => {
-                  event.preventDefault();
-                  if (active()) void this.#save();
-                }}
-              >
-                <wt-input
-                  name="effectiveBusinessDay"
-                  label=${t("business_day.date")}
-                  placeholder="YYYY-MM-DD"
-                  required
-                  .value=${draft.effectiveBusinessDay}
-                  .error=${this.errors.effectiveBusinessDay ?? ""}
-                  ?disabled=${this.busy || this.readOnly}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    if (active()) this.#change("effectiveBusinessDay", event);
+                  @submit=${(event: Event) => {
+                    event.preventDefault();
+                    if (active()) void this.#save();
                   }}
-                ></wt-input>
-                <wt-input
-                  name="dayCutover"
-                  label=${t("venue_details.dayCutover")}
-                  placeholder="HH:MM"
-                  required
-                  .value=${draft.dayCutover}
-                  .error=${this.errors.dayCutover ?? ""}
-                  ?disabled=${this.busy || this.readOnly}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    if (active()) this.#change("dayCutover", event);
-                  }}
-                ></wt-input>
-                <p>${t("business_day.history")}</p>
-                ${
-                  preview
-                    ? html`<div class="preview" data-test="preview">
-                        <p>
-                          ${t("business_day.transition")}
-                          ${String((Date.parse(preview.previousDay.endAt) - Date.parse(preview.previousDay.startAt)) / 3600000)}
-                          h
-                        </p>
-                        <dl>
-                          <dt>${preview.previousDay.businessDay}</dt>
-                          <dd>
-                            ${this.#instant(preview.previousDay.startAt)} →
-                            ${this.#instant(preview.previousDay.endAt)}
-                          </dd>
-                          <dt>${preview.effectiveDay.businessDay}</dt>
-                          <dd>
-                            ${this.#instant(preview.effectiveDay.startAt)} →
-                            ${this.#instant(preview.effectiveDay.endAt)}
-                          </dd>
-                          <dt>${t("business_day.locks")}</dt>
-                          <dd>${this.#instant(preview.locksAt)}</dd>
-                        </dl>
-                        ${
-                          preview.conflictCount
-                            ? html`<p data-test="conflicts">
-                                  ${t("business_day.conflicts")} ${conflicts!.count}.
-                                  <a href="/manage/opening-hours"
-                                    >${t("business_day.open_hours")}</a
-                                  >
-                                </p>
-                                <ul data-test="conflict-rows">
-                                  ${conflicts!.lines.map((line) => html`<li>${line}</li>`)}
-                                </ul>`
-                            : nothing
-                        }
-                      </div>`
-                    : nothing
-                }
-                ${
-                  this.previewError
-                    ? html`<p role="alert" class="error">${this.previewError}</p>
-                        <wt-button
-                          data-test="preview-retry"
-                          @click=${() => {
-                            if (active()) this.#refreshPreview();
-                          }}
-                          >${t("venue_details.retry_preview")}</wt-button
-                        >`
-                    : nothing
-                }
-                ${
-                  ready && this.acknowledged !== this.#key()
-                    ? html`<wt-button
-                        data-test="acknowledge"
-                        @click=${() => {
-                          if (active() && this.#ready()) this.acknowledged = this.#key();
-                        }}
-                        >${t("business_day.acknowledge")}</wt-button
-                      >`
-                    : nothing
-                }
-                <wt-form-actions .error=${this.actionError}
+                >
+                  <wt-input
+                    name="dayCutover"
+                    label=${t("venue_details.dayCutover")}
+                    placeholder="HH:MM"
+                    required
+                    .value=${draft.dayCutover}
+                    .error=${this.errors.dayCutover ?? ""}
+                    ?disabled=${this.busy || this.readOnly}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      if (active()) this.#change("dayCutover", event);
+                    }}
+                  ></wt-input>
+                  ${
+                    preview
+                      ? html`<div class="preview" data-test="preview">
+                          ${this.#previewLines(preview)}
+                          ${
+                            preview.conflictCount
+                              ? html`<p data-test="conflicts">
+                                    ${t("business_day.conflicts")} ${conflicts!.count}.
+                                    <a href="/manage/opening-hours"
+                                      >${t("business_day.open_hours")}</a
+                                    >
+                                  </p>
+                                  <ul data-test="conflict-rows">
+                                    ${conflicts!.lines.map((line) => html`<li>${line}</li>`)}
+                                  </ul>`
+                              : nothing
+                          }
+                        </div>`
+                      : nothing
+                  }
+                  ${
+                    this.previewError
+                      ? html`<p role="alert" class="error">${this.previewError}</p>
+                          <wt-button
+                            data-test="preview-retry"
+                            @click=${() => {
+                              if (active()) this.#refreshPreview();
+                            }}
+                            >${t("venue_details.retry_preview")}</wt-button
+                          >`
+                      : nothing
+                  }
+                </form>
+                <wt-form-actions slot="footer" .error=${this.actionError}
                   ><wt-button
                     slot="cancel"
                     data-test="cancel"
@@ -555,15 +588,14 @@ export class BusinessDayStartEditor extends LitElement {
                     >${t("action.cancel")}</wt-button
                   ><wt-button
                     data-test="save"
-                    variant=${saveAction.variant}
-                    ?disabled=${saveAction.unchanged || this.busy || this.readOnly || !ready || this.acknowledged !== this.#key() || (this.attempted && Object.keys(this.#problems()).length > 0)}
+                    variant=${ready ? saveAction.variant : "secondary"}
+                    ?disabled=${saveAction.unchanged || this.busy || this.readOnly || !ready || (this.attempted && Object.keys(this.#problems()).length > 0)}
                     @click=${() => {
                       if (active()) void this.#save();
                     }}
                     >${t("action.save")}</wt-button
                   ></wt-form-actions
-                >
-              </form>`
+                >`
             : nothing
         }</wt-dialog
       >`;

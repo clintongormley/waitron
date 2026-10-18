@@ -636,7 +636,14 @@ export interface BusinessDayClockConflict {
   date?: string;
   periodId?: string;
   rangeIndex: number;
-  reason: "range" | "endpoint_day" | "all_day" | "sending_cutoff" | "transition_strip";
+  reason:
+    | "range"
+    | "overlap"
+    | "endpoint_day"
+    | "all_day"
+    | "sending_cutoff"
+    | "transition_strip"
+    | "kept_open";
 }
 
 export interface FloorPlanSetSummary {
@@ -710,7 +717,6 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
     changeKind: "time" | "metadata",
-    at: Date,
     expectedClockRevision: number,
   ): Promise<void>;
   assertPeriodEndOffsets(tx: Transaction, cfg: { locationId: LocationId }): Promise<void>;

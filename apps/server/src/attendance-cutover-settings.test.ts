@@ -13,7 +13,11 @@ import {
   shifts,
 } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
-import { beginAttendanceDiscovery, discoverAttendanceDays } from "./attendance-discovery.js";
+import {
+  beginAttendanceDiscovery,
+  discoverAttendanceDays,
+  nextAttendanceDay,
+} from "./attendance-discovery.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -72,7 +76,7 @@ it("an admitted future cutover change does not block activity on its already dis
     {
       db: suite.db,
       cfg: venue.cfg,
-      now: () => now,
+      now: () => new Date("2026-01-07T12:00:00Z"),
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     () => {},
@@ -110,6 +114,106 @@ it("an admitted future cutover change does not block activity on its already dis
       businessDay: "2026-01-07",
       at: "2026-01-07T16:40:00.000Z",
       outcome: "qualifying",
+    }),
+  ]);
+});
+
+it("a Save that moves today's end makes attendance evaluate today up to the new end", async () => {
+  const venue = await setupVenue(suite.db);
+  const locationId = venue.cfg.locationId;
+  await suite.db
+    .update(locations)
+    .set({ dayCutover: "04:00:00", timeZone: "Europe/Madrid" })
+    .where(eq(locations.id, locationId));
+  const [worker] = await suite.db.select().from(persons).where(eq(persons.role, "staff"));
+  const [version] = await suite.db
+    .insert(rosterVersions)
+    .values({
+      locationId,
+      periodStart: "2026-01-05",
+      periodEnd: "2026-01-11",
+      status: "published",
+      publishedAt: "2026-01-04T12:00:00Z",
+    })
+    .returning();
+  await suite.db.insert(shifts).values({
+    locationId,
+    personId: worker!.id,
+    rosterVersionId: version!.id,
+    startsAt: "2026-01-07T09:00:00.000Z",
+    endsAt: "2026-01-07T17:00:00.000Z",
+    startsOffsetMinutes: 60,
+    endsOffsetMinutes: 60,
+  });
+  const saveAt = new Date("2026-01-07T12:00:00Z");
+  await withTransaction(suite.db, (tx) =>
+    beginAttendanceDiscovery(tx, { locationId, generation: "moved-end" }),
+  );
+  for (let n = 0; n < 20; n++) {
+    const { more } = await withTransaction(suite.db, (tx) =>
+      discoverAttendanceDays(tx, { locationId, now: saveAt, batchSize: 100 }),
+    );
+    if (!more) break;
+    if (n === 19) throw new Error("rota discovery did not settle");
+  }
+  const [before] = await suite.db.select().from(attendanceDayWork);
+  expect(before).toMatchObject({
+    businessDay: "2026-01-07",
+    endAt: "2026-01-08T03:00:00.000Z",
+    evaluatedRevision: 0,
+  });
+  const app = new Hono();
+  mountLocationSettingsApi(
+    app,
+    {
+      db: suite.db,
+      cfg: venue.cfg,
+      now: () => saveAt,
+      fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
+    },
+    () => {},
+  );
+  const preview = await app.request(
+    "/management-api/venue-details/business-day-start/preview?dayCutover=06%3A00&expectedClockRevision=0",
+    { headers: { cookie: venue.managerCookie } },
+  );
+  expect(preview.status).toBe(200);
+  const { effectiveDay } = await preview.json();
+  expect(effectiveDay).toMatchObject({ businessDay: "2026-01-08" });
+  const saved = await app.request("/management-api/venue-details/business-day-start", {
+    method: "PUT",
+    headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+    body: JSON.stringify({
+      effectiveBusinessDay: effectiveDay.businessDay,
+      dayCutover: "06:00",
+      expectedClockRevision: 0,
+    }),
+  });
+  expect(saved.status).toBe(200);
+  await withTransaction(suite.db, (tx) =>
+    recordAttendanceFact(tx, {
+      source: "order",
+      key: "after-old-end",
+      personId: worker!.id,
+      locationId,
+      kind: "order",
+      at: "2026-01-08T04:30:00.000Z",
+      offsetMinutes: 60,
+      outcome: "qualified",
+    }),
+  );
+  const day = await withTransaction(suite.db, (tx) =>
+    nextAttendanceDay(tx, { locationId, now: new Date("2026-01-08T05:00:00.000Z") }),
+  );
+  expect(day).toMatchObject({ businessDay: "2026-01-07", endAt: "2026-01-08T05:00:00.000Z" });
+  expect(await suite.db.select().from(attendanceDayWork)).toEqual([
+    expect.objectContaining({ businessDay: "2026-01-07", endAt: "2026-01-08T05:00:00.000Z" }),
+  ]);
+  expect(await suite.db.select().from(attendanceOperationFacts)).toEqual([
+    expect.objectContaining({
+      key: "after-old-end",
+      businessDay: "2026-01-07",
+      at: "2026-01-08T04:30:00.000Z",
     }),
   ]);
 });

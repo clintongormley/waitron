@@ -363,7 +363,14 @@ const en = {
   "prep.delete_station_daily_destinations": "These closed stations use normal routing: {names}.",
   "prep.actions": "Actions",
   "prep.service_zone": "Service zone",
-  "hours.clock_change_pending": "Cancel the pending business-day change before editing hours.",
+  "hours.clock_change_conflict":
+    "{range} clashes with the new business-day start, {time} from {when}: {reason}.",
+  "hours.conflict.range": "Crosses the new start",
+  "hours.conflict.overlap": "Invalid or overlapping range",
+  "hours.conflict.endpoint_day": "Moves to another day",
+  "hours.conflict.all_day": "All-day range needs new hours",
+  "hours.conflict.sending_cutoff": "Last orders clash with the new start or next period",
+  "hours.conflict.transition_strip": "Hours overlap the changed start",
   "hours.clock_changed": "The business-day start changed. Reload hours.",
   "venue.business_day_hours_conflict": "Adjust the conflicting hours first.",
   "hours.invalid":
@@ -1248,7 +1255,15 @@ const es: Record<keyof typeof en, string> = {
     "Estas estaciones cerradas usan el enrutamiento normal: {names}.",
   "prep.actions": "Acciones",
   "prep.service_zone": "Zona de servicio",
-  "hours.clock_change_pending": "Cancela el cambio pendiente del día antes de editar horarios.",
+  "hours.clock_change_conflict":
+    "{range} choca con el nuevo inicio del día de trabajo, {time} desde {when}: {reason}.",
+  "hours.conflict.range": "Cruza el nuevo inicio",
+  "hours.conflict.overlap": "Tramo inválido o solapado",
+  "hours.conflict.endpoint_day": "Pasa a otro día",
+  "hours.conflict.all_day": "El día completo necesita otro horario",
+  "hours.conflict.sending_cutoff":
+    "Los últimos pedidos coinciden con el nuevo inicio o el siguiente período",
+  "hours.conflict.transition_strip": "El horario coincide con el cambio de inicio",
   "hours.clock_changed": "Ha cambiado el inicio del día. Recarga los horarios.",
   "venue.business_day_hours_conflict": "Ajusta primero los horarios en conflicto.",
   "hours.invalid":

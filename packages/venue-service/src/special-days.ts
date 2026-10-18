@@ -2,7 +2,10 @@ import { and, asc, eq, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm"
 import { floorZones, newId, type Transaction } from "@waitron/db";
 import { readLocationClock, type LocationPlace } from "@waitron/reporting";
 import { AppError, isUuid, type BusinessDayClock, type ErrorParams } from "@waitron/shared";
-import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
+import {
+  assertBusinessDayScheduleWrite,
+  assertWaitingChangeFits,
+} from "./business-day-schedule.js";
 import type { PaintRange, ZonePaint } from "./day-paint.js";
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { isLocalDate } from "./hours-rules.js";
@@ -23,7 +26,13 @@ import { departments, zoneServicePolicies } from "./schema/service.js";
 import { readHolidayDates } from "./holidays.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
 import { joinTouching, type ServingRead } from "./season-weeks.js";
-import { scheduleCutovers } from "./service-day-context.js";
+import {
+  inForceClock,
+  lastOrdersClock,
+  type LastOrdersClock,
+  scheduleCutovers,
+  settledClock,
+} from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
 import "./errors.js";
 
@@ -583,9 +592,12 @@ interface ParsedEntry<T> {
 type CutoversOf = (date: LocalDate) => string[];
 
 const cutoversFor =
-  (clock: BusinessDayClock, repeats: boolean): CutoversOf =>
+  (
+    clocks: { settled: BusinessDayClock; inForce: BusinessDayClock },
+    repeats: boolean,
+  ): CutoversOf =>
   (date) =>
-    scheduleCutovers(clock, repeats ? undefined : date);
+    repeats ? scheduleCutovers(clocks.inForce) : scheduleCutovers(clocks.settled, date);
 
 function readPaintRange(
   entry: Record<string, unknown>,
@@ -685,7 +697,10 @@ function retainedEntries<T extends ClosedRange>(
     });
 }
 
-function parseInput(value: unknown, clock: BusinessDayClock) {
+function parseInput(
+  value: unknown,
+  clocks: { settled: BusinessDayClock; inForce: BusinessDayClock },
+) {
   const input = record(value, "input");
   const { name, repeatsYearly } = input;
   if (typeof name !== "string" || name.trim() === "") invalid("name");
@@ -704,7 +719,7 @@ function parseInput(value: unknown, clock: BusinessDayClock) {
       invalid(`dates.${index}.date`, { reason: "overlap" });
   });
   const held = new Set(dates.map((entry) => entry.date));
-  const cutoversOf = cutoversFor(clock, repeatsYearly);
+  const cutoversOf = cutoversFor(clocks, repeatsYearly);
   const paint = parseEntries(
     input.paint,
     "paint",
@@ -886,7 +901,7 @@ async function requireSpecialDay(tx: Transaction, cfg: VenueScope, id: string) {
 async function checkScheduleAfterWrite(
   tx: Transaction,
   cfg: VenueScope,
-  clock?: BusinessDayClock,
+  clock: LastOrdersClock,
 ): Promise<void> {
   const clash = await scheduleEndOffsetClash(tx, cfg, clock);
   if (clash !== null)
@@ -1041,10 +1056,11 @@ export async function saveSpecialDay(
   expectedClockRevision: number,
   afterWrite?: (read: ServingRead) => Promise<void>,
 ): Promise<SpecialDayDetail> {
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
+  await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
   const stored = id === null ? null : await readSpecialDay(tx, cfg, id);
   const clock = await readLocationClock(tx, cfg.locationId);
-  const parsed = parseInput(input, clock);
+  const inForce = inForceClock(clock, at);
+  const parsed = parseInput(input, { settled: settledClock(clock, at), inForce });
   const zoneDepartments = await assertPaintOwners(
     tx,
     cfg,
@@ -1187,8 +1203,9 @@ export async function saveSpecialDay(
       })),
     );
   }
-  await checkScheduleAfterWrite(tx, cfg, clock);
+  await checkScheduleAfterWrite(tx, cfg, lastOrdersClock(clock, at));
   await afterWrite?.({ clock, departmentOf: zoneDepartments });
+  await assertWaitingChangeFits(tx, cfg, at, clock);
   return readSpecialDay(tx, cfg, specialDayId);
 }
 
@@ -1200,8 +1217,10 @@ export async function deleteSpecialDay(
   at: Date,
   expectedClockRevision: number,
 ): Promise<void> {
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
+  await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
   await requireSpecialDay(tx, cfg, id);
   await tx.delete(specialDays).where(eq(specialDays.id, id));
-  await checkScheduleAfterWrite(tx, cfg);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  await checkScheduleAfterWrite(tx, cfg, lastOrdersClock(clock, at));
+  await assertWaitingChangeFits(tx, cfg, at, clock);
 }

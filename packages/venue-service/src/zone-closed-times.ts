@@ -1,5 +1,9 @@
-import { scheduleCutovers, serviceDayContext } from "./service-day-context.js";
-import { assertBusinessDayScheduleWrite, sameScheduleRanges } from "./business-day-schedule.js";
+import { inForceClock, scheduleCutovers, serviceDayContext } from "./service-day-context.js";
+import {
+  assertBusinessDayScheduleWrite,
+  assertWaitingChangeFits,
+  sameScheduleRanges,
+} from "./business-day-schedule.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { floorZones, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
@@ -35,20 +39,26 @@ export async function replaceZoneClosedWeek(
 ): Promise<void> {
   const zone = await resolveZoneContext(tx, cfg, zoneId);
   const clock = await readLocationClock(tx, cfg.locationId);
-  const staged = await stageZoneClosedWeek(tx, cfg, zoneId, days, clock, options.seasonId);
+  const staged = await stageZoneClosedWeek(
+    tx,
+    cfg,
+    zoneId,
+    days,
+    inForceClock(clock, at),
+    options.seasonId,
+  );
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,
     staged.changed ? "time" : "metadata",
-    at,
     expectedClockRevision,
-    clock,
   );
   await staged.write();
   await options.afterWrite?.({
     clock,
     departmentOf: new Map([[zone.zoneId, zone.departmentId]]),
   });
+  if (staged.changed) await assertWaitingChangeFits(tx, cfg, at, clock);
 }
 
 /** A zone's closed week checked and compared with what its seasons hold, written by `write`. The

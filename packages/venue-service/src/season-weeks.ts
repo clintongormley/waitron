@@ -2,7 +2,11 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
-import { assertBusinessDayScheduleWrite, sameScheduleRanges } from "./business-day-schedule.js";
+import {
+  assertBusinessDayScheduleWrite,
+  assertWaitingChangeFits,
+  sameScheduleRanges,
+} from "./business-day-schedule.js";
 import { assertWeekEndOffsets, readDepartmentWeekReads, stageMenuWeek } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { storedTime, wireTime, type VenueScope } from "./operations.js";
@@ -16,6 +20,7 @@ import {
 import type { Season } from "./season-rules.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { rangeSpan, type ClosedRange, type ServiceRange } from "./service-day.js";
+import { inForceClock, lastOrdersClock } from "./service-day-context.js";
 import { readServiceZones, stageZoneClosedWeek } from "./zone-closed-times.js";
 import "./errors.js";
 
@@ -328,6 +333,7 @@ export async function saveSeasonWeeks(
 ): Promise<void> {
   const season = (await seasonsNaming(tx, cfg, seasonId)).own;
   const clock = await readLocationClock(tx, cfg.locationId);
+  const inForce = inForceClock(clock, at);
   const departmentEntries = input.departments ?? [];
   const departmentReads = await readDepartmentWeekReads(
     tx,
@@ -339,7 +345,7 @@ export async function saveSeasonWeeks(
   for (const [index, entry] of departmentEntries.entries()) {
     const prefix = `departments.${index}.`;
     const staged = await within(prefix, () =>
-      stageMenuWeek(tx, cfg, entry.departmentId, entry.days, clock, season, departmentReads),
+      stageMenuWeek(tx, cfg, entry.departmentId, entry.days, inForce, season, departmentReads),
     );
     departmentWeeks.push({
       ...staged,
@@ -366,19 +372,19 @@ export async function saveSeasonWeeks(
       throw new AppError("service_zone.not_found", { zoneId: entry.zoneId });
     zoneWeeks.push(
       await within(`zones.${index}.`, () =>
-        stageZoneClosedWeek(tx, cfg, entry.zoneId, entry.days, clock, season, zoneSeasonWeeks),
+        stageZoneClosedWeek(tx, cfg, entry.zoneId, entry.days, inForce, season, zoneSeasonWeeks),
       ),
     );
   }
+  const changed = [...departmentWeeks, ...zoneWeeks].some((week) => week.changed);
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,
-    [...departmentWeeks, ...zoneWeeks].some((week) => week.changed) ? "time" : "metadata",
-    at,
+    changed ? "time" : "metadata",
     expectedClockRevision,
-    clock,
   );
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
-  await assertWeekEndOffsets(tx, cfg, clock, departmentWeeks);
+  await assertWeekEndOffsets(tx, cfg, lastOrdersClock(clock, at), departmentWeeks);
   await afterWrite?.({ clock, departmentOf: serving });
+  if (changed) await assertWaitingChangeFits(tx, cfg, at, clock);
 }

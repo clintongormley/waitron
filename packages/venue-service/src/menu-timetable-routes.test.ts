@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   buildMenuDocument,
@@ -857,7 +857,12 @@ describe("zone closed-time routes", () => {
   });
 });
 
-it("returns the pending and stale clock refusals through real hours routes", async () => {
+it("accepts a fitting week, refuses a clashing one and a stale one while a change waits", async () => {
+  // The route reads the real clock; the stored change must still be waiting whatever today is.
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   const r = await routed();
   await scoped(async (tx) => {
     await tx
@@ -871,13 +876,38 @@ it("returns the pending and stale clock refusals through real hours routes", asy
   });
   const path = `/departments/${r.restaurant}/menu-week`;
   const days = week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "14:00" }]);
-  const pending = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 1 });
-  await answers(pending, 409, {
-    code: "hours.clock_change_pending",
-    params: { effectiveBusinessDay: "2026-11-04" },
-  });
   const stale = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 0 });
   await answers(stale, 409, { code: "hours.clock_changed", params: {} });
+  const fits = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 1 });
+  await answers(fits, 204);
+  const kept = (await r.model()).departments;
+  const clash = week([{ periodId: r.mananas, startsAt: "06:00", endsAt: "08:00" }]);
+  const refused = await r.send("PUT", path, r.manager, { days: clash, expectedClockRevision: 1 });
+  await answers(refused, 409, {
+    code: "hours.clock_change_conflict",
+    params: {
+      dayCutover: "07:00",
+      timeZone: "Europe/Madrid",
+      startsAt: "2026-11-04T06:00:00.000Z",
+      conflictCount: 1,
+      conflicts: [
+        {
+          departmentId: r.restaurant,
+          departmentName: "Restaurant",
+          periodId: r.mananas,
+          periodName: "Mañanas",
+          seasonId: r.season,
+          seasonName: "Autumn",
+          weekday: 1,
+          startsAt: "06:00",
+          endsAt: "08:00",
+          rangeIndex: 0,
+          reason: "range",
+        },
+      ],
+    },
+  });
+  expect((await r.model()).departments).toEqual(kept);
 });
 
 describe("week routes name one season", () => {

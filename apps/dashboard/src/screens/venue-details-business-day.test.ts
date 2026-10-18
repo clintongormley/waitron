@@ -56,18 +56,16 @@ it("reads clock-table events passively while retaining the editor draft and a sa
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=change]")!.click();
   await editor.updateComplete;
-  const date = editor.shadowRoot!.querySelector("[name=effectiveBusinessDay]")!;
-  date.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bad-date" }, bubbles: true, composed: true }),
+  const time = editor.shadowRoot!.querySelector("[name=dayCutover]")!;
+  time.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bad" }, bubbles: true, composed: true }),
   );
   await editor.updateComplete;
   current = { ...current, businessDayClock: { ...current.businessDayClock, revision: 1 } };
   liveData.invalidate([{ type: "location_day_cutover_changes" }]);
   await expect.poll(() => background).toBe(1);
   await expect.poll(() => editor.model.revision).toBe(1);
-  expect(editor.shadowRoot!.querySelector<WtInput>("[name=effectiveBusinessDay]")!.value).toBe(
-    "bad-date",
-  );
+  expect(editor.shadowRoot!.querySelector<WtInput>("[name=dayCutover]")!.value).toBe("bad");
   expect(foreground).toBe(1);
 });
 it("closes the successful editor before a refresh failure and reports a read failure", async () => {
@@ -91,23 +89,32 @@ it("closes the successful editor before a refresh failure and reports a read fai
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).toBeTruthy();
   expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull();
 });
-it("passive timer reads update a pending lock without a row change or active session read", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-11-03T03:59:30Z"));
-  const initial = venueDetailsFixture();
+it("re-reads passively at the waiting change's moment and then shows the new start, with no active read", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  vi.setSystemTime(new Date("2026-10-21T00:59:50.000Z"));
+  const initial = venueDetailsFixture({ timeZone: "Europe/Madrid", dayCutover: "05:00" });
   let active = 0,
     passive = 0;
+  const changeover = Date.parse("2026-10-21T01:00:00.000Z");
   const snapshot = () => ({
     ...initial,
     businessDayClock: {
-      ...initial.businessDayClock,
-      pending: {
-        effectiveBusinessDay: "2026-11-04",
-        dayCutover: "03:00",
-        startsAt: "2026-11-04T02:00:00.000Z",
-        locksAt: "2026-11-03T04:00:00.000Z",
-        editable: Date.now() < Date.parse("2026-11-03T04:00:00Z"),
+      clock: {
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
+        cutoverChanges: [{ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" }],
       },
+      revision: 1,
+      ...(Date.now() < changeover
+        ? {
+            currentBusinessDay: "2026-10-20",
+            pending: {
+              effectiveBusinessDay: "2026-10-21",
+              dayCutover: "03:00",
+              startsAt: "2026-10-21T01:00:00.000Z",
+            },
+          }
+        : { currentBusinessDay: "2026-10-21", pending: null }),
     },
   });
   const api = {
@@ -129,15 +136,18 @@ it("passive timer reads update a pending lock without a row change or active ses
     await el.updateComplete;
     const editor = el.shadowRoot!.querySelector("dashboard-business-day-start-editor")!;
     await editor.updateComplete;
-    expect(editor.model.pending?.editable).toBe(true);
-    await vi.advanceTimersByTimeAsync(60000);
+    const read = (sel: string) =>
+      [...editor.shadowRoot!.querySelectorAll(sel)].map((n) => n.textContent!.trim());
+    expect(read("[data-test=saved-dayCutover]")).toEqual(["05:00"]);
+    expect(read("[data-test=new-start-value]")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(passive).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
     vi.useRealTimers();
-    await el.updateComplete;
-    await editor.updateComplete;
-    expect(editor.model.pending?.editable).toBe(false);
-    expect(editor.shadowRoot!.querySelector("[data-test=locked]")).toBeTruthy();
+    await expect.poll(() => passive).toBe(1);
+    await expect.poll(() => read("[data-test=saved-dayCutover]")).toEqual(["03:00"]);
+    expect(read("[data-test=new-start-value]")).toEqual([]);
     expect(active).toBe(1);
-    expect(passive).toBe(1);
   } finally {
     vi.useRealTimers();
   }
@@ -167,7 +177,6 @@ it("a real child save closes before the parent refresh fails and cannot submit t
         startAt: "2026-11-04T02:00:00Z",
         endAt: "2026-11-05T02:00:00Z",
       },
-      locksAt: "2026-11-03T04:00:00Z",
       conflicts: [],
       conflictCount: 0,
       backupDeadlines: { archive: null, cloud: null },
@@ -185,10 +194,7 @@ it("a real child save closes before the parent refresh fails and cannot submit t
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=change]")!.click();
   await editor.updateComplete;
-  for (const [name, value] of [
-    ["effectiveBusinessDay", "2026-11-04"],
-    ["dayCutover", "03:00"],
-  ]) {
+  for (const [name, value] of [["dayCutover", "03:00"]]) {
     editor
       .shadowRoot!.querySelector(`[name=${name}]`)!
       .dispatchEvent(
@@ -196,12 +202,10 @@ it("a real child save closes before the parent refresh fails and cannot submit t
       );
     await editor.updateComplete;
   }
-  await expect.poll(() => editor.shadowRoot!.querySelector("[data-test=acknowledge]")).toBeTruthy();
-  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=acknowledge]")!.click();
-  await editor.updateComplete;
   const save =
     editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
-  expect(save.disabled).toBe(false);
+  await expect.poll(() => save.disabled).toBe(false);
+  expect(editor.shadowRoot!.querySelector("[data-test=acknowledge]")).toBeNull();
   save.click();
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).toBeTruthy();
   expect(writes).toBe(1);

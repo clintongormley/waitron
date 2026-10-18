@@ -29,6 +29,8 @@ import { chosenSeasonId, seasonWeek } from "./season-choice.js";
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { weekdayLabel } from "./season-week-view.js";
 import { t } from "./strings.js";
+import { clockChangeConflictText } from "./clock-change-conflict.js";
+import { refusalOf } from "./refusal.js";
 import { periodColourStyles } from "./period-colour-styles.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
 import {
@@ -546,8 +548,13 @@ export class SeasonPainter extends LitElement {
     const params = (
       error as { params?: { field?: unknown; reason?: unknown; periodId?: unknown } } | null
     )?.params;
-    if (code === "hours.clock_changed" || code === "hours.clock_change_pending") {
+    if (code === "hours.clock_changed") {
       this.refused = { message: t(code) };
+      return;
+    }
+    const conflict = clockChangeConflictText(refusalOf(error));
+    if (conflict) {
+      this.refused = { message: conflict };
       return;
     }
     const match = /^(departments|zones)\.(\d+)(?=\.|$)(?:\.days\.(\d+)(?=\.|$))?/.exec(

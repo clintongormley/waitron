@@ -18,6 +18,10 @@ import {
 } from "../testing/special-day-painter-fixture.js";
 import { t } from "./strings.js";
 import "./special-day-painter.js";
+import {
+  clockChangeConflict,
+  clockChangeConflictSentence,
+} from "../testing/clock-change-conflict.js";
 
 let painter: SpecialDayPainter | undefined;
 beforeEach(() => setLocale("en"));
@@ -1188,6 +1192,16 @@ describe("edges", () => {
       );
       painter.remove();
     }
+  });
+
+  it("a delete refused by a waiting business-day start names the clashing range", async () => {
+    const { painter } = await mount({ answer: () => clockChangeConflict });
+    part(painter, "delete")!.click();
+    await settle(painter);
+    part(painter, "confirm-delete")!.click();
+    await expect
+      .poll(() => part(painter, "delete-refusal")?.textContent?.trim() ?? "")
+      .toBe(clockChangeConflictSentence);
   });
 
   it("a delete refused for another reason says it could not be saved; Escape leaves the question", async () => {
