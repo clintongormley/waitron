@@ -205,7 +205,8 @@ hook, or how tests are scheduled:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 - **The CI steps that run the stream loop and pause tests and each `test-venue-service` shard set
   `TMPDIR=/dev/shm`, in CI only.** Cost: the pause test failed its bound; a venue-service shard
-  hit its 10-minute limit. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
+  hit its 10-minute limit. The disk explanation for the shard is an inference. Guard:
+  `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
   `ci.yml` as text and never reads the steps' test files. Receipts:
   [testing-guide.md](docs/developers/testing-guide.md), "In CI their temporary files are in memory",
   and [ci-and-gates.md](docs/developers/ci-and-gates.md#the-venue-service-shards-keep-their-test-databases-in-memory).
