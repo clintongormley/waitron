@@ -101,11 +101,12 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
 - **A827. Check that row menus in plain `<table>`s stay on screen at 390 px (owner,
   2026-10-17).** `variant-table.ts` and `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a
   `wt-row-actions` in a plain table, not `wt-data-table`, so `pinned` does not reach them;
-  `product-editor.ts` also contains both a `<table>` and a row menu (found by grep, not read). The
-  390 px cases in `variant-table.test.ts` and `option-list-form.test.ts` check only that a row's
-  menu sits on the first line of a wrapping name. Done when each of the three has a 390 px case
-  holding the row menu's right edge to the screen's, as `product-editor.test.ts`'s "keeps every
-  variant row's menu on screen at phone width" does for the variant table it draws.
+  `product-editor.ts` also contains both a `<table>` and a row menu (found by grep, not read). At
+  390 px the variant table's menus are held on screen through the product editor
+  (`product-editor.test.ts`, "keeps every variant row's menu on screen at phone width"); the option
+  list form's table and the product editor's attached extras/options table have 390 px cases that
+  check where a row's menu sits, not that it stays on screen. Done when each of those two has a
+  390 px case holding every row menu's right edge to the screen's.
 
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
@@ -437,10 +438,10 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   is the one dropdown (A178b–f). Still open:
   `wt-combobox` does not sort its options, and `compareLabels`
   (`packages/shared/src/compare-labels.ts`, used by `wt-data-table`) builds its `Intl.Collator`
-  with no language, so it sorts in the browser's default language. It should sort in the signed-in
-  person's chosen language (owner, 2026-10-17): the order differs, since Node's `Intl.Collator`
-  puts "Ñoquis" between "Nísperos" and "Nuez" in English, and after "Nuez", before "Olivas", in
-  Spanish.
+  with no language, so it sorts in the default language of whatever runs it — in `wt-data-table`,
+  the browser's. It should sort in the signed-in person's chosen language (owner, 2026-10-17): the
+  order differs, since Node's `Intl.Collator` puts "Ñoquis" between "Nísperos" and "Nuez" in
+  English, and after "Nuez", before "Olivas", in Spanish.
 
 ## Shared database-backed table paging, search and sorting
 
@@ -928,7 +929,7 @@ registered as `venue-service:week`, and the others register theirs when they exi
   a full-height `wt-modal` left about 150 px between the message and the buttons (the Prep stations
   station editor). Not built yet: `wt-dialog` still puts the message at the end of the body
   (`packages/ui/src/components/wt-dialog.ts`), and design-system.md → Forms still says "in a
-  dialog, at the end of the dialog's body".
+  dialog, at the end of the dialog's body" (A849).
 
 - **The two dropdown explanations on venue service's Kitchen panel stay as hints (owner,
   2026-10-17).** "Applies to new kitchen tickets and to reprints." and the release reminder's are

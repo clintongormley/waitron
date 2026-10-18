@@ -3624,10 +3624,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   phone width (owner, 2026-10-17: keep as a check).** Seen on the Staff roles page (A585-1's look):
   after a desktop window was narrowed to 390 px, "Move up" and "Move down" broke onto two centred
   lines and the menu touched the screen's edge; loaded directly at 390 px it was one line per item,
-  three times out of three. Believed to be the shared `wt-row-actions` popover. Done by one
-  real-browser run of that resize on `main`: if the items no longer wrap, delete this entry; if they
-  do, fix it. Screenshots kept outside the repository (lane C, `a585-1-shots/11a-…`, `11b-…`,
-  `11c-…`).
+  three times out of three. Believed to be the shared `wt-row-actions` popover, not that page; not
+  yet reproduced on another screen. Done by one real-browser run of that resize on `main`: if the
+  items no longer wrap, delete this entry; if they do, fix it. Screenshots kept outside the
+  repository (lane C, `a585-1-shots/11a-…`, `11b-…`, `11c-…`).
 
 - **A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)** —
   DESIGNED 2026-10-18, waiting for the owner's answer to one question
@@ -3637,6 +3637,13 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows
   the help or opens its page in the documentation. Nothing changes on the page while it is off.
   [Detail](backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13)
+
+- **A849. Put a full-height dialog's form message in its footer, on its own line just above the
+  buttons (owner, 2026-10-17).** `wt-dialog` draws it at the end of the body
+  (`packages/ui/src/components/wt-dialog.ts:459`); move it, and change design-system.md → Forms'
+  "in a dialog, at the end of the dialog's body" in the same change. Done when a `wt-dialog` test
+  with a short form in a full-height dialog finds the message in the footer, directly above the
+  buttons.
 
 - **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
   told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
@@ -3770,10 +3777,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 
 - **A827. Check that row menus in plain `<table>`s stay on screen at 390 px (owner, 2026-10-17).**
-  The 390 px cases in `variant-table.test.ts` and `option-list-form.test.ts` check only that a
-  row's menu sits on the first line of a wrapping name. Done when each widget has a case holding the
-  menu's right edge to the screen's, as the product editor's "keeps every variant row's menu on
-  screen at phone width" does.
+  At 390 px the variant table's menus are held on screen through the product editor
+  (`product-editor.test.ts`, "keeps every variant row's menu on screen at phone width"); the option
+  list form's table and the product editor's attached extras/options table have 390 px cases that
+  check where a row's menu sits, not that it stays on screen. Done when each of those two has a
+  390 px case holding every row menu's right edge to the screen's.
   [Detail](backlog/dashboard.md#a827-check-that-row-menus-in-plain-tables-stay-on-screen-at-390-px)
 
 - The reasons screen keeps its own copy of the role list and role names (C51 sorts its dropdowns by
@@ -3931,8 +3939,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
   says so** (owner decision 2026-09-12). Still open: `wt-combobox` does not sort its options, and
   `compareLabels` (`packages/shared/src/compare-labels.ts`, used by `wt-data-table`) sorts in the
-  browser's default language; it should sort in the signed-in person's chosen language (owner,
-  2026-10-17).
+  default language of whatever runs it — in `wt-data-table`, the browser's; it should sort in the
+  signed-in person's chosen language (owner, 2026-10-17).
   [Detail](backlog/dashboard.md#dropdowns-sort-by-the-label-the-person-reads-with-intlcollator-a-list-in-a-lifecycle-order-says-so)
 
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
