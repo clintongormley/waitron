@@ -72,7 +72,7 @@ it("an admitted future cutover change does not block activity on its already dis
     {
       db: suite.db,
       cfg: venue.cfg,
-      now: () => now,
+      now: () => new Date("2026-01-07T12:00:00Z"),
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     () => {},

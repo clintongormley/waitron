@@ -60,7 +60,7 @@ beforeEach(async () => {
     {
       db: suite.db,
       cfg: venue.cfg,
-      now: () => new Date("2026-11-02T12:00:00.000Z"),
+      now: () => new Date(),
       fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
     },
     () => {},
@@ -79,6 +79,8 @@ const report = async (path: string) => {
   expect(response.status).toBe(200);
   return response.json() as Promise<Record<string, unknown>>;
 };
+// A Save takes the next changeover, so each one is pressed on Nov 3 to move Nov 4's start.
+const SAVE_BEFORE_NOV_4_CHANGEOVER = new Date("2026-11-03T12:00:00.000Z");
 async function schedule(cutover: string) {
   await inTx(async (tx) => {
     const model = await readOpeningHoursModel(tx, venue.cfg, new Date());
@@ -97,6 +99,8 @@ async function schedule(cutover: string) {
       );
     }
   });
+  const resume = new Date();
+  vi.setSystemTime(SAVE_BEFORE_NOV_4_CHANGEOVER);
   const response = await app.request("/management-api/venue-details/business-day-start", {
     method: "PUT",
     headers: { Cookie: await managerCookie(), "content-type": "application/json" },
@@ -106,6 +110,7 @@ async function schedule(cutover: string) {
       expectedClockRevision: 0,
     }),
   });
+  vi.setSystemTime(resume);
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ changed: true });
 }
@@ -391,6 +396,7 @@ describe("recorded facts refuse retrospective boundary changes", () => {
       }),
     );
     const before = await frozen();
+    vi.setSystemTime(SAVE_BEFORE_NOV_4_CHANGEOVER);
     const response = await app.request("/management-api/venue-details/business-day-start", {
       method: "PUT",
       headers: { Cookie: await managerCookie(), "content-type": "application/json" },
@@ -415,6 +421,7 @@ describe("recorded facts refuse retrospective boundary changes", () => {
       },
     });
     const before = await frozen();
+    vi.setSystemTime(SAVE_BEFORE_NOV_4_CHANGEOVER);
     const response = await app.request("/management-api/venue-details/business-day-start", {
       method: "PUT",
       headers: { Cookie: await managerCookie(), "content-type": "application/json" },
@@ -511,6 +518,7 @@ it.each(["void", "tender", "payment", "refund", "notice"])(
       }
     }
     const before = await frozen();
+    vi.setSystemTime(SAVE_BEFORE_NOV_4_CHANGEOVER);
     const response = await app.request("/management-api/venue-details/business-day-start", {
       method: "PUT",
       headers: { Cookie: await managerCookie(), "content-type": "application/json" },

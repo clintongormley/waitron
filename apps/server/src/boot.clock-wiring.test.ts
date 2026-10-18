@@ -180,7 +180,7 @@ describe("boot's authority clock wiring", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            effectiveBusinessDay: "2026-11-04",
+            effectiveBusinessDay: "2026-10-14",
             dayCutover: "07:00",
             expectedClockRevision: 0,
           }),
@@ -191,7 +191,7 @@ describe("boot's authority clock wiring", () => {
         expect(await read()).toEqual({
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
-          cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
+          cutoverChanges: [{ effectiveBusinessDay: "2026-10-14", dayCutover: "07:00" }],
         });
 
       const listed = await fetch(
