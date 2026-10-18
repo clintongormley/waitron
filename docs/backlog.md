@@ -110,8 +110,10 @@ come after the list above:
   area. **Send the asesor's [shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09)
   (S3, S6, S10 cover Q27–Q29).**
 - **Design the fixed screens for each kind of device** (A182 part 1, under _The till, devices and
-  table service_). The remaining counter redesign is A738–A739; the handheld, kitchen screen and pass still
-  need their own designs.
+  table service_). The remaining counter redesign is A738–A739. The handheld, kitchen screen and pass
+  were designed on 2026-10-18 as **A797**, waiting for the owner's answer to Q42 (lane C's questions
+  file): [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
+  [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
   installing or renewing the AEAT certificate after setup (A795: designed, three owner questions
@@ -2864,8 +2866,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#screen-faults-seen-during-menus-task-9s-look-on-2026-09-27)
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
-  Counter design and implementation remain A738–A739; the handheld, kitchen screen and pass need
-  their own designs. A737 Part 2 adds the separate
+  Counter design and implementation remain A738–A739. The handheld, kitchen screen and pass were
+  designed on 2026-10-18 as **A797**, waiting for the owner's answer to Q42 (lane C's questions
+  file); nothing is built until then:
+  [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
+  [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
   durable post-invoice payment-refund path. The screen designer was
   retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning those workflows.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)

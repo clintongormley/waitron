@@ -1036,8 +1036,11 @@ original finding; its four-surface count and five-entry list no longer describe 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
   Start from the screens in `apps/till/src/screens/` and [the fixed-screen contract](../developers/design-system.md#fixed-device-screens).
   Decide how each workflow fits narrow and wide screens and what a venue may choose per device.
-  Counter's remaining owner-approved redesign is A738–A739. The handheld, kitchen screen and pass need
-  their own designs. Menu Device Home Page, receipt configuration and the floor-plan editor stay
+  Counter's remaining owner-approved redesign is A738–A739. The handheld, kitchen screen and pass
+  were designed on 2026-10-18 as A797, waiting for the owner's answer to Q42 (lane C's questions
+  file); nothing is built until then:
+  [design](../superpowers/specs/2026-10-18-a797-device-screens-design.md),
+  [mockups](mockups/a797-device-screens/). Menu Device Home Page, receipt configuration and the floor-plan editor stay
   separate. The owner's screen-designer decision is retained under Decisions and deliberate limits.
 
 ## What W105b left open (#1248, a disabled device coming back as itself)
