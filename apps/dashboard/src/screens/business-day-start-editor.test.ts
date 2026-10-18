@@ -19,6 +19,37 @@ export const clockModel = (): BusinessDayClockModel => ({
   currentBusinessDay: "2026-11-01",
   pending: null,
 });
+const waitingModel = (): BusinessDayClockModel => ({
+  clock: {
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    cutoverChanges: [{ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" }],
+  },
+  revision: 4,
+  currentBusinessDay: "2026-10-20",
+  pending: {
+    effectiveBusinessDay: "2026-10-21",
+    dayCutover: "03:00",
+    startsAt: "2026-10-21T01:00:00.000Z",
+  },
+});
+const twoWaitingModel = (): BusinessDayClockModel => ({
+  clock: {
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    cutoverChanges: [
+      { effectiveBusinessDay: "2026-10-21", dayCutover: "21:00" },
+      { effectiveBusinessDay: "2026-10-22", dayCutover: "10:00" },
+    ],
+  },
+  revision: 5,
+  currentBusinessDay: "2026-10-20",
+  pending: {
+    effectiveBusinessDay: "2026-10-21",
+    dayCutover: "21:00",
+    startsAt: "2026-10-21T19:00:00.000Z",
+  },
+});
 export const preview = (revision = 4): BusinessDayStartPreview => ({
   revision,
   previousDay: {
@@ -33,7 +64,6 @@ export const preview = (revision = 4): BusinessDayStartPreview => ({
     startAt: "2026-11-04T02:00:00.000Z",
     endAt: "2026-11-05T02:00:00.000Z",
   },
-  locksAt: "2026-11-03T04:00:00.000Z",
   conflicts: [],
   conflictCount: 0,
   backupDeadlines: { archive: null, cloud: null },
@@ -42,9 +72,18 @@ const q = <T extends HTMLElement = HTMLElement>(el: Editor, sel: string) =>
   el.shadowRoot!.querySelector<T>(sel);
 const save = (el: Editor) => q<WtButton>(el, "[data-test=save]")!;
 const flush = async (el: Editor) => {
-  await new Promise((r) => setTimeout(r, 0));
+  if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+  else await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
 };
+const text = (node: Element | null) => node?.textContent?.replace(/\s+/g, " ").trim();
+const cardLabels = (el: Editor) =>
+  [...el.shadowRoot!.querySelectorAll("section.settings-card dt")].map((label) => text(label));
+const newStarts = (el: Editor) =>
+  [...el.shadowRoot!.querySelectorAll("[data-test=saved-new-start]")].map((row) => [
+    text(row.querySelector("[data-test=new-start-value]")),
+    text(row.querySelector("[data-test=day-length]")),
+  ]);
 const click = async (el: Editor, action: string) => {
   q(el, `[data-test=${action}]`)!.click();
   await flush(el);
@@ -62,15 +101,11 @@ function deferred<T>() {
 }
 async function rig(overrides: Partial<DashboardApi> = {}, model = clockModel(), readOnly = false) {
   const writes: BusinessDayStartInput[] = [];
-  const cancels: number[] = [];
   const api = {
+    liveData: { invalidate: vi.fn() },
     previewBusinessDayStart: vi.fn(async () => preview()),
     putBusinessDayStart: async (input: BusinessDayStartInput) => {
       writes.push(input);
-      return { changed: true, model: venueDetailsFixture() };
-    },
-    cancelBusinessDayStart: async (input: { expectedClockRevision: number }) => {
-      cancels.push(input.expectedClockRevision);
       return { changed: true, model: venueDetailsFixture() };
     },
     ...overrides,
@@ -81,7 +116,7 @@ async function rig(overrides: Partial<DashboardApi> = {}, model = clockModel(), 
     readOnly,
   });
   await flush(el);
-  return { el, api, writes, cancels };
+  return { el, api, writes };
 }
 async function ready(el: Editor) {
   await click(el, "change");
@@ -219,26 +254,21 @@ it("shows schedule conflicts and prevents acknowledgement", async () => {
   expect(q(el, "[data-test=conflicts] a")?.getAttribute("href")).toBe("/manage/opening-hours");
   expect(save(el).disabled).toBe(true);
 });
-it("offers Replace and Cancel only before the pending lock and sends the displayed revision", async () => {
-  const model = {
-    ...clockModel(),
-    pending: {
-      effectiveBusinessDay: "2026-11-04",
-      dayCutover: "03:00:00",
-      startsAt: "2026-11-04T02:00:00.000Z",
-      locksAt: "2026-11-03T04:00:00.000Z",
-      editable: true,
-    },
-  };
-  const { el, cancels } = await rig({}, model);
-  expect(q(el, "[data-test=replace]")).toBeTruthy();
-  await click(el, "cancel-pending");
-  expect(cancels).toEqual([4]);
-  el.model = { ...model, pending: { ...model.pending, editable: false } };
-  await flush(el);
-  expect(q(el, "[data-test=replace]")).toBeNull();
-  expect(q(el, "[data-test=cancel-pending]")).toBeNull();
-  expect(q(el, "[data-test=locked]")).toBeTruthy();
+it("offers only Change start while a change waits, and opens the dialog from it", async () => {
+  const { el } = await rig({}, waitingModel());
+  expect(
+    [...el.shadowRoot!.querySelectorAll("section.settings-card wt-button")].map((b) =>
+      b.getAttribute("data-test"),
+    ),
+  ).toEqual(["change"]);
+  await click(el, "change");
+  expect(q<WtInput>(el, "[name=dayCutover]")!.value).toBe("03:00");
+});
+it("read-only mode shows the start and every waiting change without a button", async () => {
+  setLocale("en-GB");
+  const { el } = await rig({}, twoWaitingModel(), true);
+  expect(cardLabels(el)).toEqual(["Starts at", "New start", "New start"]);
+  expect(q(el, "wt-button")).toBeNull();
 });
 it("read-only mode shows current and pending status without actions or fields", async () => {
   const { el } = await rig({}, clockModel(), true);
@@ -471,8 +501,8 @@ const cardRows = (el: Editor) =>
       `${label.textContent!.trim()} ${label.nextElementSibling!.textContent!.replace(/\s+/g, " ").trim()}`,
   );
 it.each([
-  ["en-GB", "Business day", ["Starts at 05:00", "Scheduled change None"]],
-  ["es", "Día de trabajo", ["Empieza a las 05:00", "Cambio programado Ninguno"]],
+  ["en-GB", "Business day", ["Starts at 05:00"]],
+  ["es", "Día de trabajo", ["Empieza a las 05:00"]],
 ])(
   "draws its own card with the start once and no time zone (%s)",
   async (locale, heading, rows) => {
@@ -486,25 +516,101 @@ it.each([
     expect(q(el, "[data-test=change]")!.closest("header")?.parentElement).toBe(card);
   },
 );
-it("shows a pending change as date · time with its lock time, and its actions in the header", async () => {
+it.each([
+  ["en-GB", "03:00, from Wed 21 Oct, 03:00", "Business day Tue 20 Oct lasts 22 h."],
+  ["es-ES", "03:00, desde mié 21 oct, 03:00", "El día de trabajo mar 20 oct dura 22 h."],
+])(
+  "shows a waiting change as a New start row with its moment and day length (%s)",
+  async (locale, value, length) => {
+    setLocale(locale);
+    const { el } = await rig({}, waitingModel());
+    expect(cardLabels(el)).toEqual([
+      locale === "es-ES" ? "Empieza a las" : "Starts at",
+      locale === "es-ES" ? "Nuevo inicio" : "New start",
+    ]);
+    expect(text(q(el, "[data-test=saved-dayCutover]"))).toBe("05:00");
+    expect(newStarts(el)).toEqual([[value, length]]);
+    const card = q(el, "section.settings-card")!;
+    expect(q(el, "[data-test=change]")!.closest("header")?.parentElement).toBe(card);
+    expect(q(el, "[data-test=replace]")).toBeNull();
+    expect(q(el, "[data-test=cancel-pending]")).toBeNull();
+  },
+);
+it("shows one New start row per waiting change after a Save while one already waits", async () => {
   setLocale("en-GB");
-  const { el } = await rig(
-    {},
-    {
-      ...clockModel(),
-      pending: {
-        effectiveBusinessDay: "2026-11-04",
-        dayCutover: "03:00:00",
-        startsAt: "2026-11-04T02:00:00.000Z",
-        locksAt: "2026-11-03T04:00:00.000Z",
-        editable: true,
+  const { el } = await rig({}, twoWaitingModel());
+  expect(cardLabels(el)).toEqual(["Starts at", "New start", "New start"]);
+  expect(newStarts(el)).toEqual([
+    ["21:00, from Wed 21 Oct, 21:00", "Business day Tue 20 Oct lasts 40 h."],
+    ["10:00, from Thu 22 Oct, 10:00", "Business day Wed 21 Oct lasts 13 h."],
+  ]);
+});
+it("does not show a change already in force as waiting", async () => {
+  setLocale("en-GB");
+  const model = waitingModel();
+  const { el } = await rig({}, { ...model, currentBusinessDay: "2026-10-21", pending: null });
+  expect(cardLabels(el)).toEqual(["Starts at"]);
+  expect(text(q(el, "[data-test=saved-dayCutover]"))).toBe("03:00");
+});
+it("re-reads the venue details passively at the waiting change's moment", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    vi.setSystemTime(new Date("2026-10-21T00:59:00.000Z"));
+    const getVenueDetails = vi.fn();
+    const { el, api } = await rig({ getVenueDetails } as Partial<DashboardApi>, waitingModel());
+    const invalidate = api.liveData.invalidate as ReturnType<typeof vi.fn>;
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(invalidate).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(invalidate.mock.calls).toEqual([[[{ type: "location_day_cutover_changes" }]]]);
+    expect(getVenueDetails).not.toHaveBeenCalled();
+    el.remove();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("schedules no re-read for a change too far ahead for one timer", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    vi.setSystemTime(new Date("2026-10-20T12:00:00.000Z"));
+    const model = waitingModel();
+    const far = {
+      ...model,
+      clock: {
+        ...model.clock,
+        cutoverChanges: [{ effectiveBusinessDay: "2027-08-17", dayCutover: "03:00" }],
       },
-    },
-  );
-  const rows = cardRows(el);
-  expect(rows.slice(0, 2)).toEqual(["Starts at 05:00", "Scheduled change 2026-11-04 · 03:00"]);
-  expect(rows[2]).toMatch(/^Editable until /);
-  const card = q(el, "section.settings-card")!;
-  expect(q(el, "[data-test=replace]")!.closest("header")?.parentElement).toBe(card);
-  expect(q(el, "[data-test=cancel-pending]")!.closest("header")?.parentElement).toBe(card);
+      pending: {
+        effectiveBusinessDay: "2027-08-17",
+        dayCutover: "03:00",
+        startsAt: "2027-08-17T01:00:00.000Z",
+      },
+    };
+    const { api } = await rig({}, far);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(api.liveData.invalidate).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("clears the re-read when the card leaves the page or the model changes", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    vi.setSystemTime(new Date("2026-10-21T00:59:00.000Z"));
+    const { el, api } = await rig({}, waitingModel());
+    expect(vi.getTimerCount()).toBe(1);
+    el.model = clockModel();
+    await el.updateComplete;
+    expect(vi.getTimerCount()).toBe(0);
+    el.model = waitingModel();
+    await el.updateComplete;
+    expect(vi.getTimerCount()).toBe(1);
+    el.remove();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(api.liveData.invalidate).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -37,7 +37,6 @@ const preview: BusinessDayStartPreview = {
     startAt: "2026-11-04T02:00:00.000Z",
     endAt: "2026-11-05T02:00:00.000Z",
   },
-  locksAt: "2026-11-03T04:00:00.000Z",
   conflicts: [],
   conflictCount: 0,
   backupDeadlines: { archive: null, cloud: null },

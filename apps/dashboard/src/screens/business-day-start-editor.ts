@@ -1,6 +1,11 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { cutoverForBusinessDay } from "@waitron/shared";
+import { businessDayBoundaryAt, businessDayBounds, cutoverForBusinessDay } from "@waitron/shared";
+import {
+  formatBusinessDate,
+  formatChangeoverMoment,
+  formatDayLength,
+} from "@waitron/dashboard-kit";
 import {
   baseStyles,
   draftScopeFor,
@@ -24,6 +29,11 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 
 type Draft = { effectiveBusinessDay: string; dayCutover: string };
+type Waiting = { effectiveBusinessDay: string; dayCutover: string; startsAt: string };
+// A longer setTimeout delay fires at once: measured 2026-10-18 in HeadlessChrome 156, 2_147_483_648 ms
+// fired within 200 ms and 2_147_483_647 ms did not.
+const LONGEST_TIMER_MS = 2_147_483_647;
+const DAY_MS = 86_400_000;
 @customElement("dashboard-business-day-start-editor")
 export class BusinessDayStartEditor extends LitElement {
   static override styles = [
@@ -54,6 +64,10 @@ export class BusinessDayStartEditor extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
+      .day-length {
+        display: block;
+        color: var(--wt-color-text-muted);
+      }
       .preview {
         padding: var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
@@ -81,12 +95,15 @@ export class BusinessDayStartEditor extends LitElement {
   #generation = 0;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
+  #changeoverTimer?: ReturnType<typeof setTimeout>;
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation++;
     this.#register();
+    this.#scheduleReread();
   }
   override disconnectedCallback(): void {
+    this.#clearReread();
     this.#generation++;
     this.#sequence++;
     this.#scope?.dispose();
@@ -109,6 +126,55 @@ export class BusinessDayStartEditor extends LitElement {
       this.preview = undefined;
       this.acknowledged = "";
     }
+  }
+  protected override updated(changes: PropertyValues): void {
+    if (changes.has("model")) this.#scheduleReread();
+  }
+  #waiting(): Waiting[] {
+    const model = this.model;
+    const today = model?.currentBusinessDay;
+    if (!today) return [];
+    return model.clock.cutoverChanges
+      .filter((change) => change.effectiveBusinessDay > today)
+      .sort((a, b) => (a.effectiveBusinessDay < b.effectiveBusinessDay ? -1 : 1))
+      .map((change) => ({
+        effectiveBusinessDay: change.effectiveBusinessDay,
+        dayCutover: change.dayCutover.slice(0, 5),
+        startsAt: businessDayBoundaryAt(model.clock, change.effectiveBusinessDay),
+      }));
+  }
+  #clearReread(): void {
+    clearTimeout(this.#changeoverTimer);
+    this.#changeoverTimer = undefined;
+  }
+  // The panel's live query reads this table through the background client, so the re-read is passive.
+  #scheduleReread(): void {
+    this.#clearReread();
+    const next = this.isConnected ? this.#waiting()[0] : undefined;
+    if (!next) return;
+    const delay = Date.parse(next.startsAt) - Date.now();
+    if (delay <= 0 || delay > LONGEST_TIMER_MS) return;
+    this.#changeoverTimer = setTimeout(() => {
+      this.#changeoverTimer = undefined;
+      this.api.liveData.invalidate([{ type: "location_day_cutover_changes" }]);
+    }, delay);
+  }
+  #newStart(change: Waiting) {
+    const day = new Date(Date.parse(`${change.effectiveBusinessDay}T00:00:00.000Z`) - DAY_MS)
+      .toISOString()
+      .slice(0, 10);
+    const { startAt, endAt } = businessDayBounds(this.model.clock, day);
+    return html`<span data-test="new-start-value"
+        >${fill("business_day.new_start_value", {
+          time: change.dayCutover,
+          when: formatChangeoverMoment(change.startsAt, this.model.clock.timeZone),
+        })}</span
+      ><span class="day-length" data-test="day-length"
+        >${fill("business_day.day_length", {
+          day: formatBusinessDate(day),
+          duration: formatDayLength((Date.parse(endAt) - Date.parse(startAt)) / 60_000),
+        })}</span
+      >`;
   }
   #identity(): string {
     return JSON.stringify([this.model.revision, this.model.clock, this.model.pending]);
@@ -134,7 +200,7 @@ export class BusinessDayStartEditor extends LitElement {
     scope.commit(this.#baseline);
   }
   #begin(): void {
-    if (this.readOnly || this.busy || this.model.pending?.editable === false) return;
+    if (this.readOnly || this.busy) return;
     this.#generation++;
     this.#revision = this.model.revision;
     this.#clockIdentity = this.#identity();
@@ -283,25 +349,6 @@ export class BusinessDayStartEditor extends LitElement {
       if (generation === this.#generation || !this.draft) this.busy = false;
     }
   }
-  async #cancelPending(): Promise<void> {
-    if (this.readOnly || this.busy || !this.model.pending?.editable) return;
-    const generation = this.#generation;
-    const revision = this.model.revision;
-    this.busy = true;
-    this.actionError = "";
-    try {
-      const result = await this.api.cancelBusinessDayStart({ expectedClockRevision: revision });
-      if (generation !== this.#generation || !this.isConnected) return;
-      this.dispatchEvent(
-        new CustomEvent("saved", { detail: result.model, bubbles: true, composed: true }),
-      );
-    } catch (error) {
-      if (generation === this.#generation && this.isConnected)
-        this.actionError = codeMessage(codeOf(error));
-    } finally {
-      if (generation === this.#generation) this.busy = false;
-    }
-  }
   #instant(at: string) {
     return html`<time datetime=${at}
       >${new Intl.DateTimeFormat(currentLocale(), {
@@ -341,6 +388,8 @@ export class BusinessDayStartEditor extends LitElement {
           all_day: "business_day.conflict_all_day",
           sending_cutoff: "business_day.conflict_sending",
           transition_strip: "business_day.conflict_strip",
+          overlap: "business_day.conflict_range",
+          kept_open: "business_day.conflict_range",
         } as const
       )[conflict.reason],
     );
@@ -377,7 +426,6 @@ export class BusinessDayStartEditor extends LitElement {
     const current = model.currentBusinessDay
       ? cutoverForBusinessDay(model.clock, model.currentBusinessDay)
       : model.clock.dayCutover;
-    const pending = model.pending;
     const draft = this.draft;
     const generation = this.#generation;
     const active = () => this.isConnected && generation === this.#generation;
@@ -386,27 +434,16 @@ export class BusinessDayStartEditor extends LitElement {
     const preview = this.preview;
     const conflicts = preview && this.#conflictLines(preview);
     const action =
-      !this.readOnly && !draft && pending?.editable !== false
+      !this.readOnly && !draft
         ? html`<div class="actions">
             <wt-button
-              data-test=${pending ? "replace" : "change"}
+              data-test="change"
               ?disabled=${this.busy}
               @click=${() => {
                 if (active()) this.#begin();
               }}
-              >${t(pending ? "business_day.replace" : "business_day.change")}</wt-button
-            >${
-              pending
-                ? html`<wt-button
-                    data-test="cancel-pending"
-                    ?disabled=${this.busy}
-                    @click=${() => {
-                      if (active()) void this.#cancelPending();
-                    }}
-                    >${t("business_day.cancel_pending")}</wt-button
-                  >`
-                : nothing
-            }
+              >${t("business_day.change")}</wt-button
+            >
           </div>`
         : nothing;
     return html`${settingsCard({
@@ -414,30 +451,18 @@ export class BusinessDayStartEditor extends LitElement {
         heading: t("venue_settings.card.business_day"),
         editing: false,
         action,
-        body: html`${settingsRows([
+        body: settingsRows([
           {
             label: t("business_day.starts_at"),
             value: current.slice(0, 5),
             dataTest: "saved-dayCutover",
           },
-          {
-            label: t("business_day.scheduled"),
-            value: pending
-              ? `${pending.effectiveBusinessDay} · ${pending.dayCutover.slice(0, 5)}`
-              : t("business_day.none"),
-            dataTest: "saved-pending",
-          },
-          ...(pending
-            ? [
-                {
-                  label: t("business_day.locks"),
-                  value: this.#instant(pending.locksAt),
-                  dataTest: "saved-locksAt",
-                },
-              ]
-            : []),
-        ])}
-        ${pending?.editable === false ? html`<p data-test="locked">${t("business_day.locked")}</p>` : nothing}`,
+          ...this.#waiting().map((change) => ({
+            label: t("business_day.new_start"),
+            value: this.#newStart(change),
+            dataTest: "saved-new-start",
+          })),
+        ]),
       })}
       ${this.actionError && !draft ? html`<p class="error" role="alert">${this.actionError}</p>` : nothing}
       <wt-dialog
@@ -502,8 +527,6 @@ export class BusinessDayStartEditor extends LitElement {
                             ${this.#instant(preview.effectiveDay.startAt)} →
                             ${this.#instant(preview.effectiveDay.endAt)}
                           </dd>
-                          <dt>${t("business_day.locks")}</dt>
-                          <dd>${this.#instant(preview.locksAt)}</dd>
                         </dl>
                         ${
                           preview.conflictCount
