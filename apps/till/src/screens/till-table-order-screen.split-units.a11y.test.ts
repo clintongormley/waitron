@@ -54,6 +54,17 @@ describe.each(["en", "es"] as const)("Split quantity %s", (locale) => {
         element: pane,
         path: `__screenshots__/a773-unit-chevron-${locale}-${theme}-${width}.png`,
       });
+      el.busy = true;
+      await el.updateComplete;
+      expect(control.disabled).toBe(true);
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        element: pane,
+        path: `__screenshots__/a773-unit-chevron-disabled-${locale}-${theme}-${width}.png`,
+      });
+      el.busy = false;
+      await el.updateComplete;
+      expect(control.disabled).toBe(false);
       await userEvent.click(control);
       await el.updateComplete;
       expect(draft.lines.map((line) => line.quantity)).toEqual(["1", "1", "1"]);
@@ -80,6 +91,17 @@ describe.each(["en", "es"] as const)("Split quantity %s", (locale) => {
         element: pane,
         path: `__screenshots__/a773-unit-family-${locale}-${theme}-${width}.png`,
       });
+      el.busy = true;
+      await el.updateComplete;
+      expect(header.disabled).toBe(true);
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        element: pane,
+        path: `__screenshots__/a773-unit-family-disabled-${locale}-${theme}-${width}.png`,
+      });
+      el.busy = false;
+      await el.updateComplete;
+      expect(header.disabled).toBe(false);
       await userEvent.click(header);
       await el.updateComplete;
       expect(draft.lines.map((line) => [line.quantity, line.note])).toEqual([

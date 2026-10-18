@@ -270,6 +270,15 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     getPartyBills: vi.fn().mockResolvedValue([]),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+    readCurrentOrders: vi.fn().mockResolvedValue({
+      revision: 3,
+      hasGroups: false,
+      nextDisplayNumber: 1,
+      retainedCourses: [],
+      groups: [],
+      ungrouped: [],
+      reminder: null,
+    }),
     listPrintProblems: vi.fn().mockResolvedValue({ problems: [] }),
     submitGroups: vi.fn().mockRejectedValue(new Error("the table no longer sends groups inline")),
     listDrafts: server.listDrafts,
@@ -2311,9 +2320,28 @@ describe("till-app: sending the draft", () => {
     };
     const { el } = await mountApp({
       listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [held] }),
+      readCurrentOrders: vi.fn().mockResolvedValue(
+        current({
+          revision: 3,
+          nextDisplayNumber: 2,
+          reminder: null,
+          groups: [
+            currentGroup("g-mains", 1, "held", [
+              row("l-9", "Steak", "1.000", {
+                workingOrderId: "wo-4",
+                released: false,
+                kitchen: null,
+                netAmount: "5.00",
+              }),
+            ]),
+          ],
+          ungrouped: [],
+        }),
+      ),
     });
     await openMesa(el);
     await tap(el, "Flan");
+    await expect.poll(() => tableOrder(el)!.billEdit?.draftRevision).toBe(1);
     await toggle(el, "Flan");
     const screen = tableOrder(el)!.shadowRoot!;
     screen.querySelector<HTMLElement>("[data-review-open]")!.click();
@@ -4096,7 +4124,7 @@ describe("till-app: another device's save arriving while the draft is shown", ()
   }
 
   const steakLine = {
-    slot: 0,
+    slot: 1,
     joinGroupId: null,
     afterGroupId: null,
     menuItemId: "offer-steak",
@@ -8898,6 +8926,14 @@ describe("held-line move editing authority", () => {
     target: { groupId: "g4" },
     expectedEdits: [source()],
   });
+  async function chooseSourceBill(el: TillApp, order: TillTableOrderScreen) {
+    expect(order.shadowRoot!.querySelector('[data-move-line="other-line"]')).toBeNull();
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-bill="wo-7"] [data-take-payment]')!,
+    );
+    await flush(el, 6);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+  }
   async function opening(
     write: ReturnType<typeof vi.fn>,
     formFactor: FormFactor = drillFormFactor,
@@ -8950,6 +8986,7 @@ describe("held-line move editing authority", () => {
       const { el, order } = await opening(write, formFactor);
       order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
       await flush(el);
+      await chooseSourceBill(el, order);
       order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="other-line"]')!.click();
       await flush(el);
       order.shadowRoot!.querySelector<HTMLElement>('[data-move-target="g4"]')!.click();
@@ -9018,6 +9055,7 @@ describe("held-line move editing authority", () => {
     const { el, order } = await opening(write);
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
+    await chooseSourceBill(el, order);
     order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="other-line"]')!.click();
     await flush(el);
     const refreshed = await server.listDrafts("v1");
@@ -9119,6 +9157,7 @@ describe("direct New order actions", () => {
     await expect.poll(() => api.saveDraft.mock.calls.length).toBe(1);
     await expect.poll(() => tableOrder(el)!.billEdit?.draftRevision).toBe(1);
     const [selected] = draft(el).lines;
+    expect(selected!.place).toEqual({ kind: "new", slot: 1 });
     const screen = tableOrder(el)!.shadowRoot!;
     await userEvent.click(screen.querySelector<HTMLElement>("[data-review-open]")!);
     const tick = screen.querySelector<HTMLElement>("[data-draft-select]")!;
@@ -9142,7 +9181,7 @@ describe("direct New order actions", () => {
     await userEvent.click(move.querySelector<HTMLElement>('[data-draft-move-to="new"]')!);
     await closed;
     await flush(el);
-    expect(draft(el).lines[0]!.place).toEqual({ kind: "new", slot: 1 });
+    expect(draft(el).lines[0]!.place).toEqual({ kind: "new", slot: 2 });
     expect(api.submitDraft).not.toHaveBeenCalled();
     expect(api.takeOverDraft).not.toHaveBeenCalled();
   });
@@ -9162,7 +9201,8 @@ describe("direct New order actions", () => {
     await direct(el, "send-all");
     expect(api.submitDraft).toHaveBeenCalledOnce();
     expect(api.submitDraft.mock.calls[0]![2].groups).toEqual([
-      { release: "fire", lineIds: ["line-2", "line-3"] },
+      { release: "hold", lineIds: ["line-2"] },
+      { release: "hold", lineIds: ["line-3"] },
     ]);
     expect(outbox.lineCount).toBe(0);
     expect(server.drafts).toEqual([]);

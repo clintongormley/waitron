@@ -3742,6 +3742,13 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #draftLine(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
+    const scope = this.#draftArrangementScope();
+    const api = this.api;
+    const current = () =>
+      this.#canEditDraftLine(store, line) &&
+      !this.busy &&
+      scope === this.#draftArrangementScope() &&
+      api === this.api;
     const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
     const family = store.splitFamily(line);
@@ -3768,8 +3775,10 @@ export class TillTableOrderScreen extends LitElement {
               class="option draft-family-header"
               data-fold-draft-family
               aria-expanded="true"
-              ?disabled=${store.sending || this.groupCommandBusy}
-              @click=${() => this.#foldDraftFamily(store, line)}
+              ?disabled=${!current()}
+              @click=${() => {
+                if (current()) this.#foldDraftFamily(store, line);
+              }}
             >
               <span
                 >${name}
@@ -3804,8 +3813,10 @@ export class TillTableOrderScreen extends LitElement {
               class="draft-unit-chevron"
               data-split-draft-line=${index}
               aria-label=${`${t("table.split_group_line")} · ${name}`}
-              ?disabled=${store.sending || store.editsLocked || this.groupCommandBusy}
-              @click=${() => this.#splitDraftLine(store, line)}
+              ?disabled=${!current()}
+              @click=${() => {
+                if (current()) this.#splitDraftLine(store, line);
+              }}
             >
               <span aria-hidden="true">›</span>
             </button>`
@@ -4056,10 +4067,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #draftMoveButton(store: WorkingOrderStore): TemplateResult {
     const disabled =
-      store.editsLocked ||
-      store.sending ||
-      this.groupCommandBusy ||
-      !store.lines.some((line) => this.#selected.has(line));
+      !this.#canDragDraft(store) || !store.lines.some((line) => this.#selected.has(line));
     return html`<wt-button
       data-draft-move
       variant=${disabled ? "secondary" : "primary"}

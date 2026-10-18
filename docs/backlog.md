@@ -2224,7 +2224,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   you can select an unsent group and use Move to to keep its saved placement or choose another
   group. Fire now, new groups and joins have separate headings; only mixed groups repeat course
   headings. A whole-unit quantity opens into individual lines from a full-height trailing chevron;
-  it looks up the current row and refuses a click while the screen has another draft or editing is locked.
+  Split and Fold retain the rendered bill, table, visit, API and editing observation, rejecting
+  stale clicks without changing the candidate or requesting a source split. Equivalent observations
+  remain usable. Move to stays quiet and disabled while its service read or editing authority is unavailable.
   Recalled quantities still split through the server command, preserving their priced sources.
   Fresh split lines have a header that folds the original family back only while its contents,
   prices and group still match. Folding clears a partial selection; a fully selected family stays

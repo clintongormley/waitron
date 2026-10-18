@@ -109,6 +109,28 @@ function snapshot(draft: DraftStore) {
   return structuredClone(draft.lines);
 }
 
+it.each(["busy", "unread", "ordering"] as const)(
+  "Move to is quiet and disabled while %s prevents opening it",
+  async (change) => {
+    const { el, draft } = await open();
+    await userEvent.click(q(el, '[data-draft-select="0"]'));
+    if (change === "busy") el.busy = true;
+    if (change === "unread") el.currentOrdersUnread = true;
+    if (change === "ordering") el.orderingAllowed = false;
+    await el.updateComplete;
+    const control = q(el, "[data-draft-move]") as HTMLElement & {
+      disabled: boolean;
+      variant: string;
+    };
+    expect(control.disabled).toBe(true);
+    expect(control.variant).toBe("secondary");
+    const before = snapshot(draft);
+    control.click();
+    expect(q(el, "[data-draft-move-dialog]").hasAttribute("open")).toBe(false);
+    expect(draft.lines).toEqual(before);
+  },
+);
+
 for (const kind of ["drag", "heading", "move"] as const) {
   it.each(["billId", "editorVersion", "draftId", "draftRevision", "missing"] as const)(
     `an open ${kind} leaves the candidate intact when its %s changes before rendering`,
