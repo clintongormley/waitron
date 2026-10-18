@@ -485,6 +485,64 @@ describe("dated route protection", () => {
       ).status,
     ).toBe(200);
   });
+  const clockTransition = (clocksChangeOn: string, saveFrom: string) => ({
+    error: {
+      code: "venue.business_day_invalid",
+      params: { field: "dayCutover", reason: "clock_transition", clocksChangeOn, saveFrom },
+    },
+  });
+  async function saveAndPreview(effectiveBusinessDay: string) {
+    const save = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ effectiveBusinessDay, dayCutover: "02:30" }),
+    );
+    const preview = await request(
+      "GET",
+      "/business-day-start/preview?dayCutover=02%3A30&expectedClockRevision=0",
+    );
+    return {
+      save: { status: save.status, body: await save.json() },
+      preview: { status: preview.status, body: await preview.json() },
+    };
+  }
+  it.each([
+    ["2026-10-23T01:00:00Z", "2026-10-24", "2026-10-25", "2026-10-26T01:30:00.000Z"],
+    ["2026-10-26T01:15:00Z", "2026-10-26", "2026-10-25", "2026-10-26T01:30:00.000Z"],
+    ["2027-03-27T11:00:00Z", "2027-03-28", "2027-03-28", "2027-03-29T00:30:00.000Z"],
+  ])(
+    "at %s the Save and the preview both say the clocks change and when to save again",
+    async (moment, effectiveBusinessDay, clocksChangeOn, saveFrom) => {
+      at = new Date(moment);
+      const refusal = { status: 400, body: clockTransition(clocksChangeOn, saveFrom) };
+      expect(await saveAndPreview(effectiveBusinessDay)).toEqual({
+        save: refusal,
+        preview: refusal,
+      });
+      expect(await clockRows()).toEqual({ changes: [], settings: [] });
+    },
+  );
+  it.each([
+    ["2026-10-26T02:00:00Z", "2026-10-27"],
+    ["2027-03-29T01:00:00Z", "2027-03-30"],
+  ])("at %s a 02:30 start saves for %s", async (moment, effectiveBusinessDay) => {
+    at = new Date(moment);
+    const preview = await request(
+      "GET",
+      "/business-day-start/preview?dayCutover=02%3A30&expectedClockRevision=0",
+    );
+    expect(preview.status).toBe(200);
+    expect((await preview.json()).effectiveDay.businessDay).toBe(effectiveBusinessDay);
+    const save = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ effectiveBusinessDay, dayCutover: "02:30" }),
+    );
+    expect(save.status).toBe(200);
+    expect((await clockRows()).changes).toMatchObject([
+      { effectiveBusinessDay, dayCutover: "02:30:00" },
+    ]);
+  });
 });
 
 function deferred() {

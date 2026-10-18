@@ -97,6 +97,15 @@ export async function readBusinessDayClockModel(
   const startsAt = businessDayBoundaryAt(clock, pending.effectiveBusinessDay);
   return { ...base, currentBusinessDay, pending: { ...pending, startsAt } };
 }
+function refuseClockTransition(clock: BusinessDayClock, dayCutover: string, at: Date): void {
+  const transition = clockTransitionAt(clock, dayCutover, at);
+  if (transition !== null)
+    throw new AppError("venue.business_day_invalid", {
+      field: "dayCutover",
+      reason: "clock_transition",
+      ...transition,
+    });
+}
 function assertRevision(model: BusinessDayClockModel, revision: number): void {
   if (revision !== model.revision) throw new AppError("venue.business_day_changed", {});
   if (model.currentBusinessDay === null) invalid("dayCutover", "clock_unreadable");
@@ -143,8 +152,7 @@ export async function previewBusinessDayStart(
   const start = startOf(input);
   const model = await readBusinessDayClockModel(tx, cfg, at);
   assertRevision(model, start.expectedClockRevision);
-  if (clockTransitionAt(model.clock, start.dayCutover, at) !== null)
-    invalid("dayCutover", "clock_transition");
+  refuseClockTransition(model.clock, start.dayCutover, at);
   const plan = planBusinessDayStart(model.clock, start.dayCutover, at);
   const effectiveDay = plan.effectiveBusinessDay;
   await protectHistory(tx, cfg, model.clock, plan.candidate, effectiveDay);
@@ -207,13 +215,7 @@ export async function writeBusinessDayStart(
   const effectiveDay = plan.effectiveBusinessDay;
   if (proposal.effectiveBusinessDay !== effectiveDay) invalid("dayCutover", "changeover_passed");
   if (sameChanges(plan.candidate, model.clock)) return unchanged();
-  const transition = clockTransitionAt(model.clock, proposal.dayCutover, at);
-  if (transition !== null)
-    throw new AppError("venue.business_day_invalid", {
-      field: "dayCutover",
-      reason: "clock_transition",
-      ...transition,
-    });
+  refuseClockTransition(model.clock, proposal.dayCutover, at);
   for (const removed of plan.removed)
     await protectHistory(tx, cfg, model.clock, plan.candidate, removed);
   await protectHistory(tx, cfg, model.clock, plan.candidate, effectiveDay);
