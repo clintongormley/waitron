@@ -431,7 +431,7 @@ the 2026-09-30 folders design; what remains:
 ## Content languages and the image library (#339, #344) — what is left open
 
 **Content languages and the image library (#339, #344) — what is left open.**
-[Operator guide](../content-and-images.md).
+[Operator guide](../../apps/server/src/guide/en/content-and-images.md).
 
 - **A new picture consumer has to add a real database reference, not just store a filename.**
   Products point at the image table through a foreign key on the picture's filename
@@ -660,7 +660,7 @@ From **Units and the old `pricing_unit` (#342, #375, #382) — what is left open
 ## Smaller things #379 surfaced and did not take
 
 From **The product editor and catalogue (#345, #379, #387) — what is left open.**
-[Operator guide](../products.md); [developer guide](../developers/products.md).
+[Operator guide](../../apps/server/src/guide/en/products.md); [developer guide](../developers/products.md).
 
 - **Smaller things #379 surfaced and did not take.** The kitchen screens show a kitchen-resolved
   dish name above modifier text resolved in the device's own locale. A joined customer-facing line

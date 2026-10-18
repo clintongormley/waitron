@@ -7,7 +7,7 @@ you need them. The image library uses the same choices as your products, section
 in the default-language translation check. An entry on an extras list does not: it has no name of
 its own, and takes the product's.
 
-## Choose your content languages
+## Choose your content languages {#languages}
 
 A new venue starts with its content languages already chosen: the languages Waitron keeps enabled
 for its region, plus English. In Spain Waitron keeps Spanish enabled in every region where a venue
@@ -40,7 +40,7 @@ without appearing in the list.
 
 A product's and a variant's customer-facing name is the exception, because it is optional: leave it
 empty in every language and Waitron falls back to the staff name, so it never blocks the change.
-Fill it in for Spanish and leave English blank, though, and that *is* a missing translation — you
+Fill it in for Spanish and leave English blank, though, and that _is_ a missing translation — you
 clearly meant to translate it — so it does hold the change up until you finish it or clear it. A
 section's customer-facing names work the same way: none at all never blocks the change, but a
 section with some names and none in the new default language does. Edit a section's customer-facing
@@ -95,7 +95,7 @@ separate interface preference. These content settings
 also provide the language choices for future online content; they do not create an online ordering
 site.
 
-## Add a photograph once
+## Add a photograph once {#upload}
 
 For several photos, open **Image library** and drop them anywhere on the page, or select
 **choose files**. Uploads start immediately. A file named `patatas-bravas.jpg` starts as
@@ -123,7 +123,7 @@ In the upload window, for the bread photograph, you might enter **Pan de verano*
 name blank until you have a translation. Choose **Save** to add the photo to the library; cancelling
 before Save leaves it out of the library.
 
-## Find and reuse an image
+## Find and reuse an image {#find}
 
 **Search images** finds photographs by the words in their names, in any order, and searches as you
 type: the word you are still typing can be any part of a word, so **read** finds **Summer bread**.
@@ -149,7 +149,7 @@ Open the photograph's **⋮** menu and choose **Edit** to add translations, chan
 the picture or replace it. The window shows its upload file name; an older photo without a recorded
 file name shows its stored name instead.
 
-## Frame or replace a photo
+## Frame or replace a photo {#framing}
 
 If a thumbnail shows mostly table instead of the dish, choose **Adjust framing** in **Edit photo**.
 Drag the photo inside the square and use **Zoom** to move closer. You can also focus the square
@@ -173,7 +173,7 @@ If someone else saves the photo while you edit, your Save asks you to reload ins
 overwriting their changes. **Discard changes and reload photo** reads their version. Until you
 choose that action, your file, names and framing remain available to review.
 
-## Remove a use before deleting the photograph
+## Remove a use before deleting the photograph {#delete}
 
 **Remove image** clears the association when you save. On a product's or a variant's own page it is
 at the bottom of the library window the photo opens, shown when there is a photo of its own; in a

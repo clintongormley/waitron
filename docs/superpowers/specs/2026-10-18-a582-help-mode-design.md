@@ -8,6 +8,7 @@ Backlog entry: `docs/backlog.md` "A582" and
 [its detail](../../backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13).
 Pictures: `docs/backlog/mockups/a582-help-mode/` (drawn in HTML with the apps' colour tokens, not
 screenshots; 02 also in dark, `-dark.png`).
+2026-10-18: slice 3 put the guides in `apps/server/src/guide/<language>/`, not `docs/guide/`; its plan's decision 1 says why.
 
 **Decided (owner, 2026-10-18), each as recommended in §9:**
 

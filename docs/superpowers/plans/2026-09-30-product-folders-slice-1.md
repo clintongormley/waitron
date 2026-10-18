@@ -1,7 +1,7 @@
 # Product folders (slice 1) Implementation Plan
 
 > Update, 2026-10-09 (A435-1): the product Disable/Enable behavior described here is historical.
-> Products and variants now archive permanently. See [the current product guide](../../products.md)
+> Products and variants now archive permanently. See [the current product guide](../../../apps/server/src/guide/en/products.md)
 > for Archive, View and the editor's staged Archive/Keep actions.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

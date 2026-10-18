@@ -1087,7 +1087,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**
-  [Operator guide](content-and-images.md). **A new picture consumer has to add a real database
+  [Operator guide](../apps/server/src/guide/en/content-and-images.md). **A new picture consumer has to add a real database
   reference, not just store a filename.** **The online language selector has nothing to select for
   yet.**
   [Detail](backlog/catalogue.md#content-languages-and-the-image-library-339-344--what-is-left-open)

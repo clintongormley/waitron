@@ -1880,4 +1880,4 @@ main checkout on 2026-10-01 (at `e5ba24d55` with that file modified, not yet com
 
 
 2026-10-08: A333 seeds optional sides on Pollo asado. The demo-extras limitation stated above
-is superseded; see [products.md](../../products.md) for the current example.
+is superseded; see [products.md](../../../apps/server/src/guide/en/products.md) for the current example.

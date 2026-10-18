@@ -490,7 +490,7 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 
 1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
 2. **Catalogue and product depth** — `catalogue-screen.ts` and `purchases-screen.ts`. The
-   owner-requested Products overhaul has landed ([operator guidance](../products.md)). One question
+   owner-requested Products overhaul has landed ([operator guidance](../../apps/server/src/guide/en/products.md)). One question
    hangs over it: the existing zero-rate class is shown as **No tax (0%)**, and asesor Q20 asks
    whether any intended case legally needs N1 or N2 instead — to be answered before the first live
    filing (the #345 entry below).
@@ -1085,8 +1085,8 @@ help about anything you want very quickly."
 - **Open points for the plan:** where the help texts live and how they are translated (EN/ES, like
   the screens' strings); how a screen declares which of its parts have help, so a shared `wt-*`
   primitive can carry it rather than every screen drawing its own marker; whether the mode stays on across pages and sessions; keyboard and screen-reader use.
-- **Documentation.** Three user guides exist (`docs/products.md`, `docs/modifiers.md`,
-  `docs/content-and-images.md`, English only); nothing in the apps links to them and the box does
+- **Documentation.** Three user guides exist (`apps/server/src/guide/en/products.md`, `modifiers.md`,
+  `content-and-images.md`, English only); nothing in the apps links to them and the box does
   not serve them. The design (below) proposes serving them from the box in English and Spanish.
 - **Design (2026-10-18):** [2026-10-18-a582-help-mode-design.md](../superpowers/specs/2026-10-18-a582-help-mode-design.md),
   pictures in [mockups/a582-help-mode/](mockups/a582-help-mode/). It settles the open points above.

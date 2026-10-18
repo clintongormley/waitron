@@ -5,10 +5,8 @@ service, and at what price. Keeping those jobs separate lets you reuse one coffe
 without copying its kitchen name, dietary declarations or choices.
 
 Open **Products** in the management dashboard and choose **Add product**. Give the product a name,
-enter its price and choose its tax treatment. A product is sold by the each unless you say otherwise,
-so choosing a selling unit is optional — pick one only when you sell the product by weight or volume,
-such as grams or litres. The tax label shows the same percentage that Waitron uses to calculate the
-sale.
+enter its price and choose its tax treatment. The tax label shows the same percentage that Waitron
+uses to calculate the sale.
 
 Choose **No tax (0%)** when you want the existing zero-rate tax class. This is a real selection, so
 leaving the field blank still prevents the product from being saved.
@@ -18,7 +16,7 @@ summarises what is inside it, so you can see at a glance which sections you have
 by clicking its heading. If a section contains something you need to fix, it opens itself and stays
 open until you have fixed it.
 
-## Set how a product is sold
+## Set how a product is sold {#selling}
 
 Open **Selling** to change Available or **Ordered on its own by**: Anyone, Staff only or Nobody.
 The explanation below the selected choice tells you what it allows. A variant has only Available
@@ -27,7 +25,12 @@ here. Selling starts closed, with the current settings on its summary line.
 Choose the pencil-marked thumbnail beside Name to change the image or colour. The square previews
 a colour change before you save. Close the panel with Escape to return to the thumbnail.
 
-## Give a product up to three names
+## Choose a selling unit {#selling-unit}
+
+A product is sold by the each unless you say otherwise, so choosing a selling unit is optional — pick
+one only when you sell the product by weight or volume, such as grams or litres.
+
+## Give a product up to three names {#names}
 
 The name you just typed is the **staff** name. It is plain text, in no particular language, and it
 is what you and your staff see: the Products list, the till's buttons, the basket, an open table's
@@ -50,7 +53,7 @@ blank, its field shows the name that will be used instead.
 You can also add a customer-facing description, under **Descriptors**, and a photo, which sits
 beside the name, below the category path.
 
-## Give the product a main category
+## Give the product a main category {#category}
 
 Each product has one main category. Categories form a tree, so the product editor shows the
 category's full path on the first line under the window's title, such as
@@ -61,8 +64,7 @@ to another category on the Products screen, by turning on **Select** and draggin
 with **Move to…**. The main category also plays a part in choosing the kitchen station a dish goes
 to, as described below.
 
-Use the **Default course** field under **Kitchen** to decide when the product fires. It saves with
-the product. Where the dish is made is set in the routing grid, on the **Routes** tab of **Prep
+Where the dish is made is set in the routing grid, on the **Routes** tab of **Prep
 stations**. The product's own row decides first, then its category's row and each parent
 category's in turn (the **No category** row for a product with no category), then **All
 categories**. Within a row, a cell for the order's service zone comes before the row's **Every
@@ -72,12 +74,17 @@ You can create a unit, an extras list or an options list without abandoning a pr
 you are editing. Open the nested form, save the new item and select it when you return. The unsaved
 product fields remain in place if the nested save fails or you cancel it.
 
+## Choose the course {#course}
+
+Use the **Default course** field under **Kitchen** to decide when the product fires. It saves with
+the product.
+
 Courses are different: **Edit courses…** at the end of the **Default course** list opens the
 course list in a window that saves each change as you make it. When you close it, the last course
 you added becomes the product's course; if you removed the product's course instead, the product
 is left with none. Your other unsaved product fields stay as they were.
 
-## Add variants when one product has several sellable forms
+## Add variants when one product has several sellable forms {#variants}
 
 Use variants for forms of the same product that need distinct names and prices, such as **Coffee,
 single** and **Coffee, double**. Each variant has its own availability. Reordering or editing the
@@ -159,7 +166,7 @@ beer in its own section at the product's €2.80, the prices disagree. Set Eveni
 resolve that disagreement before publishing. The Prices view shows where each price comes from
 and which settings still need your decision.
 
-## Declare allergens and dietary suitability directly
+## Declare allergens and dietary suitability directly {#allergens}
 
 **Nutritional info** shows two lines, **Allergens** and **Dietary preferences**, each followed by
 what you have chosen, or "None specified". Click a line, or press Enter on it, to choose from the
@@ -175,8 +182,7 @@ checked the product and declared none; a pending declaration means it has not be
 extra you can add to a dish is itself a product, so it brings its own declarations with it. A choice
 on an options list does not: an option such as _rare_ or _well done_ carries no allergens and no
 dietary suitability of its own, because it is a way of asking for the same dish rather than
-something extra to eat. The till and kitchen show each item's own list and no longer compute a
-combined "as-served" figure across the dish and its extras.
+something extra to eat. The till and kitchen show each item's own list.
 
 In the Products list, **Not reviewed**, **None** and **Declared** distinguish a dish you have not
 checked from one you have checked. A variant shows its effective state; italic means it follows
@@ -187,11 +193,10 @@ variants whose allergens are unreviewed. Select a name to open that product's ow
 still publish or schedule: the warning asks you to check the declarations, rather than refusing
 the publication. Cancelling the scheduled confirmation keeps the date and time you entered.
 
-Recipes and ingredient origins no longer author product declarations in the supported dashboard
-workflow. Existing purchasing data and recorded order facts remain available, but you maintain live
+Existing purchasing data and recorded order facts remain available, but you maintain live
 product allergens and dietary suitability in **Products**.
 
-## Put a new product on your menus
+## Put a new product on your menus {#menus}
 
 When you save a new product, the editor closes and a window such as **Add Flat white to menus** asks where it goes. It
 lists each menu's **Top level** and the sections inside it: tick the places you want and choose
@@ -200,7 +205,7 @@ place that refuses it does not undo the save — the window names the places tha
 ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
-## Keep choices reusable
+## Keep choices reusable {#reusable-choices}
 
 Create reusable extras lists and options lists on the two tabs of **Modifiers**, then attach them in
 the product's own **Modifiers** section, in the order you want. See
@@ -221,9 +226,7 @@ up to three optional sides from **Guarniciones**: Padrón peppers (2.00), mixed 
 house bread (0.50). These prices apply to one portion added to the chicken, so you can try an
 extra priced differently from the same product sold on its own.
 
-
-
-## Read a dish’s nutrition at the till
+## Read a dish’s nutrition at the till {#nutrition-at-the-till}
 
 Hold a product button down to open its information window. You see the dish’s allergens, including
 its cereals or nuts, and its diet labels. An unreviewed dish says so in the window. Choose **Add to
@@ -239,4 +242,4 @@ own nutrition separate from the dish. There is no separate Allergens screen or p
 sheet in the till.
 
 Shift+F10 or the context-menu key opens the same information window for a focused product. Enter
-still selects the dish (owner decision, 2026-10-16).
+still selects the dish.
