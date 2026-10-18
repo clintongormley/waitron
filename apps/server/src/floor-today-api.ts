@@ -1,8 +1,7 @@
-import { and, eq, exists, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import {
   diningTables,
-  floorPlans,
   floorTodayTables,
   floorTodayZones,
   floorZones,
@@ -24,7 +23,9 @@ import {
   rotateToday,
   seatsToday,
   takeOffToday,
+  todayBusinessDay,
 } from "./floor-today-store.js";
+import { plannedZones } from "./floor-layout-due.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { markMoved } from "./floor-today-mark-moved.js";
 import { resetTable } from "./floor-today-reset-table.js";
@@ -243,15 +244,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       const revision = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const [zone] = await tx
-          .select({
-            active: floorZones.active,
-            hasPlan: sql<number>`${exists(
-              tx
-                .select({ id: floorPlans.id })
-                .from(floorPlans)
-                .where(eq(floorPlans.zoneId, floorZones.id)),
-            )}`,
-          })
+          .select({ active: floorZones.active })
           .from(floorZones)
           .where(and(eq(floorZones.id, zoneId), eq(floorZones.locationId, deps.cfg.locationId)));
         if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
@@ -262,10 +255,13 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         else if (await hasTodayRow(tx, deps.cfg.locationId, zoneId)) {
           throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
         }
-        if (!zone.active || !zone.hasPlan) return from;
-        const onto = await recordedOrDefault(tx, deps.cfg, zoneId);
+        if (!zone.active) return from;
+        const onto = await recordedOnto(tx, deps.cfg, zoneId, now);
         if (onto === null) return from;
-        return (await resetZone(tx, deps.cfg, removals, zoneId, now, onto)) ?? from;
+        return (
+          (await resetZone(tx, deps.cfg, removals, zoneId, now, onto, { keepTakenOff: false })) ??
+          from
+        );
       });
       return c.json({ zoneId, revision });
     }),
@@ -273,20 +269,29 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
 }
 
 /**
- * The layout the zone's record names; with no record naming a set, the department's default set;
- * null when the zone's department has no set.
+ * Today's record of the zone, which the reset goes back to; null, and nothing reset, when the
+ * zone's department has no set or there is no record of today — `ensureToday` has already made
+ * the day's first reset wherever a saved layout is due (plan decisions 13 and 24). Refuses
+ * `floor_today.layout_changed` when the recorded set is deleted or not its department's.
  */
-async function recordedOrDefault(
+async function recordedOnto(
   tx: Transaction,
   cfg: TillConfig,
   zoneId: string,
+  now: Date,
 ): Promise<ResetOnto | null> {
+  const sets = await VENUE_SERVICE.readFloorPlanSets(tx, cfg);
+  if (!plannedZones(sets).has(zoneId)) return null;
+  const day = await todayBusinessDay(tx, cfg, now);
+  if (day === null) return null;
   const [record] = await tx
     .select({ setId: floorTodayZones.setId, occurrence: floorTodayZones.occurrence })
     .from(floorTodayZones)
-    .where(eq(floorTodayZones.zoneId, zoneId));
-  if (record?.setId != null) return { setId: record.setId, occurrence: record.occurrence };
-  const sets = await VENUE_SERVICE.readFloorPlanSets(tx, cfg);
-  const fallback = sets.find((set) => set.isDefault && set.zoneIds.includes(zoneId));
-  return fallback === undefined ? null : { setId: fallback.setId, occurrence: null };
+    .where(and(eq(floorTodayZones.zoneId, zoneId), eq(floorTodayZones.businessDay, day)));
+  if (record === undefined) return null;
+  const { setId, occurrence } = record;
+  if (setId === null || !sets.some((set) => set.setId === setId && set.zoneIds.includes(zoneId))) {
+    throw new AppError("floor_today.layout_changed", { zoneId });
+  }
+  return { setId, occurrence };
 }

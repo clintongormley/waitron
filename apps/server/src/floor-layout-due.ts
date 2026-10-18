@@ -1,8 +1,14 @@
 import { and, inArray } from "drizzle-orm";
 import { floorPlans, floorTodayZones, type Transaction } from "@waitron/db";
+import type { FloorPlanSetSummary } from "@waitron/module";
 import { VENUE_SERVICE } from "./modules.js";
 import { todayBusinessDay } from "./floor-today-store.js";
 import type { TillConfig } from "./till-config.js";
+
+/** The zones that have a plan on the till: those whose department has a set (plan decision 19). */
+export function plannedZones(sets: readonly FloorPlanSetSummary[]): Set<string> {
+  return new Set(sets.flatMap((set) => set.zoneIds));
+}
 
 export interface LayoutRecord {
   setId: string | null;

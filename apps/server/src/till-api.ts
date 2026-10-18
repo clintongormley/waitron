@@ -171,7 +171,7 @@ import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
-import { layoutOffer, zoneLayouts } from "./floor-layout-due.js";
+import { layoutOffer, plannedZones, zoneLayouts } from "./floor-layout-due.js";
 import { refuseTakenOff, zoneOfTable } from "./floor-today-table.js";
 import {
   moveChangedRooms,
@@ -541,6 +541,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "joined_table.out_of_date": 409,
   "joined_table.tables_in_group": 409,
   "floor_today.out_of_date": 409,
+  "floor_today.layout_changed": 409,
   "zone.not_found": 404,
   "tab.already_open": 409,
   "tab.not_open": 409,
@@ -2624,7 +2625,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         );
         const states = await VENUE_SERVICE.readZoneClosingStates(tx, deps.cfg, ids, at);
         const sets = await VENUE_SERVICE.readFloorPlanSets(tx, deps.cfg);
-        const planned = new Set(sets.flatMap((set) => set.zoneIds));
+        const planned = plannedZones(sets);
         const setName = new Map(sets.map((set) => [set.setId, set.name]));
         const layouts = await zoneLayouts(tx, deps.cfg, ids, deps.clock.now().instant);
         return visible.map((zone) => {

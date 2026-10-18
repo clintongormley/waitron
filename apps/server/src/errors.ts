@@ -731,6 +731,8 @@ declare module "@waitron/shared" {
      * should re-read the floor before trying again.
      */
     "floor_today.out_of_date": { zoneId: string; revision: number };
+    /** The layout the till offered or reset onto is no longer the zone's; the till reads again. */
+    "floor_today.layout_changed": { zoneId: string };
     "merge.seats_required": Record<string, never>;
     /** A table named to split off a group is not one of its members. */
     "merge.member_invalid": { tableId: string; field: "partIds" };

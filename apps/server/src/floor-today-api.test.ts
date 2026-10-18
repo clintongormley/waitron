@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { asc, sql, eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -19,8 +19,17 @@ import {
   partyTables,
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
-import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
-import { saveLayout } from "./floor-plan.js";
+import {
+  createDepartment,
+  createServiceZone,
+  departmentFloorPlanSets,
+  linkFloorPlanSet,
+  menuPeriods,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
+import { readLayout, saveLayout } from "./floor-plan.js";
+import { floorDeletionFor } from "./floor-delete.js";
+import { resetZone } from "./floor-today-store.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 
@@ -38,6 +47,8 @@ import {
   giveKeptSize,
   needingMoving,
   plannedZone,
+  setsDepartment,
+  standardAndDinner,
   tableServiceZone,
   todayRow,
   withRevision,
@@ -50,6 +61,8 @@ import "./errors.js";
 let v: PartyVenue;
 let app: Hono;
 let cookie: string;
+/** The moment the till routes read; null reads the real clock. */
+let fixedAt: Date | null = null;
 
 const REMOVALS = enabledTableRemovals(ALL_MODULES);
 
@@ -69,7 +82,10 @@ beforeAll(async () => {
     {
       db: v.db,
       backend: v.backend,
-      clock: v.clock,
+      clock: {
+        ...v.clock,
+        now: () => ({ ...v.clock.now(), ...(fixedAt === null ? {} : { instant: fixedAt }) }),
+      },
       cfg: v.cfg,
       tableRemovals: REMOVALS,
       secureCookies: false,
@@ -86,6 +102,10 @@ beforeAll(async () => {
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });
   cookie = `${SESSION_COOKIE}=${session.token}`;
+});
+
+afterEach(() => {
+  fixedAt = null;
 });
 
 async function send(method: string, path: string, body?: unknown): Promise<Response> {
@@ -1302,5 +1322,237 @@ describe("resetting a zone onto a layout", () => {
         tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("Reset to … plan", () => {
+  /** Venue times are Madrid's; Lunch runs 12:00-15:00 and Dinner 20:00-23:00. */
+  const LUNCH = new Date("2026-10-12T13:00:00+02:00");
+  const DINNER = new Date("2026-10-12T21:00:00+02:00");
+
+  const layoutChanged = (zoneId: string) => ({
+    status: 409,
+    body: { error: { code: "floor_today.layout_changed", params: { zoneId } } },
+  });
+
+  /** Standard stands A at 0 and B at 20; Dinner stands them at 40 and 60. Read at `at`. */
+  async function twoSets(at: Date) {
+    fixedAt = at;
+    const s = await standardAndDinner(
+      v,
+      at,
+      [
+        { key: "a", label: `A ${randomUUID().slice(0, 6)}` },
+        { key: "b", label: `B ${randomUUID().slice(0, 6)}` },
+      ],
+      { standard: { a: 0, b: 20 }, dinner: { a: 40, b: 60 } },
+    );
+    expect((await send("GET", "/api/tables/state")).status).toBe(200);
+    return s;
+  }
+
+  async function recordOf(zoneId: string) {
+    const [row] = await inTx(v, (tx) =>
+      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+    );
+    return row;
+  }
+
+  async function layoutRevision(setId: string, zoneId: string): Promise<number> {
+    return (await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId }))).revision;
+  }
+
+  async function moveInLayout(setId: string, zoneId: string, tableId: string, x: number) {
+    await inTx(v, async (tx) => {
+      const plan = await readLayout(tx, v.cfg, { setId, zoneId });
+      await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        { setId, zoneId },
+        {
+          revision: plan.revision,
+          tables: plan.tables.map((t) => ({
+            id: t.id,
+            key: t.id,
+            label: t.label,
+            seats: t.seats,
+            fixed: t.fixed,
+            placement:
+              t.liveTableId === tableId && t.placement !== null
+                ? { ...t.placement, x }
+                : t.placement,
+            partKeys: t.partIds,
+          })),
+        },
+        fixedAt!,
+      );
+    });
+  }
+
+  async function moveToDepartment(zoneId: string, departmentId: string): Promise<void> {
+    await inTx(v, (tx) =>
+      tx
+        .update(zoneServicePolicies)
+        .set({ departmentId })
+        .where(eq(zoneServicePolicies.zoneId, zoneId)),
+    );
+  }
+
+  async function newDepartment(withSet: boolean): Promise<string> {
+    return inTx(v, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      if (withSet) {
+        const [set] = await tx
+          .insert(floorPlanSets)
+          .values({ locationId: v.cfg.locationId })
+          .returning({ id: floorPlanSets.id });
+        await linkFloorPlanSet(tx, v.cfg, {
+          setId: set!.id,
+          departmentId: department.id,
+          name: "Standard",
+        });
+      }
+      return department.id;
+    });
+  }
+
+  it("resets onto the recorded set, brings its edit, keeps the occurrence, and undoes taken-off", async () => {
+    const { d, live } = await twoSets(LUNCH);
+    const recorded = await recordOf(d.zoneId);
+    expect(recorded).toMatchObject({ setId: d.standard });
+    expect(recorded!.occurrence).not.toBeNull();
+    await moveInLayout(d.standard, d.zoneId, live("a"), 10);
+    await expectRevision(v, today(live("b"), "take-off"), d.zoneId);
+    expect(await floorToday(live("b"))).toMatchObject({ takenOff: true });
+
+    await expectRevision(v, resetZoneToday(d.zoneId), d.zoneId);
+
+    expect(await todayRow(v, live("a"))).toMatchObject({ x: 10, y: 0 });
+    expect(await floorToday(live("b"))).toMatchObject({ takenOff: false });
+    expect(await recordOf(d.zoneId)).toMatchObject({
+      setId: d.standard,
+      layoutRevision: await layoutRevision(d.standard, d.zoneId),
+      occurrence: recorded!.occurrence,
+    });
+  });
+
+  it("never brings another set: Dinner due, Standard recorded, resets onto Standard", async () => {
+    const { d, live } = await twoSets(LUNCH);
+    const recorded = await recordOf(d.zoneId);
+    await expectRevision(v, today(live("a"), "move", { x: 90, y: 0 }), d.zoneId);
+    fixedAt = DINNER;
+
+    await expectRevision(v, resetZoneToday(d.zoneId), d.zoneId);
+
+    expect(await todayRow(v, live("a"))).toMatchObject({ x: 0, y: 0 });
+    expect(await recordOf(d.zoneId)).toMatchObject({
+      setId: d.standard,
+      occurrence: recorded!.occurrence,
+    });
+    const zones = (await (await send("GET", "/api/zones")).json()) as {
+      id: string;
+      layoutDue: { setId: string } | null;
+    }[];
+    expect(zones.find((zone) => zone.id === d.zoneId)!.layoutDue).toMatchObject({
+      setId: d.dinner,
+    });
+  });
+
+  it("is refused when the recorded set is gone, and writes nothing", async () => {
+    const { d } = await twoSets(DINNER);
+    expect(await recordOf(d.zoneId)).toMatchObject({ setId: d.dinner });
+    await inTx(v, async (tx) => {
+      await tx
+        .update(menuPeriods)
+        .set({ floorPlanSetId: null })
+        .where(eq(menuPeriods.floorPlanSetId, d.dinner));
+      await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, d.dinner));
+      await floorDeletionFor(v.cfg, REMOVALS).removeSets(tx, [d.dinner]);
+    });
+    const from = (await zoneRevisionOf(v, d.zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(resetZoneToday(d.zoneId))).toEqual(layoutChanged(d.zoneId));
+
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, d.zoneId)).toBe(from);
+  });
+
+  it("counts a recorded set of the zone's old department as gone", async () => {
+    const { d } = await twoSets(LUNCH);
+    await moveToDepartment(d.zoneId, await newDepartment(true));
+    const from = (await zoneRevisionOf(v, d.zoneId))!;
+    const before = await everything();
+
+    expect(await refusal(resetZoneToday(d.zoneId))).toEqual(layoutChanged(d.zoneId));
+
+    expect(await everything()).toEqual(before);
+    expect(await zoneRevisionOf(v, d.zoneId)).toBe(from);
+  });
+
+  it("leaves a zone moved to a department with no set as it is", async () => {
+    const { d, live } = await twoSets(LUNCH);
+    await expectRevision(v, today(live("a"), "move", { x: 90, y: 0 }), d.zoneId);
+    await moveToDepartment(d.zoneId, await newDepartment(false));
+    const from = (await zoneRevisionOf(v, d.zoneId))!;
+    const record = await recordOf(d.zoneId);
+
+    await expectRevision(v, resetZoneToday(d.zoneId), d.zoneId, from);
+
+    expect(await todayRow(v, live("a"))).toMatchObject({ x: 90 });
+    expect(await recordOf(d.zoneId)).toEqual(record);
+  });
+
+  it("resets a zone whose department has a set onto its recorded set, though no set holds its layout", async () => {
+    fixedAt = LUNCH;
+    const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
+    await inTx(v, (tx) =>
+      resetZone(tx, v.cfg, REMOVALS, d.zoneId, LUNCH, { setId: d.standard, occurrence: null }),
+    );
+    expect(await recordOf(d.zoneId)).toMatchObject({ setId: d.standard, revision: 1 });
+
+    await expectRevision(v, resetZoneToday(d.zoneId), d.zoneId, 2);
+  });
+
+  it("does not take a record of an earlier business day for today's", async () => {
+    fixedAt = LUNCH;
+    const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
+    await inTx(v, async (tx) => {
+      await tx
+        .insert(floorPlans)
+        .values({ zoneId: d.zoneId, setId: d.dinner, savedAt: LUNCH.toISOString() });
+      await tx.insert(floorTodayZones).values({
+        zoneId: d.zoneId,
+        businessDay: "2026-10-11",
+        revision: 1,
+        setId: d.standard,
+        occurrence: null,
+      });
+    });
+
+    await expectRevision(v, resetZoneToday(d.zoneId, { zoneRevision: 1 }), d.zoneId, 1);
+
+    expect(await recordOf(d.zoneId)).toMatchObject({ businessDay: "2026-10-11", revision: 1 });
+  });
+
+  it("resets a zone with no record yet onto the due layout", async () => {
+    fixedAt = DINNER;
+    const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
+    await inTx(v, (tx) =>
+      tx
+        .insert(floorPlans)
+        .values({ zoneId: d.zoneId, setId: d.dinner, savedAt: LUNCH.toISOString() }),
+    );
+    expect(await recordOf(d.zoneId)).toBeUndefined();
+
+    await expectRevision(v, resetZoneToday(d.zoneId, { zoneRevision: null }), d.zoneId);
+
+    const record = await recordOf(d.zoneId);
+    expect(record).toMatchObject({ businessDay: "2026-10-12", setId: d.dinner });
+    expect(record!.occurrence).not.toBeNull();
   });
 });
