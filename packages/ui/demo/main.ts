@@ -29,6 +29,7 @@ import "../src/components/wt-slider.js";
 import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
 import "../src/components/wt-menu-row.js";
+import "../src/components/wt-help-switch.js";
 import "../src/components/wt-combobox.js";
 import "../src/components/wt-colour-chooser.js";
 import "../src/components/wt-count-badge.js";
@@ -236,6 +237,7 @@ const panel = (theme: "light" | "dark") => `
           <wt-row-actions label="Team actions">
             <wt-button align="start" class="create-member">Add team member</wt-button>
           </wt-row-actions>
+          <wt-help-switch></wt-help-switch>
           <wt-row-actions label="Menu with help" align="end">
             <wt-menu-row help="Changes this person's name, role and PIN." help-label="Help: Edit">
               <wt-button variant="ghost" align="start">Edit</wt-button>
