@@ -34,6 +34,7 @@ import {
   partyTablesName,
 } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
 import "../widgets/bill-choice-dialog.js";
@@ -98,6 +99,26 @@ import type {
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
+
+/** The words of a table that needs clearing or moving. */
+const WAITING = {
+  clear: {
+    state: "floor.needs_clearing",
+    title: "floor.clear_title",
+    titleNamed: "floor.clear_title_named",
+    body: "floor.clear_body",
+    action: "floor.mark_cleared",
+  },
+  move: {
+    state: "floor.needs_moving",
+    title: "floor.move_title",
+    titleNamed: "floor.move_title_named",
+    body: "floor.move_body",
+    action: "floor.mark_moved",
+  },
+} as const satisfies Record<string, Record<string, StringKey>>;
+
+type Waiting = keyof typeof WAITING;
 
 function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
@@ -1948,9 +1969,9 @@ export class TillFloorScreen extends LitElement {
             ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
             : this.#plannedMap(onMap, unplaced, activeKey)
         }
-        ${this.#seatDialog()} ${this.#clearDialog()} ${this.#moveDialog()} ${this.#detailsSheet()}
-        ${this.#seatsPrompt()} ${this.#splitJoined()} ${this.#resetTable()} ${this.#renameWindow()}
-        ${this.#billChoice()} ${this.#joinWith()}
+        ${this.#seatDialog()} ${this.#waitingDialog("clear")} ${this.#waitingDialog("move")}
+        ${this.#detailsSheet()} ${this.#seatsPrompt()} ${this.#splitJoined()} ${this.#resetTable()}
+        ${this.#renameWindow()} ${this.#billChoice()} ${this.#joinWith()}
       </section>
     `;
   }
@@ -2045,109 +2066,84 @@ export class TillFloorScreen extends LitElement {
     ></till-seat-dialog>`;
   }
 
-  #clearDialog(): TemplateResult | typeof nothing {
-    const table = this.clearing;
+  /** The question a table that needs clearing or moving asks when it is tapped. */
+  #waitingDialog(kind: Waiting): TemplateResult | typeof nothing {
+    const table = kind === "clear" ? this.clearing : this.moving;
     if (table === null) return nothing;
+    const words = WAITING[kind];
+    const clear = kind === "clear";
+    const close = () => {
+      if (clear) this.clearing = null;
+      else this.moving = null;
+    };
     return html`<wt-dialog
       ${trackDialog()}
-      data-clear-dialog
+      ?data-clear-dialog=${clear}
+      ?data-move-dialog=${!clear}
       .open=${true}
-      .heading=${
-        table.today?.name == null
-          ? t("floor.clear_title").replace("{table}", () => table.label)
-          : t("floor.clear_title_named").replace("{table}", () => table.today!.name!)
-      }
-      @wt-close=${() => (this.clearing = null)}
+      .heading=${tableSentence(table, words.title, words.titleNamed)}
+      @wt-close=${close}
     >
-      <p>${t("floor.clear_body")}</p>
+      <p>${t(words.body)}</p>
       <wt-button
         slot="footer"
-        data-clear-cancel
+        ?data-clear-cancel=${clear}
+        ?data-move-cancel=${!clear}
         variant="secondary"
-        @click=${() => (this.clearing = null)}
-      >
-        ${t("action.cancel")}
-      </wt-button>
-      <wt-button
-        slot="footer"
-        data-mark-cleared
-        variant="primary"
-        @click=${() => this.#markCleared(table)}
-      >
-        ${t("floor.mark_cleared")}
-      </wt-button>
-    </wt-dialog>`;
-  }
-
-  #moveDialog(): TemplateResult | typeof nothing {
-    const table = this.moving;
-    if (table === null) return nothing;
-    return html`<wt-dialog
-      ${trackDialog()}
-      data-move-dialog
-      .open=${true}
-      .heading=${tableSentence(table, "floor.move_title", "floor.move_title_named")}
-      @wt-close=${() => (this.moving = null)}
-    >
-      <p>${t("floor.move_body")}</p>
-      <wt-button
-        slot="footer"
-        data-move-cancel
-        variant="secondary"
-        @click=${() => (this.moving = null)}
+        @click=${close}
       >
         ${t("action.cancel")}
       </wt-button>
       ${
-        this.canChangeToday
+        this.#actsOn(kind)
           ? html`<wt-button
               slot="footer"
-              data-mark-moved
+              ?data-mark-cleared=${clear}
+              ?data-mark-moved=${!clear}
               variant="primary"
-              @click=${() => this.#markMoved(table)}
+              @click=${() => this.#markWaiting(kind, table)}
             >
-              ${t("floor.mark_moved")}
+              ${t(words.action)}
             </wt-button>`
           : nothing
       }
     </wt-dialog>`;
   }
 
-  /** A table needing moving has the plain box a table needing clearing has, with Mark moved. */
-  #movingCard(table: TableState): TemplateResult {
+  /** A card is one button, so a table needing clearing or moving, whose card holds its own Mark
+   * cleared or Mark moved, is a plain box instead. */
+  #waitingCard(table: TableState, kind: Waiting): TemplateResult {
+    const words = WAITING[kind];
+    const clear = kind === "clear";
     return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
       <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
-      <span class="occupancy" data-needs-moving>${t("floor.needs_moving")}</span>
+      <span class="occupancy" ?data-needs-clearing=${clear} ?data-needs-moving=${!clear}
+        >${t(words.state)}</span
+      >
       ${
-        this.canChangeToday
+        this.#actsOn(kind)
           ? html`<wt-button
               size="sm"
               variant="secondary"
-              data-mark-moved
-              @click=${() => this.#markMoved(table)}
+              ?data-mark-cleared=${clear}
+              ?data-mark-moved=${!clear}
+              @click=${() => this.#markWaiting(kind, table)}
             >
-              ${t("floor.mark_moved")}
+              ${t(words.action)}
             </wt-button>`
           : nothing
       }
     </div>`;
   }
 
-  /** A card is one button, so a table needing clearing, whose card holds its own Mark cleared, is a
-   * plain box instead. */
-  #clearingCard(table: TableState): TemplateResult {
-    return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
-      <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
-      <span class="occupancy" data-needs-clearing>${t("floor.needs_clearing")}</span>
-      <wt-button
-        size="sm"
-        variant="secondary"
-        data-mark-cleared
-        @click=${() => this.#markCleared(table)}
-      >
-        ${t("floor.mark_cleared")}
-      </wt-button>
-    </div>`;
+  /** Mark moved changes today's plan, so it needs a device that may; Mark cleared does not. */
+  #actsOn(kind: Waiting): boolean {
+    return kind === "clear" || this.canChangeToday;
+  }
+
+  #markWaiting(kind: Waiting, table: TableState): void {
+    if (kind === "clear") this.#markCleared(table);
+    else this.#markMoved(table);
   }
 
   /** Today's name, with the saved name small after it when they differ. */
@@ -2170,8 +2166,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   #card(table: TableState): TemplateResult {
-    if (needsClearing(table)) return this.#clearingCard(table);
-    if (needsMovingToday(table)) return this.#movingCard(table);
+    if (needsClearing(table)) return this.#waitingCard(table, "clear");
+    if (needsMovingToday(table)) return this.#waitingCard(table, "move");
     return html`<button
       class="card state-${table.state}${this.#timingAccentClass(table.timingBand)}"
       data-table=${table.id}
