@@ -18,6 +18,7 @@ import {
   suggestionStale,
 } from "./content-suggestion-store.js";
 import type { ContentSuggestionQuery, ContentSuggestionView } from "./content-suggestion-types.js";
+import { optionLists, optionLabels } from "./schema/options.js";
 import { contentSuggestions } from "./schema/suggestions.js";
 import {
   addPlainProducts,
@@ -495,4 +496,35 @@ describe("suggestionStale", () => {
       expect(suggestionStale(token(), bad)).toBe(true);
     },
   );
+});
+
+it("carries the current staff name and parent editor for notes outside the translation page", async () => {
+  await seedSuggestionVenue(suite.db);
+  const ids = await app(async (tx) => {
+    const [list] = await tx
+      .insert(optionLists)
+      .values({ name: "STAFF Doneness", customerName: { ca: "CLIENT Punt" } })
+      .returning();
+    const [label] = await tx
+      .insert(optionLabels)
+      .values({ listId: list!.id, name: "STAFF Rrae", customerName: { ca: "CLIENT Poc" } })
+      .returning();
+    await tx
+      .insert(contentSuggestions)
+      .values({ kind: "option_label", itemId: label!.id, language: null, placeholder: true });
+    return { list: list!.id, label: label!.id };
+  });
+  const first = (await page()).suggestions.find((view) => view.itemId === ids.label)!;
+  expect(first.cell).toBeNull();
+  expect(first.item).toEqual({
+    name: "STAFF Rrae",
+    parent: { id: ids.list, name: "STAFF Doneness" },
+  });
+  await app(async (tx) => {
+    await tx.update(optionLabels).set({ name: "STAFF Rare" }).where(eq(optionLabels.id, ids.label));
+  });
+  expect((await page()).suggestions.find((view) => view.id === first.id)?.item).toEqual({
+    name: "STAFF Rare",
+    parent: { id: ids.list, name: "STAFF Doneness" },
+  });
 });

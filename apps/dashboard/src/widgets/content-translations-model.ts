@@ -31,10 +31,6 @@ interface Input {
   baseline: Pick<TranslationCell, "text" | "owners" | "expected">;
   config: ContentLanguages;
 }
-interface SubmittedCell {
-  revision: number;
-  config: ContentLanguages;
-}
 const normalized = (text: string | null): string | null => text?.trim() || null;
 const reference = ({ kind, id, language, field }: TranslationCellRef): TranslationCellRef => ({
   kind,
@@ -53,7 +49,7 @@ export class TranslationDrafts {
   readonly #inputs = new Map<TranslationCellKey, Input>();
   readonly #dismissed = new Set<string>();
   readonly #waiting = new Set<string>();
-  readonly #submitted = new WeakMap<Batch, ReadonlyMap<TranslationCellKey, SubmittedCell>>();
+  readonly #submitted = new WeakMap<Batch, ReadonlyMap<TranslationCellKey, Draft>>();
   #revision = 0;
 
   constructor(config: ContentLanguages, cells: readonly TranslationCell[]) {
@@ -314,10 +310,7 @@ export class TranslationDrafts {
       new Map(
         edits.map((edit) => {
           const draft = this.#drafts.get(translationCellKey(edit))!;
-          return [
-            translationCellKey(edit),
-            { revision: draft.revision, config: structuredClone(draft.config) },
-          ];
+          return [translationCellKey(edit), structuredClone(draft)];
         }),
       ),
     );
@@ -328,6 +321,19 @@ export class TranslationDrafts {
   }
   personalSubmission(): Batch {
     return this.#batch(true);
+  }
+  beginReview(submitted: Batch): boolean {
+    const snapshots = this.#submitted.get(submitted);
+    if (!snapshots) return false;
+    for (const [key, snapshot] of snapshots) {
+      this.#drafts.set(key, {
+        ...structuredClone(snapshot),
+        origin: "personal",
+        revision: ++this.#revision,
+      });
+    }
+    this.#makeRoom();
+    return true;
   }
   validate(): FieldFault[] {
     const faults: FieldFault[] = [];

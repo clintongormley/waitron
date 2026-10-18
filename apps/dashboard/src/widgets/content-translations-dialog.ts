@@ -116,6 +116,7 @@ export class ContentTranslationsDialog extends LitElement {
   @state() private staged = false;
   @state() private width: "phone" | "desktop" = "desktop";
   @state() private uncertain: Batch | null = null;
+  @state() private batchReview: readonly TranslationCellRef[] = [];
   @state() private service: SuggestionService | null = null;
   @state() private suggestionRun: SuggestionRunView | null = null;
   @state() private cloudOrigin: string | null = null;
@@ -188,6 +189,7 @@ export class ContentTranslationsDialog extends LitElement {
       this.actionError = "";
       this.refused = [];
       this.uncertain = null;
+      this.batchReview = [];
       this.service = null;
       this.suggestionRun = null;
       this.suggestionBusy = false;
@@ -376,6 +378,7 @@ export class ContentTranslationsDialog extends LitElement {
   #faults(): Refusal[] {
     return [
       ...this.refused,
+      ...this.batchReview.map((cell) => ({ cell, message: t("translations.batch_review") })),
       ...(this.reader?.drafts.validate() ?? []).map((fault) => ({
         cell: fault.cell,
         message: t(`translations.${fault.message}`),
@@ -390,6 +393,7 @@ export class ContentTranslationsDialog extends LitElement {
       this.suggestionAction ||
       this.loading ||
       this.reading ||
+      this.batchReview.length > 0 ||
       this.#state().unchanged ||
       this.#window()?.hasRejectedEdits
     )
@@ -449,6 +453,27 @@ export class ContentTranslationsDialog extends LitElement {
       if (generation === this.#generation) this.busy = false;
     }
   }
+  async #reviewBatch(): Promise<void> {
+    const reader = this.reader,
+      submitted = this.uncertain,
+      generation = this.#generation;
+    if (!reader || !submitted || this.busy || this.reading || this.suggestionAction) return;
+    if (!reader.drafts.beginReview(submitted)) return;
+    await this.#read(() => reader.refresh());
+    if (generation !== this.#generation || !this.open || !this.isConnected || reader.readError)
+      return;
+    this.batchReview = submitted.edits.map(({ kind, id, language, field }) => ({
+      kind,
+      id,
+      language,
+      field,
+    }));
+    this.uncertain = null;
+    this.actionError = "";
+    this.refused = [];
+    this.#notifyDraft();
+    this.requestUpdate();
+  }
   async #reveal(cell: TranslationCellRef): Promise<void> {
     const generation = this.#generation,
       reader = this.reader;
@@ -469,6 +494,9 @@ export class ContentTranslationsDialog extends LitElement {
     const current = this.reader.drafts.current(cell);
     if (!current || (choice === "keep" && !this.reader.drafts.canKeep(cell))) return;
     this.reader.drafts.review([current], new Map([[translationCellKey(cell), choice]]));
+    this.batchReview = this.batchReview.filter(
+      (ref) => translationCellKey(ref) !== translationCellKey(cell),
+    );
     this.refused = this.refused.filter(
       (fault) => translationCellKey(fault.cell) !== translationCellKey(cell),
     );
@@ -480,7 +508,11 @@ export class ContentTranslationsDialog extends LitElement {
     if (!draft) return nothing;
     return draft
       .staged()
-      .filter((cell) => draft.changed(cell))
+      .filter(
+        (cell) =>
+          draft.changed(cell) ||
+          this.batchReview.some((ref) => translationCellKey(ref) === translationCellKey(cell)),
+      )
       .map((cell) => {
         const old = draft.baseline(cell)!,
           current = draft.current(cell);
@@ -493,7 +525,9 @@ export class ContentTranslationsDialog extends LitElement {
           tabindex="-1"
         >
           <p>${name}</p>
-          <p>${t("translations.changed")}</p>
+          <p>
+            ${t(this.batchReview.some((ref) => translationCellKey(ref) === translationCellKey(cell)) ? "translations.batch_review" : "translations.changed")}
+          </p>
           <dl>
             <dt>${t("translations.old")}</dt>
             <dd lang=${cell.language}>${old.effectiveText ?? ""}</dd>
@@ -624,20 +658,8 @@ export class ContentTranslationsDialog extends LitElement {
       reader.suggestions.suggestions.filter((view) => !this.#discardedSuggestions.has(view.id)),
       (view) => view.id,
       (view) => {
-        const row = reader.page?.rows.find(
-          (row) => row.kind === view.kind && row.id === view.itemId,
-        );
-        const name =
-          row?.name ??
-          reader.drafts.current(
-            view.cell ?? {
-              kind: view.kind,
-              id: view.itemId,
-              language: view.language ?? "",
-              field: "name",
-            },
-          )?.staffText ??
-          view.itemId;
+        const row = { kind: view.kind, id: view.itemId, ...view.item };
+        const name = row.name;
         const origin = view.cell ? reader.drafts.origin(view.cell) : null;
         const stale =
           view.stale || this.staleSuggestions.has(view.id) || (!!view.fix && origin === "personal");
@@ -680,23 +702,16 @@ export class ContentTranslationsDialog extends LitElement {
           }
           ${stale ? html`<p role="status">${t("suggestions.stale")}</p>` : nothing}
           <div class="review-actions">
-            ${
-              row
-                ? html`<a
-                    href=${translationEditorHref(row)}
-                    @click=${(event: MouseEvent) => {
-                      if (
-                        (row.kind !== "product" && row.kind !== "variant") ||
-                        leftToBrowser(event)
-                      )
-                        return;
-                      event.preventDefault();
-                      this.#openProduct(row);
-                    }}
-                    >${t("content_gaps.open")}</a
-                  >`
-                : nothing
-            }
+            ${html`<a
+              href=${translationEditorHref(row)}
+              @click=${(event: MouseEvent) => {
+                if ((row.kind !== "product" && row.kind !== "variant") || leftToBrowser(event))
+                  return;
+                event.preventDefault();
+                this.#openProduct(row);
+              }}
+              >${t("content_gaps.open")}</a
+            >`}
             ${
               view.fix && view.cell
                 ? html`<wt-button
@@ -935,7 +950,7 @@ export class ContentTranslationsDialog extends LitElement {
                 .anchor=${this.anchor}
                 .width=${this.width}
                 .drafts=${draft!}
-                .disabled=${locked}
+                .disabled=${locked || this.batchReview.length > 0}
                 .errors=${this.attempted ? faults : this.refused}
                 @translation-change=${this.#change}
                 @translation-open=${(event: CustomEvent<{ row: TranslationRef }>) => {
@@ -973,6 +988,18 @@ export class ContentTranslationsDialog extends LitElement {
         slot="footer"
         .error=${[this.attempted && (faults.length || this.#window()?.hasRejectedEdits) ? t("form.fix_fields") : "", this.actionError].filter(Boolean).join(" ")}
       >
+        ${
+          this.uncertain
+            ? html`<wt-button
+                data-test="review-batch"
+                slot="secondary"
+                variant="secondary"
+                ?disabled=${this.busy || this.reading || Boolean(this.suggestionAction)}
+                @click=${() => void this.#reviewBatch()}
+                >${t("translations.review_batch")}</wt-button
+              >`
+            : nothing
+        }
         <wt-button
           data-test="close"
           slot="cancel"
@@ -984,7 +1011,7 @@ export class ContentTranslationsDialog extends LitElement {
         <wt-button
           data-test="save"
           variant=${action.variant}
-          ?disabled=${action.unchanged || this.loading || this.busy || Boolean(this.suggestionAction) || this.reading || count > 100 || Boolean(this.#window()?.hasRejectedEdits) || (!this.uncertain && this.attempted && faults.some((fault) => !this.refused.includes(fault)))}
+          ?disabled=${action.unchanged || this.loading || this.busy || Boolean(this.suggestionAction) || this.reading || this.batchReview.length > 0 || count > 100 || Boolean(this.#window()?.hasRejectedEdits) || (!this.uncertain && this.attempted && faults.some((fault) => !this.refused.includes(fault)))}
           @click=${() => void this.#save()}
           >${t(this.uncertain ? "translations.retry_batch" : "translations.save")}</wt-button
         >

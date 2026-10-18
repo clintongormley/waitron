@@ -1164,16 +1164,21 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   existing behavior. Changed retained fields now have separate original/current/draft review,
   with Keep restricted to an enabled language and an eligible target under the same owner.
   Replace and Discard remove only the chosen field. Local validation and exact field refusals
-  reveal the staged page and language, then focus that native field. Explicit conflict review of
-  an uncertain batch and the remaining legacy-suite migration are still open. Suggestion panels
+  reveal the staged page and language, then focus that native field. Suggestion panels
   now show borrowed values, spelling fixes, placeholder notes and stale evidence. Use fix rereads
   the selected cell and its suggestion page before staging the correction with the current token;
   personal text and deliberate clears win, and a full batch leaves the fix waiting. Per-suggestion
   Discard waits before Save, removes only its borrowed draft and suppresses the deleted id across
   reopening. Waiting-fix review explicitly selects All names; choosing Missing in again clears
-  that narrower filter. Product links on a shown suggestion use the guarded editor event. Editor
-  links for notes whose item is outside the current page, the remaining original dialog suites and
-  explicit uncertain-batch conflict review still need integration and validation. The client accepts projected multilingual
+  that narrower filter. Suggestion pages carry current staff names and parent editor identities, so
+  off-page notes retain their editor links without fetching other item pages; product links use
+  the guarded editor event. An uncertain Save retains its exact Retry request. Explicit batch review
+  restores every submitted field and its original evidence, reads current values, and requires
+  Keep, Replace or Discard for each field before editing resumes. A failed review read keeps Retry
+  available. Submitted fields take priority over newly arrived untouched suggestions at capacity.
+  The original accessibility suite now exercises the multilingual editor and its retry/review
+  states in both languages and themes at phone and desktop widths. The original standard and draft
+  suites still need migration and validation. The client accepts projected multilingual
   queries and one whole cell batch on the language-free routes; its legacy call signatures and
   public DTOs remain to be retired with the remaining editor tests and consumers. Regional
   completeness notes wrap in full, with the row actions reachable at phone and desktop widths.

@@ -275,6 +275,7 @@ it("lists all suggestions with the run, the service and Cloud's origin, and mark
           id: expect.any(String),
           kind: "product",
           itemId: id,
+          item: { name: "STAFF Bread" },
           language: "en",
           text: "EN STAFF Bread",
           placeholder: false,

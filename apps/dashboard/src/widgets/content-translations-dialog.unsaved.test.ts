@@ -312,6 +312,7 @@ const soup = (id: string, itemId: string, text: string): ContentSuggestionView =
   id,
   kind: "product",
   itemId,
+  item: { name: itemId },
   language: "es",
   text,
   placeholder: false,

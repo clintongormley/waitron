@@ -608,10 +608,13 @@ export const en = {
   "translations.jump": "Jump to language",
   "translations.more_suggestions": "More suggestions",
   "translations.retry_batch": "Retry these changes",
+  "translations.review_batch": "Review these changes",
+  "translations.batch_review":
+    "The save could not be confirmed. Review this field before editing again.",
   "translations.unstage": "Unstage field",
   "translations.unstage_named": "Unstage field · {name} · {language} · {field}",
   "translations.uncertain":
-    "The save could not be confirmed. Retry these exact changes before editing them again.",
+    "The save could not be confirmed. Retry these exact changes, or review every field before editing them again.",
   "translations.reasons":
     "Partly translated: fill the missing name for this language. No customer-facing name: start one here. Blank rows are not saved.",
   "translations.default_needed":
@@ -3660,10 +3663,13 @@ export const es: Record<StringKey, string> = {
   "translations.jump": "Ir al idioma",
   "translations.more_suggestions": "Más sugerencias",
   "translations.retry_batch": "Reintentar estos cambios",
+  "translations.review_batch": "Revisar estos cambios",
+  "translations.batch_review":
+    "No se ha podido confirmar el guardado. Revisa este campo antes de volver a editarlo.",
   "translations.unstage": "Retirar campo del lote",
   "translations.unstage_named": "Retirar campo del lote · {name} · {language} · {field}",
   "translations.uncertain":
-    "No se ha podido confirmar el guardado. Reintenta estos mismos cambios antes de volver a editarlos.",
+    "No se ha podido confirmar el guardado. Reintenta estos mismos cambios o revisa cada campo antes de volver a editarlos.",
   "translations.reasons":
     "Traducido a medias: rellena el nombre que falta en este idioma. Sin nombre para el cliente: empieza aquí. Las filas vacías no se guardan.",
   "translations.default_needed":

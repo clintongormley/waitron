@@ -41,6 +41,7 @@ const suggestion = (
   id: `suggestion-${target.id}-${target.language}-${target.field}`,
   kind: target.kind,
   itemId: target.id,
+  item: { name: target.staffText ?? target.id },
   language: target.language,
   text: "Croqueta sugerida",
   placeholder: false,
@@ -856,4 +857,52 @@ describe("multilingual translation drafts", () => {
     expect(drafts.value(one)).toBe("");
     expect(drafts.validate()).toEqual([{ cell: ref(one), message: "review" }]);
   });
+});
+
+it("retains every submitted draft and its original evidence for explicit review after an uncertain save", () => {
+  const one = cell();
+  const clear = cell({ language: "fr", text: "Avant", effectiveText: "Avant", expected: "old-fr" });
+  const drafts = new TranslationDrafts(config, [one, clear]);
+  drafts.suggest([suggestion(one)]);
+  drafts.edit(clear, "");
+  const submitted = drafts.submission();
+  const original = JSON.stringify(submitted);
+  drafts.receive(
+    page([
+      cell({ text: "Croqueta sugerida", effectiveText: "Croqueta sugerida", expected: "saved-es" }),
+      cell({ language: "fr", text: "Autre", effectiveText: "Autre", expected: "latest-fr" }),
+    ]),
+  );
+  expect(drafts.suggestedCount).toBe(0);
+  expect(drafts.beginReview(structuredClone(submitted))).toBe(false);
+  expect(drafts.beginReview(submitted)).toBe(true);
+  expect(drafts.staged()).toEqual([ref(clear), ref(one)]);
+  expect(drafts.baseline(one)?.expected).toBe("original");
+  expect(drafts.baseline(clear)?.text).toBe("Avant");
+  expect(drafts.value(one)).toBe("Croqueta sugerida");
+  expect(drafts.value(clear)).toBe("");
+  expect(drafts.origin(one)).toBe("personal");
+  expect(drafts.validate().map((fault) => fault.cell.language)).toEqual(["fr", "es"]);
+  expect(JSON.stringify(submitted)).toBe(original);
+});
+
+it("gives the uncertain submitted batch priority over new untouched suggestions during explicit review", () => {
+  const originals = changedCells(100);
+  const drafts = new TranslationDrafts(config, originals);
+  drafts.suggest(originals.map((value) => suggestion(value)));
+  const submitted = drafts.submission();
+  const arrivals = changedCells(100).map((value) => ({ ...value, id: `new-${value.id}` }));
+  drafts.receive(
+    page([
+      ...originals.map((value) => ({ ...value, expected: `changed-${value.id}` })),
+      ...arrivals,
+    ]),
+  );
+  drafts.suggest(arrivals.map((value) => suggestion(value)));
+  expect(drafts.suggestedCount).toBe(100);
+  expect(drafts.beginReview(submitted)).toBe(true);
+  expect(drafts.staged()).toHaveLength(100);
+  expect(drafts.personalSubmission()).toEqual(submitted);
+  expect(drafts.waitingCount).toBe(100);
+  expect(drafts.submission().edits.every((edit) => !edit.id.startsWith("new-"))).toBe(true);
 });

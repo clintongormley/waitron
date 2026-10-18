@@ -41,6 +41,7 @@ const suggestion = (
   id,
   kind: "product",
   itemId,
+  item: { name: `STAFF ${itemId}` },
   language: "es",
   text: `CLIENT-es ${itemId}`,
   placeholder: false,

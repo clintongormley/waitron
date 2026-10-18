@@ -1,5 +1,5 @@
 import type { ContentLanguages } from "@waitron/shared";
-import type { TranslationCellRef } from "./content-translation-types.js";
+import type { TranslationCellRef, TranslationItem } from "./content-translation-types.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
 
 export interface SuggestionResult {
@@ -60,6 +60,7 @@ export interface ContentSuggestionView {
   id: string;
   kind: TranslationGapKind;
   itemId: string;
+  item: Pick<TranslationItem, "name" | "parent">;
   language: string | null;
   text: string | null;
   placeholder: boolean;

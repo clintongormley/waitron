@@ -650,3 +650,216 @@ for (const locale of ["en-GB", "es-ES"] as const) {
     );
   }
 }
+
+describe("explicit review of an uncertain batch", () => {
+  it("keeps Retry frozen until an explicit review and requires every submitted field choice", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockImplementation(async (batch) => ({
+        saved: batch.edits.map((edit: TranslationCell) => ({
+          ...cell(edit.id, edit.language, edit.text),
+          expected: "saved",
+        })),
+      }));
+    const { el } = await mount({ saveContentTranslations: save });
+    await edit(el, "Mi borrador");
+    await edit(el, "Mon brouillon", "001", "fr");
+    button(el, "save").click();
+    await vi.waitFor(() => expect(input(el)?.disabled).toBe(true));
+    const frozen = JSON.stringify(save.mock.calls[0]![0]);
+    expect(button(el, "review-batch")).toBeTruthy();
+    button(el, "review-batch").click();
+    await vi.waitFor(() => expect(review(el)).toBeTruthy());
+    expect(review(el, "fr")).toBeTruthy();
+    expect(review(el)!.textContent).not.toContain(t("translations.changed"));
+    expect(button(el, "save").disabled).toBe(true);
+    expect(input(el)?.disabled).toBe(true);
+    expect(save).toHaveBeenCalledOnce();
+    expect(JSON.stringify(save.mock.calls[0]![0])).toBe(frozen);
+    await choose(el, "keep");
+    expect(review(el)).toBeNull();
+    expect(review(el, "fr")).toBeTruthy();
+    expect(button(el, "save").disabled).toBe(true);
+    await choose(el, "discard", "fr");
+    expect(button(el, "save").disabled).toBe(false);
+    expect(input(el)?.disabled).toBe(false);
+    button(el, "save").click();
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1]![0]).toEqual({
+      edits: [
+        {
+          kind: "product",
+          id: "001",
+          language: "es",
+          field: "name",
+          expected: "v1-001-es",
+          text: "Mi borrador",
+        },
+      ],
+    });
+  });
+  it("keeps the exact retry available when the explicit review read fails", async () => {
+    let fail = false;
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockResolvedValue({ saved: [cell("001", "es", "Sopa")] });
+    const { el, api } = await mount({
+      saveContentTranslations: save,
+      getContentTranslationCells: vi.fn(async () => {
+        if (fail) throw { code: "connection.failed" };
+        return { ...result(), cells: [cell("001")] };
+      }),
+    });
+    await edit(el, "Sopa");
+    button(el, "save").click();
+    await vi.waitFor(() => expect(input(el)?.disabled).toBe(true));
+    const submitted = save.mock.calls[0]![0];
+    fail = true;
+    expect(button(el, "review-batch")).toBeTruthy();
+    button(el, "review-batch").click();
+    await vi.waitFor(() => expect(api.getContentTranslationCells).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(button(el, "save").disabled).toBe(false));
+    expect(input(el)?.disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-test=read-error]")).toBeTruthy();
+    button(el, "save").click();
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(save.mock.calls[1]![0]).toBe(submitted);
+  });
+});
+
+it.each(["committed", "owner", "disabled", "removed"])(
+  "reviews a %s uncertain cell without silently accepting new evidence",
+  async (mode) => {
+    let changed = false;
+    const fresh = (language: string): TranslationCell => ({
+      ...cell(
+        "001",
+        language,
+        changed ? (language === "es" && mode === "committed" ? "Mine" : "Current") : "Before",
+      ),
+      expected: changed ? `latest-${language}` : `old-${language}`,
+      ...(changed && language === "es" && mode === "owner"
+        ? { owners: { kind: "variant" as const, parentId: "replacement" } }
+        : {}),
+      ...(changed && language === "es" && (mode === "disabled" || mode === "removed")
+        ? {
+            eligible: false,
+            unavailableReason:
+              mode === "disabled" ? ("language_disabled" as const) : ("missing" as const),
+          }
+        : {}),
+    });
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockImplementation(async (batch) => ({
+        saved: batch.edits.map((edit: TranslationCell) => ({ ...fresh(edit.language), ...edit })),
+      }));
+    const { el, api } = await mount({
+      getContentTranslationTargets: vi.fn(async () =>
+        result([{ ...row("001"), cells: [fresh("es"), fresh("fr")] }]),
+      ),
+      getContentTranslationCells: vi.fn(async (refs: readonly TranslationCellRef[]) => ({
+        config:
+          changed && mode === "disabled"
+            ? { defaultLanguage: "en", languages: ["en", "fr"] }
+            : config,
+        required: [],
+        configuration: "configuration-one",
+        cells: refs.map((ref) => fresh(ref.language)),
+      })),
+      saveContentTranslations: save,
+    });
+    await edit(el, "Mine");
+    await edit(el, "", "001", "fr");
+    button(el, "save").click();
+    await vi.waitFor(() => expect(input(el)?.disabled).toBe(true));
+    changed = true;
+    button(el, "review-batch").click();
+    await vi.waitFor(() => expect(review(el)?.textContent).toContain("Mine"));
+    expect(review(el)?.textContent).toContain("Before");
+    expect(review(el, "fr")?.textContent).toContain("Current");
+    expect(button(el, "save").disabled).toBe(true);
+    const keep =
+      review(el)!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-choice=keep]")!;
+    expect(keep.disabled).toBe(mode !== "committed");
+    if (mode === "committed") await choose(el, "keep");
+    else await choose(el, "replace");
+    expect(review(el)).toBeNull();
+    expect(button(el, "save").disabled).toBe(true);
+    await choose(el, "keep", "fr");
+    expect(input(el, "001", "fr")?.value).toBe("");
+    expect(button(el, "save").disabled).toBe(false);
+    button(el, "save").click();
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1]![0]).toEqual({
+      edits: [
+        {
+          kind: "product",
+          id: "001",
+          language: "fr",
+          field: "name",
+          expected: "latest-fr",
+          text: null,
+        },
+      ],
+    });
+  },
+);
+
+it.each(["success", "failure"])(
+  "keeps a reopened uncertain batch after an older review's %s",
+  async (outcome) => {
+    const held = deferred<{
+      config: typeof config;
+      required: string[];
+      configuration: string;
+      cells: TranslationCell[];
+    }>();
+    const save = vi.fn().mockRejectedValue({ code: "connection.failed" });
+    const { el, api } = await mount({
+      saveContentTranslations: save,
+      getContentTranslationCells: vi.fn(() => held.promise),
+    });
+    await edit(el, "Old draft");
+    button(el, "save").click();
+    await vi.waitFor(() => expect(input(el)?.disabled).toBe(true));
+    button(el, "review-batch").click();
+    await vi.waitFor(() => expect(api.getContentTranslationCells).toHaveBeenCalledOnce());
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=loading]")).toBeNull());
+    await edit(el, "New draft");
+    button(el, "save").click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(input(el)?.disabled).toBe(true));
+    const current = save.mock.calls[1]![0];
+    if (outcome === "success")
+      held.resolve({
+        config,
+        required: [],
+        configuration: "configuration-one",
+        cells: [cell("001")],
+      });
+    else held.reject({ code: "connection.failed" });
+    await held.promise.catch(() => undefined);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await el.updateComplete;
+    await windowFor(el).updateComplete;
+    expect(input(el)?.value).toBe("New draft");
+    expect(review(el)).toBeNull();
+    expect(button(el, "save").textContent).toContain(t("translations.retry_batch"));
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toContain(
+      t("translations.uncertain"),
+    );
+    button(el, "save").click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+    expect(save.mock.calls[2]![0]).toBe(current);
+  },
+);

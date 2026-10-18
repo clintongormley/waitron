@@ -360,13 +360,21 @@ export async function listContentSuggestions(
     if (row.text !== null && !config.languages.includes(row.language!)) continue;
     const item = live.get(keyOf(row));
     if (!item) continue;
-    const target =
-      row.language === null ? null : resolveTranslationRow(item.row, row.language, settings).target;
+    const resolved = resolveTranslationRow(
+      item.row,
+      row.language ?? config.defaultLanguage,
+      settings,
+    ).target;
+    const target = row.language === null ? null : resolved;
     const languageFix = row.fixField !== null && row.fixField !== "internal";
     suggestions.push({
       id: row.id,
       kind: row.kind,
       itemId: row.itemId,
+      item: {
+        name: resolved.name,
+        ...(resolved.parent ? { parent: resolved.parent } : {}),
+      },
       language: row.language,
       text: row.text,
       placeholder: row.placeholder,

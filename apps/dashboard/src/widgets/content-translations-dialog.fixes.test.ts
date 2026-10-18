@@ -42,6 +42,7 @@ const suggestion = (overrides: Partial<ContentSuggestionView> = {}): ContentSugg
   id: "s1",
   kind: "product",
   itemId: "one",
+  item: { name: "STAFF croquette" },
   language: "es",
   text: null,
   placeholder: false,
@@ -570,6 +571,7 @@ it("stages an inherited spelling fix only on its inclusion", async () => {
   const view = suggestion({
     kind: "included_menu",
     itemId: "membership",
+    item: { name: "STAFF folder", parent: { id: "parent-menu", name: "Parent menu" } },
     cell: { kind: "included_menu", id: "membership", language: "es", field: "name" },
   });
   const { el, api } = await mount([view], {
@@ -787,4 +789,88 @@ it("rechecks the displayed suggestion page without returning to the first page",
   expect(api.getContentSuggestions).toHaveBeenCalledTimes(3);
   expect(field(el).value).toBe("Croqueta");
   expect(api.saveContentTranslations).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["product", "/manage/catalogue/product/off-page"],
+  ["variant", "/manage/catalogue/product/off-page"],
+  ["option_list", "/manage/modifiers/view/options/list/off-page"],
+  ["option_label", "/manage/modifiers/view/options/list/owner%20id"],
+  ["extra_list", "/manage/modifiers/view/extras/list/off-page"],
+  ["menu", "/manage/menus/menu/owner%20id/view/structure"],
+  ["section", "/manage/menus/menu/owner%20id/view/structure"],
+  ["included_menu", "/manage/menus/menu/owner%20id/view/structure"],
+  ["unit", "/manage/units"],
+] as const)(
+  "keeps a %s note's exact editor link when its item is off the current page",
+  async (kind, href) => {
+    const { el, api } = await mount([
+      suggestion({
+        kind,
+        itemId: "off-page",
+        language: null,
+        cell: null,
+        fix: null,
+        placeholder: true,
+        item: { name: "STAFF off-page", parent: { id: "owner id", name: "STAFF owner" } },
+      }),
+    ]);
+    const notes = panel(el)!;
+    expect(notes.getAttribute("aria-label")).toBe("STAFF off-page");
+    expect(notes.querySelector("a")?.getAttribute("href")).toBe(href);
+    expect(notes.textContent).toContain(t("suggestions.placeholder"));
+    expect(api.getContentTranslationTargets).toHaveBeenCalledOnce();
+    expect(api.getContentTranslationCells).not.toHaveBeenCalled();
+    expect(api.saveContentTranslations).not.toHaveBeenCalled();
+    if (kind === "product" || kind === "variant") {
+      const opened = vi.fn();
+      el.addEventListener("wt-edit-product", opened);
+      notes
+        .querySelector("a")!
+        .dispatchEvent(
+          new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+        );
+      await vi.waitFor(() => expect(opened).toHaveBeenCalledOnce());
+      expect(opened.mock.calls[0]![0].detail).toEqual({ productId: "off-page" });
+    }
+  },
+);
+
+it("uses the suggestion page's current parent editor instead of an older projected row", async () => {
+  const { el } = await mount(
+    [
+      suggestion({
+        kind: "option_label",
+        itemId: "one",
+        language: null,
+        cell: null,
+        fix: null,
+        placeholder: true,
+        item: { name: "STAFF renamed", parent: { id: "current-list", name: "Current list" } },
+      }),
+    ],
+    {
+      getContentTranslationTargets: vi.fn(async () => ({
+        config,
+        required: [],
+        configuration: "config-one",
+        total: 1,
+        next: null,
+        rows: [
+          {
+            kind: "option_label",
+            id: "one",
+            name: "STAFF old",
+            parent: { id: "old-list", name: "Old list" },
+            owners: { kind: "option_label", listId: "old-list" },
+            cells: [],
+          },
+        ],
+      })),
+    },
+  );
+  expect(panel(el)!.getAttribute("aria-label")).toBe("STAFF renamed");
+  expect(panel(el)!.querySelector("a")!.getAttribute("href")).toBe(
+    "/manage/modifiers/view/options/list/current-list",
+  );
 });

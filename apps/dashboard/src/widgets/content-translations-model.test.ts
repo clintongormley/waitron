@@ -713,6 +713,7 @@ it("indexes each item's suggestions for the page language, its default and its n
     id: "s",
     kind: "product",
     itemId: "one",
+    item: { name: "one" },
     language: null,
     text: null,
     placeholder: false,
