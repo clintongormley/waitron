@@ -36,7 +36,7 @@ export interface LiveTable {
   mergedWithHeld: boolean;
   /** It is in a split group, a joined table and the parts split off it today, one of whose members waits or has food on its way. */
   splitWithBusy: boolean;
-  /** It needs clearing, so it waits as a held table does, but is never seeded (spec decision 10). */
+  /** It needs clearing, so it waits as a held table does, and is seeded as one is (spec decision 10). */
   clearing: boolean;
   /** It is in a joined group of the reset, a joined table and its parts, with a waiting member (plan decision 8). */
   joinedWithWaiting: boolean;
@@ -45,7 +45,7 @@ export interface LiveTable {
 export interface ResetPlan {
   /** `label` null: keep the current name, the target's is still in use. */
   apply: { target: Target; label: string | null }[];
-  /** Held tables with no today's row: today's row from the target, name kept; the target stays pending. */
+  /** Held tables, or ones needing clearing, with no today's row: today's row from the target, name kept; the target stays pending. */
   seed: Target[];
   /** Tables to create, whose names are free. */
   create: Target[];
@@ -93,7 +93,7 @@ export function planReset(input: {
         table.joinedWithWaiting)
     ) {
       plan.pending.push(target);
-      if (table.held && !table.hasToday) plan.seed.push(target);
+      if ((table.held || table.clearing) && !table.hasToday) plan.seed.push(target);
       fixedInUse.add(table.label);
     } else if (target.remove) {
       if (!table) continue;

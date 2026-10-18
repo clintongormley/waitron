@@ -1068,6 +1068,18 @@ describe("the reset waiting rules", () => {
     expect((await tableRow(v, tableId)).needsClearingSince).toBe(MARKED);
   });
 
+  it("a table needing clearing with no today's row gets one at Reset to saved plan, as a held one does", async () => {
+    const { zoneId, tableId } = await plannedTable(fresh("Unrowed"));
+    await reset(zoneId);
+    await inTx(v, (tx) => tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)));
+    await markNeedsClearing(tableId);
+
+    await reset(zoneId);
+
+    expect(await todayRow(tableId)).toMatchObject({ x: 0, takenOff: false });
+    expect(await resetRowOf(tableId)).toEqual({ pending: true, placed: false });
+  });
+
   it("the zone reset no longer clears needs clearing on split-off tables it takes back", async () => {
     const zoneId = await zone();
     const [long, c3, c4] = [fresh("Long"), fresh("Counter 3"), fresh("Counter 4")];

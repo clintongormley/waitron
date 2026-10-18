@@ -68,6 +68,17 @@ describe("planReset", () => {
     expect(plan.seed).toEqual([]);
   });
 
+  it("seeds a table that needs clearing and has no today's row, keeping its name, as a held one", () => {
+    const plan = planReset({
+      targets: [t("a", "Patio 1")],
+      live: [l("a", "T1", { clearing: true, hasToday: false })],
+      takenElsewhere: none,
+    });
+    expect(plan.seed).toEqual([t("a", "Patio 1")]);
+    expect(plan.pending).toEqual([t("a", "Patio 1")]);
+    expect(plan.apply).toEqual([]);
+  });
+
   it("a joined group waits whole", () => {
     const plan = planReset({
       targets: [t("a", "4"), t("b", "5"), t("c", "4+5")],
