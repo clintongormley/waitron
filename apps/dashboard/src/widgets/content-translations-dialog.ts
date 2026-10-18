@@ -1,9 +1,10 @@
+import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { ContentSuggestionView } from "@waitron/catalogue/src/content-suggestion-types.js";
 import { languageDisplayName, type ContentLanguages } from "@waitron/shared";
-import { QueryController } from "@waitron/dashboard-kit";
+import { QueryController, tableNoMatches } from "@waitron/dashboard-kit";
 import {
   baseStyles,
   draftScopeFor,
@@ -50,6 +51,10 @@ function sameRun(a: SuggestionRunView | null, b: SuggestionRunView | null): bool
 
 @customElement("dashboard-content-translations-dialog")
 export class ContentTranslationsDialog extends LitElement {
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
   static override styles = [
     baseStyles,
     css`
@@ -286,7 +291,13 @@ export class ContentTranslationsDialog extends LitElement {
             first = false;
             return;
           }
-          await reader.refresh();
+          const sequence = ++this.#readSequence;
+          try {
+            await reader.refresh();
+          } finally {
+            if (generation === this.#generation && sequence === this.#readSequence)
+              this.reading = false;
+          }
         },
       },
       () => {
@@ -963,7 +974,7 @@ export class ContentTranslationsDialog extends LitElement {
                 }}
               ></dashboard-content-translation-window>
               ${this.#reviews()} ${this.#suggestionNotes()}
-              ${reader.page?.rows.length === 0 ? html`<p data-test="complete">${fill("content_gaps.complete", { language: languageDisplayName(this.language, currentLocale(), false) })}</p>` : nothing}
+              ${reader.page?.rows.length === 0 ? html`<p data-test="complete">${this.search.trim() || this.kind || this.staged || !config.languages.includes(this.missing) ? tableNoMatches() : fill("content_gaps.complete", { language: languageDisplayName(this.missing, currentLocale(), false) })}</p>` : nothing}
               <div class="pages">
                 <wt-button
                   data-test="previous"

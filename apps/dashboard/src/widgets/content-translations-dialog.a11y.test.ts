@@ -73,166 +73,160 @@ const field = (el: ContentTranslationsDialog, language = "es") =>
 const button = (el: ContentTranslationsDialog, action: string) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test=${action}]`)!;
 
+const states = [
+  "loading",
+  "empty",
+  "ready",
+  "invalid",
+  "refused",
+  "conflict",
+  "unavailable",
+  "review",
+  "uncertain",
+  "batch-review",
+] as const;
 describe.each(["light", "dark"] as const)("translation dialog accessibility (%s)", (theme) => {
-  it.each([390, 1280])(
-    "renders all staged states in both languages at measured %i px",
-    async (width) => {
-      await page.viewport(width, 700);
-      expect(window.innerWidth).toBe(width);
-      for (const locale of ["en-GB", "es-ES"]) {
-        setLocale(locale);
-        for (const state of [
-          "loading",
-          "empty",
-          "ready",
-          "invalid",
-          "refused",
-          "conflict",
-          "unavailable",
-          "review",
-          "uncertain",
-          "batch-review",
-        ] as const) {
-          cleanupWidgets();
-          const api = {
-            getContentTranslationTargets: vi.fn(
-              state === "loading"
-                ? () => new Promise<TranslationItemPage>(() => {})
-                : async () =>
-                    result(
-                      state === "empty"
-                        ? []
-                        : [
-                            {
-                              ...row(),
-                              cells: row().cells.map((value) => ({
-                                ...value,
-                                ...(state === "unavailable"
-                                  ? { eligible: false, unavailableReason: "inactive" as const }
-                                  : {}),
-                              })),
-                            },
-                          ],
-                    ),
-            ),
-            getContentTranslationCells: vi.fn(async (refs: readonly TranslationCellRef[]) => ({
-              ...result(),
-              cells: refs.map((ref) => ({ ...cell(ref.id, ref.language), ...ref })),
-            })),
-            saveContentTranslations: vi.fn().mockRejectedValue(
-              state === "conflict"
-                ? { code: "content.translation_stale" }
-                : state === "uncertain" || state === "batch-review"
-                  ? { code: "connection.failed" }
-                  : {
-                      code: "content.translation_refused",
-                      params: {
-                        kind: "product",
-                        id: "one",
-                        field: "name",
-                        language: "es",
-                        causeCode: "product.invalid",
+  it.each(
+    [390, 1280].flatMap((width) =>
+      ["en-GB", "es-ES"].flatMap((locale) => states.map((state) => ({ width, locale, state }))),
+    ),
+  )("renders $state in $locale at measured $width px", async ({ width, locale, state }) => {
+    await page.viewport(width, 700);
+    expect(window.innerWidth).toBe(width);
+    setLocale(locale);
+    cleanupWidgets();
+    const api = {
+      getContentTranslationTargets: vi.fn(
+        state === "loading"
+          ? () => new Promise<TranslationItemPage>(() => {})
+          : async () =>
+              result(
+                state === "empty"
+                  ? []
+                  : [
+                      {
+                        ...row(),
+                        cells: row().cells.map((value) => ({
+                          ...value,
+                          ...(state === "unavailable"
+                            ? { eligible: false, unavailableReason: "inactive" as const }
+                            : {}),
+                        })),
                       },
-                    },
-            ),
-            getContentSuggestions: vi.fn(async () => suggestions()),
-          };
-          const { el, host } = await mountWidget<ContentTranslationsDialog>(
-            "dashboard-content-translations-dialog",
-            { api: api as unknown as DashboardApi, config, language: "es", open: true },
-            theme,
+                    ],
+              ),
+      ),
+      getContentTranslationCells: vi.fn(async (refs: readonly TranslationCellRef[]) => ({
+        ...result(),
+        cells: refs.map((ref) => ({ ...cell(ref.id, ref.language), ...ref })),
+      })),
+      saveContentTranslations: vi.fn().mockRejectedValue(
+        state === "conflict"
+          ? { code: "content.translation_stale" }
+          : state === "uncertain" || state === "batch-review"
+            ? { code: "connection.failed" }
+            : {
+                code: "content.translation_refused",
+                params: {
+                  kind: "product",
+                  id: "one",
+                  field: "name",
+                  language: "es",
+                  causeCode: "product.invalid",
+                },
+              },
+      ),
+      getContentSuggestions: vi.fn(async () => suggestions()),
+    };
+    const { el, host } = await mountWidget<ContentTranslationsDialog>(
+      "dashboard-content-translations-dialog",
+      { api: api as unknown as DashboardApi, config, language: "es", open: true },
+      theme,
+    );
+    if (state !== "loading")
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=loading]")).toBeNull(),
+      );
+    await el.updateComplete;
+    const view = windowFor(el);
+    await view?.updateComplete;
+    if (["invalid", "refused", "conflict", "review", "uncertain", "batch-review"].includes(state)) {
+      const input = field(el);
+      await input.updateComplete;
+      await userEvent.fill(
+        input.shadowRoot!.querySelector("input")!,
+        state === "invalid" ? "é".repeat(2049) : "Croquetas de jamón",
+      );
+      await el.updateComplete;
+      await view.updateComplete;
+      expect(field(el, "en").shadowRoot!.querySelector("input")!.value).toBe("");
+      if (state === "review") {
+        api.getContentTranslationCells.mockImplementation(async (refs) => ({
+          ...result(),
+          cells: refs.map((ref) => ({
+            ...cell(ref.id, ref.language),
+            ...ref,
+            text: "Current long name",
+            effectiveText: "Current long name",
+            expected: "current",
+          })),
+        }));
+        button(el, "review").click();
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("[data-review]")).not.toBeNull(),
+        );
+      } else {
+        button(el, "save").click();
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe(""),
+        );
+        await vi.waitFor(() => expect(button(el, "close").disabled).toBe(false));
+        if (state === "invalid") {
+          expect(field(el).error).toBe(t("translations.name_bytes"));
+          expect(api.saveContentTranslations).not.toHaveBeenCalled();
+        }
+        if (state === "batch-review") {
+          button(el, "review-batch").click();
+          await vi.waitFor(() =>
+            expect(el.shadowRoot!.querySelector("[data-review]")).not.toBeNull(),
           );
-          if (state !== "loading")
-            await vi.waitFor(() =>
-              expect(el.shadowRoot!.querySelector("[data-test=loading]")).toBeNull(),
-            );
-          await el.updateComplete;
-          const view = windowFor(el);
-          await view?.updateComplete;
-          if (
-            ["invalid", "refused", "conflict", "review", "uncertain", "batch-review"].includes(
-              state,
-            )
-          ) {
-            const input = field(el);
-            await input.updateComplete;
-            await userEvent.fill(
-              input.shadowRoot!.querySelector("input")!,
-              state === "invalid" ? "é".repeat(2049) : "Croquetas de jamón",
-            );
-            await el.updateComplete;
-            await view.updateComplete;
-            expect(field(el, "en").shadowRoot!.querySelector("input")!.value).toBe("");
-            if (state === "review") {
-              api.getContentTranslationCells.mockImplementation(async (refs) => ({
-                ...result(),
-                cells: refs.map((ref) => ({
-                  ...cell(ref.id, ref.language),
-                  ...ref,
-                  text: "Current long name",
-                  effectiveText: "Current long name",
-                  expected: "current",
-                })),
-              }));
-              button(el, "review").click();
-              await vi.waitFor(() =>
-                expect(el.shadowRoot!.querySelector("[data-review]")).not.toBeNull(),
-              );
-            } else {
-              button(el, "save").click();
-              await vi.waitFor(() =>
-                expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe(""),
-              );
-              await vi.waitFor(() => expect(button(el, "close").disabled).toBe(false));
-              if (state === "invalid") {
-                expect(field(el).error).toBe(t("translations.name_bytes"));
-                expect(api.saveContentTranslations).not.toHaveBeenCalled();
-              }
-              if (state === "batch-review") {
-                button(el, "review-batch").click();
-                await vi.waitFor(() =>
-                  expect(el.shadowRoot!.querySelector("[data-review]")).not.toBeNull(),
-                );
-                expect(button(el, "save").disabled).toBe(true);
-              }
-            }
-          }
-          const modal = el.shadowRoot!.querySelector("wt-modal")!;
-          await modal.updateComplete;
-          const native = modal.shadowRoot!.querySelector("dialog")!;
-          expect(native.open).toBe(true);
-          expect(native.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-          const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
-          expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
-          const bodyBounds = body.getBoundingClientRect();
-          for (const input of view?.shadowRoot?.querySelectorAll("wt-input") ?? []) {
-            expect(input.getBoundingClientRect().left).toBeGreaterThanOrEqual(bodyBounds.left);
-            expect(input.getBoundingClientRect().right).toBeLessThanOrEqual(bodyBounds.right);
-          }
-          if (state === "review" || state === "batch-review") {
-            const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review]")!;
-            review.scrollIntoView({ block: "center" });
-            for (const action of review.querySelectorAll("wt-button")) {
-              expect(action.getBoundingClientRect().left).toBeGreaterThanOrEqual(bodyBounds.left);
-              expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(bodyBounds.right);
-            }
-          }
-          if (state === "uncertain") {
-            const review = button(el, "review-batch");
-            await review.updateComplete;
-            expect(
-              review.shadowRoot!.querySelector("button")!.getBoundingClientRect().width,
-            ).toBeGreaterThan(0);
-          }
-          await expectNoA11yViolations(host);
-          await page.screenshot({
-            element: native,
-            path: `__screenshots__/look/a682-editor-${locale}-${theme}-${width}-${state}.png`,
-          });
+          expect(button(el, "save").disabled).toBe(true);
         }
       }
-    },
-  );
+    }
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    const native = modal.shadowRoot!.querySelector("dialog")!;
+    expect(native.open).toBe(true);
+    expect(native.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
+    const bodyBounds = body.getBoundingClientRect();
+    for (const input of view?.shadowRoot?.querySelectorAll("wt-input") ?? []) {
+      expect(input.getBoundingClientRect().left).toBeGreaterThanOrEqual(bodyBounds.left);
+      expect(input.getBoundingClientRect().right).toBeLessThanOrEqual(bodyBounds.right);
+    }
+    if (state === "review" || state === "batch-review") {
+      const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review]")!;
+      review.scrollIntoView({ block: "center" });
+      for (const action of review.querySelectorAll("wt-button")) {
+        expect(action.getBoundingClientRect().left).toBeGreaterThanOrEqual(bodyBounds.left);
+        expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(bodyBounds.right);
+      }
+    }
+    if (state === "uncertain") {
+      const review = button(el, "review-batch");
+      await review.updateComplete;
+      expect(
+        review.shadowRoot!.querySelector("button")!.getBoundingClientRect().width,
+      ).toBeGreaterThan(0);
+    }
+    await expectNoA11yViolations(host);
+    await page.screenshot({
+      element: native,
+      path: `__screenshots__/look/a682-editor-${locale}-${theme}-${width}-${state}.png`,
+    });
+  });
 });
 
 const note = (overrides: Partial<ContentSuggestionView>): ContentSuggestionView => ({

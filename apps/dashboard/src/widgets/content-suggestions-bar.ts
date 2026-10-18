@@ -1,3 +1,4 @@
+import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, formMessage, formMessageStyles } from "@waitron/ui";
@@ -14,6 +15,10 @@ export function runActive(run: SuggestionRunView | null): boolean {
 
 @customElement("dashboard-content-suggestions-bar")
 export class ContentSuggestionsBar extends LitElement {
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
   static override styles = [
     baseStyles,
     formMessageStyles,

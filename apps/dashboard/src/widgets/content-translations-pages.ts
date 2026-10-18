@@ -260,7 +260,17 @@ export class TranslationPages {
       await this.#readItems(this.#position - 1);
   }
   async refresh(): Promise<void> {
-    if (this.#active) await this.#readItems(this.#position);
+    if (!this.#active) return;
+    const sequence = this.#itemSequence + 1;
+    await this.#readItems(this.#position);
+    if (
+      this.#active &&
+      sequence === this.#itemSequence &&
+      !this.readError &&
+      this.page?.rows.length === 0 &&
+      this.#position > 0
+    )
+      await this.#readItems(0);
   }
   async #readItems(position: number): Promise<void> {
     this.#ready = false;

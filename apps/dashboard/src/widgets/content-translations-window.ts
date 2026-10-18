@@ -1,3 +1,4 @@
+import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
@@ -65,6 +66,10 @@ export interface TranslationWindowChange {
 
 @customElement("dashboard-content-translation-window")
 export class ContentTranslationWindow extends LitElement {
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
   static override styles = [
     baseStyles,
     css`
@@ -238,7 +243,7 @@ export class ContentTranslationWindow extends LitElement {
           <p class="name">${row.parent ? `${row.parent.name} › ${row.name}` : row.name}</p>
           <a
             href=${translationEditorHref(row)}
-            aria-label=${fill("content_gaps.open_named", { name: row.name })}
+            aria-label=${fill("content_gaps.open_named", { name: row.parent && row.parent.name !== row.name ? `${row.parent.name} › ${row.name}` : row.name })}
             @click=${(event: MouseEvent) => {
               if ((row.kind !== "product" && row.kind !== "variant") || leftToBrowser(event))
                 return;
@@ -280,6 +285,7 @@ export class ContentTranslationWindow extends LitElement {
                           @focusout=${() => this.#blur()}
                           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(cell, event)}
                         ></wt-input>
+                        ${!cell.eligible ? html`<p data-unavailable=${key}>${t("translations.unavailable")}</p>` : nothing}
                         ${
                           staged.has(key)
                             ? html`<wt-button

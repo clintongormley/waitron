@@ -1160,8 +1160,14 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   fields, and rejects closed, superseded or configuration-mismatched answers. Show staged pages
   distinct items, and refreshed field placeholders share the model's current facts. Filters,
   explicit page navigation, optional unit fields, deliberate field unstaging and uncertain-batch
-  retry are wired through the editor. Its migrated leave and Translate all checks retain their
-  existing behavior. Changed retained fields now have separate original/current/draft review,
+  retry are wired through the editor. Its migrated leave, Translate all and standard dialog checks
+  use the multilingual page/cell contract. Field labels refresh with the UI language while retaining
+  the native input and selection; editor links retain parent context, and unavailable fields explain
+  why editing is blocked. A newer completed live read releases a delayed review's lock without
+  letting the delayed response release a newer review.
+  Empty filtered reads show the shared no-matches message. A current refresh that empties a later
+  page reads the first bounded page once; an older refresh cannot reset a newer page.
+  Changed retained fields now have separate original/current/draft review,
   with Keep restricted to an enabled language and an eligible target under the same owner.
   Replace and Discard remove only the chosen field. Local validation and exact field refusals
   reveal the staged page and language, then focus that native field. Suggestion panels
@@ -1177,8 +1183,9 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   Keep, Replace or Discard for each field before editing resumes. A failed review read keeps Retry
   available. Submitted fields take priority over newly arrived untouched suggestions at capacity.
   The original accessibility suite now exercises the multilingual editor and its retry/review
-  states in both languages and themes at phone and desktop widths. The original standard and draft
-  suites still need migration and validation. The client accepts projected multilingual
+  states in both languages and themes at phone and desktop widths, with one deadline per staged
+  state. The original draft suite still needs migration and validation. The client accepts projected
+  multilingual
   queries and one whole cell batch on the language-free routes; its legacy call signatures and
   public DTOs remain to be retired with the remaining editor tests and consumers. Regional
   completeness notes wrap in full, with the row actions reachable at phone and desktop widths.

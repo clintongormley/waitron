@@ -145,6 +145,63 @@ describe("bounded multilingual translation reads", () => {
     expect(api.suggestions).toHaveBeenCalledTimes(1);
   });
 
+  it("returns to the first bounded page when a refresh empties a later page", async () => {
+    const { reader, api } = setup();
+    api.items
+      .mockResolvedValueOnce(items([row("001")], cursor("001")))
+      .mockResolvedValueOnce(items([row("051")]))
+      .mockResolvedValueOnce(items([]))
+      .mockResolvedValueOnce(items([row("001")]));
+    await reader.open();
+    await reader.next();
+    await reader.refresh();
+    expect(api.items).toHaveBeenCalledTimes(4);
+    expect(api.items).toHaveBeenLastCalledWith({
+      languages: ["en", "es", "fr"],
+      missing: { mode: "language", language: "es" },
+    });
+    expect(reader.page?.rows.map((value) => value.id)).toEqual(["001"]);
+    expect(reader.position).toBe(0);
+    expect(reader.canPrevious).toBe(false);
+  });
+  it("does not let an older refresh reset a newer empty page", async () => {
+    const { reader, api } = setup(),
+      held = deferred<TranslationItemPage>();
+    const next = JSON.parse(cursor("100"));
+    next.filter.search = "new";
+    api.items
+      .mockResolvedValueOnce(items([row("001")], cursor("001")))
+      .mockResolvedValueOnce(items([row("051")]))
+      .mockReturnValueOnce(held.promise)
+      .mockResolvedValueOnce(items([row("100")], JSON.stringify(next)))
+      .mockResolvedValueOnce(items([]));
+    await reader.open();
+    await reader.next();
+    const pending = reader.refresh();
+    await reader.select({ search: "new" });
+    await reader.next();
+    held.resolve(items([]));
+    await pending;
+    expect(api.items).toHaveBeenCalledTimes(5);
+    expect(reader.position).toBe(1);
+    expect(reader.page?.rows).toEqual([]);
+    expect(reader.readError).toBeNull();
+  });
+  it("retains a failed later-page refresh for retry without requesting a fallback page", async () => {
+    const { reader, api } = setup();
+    api.items
+      .mockResolvedValueOnce(items([row("001")], cursor("001")))
+      .mockResolvedValueOnce(items([row("051")]))
+      .mockRejectedValueOnce(Error("offline"));
+    await reader.open();
+    await reader.next();
+    await reader.refresh();
+    expect(api.items).toHaveBeenCalledTimes(3);
+    expect(reader.position).toBe(1);
+    expect(reader.page?.rows.map((value) => value.id)).toEqual(["051"]);
+    expect(reader.readError).toEqual(Error("offline"));
+  });
+
   it("does not fetch next or previous when there is no available page", async () => {
     const { reader, api } = setup();
     await reader.open();

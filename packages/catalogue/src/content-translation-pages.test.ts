@@ -217,6 +217,52 @@ describe("multilingual item pages", () => {
     });
   });
 
+  it("preserves accent-insensitive multiword search on bounded pages, with trimmed queries and kind/id ordering", async () => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const ids = await fixture(tx);
+      await tx.update(products).set({ active: false }).where(eq(products.id, ids.product));
+      await tx.insert(units).values([
+        {
+          id: "search-1",
+          staffName: "Croquetas de jamón ibérico",
+          staffAbbreviation: "cr",
+          name: {},
+          abbreviation: {},
+          precision: 0,
+        },
+        {
+          id: "search-2",
+          staffName: "Jamón serrano",
+          staffAbbreviation: "js",
+          name: {},
+          abbreviation: {},
+          precision: 0,
+        },
+        {
+          id: "search-3",
+          staffName: "Pan",
+          staffAbbreviation: "p",
+          name: {},
+          abbreviation: {},
+          precision: 0,
+        },
+      ]);
+      for (const [search, expected] of [
+        ["IBERICO jamon", ["search-1"]],
+        ["jam", ["search-1", "search-2"]],
+        ["jam ", ["search-1", "search-2"]],
+        ["&", []],
+        ["   ", ["search-1", "search-2", "search-3"]],
+      ] as const) {
+        const page = await listTranslationItems(tx, query({ kind: "unit", search }), context);
+        expect(page.rows.map((row) => row.id)).toEqual(expected);
+        expect(page.total).toBe(expected.length);
+        expect(page.next).toBeNull();
+      }
+    });
+  });
+
   it("includes complete waiting-fix rows without changing discovery eligibility", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {

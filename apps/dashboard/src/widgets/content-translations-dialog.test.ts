@@ -1,86 +1,176 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
+import { registerIcons } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "../icons.js";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi, TranslationPage, TranslationTarget } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type {
+  TranslationCell,
+  TranslationCellRef,
+  TranslationCellEdit,
+  TranslationItem,
+  TranslationItemPage,
+  TranslationQuery,
+} from "@waitron/catalogue/src/content-translation-types.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import "./content-translations-dialog.js";
 import type { ContentTranslationsDialog } from "./content-translations-dialog.js";
 
-const target = (id = "one", overrides: Partial<TranslationTarget> = {}): TranslationTarget => ({
+registerIcons(DASHBOARD_ICONS);
+
+const config = { defaultLanguage: "en", languages: ["en", "es"] };
+const cell = (
+  id: string,
+  language = "es",
+  overrides: Partial<TranslationCell> = {},
+): TranslationCell => ({
+  kind: "product",
+  id,
+  language,
+  field: "name",
+  text: null,
+  owners: { kind: "product", parentId: null },
+  inheritedText: null,
+  effectiveText: null,
+  defaultText: null,
+  inheritedDefaultText: null,
+  effectiveDefaultText: null,
+  expected: `baseline-${id}-${language}`,
+  staffText: `STAFF ${id}`,
+  eligible: true,
+  unavailableReason: null,
+  ...overrides,
+});
+const target = (id = "one", overrides: Partial<TranslationItem> = {}): TranslationItem => ({
   kind: "product",
   id,
   name: `STAFF ${id}`,
-  reason: "absent",
-  selectedText: null,
-  defaultText: null,
-  effectiveSelectedText: null,
-  effectiveDefaultText: null,
-  defaultRequired: true,
-  eligible: true,
-  unavailableReason: null,
   owners: { kind: "product", parentId: null },
-  expected: `baseline-${id}`,
+  cells: config.languages.map((language) => cell(id, language)),
   ...overrides,
 });
-const result = (rows: TranslationTarget[], next: string | null = null): TranslationPage => ({
-  language: "es",
-  config: { defaultLanguage: "en", languages: ["en", "es"] },
+const result = (rows: TranslationItem[], next: string | null = null): TranslationItemPage => ({
+  config,
   required: [],
+  configuration: "configuration-one",
   rows,
   next,
   total: rows.length,
 });
-async function mount(rows = [target()], overrides: Record<string, unknown> = {}) {
+const accepted = async (batch: { edits: TranslationCellEdit[] }) => ({
+  saved: batch.edits.map((edit) =>
+    cell(edit.id, edit.language, {
+      ...edit,
+      text: edit.text,
+      effectiveText: edit.text,
+      expected: `saved-${edit.id}-${edit.language}`,
+    }),
+  ),
+});
+const suggestions = () => ({
+  config,
+  required: [],
+  configuration: "configuration-one",
+  waitingFixes: 0,
+  run: null,
+  suggestions: [],
+  next: null,
+  service: "not_connected" as const,
+  cloudOrigin: null,
+});
+const cursor = (id: string, query?: TranslationQuery) =>
+  JSON.stringify({
+    configuration: "configuration-one",
+    filter: {
+      languages: query?.languages ?? ["en", "es"],
+      missing: query && "missing" in query ? query.missing : { mode: "language", language: "es" },
+      kind: query && "kind" in query ? (query.kind ?? null) : null,
+      search: query && "search" in query ? (query.search?.trim() ?? "") : "",
+      waitingFixes: false,
+    },
+    last: { kind: "product", id },
+  });
+async function mount(
+  rows = [target()],
+  overrides: Record<string, unknown> = {},
+  theme?: "light" | "dark",
+) {
   const api = {
-    getContentSuggestions: vi.fn(async () => ({
-      config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+    getContentSuggestions: vi.fn(async () => suggestions()),
+    getContentTranslationTargets: vi.fn(async () => result(rows)),
+    getContentTranslationCells: vi.fn(async (refs: readonly TranslationCellRef[]) => ({
+      config,
       required: [],
-      configuration: "suggestion-config",
-      waitingFixes: 0,
-      run: null,
-      suggestions: [],
-      next: null,
-      service: "not_connected" as const,
-      cloudOrigin: null,
+      configuration: "configuration-one",
+      cells: refs.map(
+        (ref) =>
+          rows
+            .flatMap((row) => row.cells)
+            .find(
+              (c) =>
+                c.kind === ref.kind &&
+                c.id === ref.id &&
+                c.language === ref.language &&
+                c.field === ref.field,
+            ) ?? cell(ref.id, ref.language, ref),
+      ),
     })),
-    getContentTranslationTargets: vi.fn().mockResolvedValue(result(rows)),
-    saveContentTranslations: vi.fn().mockResolvedValue({ saved: rows }),
+    saveContentTranslations: vi.fn(accepted),
     ...overrides,
   } as unknown as DashboardApi;
   const mounted = await mountWidget<ContentTranslationsDialog>(
     "dashboard-content-translations-dialog",
-    { open: true, language: "es", api },
+    { open: true, language: "es", config, api },
+    theme,
   );
   await vi.waitFor(() => expect(q(mounted.el, "[data-test=loading]")).toBeNull());
-  await mounted.el.updateComplete;
+  await settled(mounted.el);
   return { ...mounted, api };
 }
+const windowFor = (el: ContentTranslationsDialog) =>
+  el.shadowRoot!.querySelector("dashboard-content-translation-window");
 const q = <T extends HTMLElement = HTMLElement>(
   el: ContentTranslationsDialog,
   selector: string,
 ): T | null =>
   el.shadowRoot!.querySelector<T>(selector) ??
-  el.shadowRoot!.querySelector("wt-data-table")?.shadowRoot?.querySelector<T>(selector) ??
+  windowFor(el)?.shadowRoot?.querySelector<T>(selector) ??
   null;
-const field = (el: ContentTranslationsDialog, id: string, name = "text") =>
-  q<HTMLElementTagNameMap["wt-input"]>(el, `[name="translation-${name}-product-${id}"]`)!;
-async function edit(el: ContentTranslationsDialog, id: string, text: string, name = "text") {
-  const control = field(el, id, name);
+const field = (el: ContentTranslationsDialog, id: string, language = "es", kind = "product") =>
+  q<HTMLElementTagNameMap["wt-input"]>(el, `[name="translation-${kind}-${id}-${language}-name"]`)!;
+async function settled(el: ContentTranslationsDialog) {
+  await el.updateComplete;
+  await windowFor(el)?.updateComplete;
+  await el.shadowRoot!.querySelector("dashboard-content-suggestions-bar")?.updateComplete;
+}
+async function edit(el: ContentTranslationsDialog, id: string, text: string, language = "es") {
+  const control = field(el, id, language);
   expect(control).not.toBeNull();
   control.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: text }, bubbles: true, composed: true }),
   );
-  await el.updateComplete;
-  await q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")?.updateComplete;
+  await settled(el);
 }
 const click = async (el: ContentTranslationsDialog, action: string) => {
   q(el, `[data-test=${action}]`)!.click();
-  await el.updateComplete;
-  await q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")?.updateComplete;
+  await settled(el);
 };
+async function select(el: ContentTranslationsDialog, name: string, value: string) {
+  await chooseOption(q<HTMLElementTagNameMap["wt-combobox"]>(el, `[name=${name}]`)!, value);
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
+  );
+  await settled(el);
+}
+const review = (el: ContentTranslationsDialog, id = "one", language = "es") =>
+  q(el, `[data-review='["product","${id}","${language}","name"]']`);
+async function decide(el: ContentTranslationsDialog, choice: string, id = "one") {
+  review(el, id)!.querySelector<HTMLElement>(`[data-choice=${choice}]`)!.click();
+  await settled(el);
+}
 afterEach(() => {
   cleanupWidgets();
   setLocale("es-ES");
@@ -95,26 +185,24 @@ describe("staged translation dialog", () => {
     async (locale, name, sentence) => {
       setLocale(locale);
       const language = "ca-ES-valencia";
+      const settings = { defaultLanguage: "en", languages: ["en", language] };
       const api = {
-        getContentSuggestions: vi.fn(async () => ({
-          config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
-          required: [],
-          configuration: "suggestion-config",
-          waitingFixes: 0,
-          run: null,
-          suggestions: [],
-          next: null,
-          service: "not_connected" as const,
-          cloudOrigin: null,
-        })),
-        getContentTranslationTargets: vi.fn().mockResolvedValue({ ...result([]), language }),
+        getContentTranslationTargets: vi.fn(async () => ({ ...result([]), config: settings })),
+        getContentSuggestions: vi.fn(async () => ({ ...suggestions(), config: settings })),
       } as unknown as DashboardApi;
       const { el } = await mountWidget<ContentTranslationsDialog>(
         "dashboard-content-translations-dialog",
-        { api, language, open: true },
+        { api, config: settings, language, open: true },
       );
       await vi.waitFor(() => expect(q(el, "[data-test=complete]")).not.toBeNull());
-      expect(q<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!.heading).toContain(name);
+      expect(q<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!.heading).toBe(
+        t("content_languages.edit_translations"),
+      );
+      expect(
+        q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="missing"]')!.options.find(
+          (o) => o.value === language,
+        )!.label,
+      ).toBe(name);
       expect(q(el, "[data-test=complete]")!.textContent!.trim()).toBe(sentence);
     },
   );
@@ -128,22 +216,12 @@ describe("staged translation dialog", () => {
     async (locale, language, sentence) => {
       setLocale(locale);
       const api = {
-        getContentSuggestions: vi.fn(async () => ({
-          config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
-          required: [],
-          configuration: "suggestion-config",
-          waitingFixes: 0,
-          run: null,
-          suggestions: [],
-          next: null,
-          service: "not_connected" as const,
-          cloudOrigin: null,
-        })),
-        getContentTranslationTargets: vi.fn().mockResolvedValue({ ...result([]), language }),
+        getContentTranslationTargets: vi.fn(async () => result([])),
+        getContentSuggestions: vi.fn(async () => suggestions()),
       } as unknown as DashboardApi;
       const { el } = await mountWidget<ContentTranslationsDialog>(
         "dashboard-content-translations-dialog",
-        { api, language, open: true },
+        { api, config, language, open: true },
       );
       await vi.waitFor(() => expect(q(el, "[data-test=complete]")).not.toBeNull());
       expect(q(el, "[data-test=complete]")!.textContent!.trim()).toBe(sentence);
@@ -151,164 +229,188 @@ describe("staged translation dialog", () => {
   );
   it("puts a name and a language tag holding a replacement pattern in as written", async () => {
     const { el } = await mount([target("one", { name: "Pan $&" })]);
-    const link = q(el, "wt-data-table")!.shadowRoot!.querySelector("tbody a")!;
-    expect(link.getAttribute("aria-label")).toBe(
+    expect(q<HTMLAnchorElement>(el, "a")!.getAttribute("aria-label")).toBe(
       t("content_gaps.open_named").split("{name}").join("Pan $&"),
     );
     cleanupWidgets();
-    const language = "x-$&";
+    const language = "x-$&",
+      settings = { defaultLanguage: "en", languages: ["en", language] };
     const api = {
-      getContentSuggestions: vi.fn(async () => ({
-        config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
-        required: [],
-        configuration: "suggestion-config",
-        waitingFixes: 0,
-        run: null,
-        suggestions: [],
-        next: null,
-        service: "not_connected" as const,
-        cloudOrigin: null,
-      })),
-      getContentTranslationTargets: vi.fn().mockResolvedValue({ ...result([]), language }),
+      getContentTranslationTargets: vi.fn(async () => ({ ...result([]), config: settings })),
+      getContentSuggestions: vi.fn(async () => ({ ...suggestions(), config: settings })),
     } as unknown as DashboardApi;
     const mounted = await mountWidget<ContentTranslationsDialog>(
       "dashboard-content-translations-dialog",
-      { api, language, open: true },
+      { api, config: settings, language, open: true },
     );
     await vi.waitFor(() => expect(q(mounted.el, "[data-test=complete]")).not.toBeNull());
     expect(q(mounted.el, "[data-test=complete]")!.textContent!.trim()).toBe(
       t("content_gaps.complete").split("{language}").join(language),
     );
   });
-  it("names language tags holding a replacement pattern as written in the table's label and the default-name hint", async () => {
-    const language = "x-$&";
-    const defaultLanguage = "y-$&";
+  it("names language tags holding a replacement pattern as written in both field labels without a required companion", async () => {
+    const language = "x-$&",
+      defaultLanguage = "y-$&",
+      settings = { defaultLanguage, languages: [defaultLanguage, language] };
     const api = {
-      getContentSuggestions: vi.fn(async () => ({
-        config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
-        required: [],
-        configuration: "suggestion-config",
-        waitingFixes: 0,
-        run: null,
-        suggestions: [],
-        next: null,
-        service: "not_connected" as const,
-        cloudOrigin: null,
+      getContentTranslationTargets: vi.fn(async () => ({
+        ...result([target("one", { cells: settings.languages.map((l) => cell("one", l)) })]),
+        config: settings,
       })),
-      getContentTranslationTargets: vi.fn().mockResolvedValue({
-        ...result([target()]),
-        language,
-        config: { defaultLanguage, languages: [defaultLanguage, language] },
-      }),
-      saveContentTranslations: vi.fn(),
+      getContentSuggestions: vi.fn(async () => ({ ...suggestions(), config: settings })),
     } as unknown as DashboardApi;
     const { el } = await mountWidget<ContentTranslationsDialog>(
       "dashboard-content-translations-dialog",
-      { api, language, open: true },
+      { api, config: settings, language, open: true },
     );
-    await vi.waitFor(() => expect(q(el, "wt-data-table")).not.toBeNull());
-    expect(q(el, "wt-data-table")!.getAttribute("aria-label")).toBe(
-      t("content_gaps.table").split("{language}").join(language),
-    );
-    await edit(el, "one", "Croqueta");
-    const hint = [
-      ...q(el, "wt-data-table")!.shadowRoot!.querySelectorAll('[part="translation-meta"]'),
-    ].find((node) => node.nextElementSibling === field(el, "one", "defaultText"));
-    expect(hint!.textContent!.trim()).toBe(
-      t("translations.default_needed").split("{language}").join(defaultLanguage),
-    );
+    await vi.waitFor(() => expect(field(el, "one", language)).not.toBeNull());
+    await settled(el);
+    expect(field(el, "one", language).label).toBe(language);
+    expect(field(el, "one", defaultLanguage).label).toBe(defaultLanguage);
+    expect(field(el, "one", defaultLanguage).required).toBe(false);
+    expect(field(el, "one", defaultLanguage).placeholder).toBe("STAFF one");
   });
-  it("reads every opening page through the passive client and saves through the active client", async () => {
+  it("reads one opening page through the passive client and saves through the active client", async () => {
     const passive = {
-      getContentSuggestions: vi.fn(async () => ({
-        config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
-        required: [],
-        configuration: "suggestion-config",
-        waitingFixes: 0,
-        run: null,
-        suggestions: [],
-        next: null,
-        service: "not_connected" as const,
-        cloudOrigin: null,
-      })),
-      getContentTranslationTargets: vi
-        .fn()
-        .mockResolvedValue(result([target("one", { defaultRequired: false })])),
+      getContentSuggestions: vi.fn(async () => suggestions()),
+      getContentTranslationTargets: vi.fn(async () => result([target()])),
     };
     const { el, api } = await mount([], { background: passive });
     expect(field(el, "one")).not.toBeNull();
     expect(api.getContentTranslationTargets).not.toHaveBeenCalled();
-    expect(passive.getContentTranslationTargets).toHaveBeenCalledExactlyOnceWith("es", {});
-    await vi.waitFor(() => expect(passive.getContentSuggestions).toHaveBeenCalledWith());
+    expect(passive.getContentTranslationTargets).toHaveBeenCalledExactlyOnceWith({
+      languages: ["en", "es"],
+      missing: { mode: "language", language: "es" },
+    });
+    expect(passive.getContentSuggestions).toHaveBeenCalledExactlyOnceWith({});
     expect(api.getContentSuggestions).not.toHaveBeenCalled();
     await edit(el, "one", "Croqueta");
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
-    expect(api.saveContentTranslations).toHaveBeenCalledWith("es", {
-      edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "Croqueta" }],
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
+      edits: [
+        {
+          kind: "product",
+          id: "one",
+          language: "es",
+          field: "name",
+          expected: "baseline-one-es",
+          text: "Croqueta",
+        },
+      ],
     });
   });
-  it("retains column objects on redraw and updates their labels for the UI language", async () => {
-    const { el } = await mount();
-    const table = q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!;
-    const columns = table.columns;
-    await edit(el, "one", "Croqueta");
-    expect(table.columns).toBe(columns);
-    setLocale("en-GB");
-    el.requestUpdate();
-    await el.updateComplete;
-    await table.updateComplete;
-    expect(table.columns[0]!.label).toBe("Name");
-    expect(q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="kind"]')!.options[1]!.label).toBe(
-      "Product",
-    );
-  });
-  it("keeps the 101st row readable but prevents starting it until an edit is undone", async () => {
-    const rows = Array.from({ length: 101 }, (_, n) =>
-      target(String(n), { defaultRequired: false }),
-    );
-    const { el, api } = await mount(rows);
-    for (let n = 0; n < 50; n++)
-      field(el, String(n)).dispatchEvent(
-        new CustomEvent("wt-change", {
-          detail: { value: "Nombre" },
-          bubbles: true,
-          composed: true,
-        }),
+  it.each([
+    ["light", 390],
+    ["dark", 390],
+    ["light", 1280],
+    ["dark", 1280],
+  ] as const)(
+    "retains native field, text and caret when UI labels change in %s at %s px",
+    async (theme, width) => {
+      await page.viewport(width, 900);
+      const { el, host } = await mount([target()], {}, theme);
+      const held = field(el, "one");
+      await edit(el, "one", "Croqueta");
+      await held.updateComplete;
+      const native = held.shadowRoot!.querySelector("input")!;
+      await userEvent.click(native);
+      native.setSelectionRange(3, 5);
+      for (const [locale, language, kind] of [
+        ["en-GB", "Spanish", "Product"],
+        ["es-ES", "Español", "Producto"],
+      ] as const) {
+        setLocale(locale);
+        await settled(el);
+        const bar = el.shadowRoot!.querySelector("dashboard-content-suggestions-bar")!;
+        expect(bar.shadowRoot!.textContent).toContain(t("suggestions.about"));
+        expect(
+          bar
+            .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+              "[data-test=translate-all]",
+            )!
+            .textContent!.trim(),
+        ).toBe(t("suggestions.translate_all"));
+        expect(window.innerWidth).toBe(width);
+        expect(field(el, "one")).toBe(held);
+        expect(held.shadowRoot!.querySelector("input")).toBe(native);
+        expect(held.shadowRoot!.activeElement).toBe(native);
+        expect([native.value, native.selectionStart, native.selectionEnd]).toEqual([
+          "Croqueta",
+          3,
+          5,
+        ]);
+        expect(held.label).toBe(language);
+        await held.updateComplete;
+        expect(held.shadowRoot!.textContent).toContain(language);
+        expect(
+          q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="kind"]')!.options[1]!.label,
+        ).toBe(kind);
+        const body = q<HTMLElementTagNameMap["wt-modal"]>(
+          el,
+          "wt-modal",
+        )!.shadowRoot!.querySelector<HTMLElement>(".body")!;
+        expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
+        expect(native.getBoundingClientRect().width).toBeGreaterThan(0);
+        await expectNoA11yViolations(host);
+        await page.screenshot({
+          path: `__screenshots__/look/a682-label-redraw-${locale}-${theme}-${width}.png`,
+        });
+      }
+    },
+  );
+  it("retains a 101st pending field but prevents Save until another edit is undone", async () => {
+    const rows = Array.from({ length: 101 }, (_, n) => target(String(n).padStart(3, "0")));
+    const read = vi.fn(async (query: TranslationQuery) => {
+      const start =
+        "after" in query && query.after ? Number(JSON.parse(query.after).last.id) + 1 : 0;
+      return result(
+        rows.slice(start, start + 50),
+        start + 50 < rows.length ? cursor(rows[start + 49]!.id, query) : null,
       );
-    await el.updateComplete;
+    });
+    const { el, api } = await mount(rows, { getContentTranslationTargets: read });
+    for (let n = 0; n < 50; n++) await edit(el, rows[n]!.id, "Nombre");
     await click(el, "next");
-    for (let n = 50; n < 100; n++)
-      field(el, String(n)).dispatchEvent(
-        new CustomEvent("wt-change", {
-          detail: { value: "Nombre" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    await el.updateComplete;
+    await vi.waitFor(() => expect(field(el, "050")).not.toBeNull());
+    for (let n = 50; n < 100; n++) await edit(el, rows[n]!.id, "Nombre");
     await click(el, "next");
-    expect(field(el, "100").disabled).toBe(true);
-    expect(q(el, "[data-test=edited-count]")!.textContent).toContain("100");
+    await vi.waitFor(() => expect(field(el, "100")).not.toBeNull());
+    expect(field(el, "100").disabled).toBe(false);
+    await edit(el, "100", "Último");
+    const saveButton = q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!;
+    await saveButton.updateComplete;
+    expect(saveButton.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    saveButton.shadowRoot!.querySelector("button")!.click();
+    expect(api.saveContentTranslations).not.toHaveBeenCalled();
+    expect(field(el, "100").value).toBe("Último");
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!.disabled).toBe(true);
+    expect(q(el, "[data-test=edited-count]")!.textContent).toContain("101");
     await click(el, "previous");
-    await edit(el, "99", "");
+    await vi.waitFor(() => expect(field(el, "099")).not.toBeNull());
+    await edit(el, "099", "");
     await click(el, "next");
+    await vi.waitFor(() => expect(field(el, "100")).not.toBeNull());
     expect(field(el, "100").disabled).toBe(false);
     await edit(el, "100", "Último");
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
-    const batch = vi.mocked(api.saveContentTranslations).mock.calls[0]![1];
+    const batch = vi.mocked(api.saveContentTranslations).mock.calls[0]![0] as unknown as {
+      edits: TranslationCellEdit[];
+    };
     expect(batch.edits).toHaveLength(100);
     expect(batch.edits.at(-1)).toEqual({
       kind: "product",
       id: "100",
-      expected: "baseline-100",
+      language: "es",
+      field: "name",
+      expected: "baseline-100-es",
       text: "Último",
     });
-    expect(batch.edits.some((row) => row.id === "99")).toBe(false);
+    expect(batch.edits.some((row) => row.id === "099")).toBe(false);
   });
   it("marks oversized UTF-8 names after submission and disables Save until corrected", async () => {
-    const { el, api } = await mount([target("one", { defaultRequired: false })]);
+    const { el, api } = await mount();
     await edit(el, "one", "é".repeat(2049));
     await click(el, "save");
     expect(field(el, "one").error).toBe(t("translations.name_bytes"));
@@ -321,16 +423,14 @@ describe("staged translation dialog", () => {
     await vi.waitFor(() => expect(el.open).toBe(false));
   });
   it("sends once while busy and submits a valid name with native Enter", async () => {
-    let finish!: (value: { saved: TranslationTarget[] }) => void;
+    let finish!: (value: { saved: TranslationCell[] }) => void;
     const save = vi.fn(
       () =>
-        new Promise<{ saved: TranslationTarget[] }>((resolve) => {
+        new Promise<{ saved: TranslationCell[] }>((resolve) => {
           finish = resolve;
         }),
     );
-    const { el } = await mount([target("one", { defaultRequired: false })], {
-      saveContentTranslations: save,
-    });
+    const { el } = await mount([target()], { saveContentTranslations: save });
     await edit(el, "one", "Croqueta");
     const input = field(el, "one").shadowRoot!.querySelector("input")!;
     await userEvent.click(input);
@@ -339,11 +439,15 @@ describe("staged translation dialog", () => {
     await click(el, "save");
     expect(save).toHaveBeenCalledOnce();
     expect(field(el, "one").disabled).toBe(true);
-    finish({ saved: [] });
+    finish({
+      saved: [
+        cell("one", "es", { text: "Croqueta", effectiveText: "Croqueta", expected: "saved" }),
+      ],
+    });
     await vi.waitFor(() => expect(el.open).toBe(false));
   });
   it("retains every editor address, context label and localized kind option", async () => {
-    const rows: TranslationTarget[] = [
+    const rows = [
       target("prod-1", { name: "STAFF Pan" }),
       target("var-1", {
         kind: "variant",
@@ -370,8 +474,9 @@ describe("staged translation dialog", () => {
       }),
       target("unit-1", { kind: "unit", name: "ración" }),
     ];
+    for (const row of rows) row.cells = row.cells.map((c) => ({ ...c, kind: row.kind }));
     const { el } = await mount(rows);
-    const links = [...q(el, "wt-data-table")!.shadowRoot!.querySelectorAll("tbody a")];
+    const links = [...windowFor(el)!.shadowRoot!.querySelectorAll("a")];
     expect(
       links.map((link) => [link.getAttribute("aria-label"), link.getAttribute("href")]),
     ).toEqual([
@@ -409,7 +514,7 @@ describe("staged translation dialog", () => {
       target("variant", { kind: "variant" }),
       target("list", { kind: "option_list" }),
     ]);
-    const links = [...q(el, "wt-data-table")!.shadowRoot!.querySelectorAll("tbody a")];
+    const links = [...windowFor(el)!.shadowRoot!.querySelectorAll("a")];
     const asked: string[] = [];
     el.addEventListener("wt-edit-product", (event) =>
       asked.push((event as CustomEvent<{ productId: string }>).detail.productId),
@@ -437,93 +542,87 @@ describe("staged translation dialog", () => {
     expect(prevented(links[0]!, { metaKey: true })).toBe(false);
     expect(asked).toEqual(["one", "variant"]);
   });
-  it("keeps filters before search, allows any selected kinds and shows the shared no-matches sentence", async () => {
-    const { el } = await mount([
-      target(),
-      target("unit", { kind: "unit" }),
-      target("list", { kind: "extra_list" }),
-    ]);
+  it("keeps Missing in and kind before search, sends each selected kind and displays the returned empty page", async () => {
+    const read = vi.fn(async (query: TranslationQuery) =>
+      result("search" in query && query.search ? [] : [target("unit", { kind: "unit" })]),
+    );
+    const { el } = await mount([], { getContentTranslationTargets: read });
     expect(
       [...el.shadowRoot!.querySelectorAll(".filters > *")].map((field) =>
         field.getAttribute("name"),
       ),
-    ).toEqual(["kind", "why", "search"]);
+    ).toEqual(["missing", "kind", "search", "jump"]);
     const kinds = q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="kind"]')!;
-    await chooseOptions(kinds, ["product", "unit"]);
-    await el.updateComplete;
-    expect(kinds.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("2 tipos");
-    await q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.updateComplete;
-    expect(
-      q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.rows.map(
-        (row) => (row as TranslationTarget).id,
-      ),
-    ).toEqual(["one", "unit"]);
-    q(el, '[name="search"]')!.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "not present" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-    await q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.updateComplete;
-    expect(q(el, "tbody")).toBeNull();
-    expect(q(el, ".empty .message")!.textContent!.trim()).toBe(
+    expect(kinds.multiple).toBe(false);
+    for (const kind of ["product", "unit"]) {
+      await select(el, "kind", kind);
+      expect(read).toHaveBeenLastCalledWith({
+        languages: ["en", "es"],
+        missing: { mode: "language", language: "es" },
+        kind,
+      });
+    }
+    await searchFor(el, "not present");
+    expect(windowFor(el)!.rows).toEqual([]);
+    expect(q(el, "[data-test=complete]")!.textContent!.trim()).toBe(
       "Nada coincide con tu búsqueda ni con tus filtros.",
     );
   });
-  it("finds a row by every word typed, accents and order aside, closest first", async () => {
-    const { el } = await mount([
+  it("sends search words, accents, order and trailing spaces to the bounded reader and renders its returned order", async () => {
+    let rows = [
       target("croqueta", { name: "Croquetas de jamón ibérico" }),
       target("serrano", { name: "Jamón serrano" }),
       target("pan", { name: "Pan" }),
-    ]);
-    const shownFor = async (value: string) => {
-      q(el, '[name="search"]')!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-      );
-      await el.updateComplete;
-      const table = q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!;
-      await table.updateComplete;
-      return table.rows.map((row) => (row as TranslationTarget).id);
-    };
-    expect(await shownFor("IBERICO jamon")).toEqual(["croqueta"]);
-    expect(await shownFor("jam")).toEqual(["serrano", "croqueta"]);
-    expect(await shownFor("jam ")).toEqual([]);
-    expect(await shownFor("&")).toEqual([]);
-    expect(await shownFor("   ")).toEqual(["croqueta", "serrano", "pan"]);
+    ];
+    const read = vi.fn(async () => result(rows));
+    const { el } = await mount([], { getContentTranslationTargets: read });
+    for (const [value, ids] of [
+      ["IBERICO jamon", ["croqueta"]],
+      ["jam", ["serrano", "croqueta"]],
+      ["jam ", []],
+      ["&", []],
+      ["   ", ["croqueta", "serrano", "pan"]],
+    ] as const) {
+      rows = ids.map((id) => target(id));
+      await searchFor(el, value);
+      expect(read).toHaveBeenLastCalledWith({
+        languages: ["en", "es"],
+        missing: { mode: "language", language: "es" },
+        search: value,
+      });
+      expect(windowFor(el)!.rows.map((row) => row.id)).toEqual(ids);
+    }
   });
-  it("searches a row by its new name once a live read renames it", async () => {
-    let current = [target("pan", { name: "Pan" }), target("vino", { name: "Vino tinto" })];
-    const liveData = new LiveData();
-    const read = vi.fn(async () => result(current));
-    const { el } = await mount(current, { liveData, getContentTranslationTargets: read });
-    const table = q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!;
-    const shownFor = async (value: string) => {
-      q(el, '[name="search"]')!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-      );
-      await el.updateComplete;
-      await table.updateComplete;
-      return table.rows.map((row) => (row as TranslationTarget).id);
-    };
-    const held = table.rows[0];
-    expect((held as TranslationTarget).id).toBe("pan");
-    expect(await shownFor("jamon")).toEqual([]);
-    current = [target("pan", { name: "Pan con jamón" }), current[1]!];
+  it("refreshes the active search after a live rename without losing a personal field", async () => {
+    let current: TranslationItem[] = [];
+    const liveData = new LiveData(),
+      read = vi.fn(async () => result(current));
+    const { el } = await mount([], { liveData, getContentTranslationTargets: read });
+    await searchFor(el, "jamon");
+    expect(windowFor(el)!.rows).toEqual([]);
+    current = [target("pan", { name: "Pan con jamón" })];
     liveData.invalidate([{ type: "products" }]);
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-    await vi.waitFor(async () => expect(await shownFor("jamon")).toEqual(["pan"]));
-    // The live read renamed the row it already held, so the search's folded text is for the same
-    // object as before.
-    expect(table.rows[0]).toBe(held);
+    await vi.waitFor(() => expect(field(el, "pan")).not.toBeNull());
+    await edit(el, "pan", "Mi pan");
+    expect(read).toHaveBeenLastCalledWith({
+      languages: ["en", "es"],
+      missing: { mode: "language", language: "es" },
+      search: "jamon",
+    });
+    expect(windowFor(el)!.rows[0]!.name).toBe("Pan con jamón");
+    expect(field(el, "pan").value).toBe("Mi pan");
   });
-
-  it("opens only the selected language with quiet unchanged Save and no default copied from staff", async () => {
+  it("initializes Missing in and Jump to the selected language, keeps Save quiet and never requires or copies a default companion", async () => {
     const { el, api } = await mount();
-    expect(q<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!.heading).toContain("Español");
+    expect(q<HTMLElementTagNameMap["wt-modal"]>(el, "wt-modal")!.heading).toBe(
+      t("content_languages.edit_translations"),
+    );
+    expect(q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="missing"]')!.value).toBe("es");
+    expect(q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="jump"]')!.value).toBe("es");
     expect(field(el, "one").value).toBe("");
-    expect(field(el, "one", "defaultText")).toBeNull();
+    expect(field(el, "one", "en").value).toBe("");
+    expect(field(el, "one", "en").required).toBe(false);
+    expect(field(el, "one", "en").placeholder).toBe("STAFF one");
     expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!.disabled).toBe(true);
     expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!.variant).toBe(
       "secondary",
@@ -531,131 +630,161 @@ describe("staged translation dialog", () => {
     await click(el, "save");
     expect(api.saveContentTranslations).not.toHaveBeenCalled();
     await edit(el, "one", "Croqueta");
-    expect(field(el, "one", "defaultText").value).toBe("");
-    expect(field(el, "one", "defaultText").required).toBe(true);
-    expect(field(el, "one", "defaultText").placeholder).toBe("STAFF one");
     expect(field(el, "one").getAttribute("lang")).toBe("es");
-    expect(field(el, "one", "defaultText").getAttribute("lang")).toBe("en");
-    await click(el, "save");
-    expect(field(el, "one", "defaultText").error).not.toBe("");
-    expect(api.saveContentTranslations).not.toHaveBeenCalled();
-    await edit(el, "one", " Ham croquette ", "defaultText");
+    expect(field(el, "one", "en").getAttribute("lang")).toBe("en");
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
-    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
       edits: [
         {
           kind: "product",
           id: "one",
-          expected: "baseline-one",
+          language: "es",
+          field: "name",
+          expected: "baseline-one-es",
           text: "Croqueta",
-          defaultText: "Ham croquette",
         },
       ],
     });
   });
-  it("assembles pages sequentially before enabling edits and displays 50 at a time", async () => {
-    let finish!: (value: TranslationPage) => void;
-    const first = Array.from({ length: 50 }, (_, n) =>
-      target(String(n), { defaultRequired: false }),
-    );
-    const read = vi
-      .fn()
-      .mockResolvedValueOnce(result(first, "next-page"))
-      .mockImplementationOnce(
-        () =>
-          new Promise<TranslationPage>((resolve) => {
-            finish = resolve;
-          }),
-      );
-    const pending = mount(first, { getContentTranslationTargets: read });
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-    expect(
-      document
-        .querySelector("dashboard-content-translations-dialog")!
-        .shadowRoot!.querySelector("wt-data-table"),
-    ).toBeNull();
-    finish(result([target("last", { defaultRequired: false })]));
-    const { el, api } = await pending;
-    expect(read.mock.calls).toEqual([
-      ["es", {}],
-      ["es", { after: "next-page" }],
-    ]);
-    expect(q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.rows).toHaveLength(50);
-    await edit(el, "0", "First");
-    await click(el, "next");
-    expect(field(el, "last")).not.toBeNull();
-    expect(field(el, "0")).toBeNull();
-    await edit(el, "last", "Last");
+  it("saves independently entered optional Spanish and English cells without copying either value", async () => {
+    const { el, api } = await mount();
+    await edit(el, "one", "Croqueta");
+    await edit(el, "one", " Ham croquette ", "en");
+    expect(field(el, "one", "en").required).toBe(false);
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
-    expect(api.saveContentTranslations).toHaveBeenCalledWith("es", {
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
       edits: [
-        { kind: "product", id: "0", expected: "baseline-0", text: "First" },
-        { kind: "product", id: "last", expected: "baseline-last", text: "Last" },
+        {
+          kind: "product",
+          id: "one",
+          language: "es",
+          field: "name",
+          expected: "baseline-one-es",
+          text: "Croqueta",
+        },
+        {
+          kind: "product",
+          id: "one",
+          language: "en",
+          field: "name",
+          expected: "baseline-one-en",
+          text: "Ham croquette",
+        },
       ],
     });
   });
-  it("filters kind, reason and context before paging without losing hidden edits; Show edited reveals them", async () => {
-    const rows = [
-      target("one", { defaultRequired: false }),
-      target("label", {
-        kind: "option_label",
-        reason: "partial",
-        parent: { id: "list", name: "Sauces" },
-        owners: { kind: "option_label", listId: "list" },
-        defaultRequired: false,
-      }),
-    ];
-    const { el, api } = await mount(rows);
-    await edit(el, "one", "Croqueta");
-    const kind = q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="kind"]')!;
-    const why = q<HTMLElementTagNameMap["wt-combobox"]>(el, '[name="why"]')!;
-    expect(kind.multiple).toBe(true);
-    expect(why.multiple).toBe(false);
-    await chooseOptions(kind, ["option_label"]);
-    await el.updateComplete;
-    await chooseOption(why, "partial");
-    await el.updateComplete;
-    const search = q<HTMLElementTagNameMap["wt-input"]>(el, '[name="search"]')!;
-    search.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "Sauces" }, bubbles: true, composed: true }),
+  it("loads the next page only on request, keeping first-page edits through the delayed answer", async () => {
+    let finish!: (value: TranslationItemPage) => void;
+    const first = Array.from({ length: 50 }, (_, n) => target(String(n).padStart(3, "0"))),
+      after = cursor("049");
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(result(first, after))
+      .mockImplementationOnce(
+        () =>
+          new Promise<TranslationItemPage>((resolve) => {
+            finish = resolve;
+          }),
+      );
+    const { el, api } = await mount(first, { getContentTranslationTargets: read });
+    expect(read).toHaveBeenCalledOnce();
+    expect(windowFor(el)!.rows).toHaveLength(50);
+    await edit(el, "000", "First");
+    await click(el, "next");
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(field(el, "000").value).toBe("First");
+    finish(result([target("last")]));
+    await vi.waitFor(() => expect(field(el, "last")).not.toBeNull());
+    expect(read.mock.calls).toEqual([
+      [{ languages: ["en", "es"], missing: { mode: "language", language: "es" } }],
+      [{ languages: ["en", "es"], missing: { mode: "language", language: "es" }, after }],
+    ]);
+    expect(field(el, "000")).toBeNull();
+    await edit(el, "last", "Last");
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
+      edits: [
+        {
+          kind: "product",
+          id: "000",
+          language: "es",
+          field: "name",
+          expected: "baseline-000-es",
+          text: "First",
+        },
+        {
+          kind: "product",
+          id: "last",
+          language: "es",
+          field: "name",
+          expected: "baseline-last-es",
+          text: "Last",
+        },
+      ],
+    });
+  });
+  it("filters kind, Missing in and context before paging without losing hidden edits; Show staged reveals them", async () => {
+    const label = target("label", {
+      kind: "option_label",
+      parent: { id: "list", name: "Sauces" },
+      cells: [
+        cell("label", "es", {
+          kind: "option_label",
+          owners: { kind: "option_label", listId: "list" },
+        }),
+      ],
+    });
+    const read = vi.fn(async (query: TranslationQuery) =>
+      result("kind" in query && query.kind ? [label] : [target(), label]),
     );
-    await el.updateComplete;
-    await q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.updateComplete;
-    expect(
-      q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.rows.map(
-        (row) => (row as TranslationTarget).id,
-      ),
-    ).toEqual(["label"]);
+    const { el, api } = await mount([target(), label], { getContentTranslationTargets: read });
+    await edit(el, "one", "Croqueta");
+    await select(el, "kind", "option_label");
+    await select(el, "missing", "any");
+    await searchFor(el, "Sauces");
+    expect(read).toHaveBeenLastCalledWith({
+      languages: ["en", "es"],
+      missing: { mode: "any" },
+      kind: "option_label",
+      search: "Sauces",
+    });
+    expect(windowFor(el)!.rows.map((row) => row.id)).toEqual(["label"]);
     expect(q(el, "[data-test=edited-count]")!.textContent).toContain("1");
     expect(q(el, "[data-test=hidden-count]")!.textContent).toContain("1");
     await click(el, "show-edited");
+    await vi.waitFor(() => expect(field(el, "one")).not.toBeNull());
     expect(field(el, "one").value).toBe("Croqueta");
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
-    expect(api.saveContentTranslations).toHaveBeenCalledWith("es", {
-      edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "Croqueta" }],
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
+      edits: [
+        {
+          kind: "product",
+          id: "one",
+          language: "es",
+          field: "name",
+          expected: "baseline-one-es",
+          text: "Croqueta",
+        },
+      ],
     });
   });
-  it("reveals and focuses a hidden invalid companion above the bottom message", async () => {
-    const { el, api } = await mount();
-    await edit(el, "one", "Croqueta");
-    const search = q<HTMLElementTagNameMap["wt-input"]>(el, '[name="search"]')!;
-    search.dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "not present" },
-        bubbles: true,
-        composed: true,
-      }),
+  it("reveals and focuses a hidden invalid field above the bottom message", async () => {
+    const read = vi.fn(async (query: TranslationQuery) =>
+      result("search" in query && query.search ? [] : [target()]),
     );
-    await el.updateComplete;
-    await q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.updateComplete;
+    const { el, api } = await mount([target()], { getContentTranslationTargets: read });
+    await edit(el, "one", "é".repeat(2049));
+    await searchFor(el, "not present");
     expect(field(el, "one")).toBeNull();
     await click(el, "save");
-    await vi.waitFor(() => expect(field(el, "one", "defaultText")?.error).not.toBe(""));
-    const companion = field(el, "one", "defaultText");
-    await vi.waitFor(() => expect(companion.shadowRoot!.activeElement?.tagName).toBe("INPUT"));
+    await vi.waitFor(() => expect(field(el, "one")?.error).toBe(t("translations.name_bytes")));
+    await vi.waitFor(() =>
+      expect(field(el, "one").shadowRoot!.activeElement?.tagName).toBe("INPUT"),
+    );
     expect(api.saveContentTranslations).not.toHaveBeenCalled();
     expect(q<HTMLElementTagNameMap["wt-form-actions"]>(el, "wt-form-actions")!.error).toBe(
       t("form.fix_fields"),
@@ -669,16 +798,14 @@ describe("staged translation dialog", () => {
         params: {
           kind: "product",
           id: "one",
-          field: "text",
+          field: "name",
           language: "es",
           causeCode: "product.invalid",
           causeParams: { field: "customerName" },
         },
       })
-      .mockResolvedValue({ saved: [] });
-    const { el } = await mount([target("one", { defaultRequired: false })], {
-      saveContentTranslations: save,
-    });
+      .mockImplementation(accepted);
+    const { el } = await mount([target()], { saveContentTranslations: save });
     await edit(el, "one", "Croqueta");
     await click(el, "save");
     await vi.waitFor(() => expect(field(el, "one").error).toBe(codeMessage("product.invalid")));
@@ -694,7 +821,7 @@ describe("staged translation dialog", () => {
     expect(save).toHaveBeenCalledTimes(2);
   });
   it("shows empty, unavailable and failed reads without enabling Save, with a retry", async () => {
-    const read = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(result([]));
+    const read = vi.fn().mockRejectedValueOnce(Error("offline")).mockResolvedValue(result([]));
     const { el } = await mount([], { getContentTranslationTargets: read });
     expect(q(el, "[data-test=read-error]")).not.toBeNull();
     await click(el, "retry");
@@ -702,311 +829,424 @@ describe("staged translation dialog", () => {
     expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!.disabled).toBe(true);
     cleanupWidgets();
     const unavailable = await mount([
-      target("one", { eligible: false, unavailableReason: "inactive" }),
+      target("one", {
+        cells: [cell("one", "es", { eligible: false, unavailableReason: "inactive" })],
+      }),
     ]);
     expect(field(unavailable.el, "one").disabled).toBe(true);
-    expect(q(unavailable.el, "[data-test=unavailable-product-one]")).not.toBeNull();
+    expect(
+      q(unavailable.el, `[data-unavailable='["product","one","es","name"]']`)?.textContent?.trim(),
+    ).toBe(t("translations.unavailable"));
     expect(q<HTMLAnchorElement>(unavailable.el, "a")!.getAttribute("href")).toBe(
       "/manage/catalogue/product/one",
     );
+    expect(
+      q<HTMLElementTagNameMap["wt-button"]>(unavailable.el, "[data-test=save]")!.disabled,
+    ).toBe(true);
   });
   it("empty reversion makes Save quiet and prevents an accidental request", async () => {
     const { el, api } = await mount();
     await edit(el, "one", "Croqueta");
-    await edit(el, "one", "English", "defaultText");
+    await edit(el, "one", "English", "en");
     await edit(el, "one", " ");
-    await edit(el, "one", "  ", "defaultText");
+    await edit(el, "one", "  ", "en");
     expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save]")!.disabled).toBe(true);
     await click(el, "save");
     expect(api.saveContentTranslations).not.toHaveBeenCalled();
   });
   it("trims only at submission, retaining selection during a middle edit", async () => {
-    const { el } = await mount([target("one", { defaultRequired: false })]);
+    const { el, api } = await mount();
     const control = field(el, "one");
     await control.updateComplete;
     const native = control.shadowRoot!.querySelector("input")!;
     await userEvent.fill(native, "  Croqueta  ");
     native.setSelectionRange(4, 4);
     await userEvent.type(native, "X");
-    await el.updateComplete;
+    await settled(el);
     expect(native.value).toBe("  CrXoqueta  ");
     expect(native.selectionStart).toBe(5);
+    await click(el, "save");
+    await vi.waitFor(() => expect(el.open).toBe(false));
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
+      edits: [
+        {
+          kind: "product",
+          id: "one",
+          language: "es",
+          field: "name",
+          expected: "baseline-one-es",
+          text: "CrXoqueta",
+        },
+      ],
+    });
   });
 });
 
+async function searchFor(el: ContentTranslationsDialog, value: string) {
+  q(el, '[name="search"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await settled(el);
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
+  );
+  await settled(el);
+}
+async function frame(el: ContentTranslationsDialog) {
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await settled(el);
+}
+function changed(id: string, text: string, expected: string) {
+  return target(id, {
+    cells: [cell(id, "es", { text, effectiveText: text, expected }), cell(id, "en")],
+  });
+}
+function liveFixture() {
+  let rows = [target()],
+    current = cell("one");
+  const liveData = new LiveData(),
+    read = vi.fn(async () => result(rows));
+  const cells = vi.fn(async (refs: readonly TranslationCellRef[]) => ({
+    config,
+    required: [],
+    configuration: "configuration-one",
+    cells: refs.map((ref) =>
+      ref.id === "one" && ref.language === "es" ? current : cell(ref.id, ref.language),
+    ),
+  }));
+  return {
+    liveData,
+    read,
+    cells,
+    get rows() {
+      return rows;
+    },
+    set rows(value) {
+      rows = value;
+    },
+    get current() {
+      return current;
+    },
+    set current(value) {
+      current = value;
+    },
+  };
+}
+async function mountLive(
+  fixture: ReturnType<typeof liveFixture>,
+  overrides: Record<string, unknown> = {},
+) {
+  return mount(fixture.rows, {
+    liveData: fixture.liveData,
+    getContentTranslationTargets: fixture.read,
+    getContentTranslationCells: fixture.cells,
+    ...overrides,
+  });
+}
+async function reviewed(el: ContentTranslationsDialog) {
+  await click(el, "review");
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
+  );
+  await settled(el);
+}
+
 describe("translation live review", () => {
-  it("holds arrivals and dirty concurrent fills until an explicit keep decision", async () => {
-    const one = target("one", { defaultRequired: false });
-    let rows = [one];
-    const current = { ...one, selectedText: "Their name", expected: "current" };
-    const liveData = new LiveData();
-    const read = vi.fn(async (_language: string, query: { targets?: unknown[] }) =>
-      result(query.targets ? [current] : rows),
-    );
-    const { el, api } = await mount(rows, { liveData, getContentTranslationTargets: read });
+  it("keeps the focused personal field through live arrivals and requires Keep for a concurrent fill", async () => {
+    const f = liveFixture(),
+      { el, api } = await mountLive(f);
     await edit(el, "one", "My draft");
-    const input = field(el, "one").shadowRoot!.querySelector("input")!;
+    const held = field(el, "one"),
+      input = held.shadowRoot!.querySelector("input")!;
     await userEvent.click(input);
-    rows = [target("arrival", { defaultRequired: false })];
-    liveData.invalidate([{ type: "products" }]);
-    await vi.waitFor(() => expect(q(el, "[data-test=arrivals]")?.textContent).toContain("1"));
-    expect(field(el, "arrival")).toBeNull();
-    expect(field(el, "one")).not.toBeNull();
-    expect(field(el, "one").value).toBe("My draft");
-    expect(field(el, "one").shadowRoot!.activeElement).toBe(input);
-    expect(q(el, "[data-test=changed-product-one]")).not.toBeNull();
+    f.rows = [target("arrival")];
+    f.current = cell("one", "es", {
+      text: "Their name",
+      effectiveText: "Their name",
+      expected: "current",
+    });
+    f.liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(review(el)?.textContent).toContain("Their name"));
+    expect(field(el, "arrival")).not.toBeNull();
+    expect(field(el, "one")).toBe(held);
+    expect(held.value).toBe("My draft");
+    expect(held.shadowRoot!.activeElement).toBe(input);
     await click(el, "save");
     expect(api.saveContentTranslations).not.toHaveBeenCalled();
-    await click(el, "review");
-    await vi.waitFor(() =>
-      expect(q(el, "[data-test=review-product-one]")?.textContent).toContain("Their name"),
-    );
-    expect(q(el, "[data-test=review-product-one]")!.textContent).toContain("My draft");
-    await click(el, "keep-product-one");
-    expect(field(el, "arrival")).not.toBeNull();
-    expect(field(el, "one").value).toBe("My draft");
+    expect(review(el)!.textContent).toContain("My draft");
+    await decide(el, "keep");
     await click(el, "save");
     await vi.waitFor(() => expect(el.open).toBe(false));
-    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
-      edits: [{ kind: "product", id: "one", expected: "current", text: "My draft" }],
+    expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
+      edits: [
+        {
+          kind: "product",
+          id: "one",
+          language: "es",
+          field: "name",
+          expected: "current",
+          text: "My draft",
+        },
+      ],
     });
   });
   it.each(["replace", "discard"])(
     "requires explicit %s before clearing an edited concurrent fill",
     async (choice) => {
-      const one = target("one", { defaultRequired: false });
-      let current = one;
-      const read = vi.fn(async () => result([current]));
-      const { el, api } = await mount([one], { getContentTranslationTargets: read });
+      const f = liveFixture(),
+        { el, api } = await mountLive(f);
       await edit(el, "one", "My draft");
-      current = { ...one, selectedText: "Their name", expected: "current" };
-      await click(el, "review");
-      await vi.waitFor(() => expect(q(el, "[data-test=review-product-one]")).not.toBeNull());
+      f.current = cell("one", "es", {
+        text: "Their name",
+        effectiveText: "Their name",
+        expected: "current",
+      });
+      f.rows = [changed("one", "Their name", "current")];
+      await reviewed(el);
+      expect(review(el)).not.toBeNull();
       expect(field(el, "one").value).toBe("My draft");
-      await click(el, `${choice}-product-one`);
+      await decide(el, choice);
       expect(field(el, "one").value).toBe("Their name");
       await click(el, "save");
       expect(api.saveContentTranslations).not.toHaveBeenCalled();
     },
   );
-  it("assembles page-two departures and arrivals atomically and abandons a changing configuration", async () => {
-    const first = Array.from({ length: 50 }, (_, n) =>
-      target(String(n), { defaultRequired: false }),
-    );
+  it("rejects a changed configuration on page two without dropping the current page or its draft", async () => {
+    const first = [target("000")],
+      after = cursor("000");
     let phase = 0;
-    let finish!: (page: TranslationPage) => void;
-    const liveData = new LiveData();
-    const read = vi.fn(
-      async (_language: string, query: { after?: string; targets?: unknown[] }) => {
-        if (query.targets)
-          return result([
-            target("last", {
-              defaultRequired: false,
-              eligible: false,
-              unavailableReason: "missing",
-            }),
-          ]);
-        if (!query.after) return result(first, "second");
-        if (phase === 0) return result([target("last", { defaultRequired: false })]);
-        return await new Promise<TranslationPage>((resolve) => {
+    let finish!: (value: TranslationItemPage) => void;
+    const liveData = new LiveData(),
+      read = vi.fn(async (query: TranslationQuery) => {
+        if ("targets" in query) return result(query.targets.map((ref) => target(ref.id)));
+        if (!query.after) return result(first, after);
+        if (!phase) return result([target("last")]);
+        return new Promise<TranslationItemPage>((resolve) => {
           finish = resolve;
         });
-      },
-    );
-    const { el } = await mount(first, { liveData, getContentTranslationTargets: read });
+      });
+    const { el } = await mount([...first, target("last")], {
+      liveData,
+      getContentTranslationTargets: read,
+      getContentTranslationCells: vi.fn(async (refs: readonly TranslationCellRef[]) => ({
+        config,
+        required: [],
+        configuration: "configuration-one",
+        cells: refs.map((ref) =>
+          cell(
+            ref.id,
+            ref.language,
+            phase
+              ? {
+                  eligible: false,
+                  unavailableReason: "missing",
+                  owners: null,
+                  staffText: null,
+                  expected: "removed",
+                }
+              : {},
+          ),
+        ),
+      })),
+    });
     await click(el, "next");
+    await vi.waitFor(() => expect(field(el, "last")).not.toBeNull());
     await edit(el, "last", "My last");
     phase = 1;
     liveData.invalidate([{ type: "products" }]);
-    await vi.waitFor(() => expect(read.mock.calls.filter(([, q]) => q.after).length).toBe(2));
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
     expect(field(el, "last").value).toBe("My last");
-    expect(q(el, "[data-test=arrivals]")).toBeNull();
     finish({
-      ...result([target("arrival", { defaultRequired: false })]),
+      ...result([target("arrival")]),
+      configuration: "other-config",
       config: { languages: ["en", "es"], defaultLanguage: "es" },
     });
     await vi.waitFor(() => expect(q(el, "[data-test=read-error]")).not.toBeNull());
     expect(field(el, "last").value).toBe("My last");
-    expect(q(el, "[data-test=changed-product-last]")).toBeNull();
+    expect(review(el, "last")).toBeNull();
     liveData.invalidate([{ type: "products" }]);
-    await vi.waitFor(() => expect(read.mock.calls.filter(([, q]) => q.after).length).toBe(3));
-    finish(result([target("arrival", { defaultRequired: false })]));
-    await vi.waitFor(() => expect(q(el, "[data-test=arrivals]")?.textContent).toContain("1"));
-    expect(field(el, "last").value).toBe("My last");
-    expect(q(el, "[data-test=changed-product-last]")).not.toBeNull();
-    expect(q(el, "[data-test=unavailable-product-last]")).not.toBeNull();
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(4));
+    finish(result([target("arrival")]));
+    await vi.waitFor(() => expect(field(el, "arrival")).not.toBeNull());
     expect(q(el, "[data-test=read-error]")).toBeNull();
+    expect(review(el, "last")!.textContent).toContain("My last");
+    expect(
+      review(el, "last")!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-choice=keep]")!
+        .disabled,
+    ).toBe(true);
+    await click(el, "show-edited");
+    await vi.waitFor(() => expect(field(el, "last")).not.toBeNull());
+    expect(field(el, "last").value).toBe("My last");
+    expect(field(el, "last").disabled).toBe(true);
+    expect(q(el, `[data-unavailable='["product","last","es","name"]']`)!.textContent!.trim()).toBe(
+      t("translations.unavailable"),
+    );
   });
   it("ignores old PUT success after close and reopen", async () => {
-    let finish!: (response: { saved: TranslationTarget[] }) => void;
+    let finish!: (value: { saved: TranslationCell[] }) => void;
     const save = vi.fn(
       () =>
-        new Promise<{ saved: TranslationTarget[] }>((resolve) => {
+        new Promise<{ saved: TranslationCell[] }>((resolve) => {
           finish = resolve;
         }),
     );
-    const { el } = await mount([target("one", { defaultRequired: false })], {
-      saveContentTranslations: save,
-    });
-    const saved = vi.fn();
+    const { el } = await mount([target()], { saveContentTranslations: save }),
+      saved = vi.fn();
     el.addEventListener("translations-saved", saved);
     await edit(el, "one", "Old draft");
     await click(el, "save");
     el.open = false;
-    await el.updateComplete;
+    await settled(el);
     el.open = true;
-    await el.updateComplete;
-    await vi.waitFor(() => expect(field(el, "one")).not.toBeNull());
+    await settled(el);
+    await vi.waitFor(() => expect(field(el, "one")?.disabled).toBe(false));
     await edit(el, "one", "New draft");
     finish({ saved: [] });
-    await vi.waitFor(() => expect(field(el, "one").value).toBe("New draft"));
+    await frame(el);
+    expect(field(el, "one").value).toBe("New draft");
     expect(saved).not.toHaveBeenCalled();
     expect(el.open).toBe(true);
   });
 });
 
 it("reconnect abandons an old PUT while keeping edited text retryable", async () => {
-  let finish!: (value: { saved: TranslationTarget[] }) => void;
+  let finish!: (value: { saved: TranslationCell[] }) => void;
   const save = vi
     .fn()
     .mockImplementationOnce(
       () =>
-        new Promise<{ saved: TranslationTarget[] }>((resolve) => {
+        new Promise<{ saved: TranslationCell[] }>((resolve) => {
           finish = resolve;
         }),
     )
-    .mockResolvedValue({ saved: [] });
-  const { el, host } = await mount([target("one", { defaultRequired: false })], {
-    saveContentTranslations: save,
-  });
+    .mockImplementation(accepted);
+  const { el, host } = await mount([target()], { saveContentTranslations: save });
   await edit(el, "one", "Draft");
   await click(el, "save");
   el.remove();
   host.append(el);
-  await el.updateComplete;
-  await vi.waitFor(() => expect(field(el, "one").disabled).toBe(false));
+  await settled(el);
+  await vi.waitFor(() => expect(field(el, "one")?.disabled).toBe(false));
   finish({ saved: [] });
-  await vi.waitFor(() => expect(el.open).toBe(true));
+  await frame(el);
+  expect(el.open).toBe(true);
   expect(field(el, "one").value).toBe("Draft");
   await click(el, "save");
   await vi.waitFor(() => expect(el.open).toBe(false));
   expect(save).toHaveBeenCalledTimes(2);
 });
-it("retained reference review is split into reads of at most 50 without dropping filled drafts", async () => {
-  const rows = Array.from({ length: 51 }, (_, n) => target(String(n), { defaultRequired: false }));
+it("retained cell review reads 51 filled drafts without dropping any", async () => {
+  const rows = Array.from({ length: 51 }, (_, n) => target(String(n).padStart(3, "0")));
   let filled = false;
-  const read = vi.fn(
-    async (_language: string, query: { after?: string; targets?: { id: string }[] }) => {
-      if (query.targets)
-        return result(
-          query.targets.map(({ id }) => ({
-            ...rows[Number(id)]!,
-            selectedText: "Their name",
-            expected: `latest-${id}`,
-          })),
-        );
-      return filled
-        ? result([])
-        : query.after
-          ? result(rows.slice(50))
-          : result(rows.slice(0, 50), "second");
-    },
+  const read = vi.fn(async (query: TranslationQuery) =>
+    filled
+      ? result([])
+      : "after" in query && query.after
+        ? result(rows.slice(50))
+        : result(rows.slice(0, 50), cursor("049")),
   );
-  const { el } = await mount(rows, { getContentTranslationTargets: read });
-  for (let n = 0; n < 50; n++)
-    field(el, String(n)).dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: `Draft ${n}` },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  await el.updateComplete;
+  const cells = vi.fn(async (refs: readonly TranslationCellRef[]) => ({
+    config,
+    required: [],
+    configuration: "configuration-one",
+    cells: refs.map((ref) =>
+      cell(
+        ref.id,
+        ref.language,
+        filled
+          ? { text: "Their name", effectiveText: "Their name", expected: `latest-${ref.id}` }
+          : {},
+      ),
+    ),
+  }));
+  const { el } = await mount(rows, {
+    getContentTranslationTargets: read,
+    getContentTranslationCells: cells,
+  });
+  for (let n = 0; n < 50; n++) await edit(el, rows[n]!.id, `Draft ${n}`);
   await click(el, "next");
-  await edit(el, "50", "Draft 50");
+  await vi.waitFor(() => expect(field(el, "050")).not.toBeNull());
+  await edit(el, "050", "Draft 50");
   filled = true;
-  await click(el, "review");
-  await vi.waitFor(() => expect(q(el, "[data-test=review-product-50]")).not.toBeNull());
-  const queries = read.mock.calls.filter(([, q]) => q.targets).map(([, q]) => q.targets!);
-  expect(queries.map((q) => q.length)).toEqual([50, 1]);
-  expect(queries.flat().map((q) => q.id)).toEqual(rows.map((row) => row.id));
-  expect(field(el, "50").value).toBe("Draft 50");
+  cells.mockClear();
+  await reviewed(el);
+  expect(review(el, "050")).not.toBeNull();
+  expect(cells.mock.calls.map(([refs]) => refs.length)).toEqual([51, 51]);
+  expect(cells.mock.calls.map(([refs]) => refs.map((ref) => ref.id))).toEqual([
+    rows.map((row) => row.id),
+    rows.map((row) => row.id),
+  ]);
+  expect(el.shadowRoot!.querySelectorAll("[data-review]")).toHaveLength(51);
+  expect(review(el, "050")!.textContent).toContain("Draft 50");
 });
 it("a late opening GET and late review GET cannot overwrite a reopened draft", async () => {
-  let finish!: (page: TranslationPage) => void;
+  let finish!: (value: TranslationItemPage) => void;
   const read = vi
     .fn()
     .mockImplementationOnce(
       () =>
-        new Promise<TranslationPage>((resolve) => {
+        new Promise<TranslationItemPage>((resolve) => {
           finish = resolve;
         }),
     )
-    .mockResolvedValue(result([target("one", { defaultRequired: false })]));
+    .mockResolvedValue(result([target()]));
   const api = {
     getContentTranslationTargets: read,
-    getContentSuggestions: vi.fn(async () => ({
-      config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+    getContentSuggestions: vi.fn(async () => suggestions()),
+    getContentTranslationCells: vi.fn(async () => ({
+      config,
       required: [],
-      configuration: "suggestion-config",
-      waitingFixes: 0,
-      run: null,
-      suggestions: [],
-      next: null,
-      service: "not_connected" as const,
-      cloudOrigin: null,
+      configuration: "configuration-one",
+      cells: [cell("one")],
     })),
   } as unknown as DashboardApi;
   const { el } = await mountWidget<ContentTranslationsDialog>(
     "dashboard-content-translations-dialog",
-    { open: true, language: "es", api },
+    { open: true, language: "es", config, api },
   );
   await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
   el.open = false;
-  await el.updateComplete;
+  await settled(el);
   el.open = true;
-  await el.updateComplete;
+  await settled(el);
   await vi.waitFor(() => expect(field(el, "one")).not.toBeNull());
   await edit(el, "one", "New draft");
   finish(result([target("old")]));
-  await vi.waitFor(() => expect(q(el, "[data-test=loading]")).toBeNull());
+  await frame(el);
   expect(field(el, "old")).toBeNull();
   expect(field(el, "one").value).toBe("New draft");
   read.mockImplementationOnce(
     () =>
-      new Promise<TranslationPage>((resolve) => {
+      new Promise<TranslationItemPage>((resolve) => {
         finish = resolve;
       }),
   );
   await click(el, "review");
   await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
   el.open = false;
-  await el.updateComplete;
+  await settled(el);
   el.open = true;
-  await el.updateComplete;
+  await settled(el);
   await vi.waitFor(() => expect(field(el, "one")).not.toBeNull());
   await edit(el, "one", "Newest draft");
   finish(result([target("old")]));
-  await vi.waitFor(() => expect(q(el, "[data-test=loading]")).toBeNull());
+  await frame(el);
+  expect(q(el, "[data-test=loading]")).toBeNull();
   expect(field(el, "old")).toBeNull();
   expect(field(el, "one").value).toBe("Newest draft");
 });
 it("live read recovery preserves an action refusal and a retry sends the same draft", async () => {
+  const f = liveFixture();
   let failure = false;
-  const liveData = new LiveData();
-  const read = vi.fn(async () => {
+  f.read.mockImplementation(async () => {
     if (failure) throw Error("offline");
-    return result([target("one", { defaultRequired: false })]);
+    return result(f.rows);
   });
   const save = vi
     .fn()
     .mockRejectedValueOnce({ code: "content.translation_stale" })
-    .mockResolvedValue({ saved: [] });
-  const { el } = await mount([], {
-    liveData,
-    getContentTranslationTargets: read,
-    saveContentTranslations: save,
-  });
+    .mockImplementation(accepted);
+  const { el } = await mountLive(f, { saveContentTranslations: save });
   await edit(el, "one", "Draft");
   await click(el, "save");
   await vi.waitFor(() =>
@@ -1015,10 +1255,10 @@ it("live read recovery preserves an action refusal and a retry sends the same dr
     ),
   );
   failure = true;
-  liveData.invalidate([{ type: "products" }]);
+  f.liveData.invalidate([{ type: "products" }]);
   await vi.waitFor(() => expect(q(el, "[data-test=read-error]")).not.toBeNull());
   failure = false;
-  liveData.invalidate([{ type: "products" }]);
+  f.liveData.invalidate([{ type: "products" }]);
   await vi.waitFor(() => expect(q(el, "[data-test=read-error]")).toBeNull());
   expect(q<HTMLElementTagNameMap["wt-form-actions"]>(el, "wt-form-actions")!.error).toBe(
     codeMessage("content.translation_stale"),
@@ -1027,167 +1267,179 @@ it("live read recovery preserves an action refusal and a retry sends the same dr
   await click(el, "save");
   await vi.waitFor(() => expect(el.open).toBe(false));
   expect(save.mock.calls).toEqual([
-    ["es", { edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "Draft" }] }],
-    ["es", { edits: [{ kind: "product", id: "one", expected: "baseline-one", text: "Draft" }] }],
+    [
+      {
+        edits: [
+          {
+            kind: "product",
+            id: "one",
+            language: "es",
+            field: "name",
+            expected: "baseline-one-es",
+            text: "Draft",
+          },
+        ],
+      },
+    ],
+    [
+      {
+        edits: [
+          {
+            kind: "product",
+            id: "one",
+            language: "es",
+            field: "name",
+            expected: "baseline-one-es",
+            text: "Draft",
+          },
+        ],
+      },
+    ],
   ]);
 });
-
 it("a newer live snapshot wins over a delayed explicit review without changing the draft", async () => {
-  const one = target("one", { defaultRequired: false });
-  let current = one;
-  let finish!: (page: TranslationPage) => void;
-  const liveData = new LiveData();
-  const read = vi.fn(async () => result([current]));
-  const { el } = await mount([one], { liveData, getContentTranslationTargets: read });
+  const f = liveFixture(),
+    { el } = await mountLive(f);
   await edit(el, "one", "My draft");
-  read.mockImplementationOnce(
+  let finish!: (value: TranslationItemPage) => void;
+  f.read.mockImplementationOnce(
     () =>
-      new Promise<TranslationPage>((resolve) => {
+      new Promise<TranslationItemPage>((resolve) => {
         finish = resolve;
       }),
   );
   await click(el, "review");
-  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-  current = { ...one, selectedText: "New live", expected: "new-live" };
-  liveData.invalidate([{ type: "products" }]);
-  await vi.waitFor(() => expect(q(el, "[data-test=changed-product-one]")).not.toBeNull());
-  finish(result([{ ...one, selectedText: "Old review", expected: "old-review" }]));
-  await vi.waitFor(() =>
-    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
-  );
-  await click(el, "review");
-  await vi.waitFor(() =>
-    expect(q(el, "[data-test=review-product-one]")?.textContent).toContain("New live"),
-  );
-  expect(q(el, "[data-test=review-product-one]")!.textContent).not.toContain("Old review");
+  await vi.waitFor(() => expect(f.read).toHaveBeenCalledTimes(2));
+  f.current = cell("one", "es", {
+    text: "New live",
+    effectiveText: "New live",
+    expected: "new-live",
+  });
+  f.rows = [changed("one", "New live", "new-live")];
+  f.liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(review(el)?.textContent).toContain("New live"));
+  finish(result([changed("one", "Old review", "old-review")]));
+  await frame(el);
+  expect(review(el)!.textContent).toContain("New live");
+  expect(review(el)!.textContent).not.toContain("Old review");
   expect(field(el, "one").value).toBe("My draft");
 });
-
 it("an obsolete review refusal cannot replace a recovered live read or release a newer review", async () => {
-  const one = target("one", { defaultRequired: false });
-  const liveData = new LiveData();
-  let refuse!: (error: Error) => void;
-  let finish!: (value: TranslationPage) => void;
-  const read = vi.fn(async () => result([one]));
-  const { el } = await mount([one], { liveData, getContentTranslationTargets: read });
+  const f = liveFixture(),
+    { el } = await mountLive(f);
   await edit(el, "one", "Draft");
-  read.mockImplementationOnce(
+  let refuse!: (error: Error) => void, finish!: (value: TranslationItemPage) => void;
+  f.read.mockImplementationOnce(
     () =>
-      new Promise<TranslationPage>((_resolve, reject) => {
+      new Promise<TranslationItemPage>((_resolve, reject) => {
         refuse = reject;
       }),
   );
   await click(el, "review");
-  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-  liveData.invalidate([{ type: "products" }]);
-  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(4));
+  await vi.waitFor(() => expect(f.read).toHaveBeenCalledTimes(2));
+  f.liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(f.read).toHaveBeenCalledTimes(3));
   await vi.waitFor(() =>
     expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
   );
-  read.mockImplementationOnce(
+  f.read.mockImplementationOnce(
     () =>
-      new Promise<TranslationPage>((resolve) => {
+      new Promise<TranslationItemPage>((resolve) => {
         finish = resolve;
       }),
   );
   await click(el, "review");
-  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(5));
+  await vi.waitFor(() => expect(f.read).toHaveBeenCalledTimes(4));
   refuse(Error("old failure"));
-  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await frame(el);
   expect(q(el, "[data-test=read-error]")).toBeNull();
   expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(true);
-  finish(result([one]));
+  finish(result([target()]));
   await vi.waitFor(() =>
     expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
   );
 });
-
 it("Review latest reveals a hidden conflict with its old, current and draft text", async () => {
-  const one = target("one", { defaultRequired: false });
-  let current = one;
-  const read = vi.fn(async () => result([current]));
-  const { el } = await mount([one], { getContentTranslationTargets: read });
+  const f = liveFixture();
+  f.read.mockImplementation(async () => result(f.rows));
+  const { el } = await mountLive(f);
   await edit(el, "one", "My draft");
-  q(el, '[name="search"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "hidden" }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  await q<HTMLElementTagNameMap["wt-data-table"]>(el, "wt-data-table")!.updateComplete;
+  f.rows = [];
+  await searchFor(el, "hidden");
   expect(field(el, "one")).toBeNull();
-  current = { ...one, selectedText: "Their name", expected: "latest" };
-  await click(el, "review");
-  await vi.waitFor(() =>
-    expect(q(el, "[data-test=review-product-one]")?.textContent).toContain("Their name"),
-  );
-  expect(field(el, "one").value).toBe("My draft");
+  f.current = cell("one", "es", {
+    text: "Their name",
+    effectiveText: "Their name",
+    expected: "latest",
+  });
+  await reviewed(el);
+  expect(review(el)!.textContent).toContain("Their name");
+  expect(review(el)!.textContent).toContain("My draft");
+  expect([...review(el)!.querySelectorAll("dd")].map((node) => node.textContent)).toEqual([
+    "",
+    "Their name",
+    "My draft",
+  ]);
 });
-
 it("an old passive scan refusal cannot replace a newer successful explicit review", async () => {
-  const one = target("one", { defaultRequired: false });
-  const liveData = new LiveData();
-  let refuse!: (error: Error) => void;
-  const read = vi.fn(async () => result([one]));
-  const { el } = await mount([one], { liveData, getContentTranslationTargets: read });
+  const f = liveFixture(),
+    { el } = await mountLive(f);
   await edit(el, "one", "Draft");
-  read.mockImplementationOnce(
+  let refuse!: (error: Error) => void;
+  f.read.mockImplementationOnce(
     () =>
-      new Promise<TranslationPage>((_resolve, reject) => {
+      new Promise<TranslationItemPage>((_resolve, reject) => {
         refuse = reject;
       }),
   );
-  liveData.invalidate([{ type: "products" }]);
-  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-  await click(el, "review");
-  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(4));
-  await vi.waitFor(() =>
-    expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=review]")!.disabled).toBe(false),
-  );
+  f.liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(f.read).toHaveBeenCalledTimes(2));
+  await reviewed(el);
+  expect(f.read).toHaveBeenCalledTimes(3);
   refuse(Error("old passive failure"));
-  await new Promise((resolve) => requestAnimationFrame(resolve));
+  await frame(el);
   expect(q(el, "[data-test=read-error]")).toBeNull();
   expect(field(el, "one").value).toBe("Draft");
 });
-
-it("returns to a populated page when live departures remove the last page", async () => {
-  let rows = Array.from({ length: 60 }, (_, n) => target(String(n), { defaultRequired: false }));
-  const liveData = new LiveData();
-  const read = vi.fn(async (_language: string, query: { after?: string }) =>
-    query.after
-      ? result(rows.slice(50))
-      : result(rows.slice(0, 50), rows.length > 50 ? "second" : null),
-  );
+it("returns to a populated page when live departures empty the last bounded page", async () => {
+  let rows = Array.from({ length: 60 }, (_, n) => target(String(n).padStart(3, "0")));
+  const liveData = new LiveData(),
+    read = vi.fn(async (query: TranslationQuery) =>
+      "after" in query && query.after
+        ? result(rows.slice(50))
+        : result(rows.slice(0, 50), rows.length > 50 ? cursor("049", query) : null),
+    );
   const { el } = await mount(rows, { liveData, getContentTranslationTargets: read });
   await click(el, "next");
-  expect(field(el, "50")).not.toBeNull();
+  await vi.waitFor(() => expect(field(el, "050")).not.toBeNull());
   rows = rows.slice(0, 45);
   liveData.invalidate([{ type: "products" }]);
-  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
-  await vi.waitFor(() => expect(field(el, "0")).not.toBeNull());
-  expect(q(el, "[data-test=next]")).toBeNull();
+  await vi.waitFor(() => expect(field(el, "000")).not.toBeNull());
+  expect(read).toHaveBeenCalledTimes(4);
+  expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=previous]")!.disabled).toBe(true);
+  expect(q<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=next]")!.disabled).toBe(true);
+  expect(windowFor(el)!.rows).toHaveLength(45);
 });
-
 it.each(["reopen", "reconnect"] as const)("ignores an old PUT refusal after %s", async (mode) => {
   let refuse!: (value: unknown) => void;
   const save = vi.fn(
     () =>
-      new Promise<{ saved: TranslationTarget[] }>((_resolve, reject) => {
+      new Promise<{ saved: TranslationCell[] }>((_resolve, reject) => {
         refuse = reject;
       }),
   );
-  const { el, host } = await mount([target("one", { defaultRequired: false })], {
-    saveContentTranslations: save,
-  });
+  const { el, host } = await mount([target()], { saveContentTranslations: save });
   await edit(el, "one", "Old draft");
   await click(el, "save");
   if (mode === "reopen") {
     el.open = false;
-    await el.updateComplete;
+    await settled(el);
     el.open = true;
-    await el.updateComplete;
+    await settled(el);
   } else {
     el.remove();
     host.append(el);
-    await el.updateComplete;
+    await settled(el);
   }
   await vi.waitFor(() => expect(field(el, "one")?.disabled).toBe(false));
   await edit(el, "one", "New draft");
@@ -1196,46 +1448,53 @@ it.each(["reopen", "reconnect"] as const)("ignores an old PUT refusal after %s",
     params: {
       kind: "product",
       id: "one",
-      field: "text",
+      field: "name",
       language: "es",
       causeCode: "content.translation_required",
     },
   });
-  await new Promise((resolve) => requestAnimationFrame(resolve));
-  await el.updateComplete;
+  await frame(el);
   expect(field(el, "one").error).toBe("");
   expect(field(el, "one").value).toBe("New draft");
   expect(el.open).toBe(true);
   expect(q<HTMLElementTagNameMap["wt-form-actions"]>(el, "wt-form-actions")!.error).toBe("");
 });
-
 it("keeps an unresolved review visible with the newest passive values and the held draft", async () => {
-  const one = target("one", { defaultRequired: false });
-  let current = one;
-  const liveData = new LiveData();
-  const read = vi.fn(async () => result([current]));
-  const { el, api } = await mount([one], { liveData, getContentTranslationTargets: read });
+  const f = liveFixture(),
+    { el, api } = await mountLive(f);
   await edit(el, "one", "My draft");
-  current = { ...one, selectedText: "Their first name", expected: "first" };
-  await click(el, "review");
-  await vi.waitFor(() =>
-    expect(q(el, "[data-test=review-product-one]")?.textContent).toContain("Their first name"),
-  );
-  current = { ...one, selectedText: "Their newest name", expected: "newest" };
-  liveData.invalidate([{ type: "products" }]);
-  await vi.waitFor(() => expect(read.mock.calls.length).toBeGreaterThanOrEqual(4));
-  await vi.waitFor(() =>
-    expect(q(el, "[data-test=review-product-one]")?.textContent ?? "").toContain(
-      "Their newest name",
-    ),
-  );
+  f.current = cell("one", "es", {
+    text: "Their first name",
+    effectiveText: "Their first name",
+    expected: "first",
+  });
+  f.rows = [changed("one", "Their first name", "first")];
+  await reviewed(el);
+  expect(review(el)!.textContent).toContain("Their first name");
+  f.current = cell("one", "es", {
+    text: "Their newest name",
+    effectiveText: "Their newest name",
+    expected: "newest",
+  });
+  f.rows = [changed("one", "Their newest name", "newest")];
+  f.liveData.invalidate([{ type: "products" }]);
+  await vi.waitFor(() => expect(review(el)?.textContent).toContain("Their newest name"));
   expect(field(el, "one").value).toBe("My draft");
   await click(el, "save");
   expect(api.saveContentTranslations).not.toHaveBeenCalled();
-  await click(el, "keep-product-one");
+  await decide(el, "keep");
   await click(el, "save");
   await vi.waitFor(() => expect(el.open).toBe(false));
-  expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("es", {
-    edits: [{ kind: "product", id: "one", expected: "newest", text: "My draft" }],
+  expect(api.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
+    edits: [
+      {
+        kind: "product",
+        id: "one",
+        language: "es",
+        field: "name",
+        expected: "newest",
+        text: "My draft",
+      },
+    ],
   });
 });
