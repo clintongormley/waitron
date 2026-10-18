@@ -91,7 +91,7 @@ it("lets the colour CHECK take every calendar colour and refuses an unknown one"
         .values({ locationId: v.locationId, name: `Role ${colour}`, colour: colour as never }),
     );
   for (const colour of CALENDAR_COLOURS) await insert(colour);
-  await expect(insert("magenta")).rejects.toThrow("CHECK constraint failed: staff_roles_colour_ck");
+  await expect(insert("beige")).rejects.toThrow("CHECK constraint failed: staff_roles_colour_ck");
 });
 
 it("refuses a staffing day for both a department and a station", async () => {

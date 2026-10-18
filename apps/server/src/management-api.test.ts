@@ -1202,6 +1202,16 @@ describe("/management-api/stations (KDS-1 config)", () => {
       ...before,
       colour: "indigo",
     });
+    const magenta = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ colour: "magenta" }) },
+      managerCookie,
+    );
+    expect(magenta.status).toBe(204);
+    expect((await listStations()).find((station) => station.id === id)).toEqual({
+      ...before,
+      colour: "magenta",
+    });
   });
 
   it("refuses a colour outside the shared palette on create and on edit, naming colour, and writes nothing", async () => {

@@ -136,21 +136,24 @@ const COLOURS = [
   "red",
   "orange",
   "amber",
+  "yellow",
   "lime",
   "green",
   "teal",
   "cyan",
+  "sky",
   "blue",
   "indigo",
   "purple",
+  "magenta",
   "pink",
   "brown",
 ] as const;
 
 /**
- * Twelve stations, one per colour: category `c<i>` sends Every zone to station `s<i>` with a Lunch
- * line to the next station, and its product inherits both. One cell carries a refusal and another a
- * disabled station.
+ * One station per colour in `COLOURS`: category `c<i>` sends Every zone to station `s<i>` with a
+ * Lunch line to the next station, and its product inherits both. One cell carries a refusal and
+ * another a disabled station.
  */
 const everyColour = routing({
   periods: flaggedLine.periods.map((period) => ({ ...period, productIds: ["p0"] })),
@@ -173,7 +176,10 @@ const everyColour = routing({
       zoneId: null,
       target: { kind: "station" as const, stationId: `s${i}` },
       periods: [
-        { periodId: "lunch", target: { kind: "station" as const, stationId: `s${(i + 1) % 12}` } },
+        {
+          periodId: "lunch",
+          target: { kind: "station" as const, stationId: `s${(i + 1) % COLOURS.length}` },
+        },
       ],
     })),
     {
@@ -251,7 +257,7 @@ const states: Record<
   "every colour": {
     model: everyColour,
     expand: true,
-    painted: 12,
+    painted: COLOURS.length,
     refusal: {
       address: { row: { kind: "category", categoryId: "c5" }, zoneId: null },
       message: "This station was disabled. Choose another.",
@@ -261,7 +267,7 @@ const states: Record<
     model: everyColour,
     expand: true,
     period: "lunch",
-    painted: 12,
+    painted: COLOURS.length,
     styles: {
       'td[data-row="c:c3"][data-zone="every"]': "set",
       'td[data-row="p:p3"][data-zone="every"]': "inherited",
@@ -495,7 +501,7 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
     expect(contrastRatio(getComputedStyle(refusal).color, behind)).toBeGreaterThanOrEqual(4.5);
   });
 
-  // Its colour against the twelve fills is held in `packages/ui-core/src/tokens/colors.test.ts`;
+  // Its colour against the station fills is held in `packages/ui-core/src/tokens/colors.test.ts`;
   // here, that a station cell keeps its fill and draws the ring in that colour.
   test("outlines a hovered station cell in the focus colour, which stands 3:1 on its fill", async () => {
     await mountThemed("<div></div>", theme);

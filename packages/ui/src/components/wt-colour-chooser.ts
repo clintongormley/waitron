@@ -17,6 +17,12 @@ export interface ColourChoice {
   usedBy?: readonly string[];
 }
 
+function lineCount(element: Element): number {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+}
+
 /** A form field showing the chosen colour, which opens a panel of colour tiles. */
 @customElement("wt-colour-chooser")
 export class WtColourChooser extends LitElement {
@@ -88,6 +94,10 @@ export class WtColourChooser extends LitElement {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--wt-space-2);
+      }
+
+      [role="radiogroup"][data-columns="4"] {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
       }
 
       .tile {
@@ -208,6 +218,14 @@ export class WtColourChooser extends LitElement {
     popup.style.minWidth = `${anchor.width}px`;
     popup.style.maxWidth = `${innerWidth - 16}px`;
     popup.style.maxHeight = `${innerHeight - 16}px`;
+    // Trying four columns can shorten the panel's content, and the browser then clamps its scroll position.
+    const scrollTop = popup.scrollTop;
+    const group = popup.querySelector<HTMLElement>('[role="radiogroup"]')!;
+    // Set here, not through render(): the line count below reads this layout at once.
+    group.dataset.columns = "4";
+    if ([...group.querySelectorAll(".colour-name")].some((name) => lineCount(name) > 1))
+      group.dataset.columns = "2";
+    popup.scrollTop = scrollTop;
     const box = popup.getBoundingClientRect();
     const maxLeft = Math.max(0, innerWidth - box.width - 8);
     popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;

@@ -421,6 +421,13 @@
       "when": 1792328709424,
       "tag": "0059_floor_plan_sets",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "6",
+      "when": 1792339482039,
+      "tag": "0060_certain_the_fallen",
+      "breakpoints": true
     }
   ]
 }

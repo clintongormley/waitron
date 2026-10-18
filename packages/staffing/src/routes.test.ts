@@ -234,7 +234,7 @@ describe("the staff-role routes", () => {
       refusal("staffing.invalid", { field: "name" }),
     );
     await answers(
-      await r.send("POST", "", r.manager, { name: "Cook", colour: "magenta" }),
+      await r.send("POST", "", r.manager, { name: "Cook", colour: "beige" }),
       400,
       refusal("staffing.invalid", { field: "colour" }),
     );

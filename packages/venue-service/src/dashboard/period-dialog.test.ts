@@ -374,7 +374,7 @@ it("a stored colour outside the palette is refused by the form's own check", asy
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
-  el.period = { ...structuredClone(period), colour: "magenta" as never };
+  el.period = { ...structuredClone(period), colour: "beige" as never };
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -394,20 +394,23 @@ it("a stored colour outside the palette is refused by the form's own check", asy
   expect(save(el).disabled).toBe(false);
 });
 
-it("colour is the shared chooser of the thirteen period colours; choosing one makes Save ready", async () => {
+it("colour is the shared chooser of the period colours; choosing one makes Save ready", async () => {
   const el = await mount(true);
   expect(chooser(el).label).toBe("Colour");
   expect(chooser(el).choices.map((choice) => [choice.value, choice.label])).toEqual([
     ["red", "Red"],
     ["orange", "Orange"],
     ["amber", "Amber"],
+    ["yellow", "Yellow"],
     ["lime", "Lime"],
     ["green", "Green"],
     ["teal", "Teal"],
     ["cyan", "Cyan"],
+    ["sky", "Sky"],
     ["blue", "Blue"],
     ["indigo", "Indigo"],
     ["purple", "Purple"],
+    ["magenta", "Magenta"],
     ["pink", "Pink"],
     ["brown", "Brown"],
     ["grey", "Grey"],
@@ -474,7 +477,7 @@ it("with no colour chosen, the chooser shows none and its first tile is the tab 
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
-  el.period = { ...structuredClone(period), colour: "magenta" as never };
+  el.period = { ...structuredClone(period), colour: "beige" as never };
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -488,18 +491,21 @@ it("with no colour chosen, the chooser shows none and its first tile is the tab 
       "red",
       "orange",
       "amber",
+      "yellow",
       "lime",
       "green",
       "teal",
       "cyan",
+      "sky",
       "blue",
       "indigo",
       "purple",
+      "magenta",
       "pink",
       "brown",
       "grey",
     ].map((colour) => chooserTile(el, colour).tabIndex),
-  ).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
+  ).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
 });
 
 it("LOOK L9: the end-offset explanation is small muted hint text", async () => {
@@ -522,7 +528,7 @@ it("a Save refused only for its colour moves focus to the colour field", async (
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
-  el.period = { ...structuredClone(period), colour: "magenta" as never };
+  el.period = { ...structuredClone(period), colour: "beige" as never };
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -1142,13 +1148,16 @@ it("adding, the chooser names the periods that use each colour, and the new peri
     red: ["Lunch"],
     orange: ["Dinner"],
     amber: [],
+    yellow: [],
     lime: [],
     green: [],
     teal: [],
     cyan: [],
+    sky: [],
     blue: [],
     indigo: [],
     purple: [],
+    magenta: [],
     pink: [],
     brown: [],
     grey: [],
@@ -1162,13 +1171,16 @@ it("with two departments, no colour is marked until one is chosen, then the chos
     red: [],
     orange: [],
     amber: [],
+    yellow: [],
     lime: [],
     green: [],
     teal: [],
     cyan: [],
+    sky: [],
     blue: [],
     indigo: [],
     purple: [],
+    magenta: [],
     pink: [],
     brown: [],
     grey: [],
@@ -1209,13 +1221,16 @@ it("typing in another field keeps the chooser's choices; a language change rebui
       ["red", "Rojo"],
       ["orange", "Naranja"],
       ["amber", "Ámbar"],
+      ["yellow", "Amarillo"],
       ["lime", "Lima"],
       ["green", "Verde"],
       ["teal", "Turquesa"],
       ["cyan", "Cian"],
+      ["sky", "Celeste"],
       ["blue", "Azul"],
       ["indigo", "Índigo"],
       ["purple", "Morado"],
+      ["magenta", "Magenta"],
       ["pink", "Rosa"],
       ["brown", "Marrón"],
       ["grey", "Gris"],

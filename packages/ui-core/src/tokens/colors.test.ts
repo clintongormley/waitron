@@ -422,13 +422,16 @@ const PALETTE = [
   "red",
   "orange",
   "amber",
+  "yellow",
   "lime",
   "green",
   "teal",
   "cyan",
+  "sky",
   "blue",
   "indigo",
   "purple",
+  "magenta",
   "pink",
   "brown",
   "grey",
@@ -507,18 +510,20 @@ describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => 
   });
 });
 
-// The twelve fills a prep station picks from, in the order the picker offers them.
 const STATION_FILLS = [
   "red",
   "orange",
   "amber",
+  "yellow",
   "lime",
   "green",
   "teal",
   "cyan",
+  "sky",
   "blue",
   "indigo",
   "purple",
+  "magenta",
   "pink",
   "brown",
 ].map((colour) => `--wt-color-station-${colour}`);
@@ -560,7 +565,7 @@ describe.each(["light", "dark"] as const)("station colours (%s)", (theme) => {
       ).toBeGreaterThanOrEqual(3);
   });
 
-  test("the twelve fills are different colours, and so are the twelve dots", () => {
+  test("the fills are different colours, and so are the dots", () => {
     const el = mount(theme);
     expect(new Set(STATION_FILLS.map((fill) => token(el, fill))).size).toBe(STATION_FILLS.length);
     expect(new Set(STATION_FILLS.map((fill) => token(el, `${fill}-dot`))).size).toBe(

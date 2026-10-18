@@ -479,7 +479,7 @@ export class RoutingGrid extends LitElement {
     return this.#stations.get(id);
   }
 
-  /** The colour a target paints in; none for No preparation, a missing or disabled station, or a colour outside the twelve. */
+  /** The colour a target paints in; none for No preparation, a missing or disabled station, or a colour outside `STATION_COLOURS`. */
   #colourOf(target: RouteTarget | null): StationColour | undefined {
     if (target?.kind !== "station") return undefined;
     const station = this.#station(target.stationId);

@@ -148,7 +148,7 @@ describe("staff roles", () => {
       inTx((tx) => createStaffRole(tx, v.cfg, { name: "   ", colour: "blue" })),
     ).rejects.toMatchObject({ code: "staffing.invalid", params: { field: "name" } });
     await expect(
-      inTx((tx) => createStaffRole(tx, v.cfg, { name: "Waiter", colour: "magenta" as "blue" })),
+      inTx((tx) => createStaffRole(tx, v.cfg, { name: "Waiter", colour: "beige" as "blue" })),
     ).rejects.toMatchObject({ code: "staffing.invalid", params: { field: "colour" } });
     const staffRole = await inTx((tx) =>
       createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }),
@@ -171,6 +171,12 @@ describe("staff roles", () => {
     expect(
       (await inTx((tx) => listStaffRoles(tx, v.cfg))).map(({ name, colour }) => [name, colour]),
     ).toEqual([["Waiter", "pink"]]);
+    await inTx((tx) =>
+      updateStaffRole(tx, v.cfg, created.id, { name: "Waiter", colour: "yellow" }),
+    );
+    expect(
+      (await inTx((tx) => listStaffRoles(tx, v.cfg))).map(({ name, colour }) => [name, colour]),
+    ).toEqual([["Waiter", "yellow"]]);
   });
 
   it("updates a role's name and colour, keeping its own name free to itself", async () => {

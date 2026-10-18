@@ -96,7 +96,7 @@ describe("addRow", () => {
     expect(addRow(draft).rows.map((r) => r.key)).toEqual(["s1", "new-1", "new-2"]);
   });
 
-  it("takes the first calendar colour when all thirteen are taken", () => {
+  it("takes the first calendar colour when all are taken", () => {
     const seasons = CALENDAR_COLOURS.map((colour, i) => ({
       id: `c${i}`,
       name: colour,

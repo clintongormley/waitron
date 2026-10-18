@@ -393,6 +393,7 @@ native column drop and compares every recorded table value except the retired co
   **2026-10-17, owner's A725/A783 decision:** stations use the same shared palette as periods,
   staff roles and seasons. A725 adopts the current shared list; A783 expands it to sixteen and
   changes the shared chooser layout. The historical twelve-colour board does not set today's palette.
+  **2026-10-18, A783:** stations, periods, staff roles and seasons take the sixteen.
 
 - **A prep station set not to print MOVED slips still shows the moved notice on its kitchen screen
   (A650 question C, owner 2026-10-14: the default kept).** The venue's Print MOVED slips switch and

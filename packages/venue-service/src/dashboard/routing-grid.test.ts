@@ -2136,11 +2136,11 @@ describe("station colours", () => {
     expect(keyColours(el)).toEqual(["Kitchen:orange", "Bar:pink"]);
   });
 
-  it("draws a station whose stored colour is not one of the twelve unpainted, with no dot and no key entry", async () => {
+  it("draws a station whose stored colour is not a station colour as unpainted, with no dot and no key entry", async () => {
     const { el } = await mount(
       withBarLine(
         routing().stations.map((s) =>
-          s.id === "bar" ? { ...s, colour: "magenta" as unknown as typeof s.colour } : s,
+          s.id === "bar" ? { ...s, colour: "beige" as unknown as typeof s.colour } : s,
         ),
       ),
     );

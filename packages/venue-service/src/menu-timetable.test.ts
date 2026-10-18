@@ -485,7 +485,7 @@ describe("service-period writers", () => {
     ]);
   });
 
-  it.each([null, "magenta", 1])("refuses an explicit invalid colour %s", async (colour) => {
+  it.each([null, "beige", 1])("refuses an explicit invalid colour %s", async (colour) => {
     const v = await venue({ timetable: false });
     await expect(
       scoped((tx) =>
@@ -626,15 +626,15 @@ describe("service-period writers", () => {
         colour: colour as never,
       });
     for (const colour of CALENDAR_COLOURS) await insert(colour);
-    await expect(insert("magenta")).rejects.toThrow(
+    await expect(insert("beige")).rejects.toThrow(
       "CHECK constraint failed: menu_periods_colour_ck",
     );
   });
 
-  it("chooses the first unused department colour, repeating red after all thirteen", async () => {
+  it("chooses the first unused department colour, repeating red after all of them", async () => {
     const v = await venue({ timetable: false });
     const colours = [];
-    for (let index = 0; index < 14; index++) {
+    for (let index = 0; index < 17; index++) {
       const { id } = await scoped((tx) =>
         saveMenuPeriod(
           tx,
@@ -658,13 +658,16 @@ describe("service-period writers", () => {
       "red",
       "orange",
       "amber",
+      "yellow",
       "lime",
       "green",
       "teal",
       "cyan",
+      "sky",
       "blue",
       "indigo",
       "purple",
+      "magenta",
       "pink",
       "brown",
       "grey",
@@ -2055,7 +2058,7 @@ describe("the editor's model", () => {
           id: periods.brunch,
           name: "Brunch navideño",
           menuId: menus["Brunch de Navidad"],
-          colour: "green",
+          colour: "lime",
           staffMenuIds: [],
           endOffsetMinutes: 0,
           floorPlanSetId: null,
@@ -2066,7 +2069,7 @@ describe("the editor's model", () => {
           id: periods.madrugada,
           name: "Madrugada",
           menuId: menus.Copas,
-          colour: "lime",
+          colour: "yellow",
           staffMenuIds: [],
           endOffsetMinutes: 0,
           floorPlanSetId: null,

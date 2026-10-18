@@ -624,6 +624,11 @@ describe("saveSeasons", () => {
 
   it("stores each entry's colour, and refuses one outside the calendar colours", async () => {
     const v = await autumnVenue();
+    await change(v, { save: [entry(v.lateAutumn, "Late autumn", "11-01", "sky")] });
+    expect(
+      (await scoped((tx) => readSeasons(tx, v.cfg))).find((season) => season.id === v.lateAutumn)
+        ?.colour,
+    ).toBe("sky");
     await change(v, { save: [entry(v.lateAutumn, "Late autumn", "11-01", "teal")] });
     const read = await scoped((tx) => readSeasons(tx, v.cfg));
     expect(read.find((season) => season.id === v.lateAutumn)?.colour).toBe("teal");

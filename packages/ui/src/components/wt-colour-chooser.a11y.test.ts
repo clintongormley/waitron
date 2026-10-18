@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "./wt-colour-chooser.js";
@@ -23,6 +23,34 @@ const CHOICES: readonly ColourChoice[] = [
   { value: "green", label: "Green", fill: "var(--wt-color-palette-green)" },
   { value: "purple", label: "Purple", fill: "var(--wt-color-palette-purple)" },
 ];
+
+const SIXTEEN: readonly ColourChoice[] = [
+  "red",
+  "orange",
+  "amber",
+  "yellow",
+  "lime",
+  "green",
+  "teal",
+  "cyan",
+  "sky",
+  "blue",
+  "indigo",
+  "purple",
+  "magenta",
+  "pink",
+  "brown",
+  "grey",
+].map((value) => ({
+  value,
+  label: value[0]!.toUpperCase() + value.slice(1),
+  fill: `var(--wt-color-palette-${value})`,
+  ...(value === "amber"
+    ? { usedBy: ["Lunch", "Bar"] }
+    : value === "red"
+      ? { usedBy: ["Dinner"] }
+      : {}),
+}));
 
 async function mountChooser(attributes: string, theme: "light" | "dark") {
   const el = (await mountThemed(
@@ -87,4 +115,30 @@ describe.each(["light", "dark"] as const)("wt-colour-chooser a11y (%s theme)", (
     expect(panel.scrollHeight).toBeGreaterThan(panel.clientHeight);
     await expectNoA11yViolations(host);
   });
+
+  for (const [width, height, count] of [
+    [1280, 800, 4],
+    [390, 844, 2],
+  ] as const) {
+    test(`open, sixteen colours in ${count === 4 ? "four" : "two"} columns`, async () => {
+      const [oldWidth, oldHeight] = [innerWidth, innerHeight];
+      await page.viewport(width, height);
+      try {
+        expect(window.innerWidth).toBe(width);
+        const el = await mountChooser('value="blue"', theme);
+        el.style.cssText = "width: 398px; max-width: 100%";
+        el.choices = SIXTEEN;
+        await el.updateComplete;
+        const panel = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        await userEvent.click(el.shadowRoot!.querySelector("button.trigger")!);
+        await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(true));
+        const group = panel.querySelector<HTMLElement>('[role="radiogroup"]')!;
+        expect(getComputedStyle(group).gridTemplateColumns.split(" ")).toHaveLength(count);
+        expect(panel.querySelectorAll(".used-by")).toHaveLength(2);
+        await expectNoA11yViolations(host);
+      } finally {
+        await page.viewport(oldWidth, oldHeight);
+      }
+    });
+  }
 });

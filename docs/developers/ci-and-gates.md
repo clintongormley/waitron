@@ -1826,10 +1826,12 @@ failed`), core `0044_drop_table_bill_pointer` (the same for `dining_tables`), co
 `0008_node_keyed_rows`, identity `0003_session_token_hash_required` and core `0026_line_vat_class`
 (a rebuild making a column required, refused with `NOT NULL constraint failed` on a copied row
 whose value is null), and core `0012_printer_calibration`, which rebuilds `drawer_opens` without
-copying its rows (`drawer_opens: 2 rows before, 0 after`). The steps `RESETS` lists are these,
-plus core `0055_drop_printer_character_set`, added by C107 (the `printers` rebuild, refused with
-`FOREIGN KEY constraint failed` the way `0044` is): at each the guard checks the failure is still
-the listed one, then migrates an empty database to that point and carries on. A reset that expects a
+copying its rows (`drawer_opens: 2 rows before, 0 after`). These were the first steps `RESETS`
+listed; C107 then added core `0055_drop_printer_character_set` (the `printers` rebuild, refused
+with `FOREIGN KEY constraint failed` the way `0044` is), and `RESETS` in
+`scripts/migration-upgrade.test.ts` holds the whole list. At each step it lists, the guard
+checks the failure is still the listed one, then migrates an empty database to that point and
+carries on. A reset that expects a
 row loss must lose exactly the listed tables, so a second table losing rows at the same step fails
 the guard; at a step refused by a constraint, nothing else the step does to the rows is seen.
 Removing the row-count comparison made the `core/0012` entry fail with

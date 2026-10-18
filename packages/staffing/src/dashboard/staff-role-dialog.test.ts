@@ -108,7 +108,7 @@ function closed() {
 }
 
 describe("staff-role dialog", () => {
-  it("offers a required name, the thirteen calendar colours and the venue's people", async () => {
+  it("offers a required name, the calendar colours and the venue's people", async () => {
     await mount();
     expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Add staff role");
     expect(field("wt-input", "name").required).toBe(true);
@@ -119,13 +119,16 @@ describe("staff-role dialog", () => {
       ["red", "Red"],
       ["orange", "Orange"],
       ["amber", "Amber"],
+      ["yellow", "Yellow"],
       ["lime", "Lime"],
       ["green", "Green"],
       ["teal", "Teal"],
       ["cyan", "Cyan"],
+      ["sky", "Sky"],
       ["blue", "Blue"],
       ["indigo", "Indigo"],
       ["purple", "Purple"],
+      ["magenta", "Magenta"],
       ["pink", "Pink"],
       ["brown", "Brown"],
       ["grey", "Grey"],
@@ -165,7 +168,7 @@ describe("staff-role dialog", () => {
     setLocale("es");
     await mount();
     expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Añadir rol de personal");
-    expect(chooser().choices[4]!.label).toBe("Verde");
+    expect(chooser().choices[5]!.label).toBe("Verde");
   });
 
   it("marks a blank name and says so above the buttons, holding Save until it is fixed", async () => {
@@ -668,13 +671,16 @@ describe("staff-role dialog", () => {
       red: ["Waiter"],
       orange: [],
       amber: [],
+      yellow: [],
       lime: [],
       green: [],
       teal: [],
       cyan: [],
+      sky: [],
       blue: ["Runner", "Cook"],
       indigo: [],
       purple: [],
+      magenta: [],
       pink: [],
       brown: [],
       grey: [],
@@ -688,13 +694,16 @@ describe("staff-role dialog", () => {
           "red",
           "orange",
           "amber",
+          "yellow",
           "lime",
           "green",
           "teal",
           "cyan",
+          "sky",
           "blue",
           "indigo",
           "purple",
+          "magenta",
           "pink",
           "brown",
           "grey",
@@ -733,13 +742,16 @@ describe("staff-role dialog", () => {
       red: [],
       orange: [],
       amber: [],
+      yellow: [],
       lime: [],
       green: [],
       teal: [],
       cyan: [],
+      sky: [],
       blue: ["Waiter"],
       indigo: [],
       purple: [],
+      magenta: [],
       pink: [],
       brown: [],
       grey: [],
