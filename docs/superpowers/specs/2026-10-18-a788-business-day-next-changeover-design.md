@@ -503,8 +503,8 @@ empieza a las" (`:3794`), changes to match.
 | `venue.business_day_invalid` / `clock_transition` | The clocks change on {date}. Save again from {when}. | La hora oficial cambia el {date}. Vuelve a guardar desde {when}. |
 | `hours.clock_change_conflict` | {range} clashes with the new business-day start, {time} from {when}: {reason}. | {range} choca con el nuevo inicio del día de trabajo, {time} desde {when}: {reason}. |
 
-`{reason}` is one of the conflict labels above, or today's `business_day.conflict_all_day`,
-`conflict_sending` or `conflict_strip` (`apps/dashboard/src/i18n/strings.ts:844-846`). Removed:
+`{reason}` comes from venue-service's own copy of those labels, `hours.conflict.<reason>` in
+`packages/venue-service/src/dashboard/strings.ts`; reword both tables together. Removed:
 `business_day.scheduled`, `business_day.none`, `business_day.locks`, `business_day.locked`,
 `business_day.date`, `business_day.date_invalid`, `business_day.replace`,
 `business_day.cancel_pending`, `business_day.acknowledge`, `business_day.transition`, and

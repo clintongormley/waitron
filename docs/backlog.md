@@ -1595,7 +1595,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   A506-1, #1577.
 
 - **Loose ends left by A506-3 (#1591).**
-  - The Business day start dialog repeats the server's conflict-counting rule (`rangeKey`,
+  - The Business day start dialog repeats the server's conflict-counting rule (`#conflictLines`,
     `business-day-start-editor.ts`), so a server change would make it miscount unnoticed.
     [Detail](backlog/service-periods.md#the-business-day-start-dialog-repeats-the-servers-conflict-counting-rule)
 

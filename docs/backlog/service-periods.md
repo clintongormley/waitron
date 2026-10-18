@@ -72,7 +72,7 @@ and hours proposals; the historical spec keeps its dated pointers.
 Left open by A506-3, #1591.
 
 The Business day start dialog works out its conflict count by repeating the server's rule for
-counting a conflict once whatever its season (`rangeKey`,
+counting a conflict once whatever its season (`#conflictLines`,
 `apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
 would make the dialog miscount without any test noticing. The server could return how many conflicts
 it left off its list instead, which adds a field to the shared preview type.
@@ -633,7 +633,9 @@ code, not run again here.
   UTC-clock limits. `apps/server/src/business-day-history.test.ts` compares recorded fiscal,
   invoice-series and close rows before and after scheduling; it does not establish external
   filing behavior.
-  2026-10-18, A788: dated scheduling replaced — a new start takes effect at the next changeover; see
+  2026-10-18, A788: dated scheduling, Replace, Cancel and the pause on hours edits are retired. A new
+  start takes effect at the next changeover, and opening hours stay editable while it waits; a write
+  that clashes with the waiting start is refused `hours.clock_change_conflict`. See
   [the design](../superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md).
 
 
