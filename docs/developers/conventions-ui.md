@@ -127,8 +127,8 @@ accepts exactly this:
 - `**bold**`, `_emphasis_`, `` `code` ``, and links to another guide, written
   `[text](modifiers.md)` or `[text](modifiers.md#lists)`.
 
-Everything else in a line is escaped and shown as written, so a placeholder such as
-`**<department> receipt logo**` reads as text. A shape outside the subset makes `renderGuide` throw
+The characters `<`, `>`, `&` and the quotes are escaped wherever they appear, so a placeholder such
+as `**<department> receipt logo**` reads as text. A shape outside the subset makes `renderGuide` throw
 an error naming the line: a table row starting with `|`, a fence, a quote, a `*` or `+` list, a numbered list, a nested
 list, an indented line, a rule, a level-3 heading, a second title, formatting inside a heading, an
 image, a link to anything but another guide, a lone `*`, a backslash, an HTML comment, an HTML
@@ -139,9 +139,10 @@ to `https://example.com` were each refused with their line number; `<b>hi</b>` r
 link is written relative, so it stays in the reader's language.
 
 The refusals keep the shapes listed above from reaching a box: `apps/server/src/guide-content.test.ts`
-renders every page, so a guide edit that uses one fails `apps/server`'s tests in CI. Anything else,
-such as a table written without a leading `|`, `~~strike~~` or `<img src=x>`, is shown as plain
-text (measured 2026-10-19 with the same `node` call), so only reading the rendered page catches it.
+renders every page, so a guide edit that uses one fails `apps/server`'s tests in CI. Nothing else is
+refused. A table written without a leading `|`, `~~strike~~` and `<img src=x>` are shown as
+written, and `__bold__` comes out as emphasis around `_bold_` (measured 2026-10-19 with the same
+`node` call), so no test catches them: someone has to read the page.
 If a refused shape reached a box anyway, the route answers its own 500 page and logs `guide.render_failed`, without
 the guide's words.
 

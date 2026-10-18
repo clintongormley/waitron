@@ -4444,8 +4444,8 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 - **A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads.** The
   image library says "Disabled product" where the product screens say "Archived", the Spanish
-  `product.refusal_menus`, `folders.delete_off_menus` and `routing.period_not_on_menus` say
-  "menús" where the neighbouring strings say "cartas", and
+  `product.refusal_menus`, `folders.delete_off_menus`, `routing.period_not_on_menus` and
+  `venue.delete_item_staff_menus` say "menús" where the neighbouring strings say "cartas", and
   `product.disable_warning` and `product.disabled_badge` are unused.
   [Detail](backlog/languages.md#a886-dashboard-wording-disabled-product-menús-and-two-strings-nothing-reads)
 

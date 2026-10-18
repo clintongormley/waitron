@@ -869,8 +869,11 @@ reverted:
 
 - With an options list deleted and the menus not republished, the till cannot add a dish that
   carries it (`options.label_required`), and saving a change to a parked order that keeps such a
-  dish on it is refused the same way. On a table's order, a new round and a quantity change still
-  succeed; only another such dish with the old answer is refused.
+  dish on it is refused the same way. On a table's order, a new round (`submitGroups`) and a
+  quantity change to one line (`updateOrderLine`) still succeed, and only another such dish with
+  the old answer is refused; but an edit of a table's order that kept such a dish, already sent to
+  the kitchen, and added a line (a probe in `apps/server/src/tabs.test.ts`) was refused
+  `options.label_required`.
 - With an options list and an extras list both deleted and the menus republished, raising the
   quantity of a table's dish that still carries an extra from the deleted list is refused
   `extras.invalid`, though a note on it succeeds.
