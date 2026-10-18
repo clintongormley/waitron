@@ -592,7 +592,7 @@ export class CourseList extends LitElement {
         : nothing
     }
     ${
-      this.readOnly
+      this.readOnly || !this.showAddButton
         ? nothing
         : html`<div class="add">
             <wt-button variant="secondary" data-test="add-course" @click=${() => void this.#add()}
@@ -601,6 +601,13 @@ export class CourseList extends LitElement {
           </div>`
     }
     ${this.#deleteDialog()}`;
+  }
+
+  /** Off where the page's own header carries Add course and calls {@link startAdding}. */
+  @property({ type: Boolean }) showAddButton = true;
+
+  startAdding(): void {
+    void this.#add();
   }
 }
 
