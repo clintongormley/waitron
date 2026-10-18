@@ -437,7 +437,8 @@ called weaker than its name, the topic file lists what it does not see.
   Write-path functions take a `tx: Transaction` and never open their own; a route handler opens
   exactly one `withTransaction` per request. This is a convention, not a compiler guarantee. A
   secret check should be the exception: it takes the `Database` and derives its key with no
-  transaction open, and a new route that forgets the early check, or forgets to take turns, derives
+  transaction open, and a new route that forgets the early check, or forgets to take turns
+  (`inTurn`, `apps/server/src/attempt-turns.ts`), derives
   under the lock or once per attempt in a burst, unnoticed. **Splitting one logical change across
   transactions is a commented decision, never a default.** **Queries on one transaction are awaited
   in turn, never `Promise.all`.** No guard enforces it.
@@ -543,7 +544,10 @@ called weaker than its name, the topic file lists what it does not see.
   Guard: `scripts/schema-constraints.test.ts`, weaker than its name — it reads the built schema
   rather than trying an offending insert, and matches a unique index by NAME.
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
-  snapshots or `_journal.json`.**
+  snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
+  RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts`,
+  `scripts/behavioural-triggers.test.ts`, `scripts/migrations-match-schema.test.ts` and
+  `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
 - **A drizzle table rebuild on this engine runs with foreign keys ON, so its `DROP TABLE` silently
   deletes every cascading child's rows, and fails on a `no action` or `restrict` child holding rows.**
   Before shipping a rebuild, list the foreign keys that point at the table. Cost: rebuilds emptied
@@ -572,7 +576,7 @@ called weaker than its name, the topic file lists what it does not see.
   without the check; the full list is in [conventions-data.md](docs/developers/conventions-data.md).
 - **An empty value is a valid value** — to whatever receives it, so a reader must turn `""` into
   "unset" itself. An env or prompt value set to `""` falls back to its default exactly as an unset
-  one does; a path never goes through `resolve("")`; and a reader with no default refuses `""`
+  one does (`isUnset`, `apps/server/src/env-value.ts`); a path never goes through `resolve("")`; and a reader with no default refuses `""`
   explicitly.
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Until then
   any installation may be reset at any time instead of carrying its data forward (owner,
