@@ -2287,8 +2287,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   clock are removed on the feature branch. The station menu uses the sent read when no editable
   bill-line copy exists, including a presented bill, while retained controls still refuse changed
   status, preparation and editing authority. Focused checks retain the service payloads and
-  accessible dish/group labels. The old Current orders, To serve and Served drawer lists still
-  need their remaining checks moved to Sent before removal. Sent's Comp now opens one reason-first
+  accessible dish/group labels. In Sent's dish window, you can now see when its group was sent,
+  who sent it and how much of the dish has been served. Those facts use the current service read;
+  an ungrouped dish has no group sender. Grouped, row-state, extra/note, unread and busy-service
+  checks now use Sent. All served and a fired-row tap leave unreleased food alone, including a
+  dish whose extra is still held, while retaining its displayed price. A retained Mark served
+  action leaves the dish window open when a newer read says the dish is no longer released.
+  The old Current orders, To serve and Served drawer lists still need their remaining move,
+  fallback, nutrition, refusal and reorder checks moved before removal. Sent's Comp now opens one reason-first
   window on the feature branch.
   You choose the whole dish with its extras or one priced extra, then Free, % or € from the
   reason's allowed actions. A whole dish starts at all units and accepts a count from one to its

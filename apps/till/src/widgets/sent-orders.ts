@@ -398,7 +398,11 @@ export class TillSentOrders extends LitElement {
   #serve(displayed: readonly { lineId: string; quantity: string }[]): void {
     if (!this.isConnected || this.busy || displayed.length === 0) return;
     const fired = this.#model()?.fired ?? [];
-    const current = new Map(fired.map((slice) => [slice.row.lineId, slice.quantity]));
+    const current = new Map(
+      fired
+        .filter((slice) => slice.row.released)
+        .map((slice) => [slice.row.lineId, slice.quantity]),
+    );
     if (displayed.some((item) => current.get(item.lineId) !== item.quantity)) return;
     this.#dispatch("serve-lines", { items: displayed.map((item) => ({ ...item })) });
     this.#releasePointer();
@@ -494,7 +498,7 @@ export class TillSentOrders extends LitElement {
               type="button"
               class="dish"
               data-serve-line=${slice.row.lineId}
-              ?disabled=${this.busy}
+              ?disabled=${this.busy || !slice.row.released}
               aria-description=${t("table.serve")}
               @pointerdown=${(event: PointerEvent) => this.#pressLine(slice, event)}
               @click=${(event: MouseEvent) => this.#clickServe(slice, event)}
@@ -733,9 +737,9 @@ export class TillSentOrders extends LitElement {
                   <h3>${t("table.group_fired")}</h3>
                   <wt-button
                     data-serve-all
-                    variant=${this.busy || model.fired.length === 0 ? "secondary" : "primary"}
-                    ?disabled=${this.busy || model.fired.length === 0}
-                    @click=${() => this.#serve(model.fired.map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })))}
+                    variant=${this.busy || !model.fired.some((slice) => slice.row.released) ? "secondary" : "primary"}
+                    ?disabled=${this.busy || !model.fired.some((slice) => slice.row.released)}
+                    @click=${() => this.#serve(model.fired.filter((slice) => slice.row.released).map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })))}
                     >${t("table.serve_group")}</wt-button
                   >
                 </div>

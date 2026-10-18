@@ -73,6 +73,28 @@ const sq = (el: TillTableOrderScreen, selector: string) =>
   el
     .shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!
     .shadowRoot!.querySelector<HTMLElement & { disabled?: boolean }>(selector);
+async function unfoldSent(el: TillTableOrderScreen) {
+  const panel = await sentPanelFor(el);
+  for (const selector of ["[data-sent-toggle]", "[data-served-toggle]", "[data-held-toggle]"]) {
+    const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector);
+    if (toggle?.getAttribute("aria-expanded") === "false") {
+      await userEvent.click(toggle);
+      await panel.updateComplete;
+    }
+  }
+  return panel;
+}
+
+async function closeSentDish(el: TillTableOrderScreen) {
+  const dialog = q(el, "[data-sent-line-dialog]")!;
+  const closed = new Promise<void>((resolve) =>
+    dialog.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  await userEvent.click(q(el, "[data-sent-line-close]")!);
+  await closed;
+  await el.updateComplete;
+}
+
 const rowOf = (el: TillTableOrderScreen, lineId: string) => q(el, `[data-group-line="${lineId}"]`)!;
 
 function capture(el: TillTableOrderScreen, type: string): CustomEvent[] {
@@ -82,47 +104,65 @@ function capture(el: TillTableOrderScreen, type: string): CustomEvent[] {
 }
 
 describe("Current orders and Sent service", () => {
-  it("lists the groups in sequence with every bill's rows, held and fired told apart", async () => {
-    const { el } = await mountCurrent();
-    expect(text(q(el, "[data-groups] h2")!)).toBe(t("table.groups_title"));
-    const shown = all(el, "[data-group]");
-    expect(shown.map((group) => group.dataset.group)).toEqual(["g1", "g2", "g3", "g4"]);
-    expect(shown.map((group) => group.dataset.groupState)).toEqual([
-      "fired",
-      "fired",
-      "held",
-      "held",
-    ]);
+  it("keeps held groups in sequence and separates this bill's fired and served rows", async () => {
+    const { el } = await mountSent();
+    const panel = await unfoldSent(el);
+    expect(text(sq(el, "[data-sent-toggle]")!)).toContain(t("table.sent_title"));
+    const shown = [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-held-group]")];
+    expect(shown.map((group) => group.dataset.heldGroup)).toEqual(["g3", "g4"]);
     expect(
       shown.map((group) =>
-        [...group.querySelectorAll<HTMLElement>("[data-group-line]")].map(
-          (line) => line.dataset.groupLine,
+        [...group.querySelectorAll<HTMLElement>("[data-held-line]")].map(
+          (line) => line.dataset.heldLine,
         ),
       ),
-    ).toEqual([
-      ["l-croq", "l-salad", "l-beer", "l-bravas"],
-      ["l-steak", "l-fish", "l-pulpo"],
-      ["l-flan"],
-      ["l-tarta"],
-    ]);
-    expect(text(q(el, '[data-group="g4"] [data-group-kitchen]')!)).toBe(t("table.group_held"));
-    // The rows stand for the server's summary.
-    expect(el.shadowRoot!.querySelector("[data-group-summary]")).toBeNull();
+    ).toEqual([["l-flan"], ["l-tarta"]]);
+    expect(
+      [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-fired-line]")].map(
+        (line) => line.dataset.firedLine,
+      ),
+    ).toEqual(["l-beer", "l-bravas", "l-coffee", "l-croq", "l-fish", "l-steak"]);
+    expect(
+      [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-served-line]")].map(
+        (line) => line.dataset.servedLine,
+      ),
+    ).toEqual(["l-croq", "l-salad"]);
+    expect(text(sq(el, '[data-held-line="l-tarta"] .status')!)).toBe(t("table.group_held"));
+    expect(panel.shadowRoot!.querySelector("[data-group-summary]")).toBeNull();
+    expect(panel.shadowRoot!.querySelector('[data-fired-line="l-pulpo"]')).toBeNull();
+    el.orderId = "wo-check";
+    await el.updateComplete;
+    await unfoldSent(el);
+    expect(sq(el, '[data-fired-line="l-pulpo"]')).not.toBeNull();
+    expect(sq(el, '[data-fired-line="l-croq"]')).toBeNull();
   });
 
-  describe("each group's head says when it was sent and by whom", () => {
+  describe("the sent dish window says when its group was sent and by whom", () => {
     const clock = (iso: string) =>
       new Intl.DateTimeFormat(currentLocale(), { hour: "2-digit", minute: "2-digit" }).format(
         new Date(iso),
       );
-    const sentOf = (el: TillTableOrderScreen) =>
-      ["g1", "g2", "g3", "g4"].map((id) =>
-        text(q(el, `[data-group="${id}"] .group-head [data-group-sent]`)!),
-      );
+    const sentOf = async (el: TillTableOrderScreen) => {
+      const facts: (string | null)[] = [];
+      for (const [lineId, kind] of [
+        ["l-beer", "fired"],
+        ["l-fish", "fired"],
+        ["l-flan", "held"],
+        ["l-tarta", "held"],
+      ] as const) {
+        await openSentDish(el, lineId, kind);
+        const fact = q(el, "[data-sent-line-origin]");
+        facts.push(fact === null ? null : text(fact));
+        await closeSentDish(el);
+      }
+      return facts;
+    };
     // Group 1's sent time differs from its fired time, so showing the one for the other fails.
     const sentBeforeFired = "2026-09-28T19:45:00.000Z";
     const mountSent = () =>
-      mountCurrent({
+      mount({
+        groups,
+        now,
         currentOrders: current({
           groups: current().groups.map((group) =>
             group.id === "g1" ? { ...group, sentAt: sentBeforeFired } : group,
@@ -132,7 +172,7 @@ describe("Current orders and Sent service", () => {
 
     it("in English: fired groups say Sent, held ones Held, and a sender with no name is left out", async () => {
       const { el } = await mountSent();
-      expect(sentOf(el)).toEqual([
+      expect(await sentOf(el)).toEqual([
         `Sent ${clock(sentBeforeFired)} by Luis`,
         `Sent ${clock(fired)}`,
         `Held ${clock(heldAt)} by Ana`,
@@ -143,7 +183,7 @@ describe("Current orders and Sent service", () => {
     it("in Spanish", async () => {
       setLocale("es");
       const { el } = await mountSent();
-      expect(sentOf(el)).toEqual([
+      expect(await sentOf(el)).toEqual([
         `Enviado a las ${clock(sentBeforeFired)} por Luis`,
         `Enviado a las ${clock(fired)}`,
         `En espera desde las ${clock(heldAt)}, por Ana`,
@@ -153,40 +193,53 @@ describe("Current orders and Sent service", () => {
   });
 
   it("says of each row only what was recorded, and how much of a partly served one is served", async () => {
-    const { el } = await mountCurrent();
-    const state = (lineId: string) => text(rowOf(el, lineId).querySelector("[data-row-state]")!);
+    const { el } = await mountSent();
+    const state = async (lineId: string, kind: "fired" | "served" = "fired") => {
+      await openSentDish(el, lineId, kind);
+      return text(q(el, "[data-sent-line-status]")!);
+    };
     const ago = t("table.group_fired_ago").replace("{n}", "25");
-    expect(state("l-croq")).toBe(ago);
-    expect(text(rowOf(el, "l-croq").querySelector("[data-row-served]")!)).toBe(
+    expect(await state("l-croq")).toBe(ago);
+    expect(q(el, "[data-sent-line-served]")?.textContent?.trim() ?? null).toBe(
       t("table.row_served_of").replace("{served}", "2").replace("{quantity}", "4"),
     );
-    expect(state("l-salad")).toBe(t("table.row_served"));
-    expect(state("l-beer")).toBe(t("table.group_ready"));
-    expect(state("l-bravas")).toBe(t("table.group_away"));
-    expect(state("l-fish")).toBe(t("table.row_preparing"));
-    // A station that records nothing: fired, and no claim that it is ready.
-    expect(state("l-pulpo")).toBe(ago);
-    expect(text(rowOf(el, "l-pulpo"))).not.toContain(t("table.group_ready"));
-    // No kitchen item, so no kitchen state at all.
-    expect(rowOf(el, "l-steak").querySelector("[data-row-state]")).toBeNull();
-    expect(rowOf(el, "l-salad").querySelector("[data-row-served]")).toBeNull();
-    expect(rowOf(el, "l-beer").querySelector("[data-row-served]")).toBeNull();
+    await closeSentDish(el);
+    for (const [id, kind, wanted] of [
+      ["l-salad", "served", t("table.row_served")],
+      ["l-beer", "fired", t("table.group_ready")],
+      ["l-bravas", "fired", t("table.group_away")],
+      ["l-fish", "fired", t("table.row_preparing")],
+      ["l-steak", "fired", ""],
+    ] as const) {
+      expect(await state(id, kind)).toBe(wanted);
+      if (id === "l-salad" || id === "l-beer") expect(q(el, "[data-sent-line-served]")).toBeNull();
+      await closeSentDish(el);
+    }
+    el.orderId = "wo-check";
+    await el.updateComplete;
+    expect(await state("l-pulpo")).toBe(ago);
+    expect(text(q(el, "[data-sent-line-dialog]")!)).not.toContain(t("table.group_ready"));
   });
 
   it("shows a dish's extras and note with it, and a held row offers no Mark served", async () => {
-    const { el } = await mountCurrent({
+    const { el } = await mountSent({
       currentOrders: current({
         groups: [currentGroup("g3", 3, "held", [{ ...flan, note: "no sugar" }])],
       }),
     });
-    const flanRow = rowOf(el, "l-flan");
+    await unfoldSent(el);
+    const flanRow = sq(el, '[data-held-line="l-flan"]')!;
     expect(text(flanRow)).toContain("Flan ×2");
     expect(text(flanRow)).toContain("Cream ×2");
     expect(text(flanRow)).toContain("no sugar");
-    expect(flanRow.querySelector("[data-serve-row]")).toBeNull();
-    expect(q(el, '[data-serve-row="l-cream"]')).toBeNull();
-    // A held row keeps its Move.
-    expect(flanRow.querySelector('[data-move-line="l-flan"]')).not.toBeNull();
+    expect(flanRow.querySelector("[data-serve-line]")).toBeNull();
+    expect(sq(el, '[data-serve-line="l-cream"]')).toBeNull();
+    await openSentDish(el, "l-flan", "held");
+    expect(q(el, "[data-sent-line-serve]")).toBeNull();
+    await openSentMore(el);
+    expect(q(el, "[data-sent-line-fire]")).not.toBeNull();
+    expect(q(el, "[data-move-line]")).toBeNull();
+    expect(q(el, "[data-split-group-line]")).toBeNull();
   });
 
   it("offers Mark served on a dish and not on its extras, which are served with it", async () => {
@@ -203,14 +256,22 @@ describe("Current orders and Sent service", () => {
         },
       ],
     });
-    const { el } = await mountCurrent({
+    const { el } = await mountSent({
       currentOrders: current({ groups: [currentGroup("g1", 1, "fired", [burger])], ungrouped: [] }),
     });
-    expect(all(el, "[data-serve-row]").map((button) => button.dataset.serveRow)).toEqual([
-      "l-burger",
+    const panel = await unfoldSent(el);
+    expect(
+      [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-serve-line]")].map(
+        (button) => button.dataset.serveLine,
+      ),
+    ).toEqual(["l-burger"]);
+    expect(sq(el, '[data-fired-line="l-bacon"]')).toBeNull();
+    expect(text(sq(el, '[data-fired-line="l-burger"]')!)).toContain("Bacon ×2");
+    const serves = capture(el, "serve-lines");
+    await userEvent.click(sq(el, '[data-serve-line="l-burger"]')!);
+    expect(serves.map((event) => event.detail)).toEqual([
+      { items: [{ lineId: "l-burger", quantity: "1" }] },
     ]);
-    expect(q(el, '[data-group-line="l-bacon"]')).toBeNull();
-    expect(text(rowOf(el, "l-burger"))).toContain("Bacon ×2");
   });
 
   it("marks a row of one served at once, naming the dish on the control", async () => {
@@ -320,14 +381,14 @@ describe("Current orders and Sent service", () => {
     ]);
   });
 
-  it("marks a fired group served whole, only where every row is released and some is unserved", async () => {
-    const recalled = { ...fish, released: false, kitchen: null };
-    const { el } = await mountCurrent({
+  it("All served marks this bill's released remainders, excluding served and still held food", async () => {
+    const withheld = { ...fish, released: false, kitchen: null };
+    const { el } = await mountSent({
       currentOrders: current({
         groups: [
           currentGroup("g1", 1, "fired", [croquetas, salad]),
           currentGroup("g2", 2, "fired", [salad]),
-          currentGroup("g3", 3, "fired", [steak, recalled]),
+          currentGroup("g3", 3, "fired", [steak, withheld]),
           currentGroup("g4", 4, "held", [tarta]),
         ],
       }),
@@ -338,23 +399,73 @@ describe("Current orders and Sent service", () => {
         orderGroup("g4", 4, "held"),
       ],
     });
-    const serves = capture(el, "serve-group");
-    expect(all(el, "[data-serve-group]").map((button) => button.dataset.serveGroup)).toEqual([
-      "g1",
+    await unfoldSent(el);
+    const serves = capture(el, "serve-lines");
+    const serve = sq(el, "[data-serve-all]")!;
+    expect(text(serve)).toBe(t("table.serve_group"));
+    await userEvent.click(serve);
+    expect(serves.map((event) => event.detail)).toEqual([
+      {
+        items: [
+          { lineId: "l-coffee", quantity: "1" },
+          { lineId: "l-croq", quantity: "2" },
+          { lineId: "l-steak", quantity: "1" },
+        ],
+      },
     ]);
-    const serve = q(el, '[data-serve-group="g1"]')!;
-    expect(serve.getAttribute("aria-label")).toBe(
-      `${t("table.serve_group")} · ${t("table.group_n").replace("{n}", "1")}`,
-    );
+    await openSentDish(el, "l-salad", "served");
+    expect(text(q(el, "[data-sent-line-status]")!)).toBe(t("table.row_served"));
+    await closeSentDish(el);
+    expect(sq(el, '[data-serve-line="l-fish"]')!.disabled).toBe(true);
+    await openSentDish(el, "l-fish");
+    expect(text(q(el, "[data-sent-line-status]")!)).toBe(t("table.group_held"));
+    expect(q(el, "[data-sent-line-serve]")).toBeNull();
+  });
+
+  it("keeps an open dish window when a retained serve action meets an unreleased component", async () => {
+    const { el } = await mountSent();
+    await openSentDish(el, "l-beer");
+    const serve = q(el, "[data-sent-line-serve]")!;
+    const serves = capture(el, "serve-lines");
+    el.currentOrders = current({
+      groups: [
+        currentGroup("g1", 1, "fired", [row("l-beer", "Beer", "1.000", { released: false })]),
+      ],
+    });
     serve.click();
-    expect(serves.map((event) => event.detail)).toEqual([{ groupId: "g1" }]);
-    // Every row of group 2 is served: it says so.
-    expect(text(q(el, '[data-group="g2"] [data-group-kitchen]')!)).toBe(t("table.row_served"));
-    // The recalled Fish is held again.
-    expect(text(rowOf(el, "l-fish").querySelector("[data-row-state]")!)).toBe(
-      t("table.group_held"),
-    );
-    expect(rowOf(el, "l-fish").querySelector("[data-serve-row]")).toBeNull();
+    await el.updateComplete;
+    expect(serves).toEqual([]);
+    expect(q(el, "[data-sent-line-dialog]")!.hasAttribute("open")).toBe(true);
+    expect(q(el, "[data-sent-line-serve]")).toBeNull();
+  });
+
+  it("refreshes an open dish's group facts and removes them when its group no longer contains it", async () => {
+    const { el } = await mountSent();
+    await openSentDish(el, "l-beer");
+    const clock = (value: string) =>
+      new Intl.DateTimeFormat(currentLocale(), {
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(value));
+    const origin = () => text(q(el, "[data-sent-line-origin]")!);
+    expect(origin()).toBe(`Sent ${clock(fired)} by Luis`);
+    el.currentOrders = current({
+      groups: [
+        currentGroup("changed", 8, "fired", [row("l-beer", "Beer", "1.000")], {
+          sentAt: heldAt,
+          sentBy: "Ana $& $'",
+        }),
+      ],
+    });
+    await el.updateComplete;
+    expect(origin()).toBe(`Sent ${clock(heldAt)} by Ana $& $'`);
+    el.currentOrders = current({
+      groups: [currentGroup("unrelated", 9, "held", [flan])],
+      ungrouped: [row("l-beer", "Beer", "1.000")],
+    });
+    await el.updateComplete;
+    expect(q(el, "[data-sent-line-origin]")).toBeNull();
+    expect(q(el, "[data-sent-line-dialog]")!.hasAttribute("open")).toBe(true);
   });
 
   it("moves a held row on any open bill of the party, and splits one sold by the unit with no extras", async () => {
@@ -408,49 +519,58 @@ describe("Current orders and Sent service", () => {
     expect(text(rowOf(el, "l-paid"))).toBe("Steak ×2");
   });
 
-  it("says Current orders could not be read, where the list would be", async () => {
-    const { el } = await mountCurrent({ currentOrders: null, currentOrdersUnread: true });
-    expect(text(q(el, "[data-groups] [data-current-orders-unread]")!)).toBe(
+  it("says the sent orders could not be read, where Sent would be", async () => {
+    const { el } = await mountSent({ currentOrders: null, currentOrdersUnread: true });
+    expect(text(q(el, "[data-sent-orders] [data-sent-unread]")!)).toBe(
       t("table.current_orders_unread"),
     );
-    const none = await mountCurrent({
-      groups: [],
-      currentOrders: null,
-      currentOrdersUnread: true,
-    });
-    expect(q(none.el, "[data-current-orders-unread]")).not.toBeNull();
+    const none = await mountSent({ groups: [], currentOrders: null, currentOrdersUnread: true });
+    expect(q(none.el, "[data-sent-unread]")).not.toBeNull();
     el.currentOrdersUnread = false;
     await el.updateComplete;
-    expect(q(el, "[data-current-orders-unread]")).toBeNull();
+    expect(q(el, "[data-sent-unread]")).toBeNull();
   });
 
-  it("lists rows in no group under their own heading, each with Mark served", async () => {
-    const { el } = await mountCurrent({ groups: [], currentOrders: current({ groups: [] }) });
-    const loose = q(el, "[data-ungrouped]")!;
-    expect(text(loose.querySelector("h3")!)).toBe(t("table.ungrouped_title"));
-    expect(loose.querySelector('[data-serve-row="l-coffee"]')).not.toBeNull();
-    expect(q(el, "[data-group]")).toBeNull();
+  it("includes rows in no group in Fired, with Mark served and no invented group", async () => {
+    const { el } = await mountSent({ groups: [], currentOrders: current({ groups: [] }) });
+    await unfoldSent(el);
+    expect(sq(el, '[data-serve-line="l-coffee"]')).not.toBeNull();
+    expect(sq(el, "[data-held-group]")).toBeNull();
+    await openSentDish(el, "l-coffee");
+    expect(q(el, "[data-sent-line-origin]")).toBeNull();
   });
 
   it("is absent when the party has neither groups nor rows in no group", async () => {
-    const { el } = await mountCurrent({
+    const { el } = await mountSent({
       groups: [],
       currentOrders: current({ groups: [], ungrouped: [], reminder: null }),
     });
-    expect(q(el, "[data-groups]")).toBeNull();
+    expect(sq(el, "[data-sent-panel]")).toBeNull();
   });
 
   it("offers no serving while a group command runs", async () => {
-    const { el } = await mountCurrent({ groupCommandBusy: true });
-    for (const selector of [
-      '[data-serve-row="l-croq"]',
-      '[data-unserve-row="l-salad"]',
-      '[data-serve-group="g1"]',
-    ])
-      expect(q(el, selector)!.disabled, selector).toBe(true);
+    const { el } = await mountSent();
+    await unfoldSent(el);
+    await openSentDish(el, "l-salad", "served");
+    await openSentMore(el);
+    const serves = capture(el, "serve-lines");
+    const undoes = capture(el, "unserve-lines");
+    el.groupCommandBusy = true;
+    await el.updateComplete;
     await sentPanelFor(el);
-    for (const selector of ["[data-reminder-snooze]", "[data-reminder-fire]"])
+    for (const selector of [
+      '[data-serve-line="l-croq"]',
+      "[data-serve-all]",
+      "[data-reminder-snooze]",
+      "[data-reminder-fire]",
+    ])
       expect(sq(el, selector)!.disabled, selector).toBe(true);
+    expect(q(el, "[data-sent-line-unserve]")!.disabled).toBe(true);
+    sq(el, '[data-serve-line="l-croq"]')!.click();
+    sq(el, "[data-serve-all]")!.click();
+    q(el, "[data-sent-line-unserve]")!.click();
+    expect(serves).toEqual([]);
+    expect(undoes).toEqual([]);
   });
 
   it("without Current orders, shows this bill's rows and offers no serving", async () => {

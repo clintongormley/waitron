@@ -692,3 +692,43 @@ it("runs no age interval for an unread or folded Sent panel", async () => {
     vi.useRealTimers();
   }
 });
+
+it("keeps unreleased fired food visible but serves only released remainders", async () => {
+  const el = await mount(
+    current([
+      row("held-extra", { released: false, firedAt: null }),
+      row("served", { servedQuantity: "1.000", servedAt: at(59) }),
+    ]),
+  );
+  await click(el, "[data-sent-toggle]");
+  const all = find(el, "[data-serve-all]") as HTMLElement & { disabled: boolean };
+  expect(all.disabled).toBe(true);
+  expect(all.getAttribute("variant")).toBe("secondary");
+  const dish = find(el, '[data-serve-line="held-extra"]') as HTMLButtonElement;
+  expect(dish.disabled).toBe(true);
+  expect(find(el, '[data-fired-line="held-extra"]').textContent).toContain("3.00");
+  const calls = collect(el, "serve-lines");
+  all.click();
+  dish.click();
+  expect(calls).toEqual([]);
+  el.snapshot = { ...el.snapshot!, current: current([row("held-extra")]) };
+  await el.updateComplete;
+  expect(all.disabled).toBe(false);
+  expect(all.getAttribute("variant")).toBe("primary");
+  await click(el, "[data-serve-all]");
+  expect(calls).toEqual([{ items: [{ lineId: "held-extra", quantity: "1" }] }]);
+});
+
+it("refuses a retained serve control when the latest row has an unreleased component", async () => {
+  const el = await mount(current([row("Bravas")]));
+  await click(el, "[data-sent-toggle]");
+  const dish = find(el, '[data-serve-line="Bravas"]');
+  const all = find(el, "[data-serve-all]");
+  const calls = collect(el, "serve-lines");
+  el.snapshot = { ...el.snapshot!, current: current([row("Bravas", { released: false })]) };
+  dish.click();
+  all.click();
+  expect(calls).toEqual([]);
+  await el.updateComplete;
+  expect((find(el, '[data-serve-line="Bravas"]') as HTMLButtonElement).disabled).toBe(true);
+});

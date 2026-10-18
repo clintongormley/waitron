@@ -2928,6 +2928,7 @@ export class TillTableOrderScreen extends LitElement {
     if (
       slice === undefined ||
       slice.kind !== (undo ? "served" : "fired") ||
+      (!undo && !slice.row.released) ||
       (undo && !this.#sentBillOpen(slice.row))
     )
       return;
@@ -3082,6 +3083,19 @@ export class TillTableOrderScreen extends LitElement {
     const slice = this.#sentLine();
     const row = slice?.row;
     const disabled = this.busy || this.groupCommandBusy;
+    const group =
+      row === undefined
+        ? undefined
+        : this.currentOrders?.groups.find((group) =>
+            group.rows.some(
+              (member) =>
+                member.lineId === row.lineId && member.workingOrderId === row.workingOrderId,
+            ),
+          );
+    const partlyServed =
+      row !== undefined &&
+      row.servedAt === null &&
+      compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
     const extraTotal =
       row?.extras.reduce((sum, extra) => addDecimal(sum, decimal(extra.netAmount)), decimal("0")) ??
       decimal("0");
@@ -3123,6 +3137,8 @@ export class TillTableOrderScreen extends LitElement {
               <p data-sent-line-status>
                 ${station === undefined ? nothing : html`${station.name} · `}${status}
               </p>
+              ${group === undefined ? nothing : html`<p data-sent-line-origin>${this.#sentOf(group)}</p>`}
+              ${partlyServed ? html`<p data-sent-line-served>${this.#servedOf(row)}</p>` : nothing}
               <div class="total-row">
                 <span>${t("label.total")}</span
                 ><span class="amount">${this.#money(row.netAmount)}</span>
@@ -3138,7 +3154,7 @@ export class TillTableOrderScreen extends LitElement {
           }}
           >${t("table.submitted_close")}</wt-button
         >
-        ${slice?.kind === "fired" ? html`<wt-button data-sent-line-serve aria-label=${`${t("table.serve")} · ${slice.row.name}`} variant=${disabled ? "secondary" : "primary"} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, false)}>${t("table.serve")}</wt-button>` : nothing}
+        ${slice?.kind === "fired" && slice.row.released ? html`<wt-button data-sent-line-serve aria-label=${`${t("table.serve")} · ${slice.row.name}`} variant=${disabled ? "secondary" : "primary"} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, false)}>${t("table.serve")}</wt-button>` : nothing}
         ${this.#sentLineMore(slice)}
       </div>
     </wt-dialog>`;
