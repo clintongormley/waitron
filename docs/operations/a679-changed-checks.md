@@ -1604,3 +1604,45 @@ listed above differ. This syntax inventory does not establish behavioral equival
 Lane E `receipts/a679-one-prefix-20261018/verification.json`, `controls.json`,
 `assertion-audit.json` and the retained command logs. Earlier whole-branch failures and acceptance
 gates remain open.
+
+## Unfinished key replacement in the wizard, 2026-10-18
+
+The setup session and optional module action now project the existing original-password reissue
+endpoint. The hour screen prepares a new key-only PDF after an explicit replacement action.
+Replacing clears the old download and kept choice, resets Review and protects the replacement as
+an unsaved change. It retains the selected hour and imported input. The password prompt explains
+that older backups still need their matching key.
+
+No existing expected value or assertion changes in this checkpoint. The only existing test-file
+delta adds seven fixture lines in `apps/setup/src/screens/recovery-hour.test.ts`: enter `06RB` in
+the required installation-code control. All original lines remain in order. The three archive,
+bucket and Cloud cases failed at the disabled comparison action both in the starting
+`89c74222c209fe4427690f0a865b2affd2b36953` checkout and the first wider run. The added field lets
+their original credential and source assertions run again. New files cover replacement ownership,
+node/name mismatches, late replies, damaged ownership, fresh reconciliation, retained hour,
+PDF decoding, failed-request retry and repeated kept consent through native controls.
+
+The local receipt directory is `~/waitron-campaign-e/receipts/a679-key-reissue-ui-20261018`.
+The full setup run reports 1,632 passing tests in 87 files and coverage of 98.05% statements,
+95.86% branches, 99.07% functions and 99.51% lines. Earlier statement coverage of 97.83% failed;
+new ownership/refusal cases close that gap without changing coverage configuration. Installed
+wizard/PDF checks and the unchanged fiscal pair pass. Four independent installed omissions catch
+node binding, Review reset, old PDF retention and replacement draft protection; each restored
+case passes. `assertion-audit.json` checks every starting test file and all six protected paths.
+
+Sixteen mounted wizard captures were inspected in English and Spanish, light and dark, with
+measured browser widths of 390 and 1280. Axe reports no violation in either captured state.
+These checks use synthetic server replies; separate server tests exercise the existing HTTPS
+reissue service. They do not establish a complete installed first-Live or recovery journey,
+completed-manager reissue, physical acceptance or owner viewing of the PDF through Drive.
+
+The initial integrated fixture nested two main landmarks and failed axe. Its wrapper is now a
+div. Initial selector/state type errors were corrected in the new tests. A misplaced replacement
+button was caught by the frozen-hour visibility check and moved into the selected-hour section.
+The initial insertion audit assumed unformatted lines and failed; the final audit checks the
+actual seven-line insertion. These failures are retained in the local receipts.
+
+Task 9 remains partial for completed-manager reissue, interrupted-page ordering and complete entry
+journeys. Tasks 8 and 10–12, earlier provisioning coverage and legacy server failures, final
+whole-branch reviews and publication gates remain open. Preserve all earlier inventories for the
+eventual pull request.

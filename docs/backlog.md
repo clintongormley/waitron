@@ -328,8 +328,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   on 2026-10-16 at 14:50: four UTC-hour characters replace paper/Cloud name allocation;
   the PDF keeps the recovery key and public installation codes (owner, 2026-10-18 at 10:15).
   Protected-code and fiscal-assertion restrictions remain.
-  Reissue controls, completed-manager reissue, interrupted-page ordering and full installed
-  journeys remain open; the unfinished-key HTTPS service is implemented on the branch.
+  The unfinished-key HTTPS service and wizard replacement controls are implemented on the branch.
+  Browser checks require the original password, retain the frozen hour and require the replacement
+  PDF to be kept before Review. Completed-manager reissue, interrupted-page ordering and full
+  installed journeys remain open.
   The exact approved standby wrapper and hour-admission dispatch are implemented. Real-database
   checks refuse the original box's same-hour code and accept the next hour without an advance
   reservation. The branch prints the selected code in first setup and accepts reported codes

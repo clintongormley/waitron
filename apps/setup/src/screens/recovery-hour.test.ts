@@ -105,6 +105,13 @@ async function fill(entry: LitElement) {
     input.value = value!;
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   }
+  const codes = entry.shadowRoot!.querySelector<LitElement>(
+    '[name="recovery-installation-codes"]',
+  )!;
+  await codes.updateComplete;
+  const codeInput = codes.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  codeInput.value = "06RB";
+  codeInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   for (const name of ["recovery-old-box-stopped", "recovery-sole-operation", "taxpayer-hour-no"]) {
     const field = entry.shadowRoot!.querySelector<HTMLInputElement>(
       name.startsWith("taxpayer-hour-")

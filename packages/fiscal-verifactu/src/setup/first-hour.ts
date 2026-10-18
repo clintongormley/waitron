@@ -16,6 +16,7 @@ type Answer = "no" | "yes" | "unknown";
 interface Draft {
   reviewed: boolean;
   confirmed: boolean;
+  recoveryRevision: number;
   answer?: Answer;
 }
 interface Context {
@@ -44,7 +45,7 @@ type Result =
         allocation: { installationIdentity: string; series: { code: string; purpose: string }[] };
       };
     };
-const empty = (): Draft => ({ reviewed: false, confirmed: false });
+const empty = (): Draft => ({ reviewed: false, confirmed: false, recoveryRevision: 0 });
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 @customElement("vf-first-setup-hour")
@@ -145,7 +146,10 @@ export class FirstSetupHour extends LitElement {
         current: () => this.draft,
         snapshot: (v) => ({ ...v }),
         equal: (a, b) =>
-          a.reviewed === b.reviewed && a.confirmed === b.confirmed && a.answer === b.answer,
+          a.reviewed === b.reviewed &&
+          a.confirmed === b.confirmed &&
+          a.answer === b.answer &&
+          a.recoveryRevision === b.recoveryRevision,
         restore: () => this.#clear(),
       }).scope;
       this.#scope.commit(empty());
@@ -313,12 +317,12 @@ export class FirstSetupHour extends LitElement {
       if (current()) this.busy = false;
     }
   }
-  async #preparePdf(): Promise<void> {
+  async #preparePdf(replace = false): Promise<void> {
     if (
       this.busy ||
       this.result?.status !== "selected" ||
-      this.pdfUrl ||
-      !this.api.stageNodeKey ||
+      (!replace && this.pdfUrl) ||
+      !(replace ? this.api.reissueNodeKey : this.api.stageNodeKey) ||
       !this.api.registerRecoveryDocument ||
       !this.api.confirmRecoveryDocument
     )
@@ -334,9 +338,14 @@ export class FirstSetupHour extends LitElement {
       context === this.context;
     this.busy = true;
     this.error = false;
+    if (replace) {
+      this.#disposeDelivery();
+      this.draft = { ...this.draft, recoveryRevision: this.draft.recoveryRevision + 1 };
+      this.#changed();
+    }
     let delivery: ReturnType<typeof createRecoveryDelivery<void>> | undefined;
     try {
-      const staged = await api.stageNodeKey!();
+      const staged = replace ? await api.reissueNodeKey!() : await api.stageNodeKey!();
       if (!current()) return;
       const { createRecoveryDelivery } = await import("../recovery-delivery.js");
       if (!current()) return;
@@ -462,6 +471,7 @@ export class FirstSetupHour extends LitElement {
           kept: "I kept the recovery PDF.",
           confirmKept: "Continue",
           complete: "Recovery PDF confirmed.",
+          replace: "Replace recovery key",
         }
       : {
           heading: "Comprueba este local",
@@ -505,6 +515,7 @@ export class FirstSetupHour extends LitElement {
           kept: "He guardado el PDF de recuperación.",
           confirmKept: "Continuar",
           complete: "PDF de recuperación confirmado.",
+          replace: "Sustituir clave de recuperación",
         };
     const venue = this.context.venue,
       clock = this.comparison?.clock;
@@ -646,6 +657,17 @@ export class FirstSetupHour extends LitElement {
                       @click=${() => void this.#preparePdf()}
                       >${t.pdf}</wt-button
                     >`
+              }
+              ${
+                this.api.reissueNodeKey
+                  ? html`<wt-button
+                      data-test="replace-key"
+                      variant=${this.busy ? "secondary" : "primary"}
+                      ?disabled=${this.busy}
+                      @click=${() => void this.#preparePdf(true)}
+                      >${t.replace}</wt-button
+                    >`
+                  : nothing
               }
             </section>`
           : nothing

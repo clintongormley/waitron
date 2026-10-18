@@ -7,6 +7,7 @@ export const initialSetupStrings = {
     required: "Enter your password.",
     block: "Confirm before selecting an hour or preparing your recovery PDF.",
     activation: "Confirm before activation.",
+    reissue: "Replace the recovery key. Older backups still need their matching key.",
     confirm: "Confirm",
     cancel: "Cancel",
     next: "Review",
@@ -25,6 +26,8 @@ export const initialSetupStrings = {
     required: "Introduce tu contraseña.",
     block: "Confirma antes de seleccionar una hora o preparar el PDF de recuperación.",
     activation: "Confirma antes de activar.",
+    reissue:
+      "Sustituye la clave de recuperación. Las copias anteriores siguen necesitando su clave correspondiente.",
     confirm: "Confirmar",
     cancel: "Cancelar",
     next: "Revisar",

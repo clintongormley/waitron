@@ -36,7 +36,7 @@ export class InitialSetupScreen extends LitElement {
   @property() locale: "en" | "es" = "en";
   @state() private moduleScreens: HTMLElement[] = [];
   @state() private unavailable = true;
-  @state() private proof?: "block-use" | "activation";
+  @state() private proof?: "block-use" | "activation" | "node-key-reissue";
   @state() private password = "";
   @state() private attempted = false;
   @state() private recovery = false;
@@ -123,6 +123,12 @@ export class InitialSetupScreen extends LitElement {
             return value.request;
           };
           const api: InitialSetupActions = {
+            reissueNodeKey: () =>
+              run(async () => {
+                const password = await this.#password("node-key-reissue");
+                current();
+                return this.session.reissueNodeKey(module, password);
+              }),
             stageNodeKey: () =>
               run(async () => {
                 const password = await this.#password("block-use");
@@ -165,7 +171,7 @@ export class InitialSetupScreen extends LitElement {
           return contribution.create({ locale: this.locale, request: state, api });
         });
   }
-  async #password(purpose: "block-use" | "activation"): Promise<string> {
+  async #password(purpose: "block-use" | "activation" | "node-key-reissue"): Promise<string> {
     if (this.proof) throw { code: "setup.attempt_conflict" };
     this.password = "";
     this.attempted = false;
@@ -235,7 +241,9 @@ export class InitialSetupScreen extends LitElement {
         this.proof
           ? html`<section aria-label=${t.proof}>
               <h2>${t.proof}</h2>
-              <p>${this.proof === "block-use" ? t.block : t.activation}</p>
+              <p>
+                ${this.proof === "block-use" ? t.block : this.proof === "node-key-reissue" ? t.reissue : t.activation}
+              </p>
               <wt-input
                 data-test="owner-password"
                 name="setup-administrator-password"

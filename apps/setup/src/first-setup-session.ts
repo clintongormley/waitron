@@ -398,6 +398,20 @@ export class FirstSetupSession {
       return result;
     });
   }
+  reissueNodeKey(module: string, password: string) {
+    return this.#run(async (current) => {
+      this.#module(module);
+      const result = await this.#api.reissueFirstSetupNodeKey(this.#owner(), password);
+      current();
+      if (
+        result.stage.nodeId !== this.#state!.nodeId ||
+        result.key.nodeId !== result.stage.nodeId ||
+        result.key.name !== result.stage.name
+      )
+        failure("setup.attempt_conflict");
+      return result;
+    });
+  }
   registerRecoveryDocument(
     module: string,
     value: import("@waitron/module/src/setup-contract.js").InitialSetupRecoveryReference & {

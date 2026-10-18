@@ -10,6 +10,7 @@ export interface InitialSetupRecoveryReference {
 }
 export interface InitialSetupActions {
   stageNodeKey?(): Promise<InitialSetupNodeKey>;
+  reissueNodeKey?(): Promise<InitialSetupNodeKey>;
   registerRecoveryDocument?(
     value: InitialSetupRecoveryReference & { statement: unknown },
   ): Promise<void>;
