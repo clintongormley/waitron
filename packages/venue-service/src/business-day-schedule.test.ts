@@ -404,8 +404,63 @@ describe("business-day schedule compatibility", () => {
       params: {
         conflictCount: 2,
         conflicts: [
-          expect.objectContaining({ reason: "range" }),
-          expect.objectContaining({ reason: "range" }),
+          expect.objectContaining({ reason: "overlap" }),
+          expect.objectContaining({ reason: "overlap" }),
+        ],
+      },
+    });
+  });
+  it("names only the range that crosses the new start, leaving its day's other range clear", async () => {
+    const v = await fixture([range("13:00", "16:00"), range("22:00", "04:30")]);
+    await expect(check(v, "03:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: {
+        conflictCount: 1,
+        conflicts: [
+          { startsAt: "22:00", endsAt: "04:30", weekday: 3, rangeIndex: 1, reason: "range" },
+        ],
+      },
+    });
+  });
+  it("checks the other ranges of a day with a crossing range for their own clashes", async () => {
+    const v = await fixture([range("13:00", "16:00"), range("20:00", "23:30")]);
+    await expect(check(v, "21:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: {
+        conflictCount: 2,
+        conflicts: [
+          { startsAt: "13:00", endsAt: "16:00", rangeIndex: 0, reason: "endpoint_day" },
+          { startsAt: "20:00", endsAt: "23:30", rangeIndex: 1, reason: "range" },
+        ],
+      },
+    });
+  });
+  it("leaves a crossing range out of a sending cutoff's later ranges", async () => {
+    const v = await fixture([range("09:00", "17:00"), range("17:30", "04:30")], { offset: 60 });
+    await expect(check(v, "03:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: {
+        conflictCount: 1,
+        conflicts: [{ startsAt: "17:30", endsAt: "04:30", reason: "range" }],
+      },
+    });
+  });
+  it("marks each one-range night that crosses the new start (mockup 04)", async () => {
+    const v = await fixture([]);
+    await withTransaction(suite.db, async (tx) => {
+      for (const [weekday, endsAt] of [
+        [5, "04:00"],
+        [6, "04:30"],
+      ] as const)
+        await seasonDay(tx, { ...v, weekday, ranges: [range("21:00", endsAt)] });
+    });
+    await expect(check(v, "03:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: {
+        conflictCount: 2,
+        conflicts: [
+          { startsAt: "21:00", endsAt: "04:00", weekday: 5, reason: "range" },
+          { startsAt: "21:00", endsAt: "04:30", weekday: 6, reason: "range" },
         ],
       },
     });

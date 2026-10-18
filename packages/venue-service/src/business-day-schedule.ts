@@ -384,21 +384,24 @@ export async function businessDayClockConflicts(
         a.startsAt.localeCompare(b.startsAt) ||
         a.endsAt.localeCompare(b.endsAt),
     );
-    let invalid = false;
-    for (const cutover of [oldCutover, newCutover]) {
-      try {
-        parseClosedRanges(
-          placements.map((p) => ({
-            startsAt: p.startsAt.slice(0, 5),
-            endsAt: p.endsAt.slice(0, 5),
-          })),
-          "ranges",
-          cutover,
-        );
-      } catch {
-        invalid = true;
-      }
-    }
+    const parses = (group: Placement[]) =>
+      [oldCutover, newCutover].every((cutover) => {
+        try {
+          parseClosedRanges(
+            group.map((p) => ({ startsAt: p.startsAt.slice(0, 5), endsAt: p.endsAt.slice(0, 5) })),
+            "ranges",
+            cutover,
+          );
+          return true;
+        } catch {
+          return false;
+        }
+      });
+    const together = parses(placements);
+    const crossing = together
+      ? new Set<Placement>()
+      : new Set(placements.filter((p) => !parses([p])));
+    const overlapping = !together && crossing.size === 0;
     for (const [rangeIndex, p] of placements.entries()) {
       const startsAt = p.startsAt.slice(0, 5),
         endsAt = p.endsAt.slice(0, 5);
@@ -418,6 +421,7 @@ export async function businessDayClockConflicts(
           const span = rangeSpan({ startsAt, endsAt }, cutover);
           const later = placements
             .slice(rangeIndex + 1)
+            .filter((next) => !crossing.has(next))
             .map((next) => rangeSpan(next, cutover).start);
           return [...later, earliestTomorrow(p, cutover)].some(
             (next) => span.end + p.offset >= next,
@@ -425,7 +429,8 @@ export async function businessDayClockConflicts(
         });
       let reason: BusinessDayClockConflict["reason"] | null = null;
       if (startsAt === endsAt) reason = "all_day";
-      else if (invalid) reason = "range";
+      else if (overlapping) reason = "overlap";
+      else if (crossing.has(p)) reason = "range";
       else if (
         ownership(startsAt, oldCutover, false) !== ownership(startsAt, newCutover, false) ||
         ownership(endsAt, oldCutover, true) !== ownership(endsAt, newCutover, true)
