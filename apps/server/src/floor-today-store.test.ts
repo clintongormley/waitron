@@ -116,7 +116,6 @@ async function insertMaster(
   const [row] = await tx
     .insert(floorPlanTables)
     .values({
-      planId,
       zoneId,
       label: table.label,
       seats: table.seats ?? null,
@@ -1911,9 +1910,16 @@ describe("resets onto a set's layout", () => {
         name: `Setless ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
-      await tx
-        .insert(floorPlans)
-        .values({ zoneId: zone.id, revision: 1, savedAt: FRIDAY_NIGHT.toISOString() });
+      const [unlinked] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await tx.insert(floorPlans).values({
+        zoneId: zone.id,
+        setId: unlinked!.id,
+        revision: 1,
+        savedAt: FRIDAY_NIGHT.toISOString(),
+      });
       return zone.id;
     });
 
@@ -1953,9 +1959,16 @@ describe("resets onto a set's layout", () => {
         .update(zoneServicePolicies)
         .set({ departmentId: moved.id })
         .where(eq(zoneServicePolicies.zoneId, zone.id));
-      await tx
-        .insert(floorPlans)
-        .values({ zoneId: zone.id, revision: 1, savedAt: FRIDAY_NIGHT.toISOString() });
+      const [unlinked] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await tx.insert(floorPlans).values({
+        zoneId: zone.id,
+        setId: unlinked!.id,
+        revision: 1,
+        savedAt: FRIDAY_NIGHT.toISOString(),
+      });
       return { zoneId: zone.id, gaining: moved.id, tableId: ids.a!, label: name };
     });
     const recordBefore = await todayZone(zoneId);

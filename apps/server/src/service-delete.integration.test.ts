@@ -883,8 +883,8 @@ it.each(["zone", "department"] as const)(
       const masters = await tx
         .insert(floorPlanTables)
         .values([
-          { planId: plan!.id, zoneId: f.zoneId, label, seats: 4 },
-          { planId: plan!.id, zoneId: f.zoneId, label: `Saved ${randomUUID()}`, seats: 4 },
+          { zoneId: f.zoneId, label, seats: 4 },
+          { zoneId: f.zoneId, label: `Saved ${randomUUID()}`, seats: 4 },
         ])
         .returning();
       for (const [i, tableId] of [f.tableId, second].entries())
@@ -1238,18 +1238,15 @@ it("rechecks an upcoming booking added after the master editor opened, but allow
   const removals = enabledTableRemovals(ALL_MODULES);
   const masterId = await run(async (tx) => {
     const [table] = await tx.select().from(diningTables).where(eq(diningTables.id, f.tableId));
-    const [plan] = await tx
-      .insert(floorPlans)
-      .values({
-        zoneId: f.zoneId,
-        setId: (await defaultLayout(tx, venue.cfg, f.zoneId)).setId,
-        revision: 1,
-        savedAt: NOW.toISOString(),
-      })
-      .returning();
+    await tx.insert(floorPlans).values({
+      zoneId: f.zoneId,
+      setId: (await defaultLayout(tx, venue.cfg, f.zoneId)).setId,
+      revision: 1,
+      savedAt: NOW.toISOString(),
+    });
     const [master] = await tx
       .insert(floorPlanTables)
-      .values({ planId: plan!.id, zoneId: f.zoneId, label: table!.label, seats: 4 })
+      .values({ zoneId: f.zoneId, label: table!.label, seats: 4 })
       .returning();
     await tx
       .update(diningTables)

@@ -89,18 +89,15 @@ async function plannedZone(...labels: string[]): Promise<{ zoneId: string; ids: 
   const ids: string[] = [];
   for (const label of labels) ids.push(await v.table(label, zoneId));
   await inTx(v, async (tx) => {
-    const [plan] = await tx
-      .insert(floorPlans)
-      .values({
-        zoneId,
-        setId: (await defaultLayout(tx, v.cfg, zoneId)).setId,
-        savedAt: NOW.toISOString(),
-      })
-      .returning({ id: floorPlans.id });
+    await tx.insert(floorPlans).values({
+      zoneId,
+      setId: (await defaultLayout(tx, v.cfg, zoneId)).setId,
+      savedAt: NOW.toISOString(),
+    });
     for (const [i, label] of labels.entries()) {
       const [row] = await tx
         .insert(floorPlanTables)
-        .values({ planId: plan!.id, zoneId, label, fixed: false })
+        .values({ zoneId, label, fixed: false })
         .returning({ id: floorPlanTables.id });
       await tx
         .update(diningTables)

@@ -764,10 +764,11 @@ describe("a part of a joined table on the saved plan", () => {
       .insert(floorZones)
       .values({ locationId, name: "Counter" })
       .returning({ id: floorZones.id });
-    const [plan] = await db
-      .insert(floorPlans)
-      .values({ zoneId: zone!.id, savedAt: nowIso() })
-      .returning({ id: floorPlans.id });
+    const [set] = await db
+      .insert(floorPlanSets)
+      .values({ locationId })
+      .returning({ id: floorPlanSets.id });
+    await db.insert(floorPlans).values({ zoneId: zone!.id, setId: set!.id, savedAt: nowIso() });
     const seats = { long: 10, c3: 2, c4: 6, c5: 4 } as const;
     const labels = { long: "Long table", c3: "Counter 3", c4: "Counter 4", c5: "Counter 5" };
     const master = {} as Record<keyof typeof seats, string>;
@@ -775,7 +776,7 @@ describe("a part of a joined table on the saved plan", () => {
     for (const key of ["long", "c3", "c4", "c5"] as const) {
       const [row] = await db
         .insert(floorPlanTables)
-        .values({ planId: plan!.id, zoneId: zone!.id, label: labels[key], seats: seats[key] })
+        .values({ zoneId: zone!.id, label: labels[key], seats: seats[key] })
         .returning({ id: floorPlanTables.id });
       master[key] = row!.id;
       const table = await db.execute<{ id: string }>(sql`
@@ -874,7 +875,7 @@ describe("books table 4 while today's recorded layout stands it", () => {
     ] as const) {
       const [row] = await db
         .insert(floorPlanTables)
-        .values({ planId: standardPlan!.id, zoneId: zone!.id, label, seats: 4 })
+        .values({ zoneId: zone!.id, label, seats: 4 })
         .returning({ id: floorPlanTables.id });
       master[key] = row!.id;
       const table = await db.execute<{ id: string }>(sql`

@@ -637,7 +637,13 @@ describe("today's routes", () => {
         operationDescription: "Restaurant",
       });
       await tx.insert(floorZones).values({ id: zoneId, locationId: elsewhere, name: "Elsewhere" });
-      await tx.insert(floorPlans).values({ zoneId, savedAt: "2026-01-01T00:00:00.000Z" });
+      const [set] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: elsewhere })
+        .returning({ id: floorPlanSets.id });
+      await tx
+        .insert(floorPlans)
+        .values({ zoneId, setId: set!.id, savedAt: "2026-01-01T00:00:00.000Z" });
       await tx.insert(floorTodayZones).values({ zoneId, businessDay: "2026-01-01", revision: 1 });
     });
 
@@ -656,6 +662,7 @@ describe("today's routes", () => {
       await inTx(v, async (tx) => {
         await tx.delete(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId));
         await tx.delete(floorPlans).where(eq(floorPlans.zoneId, zoneId));
+        await tx.delete(floorPlanSets).where(eq(floorPlanSets.locationId, elsewhere));
         await tx.delete(floorZones).where(eq(floorZones.id, zoneId));
         await tx.delete(locations).where(eq(locations.id, elsewhere));
       });
@@ -1240,7 +1247,13 @@ describe("resetting a zone onto a layout", () => {
         departmentId: department.id,
         name: "Standard",
       });
-      await tx.insert(floorPlans).values({ zoneId, savedAt: "2026-01-01T00:00:00.000Z" });
+      const [unlinked] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await tx
+        .insert(floorPlans)
+        .values({ zoneId, setId: unlinked!.id, savedAt: "2026-01-01T00:00:00.000Z" });
       return { zoneId, standard: set!.id };
     });
 
@@ -1262,7 +1275,13 @@ describe("resetting a zone onto a layout", () => {
         name: `Setless ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
-      await tx.insert(floorPlans).values({ zoneId: id, savedAt: "2026-01-01T00:00:00.000Z" });
+      const [unlinked] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await tx
+        .insert(floorPlans)
+        .values({ zoneId: id, setId: unlinked!.id, savedAt: "2026-01-01T00:00:00.000Z" });
       return id;
     });
 

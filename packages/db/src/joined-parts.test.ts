@@ -291,6 +291,7 @@ const COUNTER_3_MASTER = "ffffffff-0000-4000-8000-000000000003";
 const COUNTER_4_MASTER = "ffffffff-0000-4000-8000-000000000004";
 const COUNTER_5_MASTER = "ffffffff-0000-4000-8000-000000000005";
 const NO_MASTER = "cccccccc-0000-4000-8000-000000000008";
+const PLAN_SET = "cccccccc-0000-4000-8000-0000000000aa";
 
 describe("saved part", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -304,14 +305,15 @@ describe("saved part", () => {
       operationDescription: "Hostelería",
     });
     await suite.db.insert(floorZones).values({ id: ZONE, locationId: LOCATION, name: "Bar" });
+    await suite.db.insert(floorPlanSets).values({ id: PLAN_SET, locationId: LOCATION });
     await suite.db
       .insert(floorPlans)
-      .values({ id: PLAN, zoneId: ZONE, savedAt: "2026-10-10T12:00:00.000Z" });
+      .values({ id: PLAN, zoneId: ZONE, setId: PLAN_SET, savedAt: "2026-10-10T12:00:00.000Z" });
     await suite.db.insert(floorPlanTables).values([
-      { id: LONG_MASTER, planId: PLAN, zoneId: ZONE, label: "Long table", seats: 10 },
-      { id: COUNTER_3_MASTER, planId: PLAN, zoneId: ZONE, label: "Counter 3", seats: 2 },
-      { id: COUNTER_4_MASTER, planId: PLAN, zoneId: ZONE, label: "Counter 4", seats: 6 },
-      { id: COUNTER_5_MASTER, planId: PLAN, zoneId: ZONE, label: "Counter 5", seats: 4 },
+      { id: LONG_MASTER, zoneId: ZONE, label: "Long table", seats: 10 },
+      { id: COUNTER_3_MASTER, zoneId: ZONE, label: "Counter 3", seats: 2 },
+      { id: COUNTER_4_MASTER, zoneId: ZONE, label: "Counter 4", seats: 6 },
+      { id: COUNTER_5_MASTER, zoneId: ZONE, label: "Counter 5", seats: 4 },
     ]);
     await suite.db.insert(floorPlanTableParts).values([
       { joinedTableId: LONG_MASTER, partTableId: COUNTER_3_MASTER },
@@ -411,9 +413,9 @@ describe("a layout that stands a joined table's tables", () => {
       })),
     );
     await suite.db.insert(floorPlanTables).values([
-      { id: M4, planId: plan(STANDARD), zoneId: INSIDE, label: "4", seats: 4 },
-      { id: M5, planId: plan(STANDARD), zoneId: INSIDE, label: "5", seats: 4 },
-      { id: M45, planId: plan(STANDARD), zoneId: INSIDE, label: "4+5", seats: 8 },
+      { id: M4, zoneId: INSIDE, label: "4", seats: 4 },
+      { id: M5, zoneId: INSIDE, label: "5", seats: 4 },
+      { id: M45, zoneId: INSIDE, label: "4+5", seats: 8 },
     ]);
     await suite.db.insert(floorPlanTableParts).values([
       { joinedTableId: M45, partTableId: M4 },

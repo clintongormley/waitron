@@ -8,6 +8,7 @@ import {
   diningTables,
   floorTodayTables,
   floorPlanPlacements,
+  floorPlanSets,
   floorPlans,
   floorPlanTables,
   floorZones,
@@ -480,13 +481,17 @@ describe("stale floor identifiers", () => {
         shape: "rect",
         rotation: 0,
       });
+      const [set] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning();
       const [plan] = await tx
         .insert(floorPlans)
-        .values({ zoneId: f.zoneId, savedAt: now.toISOString() })
+        .values({ zoneId: f.zoneId, setId: set!.id, savedAt: now.toISOString() })
         .returning();
       const [master] = await tx
         .insert(floorPlanTables)
-        .values({ planId: plan!.id, zoneId: f.zoneId, label: table!.label })
+        .values({ zoneId: f.zoneId, label: table!.label })
         .returning();
       await tx.insert(floorPlanPlacements).values({
         planId: plan!.id,

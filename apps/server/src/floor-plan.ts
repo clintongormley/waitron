@@ -16,7 +16,7 @@ import {
 import type { FloorPlanSetSummary, TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
-import { placementColumns, placementOf, resetZone, spareLabels } from "./floor-today-store.js";
+import { placementOf, resetZone, spareLabels } from "./floor-today-store.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { refusedByAModule } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
@@ -407,7 +407,7 @@ async function checkSave(
 }
 
 function masterColumns(table: ZonePlanSave["tables"][number]) {
-  return { seats: table.seats, fixed: table.fixed, ...placementColumns(null) };
+  return { seats: table.seats, fixed: table.fixed };
 }
 
 /** A zone's first save builds today's plan at once, from the layout due now (spec decision 19). */
@@ -544,7 +544,7 @@ async function writeSave(
   }
 
   // Each renamed table first steps aside under a spare name, so a swap or a rename onto a name
-  // another row is giving up never meets the unique (plan_id, label) key halfway.
+  // another row is giving up never meets the unique (zone_id, label) key halfway.
   const spare = spareLabels(
     tables.flatMap((t) =>
       t.id !== undefined && masterOf.get(t.id)!.label !== t.label.trim() ? [t.id] : [],
@@ -561,7 +561,7 @@ async function writeSave(
     const id = table.id ?? newId();
     ids.set(table.key, id);
     if (table.id === undefined) {
-      created.push({ id, planId, zoneId, label: table.label.trim(), ...masterColumns(table) });
+      created.push({ id, zoneId, label: table.label.trim(), ...masterColumns(table) });
     }
   }
   if (created.length > 0) await tx.insert(floorPlanTables).values(created);

@@ -5,6 +5,7 @@ import { BOOKINGS_TABLE_REMOVAL, bookings } from "@waitron/bookings";
 import {
   diningTables,
   floorPlanPlacements,
+  floorPlanSets,
   floorPlans,
   floorPlanTableParts,
   floorPlanTableSizes,
@@ -109,15 +110,15 @@ async function snapshot(tx: Transaction) {
 
 async function planned(z: string, prefix: string, locationId = v.cfg.locationId as string) {
   return inTx(v, async (tx) => {
+    const [set] = await tx.insert(floorPlanSets).values({ locationId }).returning();
     const [plan] = await tx
       .insert(floorPlans)
-      .values({ zoneId: z, savedAt: NOW.toISOString() })
+      .values({ zoneId: z, setId: set!.id, savedAt: NOW.toISOString() })
       .returning();
     const masters = await tx
       .insert(floorPlanTables)
       .values(
         ["C", "A", "B"].map((label) => ({
-          planId: plan!.id,
           zoneId: z,
           label: `${prefix} saved ${label}`,
         })),

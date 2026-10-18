@@ -131,7 +131,7 @@ async function masterOf(
     for (const table of tables) {
       const [row] = await tx
         .insert(floorPlanTables)
-        .values({ planId: plan!.id, zoneId, label: table.label, seats: 4 })
+        .values({ zoneId, label: table.label, seats: 4 })
         .returning({ id: floorPlanTables.id });
       ids.push(row!.id);
       if (table.place === true) {
@@ -463,14 +463,10 @@ describe("checkLayoutSave", () => {
     const added = await inTx(v, async (tx) => {
       await tx.update(diningTables).set({ planTableId: null }).where(eq(diningTables.id, live));
       await tx.delete(floorPlanTables).where(eq(floorPlanTables.id, master));
-      const [plan] = await tx
-        .update(floorPlans)
-        .set({ revision: 2 })
-        .where(eq(floorPlans.zoneId, z))
-        .returning({ id: floorPlans.id });
+      await tx.update(floorPlans).set({ revision: 2 }).where(eq(floorPlans.zoneId, z));
       const [row] = await tx
         .insert(floorPlanTables)
-        .values({ planId: plan!.id, zoneId: z, label, seats: 4 })
+        .values({ zoneId: z, label, seats: 4 })
         .returning({ id: floorPlanTables.id });
       return row!.id;
     });

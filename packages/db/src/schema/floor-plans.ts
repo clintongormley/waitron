@@ -92,13 +92,13 @@ export const floorPlanSets = table(
   ],
 );
 
-/** A zone's master plan, edited by the dashboard only. */
+/** One set's layout of one zone, edited by the dashboard only. */
 export const floorPlans = table(
   "floor_plans",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     zoneId: id("zone_id").notNull(),
-    setId: id("set_id"),
+    setId: id("set_id").notNull(),
     revision: count("revision").notNull().default(0),
     savedAt: tsString("saved_at").notNull(),
   },
@@ -117,33 +117,24 @@ export const floorPlans = table(
   ],
 );
 
-/** A table on a master plan; a spare has no place, so all six placement columns are null. */
+/** A zone's table, shared by every set's layout of the zone; where it stands is a placement. */
 export const floorPlanTables = table(
   "floor_plan_tables",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    planId: id("plan_id").notNull(),
-    zoneId: id("zone_id"),
+    zoneId: id("zone_id").notNull(),
     label: label("label").notNull(),
     seats: count("seats"),
     fixed: flag("fixed").notNull().default(false),
-    ...placementColumns(),
   },
   (t) => [
-    unique("floor_plan_tables_plan_label_key").on(t.planId, t.label),
     unique("floor_plan_tables_zone_label_key").on(t.zoneId, t.label),
-    foreignKey({
-      columns: [t.planId],
-      foreignColumns: [floorPlans.id],
-      name: "floor_plan_tables_plan_fk",
-    }),
     foreignKey({
       columns: [t.zoneId],
       foreignColumns: [floorZones.id],
       name: "floor_plan_tables_zone_fk",
     }),
     seatsCheck("floor_plan_tables", t.seats),
-    ...placeChecks("floor_plan_tables", t),
   ],
 );
 
@@ -207,7 +198,7 @@ export const floorPlanTableSizes = table(
   "floor_plan_table_sizes",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    planId: id("plan_id"),
+    planId: id("plan_id").notNull(),
     planTableId: id("plan_table_id").notNull(),
     width: smallCount("width").notNull(),
     height: smallCount("height").notNull(),

@@ -34,12 +34,13 @@ const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
 const OTHER_ZONE = "bbbbbbbb-0000-4000-8000-000000000002";
 const PLAN = "cccccccc-0000-4000-8000-000000000001";
+const SET = "cccccccc-0000-4000-8000-000000000009";
 const TABLE_1 = "dddddddd-0000-4000-8000-000000000001";
 const TABLE_2 = "dddddddd-0000-4000-8000-000000000002";
 const PERSON = "eeeeeeee-0000-4000-8000-000000000001";
 
 const PLACED = { x: 10, y: 20, width: 4, height: 4, shape: "rect", rotation: 0 } as const;
-const GOOD_MASTER_TABLE = { planId: PLAN, label: "T9", seats: 4, ...PLACED };
+const GOOD_MASTER_TABLE = { zoneId: ZONE, label: "T9", seats: 4 };
 const NO_PLACE = { x: null, y: null, width: null, height: null, shape: null, rotation: null };
 
 describe("floor plan tables", () => {
@@ -63,7 +64,10 @@ describe("floor plan tables", () => {
       { id: ZONE, locationId: LOCATION, name: "Comedor" },
       { id: OTHER_ZONE, locationId: LOCATION, name: "Terraza" },
     ]);
-    await db.insert(floorPlans).values({ id: PLAN, zoneId: ZONE, savedAt: "2026-10-08T10:00:00Z" });
+    await db.insert(floorPlanSets).values({ id: SET, locationId: LOCATION });
+    await db
+      .insert(floorPlans)
+      .values({ id: PLAN, zoneId: ZONE, setId: SET, savedAt: "2026-10-08T10:00:00Z" });
     await db.insert(diningTables).values([
       { id: TABLE_1, locationId: LOCATION, label: "T1", zoneId: ZONE },
       { id: TABLE_2, locationId: LOCATION, label: "T2", zoneId: ZONE },
@@ -425,9 +429,9 @@ describe("floor plan tables", () => {
         .insert(floorPlanTables)
         .values([
           { ...GOOD_MASTER_TABLE, label: "Long table", seats: 10 },
-          { planId: PLAN, label: "Counter 3", seats: 2, ...NO_PLACE },
-          { planId: PLAN, label: "Counter 4", seats: 6, ...NO_PLACE },
-          { planId: PLAN, label: "Counter 5", seats: 4, ...NO_PLACE },
+          { zoneId: ZONE, label: "Counter 3", seats: 2 },
+          { zoneId: ZONE, label: "Counter 4", seats: 6 },
+          { zoneId: ZONE, label: "Counter 5", seats: 4 },
         ])
         .returning({ id: floorPlanTables.id });
       return {
@@ -670,13 +674,17 @@ describe("floor plan tables", () => {
     ).toBe(true);
     const narrow = await captureError(() =>
       inTx((tx) =>
-        tx.insert(floorPlanTableSizes).values({ planTableId: t.counter4, width: 0, height: 2 }),
+        tx
+          .insert(floorPlanTableSizes)
+          .values({ planId: PLAN, planTableId: t.counter4, width: 0, height: 2 }),
       ),
     );
     expect(checkFailed(narrow, "floor_plan_table_sizes_width_ck")).toBe(true);
     const deep = await captureError(() =>
       inTx((tx) =>
-        tx.insert(floorPlanTableSizes).values({ planTableId: t.counter4, width: 2, height: 100 }),
+        tx
+          .insert(floorPlanTableSizes)
+          .values({ planId: PLAN, planTableId: t.counter4, width: 2, height: 100 }),
       ),
     );
     expect(checkFailed(deep, "floor_plan_table_sizes_height_ck")).toBe(true);
@@ -687,7 +695,9 @@ describe("floor plan tables", () => {
   it("refuses deleting a master table that keeps a size", async () => {
     const t = await insertCounterTables();
     await inTx((tx) =>
-      tx.insert(floorPlanTableSizes).values({ planTableId: t.counter3, width: 2, height: 2 }),
+      tx
+        .insert(floorPlanTableSizes)
+        .values({ planId: PLAN, planTableId: t.counter3, width: 2, height: 2 }),
     );
     const error = await captureError(() =>
       inTx((tx) => tx.delete(floorPlanTables).where(eq(floorPlanTables.id, t.counter3))),
@@ -781,7 +791,7 @@ describe("floor plan tables", () => {
     await inTx(async (tx) => {
       await tx
         .insert(floorPlanTableSizes)
-        .values({ planTableId: plan.counter3, width: 2, height: 3 });
+        .values({ planId: PLAN, planTableId: plan.counter3, width: 2, height: 3 });
       await tx
         .insert(floorTodaySplitParts)
         .values({ joinedTableId: live.long, partTableId: live.counter5 });
@@ -908,6 +918,26 @@ describe("floor plan tables", () => {
         columns: ["plan_id", "plan_table_id"],
       }),
     ).toBe(true);
+  });
+
+  it("floor_plan_tables has no place columns and needs a zone", async () => {
+    const columns = await suite.db.execute<{ name: string }>(
+      sql`select name from pragma_table_info('floor_plan_tables')`,
+    );
+    const names = columns.rows.map((row) => row.name);
+    for (const gone of ["plan_id", "x", "y", "width", "height", "shape", "rotation"]) {
+      expect(names).not.toContain(gone);
+    }
+    expect(names).toContain("seats");
+    const seats = await captureError(() =>
+      insertMasterTable({ zoneId: ZONE, label: "Too many", seats: 1000 }),
+    );
+    expect(checkFailed(seats, "floor_plan_tables_seats_ck")).toBe(true);
+
+    const zoneless = await captureError(() => insertMasterTable({ label: "Nowhere", seats: 4 }));
+    expect(String((zoneless as Error).message)).toContain(
+      "NOT NULL constraint failed: floor_plan_tables.zone_id",
+    );
   });
 
   it("starts a today's zone at revision 0", async () => {
