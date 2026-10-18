@@ -3,7 +3,11 @@ import { floorZones, type Transaction } from "@waitron/db";
 import type { FloorDeletion, FloorPlanSets, FloorPlanSetSummary } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import type { FloorPlanSetsModel, PeriodFloorPlans } from "./floor-plan-set-types.js";
+import type {
+  FloorPlanSetDeleteImpact,
+  FloorPlanSetsModel,
+  PeriodFloorPlans,
+} from "./floor-plan-set-types.js";
 import { listDepartments, type VenueScope } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
@@ -33,6 +37,15 @@ export async function linkFloorPlanSet(
     .select({ name: departmentFloorPlanSets.name })
     .from(departmentFloorPlanSets)
     .where(eq(departmentFloorPlanSets.departmentId, input.departmentId));
+  await insertLink(tx, input, held);
+}
+
+/** `linkFloorPlanSet` for a caller that has checked the department and read its sets, `held`. */
+async function insertLink(
+  tx: Transaction,
+  input: { setId: string; departmentId: string; name: string },
+  held: readonly { name: string }[],
+): Promise<void> {
   if (held.some(({ name }) => name === input.name))
     throw new AppError("floor_plan_set.name_taken", {
       departmentId: input.departmentId,
@@ -53,7 +66,21 @@ export async function readFloorPlanSets(
   filter: { setIds?: readonly string[]; departmentId?: string } = {},
 ): Promise<FloorPlanSetSummary[]> {
   if (filter.setIds?.length === 0) return [];
-  const sets = await tx
+  const sets = await setRows(tx, cfg, filter);
+  if (sets.length === 0) return [];
+  const zones = await departmentZones(tx, cfg, [...new Set(sets.map((s) => s.departmentId))]);
+  return sets.map((set) => ({
+    ...set,
+    zoneIds: zones.filter((z) => z.departmentId === set.departmentId).map((z) => z.id),
+  }));
+}
+
+function setRows(
+  tx: Transaction,
+  cfg: VenueScope,
+  filter: { setIds?: readonly string[]; departmentId?: string },
+) {
+  return tx
     .select({
       setId: departmentFloorPlanSets.setId,
       departmentId: departmentFloorPlanSets.departmentId,
@@ -79,35 +106,16 @@ export async function readFloorPlanSets(
       desc(departmentFloorPlanSets.isDefault),
       asc(departmentFloorPlanSets.name),
     );
-  if (sets.length === 0) return [];
-  const zones = await tx
-    .select({ zoneId: floorZones.id, departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-        inArray(zoneServicePolicies.departmentId, [...new Set(sets.map((s) => s.departmentId))]),
-      ),
-    )
-    .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
-  return sets.map((set) => ({
-    ...set,
-    zoneIds: zones.filter((z) => z.departmentId === set.departmentId).map((z) => z.zoneId),
-  }));
 }
 
-/** The Floor plans page: every active department, its zones and its sets. */
-export async function readFloorPlanSetsModel(
+/** The active zones of `departmentIds`, in the order the venue lists its zones. */
+async function departmentZones(
   tx: Transaction,
   cfg: VenueScope,
-  core: FloorPlanSets,
-): Promise<FloorPlanSetsModel> {
-  const departmentRows = await listDepartments(tx, cfg);
-  const departmentIds = departmentRows.map((d) => d.id);
-  const sets = await readFloorPlanSets(tx, cfg);
-  const zones = await tx
+  departmentIds: readonly string[],
+): Promise<{ id: string; name: string; departmentId: string }[]> {
+  if (departmentIds.length === 0) return [];
+  return tx
     .select({
       id: floorZones.id,
       name: floorZones.name,
@@ -119,10 +127,22 @@ export async function readFloorPlanSetsModel(
       and(
         eq(zoneServicePolicies.locationId, cfg.locationId),
         eq(floorZones.active, true),
-        inArray(zoneServicePolicies.departmentId, departmentIds),
+        inArray(zoneServicePolicies.departmentId, [...departmentIds]),
       ),
     )
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
+}
+
+/** The Floor plans page: every active department, its zones and its sets. */
+export async function readFloorPlanSetsModel(
+  tx: Transaction,
+  cfg: VenueScope,
+  core: FloorPlanSets,
+): Promise<FloorPlanSetsModel> {
+  const departmentRows = await listDepartments(tx, cfg);
+  const departmentIds = departmentRows.map((d) => d.id);
+  const sets = await setRows(tx, cfg, {});
+  const zones = await departmentZones(tx, cfg, departmentIds);
   const periods = await tx
     .select({
       id: menuPeriods.id,
@@ -180,20 +200,7 @@ export async function readPeriodFloorPlans(
   core: FloorPlanSets,
 ): Promise<PeriodFloorPlans> {
   const departmentIds = (await listDepartments(tx, cfg)).map((d) => d.id);
-  const zones =
-    departmentIds.length === 0
-      ? []
-      : await tx
-          .select({ id: floorZones.id, departmentId: zoneServicePolicies.departmentId })
-          .from(zoneServicePolicies)
-          .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-          .where(
-            and(
-              eq(zoneServicePolicies.locationId, cfg.locationId),
-              eq(floorZones.active, true),
-              inArray(zoneServicePolicies.departmentId, departmentIds),
-            ),
-          );
+  const zones = await departmentZones(tx, cfg, departmentIds);
   if (zones.length === 0) return { departments: [] };
   const { tableCounts } = await core.readLayouts(
     tx,
@@ -282,7 +289,7 @@ export async function createFloorPlanSet(
     throw new AppError("floor_plan_set.invalid", { field: "fromSetId" });
   const name = setName(input.name);
   const setId = await core.create(tx);
-  await linkFloorPlanSet(tx, cfg, { setId, departmentId: input.departmentId, name });
+  await insertLink(tx, { setId, departmentId: input.departmentId, name }, held);
   if (input.fromSetId !== undefined) await core.copyLayouts(tx, input.fromSetId, setId);
   return setId;
 }
@@ -347,10 +354,7 @@ export async function readFloorPlanSetDeleteImpact(
   cfg: VenueScope,
   core: FloorPlanSets,
   setId: string,
-): Promise<{
-  periods: { id: string; name: string }[];
-  zonesShowing: { id: string; name: string }[];
-}> {
+): Promise<FloorPlanSetDeleteImpact> {
   await ownedSet(tx, cfg, setId);
   const periods = await tx
     .select({ id: menuPeriods.id, name: menuPeriods.name })
