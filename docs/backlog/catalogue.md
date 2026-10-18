@@ -872,8 +872,7 @@ with temporary cases in `apps/server/src/working-order.test.ts`, `order-groups.t
   dish on it is refused the same way. On a table's order, a new round (`submitGroups`) and a
   quantity change to one line (`updateOrderLine`) still succeed, and another such dish with the
   old answer is refused. A save of the whole order that kept such a dish, already sent to the
-  kitchen, and added a line (a probe in `apps/server/src/tabs.test.ts`) was refused
-  `options.label_required`.
+  kitchen, and added a line was refused `options.label_required`.
 - With an options list and an extras list both deleted and the menus republished, raising the
   quantity of a table's dish that still carries an extra from the deleted list is refused
   `extras.invalid`, though a note on it succeeds.

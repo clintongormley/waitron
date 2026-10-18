@@ -189,7 +189,8 @@ jobs:
 
           code=$(curl -sk -o guide.html -w '%{http_code}' https://127.0.0.1/help/es/products)
           [ "$code" = "200" ]
-          # A 200 alone would pass for an error page: the Spanish twin's section is what proves the files shipped.
+          # A section id proves the guides shipped. The page's language proves the Spanish twin did,
+          # because a missing twin is served in English.
           grep -q 'id="variants"' guide.html
           grep -q '<html lang="es">' guide.html
 

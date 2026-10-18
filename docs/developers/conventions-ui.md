@@ -117,8 +117,8 @@ blank box and looks for the Spanish page's `id="variants"` and `<html lang="es">
 ### What the renderer accepts, and what it refuses
 
 `renderGuide` (`apps/server/src/guide-markdown.ts`) is our own renderer and adds no dependency. It
-renders a page on every request, with no cache, so the dev server shows an edit on reload. It
-accepts exactly this:
+renders a page on every request, with no cache, so the dev server shows an edit on reload. The
+guides use this subset:
 
 - one level-1 heading, first, which is the page's title;
 - level-2 headings, each ending `{#id}`, where the id is a lower-case letter followed by lower-case
