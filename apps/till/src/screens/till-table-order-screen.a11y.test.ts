@@ -362,11 +362,13 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the dialog asking how many to cancel", async () => {
+    it("has no violations in the dialog asking how many to cancel after the app offers it", async () => {
       const { el } = await mountDrawer([sentLine]);
       let asked: AdjustDetail | undefined;
       el.addEventListener("adjust", (e) => (asked = (e as CustomEvent<AdjustDetail>).detail));
-      el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="5"]')!.click();
+      el.cancelOffer = 5;
+      await el.updateComplete;
+      expect(asked!.offered).toBe(true);
       // The app opens the dialog on what the screen asked for.
       const { el: dialog, host } = await mountWidget<TillAdjustmentDialog>(
         "till-adjustment-dialog",

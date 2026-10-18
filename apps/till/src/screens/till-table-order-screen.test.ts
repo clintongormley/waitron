@@ -2169,18 +2169,19 @@ describe("till-table-order-screen", () => {
       expect([fire.open, move.open]).toEqual([false, false]);
     });
 
-    it("offers Cancel without direct Change on a held dish and asks the app to take it off the bill", async () => {
+    it("takes the app's Cancel offer for a held dish without direct Change", async () => {
       const { el } = await mountGroups();
       const asked = capture(el, "adjust");
       expect(control(el, '[data-change-line="4"]')).toBeNull();
-      expect(control(el, '[data-cancel-line="3"]')).not.toBeNull();
       expect(control(el, '[data-send-line="3"]')).toBeNull();
 
-      control(el, '[data-cancel-line="3"]')!.click();
+      el.cancelOffer = 3;
+      await el.updateComplete;
 
       expect(asked.map((event) => event.detail)).toEqual([
         {
           kind: "cancel",
+          offered: true,
           target: {
             lineId: "l-croq",
             name: "Croquetas",
@@ -2193,7 +2194,7 @@ describe("till-table-order-screen", () => {
       ]);
     });
 
-    it("offers Cancel on a dish in a held group that goes to no kitchen, saying it comes off the bill", async () => {
+    it("takes the app's Cancel offer for a held dish that goes to no kitchen", async () => {
       const water = dishLine("l-water", 7, "Water", "1.000", "g5", { state: null });
       const { el } = await mountGroups({
         lines: [...tabLines, water],
@@ -2203,11 +2204,13 @@ describe("till-table-order-screen", () => {
       });
       const asked = capture(el, "adjust");
 
-      control(el, '[data-cancel-line="7"]')!.click();
+      el.cancelOffer = 7;
+      await el.updateComplete;
 
       expect(asked.map((event) => event.detail)).toEqual([
         {
           kind: "cancel",
+          offered: true,
           target: expect.objectContaining({ lineId: "l-water", started: false }),
         },
       ]);
@@ -3783,7 +3786,7 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    describe("Cancel on a line of more than one", () => {
+    describe("the app's Cancel offer on a line of more than one", () => {
       const pair: TabLine = { ...burgerLine, quantity: "2.000" };
       function captureCancel(el: TillTableOrderScreen): AdjustDetail[] {
         const seen: AdjustDetail[] = [];
@@ -3793,19 +3796,23 @@ describe("till-table-order-screen", () => {
         });
         return seen;
       }
-      async function pressCancel(el: TillTableOrderScreen, lineNo: number): Promise<AdjustDetail> {
+      async function acceptCancelOffer(
+        el: TillTableOrderScreen,
+        lineNo: number,
+      ): Promise<AdjustDetail> {
         const seen = captureCancel(el);
-        lineAction(el, "cancel", lineNo)!.click();
+        el.cancelOffer = lineNo;
         await el.updateComplete;
         expect(seen).toHaveLength(1);
         expect(seen[0]!.kind).toBe("cancel");
+        expect(seen[0]!.offered).toBe(true);
         return seen[0]!;
       }
 
       it("lets the dialog cancel one of them, at one unit's price", async () => {
         const { el } = await mountLines([pair]);
         await openDrawer(el);
-        const { target } = await pressCancel(el, 5);
+        const { target } = await acceptCancelOffer(el, 5);
         expect(target).toEqual({
           lineId: "line-5",
           name: "Burger",
@@ -3819,7 +3826,7 @@ describe("till-table-order-screen", () => {
       it("keeps the started wording, and one at a time, when the kitchen has started the pair", async () => {
         const { el } = await mountLines([{ ...pair, state: "preparing" }]);
         await openDrawer(el);
-        const { target } = await pressCancel(el, 5);
+        const { target } = await acceptCancelOffer(el, 5);
         expect(target.started).toBe(true);
         expect(target.unitTotal).toBe("9.50");
       });
@@ -3827,7 +3834,7 @@ describe("till-table-order-screen", () => {
       it("does not offer one at a time on a line of one", async () => {
         const { el } = await mountLines([burgerLine]);
         await openDrawer(el);
-        const { target } = await pressCancel(el, 5);
+        const { target } = await acceptCancelOffer(el, 5);
         expect(target.quantity).toBe("1");
         expect(target.unitTotal).toBeNull();
       });
@@ -3844,7 +3851,7 @@ describe("till-table-order-screen", () => {
         };
         const { el } = await mountLines([weighed]);
         await openDrawer(el);
-        const { target } = await pressCancel(el, 5);
+        const { target } = await acceptCancelOffer(el, 5);
         expect(target.unitTotal).toBeNull();
       });
 
