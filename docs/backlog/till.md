@@ -149,18 +149,22 @@ may make one or both of those branches reachable, or show they can go.
 
 <a id="five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen"></a>
 
-## Two till handlers still leave a failed list refresh unhandled
+## Three till handlers still leave a failed list refresh unhandled
 
-**Two till handlers still leave a failed list refresh unhandled — OPEN (found 2026-09-25, review of PR #641).**
+**Three till handlers still leave a failed list refresh unhandled — OPEN (found 2026-09-25, review of PR #641).**
 
 - `#onRetrieveOrder` awaits `#refreshHeldOrders()`, and `#onAdvanceTicketItem` awaits
   `#refreshStationQueue()`, in `apps/till/src/till-app.ts`, each after its `try`/`catch` and
   outside it, on both paths, after a success and after a failure. A failed refresh there is an
   unhandled promise rejection and the operator sees nothing. Retrieve writes nothing, so an "X
   succeeded, but…" message does not fit it.
+- `#onMarkCollected` goes through `#refreshAfterWrite` after a successful collect, but after a
+  failed one it awaits `#refreshStationQueue()` in a `try`/`finally` with no `catch`, so a failed
+  refresh there is an unhandled promise rejection too.
 
 **Next action:** decide whether advance goes through `#refreshAfterWrite` with its own "X
-succeeded, but…" string, and what retrieve shows when its refresh fails.
+succeeded, but…" string, what retrieve shows when its refresh fails, and what mark-collected shows
+when its refresh after a failed collect fails.
 
 ## Cash handed back for a voided cash sale is recorded nowhere
 
@@ -735,8 +739,8 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     whether to record it.
   - **A placed pay-later counter order (a `ticket_then_pay` zone's, sent to the kitchen before
     it is paid) cannot be adjusted:** the placed-order trigger freezes its prices. B16 lets such
-    an order be handed over before it is paid but did not decide this. **Next action:** decide whether a placed order can be adjusted before it is
-    collected.
+    an order be handed over before it is paid but did not decide this. **Next action:** decide
+    whether a placed order can be adjusted before it is collected.
   - **The server's held-order edit (`PUT /api/working-orders/:id`) still voids a sent dish's
     dropped quantity without a reason** when a client sends it that way, the venue allows changes
     to sent items and the kitchen has not started the dish (`applyLineEdits`,
@@ -2101,7 +2105,8 @@ build after A757's board if it has been decided, else name the table alone.
   `dropAction`, `apps/till/src/state/floor-today.ts`): one wasted round trip (for a party, a
   join done and undone in one transaction) and a red 400 in the console; nothing the waiter sees goes
   wrong. Owner, 2026-10-17: ask for the seat count first and send once; the other refusals (table
-  not free, already grouped, zone mismatch) then show only after the seats are typed.
+  not free, already grouped, zone mismatch) then show only after the seats are typed. Done when a
+  floor join that needs seats asks for them before its first request and sends once.
   The request log is in #1699.
 
 ## Move this bill still offers a closed counter area

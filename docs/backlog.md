@@ -2103,7 +2103,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the Seats prompt opens (2026-10-14; owner decided 2026-10-17).** It first sends the merge or
   join with no seat count, gets `400 merge.seats_required`, then opens the Seats prompt and sends
   again. Owner, 2026-10-17: ask for the seat count first and send once; the other refusals (table
-  not free, already grouped, zone mismatch) then show only after the seats are typed.
+  not free, already grouped, zone mismatch) then show only after the seats are typed. Done when a
+  floor join that needs seats asks for them before its first request and sends once.
   [Detail](backlog/till.md#a666-a-floor-join-that-moves-tables-together-is-sent-once-without-seats)
 
 - **Move this bill still offers a closed counter area (2026-10-15; open, A697 review).**
@@ -2191,10 +2192,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   below 1, and seating one passes it on unchecked; the guests count stored for such a receipt is
   bounded 1 to 999, so such a party's simplified receipt prints no guests line. [Detail](backlog/till.md#a-booking-or-a-seated-party-can-count-more-than-999-guests)
 
-- **Two till handlers still leave a failed list refresh unhandled** — OPEN (found 2026-09-25,
+- **Three till handlers still leave a failed list refresh unhandled** — OPEN (found 2026-09-25,
   review of PR #641). `#onAdvanceTicketItem` and `#onRetrieveOrder` (`apps/till/src/till-app.ts`)
-  await their list refresh after their `try`/`catch`, outside it. **Next action:** decide what each
-  shows when that refresh fails.
+  await their list refresh after their `try`/`catch`, outside it, and `#onMarkCollected` awaits
+  `#refreshStationQueue()` after a failed collect in a `try`/`finally` with no `catch`. **Next
+  action:** decide what each shows when that refresh fails.
   [Detail](backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen)
 
 - **The till's idle-timer check may be unreachable — OPEN (found by W24's review, 2026-10-03, by
@@ -2600,9 +2602,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
   - **The adjustment history records who approved, but not whether the bill's discount limit,
     rather than the reason, is why.** **Next action:** decide whether to record it.
-  - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) cannot be
-    adjusted.** **Next action:** decide whether a placed order can be adjusted before it is
-    collected.
+  - **A placed pay-later counter order (a `ticket_then_pay` zone's, sent to the kitchen before
+    it is paid) cannot be adjusted.** **Next action:** decide whether a placed order can be
+    adjusted before it is collected.
   - **The server's held-order edit (`PUT /api/working-orders/:id`) still voids a sent dish's
     dropped quantity without a reason** (`applyLineEdits`, `apps/server/src/working-order.ts`).
     **Next action:** decide whether the edit should refuse dropping a sent line.
@@ -2862,7 +2864,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   subscription model when it matters.
 
 - **A841. A theme editor (owner, 2026-10-17).** Lets the owner change how Waitron looks by setting
-  the `--wt-*` CSS variables it already reads. Not designed yet.
+  the `--wt-*` CSS variables it already reads. Not designed yet. Next: a design.
 
 - **Bookings**, each greenfield: public/online/QR booking, availability, reminders, a CRM entity,
   recurring, a calendar grid, deposits.
@@ -2944,7 +2946,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A842. While a payment is being sent, the pressed Cash or Card keeps its colour with a spinner
   (owner, 2026-10-17; left open by A535, #1617).** Both are switched off with `disabled` while
   sending, so in dark they turn dim blue. Follow the owner's 2026-10-08 rule: the pressed button
-  keeps its own colour with a spinner while its request is sent, and the other goes quiet.
+  keeps its own colour with a spinner while its request is sent, and the other goes quiet. Done
+  when a test finds the pressed button in `loading` with its own colour, and the other one quiet,
+  while the payment is sent.
   [Detail](backlog/till.md#in-dark-the-tills-cash-and-card-turn-dim-blue-while-a-payment-is-being-sent)
 
 - **Check leading-zero tip drafts on the counter payment screen.** The draft comparator in
@@ -2975,7 +2979,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A843. Retire `GET /api/products` and move the till's tests onto zone-offer fixtures (owner,
   2026-10-17).** The route has no caller in the till app, and `listAvailableProducts` is off the sale
   path. `TillApi.listProducts` (`apps/till/src/api/client.ts`) is kept because the till's tests
-  stub it; outside tests `listAvailableProducts` is called by that route and two dev scripts.
+  stub it; outside tests `listAvailableProducts` is called by that route and two dev scripts. Done
+  when the route and `TillApi.listProducts` are gone and no till test stubs `listProducts`.
 
 - **Two branches still read a held line that names no menu offer**, which only an order parked
   before B4 should have: `getHeldOrder` (`apps/server/src/working-order.ts`) and the till's retrieve
