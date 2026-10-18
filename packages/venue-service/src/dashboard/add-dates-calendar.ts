@@ -4,6 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { HOURS_RANGE_MAX_DAYS, type LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
+import { DayPicker, type DayRun } from "./day-picking.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import { t } from "./strings.js";
 
@@ -34,10 +35,9 @@ function monthDates(month: string): LocalDate[] {
   return dates;
 }
 
-/** A month of dates to pick from: a click adds a date, or removes a chosen one; a shift-click (or
- *  two clicks with Range on) adds every date between it and the last one clicked. Dates another
- *  special day holds are marked with its name but still offered; the server refuses them. ‹ › send
- *  `month-change`. */
+/** A month of dates to pick from: a click adds a date, or removes a chosen one; a drag, a
+ *  shift-click or Shift+arrow adds every date of the run. Dates another special day holds are
+ *  marked with its name but still offered; the server refuses them. ‹ › send `month-change`. */
 @customElement("add-dates-calendar")
 export class AddDatesCalendar extends LitElement {
   static override styles = [
@@ -111,11 +111,10 @@ export class AddDatesCalendar extends LitElement {
         background: var(--wt-color-primary);
         color: var(--wt-color-on-primary);
       }
-      td[data-anchor] button {
+      td[data-picked] button {
         box-shadow: inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary);
       }
-      td button:focus-visible,
-      .range:focus-visible {
+      td button:focus-visible {
         outline: var(--wt-field-line-width-active) solid var(--wt-color-focus);
         outline-offset: var(--wt-focus-offset);
       }
@@ -126,20 +125,7 @@ export class AddDatesCalendar extends LitElement {
         gap: var(--wt-space-2);
         margin-block-start: var(--wt-space-2);
       }
-      .range {
-        min-height: var(--wt-tap-min);
-        padding: 0 var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
-        cursor: pointer;
-      }
-      .range[aria-pressed="true"] {
-        border-color: var(--wt-color-primary);
-        font-weight: var(--wt-font-weight-bold);
-      }
+      .hint,
       .message,
       .legend,
       .held {
@@ -175,12 +161,7 @@ export class AddDatesCalendar extends LitElement {
   @property({ attribute: false }) selected: readonly LocalDate[] = [];
   /** Each date another special day holds, with that day's name. */
   @property({ attribute: false }) taken: ReadonlyMap<LocalDate, string> = new Map();
-  /** The last date clicked, where a shift-click's range starts; kept across months. */
-  @state() private anchor: LocalDate | null = null;
-  /** Range is on: the next click sets `anchor` and adds nothing, the one after adds the range. */
-  @state() private ranging = false;
   @state() private message = "";
-  @state() private focusDate: LocalDate | null = null;
   /** The date last clicked or focused, whose holder is named under the month. */
   @state() private pointed: LocalDate | null = null;
 
@@ -194,59 +175,44 @@ export class AddDatesCalendar extends LitElement {
     if (fresh.length) this.#emit<AddDates>("add-dates", { dates: fresh });
   }
 
-  /** Adds the dates from `a` to `b`; false, adding nothing, when there are too many. */
-  #range(a: LocalDate, b: LocalDate): boolean {
-    const [from, to] = a <= b ? [a, b] : [b, a];
-    const dates: LocalDate[] = [];
-    for (let date = from; date <= to; date = addDays(date, 1)) {
-      if (dates.length === HOURS_RANGE_MAX_DAYS) {
-        this.message = t("special.range_long");
-        return false;
-      }
-      dates.push(date);
-    }
-    this.message = "";
-    this.#add(dates);
-    return true;
-  }
+  /** The last run a gesture added; a run the picker holds that is not this one is still being
+   *  picked, so it is drawn marked. */
+  #rangedRun: DayRun | null = null;
 
-  /** A refused range keeps its first date, so a nearer last date can follow. */
-  #click(date: LocalDate, event: MouseEvent): void {
-    this.pointed = date;
-    if (this.ranging) {
-      if (this.anchor === null) {
-        this.anchor = date;
-        this.message = t("special.range_last");
-        return;
-      }
-      if (!this.#range(this.anchor, date)) return;
-      this.ranging = false;
-    } else if (event.shiftKey && this.anchor !== null) {
-      if (!this.#range(this.anchor, date)) return;
-    } else {
+  #picker = new DayPicker(this, {
+    button: (date) => this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] button`),
+    canPick: () => true,
+    dragOnTouch: true,
+    choose: (date) => {
+      this.pointed = date;
       this.message = "";
       if (this.selected.includes(date)) this.#emit<RemoveDates>("remove-dates", { dates: [date] });
       else this.#add([date]);
-    }
-    this.anchor = date;
-  }
+    },
+    /** A refused run keeps its first date, so a nearer last date can follow. */
+    ranged: (run) => {
+      this.#rangedRun = run;
+      this.requestUpdate();
+      const dates: LocalDate[] = [];
+      for (let date = run.from; date <= run.to; date = addDays(date, 1)) {
+        if (dates.length === HOURS_RANGE_MAX_DAYS) {
+          this.message = t("special.range_long");
+          return;
+        }
+        dates.push(date);
+      }
+      this.message = "";
+      this.#add(dates);
+    },
+  });
 
-  #toggleRange(): void {
-    this.ranging = !this.ranging;
-    this.anchor = null;
-    this.message = "";
-  }
-
-  #keydown(event: KeyboardEvent): void {
-    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key];
-    const date = (event.composedPath()[0] as HTMLElement).closest("td")?.dataset.date;
-    if (step === undefined || date === undefined) return;
-    event.preventDefault();
-    const next = addDays(date, step);
-    const target = this.renderRoot.querySelector<HTMLElement>(`td[data-date="${next}"] button`);
-    if (!target) return;
-    this.focusDate = next;
-    target.focus();
+  #marking(): boolean {
+    const run = this.#picker.run;
+    return (
+      run !== null &&
+      run.from !== run.to &&
+      (run.from !== this.#rangedRun?.from || run.to !== this.#rangedRun.to)
+    );
   }
 
   override render() {
@@ -269,7 +235,8 @@ export class AddDatesCalendar extends LitElement {
       >`;
     };
     const dates = monthDates(this.month);
-    const stop = dates.includes(this.focusDate ?? "") ? this.focusDate! : dates[0]!;
+    const focus = this.#picker.focusDate;
+    const stop = focus !== null && dates.includes(focus) ? focus : dates[0]!;
     const cells: (LocalDate | null)[] = [
       ...Array.from({ length: (weekdayOf(dates[0]!) + 6) % 7 }, () => null),
       ...dates,
@@ -279,6 +246,7 @@ export class AddDatesCalendar extends LitElement {
       cells.slice(row * 7, row * 7 + 7),
     );
     const chosen = new Set(this.selected);
+    const marking = this.#marking();
     const holder = dates.includes(this.pointed ?? "") ? this.taken.get(this.pointed!) : undefined;
     return html`<div class="head">
         ${step(-1, "previous-month", "month.previous", "‹")}
@@ -287,7 +255,13 @@ export class AddDatesCalendar extends LitElement {
         </h3>
         ${step(1, "next-month", "month.next", "›")}
       </div>
-      <table @keydown=${this.#keydown}>
+      <table
+        @pointerdown=${this.#picker.handlers.pointerdown}
+        @click=${this.#picker.handlers.click}
+        @dblclick=${this.#picker.handlers.dblclick}
+        @keydown=${this.#picker.handlers.keydown}
+        @contextmenu=${this.#picker.handlers.contextmenu}
+      >
         <thead>
           <tr>
             ${Array.from({ length: 7 }, (_, index) => {
@@ -302,21 +276,15 @@ export class AddDatesCalendar extends LitElement {
           ${weeks.map(
             (week) =>
               html`<tr>
-                ${week.map((date) => (date ? this.#cell(date, chosen, stop) : html`<td></td>`))}
+                ${week.map((date) =>
+                  date ? this.#cell(date, chosen, stop, marking) : html`<td></td>`,
+                )}
               </tr>`,
           )}
         </tbody>
       </table>
       <div class="foot">
-        <button
-          type="button"
-          class="range"
-          data-test="range"
-          aria-pressed=${this.ranging ? "true" : "false"}
-          @click=${this.#toggleRange}
-        >
-          ${t("special.range")}
-        </button>
+        <p class="hint" data-test="hint">${t("special.pick_hint")}</p>
         <p class="message" data-test="message" role="status">${this.message}</p>
       </div>
       ${
@@ -331,12 +299,12 @@ export class AddDatesCalendar extends LitElement {
       </p>`;
   }
 
-  #cell(date: LocalDate, chosen: ReadonlySet<LocalDate>, stop: LocalDate) {
+  #cell(date: LocalDate, chosen: ReadonlySet<LocalDate>, stop: LocalDate, marking: boolean) {
     const holder = this.taken.get(date);
     return html`<td
       data-date=${date}
       ?data-taken=${holder !== undefined}
-      ?data-anchor=${this.ranging && date === this.anchor}
+      ?data-picked=${marking && this.#picker.isPicked(date)}
     >
       <button
         type="button"
@@ -344,9 +312,7 @@ export class AddDatesCalendar extends LitElement {
         aria-label=${holder ? `${formatLongDate(date)}, ${holder}` : formatLongDate(date)}
         aria-pressed=${chosen.has(date) ? "true" : "false"}
         title=${holder ?? nothing}
-        @click=${(event: MouseEvent) => this.#click(date, event)}
         @focus=${() => {
-          this.focusDate = date;
           this.pointed = date;
         }}
       >
