@@ -5,7 +5,7 @@ import { byStart, seasonOnSorted } from "./season-rules.js";
 import { rangeSpan, type ServiceRange } from "./service-day.js";
 import { scheduleCutovers, serviceDayWallContext } from "./service-day-context.js";
 import { standingInYear } from "./repeat-rules.js";
-import type { BusinessDayClock } from "@waitron/shared";
+import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 
@@ -82,14 +82,15 @@ export interface DatedSchedule {
   specialDayId?: string;
 }
 
-/** With `weekly`, the weeks and repeating days are judged under that one start, and only a
- *  one-off date under its own start on `clock`. */
+/** With `from`, the business day an hours save falls in: the weeks are judged under the start in
+ *  force on `from`, and before `from` only a one-off date's own paint is present, under its own
+ *  start on `clock`. */
 export function findSeasonEndOffsetClash(
   seasons: readonly SeasonSchedule[],
   dated: readonly DatedSchedule[],
   offsets: ReadonlyMap<string, number>,
   clock: string | BusinessDayClock,
-  weekly?: string,
+  from?: LocalDate,
 ): {
   periodId: string;
   slotIndex: number;
@@ -106,9 +107,12 @@ export function findSeasonEndOffsetClash(
     pairs.push(
       ...ordered.map((season, index) => [season, ordered[(index + 1) % ordered.length]!] as const),
     );
-  const changes = typeof clock === "string" || weekly !== undefined ? [] : clock.cutoverChanges;
   const cutovers =
-    weekly !== undefined ? [weekly] : typeof clock === "string" ? [clock] : scheduleCutovers(clock);
+    typeof clock === "string"
+      ? [clock]
+      : from !== undefined
+        ? [cutoverForBusinessDay(clock, from)]
+        : scheduleCutovers(clock);
   for (const [first, second] of pairs)
     for (const cutover of cutovers)
       for (let weekday = 0; weekday < 7; weekday++) {
@@ -126,15 +130,18 @@ export function findSeasonEndOffsetClash(
           };
       }
   const years = new Set(dated.map(({ date }) => Number(date.slice(0, 4))));
-  for (const change of changes) years.add(Number(change.effectiveBusinessDay.slice(0, 4)));
+  if (typeof clock !== "string")
+    for (const change of clock.cutoverChanges)
+      years.add(Number(change.effectiveBusinessDay.slice(0, 4)));
   for (const day of dated) {
     if (day.occursIn === undefined) continue;
     const firstYear = Number(day.date.slice(0, 4));
     for (let year = firstYear; year < Math.min(firstYear + 400, 10000); year++) years.add(year);
-    for (const change of changes) {
-      const start = Math.max(firstYear, Number(change.effectiveBusinessDay.slice(0, 4)));
-      for (let year = start; year < Math.min(start + 400, 10000); year++) years.add(year);
-    }
+    if (typeof clock !== "string")
+      for (const change of clock.cutoverChanges) {
+        const start = Math.max(firstYear, Number(change.effectiveBusinessDay.slice(0, 4)));
+        for (let year = start; year < Math.min(start + 400, 10000); year++) years.add(year);
+      }
   }
   const occurrences = dated.flatMap((day) =>
     day.occursIn === undefined
@@ -174,29 +181,28 @@ export function findSeasonEndOffsetClash(
   const effective = (date: LocalDate, cutover: string): readonly ServiceRange[] => {
     const index = storedIndex(date);
     const stored = dated[index];
-    if (stored === undefined) return seasonal(date);
+    const past = from !== undefined && date < from;
+    if (past && stored?.occursIn !== undefined) return [];
+    if (stored === undefined) return past ? [] : seasonal(date);
     if (stored.closeWholeVenue) return [];
-    const key = `${index}|${seasonOf(date)?.seasonId}|${weekdayOf(date)}|${cutover}`;
-    const day = layered.get(key) ?? layerPaint(seasonal(date), stored.paint, cutover);
+    const key = past ? date : `${index}|${seasonOf(date)?.seasonId}|${weekdayOf(date)}|${cutover}`;
+    const day = layered.get(key) ?? layerPaint(past ? [] : seasonal(date), stored.paint, cutover);
     layered.set(key, day);
     return day;
   };
   // Less than one day's grace can meet only a placement on this or the next business day.
   const boundaries = new Set(occurrences.flatMap(({ date }) => [addDays(date, -1), date]));
-  for (const change of changes) {
-    boundaries.add(addDays(change.effectiveBusinessDay, -1));
-    boundaries.add(change.effectiveBusinessDay);
-  }
-  const cutoverOn = (day: LocalDate): string => {
-    if (typeof clock === "string") return clock;
-    const stored = storedOn(day);
-    return weekly !== undefined && (stored === undefined || stored.occursIn !== undefined)
-      ? weekly
-      : serviceDayWallContext(clock, day).dayCutover;
-  };
+  if (typeof clock !== "string")
+    for (const change of clock.cutoverChanges) {
+      boundaries.add(addDays(change.effectiveBusinessDay, -1));
+      boundaries.add(change.effectiveBusinessDay);
+    }
   for (const date of [...boundaries].sort()) {
     const next = addDays(date, 1);
-    const contexts = [cutoverOn(date), cutoverOn(next)];
+    const contexts =
+      typeof clock === "string"
+        ? [clock, clock]
+        : [date, next].map((day) => serviceDayWallContext(clock, day).dayCutover);
     const clash = findEndOffsetClash(
       [effective(date, contexts[0]!), effective(next, contexts[1]!)],
       offsets,

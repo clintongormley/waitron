@@ -1656,6 +1656,12 @@ describe("undated hours are checked against the start in force", () => {
       withTransaction(suite.db, (tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, monday, at, 1)),
     ).resolves.toBeUndefined();
   });
+  it("leaves the weekly ranges out beside a past one-off date when the week is saved", async () => {
+    const v = await fixture([], { offset: 30 });
+    await hoursBack(v);
+    await paintDate(v, "menu", "2026-10-22", [range("03:00", "04:00")], whileThreeInForce, 1);
+    await expect(writeWeek(v, [range("22:00", "04:30")])).resolves.toBeUndefined();
+  });
   it("joins a replaced period's touching ranges in order from the start in force", async () => {
     const v = await fixture([]);
     const other = randomUUID();

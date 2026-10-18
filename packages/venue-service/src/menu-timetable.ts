@@ -199,7 +199,7 @@ async function endOffsetClash(
     );
   if (!validateZeroOffsets && periods.every((period) => period.offset === 0)) return null;
   const read = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
-  const { clock, weekly } = "weekly" in read ? read : { clock: read, weekly: undefined };
+  const { clock, from } = "clock" in read ? read : { clock: read, from: undefined };
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
   const departmentIds =
     only === undefined
@@ -234,7 +234,7 @@ async function endOffsetClash(
       })),
       offsets,
       clock,
-      weekly,
+      from,
     );
     if (clash !== null) {
       return {

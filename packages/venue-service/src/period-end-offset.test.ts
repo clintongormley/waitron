@@ -6,7 +6,7 @@ import {
   type SeasonSchedule,
 } from "./period-end-offset.js";
 import type { ServiceRange } from "./service-day.js";
-import { inForceClock, settledClock } from "./service-day-context.js";
+import { settledClock } from "./service-day-context.js";
 import type { BusinessDayClock } from "@waitron/shared";
 
 const lunch = { periodId: "lunch", startsAt: "12:00", endsAt: "14:00" };
@@ -343,36 +343,76 @@ describe("end offsets for an hours save after the start moved", () => {
       { effectiveBusinessDay: "2026-10-28", dayCutover: "05:00" },
     ],
   };
-  const at = new Date("2026-11-02T12:00:00Z");
-  const settled = settledClock(clock, at);
-  const weekly = inForceClock(clock, at).dayCutover;
+  const settled = settledClock(clock, new Date("2026-11-02T12:00:00Z"));
+  const today = "2026-11-02";
   const offsets = new Map([["p", 30]]);
-  const oneOff = (date: string, startsAt: string, endsAt: string) => ({
+  const oneOff = (
+    date: string,
+    ...paint: { periodId: string; startsAt: string; endsAt: string }[]
+  ) => ({
     date,
     closeWholeVenue: false,
-    paint: [{ periodId: "p", startsAt, endsAt }],
+    paint,
     specialDayId: `sd-${date}`,
   });
+  const p = (startsAt: string, endsAt: string) => ({ periodId: "p", startsAt, endsAt });
   const noWeek = [
     { seasonId: "year", startsOn: "01-01", week: Array.from({ length: 7 }, () => []) },
   ];
+  const lateWednesday = () => {
+    const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
+    week[3] = [p("22:00", "04:30")];
+    return [{ seasonId: "year", startsOn: "01-01", week }];
+  };
 
   it("judges a past one-off date under its own start", () => {
-    const past = [oneOff("2026-10-23", "03:00", "04:30"), oneOff("2026-10-24", "05:00", "06:00")];
-    expect(findSeasonEndOffsetClash(noWeek, past, offsets, settled, weekly)).toBeNull();
+    const past = [
+      oneOff("2026-10-23", p("03:00", "04:30")),
+      oneOff("2026-10-24", p("05:00", "06:00")),
+    ];
+    expect(findSeasonEndOffsetClash(noWeek, past, offsets, settled, today)).toBeNull();
+  });
+  it("leaves the weekly ranges out beside a past one-off date", () => {
+    const past = [oneOff("2026-10-22", p("03:00", "04:00"))];
+    expect(findSeasonEndOffsetClash(lateWednesday(), past, offsets, settled, today)).toBeNull();
+  });
+  it("still refuses a past one-off date whose own periods clash, naming it", () => {
+    const past = [
+      oneOff("2026-10-23", p("12:00", "14:00"), {
+        periodId: "next",
+        startsAt: "14:15",
+        endsAt: "18:00",
+      }),
+    ];
+    expect(findSeasonEndOffsetClash(noWeek, past, offsets, settled, today)).toEqual({
+      periodId: "p",
+      slotIndex: 0,
+      date: "2026-10-23",
+      specialDayId: "sd-2026-10-23",
+    });
   });
   it("still finds a future one-off date's clash", () => {
-    const future = [oneOff("2026-11-12", "03:00", "04:30"), oneOff("2026-11-13", "05:00", "06:00")];
-    expect(findSeasonEndOffsetClash(noWeek, future, offsets, settled, weekly)).toMatchObject({
+    const future = [
+      oneOff("2026-11-12", p("03:00", "04:30")),
+      oneOff("2026-11-13", p("05:00", "06:00")),
+    ];
+    expect(findSeasonEndOffsetClash(noWeek, future, offsets, settled, today)).toMatchObject({
       periodId: "p",
       date: "2026-11-12",
     });
   });
+  it("finds a clash whose earlier day is the business day of the save", () => {
+    const now = [
+      oneOff("2026-11-02", p("03:00", "04:30")),
+      oneOff("2026-11-03", p("05:00", "06:00")),
+    ];
+    expect(findSeasonEndOffsetClash(noWeek, now, offsets, settled, today)).toMatchObject({
+      periodId: "p",
+      date: "2026-11-02",
+    });
+  });
   it("judges the weekly ranges under the start in force alone", () => {
-    const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
-    week[3] = [{ periodId: "p", startsAt: "22:00", endsAt: "04:30" }];
-    const seasons = [{ seasonId: "year", startsOn: "01-01", week }];
-    expect(findSeasonEndOffsetClash(seasons, [], offsets, settled)).not.toBeNull();
-    expect(findSeasonEndOffsetClash(seasons, [], offsets, settled, weekly)).toBeNull();
+    expect(findSeasonEndOffsetClash(lateWednesday(), [], offsets, settled)).not.toBeNull();
+    expect(findSeasonEndOffsetClash(lateWednesday(), [], offsets, settled, today)).toBeNull();
   });
 });
