@@ -1,4 +1,4 @@
-import { and, asc, eq, getTableColumns, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   diningTables,
@@ -50,15 +50,6 @@ export interface ZonePlan {
   tables: PlanTable[];
 }
 
-/** The zone-only editor's answer, read from the zone's set-less plan. */
-export type SetlessZonePlan = Omit<ZonePlan, "setId" | "setName">;
-
-/** A layout of a zone: a set's, or the zone's set-less plan when `setId` is null. */
-interface PlanAt {
-  zoneId: string;
-  setId: string | null;
-}
-
 export interface ZonePlanSave {
   /** The copy's revision; 0 when the zone had no master plan. */
   revision: number;
@@ -88,16 +79,11 @@ export async function requireZone(tx: Transaction, cfg: TillConfig, zoneId: stri
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
 }
 
-async function planOf(tx: Transaction, at: PlanAt) {
+async function planOf(tx: Transaction, at: LayoutRef) {
   const [plan] = await tx
     .select({ id: floorPlans.id, revision: floorPlans.revision, savedAt: floorPlans.savedAt })
     .from(floorPlans)
-    .where(
-      and(
-        eq(floorPlans.zoneId, at.zoneId),
-        at.setId === null ? isNull(floorPlans.setId) : eq(floorPlans.setId, at.setId),
-      ),
-    );
+    .where(and(eq(floorPlans.zoneId, at.zoneId), eq(floorPlans.setId, at.setId)));
   return plan;
 }
 
@@ -230,21 +216,6 @@ async function planTables(tx: Transaction, masters: LayoutTable[]): Promise<Plan
   }));
 }
 
-export async function readZonePlan(
-  tx: Transaction,
-  cfg: TillConfig,
-  zoneId: string,
-): Promise<SetlessZonePlan> {
-  await requireZone(tx, cfg, zoneId);
-  const plan = await planOf(tx, { zoneId, setId: null });
-  return {
-    zoneId,
-    revision: plan?.revision ?? 0,
-    savedAt: plan?.savedAt ?? null,
-    tables: plan === undefined ? [] : await planTables(tx, await layoutTables(tx, zoneId, plan.id)),
-  };
-}
-
 /** A set's layout of a zone; with no layout row yet, the zone's tables all off, at revision 0. */
 export async function readLayout(
   tx: Transaction,
@@ -264,7 +235,7 @@ export async function readLayout(
   };
 }
 
-/** The zones among `zoneIds` whose plan has a table `readZonePlan` would answer with a placement. */
+/** The zones among `zoneIds` with a saved layout that places one of the zone's tables. */
 export async function zonesWithPlacedTables(
   tx: Transaction,
   zoneIds: readonly string[],
@@ -371,41 +342,40 @@ interface CheckedZonePlanSave {
   /** The plan's tables, by label. */
   masters: LayoutTable[];
   tables: ZonePlanSave["tables"];
-  /** The saved set's department; null for the zone's set-less plan. */
-  departmentId: string | null;
+  /** The saved set's department. */
+  departmentId: string;
 }
 
-export async function checkZonePlanSave(
+/** Checks a save of a set's layout without writing it. */
+export async function checkLayoutSave(
   tx: Transaction,
   cfg: TillConfig,
   removals: readonly TableRemoval[],
-  zoneId: string,
+  at: LayoutRef,
   input: ZonePlanSave,
   now: Date = new Date(),
 ): Promise<void> {
-  await checkSave(tx, cfg, removals, { zoneId, setId: null }, input, now);
+  await checkSave(tx, cfg, removals, at, input, now);
 }
 
 async function checkSave(
   tx: Transaction,
   cfg: TillConfig,
   removals: readonly TableRemoval[],
-  at: PlanAt,
+  at: LayoutRef,
   input: ZonePlanSave,
   now: Date,
 ): Promise<CheckedZonePlanSave> {
-  const { zoneId, setId } = at;
+  const { zoneId } = at;
   await requireZone(tx, cfg, zoneId);
-  const departmentId =
-    setId === null ? null : (await requireSetOf(tx, cfg, { zoneId, setId })).departmentId;
+  const { departmentId } = await requireSetOf(tx, cfg, at);
   const plan = await planOf(tx, at);
   const revision = plan?.revision ?? 0;
   if (input.revision !== revision) {
     throw new AppError("floor_plan.out_of_date", { zoneId, revision });
   }
   // A set's layout shares the zone's tables, so it holds them all even before its first save.
-  const masters =
-    plan === undefined && setId === null ? [] : await layoutTables(tx, zoneId, plan?.id ?? null);
+  const masters = await layoutTables(tx, zoneId, plan?.id ?? null);
   const masterIds = new Set(masters.map((m) => m.id));
   const followers = await followersOf(tx, [
     ...new Set([...masterIds, ...input.tables.flatMap((t) => t.id ?? [])]),
@@ -440,21 +410,6 @@ function masterColumns(table: ZonePlanSave["tables"][number]) {
   return { seats: table.seats, fixed: table.fixed, ...placementColumns(null) };
 }
 
-/** Writes a checked save to the zone's set-less plan; nothing live changes until the zone's next reset, but for its first save. */
-export async function saveZonePlan(
-  tx: Transaction,
-  cfg: TillConfig,
-  removals: readonly TableRemoval[],
-  zoneId: string,
-  input: ZonePlanSave,
-  now: Date = new Date(),
-): Promise<{ revision: number; ids: Record<string, string> }> {
-  const checked = await checkSave(tx, cfg, removals, { zoneId, setId: null }, input, now);
-  const saved = await writeSave(tx, { zoneId, setId: null }, checked, now);
-  await firstSaveReset(tx, cfg, removals, zoneId, now);
-  return { revision: saved.revision, ids: saved.ids };
-}
-
 /** A zone's first save builds today's plan at once, from the layout due now (spec decision 19). */
 async function firstSaveReset(
   tx: Transaction,
@@ -473,8 +428,8 @@ async function firstSaveReset(
 /**
  * Writes a checked save to a set's layout. A save that changes the zone's shared tables moves
  * the revision of every layout of the zone in the set's department, writing the missing ones,
- * so an editor open on another set cannot save a stale table list over it. As the set-less save,
- * a zone's first save builds today's plan.
+ * so an editor open on another set cannot save a stale table list over it. A zone's first save
+ * builds today's plan.
  */
 export async function saveLayout(
   tx: Transaction,
@@ -488,7 +443,7 @@ export async function saveLayout(
   const saved = await writeSave(tx, at, checked, now);
   if (saved.shared) {
     const sets = await VENUE_SERVICE.readFloorPlanSets(tx, cfg, {
-      departmentId: checked.departmentId!,
+      departmentId: checked.departmentId,
     });
     const others = sets.map((s) => s.setId).filter((id) => id !== at.setId);
     if (others.length > 0) {
@@ -520,7 +475,7 @@ export async function saveLayout(
 
 async function writeSave(
   tx: Transaction,
-  at: PlanAt,
+  at: LayoutRef,
   checked: CheckedZonePlanSave,
   now: Date,
 ): Promise<{ revision: number; ids: Record<string, string>; shared: boolean }> {

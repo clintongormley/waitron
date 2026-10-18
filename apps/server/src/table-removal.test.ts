@@ -91,7 +91,11 @@ async function plannedZone(...labels: string[]): Promise<{ zoneId: string; ids: 
   await inTx(v, async (tx) => {
     const [plan] = await tx
       .insert(floorPlans)
-      .values({ zoneId, savedAt: NOW.toISOString() })
+      .values({
+        zoneId,
+        setId: (await defaultLayout(tx, v.cfg, zoneId)).setId,
+        savedAt: NOW.toISOString(),
+      })
       .returning({ id: floorPlans.id });
     for (const [i, label] of labels.entries()) {
       const [row] = await tx

@@ -1252,4 +1252,27 @@ describe("resetting a zone onto a layout", () => {
     );
     expect(row).toMatchObject({ setId: zone.standard, layoutRevision: 0, occurrence: null });
   });
+
+  it("leaves a zone whose department has no set as it is, answering its revision", async () => {
+    const zoneId = await inTx(v, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      const { id } = await createServiceZone(tx, v.cfg, {
+        name: `Setless ${randomUUID().slice(0, 8)}`,
+        departmentId: department.id,
+      });
+      await tx.insert(floorPlans).values({ zoneId: id, savedAt: "2026-01-01T00:00:00.000Z" });
+      return id;
+    });
+
+    await expectRevision(v, resetZoneToday(zoneId), zoneId, 0);
+
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+      ),
+    ).toEqual([]);
+  });
 });

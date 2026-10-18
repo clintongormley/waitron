@@ -36,7 +36,7 @@ import {
   VENUE_SERVICE_PERMISSIONS,
   zoneServicePolicies,
 } from "@waitron/venue-service";
-import { readZonePlan, saveZonePlan } from "./floor-plan.js";
+import { readLayout, saveLayout } from "./floor-plan.js";
 import {
   resetZone,
   catchUpZone,
@@ -522,11 +522,23 @@ describe("stale floor identifiers", () => {
           typeof updateZone
         >[3]),
     ],
-    ["floor read", "zone.not_found", (tx, f) => readZonePlan(tx, v.cfg, f.zoneId)],
+    [
+      "floor read",
+      "zone.not_found",
+      (tx, f) => readLayout(tx, v.cfg, { setId: randomUUID(), zoneId: f.zoneId }),
+    ],
     [
       "floor save",
       "zone.not_found",
-      (tx, f) => saveZonePlan(tx, v.cfg, [], f.zoneId, { revision: 1, tables: [] }, now),
+      (tx, f) =>
+        saveLayout(
+          tx,
+          v.cfg,
+          [],
+          { setId: randomUUID(), zoneId: f.zoneId },
+          { revision: 1, tables: [] },
+          now,
+        ),
     ],
     ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, v.cfg, [], f.zoneId, now, "due")],
     ["floor catch-up", "zone.not_found", (tx, f) => catchUpZone(tx, v.cfg, [], f.zoneId, now)],

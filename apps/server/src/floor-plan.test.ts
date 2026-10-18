@@ -20,7 +20,7 @@ import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import {
-  checkZonePlanSave,
+  checkLayoutSave,
   readLayout,
   saveLayout,
   type LayoutRef,
@@ -108,19 +108,24 @@ function fresh(label: string): string {
 }
 
 /**
- * Writes a master plan at `revision`, in set `setId` or set-less; each table follows the live
- * table named, if any.
+ * Writes a master plan at `revision`, in set `setId` or else the zone's default set; each table
+ * follows the live table named, if any.
  */
 async function masterOf(
   zoneId: string,
   tables: { label: string; live?: string; place?: boolean }[],
   revision = 1,
-  setId: string | null = null,
+  setId?: string,
 ): Promise<string[]> {
   return inTx(v, async (tx) => {
     const [plan] = await tx
       .insert(floorPlans)
-      .values({ zoneId, setId, revision, savedAt: NOW.toISOString() })
+      .values({
+        zoneId,
+        setId: setId ?? (await defaultLayout(tx, v.cfg, zoneId)).setId,
+        revision,
+        savedAt: NOW.toISOString(),
+      })
       .returning({ id: floorPlans.id });
     const ids: string[] = [];
     for (const table of tables) {
@@ -159,7 +164,9 @@ async function refusal(promise: Promise<unknown>): Promise<AppError> {
 }
 
 function check(zoneId: string, input: ZonePlanSave, removals: readonly TableRemoval[] = NONE) {
-  return inTx(v, (tx) => checkZonePlanSave(tx, v.cfg, removals, zoneId, input, NOW));
+  return inTx(v, async (tx) =>
+    checkLayoutSave(tx, v.cfg, removals, await defaultLayout(tx, v.cfg, zoneId), input, NOW),
+  );
 }
 
 async function layoutOf(zoneId: string): Promise<LayoutRef> {
@@ -192,7 +199,7 @@ async function readCost(tables: number): Promise<number> {
   });
 }
 
-describe("readZonePlan", () => {
+describe("readLayout", () => {
   it("reads a plan in the same statements however many tables it holds", async () => {
     const two = await readCost(2);
     expect(two).toBe(6);
@@ -221,7 +228,7 @@ describe("readZonePlan", () => {
   });
 });
 
-describe("checkZonePlanSave", () => {
+describe("checkLayoutSave", () => {
   /** A zone whose master holds one table followed by a live table, plus an adoptable live table. */
   async function planned() {
     const z = await zone();
@@ -239,7 +246,18 @@ describe("checkZonePlanSave", () => {
 
   it("refuses a zone that does not exist", async () => {
     const zoneId = randomUUID();
-    const error = await refusal(check(zoneId, { revision: 0, tables: [] }));
+    const error = await refusal(
+      inTx(v, (tx) =>
+        checkLayoutSave(
+          tx,
+          v.cfg,
+          NONE,
+          { setId: randomUUID(), zoneId },
+          { revision: 0, tables: [] },
+          NOW,
+        ),
+      ),
+    );
     expect(error.code).toBe("zone.not_found");
   });
 
@@ -441,7 +459,7 @@ describe("checkZonePlanSave", () => {
   it("lets a re-saved plan keep a name its zone's deleted table still holds", async () => {
     const { z, live, master, input } = await planned();
     const label = input.tables[0]!.label;
-    // The first save deleted T1 and added a new T1, written as saveZonePlan writes it.
+    // The first save deleted T1 and added a new T1, written as a save writes it.
     const added = await inTx(v, async (tx) => {
       await tx.update(diningTables).set({ planTableId: null }).where(eq(diningTables.id, live));
       await tx.delete(floorPlanTables).where(eq(floorPlanTables.id, master));
@@ -545,7 +563,7 @@ function unplaced(key: string, label: string): SaveEntry {
   return { key, label: fresh(label), seats: 4, fixed: false, placement: null, partKeys: [] };
 }
 
-describe("saveZonePlan", () => {
+describe("saveLayout", () => {
   type Entry = ZonePlanSave["tables"][number];
 
   async function save(zoneId: string, input: ZonePlanSave) {

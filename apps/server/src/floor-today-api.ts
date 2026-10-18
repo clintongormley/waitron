@@ -258,6 +258,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         }
         if (!zone.active || !zone.hasPlan) return from;
         const onto = await recordedOrDefault(tx, deps.cfg, zoneId);
+        if (onto === null) return from;
         return (await resetZone(tx, deps.cfg, removals, zoneId, now, onto)) ?? from;
       });
       return c.json({ zoneId, revision });
@@ -265,18 +266,21 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
   );
 }
 
-/** The layout the zone's record names; with no record, the department's default set. */
+/**
+ * The layout the zone's record names; with no record naming a set, the department's default set;
+ * null when the zone's department has no set.
+ */
 async function recordedOrDefault(
   tx: Transaction,
   cfg: TillConfig,
   zoneId: string,
-): Promise<ResetOnto> {
+): Promise<ResetOnto | null> {
   const [record] = await tx
     .select({ setId: floorTodayZones.setId, occurrence: floorTodayZones.occurrence })
     .from(floorTodayZones)
     .where(eq(floorTodayZones.zoneId, zoneId));
-  if (record !== undefined) return record;
+  if (record?.setId != null) return { setId: record.setId, occurrence: record.occurrence };
   const sets = await VENUE_SERVICE.readFloorPlanSets(tx, cfg);
   const fallback = sets.find((set) => set.isDefault && set.zoneIds.includes(zoneId));
-  return { setId: fallback?.setId ?? null, occurrence: null };
+  return fallback === undefined ? null : { setId: fallback.setId, occurrence: null };
 }

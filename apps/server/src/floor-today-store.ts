@@ -86,16 +86,17 @@ export async function todayBusinessDay(
   return venueMomentAt(now, await readLocationClock(tx, cfg.locationId))?.businessDay ?? null;
 }
 
-/** The layout a reset makes today's plan from; `setId` null names the zone's set-less layout. */
+/** The layout a reset makes today's plan from. */
 export interface ResetOnto {
-  setId: string | null;
+  setId: string;
   occurrence: string | null;
 }
 
 /**
  * Copies a layout of the zone into today's plan, `"due"` naming the one due at `now`: replaces
  * the zone's reset rows with targetsFromMaster, records the layout, then catches up. Answers the
- * room's new revision; null when the venue's clock names no business day, and nothing was reset.
+ * room's new revision; null, and nothing reset, when the venue's clock names no business day or
+ * `"due"` finds no layout due.
  */
 export async function resetZone(
   tx: Transaction,
@@ -113,38 +114,24 @@ export async function resetZone(
     return resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout);
   }
   const { states, rows } = await zoneLayoutsOn(tx, cfg, [zoneId], now, day);
-  return resetZoneFor(
-    tx,
-    cfg,
-    removals,
-    zoneId,
-    day,
-    now,
-    dueOnto(states.get(zoneId)!),
-    rows.get(zoneId),
-  );
+  const due = dueOnto(states.get(zoneId)!);
+  if (due === null) return null;
+  return resetZoneFor(tx, cfg, removals, zoneId, day, now, due, rows.get(zoneId));
 }
 
-function dueOnto(state: ZoneLayoutState): ResetOnto {
-  return state.due === null
-    ? { setId: null, occurrence: null }
-    : { setId: state.due.setId, occurrence: state.due.occurrence };
+function dueOnto(state: ZoneLayoutState): ResetOnto | null {
+  return state.due === null ? null : { setId: state.due.setId, occurrence: state.due.occurrence };
 }
 
 async function layoutRowOf(
   tx: Transaction,
-  setId: string | null,
+  setId: string,
   zoneId: string,
 ): Promise<LayoutRow | undefined> {
   const [row] = await tx
     .select({ id: floorPlans.id, revision: floorPlans.revision })
     .from(floorPlans)
-    .where(
-      and(
-        eq(floorPlans.zoneId, zoneId),
-        setId === null ? isNull(floorPlans.setId) : eq(floorPlans.setId, setId),
-      ),
-    );
+    .where(and(eq(floorPlans.zoneId, zoneId), eq(floorPlans.setId, setId)));
   return row;
 }
 
@@ -630,8 +617,8 @@ export async function ensureToday(
   for (const { zoneId, businessDay } of zones) {
     if (resets(businessDay)) {
       const layout = layouts.rows.get(zoneId);
-      if (layout !== undefined) {
-        const onto = dueOnto(layouts.states.get(zoneId)!);
+      const onto = dueOnto(layouts.states.get(zoneId)!);
+      if (layout !== undefined && onto !== null) {
         await resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout);
       }
     } else await catchUpZone(tx, cfg, removals, zoneId, now);

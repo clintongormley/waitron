@@ -23,7 +23,8 @@ import type { TillConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
 import { finishTable, moduleCoreServices, seatTable } from "./parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import "./errors.js";
 
 // The `seatBooking ↔ seatTable` edge with the REAL `apps/server` `seatTable` — the one seam the
@@ -283,7 +284,8 @@ describe("bookings seat route → real seatTable", () => {
             : { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
         partKeys,
       });
-      const { ids } = await saveZonePlan(tx, v.tillCfg, enabledTableRemovals(ALL_MODULES), zoneId, {
+      const layout = await defaultLayout(tx, v.tillCfg, zoneId);
+      const { ids } = await saveLayout(tx, v.tillCfg, enabledTableRemovals(ALL_MODULES), layout, {
         revision: 0,
         tables: [
           entry("c3", "Counter 3", 2),
@@ -292,7 +294,7 @@ describe("bookings seat route → real seatTable", () => {
           entry("long", "Long table", 10, ["c3", "c4", "c5"]),
         ],
       });
-      const plan = await readZonePlan(tx, v.tillCfg, zoneId);
+      const plan = await readLayout(tx, v.tillCfg, layout);
       const live = (key: string) => plan.tables.find((t) => t.id === ids[key])!.liveTableId!;
       return { long: live("long"), c3: live("c3") };
     });

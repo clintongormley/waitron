@@ -88,6 +88,7 @@ import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
 import { enqueuePrintJob, esc } from "@waitron/printing";
@@ -1780,6 +1781,10 @@ describe("startServer, against a migrated venue directory", () => {
       });
       expect(zone.status).toBe(201);
       const zoneId = ((await zone.json()) as { id: string }).id;
+      const { setId } = await liveFixture(port, (db) =>
+        defaultLayout(db, { ...loadTillConfig(TILL_ENV), simplifiedInvoiceLimit: null }, zoneId),
+      );
+      const planPath = `/floor-plan-sets/${setId}/zones/${zoneId}/floor-plan`;
       const table = {
         key: "a",
         label: "Boot plan 1",
@@ -1790,13 +1795,13 @@ describe("startServer, against a migrated venue directory", () => {
       };
       expect(
         (
-          await send("PUT", `/zones/${zoneId}/floor-plan`, {
+          await send("PUT", planPath, {
             revision: 0,
             tables: [table],
           })
         ).status,
       ).toBe(200);
-      const plan = (await (await send("GET", `/zones/${zoneId}/floor-plan`)).json()) as {
+      const plan = (await (await send("GET", planPath)).json()) as {
         tables: { liveTableId: string }[];
       };
       const liveTableId = plan.tables[0]!.liveTableId;
@@ -1816,7 +1821,7 @@ describe("startServer, against a migrated venue directory", () => {
           .returning({ id: bookings.id }),
       );
 
-      const removal = await send("PUT", `/zones/${zoneId}/floor-plan`, {
+      const removal = await send("PUT", planPath, {
         revision: 1,
         tables: [],
       });

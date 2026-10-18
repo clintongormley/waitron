@@ -136,7 +136,11 @@ async function masterOf(zoneId: string, tables: MasterTable[]): Promise<Map<stri
   return inTx(v, async (tx) => {
     const [plan] = await tx
       .insert(floorPlans)
-      .values({ zoneId, savedAt: NOW.toISOString() })
+      .values({
+        zoneId,
+        setId: (await defaultLayout(tx, v.cfg, zoneId)).setId,
+        savedAt: NOW.toISOString(),
+      })
       .returning({ id: floorPlans.id });
     const ids = new Map<string, string>();
     for (const table of tables) {
@@ -1897,6 +1901,121 @@ describe("resets onto a set's layout", () => {
     });
     expect(await todayRow(await liveOf(ids.a!))).toMatchObject({ x: null });
   });
+  it("a due reset of a zone whose department has no set resets nothing and answers null", async () => {
+    const zoneId = await inTx(v, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      const zone = await createServiceZone(tx, v.cfg, {
+        name: `Setless ${randomUUID().slice(0, 8)}`,
+        departmentId: department.id,
+      });
+      await tx
+        .insert(floorPlans)
+        .values({ zoneId: zone.id, revision: 1, savedAt: FRIDAY_NIGHT.toISOString() });
+      return zone.id;
+    });
+
+    await expect(reset(zoneId)).resolves.toBeNull();
+    expect(await todayZone(zoneId)).toBeUndefined();
+  });
+
+  it("leaves a zone with tables but no saved due layout as it is at the day's first read", async () => {
+    const { zoneId, gaining, tableId, label } = await inTx(v, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      const zone = await createServiceZone(tx, v.cfg, {
+        name: `Moved ${randomUUID().slice(0, 8)}`,
+        departmentId: department.id,
+      });
+      const name = `A ${randomUUID().slice(0, 6)}`;
+      const { ids } = await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        await defaultLayout(tx, v.cfg, zone.id),
+        {
+          revision: 0,
+          tables: [
+            { key: "a", label: name, seats: 4, fixed: false, placement: at(30), partKeys: [] },
+          ],
+        },
+        FRIDAY_NIGHT,
+      );
+      const moved = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      await tx
+        .update(zoneServicePolicies)
+        .set({ departmentId: moved.id })
+        .where(eq(zoneServicePolicies.zoneId, zone.id));
+      // A set-less layout row, which a reset with no due set used to read.
+      await tx
+        .insert(floorPlans)
+        .values({ zoneId: zone.id, revision: 1, savedAt: FRIDAY_NIGHT.toISOString() });
+      return { zoneId: zone.id, gaining: moved.id, tableId: ids.a!, label: name };
+    });
+    const recordBefore = await todayZone(zoneId);
+    const [live] = await liveTablesOf(zoneId);
+    const rowBefore = await todayRow(live!.id);
+    expect(rowBefore).toMatchObject({ x: 30 });
+
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    expect(await todayZone(zoneId)).toEqual(recordBefore);
+    expect(await todayRow(live!.id)).toEqual(rowBefore);
+
+    const setId = await inTx(v, async (tx) => {
+      const [set] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await linkFloorPlanSet(tx, v.cfg, {
+        setId: set!.id,
+        departmentId: gaining,
+        name: "Standard",
+      });
+      return set!.id;
+    });
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    expect(await todayZone(zoneId)).toEqual(recordBefore);
+    expect(await todayRow(live!.id)).toEqual(rowBefore);
+
+    await inTx(v, (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        { setId, zoneId },
+        {
+          revision: 0,
+          tables: [
+            {
+              id: tableId,
+              key: "a",
+              label,
+              seats: 4,
+              fixed: false,
+              placement: at(50),
+              partKeys: [],
+            },
+          ],
+        },
+        NOW,
+      ),
+    );
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    expect(await todayZone(zoneId)).toMatchObject({
+      businessDay: "2026-10-10",
+      setId,
+      layoutRevision: await layoutRevision(setId, zoneId),
+    });
+    expect(await todayRow(live!.id)).toMatchObject({ x: 50 });
+  });
+
   it("leaves a zone as it is when its department gains a set with no saved layout", async () => {
     const { zoneId, fromSet } = await inTx(v, async (tx) => {
       const department = await createDepartment(tx, v.cfg, {

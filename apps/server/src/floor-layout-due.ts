@@ -1,4 +1,4 @@
-import { and, inArray, isNull, or } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 import { floorPlans, floorTodayZones, type Transaction } from "@waitron/db";
 import { VENUE_SERVICE } from "./modules.js";
 import { todayBusinessDay } from "./floor-today-store.js";
@@ -39,8 +39,8 @@ export async function zoneLayouts(
 export type LayoutRow = { id: string; revision: number };
 
 /**
- * `zoneLayouts` on business day `day`, with each zone's saved row of the layout a reset would
- * read: the due set's, or the set-less one when no set is due. A zone with no such row is absent.
+ * `zoneLayouts` on business day `day`, with each zone's saved row of its due set's layout. A zone
+ * with no due set, or whose due set has no row of it, is absent from `rows`.
  */
 export async function zoneLayoutsOn(
   tx: Transaction,
@@ -93,17 +93,12 @@ export async function zoneLayoutsOn(
       revision: floorPlans.revision,
     })
     .from(floorPlans)
-    .where(
-      and(
-        inArray(floorPlans.zoneId, [...zoneIds]),
-        or(isNull(floorPlans.setId), inArray(floorPlans.setId, dueSets)),
-      ),
-    );
-  const planOf = new Map(plans.map((row) => [`${row.setId ?? ""}/${row.zoneId}`, row]));
+    .where(and(inArray(floorPlans.zoneId, [...zoneIds]), inArray(floorPlans.setId, dueSets)));
+  const planOf = new Map(plans.map((row) => [`${row.setId}/${row.zoneId}`, row]));
   for (const zoneId of zoneIds) {
     const layout = due.get(zoneId);
     const setId = layout?.setId ?? null;
-    const plan = planOf.get(`${setId ?? ""}/${zoneId}`);
+    const plan = setId === null ? undefined : planOf.get(`${setId}/${zoneId}`);
     if (plan !== undefined) rows.set(zoneId, { id: plan.id, revision: plan.revision });
     states.set(zoneId, {
       zoneId,

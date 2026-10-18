@@ -184,6 +184,15 @@ describe("/management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan", () =
     });
   });
 
+  it("no longer serves the zone-only floor plan routes", async () => {
+    const at = await setAndZone();
+    const res = await app.request(`/management-api/zones/${at.zoneId}/floor-plan`, {
+      method: "GET",
+      headers: { cookie: managerCookie },
+    });
+    expect(res.status).toBe(404);
+  });
+
   it("refuses a person without venue.configure on both routes", async () => {
     const at = await setAndZone();
     const body = JSON.stringify({ revision: 0, tables: [] });

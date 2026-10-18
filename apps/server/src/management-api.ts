@@ -113,14 +113,7 @@ import {
 } from "./kitchen.js";
 import { parseProfileKitchenScreens } from "./device.js";
 import type { NarrowedDevice, TableRemoval } from "@waitron/module";
-import {
-  readLayout,
-  readZonePlan,
-  saveLayout,
-  saveZonePlan,
-  zonesWithPlacedTables,
-  type ZonePlanSave,
-} from "./floor-plan.js";
+import { readLayout, saveLayout, zonesWithPlacedTables, type ZonePlanSave } from "./floor-plan.js";
 import type { TillConfig } from "./till-config.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
@@ -421,7 +414,7 @@ function optionalId(value: unknown, field: string): string | undefined {
 }
 
 /**
- * The shape of a floor-plan save; `checkZonePlanSave` checks the values. A null id or live table
+ * The shape of a floor-plan save; `saveLayout` checks the values. A null id or live table
  * is absent, as the read shape sends them.
  */
 function parseZonePlanSave(body: unknown): ZonePlanSave {
@@ -1670,29 +1663,6 @@ export function mountManagementApi(
           );
         }),
       );
-    }),
-  );
-
-  app.get("/management-api/zones/:id/floor-plan", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireZoneId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
-      return c.json(await withVenueAuth(deps, sessionId, (tx) => readZonePlan(tx, cfg, id)));
-    }),
-  );
-
-  app.put("/management-api/zones/:id/floor-plan", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireZoneId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
-      const input = parseZonePlanSave(await readJsonBody<unknown>(c));
-      const now = new Date();
-      const saved = await withVenueAuth(deps, sessionId, (tx) =>
-        saveZonePlan(tx, cfg, deps.tableRemovals ?? [], id, input, now),
-      );
-      return c.json(saved);
     }),
   );
 
