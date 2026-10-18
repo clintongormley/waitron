@@ -127,9 +127,11 @@ export async function markMoved(
 }
 
 /**
- * Leaves a table that needs moving, and every row of a pending joined group holding it, as today's
- * map has it until the next reset rewrites the rows. A row with no table is ended rather than
- * marked placed, because the catch-up makes such a table without reading `placed`.
+ * Leaves a table that needs moving, and every table of a pending joined group holding it, in the
+ * place today's map gives it until the next reset rewrites the rows. A row that renames its table
+ * is marked placed but left pending, so the catch-up still gives the table its new name. A row with
+ * no table is ended rather than marked placed, because the catch-up makes such a table without
+ * reading `placed`.
  */
 export async function leaveHere(
   tx: Transaction,

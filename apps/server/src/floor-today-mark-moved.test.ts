@@ -898,6 +898,66 @@ describe("Leave it here", () => {
     expect(await rowStateOf(table.a!)).toEqual(ended);
   });
 
+  it("keeps its place and old name while a rename to a name another zone holds waits", async () => {
+    const elsewhere = await plannedZone(v, [{ key: "b", place: { x: 0, y: 0 } }], NOW);
+    const heldName = (await tableRow(v, elsewhere.table.b!)).label;
+    const { zoneId, table, master, revision } = await plannedZone(
+      v,
+      [{ key: "a", place: { x: 0, y: 0 } }],
+      NOW,
+    );
+    const oldName = (await tableRow(v, table.a!)).label;
+    const partyId = await seatAt(table.a!);
+    await inTx(v, async (tx) => {
+      const layout = await defaultLayout(tx, v.cfg, zoneId);
+      const plan = await readLayout(tx, v.cfg, layout);
+      const saved = plan.tables.find((t) => t.id === master.a)!;
+      await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        layout,
+        {
+          revision,
+          tables: [
+            {
+              id: saved.id,
+              key: "a",
+              label: fresh("Renamed"),
+              seats: saved.seats,
+              fixed: saved.fixed,
+              placement: { ...saved.placement!, x: 40 },
+              partKeys: [],
+            },
+          ],
+        },
+        NOW,
+      );
+      await resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due");
+    });
+    await finish(partyId);
+    expect(await needsMoving(table.a!)).toBe(true);
+    await inTx(v, (tx) =>
+      tx
+        .update(floorResetTables)
+        .set({ label: heldName })
+        .where(eq(floorResetTables.tableId, table.a!)),
+    );
+
+    await expectRevision(v, leaveHere(table.a!), zoneId);
+
+    for (let read = 0; read < 2; read++) {
+      expect(await needsMoving(table.a!)).toBe(false);
+      expect(await rowStateOf(table.a!)).toEqual({
+        pending: true,
+        readyToMove: false,
+        placed: true,
+      });
+      expect(await todayRow(table.a!)).toMatchObject({ x: 0 });
+      expect((await tableRow(v, table.a!)).label).toBe(oldName);
+    }
+  });
+
   it("after Leave it here on 2 of a swap, Mark moved on 3 is refused naming 2, and 3 can be left too", async () => {
     const s = await standardAndDinner([
       { key: "t2", standard: 0, dinner: 40 },
