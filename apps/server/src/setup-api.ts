@@ -39,6 +39,7 @@ import type {
   SetupOperationStore,
 } from "./setup-operation.js";
 import type { ArchiveRestoreRequest } from "./restore-request.js";
+import { parseRecoveryEntryContext, type RecoveryEntryContext } from "./recovery-entry.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import {
   parseRecoveryOperationInput,
@@ -64,16 +65,19 @@ export interface BucketRestoreInput {
   venueConfirmed: string | null;
   recoveryOperation?: RecoveryOperationInput;
   nodeRecoverySecret?: string;
+  recoveryContext?: RecoveryEntryContext;
 }
 
 function recoveryCredentials(
   operation: unknown,
   secret: unknown,
+  context?: unknown,
 ): {
   recoveryOperation?: RecoveryOperationInput;
   nodeRecoverySecret?: string;
+  recoveryContext?: RecoveryEntryContext;
 } {
-  if (operation === undefined && secret === undefined) return {};
+  if (operation === undefined && secret === undefined && context === undefined) return {};
   const parsed = parseRecoveryOperationInput(operation);
   if (
     parsed === null ||
@@ -83,7 +87,13 @@ function recoveryCredentials(
     invalidRequest("recoveryOperation");
   if (typeof secret !== "string" || secret.trim().length === 0 || Buffer.byteLength(secret) > 4096)
     invalidRequest("nodeRecoverySecret");
-  return { recoveryOperation: parsed, nodeRecoverySecret: secret };
+  const selected = context === undefined ? undefined : parseRecoveryEntryContext(context);
+  if (selected === null) invalidRequest("recoveryContext");
+  return {
+    recoveryOperation: parsed,
+    nodeRecoverySecret: secret,
+    ...(selected === undefined ? {} : { recoveryContext: selected }),
+  };
 }
 
 /**
@@ -132,9 +142,6 @@ export interface SetupDeps {
   operations?: SetupOperationStore;
   firstFiscal?: FirstFiscalHost;
   firstSetup?: { coordinator: FirstSetupCoordinator; assertOtherAllowed(): Promise<void> };
-  /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart.
-   * `oldBoxGone` is the operator's answer to whether the server the backup came from is switched
-   * off for good; it is checked while staging and is not part of the staged request. */
   stageRestore?: (
     request: ArchiveRestoreRequest,
     options: { oldBoxGone: boolean },
@@ -1091,6 +1098,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           oldBoxGone?: unknown;
           recoveryOperation?: unknown;
           nodeRecoverySecret?: unknown;
+          recoveryContext?: unknown;
         }>(c);
         if (
           typeof body.pointId !== "string" ||
@@ -1100,7 +1108,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (body.oldBoxGone !== undefined && typeof body.oldBoxGone !== "boolean") {
           invalidRequest("oldBoxGone");
         }
-        const credentials = recoveryCredentials(body.recoveryOperation, body.nodeRecoverySecret);
+        const credentials = recoveryCredentials(
+          body.recoveryOperation,
+          body.nodeRecoverySecret,
+          body.recoveryContext,
+        );
         c.header("Cache-Control", "no-store");
         const pointId = body.pointId;
         const oldBoxGone = body.oldBoxGone === true;
@@ -1263,6 +1275,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             "oldBoxGone",
             "recoveryOperation",
             "nodeRecoverySecret",
+            "recoveryContext",
           ])
             if (form.getAll(field).length > 1) invalidRequest(field);
           const answer = form.get("oldBoxGone");
@@ -1295,6 +1308,17 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const credentials = recoveryCredentials(
           suppliedOperation,
           form?.get("nodeRecoverySecret") ?? undefined,
+          (() => {
+            const raw = form?.get("recoveryContext");
+            if (raw === undefined || raw === null) return undefined;
+            if (typeof raw !== "string" || Buffer.byteLength(raw) > 2048)
+              invalidRequest("recoveryContext");
+            try {
+              return JSON.parse(raw) as unknown;
+            } catch {
+              return invalidRequest("recoveryContext");
+            }
+          })(),
         );
         const file = form?.get("artifact");
         if (form !== undefined && !(file instanceof Blob)) invalidRequest("artifact");
@@ -1359,6 +1383,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           venueConfirmed?: unknown;
           recoveryOperation?: unknown;
           nodeRecoverySecret?: unknown;
+          recoveryContext?: unknown;
         }>(c);
         const kit = asString(body.kit, "kit");
         if (Buffer.byteLength(kit) > MAX_KIT_BYTES) invalidRequest("kit");
@@ -1372,7 +1397,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (body.venueConfirmed !== undefined && typeof body.venueConfirmed !== "string") {
           invalidRequest("venueConfirmed");
         }
-        const credentials = recoveryCredentials(body.recoveryOperation, body.nodeRecoverySecret);
+        const credentials = recoveryCredentials(
+          body.recoveryOperation,
+          body.nodeRecoverySecret,
+          body.recoveryContext,
+        );
         c.header("Cache-Control", "no-store");
         const input: BucketRestoreInput = {
           ...credentials,

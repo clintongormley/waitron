@@ -1120,6 +1120,7 @@ async function bootServer(
           venueConfirmed,
           recoveryOperation,
           nodeRecoverySecret,
+          recoveryContext,
         }) =>
           stageStreamRestore({
             kit: parseRecoveryKit(kit),
@@ -1133,6 +1134,7 @@ async function bootServer(
             venueConfirmed,
             recoveryOperation,
             nodeRecoverySecret,
+            recoveryContext,
             now,
             log,
             openStore: openBoundedBucket,

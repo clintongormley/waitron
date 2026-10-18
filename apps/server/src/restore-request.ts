@@ -38,7 +38,11 @@ import {
   recoveryArchiveFileSourceId,
   recoveryStreamSourceId,
 } from "./recovery-source.js";
-import { createRecoveryEntryRunner, type RecoveryEntryContext } from "./recovery-entry.js";
+import {
+  createRecoveryEntryRunner,
+  parseRecoveryEntryContext,
+  type RecoveryEntryContext,
+} from "./recovery-entry.js";
 
 const ARTIFACT = "restore-request.artifact";
 const KEY = "restore-request.key";
@@ -92,30 +96,7 @@ function nodeKey(value: unknown): string {
 
 function recoveryContext(value: unknown): RecoveryEntryContext | undefined {
   if (value === undefined) return undefined;
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value) ||
-    Object.keys(value).length !== 3 ||
-    !Object.hasOwn(value, "selectedSourceId") ||
-    !Object.hasOwn(value, "oldBoxGone") ||
-    !Object.hasOwn(value, "soleRecovery")
-  )
-    return invalidRecoveryContext();
-  const context = value as Record<string, unknown>;
-  if (
-    typeof context.selectedSourceId !== "string" ||
-    context.selectedSourceId.trim() === "" ||
-    context.selectedSourceId.length > 256 ||
-    typeof context.oldBoxGone !== "boolean" ||
-    typeof context.soleRecovery !== "boolean"
-  )
-    return invalidRecoveryContext();
-  return {
-    selectedSourceId: context.selectedSourceId,
-    oldBoxGone: context.oldBoxGone,
-    soleRecovery: context.soleRecovery,
-  };
+  return parseRecoveryEntryContext(value) ?? invalidRecoveryContext();
 }
 
 function invalidRecoveryContext(): never {
@@ -252,6 +233,7 @@ export async function stageStreamRestore(
       venueConfirmed: string | null;
       recoveryOperation?: RecoveryOperationInput;
       nodeRecoverySecret?: string;
+      recoveryContext?: RecoveryEntryContext;
     },
 ): Promise<void> {
   const prepared = await prepareStreamRestore(deps);
@@ -268,6 +250,7 @@ export async function stageStreamRestore(
         environment: deps.environment,
         recoveryOperation: deps.recoveryOperation,
         nodeRecoverySecret: deps.nodeRecoverySecret,
+        recoveryContext: deps.recoveryContext,
       },
       async (request) => {
         const validated = await validateDatabaseEntries(
@@ -531,7 +514,14 @@ export async function runStagedRestore(
     }
     throw error;
   }
+  if (managedCloud) {
+    try {
+      await deps.onManagedCloudRestored?.(managedCloud);
+    } catch {
+      // A started keyed request can check its committed activation before retrying notification.
+      if (markedStarted || resuming) return true;
+    }
+  }
   await clearStagedRestore(deps.stateDir);
-  if (managedCloud) await deps.onManagedCloudRestored?.(managedCloud).catch(() => {});
   return true;
 }

@@ -409,24 +409,20 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The selected service now reads surviving destination history under its preparation hold and keeps
   the captured evidence through placement. Local archive/bucket cases refuse a newer target before
   replacement, admit older target history and retain the recovered counters. Module checks include
-  retired other-node hours and snapshots taken across retirement. These cases still supply the
-  selected runner explicitly; source-specific staged HTTP recovery
-  remains part of Task 7.
+  retired other-node hours and snapshots taken across retirement. These cases supply the selected
+  runner explicitly; the default-entry checks below cover separate host composition.
   The base restore runner now checks authentication and module preparation before placement.
   Local command and staged archive/bucket cases retain the destination database and identity when
   a node key is wrong; a separate case retains them when module preparation is missing.
-  These checks do not complete the default hour-preparation wiring.
   Staged archive/bucket admission refusals now retain a fresh request for retry. Local checks
   repeat wrong-key and missing-preparation refusals without changing the destination database
-  or identity; wrong-key checks also run in two successive Node processes. Interruption during
-  admission and default hour-preparation composition remain open.
+  or identity; wrong-key checks also run in two successive Node processes.
   New archive, file, bucket-point and managed-Cloud cases now record two real sales, accept one
   through the synthetic AEAT transport and leave the other pending. They compare the restored
   commercial and fiscal rows exactly, refuse the retired series, issue on the fresh hour and retain
   that later sale and its counter through checked replay with a reconstructed host. The managed
   case uses the real Cloud recovery client with synthetic HTTP replies and downloaded bytes;
-  these cases still supply the selected preparation service explicitly. Remaining default entry wiring,
-  interrupted staged activation and the remaining Task 7 work are open.
+  these cases supply the selected preparation service explicitly.
   The archive and archive-pack commands now construct selected-hour preparation from validated
   backup evidence when you explicitly confirm the old box is gone and this is the sole recovery.
   New command cases retain the selected hour and recovered counters, refuse invalid admission
@@ -440,9 +436,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   now rebuilds the same preparation from independently retained source/isolation context and
   preserves its original bucket point in a private preview copy. New cases repeat refused
   admission without replacing the destination and kill a child after placement commits; next-day
-  replay retains changed counters and allocation rows without another comparison. HTTP/wizard
-  context wiring, managed transport/restart/Finish, interruption within activation and the remaining
-  hour-plan gates stay open.
+  replay retains changed counters and allocation rows without another comparison. The archive,
+  bucket and managed-Cloud HTTP routes now validate and retain separate source/isolation context;
+  the browser transport also carries it. Route checks preserve issued invoices, accepted and pending
+  filings and recovered counters through real staging and reconstruction. Keyed managed recovery
+  retains checked replay when its local completion acknowledgement is lost. Repeated completion
+  keeps the reported state. Separate child-process checks interrupt the activation transaction and
+  refuse publication after restart when no activation committed. These checks use controlled clocks
+  and synthetic external transport. The recovery screen's hour selection, declaration collection
+  and key fields remain Task 9; installed journeys and the remaining hour-plan gates stay open.
   Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,

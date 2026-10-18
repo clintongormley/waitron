@@ -1260,3 +1260,35 @@ Nine surrounding server suites pass 255 cases, and the protected fiscal pair pas
 cases. Server type checking, scoped ESLint, source formatting and whitespace checks pass. The
 complete disposable candidate matches the source before removal. These are focused checks;
 full-package coverage, HTTP/wizard integration and the later hour-plan acceptance gates remain open.
+
+
+## HTTP recovery context and managed completion (2026-10-18)
+
+Existing test checks and fixture values change: **none**. The three suites retain all 275 earlier
+printed expectation expressions. The old host-suite test bodies and both other suite prefixes
+remain byte-identical apart from the host imports. The source comparison is recorded in
+`a679-http-recovery-20261018/assertion-audit.json`; it does not establish fixture equivalence.
+
+- `apps/server/src/hour-recovery-host.test.ts`: thirteen new cases cover archive/bucket/managed
+  HTTP handoff, six malformed archive contexts, managed completion and two child deaths inside
+  the activation transaction. The three successful source journeys compare actual issued invoices,
+  accepted/pending filing rows and recovered counters. Managed lost-response retries keep changed
+  counters and allocation rows through the real committed-result check. Completed acknowledgement
+  cannot move a reported operation back to restored; another point still refuses.
+- `apps/server/src/setup-api.recovery-input.test.ts`: six new parameterized cases cover malformed
+  contexts, corrected retries and request-hash binding of each source/isolation declaration across
+  archive, bucket and Cloud routes. Existing bodies and fixture values remain unchanged.
+- `apps/setup/src/api/recovery-input.test.ts`: one new browser case covers the public context in
+  multipart archive transport alongside the separate key and opaque prepared operation.
+
+The child fault runs the real activation writes and sends SIGKILL before their transaction commits.
+The following process retains the original counters, allocates nothing and refuses publication.
+This is a process-death experiment, not power-loss qualification. Internet readings and Cloud/S3
+transport are controlled. The requests carry an already selected operation; they do not qualify
+recovery-screen hour selection, declaration collection, rendered key entry, actual internet clocks
+or a built appliance. Those interactive and installed journeys remain Tasks 9 and 10.
+
+No protected writer, restore hook, fiscal assertion, production SQL, schema, guard or rule changes.
+Raw receipts, including RED runs and installed omission controls, stay in the lane's
+`receipts/a679-http-recovery-20261018` directory. Carry this inventory and every earlier section
+into the final pull request's Changed test checks section.

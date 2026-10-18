@@ -151,6 +151,11 @@ export interface RecoveryRestoreCredentials {
     input: unknown;
   };
   nodeRecoverySecret: string;
+  recoveryContext?: {
+    selectedSourceId: string;
+    oldBoxGone: boolean;
+    soleRecovery: boolean;
+  };
 }
 
 export interface BucketRestoreBody {
@@ -161,6 +166,7 @@ export interface BucketRestoreBody {
   venueConfirmed: string | null;
   recoveryOperation?: RecoveryRestoreCredentials["recoveryOperation"];
   nodeRecoverySecret?: string;
+  recoveryContext?: RecoveryRestoreCredentials["recoveryContext"];
 }
 
 export interface CloudRecoveryView {
@@ -319,6 +325,8 @@ export class SetupApi {
       form.set("oldBoxGone", oldBoxGone ? "1" : "0");
       form.set("recoveryOperation", JSON.stringify(recovery.recoveryOperation));
       form.set("nodeRecoverySecret", recovery.nodeRecoverySecret);
+      if (recovery.recoveryContext !== undefined)
+        form.set("recoveryContext", JSON.stringify(recovery.recoveryContext));
       body = form;
     }
     const res = await fetchImpl(this.#baseUrl + "/setup-api/restore", {

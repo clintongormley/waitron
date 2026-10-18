@@ -46,7 +46,9 @@ import { restoreFromStream, writeStreamRestore } from "./restore-stream.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
 import { runRestore } from "./restore-command.js";
 import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
-import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
+import { runStagedRestore, stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
+import { Hono } from "hono";
+import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { eq, sql } from "drizzle-orm";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -2695,6 +2697,559 @@ describe("selected-hour admission before archive placement", () => {
       }
       expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
       expect(await runStagedRestore(f.restore)).toBe(false);
+    },
+    120_000,
+  );
+
+  function agreeInternet() {
+    external.internet.mockImplementation(async () => ({
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 0,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: performance.now(),
+      monotonicFinishedMs: performance.now(),
+    }));
+  }
+
+  function restoreApp(deps: Partial<SetupDeps> = {}) {
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        firstSetup: {
+          coordinator: createFirstSetupCoordinator(),
+          assertOtherAllowed: async () => {},
+        },
+        requestRestart() {},
+        ...deps,
+      },
+      () => {},
+    );
+    return app;
+  }
+
+  function archiveForm(f: Awaited<ReturnType<typeof archiveHost>>, context: unknown) {
+    const form = new FormData();
+    form.set("artifact", new Blob([Uint8Array.from(f.restore.artifact)]), "selected.wbk");
+    form.set("recoveryKey", "archive password");
+    form.set("environment", "preproduction");
+    form.set("oldBoxGone", "1");
+    form.set(
+      "recoveryOperation",
+      JSON.stringify({ binding: f.options.binding, input: f.outcome.input }),
+    );
+    form.set("nodeRecoverySecret", key.secret);
+    form.set("recoveryContext", JSON.stringify(context));
+    return form;
+  }
+
+  async function recordedRecoveryRows(db: Database) {
+    return {
+      sales: (await db.execute(sql`select * from sales order by id`)).rows,
+      lines: (await db.execute(sql`select * from sale_lines order by sale_id, line_no`)).rows,
+      tenders: (await db.execute(sql`select * from tenders order by id`)).rows,
+      settlements: (await db.execute(sql`select * from sale_settlements order by id`)).rows,
+      records: (await db.execute(sql`select * from registros_facturacion order by secuencia`)).rows,
+      submissions: (await db.execute(sql`select * from envios order by registro_id`)).rows,
+    };
+  }
+
+  async function recoveryInvoices() {
+    const clock = {
+      ...steadyClock,
+      now: () => ({ ...steadyClock.now(), instant: new Date(), offsetMinutes: 120 }),
+    };
+    const aeat = createFakeAeat({ serverNow: new Date() });
+    const backend = new VerifactuBackend({
+      db: suite.db,
+      clock,
+      deploymentEnvironment: "preproduction",
+      environment: "preproduction",
+      resolveClient: async () => aeat.client(),
+    });
+    const [standard] = await suite.db
+      .select()
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.code, "A-06RB"));
+    const sell = () =>
+      withTransaction(suite.db, (tx) =>
+        recordSale(
+          tx,
+          backend,
+          saleInput({
+            nodeId: node.nodeId,
+            seriesId: seriesId(standard!.id),
+            clock,
+            settlement: {
+              kind: "immediate",
+              tenders: [
+                { method: "card", amount: "16.31", tipAmount: "1.90", settledAt: new Date() },
+              ],
+            },
+          }),
+        ),
+      );
+    await sell();
+    expect(
+      (
+        await drain(
+          {
+            db: suite.db,
+            resolveClient: async () => aeat.client(),
+            environment: "preproduction",
+            skipRetryMs: 300_000,
+          },
+          new Date(),
+        )
+      ).recordsAccepted,
+    ).toBe(1);
+    await sell();
+    const rows = await recordedRecoveryRows(suite.db);
+    expect(rows.records.map((row) => row.num_serie_factura)).toEqual(["A-06RB/123", "A-06RB/124"]);
+    expect(rows.submissions.find((row) => row.registro_id === rows.records[0]?.id)).toMatchObject({
+      estado: "aceptado",
+      intentos: 1,
+      csv: expect.any(String),
+    });
+    expect(rows.submissions.find((row) => row.registro_id === rows.records[1]?.id)).toMatchObject({
+      estado: "pendiente",
+      intentos: 0,
+      csv: null,
+    });
+    for (const row of rows.records) {
+      const record = fromRegistroRow(decodeRegistroRow(row));
+      assertValid(record);
+      expect(computeHuella(record)).toBe(row.huella);
+    }
+    return rows;
+  }
+
+  it("carries explicit HTTP archive isolation through staging and reconstructed activation", async () => {
+    const history = await recoveryInvoices();
+    const f = await archiveHost();
+    const app = restoreApp({
+      stageRestore: (request) => stageRestoreRequest(f.roots.stateDir, request),
+    });
+    const context = {
+      selectedSourceId: f.options.selected.sourceId,
+      oldBoxGone: true,
+      soleRecovery: true,
+    };
+    const response = await app.request("https://box.test/setup-api/restore", {
+      method: "POST",
+      body: archiveForm(f, context),
+    });
+    expect(response.status).toBe(202);
+    const marker = JSON.parse(
+      await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8"),
+    );
+    expect(marker).toHaveProperty("recoveryContext", context);
+    expect(JSON.stringify(marker)).not.toContain(key.secret);
+    agreeInternet();
+    expect(await runStagedRestore(f.restore)).toBe(true);
+    const placed = await openVenueDatabase(f.roots.venueDir);
+    try {
+      expect(await recordedRecoveryRows(placed.venue)).toEqual(history);
+      const rows = await placed.venue.select().from(invoiceSeries);
+      expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
+        "A-06RC",
+        "FF-06RC",
+        "R-06RC",
+      ]);
+      expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
+        125, 123, 123,
+      ]);
+    } finally {
+      await placed.close();
+    }
+  });
+
+  it.each([
+    null,
+    {},
+    { selectedSourceId: "", oldBoxGone: true, soleRecovery: true },
+    { selectedSourceId: "selected", oldBoxGone: "true", soleRecovery: true },
+    { selectedSourceId: "selected", oldBoxGone: true, soleRecovery: 1 },
+    { selectedSourceId: "selected", oldBoxGone: true, soleRecovery: true, extra: true },
+  ])("refuses malformed HTTP archive recovery context %j before staging", async (context) => {
+    const f = await archiveHost();
+    const app = restoreApp({
+      stageRestore: (request) => stageRestoreRequest(f.roots.stateDir, request),
+    });
+    const response = await app.request("https://box.test/setup-api/restore", {
+      method: "POST",
+      body: archiveForm(f, context),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "setup.request_invalid", params: { field: "recoveryContext" } },
+    });
+    expect(await readdir(f.roots.stateDir)).not.toContain("restore-request.json");
+    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  });
+
+  it("carries the bucket HTTP selection and isolation through the real staging adapter", async () => {
+    const history = await recoveryInvoices();
+    const { f, command, deps, kit } = await bucketCommand();
+    const operation = JSON.parse(await readFile(command.operationPath, "utf8"));
+    const context = {
+      selectedSourceId: `stream:${node.locationId}:gen-0-${node.nodeId}-20261016T124000Z`,
+      oldBoxGone: true,
+      soleRecovery: true,
+    };
+    const app = restoreApp({
+      stageBucketRestore: (input) =>
+        stageStreamRestore({
+          ...f.restore,
+          ...input,
+          kit,
+          litestreamBin: "/unused",
+          now: () => new Date(),
+          openStore: deps.openStore,
+          restoreGeneration: async ({ outPath }) => {
+            await copyFile(f.database, outPath);
+          },
+        }),
+    });
+    const response = await app.request("https://box.test/setup-api/restore-bucket", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kit: encodeRecoveryKit(kit),
+        environment: "preproduction",
+        oldBoxGone: true,
+        venueConfirmed: scope.taxpayerNif,
+        recoveryOperation: operation,
+        nodeRecoverySecret: key.secret,
+        recoveryContext: context,
+      }),
+    });
+    expect(response.status).toBe(202);
+    expect(
+      JSON.parse(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")),
+    ).toHaveProperty("recoveryContext", context);
+    agreeInternet();
+    expect(await runStagedRestore(f.restore)).toBe(true);
+    const placed = await openVenueDatabase(f.roots.venueDir);
+    try {
+      expect(await recordedRecoveryRows(placed.venue)).toEqual(history);
+      const rows = await placed.venue.select().from(invoiceSeries);
+      expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
+        "A-06RD",
+        "FF-06RD",
+        "R-06RD",
+      ]);
+      expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
+        125, 123, 123,
+      ]);
+    } finally {
+      await placed.close();
+    }
+  });
+
+  async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
+    const pointId = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
+    const point = {
+      id: pointId,
+      venueId: node.locationId,
+      capturedAt: new Date().toISOString(),
+      modules: (
+        await buildManifest({
+          db: suite.db,
+          modules: ALL_MODULES,
+          environment: "preproduction",
+          now: new Date(),
+        })
+      ).modules,
+      digest: createHash("sha256").update(f.restore.artifact).digest("hex"),
+      size: f.restore.artifact.length,
+      objectKey: `snapshots/${pointId}`,
+      verification: "verified",
+      kind: "snapshot",
+      deleting: false,
+      deletedAt: null,
+    };
+    const expiresAt = new Date(Date.now() + 900_000).toISOString();
+    const options = {
+      stateDir: f.roots.stateDir,
+      origin: "https://cloud.example.test",
+      environment: "preproduction" as const,
+      fetch: async (url: string | URL | Request, init?: RequestInit) => {
+        const action = new URL(String(url)).pathname.split("/").at(-1);
+        const body = JSON.parse(String(init?.body)) as { payload: string };
+        const requestId = JSON.parse(Buffer.from(body.payload, "base64url").toString())[2];
+        if (action === "start" || action === "status")
+          return Response.json({
+            requestId,
+            state: action === "start" ? "awaiting_owner" : "approved",
+            expiresAt,
+            operationId: action === "start" ? null : requestId,
+          });
+        if (action === "info") return Response.json({ point, operationExpiresAt: expiresAt });
+        if (action === "read")
+          return Response.json({
+            point,
+            location: { endpoint: "https://store.example.test", bucket: "copy", region: "local" },
+            credentials: {
+              accessKeyId: "unused",
+              secretAccessKey: "unused",
+              sessionToken: "unused",
+            },
+            recoveryKey: "archive password",
+            expiresAt,
+            operationExpiresAt: expiresAt,
+          });
+        if (action === "restored") return Response.json({ status: "restored" });
+        throw new Error(`unexpected recovery action ${action}`);
+      },
+      download: async () => f.restore.artifact,
+    };
+    const client = () => createCloudRecoveryClient(options);
+    await client().start();
+    await client().status();
+    const app = restoreApp({
+      cloudRecovery: client(),
+      stageRestore: (request) => stageRestoreRequest(f.roots.stateDir, request),
+    });
+    const context = {
+      selectedSourceId: f.options.selected.sourceId,
+      oldBoxGone: true,
+      soleRecovery: true,
+    };
+    const response = await app.request("https://box.test/setup-api/cloud-recovery/restore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pointId,
+        oldBoxGone: true,
+        recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
+        nodeRecoverySecret: key.secret,
+        recoveryContext: context,
+      }),
+    });
+    expect(response.status).toBe(202);
+    return { client, pointId, context };
+  }
+
+  it("completes managed HTTP recovery after reconstruction without a second fiscal activation", async () => {
+    const history = await recoveryInvoices();
+    const f = await archiveHost();
+    const managed = await managedHttp(f);
+    expect(
+      JSON.parse(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")),
+    ).toHaveProperty("recoveryContext", managed.context);
+    agreeInternet();
+    expect(
+      await runStagedRestore({
+        ...f.restore,
+        onManagedCloudRestored: (binding) => managed.client().markRestored(binding),
+      }),
+    ).toBe(true);
+    expect(await readdir(f.roots.stateDir)).not.toContain("restore-request.json");
+    expect(await managed.client().replacementIdentity()).toMatchObject({
+      phase: "restored",
+      pointId: managed.pointId,
+    });
+    const placed = await openVenueDatabase(f.roots.venueDir);
+    let rows;
+    let allocations;
+    try {
+      expect(await recordedRecoveryRows(placed.venue)).toEqual(history);
+      const restored = await placed.venue.select().from(invoiceSeries);
+      expect(restored.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
+        "A-06RC",
+        "FF-06RC",
+        "R-06RC",
+      ]);
+      expect(restored.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual(
+        [125, 123, 123],
+      );
+      await placed.venue.update(invoiceSeries).set({ nextNumber: 917 });
+      rows = await placed.venue.select().from(invoiceSeries);
+      allocations = await placed.venue.select().from(fiscalAllocations);
+    } finally {
+      await placed.close();
+    }
+    external.internet.mockClear();
+    expect(await runStagedRestore(f.restore)).toBe(false);
+    await managed.client().reportRestored();
+    expect(await managed.client().replacementIdentity()).toMatchObject({
+      phase: "reported",
+      pointId: managed.pointId,
+    });
+    const replay = await openVenueDatabase(f.roots.venueDir);
+    try {
+      expect(await replay.venue.select().from(invoiceSeries)).toEqual(rows);
+      expect(await replay.venue.select().from(fiscalAllocations)).toEqual(allocations);
+    } finally {
+      await replay.close();
+    }
+    expect(external.internet).not.toHaveBeenCalled();
+  });
+
+  it.each(["before", "after"] as const)(
+    "retries managed completion lost %s local acknowledgement without restoring again",
+    async (when) => {
+      const f = await archiveHost();
+      const managed = await managedHttp(f);
+      agreeInternet();
+      expect(
+        await runStagedRestore({
+          ...f.restore,
+          onManagedCloudRestored: async (binding) => {
+            if (when === "after") await managed.client().markRestored(binding);
+            throw new Error("lost local acknowledgement");
+          },
+        }),
+      ).toBe(true);
+      expect(await readdir(f.roots.stateDir)).toContain("restore-request.json");
+      expect(
+        JSON.parse(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")),
+      ).toMatchObject({ placementStarted: true, managedCloud: { pointId: managed.pointId } });
+      const placed = await openVenueDatabase(f.roots.venueDir);
+      let rows;
+      let allocations;
+      try {
+        await placed.venue.update(invoiceSeries).set({ nextNumber: 917 });
+        rows = await placed.venue.select().from(invoiceSeries);
+        allocations = await placed.venue.select().from(fiscalAllocations);
+      } finally {
+        await placed.close();
+      }
+      external.internet.mockClear();
+      expect(
+        await runStagedRestore({
+          ...f.restore,
+          onManagedCloudRestored: (binding) => managed.client().markRestored(binding),
+        }),
+      ).toBe(true);
+      expect(await readdir(f.roots.stateDir)).not.toContain("restore-request.json");
+      expect(await managed.client().replacementIdentity()).toMatchObject({
+        phase: "restored",
+        pointId: managed.pointId,
+      });
+      await managed.client().reportRestored();
+      expect(await managed.client().replacementIdentity()).toMatchObject({ phase: "reported" });
+      const completed = await managed.client().binding();
+      await expect(
+        managed.client().markRestored({
+          requestId: completed.requestId,
+          pointId: "715955bb-2dbd-4481-9746-f6d3e95a8651",
+        }),
+      ).rejects.toThrow("Cloud recovery is unavailable");
+      await managed
+        .client()
+        .markRestored({ requestId: completed.requestId, pointId: managed.pointId });
+      expect(await managed.client().replacementIdentity()).toMatchObject({ phase: "reported" });
+      const replay = await openVenueDatabase(f.roots.venueDir);
+      try {
+        expect(await replay.venue.select().from(invoiceSeries)).toEqual(rows);
+        expect(await replay.venue.select().from(fiscalAllocations)).toEqual(allocations);
+      } finally {
+        await replay.close();
+      }
+      expect(external.internet).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["archive", "stream"] as const)(
+    "refuses publication after %s process death inside the uncommitted activation",
+    async (kind) => {
+      const f = await archiveHost(kind);
+      const credentials = {
+        environment: "preproduction" as const,
+        recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
+        nodeRecoverySecret: key.secret,
+        recoveryContext: {
+          selectedSourceId: f.options.selected.sourceId,
+          oldBoxGone: true,
+          soleRecovery: true,
+        },
+      };
+      await stageRestoreRequest(
+        f.roots.stateDir,
+        kind === "archive"
+          ? { ...credentials, artifact: f.restore.artifact, recoveryKey: "archive password" }
+          : { ...credentials, kind: "stream", databasePath: f.database, entries: f.entries },
+      );
+      const original = new URL(
+        "../../../packages/fiscal-verifactu/src/allocation-preparation.ts",
+        import.meta.url,
+      ).href;
+      const wrapper = `import * as actual from ${JSON.stringify(original)};
+      export * from ${JSON.stringify(original)};
+      export async function activatePreparedModuleAllocation(tx, node, operation) {
+        const outcome = await actual.activatePreparedModuleAllocation(tx, node, operation);
+        if (operation.binding.action === "restore") {
+          process.stdout.write("activation-writes-before-commit\\n");
+          process.kill(process.pid, "SIGKILL");
+        }
+        return outcome;
+      }`;
+      const internet = `export async function observeInternetHourClock() { return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0, wallStartedMs: Date.now(), wallFinishedMs: Date.now(), monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() }; }`;
+      const release = `export function readHourRelease() { return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
+      const source = `import { registerHooks } from "node:module";
+      const RealDate = Date;
+      globalThis.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:40:00Z"])); } static now() { return RealDate.parse("2026-10-16T12:40:00Z"); } };
+      registerHooks({ resolve(specifier, context, next) {
+        const replacement = specifier.endsWith("/allocation-preparation.js") ? ${JSON.stringify(wrapper)} : specifier.endsWith("/hour-clock-internet.js") ? ${JSON.stringify(internet)} : specifier.endsWith("/hour-release.js") ? ${JSON.stringify(release)} : undefined;
+        return replacement === undefined ? next(specifier, context) : { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(replacement) };
+      }});
+      const { runStagedRestore } = await import(${JSON.stringify(new URL("./restore-request.ts", import.meta.url).href)});
+      await runStagedRestore({ ...JSON.parse(process.argv[1]), log() {} });`;
+      await expect(
+        promisify(execFile)(
+          process.execPath,
+          [
+            "--import",
+            import.meta.resolve("tsx"),
+            "--input-type=module",
+            "-e",
+            source,
+            JSON.stringify({ ...f.roots, migrationsRoot: null }),
+          ],
+          { timeout: 45_000 },
+        ),
+      ).rejects.toMatchObject({ signal: "SIGKILL", stdout: "activation-writes-before-commit\n" });
+      const marker = await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8");
+      expect(JSON.parse(marker)).toMatchObject({ placementStarted: true });
+      expect(await readdir(f.roots.stateDir)).not.toContain("trading.env");
+      const destination = await openVenueDatabase(f.roots.venueDir);
+      let rows;
+      let allocations;
+      try {
+        rows = await destination.venue.select().from(invoiceSeries);
+        allocations = await destination.venue.select().from(fiscalAllocations);
+        expect(
+          rows
+            .filter((row) => row.retiredAt === null)
+            .map((row) => ({ code: row.code, nextNumber: row.nextNumber })),
+        ).toEqual([
+          { code: "A-06RB", nextNumber: 123 },
+          { code: "FF-06RB", nextNumber: 123 },
+          { code: "R-06RB", nextNumber: 123 },
+        ]);
+        expect(allocations).toHaveLength(1);
+      } finally {
+        await destination.close();
+      }
+      agreeInternet();
+      await expect(runStagedRestore(f.restore)).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+      });
+      expect(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")).toBe(marker);
+      expect(await readdir(f.roots.stateDir)).not.toContain("trading.env");
+      const retained = await openVenueDatabase(f.roots.venueDir);
+      try {
+        expect(await retained.venue.select().from(invoiceSeries)).toEqual(rows);
+        expect(await retained.venue.select().from(fiscalAllocations)).toEqual(allocations);
+      } finally {
+        await retained.close();
+      }
     },
     120_000,
   );

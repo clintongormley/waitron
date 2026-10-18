@@ -537,11 +537,12 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
         const state = await read();
         if (
           !state ||
-          state.phase !== "staged" ||
+          !["staged", "restored", "reported"].includes(state.phase ?? "") ||
           state.requestId !== binding.requestId ||
           state.pointId !== binding.pointId
         )
           unavailable();
+        if (state.phase !== "staged") return;
         state.phase = "restored";
         await save(state);
       });

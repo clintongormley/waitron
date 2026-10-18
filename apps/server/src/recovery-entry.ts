@@ -17,6 +17,28 @@ export interface RecoveryEntryContext {
   readonly soleRecovery: boolean;
 }
 
+export function parseRecoveryEntryContext(value: unknown): RecoveryEntryContext | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const context = value as Record<string, unknown>;
+  if (
+    Object.keys(context).length !== 3 ||
+    !Object.hasOwn(context, "selectedSourceId") ||
+    !Object.hasOwn(context, "oldBoxGone") ||
+    !Object.hasOwn(context, "soleRecovery") ||
+    typeof context.selectedSourceId !== "string" ||
+    context.selectedSourceId.trim() === "" ||
+    context.selectedSourceId.length > 256 ||
+    typeof context.oldBoxGone !== "boolean" ||
+    typeof context.soleRecovery !== "boolean"
+  )
+    return null;
+  return {
+    selectedSourceId: context.selectedSourceId,
+    oldBoxGone: context.oldBoxGone,
+    soleRecovery: context.soleRecovery,
+  };
+}
+
 export async function createRecoveryEntryRunner(options: {
   stateDir: string;
   venueDir: string;
