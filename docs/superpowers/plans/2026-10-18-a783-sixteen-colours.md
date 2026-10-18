@@ -86,47 +86,46 @@ a shared `wt-*` primitive changes). Template: the A753 plan,
   save (`packages/venue-service/src/seasons.ts:104`), and venue-service's import of periods and
   seasons (`packages/venue-service/src/configuration-transfer.ts:152,293`), plus the period route
   (`routes.ts:246`), the period write (`menu-timetable.ts:538`) and the staff role write
-  (`packages/staffing/src/staff-roles.ts:33`). That is a reading; Task 3 runs one accepted
+  (`packages/staffing/src/staff-roles.ts:33`). Staffing's configuration import validates no colour
+  (`packages/staffing/src/configuration-transfer.ts:6` only names `staff_roles`); an imported
+  role's colour is held by `staff_roles_colour_ck` alone, so it widens with the migration. That is a
+  reading; Task 4 runs one accepted
   new-colour case per path to make it a measurement. The station paint is NOT automatic:
   `stationTints` (`packages/venue-service/src/dashboard/station-colour-styles.ts:6-19`) is a
   `Partial` map, and a colour missing from it silently falls back to a 15% mix of the palette fill
   (`:21-28`), which is how grey is drawn. Its test
   (`station-colour-styles.test.ts:5-18`) expects `var(--wt-color-station-<colour>)` for every colour
   but grey, so it goes red until the three entries exist.
-- **D8 — the chooser's column count is chosen in code each time the panel is placed: four, or two
-  in a window `40rem` wide or less.** Evidence for the HOW:
-  - No primitive in `packages/ui/src/components` switches layout with a width media or container
-    query: grep `@media|@container|matchMedia` there finds only `prefers-reduced-motion` and
-    `hover` (2026-10-18).
-  - The `no-hardcoded-chrome` guard refuses any `rem`/`em` and any `px` over 1 in a primitive's
-    `styles` (`packages/ui/src/no-hardcoded-chrome.test.ts:50-56`), so a CSS
-    `@media (max-width: 40rem)` inside the component fails it; design-system.md:728 and :1776-1778
-    say the same and point the app at its own `::part` rule or a `clamp()` instead.
-  - The precedent for a primitive switching at a width is JS: `wt-data-table` holds px constants
-    (`wt-data-table.ts:74,91`) and sets `narrow`/`sideFilters` from measured widths (`:1041,1063`).
-    The guard reads only `styles` (`no-hardcoded-chrome.test.ts:27-30`), so a JS constant passes it.
-  - The chooser already places and sizes its panel in JS from the window, on open, on every
-    re-render while open and on resize (`positionPopup`, `wt-colour-chooser.ts:203-215`, called at
-    `:171,189,217`).
-  - The house's phone width is `40rem`: `apps/dashboard/src/dashboard-app.ts:812`,
-    `apps/setup/src/setup-app.ts:453`, `packages/venue-service/src/dashboard/routing-grid.ts:119,143`,
-    and design-system.md:728 (the language chooser's phone switch).
-
-  So `positionPopup` sets the radio group's column count from
-  `matchMedia("(max-width: 40rem)").matches` BEFORE it measures, as it already sets the width
-  before measuring (`:206`). `matchMedia` with the same query evaluates exactly as the dashboard's
-  CSS rule does. Rejected: choosing four columns whenever the four-column panel fits. The panel is
-  `max-content` wide (`:207`), which includes each tile's `usedBy` names unwrapped, so a tile with
-  long names would (by that reading, not measured) push a desktop panel to two columns; the a11y
-  suite deliberately mounts tiles with twenty long names each (`wt-colour-chooser.a11y.test.ts:77-89`).
+- **D8 — the chooser MEASURES: four columns when every colour name fits on one line, else two.**
+  The owner's wording in the queue: "4 × 4 if the tiles still fit with their names, else 2 × 8"
+  (`~/waitron-campaign-b/queue.md:520`). Each time `positionPopup` places the panel
+  (`wt-colour-chooser.ts:203-215`; called on open, on every re-render while open and on resize, at
+  `:171,189,217`), it first lays the tiles out in four columns at the panel's allowed width (the
+  same `max-content` / at least the field / at most the window less 16 px it sets today,
+  `:207-209`); if any `.colour-name` then takes more than one line, it switches to two columns;
+  then it measures and places the panel as today. It starts from four on every call, so a panel
+  that went to two on a narrow window comes back to four when there is room. Only the colour NAME
+  decides; a `usedBy` line may wrap.
+  - **Measuring method:** count the distinct `top`s of the client rects of a `Range` over each
+    `.colour-name`'s contents — one top is one line. This works with `overflow-wrap: anywhere`
+    (`:127-130`), which wraps a long name onto a second line instead of overflowing it (so a
+    `scrollWidth` comparison would see nothing), and it is the measure `shoot.mjs:measurePanel`
+    used for the mock-up figures in D9. The checked tile's bold name is measured as drawn.
+  - **No literal breakpoint, anywhere.** The house forbids one in a `packages/ui` primitive
+    (design-system.md:728; `wt-language-chooser.ts:17-19`; `packages/ui-core/src/tokens/structure.css:63-64`),
+    and a constant in TypeScript would only slip past the no-hardcoded-chrome guard, which reads a
+    primitive's `styles` alone (`no-hardcoded-chrome.test.ts:27-30,50-56`). Precedent for a
+    primitive deciding its layout in code from its own measured box: `wt-data-table`
+    (`wt-data-table.ts:1041,1063`).
+  - The rule is content-driven: at a mid width, short names give four columns where long ones give
+    two. Task 2 tests both.
 - **D9 — the panel's width logic needs nothing.** Measured 2026-10-18 by the temporary copy of
   `shoot.mjs` (real `wt-modal` + `wt-colour-chooser`, four columns forced before `show()`): at 1280
   wide the four-column panel is 484 px (EN) and 518 px (ES) against a 398 px field, inside the
   1264 px cap, every name on one line; at 390 wide four columns are clamped to 374 px and 8 English
   and 10 Spanish names break onto two lines; two columns at 390 give a 356 px panel (the field's
-  width) with every name on one line. Computed, not measured: just above the breakpoint (641 px) a
-  clamped panel's columns are about (641 − 16 − 16 − 24 − 2) / 4 ≈ 145 px, wider than the 119 px
-  the widest Spanish tile took at 1280 — Task 2 measures it.
+  width) with every name on one line. So the measured rule gives four at 1280 and two at 390 for
+  both languages.
 - **D10 — arrow keys stay linear.** `onPanelKeydown` (`wt-colour-chooser.ts:232-262`) moves to the
   next tile on Right or Down and the previous on Left or Up, wrapping; it never assumes two columns.
   That is the radio group pattern (one tab stop, `role="radiogroup"` at `:365-369`); a row-aware
@@ -139,7 +138,7 @@ a shared `wt-*` primitive changes). Template: the A753 plan,
 - **D12 — no A783 entry exists in `docs/backlog.md`.** The item lives in lane B's queue
   (`~/waitron-campaign-b/queue.md:518`); under `docs/` A783 is named only in the A725/A783 decision
   note (`docs/backlog/kitchen.md:391-393`), the A725 plan (`2026-10-17-a725-prep-stations.md:186-187`)
-  and the mock-ups. Decision notes are never deleted (CLAUDE.md §6): Task 6 adds dated lines.
+  and the mock-ups. Decision notes are never deleted (CLAUDE.md §6): Task 7 adds dated lines.
 - **D13 — A760 changes nothing in this plan.** A760 (the squash of every migration set) is approved
   but not started (`docs/backlog.md:5714-5720`); its plan starts only after migration branches
   finish or are withdrawn (`docs/superpowers/plans/2026-10-16-a760-migration-squash.md:13-14,49,108`).
@@ -148,7 +147,11 @@ a shared `wt-*` primitive changes). Template: the A753 plan,
 
 ## Global constraints
 
-- TDD: each task writes its failing test first and watches it fail for the stated reason.
+- TDD: each task writes its failing test first and watches it fail for the stated reason. A test
+  edit that cannot fail first (a list that follows the change, a swapped example) is labelled as
+  such in the task and the report.
+- **The colour values and names are the owner's.** If one fails a check (contrast, distinctness,
+  spacing), stop and report — never adjust a value to make a check pass.
 - Never edit a shipped migration file. Never hand-edit a generated migration, snapshot or
   `_journal.json`; on a number clash, reset the folder to `main` and regenerate (CLAUDE.md §3).
 - Comments: none that restate code; cut stale ones you touch (CLAUDE.md §1, last rule). Prefer
@@ -158,13 +161,16 @@ a shared `wt-*` primitive changes). Template: the A753 plan,
 - Changed test checks (owner, 2026-10-05): a check may change only where this item changes what it
   checks. The task report lists every changed check with file:line, old → new.
 - Golden huella (`pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts`)
-  and `inmutabilidad` must pass UNEDITED (Task 4 runs both).
+  and `inmutabilidad` must pass UNEDITED (Task 5 runs both).
 - Implementers are dispatched as `subagent_type: "implementer"` (medium effort). Each task is cut to
   finish well under 100 tool calls; past about 150 calls, stop at a passing (or cleanly red) point,
   commit, and hand over.
 - Browser runs: check `memory_pressure | grep free` first; run beside another session's browser run
   only when free memory is well above 15%. Stop only processes you started, by pid.
 - Read each run's `Tests` count; a blank result or an exit status alone is no evidence.
+- A browser test file with no `page.viewport` call runs at Vitest 4.1.11's default width, 414 px
+  (`resolved.browser.viewport.width ??= 414` in `vitest/dist/chunks/coverage.DM_a_rWm.js`, read
+  2026-10-18), which no `packages/ui` or venue-service config overrides.
 
 ## Task 1 — the three new colour tokens (`packages/ui-core`)
 
@@ -175,11 +181,12 @@ Files: `packages/ui-core/src/tokens/colors.css`, `packages/ui-core/src/tokens/co
    station token — D7). Run `pnpm --filter @waitron/ui-core exec vitest run src/tokens/colors.test.ts`
    and see it fail on the missing tokens.
 2. In each of the four theme blocks (`colors.css`: light `:1-110`, dark media query `:112-216`,
-   explicit light `:218-320`, explicit dark `:322-424`), add `--wt-color-palette-<key>` and
-   `--wt-color-on-palette-<key>` beside the other palette tokens (after the brown pair: `:68`,
-   `:174`, `:279`, `:383`), and `--wt-color-station-<key>` and `-dot` after the brown station pair
-   (`:97`, `:202`, `:307`, `:411`), with D2's values: light values in the two light blocks, dark in
-   the two dark ones.
+   explicit light `:218-320`, explicit dark `:322-424`), add the station pairs at their D1 places
+   in the station list, which is in D1 order today (`:74-97`): yellow after amber, sky after cyan,
+   magenta after purple. The palette list is NOT in D1 order today (`:43-68` runs red, amber, grey,
+   blue, green, purple, orange, …); reorder each block's palette pairs into D1 order with the three
+   new pairs in their places (values unchanged — the `prefers-color-scheme` cases compare by name,
+   `colors.test.ts:461-472`). D2's values: light in the two light blocks, dark in the two dark ones.
 3. Stale counts: the comment at `colors.css:73` ("twelve fills a station picks from") and the test's
    comment and title at `colors.test.ts:510` and `:563` ("twelve") lose the count. The comment at
    `colors.css:41-42` says periods and staff roles pick the palette; seasons pick it too
@@ -188,48 +195,76 @@ Files: `packages/ui-core/src/tokens/colors.css`, `packages/ui-core/src/tokens/co
 4. Run the whole file, and `pnpm exec vitest run scripts/style-token-names.test.ts` from the root.
    Commit.
 
-## Task 2 — the chooser shows four columns, two at phone width (`packages/ui`)
+## Task 2 — the chooser measures: four columns, or two when a name would wrap (`packages/ui`)
 
 After Task 1 (its fixtures paint with the new tokens). Files:
 `packages/ui/src/components/wt-colour-chooser.ts`, `wt-colour-chooser.test.ts`,
 `wt-colour-chooser.a11y.test.ts`.
 
 1. Tests first, in `wt-colour-chooser.test.ts`. Add a `SIXTEEN` fixture: the sixteen in D1 order,
-   `fill: var(--wt-color-palette-<key>)`, with English and Spanish labels from D3, and `usedBy` on
-   two of them (as `shoot.mjs:286-287` does). Every case sets its viewport with `page.viewport` and
-   restores the old one in `finally`, as `:571-587` does. Before writing them, record the suite's
-   default `window.innerWidth` once (a throwaway `console.log` under `AI_AGENT= CLAUDECODE=`), so
-   the report says whether the existing cases ran at two or four columns.
-   - At 1280×800, open: the radio group's computed `gridTemplateColumns` has four tracks; tiles
-     1-4 share a top and tile 5 starts a new row. Fails today (two tracks, `:89`).
-   - At 390×844: two tracks.
-   - The boundary: 640 wide gives two, 641 gives four. This and the 1280 case are what kill the
-     nightly mutants of the query and its comparison (`ui` mutation bites nightly,
-     `docs/developers/ci-and-gates.md:325`).
-   - Resizing an open panel from 1280 to 390 gives two tracks and keeps the panel inside the window
-     (the placement half is already held by `:640-660`; add the column assertion there or beside it).
-   - At 641 wide and at 1280, in Spanish and English: every `.colour-name` takes one line (count the
-     distinct tops of a `Range`'s client rects, as `shoot.mjs:measurePanel` does), and the panel is
-     at least the trigger's width and at most the window's less 16 px.
+   `fill: var(--wt-color-palette-<key>)`, English and Spanish labels from D3, and `usedBy` on two
+   of them (as `shoot.mjs:286-287` does). Every case sets its viewport with `page.viewport` and
+   restores the old one in `finally`, as `:571-587` does. A helper `columns(el)` reads the number
+   of tracks in the radio group's computed `gridTemplateColumns`; a helper `nameLines(tile)` is
+   D8's measuring method.
+   - 1280×800, English and Spanish: four columns; tiles 1-4 share a top and tile 5 starts a new row;
+     every name on one line. Fails today (two columns, `:89`).
+   - 390×844, English and Spanish: two columns, every name on one line.
+   - Open at 1280, close, shrink to 390, reopen: two columns.
+   - Open at 1280, shrink to 390 while open: two columns, and the panel is re-placed inside the
+     window (the placement half is held by `:640-660`; add the column assertion there or beside it).
+     Then widen back to 1280 while open: four.
+   - Content, not width: at one mid width (choose one where the English sixteen give two columns,
+     e.g. 480 — measure, then pin it), sixteen ONE-LETTER labels give four columns and the real
+     names give two.
+   - A long `usedBy` list does not force two columns at 1280 (the a11y suite's twenty long names,
+     `wt-colour-chooser.a11y.test.ts:79-82`, on the sixteen): four columns, names on one line.
    - Keys across a row of four, at 1280: from yellow (4th) ArrowRight chooses lime (5th); from red
-     ArrowDown chooses orange, not lime; from lime ArrowUp chooses yellow. This passes before and
-     after the change: it pins D10.
-   - Tokens (beside `:869-921`): `--wt-space-2` set on the host sets the radio group's `columnGap`
-     and `rowGap` at four columns.
+     ArrowDown chooses orange, not lime; from lime ArrowUp chooses yellow. Passes before and after:
+     it pins D10.
+   - Tokens (beside `:869-921`): `--wt-space-2` on the host sets the radio group's `columnGap` and
+     `rowGap` at four columns.
    In `wt-colour-chooser.a11y.test.ts`, per theme: "open, sixteen colours in four columns" at 1280
-   and "open, sixteen colours in two columns" at 390, each with `usedBy` marks.
-   Watch the new layout cases fail for the stated reason.
-2. Implement D8: the radio group's default is four columns (`:87-91`); in `positionPopup`, before
-   `popup.style.width = "max-content"` (`:207`), set an attribute on the radio group (for example
-   `data-columns="2"` when `matchMedia("(max-width: 40rem)").matches`, removed otherwise) that a
-   rule switches to `repeat(2, minmax(0, 1fr))`. Hold the query in one module constant; its
-   comment, if any, names why the query is in code rather than CSS (the guard) in one line.
-   Nothing else in `positionPopup` changes (D9).
-3. Run both files plus `src/no-hardcoded-chrome.test.ts`:
-   `pnpm --filter @waitron/ui exec vitest run src/components/wt-colour-chooser.test.ts src/components/wt-colour-chooser.a11y.test.ts src/no-hardcoded-chrome.test.ts`.
-   Read the counts. Commit.
+   and "open, sixteen colours in two columns" at 390, each with `usedBy` marks and each asserting
+   its column count. Watch the new layout cases fail for the stated reason.
+2. Implement D8 in `positionPopup`, before its existing measure (`:211`): set four columns, apply
+   today's width rules, measure every `.colour-name`, and switch to two columns if any takes more
+   than one line. Set the column count directly on the radio group (an attribute a rule reads, as
+   the width is set directly today), not through a Lit render, because the measure that follows is
+   synchronous. No literal width anywhere, in `styles` or in code.
+3. **Prove by deletion:** remove the two-column fallback; the 390 cases (and the reopen and
+   resize cases) must fail. Restore it. Say in the report what failed.
+4. Run, reading each count:
+   `pnpm --filter @waitron/ui exec vitest run src/components/wt-colour-chooser.test.ts src/components/wt-colour-chooser.a11y.test.ts src/no-hardcoded-chrome.test.ts`;
+   then the consumer suites that open the chooser, still on thirteen colours, so a failure in Task 6
+   is the palette and not the layout:
+   `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/period-dialog.test.ts src/dashboard/period-dialog.a11y.test.ts src/dashboard/seasons-window.test.ts src/dashboard/seasons-window.a11y.test.ts src/dashboard/station-editor.test.ts src/dashboard/station-editor.a11y.test.ts src/dashboard/prep-stations-screen.a11y.test.ts`
+   and `pnpm --filter @waitron/staffing exec vitest run src/dashboard/staff-role-dialog.test.ts src/dashboard/staff-role-dialog.a11y.test.ts`.
+   Commit.
 
-## Task 3 — the palette, its names and the two migrations (one commit)
+## Task 3 — swap the invalid example and delete the dead strings (green before and after)
+
+A small commit before the palette changes, so Task 4 holds only the change itself.
+
+1. **"magenta" as the invalid example → `"beige"` (D11).** Edits that do not change what is
+   checked (magenta is still invalid until Task 4), so they cannot fail first:
+   `packages/staffing/src/staff-roles.test.ts:151`, `packages/staffing/src/routes.test.ts:237`,
+   `packages/staffing/src/schema/constraints.test.ts:94`,
+   `packages/venue-service/src/menu-timetable.test.ts:488` and `:629`,
+   `packages/venue-service/src/menu-timetable-routes.test.ts:641`,
+   `packages/venue-service/src/configuration-transfer.test.ts:1025`,
+   `packages/venue-service/src/dashboard/period-dialog.test.ts:377`, `:477`, `:525`,
+   `period-dialog.a11y.test.ts:40`, `calendar-colours.test.ts:51`, and `routing-grid.test.ts:2143`
+   (with its title at `:2139`, "not one of the twelve" → "not a station colour", and the source
+   comment it mirrors, `routing-grid.ts:482`, "a colour outside the twelve" → "a colour outside
+   `STATION_COLOURS`"). Then `grep -rn '"magenta"' packages apps scripts --include='*.ts'` finds
+   only `category-color` (a separate set).
+2. Delete the dead `prep.colour.<colour>` keys (D4) in EN (`strings.ts:249-260`) and ES
+   (`:1141-1152`); re-run the grep in D4 first. `pnpm --filter @waitron/venue-service typecheck`.
+3. Run every touched file (staffing and venue-service node files with `--project node`; the
+   dashboard files by path); all green, as before. Commit.
+
+## Task 4 — the palette, its names and the two migrations (one commit)
 
 Files: `packages/shared/src/calendar-colours.ts`, `packages/shared/src/station-colours.test.ts`,
 `packages/venue-service/src/dashboard/period-colour-styles.ts`,
@@ -259,24 +294,19 @@ the two migration folders, and the server-side tests named below.
      (`apps/server/src/management-api.test.ts:1183` "PATCH changes only the colour", beside indigo).
      Use a different new colour in each (yellow, sky, magenta). The core import already iterates
      `STATION_COLOURS` (`packages/db/src/configuration-transfer.test.ts:92`).
-   - **"magenta" as the invalid example → `"beige"` (D11):**
-     `packages/staffing/src/staff-roles.test.ts:151`, `packages/staffing/src/routes.test.ts:237`,
-     `packages/staffing/src/schema/constraints.test.ts:94`,
-     `packages/venue-service/src/menu-timetable.test.ts:488` and `:629`,
-     `packages/venue-service/src/menu-timetable-routes.test.ts:641`,
-     `packages/venue-service/src/configuration-transfer.test.ts:1025`. (The dashboard ones are in
-     Task 5a/5b.) Re-run `grep -rn '"magenta"' packages apps scripts --include='*.ts'` after.
-   - `apps/server/src/kitchen.test.ts:213-236` ("A725 reuses red when every station colour is
-     occupied") lists thirteen; make it every station colour (the sixteen, or `STATION_COLOURS`).
-   Watch each fail for the stated reason. The dashboard browser tests that pin thirteen go red
-   after this task; Tasks 5a and 5b fix them straight after (this commit is expected red there, and
-   only there).
+   - Edits that follow the change and cannot fail first: `apps/server/src/kitchen.test.ts:213-236`
+     ("A725 reuses red when every station colour is occupied") lists thirteen; make it every station
+     colour (the sixteen, or `STATION_COLOURS`). Left alone it fails after step 2 (the fourth free
+     colour is yellow, not red).
+   Watch each other case fail for the stated reason. After this commit two things are red, and only
+   these: the dashboard browser tests that pin thirteen (Tasks 6a and 6b, straight after), and the
+   root `scripts/migration-upgrade.test.ts`, until Task 5 adds the `RESETS` entries.
 2. `CALENDAR_COLOURS` becomes the sixteen in D1 order. Add the three to `PERIOD_COLOUR_TOKENS`
    (`period-colour-styles.ts:5-19`, a full `Record`, so the type checker demands them) and to
    `stationTints` (`station-colour-styles.ts:6-19`, `Partial` — D7), in D1 order. Add
    `hours.colour.yellow|sky|magenta` to EN (`strings.ts:614-626`) and ES (`:1516-1528`), and the
    three to staffing's `COLOUR_NAMES` (`staffing/src/dashboard/strings.ts:521-535`), all in D1
-   order. Delete the dead `prep.colour.<colour>` keys (D4) in EN and ES. Run
+   order. Run
    `pnpm --filter @waitron/shared typecheck`, `@waitron/venue-service`, `@waitron/staffing`,
    `@waitron/db` and `@waitron/server` (apps/server's package name: check its `package.json`), and
    note in the report whether venue-service's typecheck named the missing `hours.colour.*` keys
@@ -294,21 +324,25 @@ the two migration folders, and the server-side tests named below.
    table, a dropped index or key), stop and report. Neither table has an expression index
    (`menus.ts:49-50`, `staffing.ts:38`), so the 0.31.11 expression-index trap
    (`conventions-data.md:2652`) does not apply. Triggers: grep every `CREATE TRIGGER` under
-   `packages/*/drizzle` for `menu_periods` or `staff_roles` — none on 2026-10-18 (only
-   `packages/db/drizzle` has triggers, none naming either table); re-run that grep.
+   `packages/*/drizzle` for `menu_periods` or `staff_roles` — on 2026-10-18 the files with triggers
+   were in `packages/db/drizzle` (36) and `packages/media/drizzle` (8), none naming either table;
+   re-run that grep.
 4. Run, reading each `Tests` count:
    `pnpm --filter @waitron/shared exec vitest run src/station-colours.test.ts`;
    `pnpm --filter @waitron/staffing exec vitest run --project node`;
    `pnpm --filter @waitron/venue-service exec vitest run --project node` (the whole node side: the
    palette order is a value several suites pin, and A753's rebuild broke three upgrade tests here);
    `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/station-colour-styles.test.ts src/dashboard/season-tint.test.ts src/dashboard/calendar-colours.test.ts`
-   (the last is expected red until Task 5a only for its pinned maps);
+   (the last is expected red until Task 6a only for its pinned map);
+   `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/paint-grid.a11y.test.ts`
+   and `pnpm --filter @waitron/staffing exec vitest run src/dashboard/staffing-grid.a11y.test.ts`
+   (both iterate the constant: `paint-grid.a11y.test.ts:27,57`, `staffing-grid.a11y.test.ts:43`);
    `pnpm --filter @waitron/db exec vitest run src/configuration-transfer.test.ts`;
    and in `apps/server`, `src/kitchen.test.ts src/management-api.test.ts src/configuration-transfer.test.ts`.
    Commit (code and migrations in ONE commit: the CHECK refuses the new colours until the migration
    exists).
 
-## Task 4 — the upgrade walk and the guard suites
+## Task 5 — the upgrade walk and the guard suites
 
 1. `pnpm exec vitest run scripts/migration-upgrade.test.ts` from the root. For each new step it
    fails on, add a `RESETS` entry keyed by the step label it prints, with the refusal parts or lost
@@ -320,40 +354,43 @@ the two migration folders, and the server-side tests named below.
    `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts`, both
    UNEDITED. Read each count. Commit.
 
-## Task 5a — venue-service dashboard tests: periods, seasons, colour choices
+## Task 6a — venue-service dashboard tests: periods, seasons, colour choices
 
-Run these first and record which fail after Task 3 and why; then update each to the sixteen in D1
+Run these first and record which fail after Task 4 and why; then update each to the sixteen in D1
 order, keeping every check's shape (labels checked in both languages where the file checks both; a
 "first unused" check still proves the skip). Never weaken a check to a length or a subset.
 
 - `packages/venue-service/src/dashboard/period-dialog.test.ts`: the EN labels (`:397-413`, title
   "thirteen" loses its count), the tab-stop list and `[0, -1, …]` (`:486-503`, sixteen entries),
-  the two `usedBy` maps (`:1141-1155`, `:1161-1175`), the ES labels (`:1207-1221`); `"magenta" as never`
-  → `"beige"` at `:377`, `:477`, `:525`.
-- `period-dialog.a11y.test.ts:40`: the colour-invalid state's `"magenta"` → `"beige"` (left alone it
-  silently tests a valid colour).
-- `calendar-colours.test.ts`: the `usedBy` map (`:33-47`); the "Odd" user's `"magenta"` (`:51`) →
-  `"beige"`. `:57` (red, orange → amber) is unchanged by D1.
+  the two `usedBy` maps (`:1141-1155`, `:1161-1175`), the ES labels (`:1207-1221`).
+- `period-dialog.a11y.test.ts:118`: `toHaveLength(13)` on the chooser's choices → sixteen.
+- `calendar-colours.test.ts`: the `usedBy` map (`:33-47`). `:57` (red, orange → amber) is unchanged
+  by D1.
 - `periods-list.editing.test.ts:467-485`: the all-taken list → the sixteen (or `[...CALENDAR_COLOURS]`).
 - `seasons-window.test.ts:161`: the second new season's colour `lime` → `yellow` (D1: green, amber,
   orange, blue and red are used, so the first free is now yellow).
 - `season-draft.test.ts:99`: title "all thirteen" loses its count (the body iterates the constant).
+- `seasons-window.test.ts:404-405`: the case puts the longest colour name on a row so the 390 px
+  layout is checked against it. Turquesa stays the longest Spanish name; the longest English one is
+  now Magenta (the plan review measured 63.5 px against Orange's 53.6 px at 16 px system-ui —
+  re-measure in the test's browser with a `Range` and record it). Put magenta on an English row
+  (keeping teal for Spanish) and correct the comment.
 
 Run each touched file (`pnpm --filter @waitron/venue-service exec vitest run <files>`), read the
 counts. Commit.
 
-## Task 5b — station and staff role dashboard tests
+## Task 6b — station and staff role dashboard tests
 
 - `packages/venue-service/src/dashboard/prep-stations-screen.test.ts:696-715` (all taken → red):
   every station colour.
 - `station-table.test.ts:185-215` and `prep-stations-screen.a11y.test.ts:466-480`: the per-colour
   lists gain the three (or iterate `STATION_COLOURS`), so the new swatches are painted and checked.
+  The same a11y case's English and Spanish label lists (`prep-stations-screen.a11y.test.ts:523-553`)
+  become the sixteen names, and its "every colour used once" check (`:522`) holds because the
+  station list grows with them.
 - `routing-grid.a11y.test.ts:135-148`: `COLOURS` (twelve, grey left out) gains the three; the
   hard-coded `% 12` (`:176`) becomes `% COLOURS.length`; the comment "Twelve stations, one per colour" (`:151`)
   and "against the twelve fills" (`:498`) lose the count.
-- `routing-grid.test.ts:2139-2143`: title "not one of the twelve" → "not a station colour";
-  `"magenta"` → `"beige"`. The source comment it mirrors, `routing-grid.ts:482` ("a colour outside
-  the twelve"), becomes "a colour outside `STATION_COLOURS`".
 - `packages/staffing/src/dashboard/staff-role-dialog.test.ts`: the labels (`:111-132`, title
   "thirteen" loses its count), the two `usedBy` maps (`:667-681`, `:732-746`), the all-taken list
   (`:684-706`). `:666` (red and blue used → orange) is unchanged by D1.
@@ -362,29 +399,32 @@ Then `grep -rn "thirteen\|twelve" packages/*/src apps/*/src --include='*.ts'` fo
 left (2026-10-18 the colour hits were the ones listed in this plan). Run each touched file, read the
 counts. Commit.
 
-## Task 6 — LOOK and documents (driver)
+## Task 7 — LOOK and documents (driver)
 
 1. LOOK. The dev venue needs a reset for the rebuilds (D6). Check holders first:
    `lsof +D ~/workspace/.waitron-dev/box/venue` and `lsof -nP -iTCP:8080 -sTCP:LISTEN` (the slot-0
    folder, per the memory note on resets; use this worktree's slot if `wa-wt` gives another), then
    `wa-wt reset demo waitron-feat-a783-sixteen-colours` and `wa-wt demo waitron-feat-a783-sixteen-colours`.
    Create periods, staff roles, seasons and stations in yellow, sky and magenta. Shoot, both themes,
-   390 and 1280 wide, EN and ES, to `~/waitron-campaign-b/a783-shots/`: the period dialog's,
-   staff role dialog's, station editor's and Seasons window's open chooser (sixteen tiles: four
-   columns at 1280, two at 390); the Staff roles list swatches; the Calendar Month view segments;
-   the rota by area swatches; the Prep stations Routes grid. Check the Seasons window's colour
-   button at 390 (backlog "At phone width the Seasons window cuts longer colour names",
-   `docs/backlog.md:1400`): if Amarillo, Celeste or Magenta is cut, add it to that entry's examples
-   as measured.
+   390 and 1280 wide, EN and ES, to `~/waitron-campaign-b/a783-shots/`: the open chooser (sixteen
+   tiles: four columns at 1280, two at 390) in the period dialog, the staff role dialog, the station
+   editor, the Prep stations screen's add-station form (`prep-stations-screen.ts:1024`) and the
+   Seasons window; the swatches of the Staff roles list, the Periods list (`periods-list.ts:41-45`)
+   and the Floor plans screen (`floor-plans-screen.ts:57-61`); the Calendar Month view segments;
+   the rota by area swatches; the Prep stations Routes grid. The Seasons window's colour button at
+   390 (backlog "At phone width the Seasons window cuts longer colour names",
+   `docs/backlog.md:1400`): add Magenta to that entry's examples (longer than Orange, which is cut —
+   Task 6a's measurement), and Amarillo or Celeste if the shots show them cut.
 2. Docs:
    - `docs/developers/design-system.md`: the token list (`:140`, the `palette-{…}` brace list); the
      A753 paragraph (`:224-226`, "grew to thirteen") gains a dated 2026-10-18 A783 sentence and its
      pointer moves to `packages/shared/src/calendar-colours.ts`; the palette table (`:228-244`) and
      the station table (`:285-298`) gain the three rows with D2's values in D1 order; "one of the
      thirteen" (`:253`) and "the twelve fills differ and so do the twelve dots" (`:303`) lose their
-     counts; the `wt-colour-chooser` row (`:727`, "tiles in two columns") says four columns, or two
-     in a window `40rem` wide or less, chosen each time the panel is placed, and that the arrow keys
-     move tile by tile in reading order.
+     counts; the `wt-colour-chooser` row (`:727`, "tiles in two columns") describes D8: four columns
+     when every colour name fits on one line at the panel's allowed width, else two, measured each
+     time the panel is placed (a `usedBy` line may wrap); and that the arrow keys move tile by tile
+     in reading order. No house-rule exception is needed: there is no breakpoint.
    - `docs/backlog/service-periods.md:438-443` (the A753 decision, never deleted): add a dated line —
      2026-10-18, A783: sixteen, in rows of four, the order of D1; a fourth new period or role now
      takes yellow.
@@ -397,6 +437,6 @@ counts. Commit.
      driver's to mark.
    - `packages/ui/demo/main.ts:498-508` stays: it demonstrates the chooser, not the palette.
 3. PR: first line says a venue reset is needed (D6); the body names the yellow-fourth consequence
-   (D1), the column rule (D8) and the deleted dead strings (D4). After landing, the Santet
+   (D1), the measured column rule (D8) and the deleted dead strings (D4). After landing, the Santet
    real-data venue and the owner's box need the reset too (Santet through its own rebuild script,
    never `wa-wt reset`).
