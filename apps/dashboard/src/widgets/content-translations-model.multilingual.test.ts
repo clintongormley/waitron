@@ -794,4 +794,66 @@ describe("multilingual translation drafts", () => {
     expect(drafts.value(one)).toBe("Sent");
     expect(drafts.personalSubmission()).toEqual({ edits: [] });
   });
+  it("keeps a previously empty personal blank reviewable when a hidden cell is filled elsewhere", () => {
+    const one = cell(),
+      drafts = new TranslationDrafts(config, [one]);
+    drafts.edit(one, "");
+    expect(drafts.personalSubmission()).toEqual({ edits: [] });
+    drafts.receive(page([cell({ id: "other-page" })]));
+    const latest = cell({
+      text: "Another person's text",
+      effectiveText: "Another person's text",
+      expected: "concurrent-fill",
+    });
+    drafts.receive(page([latest]));
+    expect(drafts.value(one)).toBe("");
+    expect(drafts.validate()).toEqual([{ cell: ref(one), message: "review" }]);
+    drafts.review([latest], new Map([[translationCellKey(one), "keep"]]));
+    expect(drafts.personalSubmission()).toEqual({
+      edits: [
+        {
+          kind: "product",
+          id: "one",
+          language: "es",
+          field: "name",
+          expected: "concurrent-fill",
+          text: null,
+        },
+      ],
+    });
+    expect(drafts.validate()).toEqual([]);
+  });
+  it("never Keeps a no-op blank against replacement ownership after revisiting the cell", () => {
+    const one = cell({ kind: "option_label", owners: { kind: "option_label", listId: "old" } });
+    const drafts = new TranslationDrafts(config, [one]);
+    drafts.edit(one, "");
+    drafts.receive(page([]));
+    const latest = cell({
+      ...one,
+      owners: { kind: "option_label", listId: "new" },
+      text: "Replacement",
+      effectiveText: "Replacement",
+      expected: "new-owner",
+    });
+    drafts.receive(page([latest]));
+    drafts.review([latest], new Map([[translationCellKey(one), "keep"]]));
+    expect(drafts.value(one)).toBe("");
+    expect(drafts.validate()).toEqual([{ cell: ref(one), message: "review" }]);
+    expect(drafts.personalSubmission().edits[0]?.expected).toBe("original");
+  });
+  it("makes room among suggestions when a personal no-op clear becomes reviewable", () => {
+    const cells = changedCells(100),
+      one = cell({ id: "personal" });
+    const drafts = new TranslationDrafts(config, [...cells, one]);
+    drafts.edit(one, "");
+    drafts.suggest(cells.map((target) => suggestion(target)));
+    expect(drafts.suggestedCount).toBe(100);
+    drafts.receive(
+      page([cell({ ...one, text: "Concurrent", effectiveText: "Concurrent", expected: "new" })]),
+    );
+    expect(drafts.staged()).toHaveLength(100);
+    expect(drafts.suggestedCount).toBe(99);
+    expect(drafts.value(one)).toBe("");
+    expect(drafts.validate()).toEqual([{ cell: ref(one), message: "review" }]);
+  });
 });

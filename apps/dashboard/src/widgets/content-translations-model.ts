@@ -28,6 +28,8 @@ interface Draft {
 interface Input {
   value: string;
   revision: number;
+  baseline: Pick<TranslationCell, "text" | "owners" | "expected">;
+  config: ContentLanguages;
 }
 interface SubmittedCell {
   revision: number;
@@ -105,7 +107,12 @@ export class TranslationDrafts {
     ).length;
     if (different && !previous && personalCount >= 101) return false;
     const revision = ++this.#revision;
-    this.#inputs.set(key, { value: text, revision });
+    this.#inputs.set(key, {
+      value: text,
+      revision,
+      baseline: { text: base.text, owners: structuredClone(base.owners), expected: base.expected },
+      config: structuredClone(previous?.config ?? this.#config),
+    });
     if (!different) this.#drafts.delete(key);
     else
       this.#drafts.set(key, {
@@ -133,13 +140,27 @@ export class TranslationDrafts {
       const current = this.#current.get(key);
       if (current) next.set(key, current);
     }
-    for (const cell of page.cells) next.set(translationCellKey(cell), structuredClone(cell));
+    for (const cell of page.cells) {
+      const key = translationCellKey(cell),
+        input = this.#inputs.get(key);
+      if (input && !this.#drafts.has(key) && normalized(input.value) !== normalized(cell.text)) {
+        this.#drafts.set(key, {
+          base: { ...structuredClone(cell), ...structuredClone(input.baseline) },
+          config: structuredClone(input.config),
+          value: input.value,
+          origin: "personal",
+          revision: input.revision,
+        });
+      }
+      next.set(key, structuredClone(cell));
+    }
     this.#current = next;
     for (const [key, draft] of this.#drafts) {
       if (draft.origin !== "suggested") continue;
       if (this.changed(draft.base) || normalized(this.#current.get(key)?.effectiveText ?? null))
         this.#drafts.delete(key);
     }
+    this.#makeRoom();
   }
   #matches(view: ContentSuggestionView, cell: TranslationCell): boolean {
     return (
@@ -244,6 +265,15 @@ export class TranslationDrafts {
         continue;
       draft.base = structuredClone(cell);
       draft.config = structuredClone(this.#config);
+      const input = this.#inputs.get(key);
+      if (input) {
+        input.baseline = {
+          text: cell.text,
+          owners: structuredClone(cell.owners),
+          expected: cell.expected,
+        };
+        input.config = structuredClone(this.#config);
+      }
       if (normalized(draft.value) === normalized(cell.text)) this.#drafts.delete(key);
     }
   }
@@ -325,6 +355,14 @@ export class TranslationDrafts {
         continue;
       }
       const value = input?.value ?? draft?.value ?? "";
+      if (input) {
+        input.baseline = {
+          text: cell.text,
+          owners: structuredClone(cell.owners),
+          expected: cell.expected,
+        };
+        input.config = structuredClone(snapshot?.config ?? this.#config);
+      }
       if (normalized(value) === normalized(cell.text)) this.#drafts.delete(key);
       else
         this.#drafts.set(key, {
