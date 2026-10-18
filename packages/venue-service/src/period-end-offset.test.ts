@@ -422,6 +422,18 @@ describe("end offsets for an hours save after the start moved", () => {
       date: "2026-11-02",
     });
   });
+  it("finds a clash between the save day's weekly hours and the next day's one-off", () => {
+    const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
+    week[1] = [p("22:00", "04:30")];
+    const mondays = [{ seasonId: "year", startsOn: "01-01", week }];
+    const next = [oneOff("2026-11-03", p("05:00", "06:00"))];
+    expect(findSeasonEndOffsetClash(mondays, next, offsets, settled, today)).toEqual({
+      periodId: "p",
+      slotIndex: 0,
+      date: "2026-11-02",
+      specialDayId: "sd-2026-11-03",
+    });
+  });
   it("judges the weekly ranges under the start in force alone", () => {
     expect(findSeasonEndOffsetClash(lateWednesday(), [], offsets, settled)).not.toBeNull();
     expect(findSeasonEndOffsetClash(lateWednesday(), [], offsets, settled, today)).toBeNull();

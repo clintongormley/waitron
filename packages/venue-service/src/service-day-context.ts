@@ -59,7 +59,7 @@ export function settledClock(clock: BusinessDayClock, at: Date): BusinessDayCloc
 }
 
 /** What a last-orders check after an hours save at `at` reads; `from` is the business day
- *  holding `at`, left out when the start never changed. */
+ *  holding `at`, left out when the clock holds no start changes. */
 export interface LastOrdersClock {
   clock: BusinessDayClock;
   from?: string;
