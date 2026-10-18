@@ -10,8 +10,8 @@ it.each([
   ["tables", "Deletes {count} tables. {names}", "Elimina {count} mesas. {names}"],
   [
     "saved_tables",
-    "Removes {count} tables from the saved plan. {names}",
-    "Quita {count} mesas del plano guardado. {names}",
+    "Removes {count} tables from the floor plans. {names}",
+    "Quita {count} mesas de los planos. {names}",
   ],
   ["zones", "Deletes {count} zones. {names}", "Elimina {count} zonas. {names}"],
   [
@@ -205,7 +205,7 @@ it("counts physical tables independently of today placement and discloses retain
     }),
   ).toBe("Deletes 3 tables. Never placed today");
   expect(c.item({ key: "saved_tables", count: 1, targets: [] })).toBe(
-    "Removes 1 tables from the saved plan.",
+    "Removes 1 tables from the floor plans.",
   );
 });
 it.each(["zone", "department"] as const)(
