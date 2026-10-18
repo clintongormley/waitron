@@ -96,8 +96,8 @@ describe.each(["en", "es"] as const)("Sent dish actions in %s", (locale) => {
         expect(actions.map((action) => action.textContent!.trim())).toEqual(
           kind === "held"
             ? locale === "es"
-              ? ["Marchar ya", "Retirar", "Cambiar de estación…", "Cancelar…"]
-              : ["Fire now", "Recall", "Move to station…", "Void…"]
+              ? ["Marchar ya", "Retirar", "Cambiar de estación…", "Descuento…", "Cancelar…"]
+              : ["Fire now", "Recall", "Move to station…", "Comp…", "Void…"]
             : locale === "es"
               ? ["Cancelar…", "Deshacer servido"]
               : ["Void…", "Undo served"],

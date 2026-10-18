@@ -2277,8 +2277,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   leaving the bill, changing server or signing out removes its authority. A failed refresh keeps
   the accepted receipt, while a refused serve shows no success notice.
   The old Current orders, To serve and Served drawer lists still need their remaining checks moved
-  to Sent before removal. The combined Comp window, held-heading
-  reorder and held-dish Finish resolution also remain open. Its
+  to Sent before removal. Sent's Comp now opens one reason-first window on the feature branch.
+  You choose the whole dish with its extras or one priced extra, then Free, % or € from the
+  reason's allowed actions. A whole dish starts at all units and accepts a count from one to its
+  quantity; a weighed dish or one extra is covered whole. The preview and approval still use the
+  existing adjustment requests. Focused tests cover amount correction, exact whole-family totals,
+  a withdrawn reason, retained paid/editor/context controls and keeping unfinished choices when
+  you close the window. The new Spanish Comp wording awaits review; the earlier six Sent labels
+  were approved on 2026-10-18. Held-heading reorder and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
   target recovery. Single-dish Fire now's command/API/client work is qualified on the feature

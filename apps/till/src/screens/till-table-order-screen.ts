@@ -349,9 +349,8 @@ export interface UnsnoozeGroupDetail {
 /** How far one press of Snooze puts a release reminder off. */
 export const SNOOZE_MINUTES = 5;
 
-/** `adjust`: Cancel, Give away or Discount pressed on a dish or an extra, or Discount on the bill on
- * screen. */
 export interface AdjustDetail {
+  combined?: true;
   kind: AdjustKind;
   target: AdjustTarget;
   /** Opened by the app's Cancel offer, so the message saying why stays on screen. */
@@ -2738,7 +2737,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #actOnSentLine(
     pending: typeof this.sentLinePending,
-    action: "fire" | "recall" | "station" | "void",
+    action: "fire" | "recall" | "station" | "void" | "comp",
   ): void {
     if (
       pending === null ||
@@ -2754,14 +2753,25 @@ export class TillTableOrderScreen extends LitElement {
       (action === "fire" && !this.#canFireSent(slice)) ||
       (action === "recall" && !this.#canRecallSent(slice)) ||
       (action === "station" && !this.#canMoveSent(slice)) ||
-      (action === "void" && !this.#canVoidSent(slice))
+      (action === "void" && !this.#canVoidSent(slice)) ||
+      (action === "comp" && this.#sentOrderLine(slice) === undefined)
     )
       return;
     this.sentLinePending = null;
     this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
     if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
     else if (action === "recall") this.#recallLine(slice.row.lineNo);
-    else if (action === "void") this.#dispatch("cancel-item", { lineId: slice.row.lineId });
+    else if (action === "comp") {
+      const line = this.#sentOrderLine(slice)!;
+      const target = lineAdjustTarget(line, this.lines, this.#adjustName(line));
+      target.extras = this.lines
+        .filter(
+          (row) =>
+            row.parentLineNo === line.lineNo && compareDecimal(tabLineGross(row), decimal("0")) > 0,
+        )
+        .map((row) => lineAdjustTarget(row, this.lines, this.#adjustName(row)));
+      this.#dispatch("adjust", { kind: "comp", combined: true, target });
+    } else if (action === "void") this.#dispatch("cancel-item", { lineId: slice.row.lineId });
     else
       this.#dispatch("move-station", {
         workingOrderId: slice.row.workingOrderId,
@@ -2777,14 +2787,16 @@ export class TillTableOrderScreen extends LitElement {
     const recall = this.#canRecallSent(slice);
     const station = this.#canMoveSent(slice);
     const unserve = slice.kind === "served" && this.#sentBillOpen(slice.row);
+    const comp = this.#sentOrderLine(slice) !== undefined;
     const canVoid = this.#canVoidSent(slice);
-    if (!fire && !recall && !station && !unserve && !canVoid) return nothing;
+    if (!fire && !recall && !station && !unserve && !canVoid && !comp) return nothing;
     const pending = this.sentLinePending;
     const disabled = this.busy || this.groupCommandBusy;
     return html`<wt-row-actions label=${t("shell.more")}>
       ${fire ? html`<wt-button variant=${disabled ? "secondary" : "primary"} data-sent-line-fire ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "fire")}>${t("table.destination_fire_now")}</wt-button>` : nothing}
       ${recall ? html`<wt-button variant="secondary" data-sent-line-recall ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "recall")}>${t("table.recall_line")}</wt-button>` : nothing}
       ${station ? html`<wt-button variant="secondary" data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
+      ${comp ? html`<wt-button variant="secondary" data-sent-line-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
       ${canVoid ? html`<wt-button variant=${disabled ? "secondary" : "danger"} data-sent-line-void ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "void")}>${t("table.void_line")}</wt-button>` : nothing}
       ${unserve ? html`<wt-button variant="secondary" data-sent-line-unserve ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button>` : nothing}
     </wt-row-actions>`;

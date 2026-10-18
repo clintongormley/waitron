@@ -485,3 +485,122 @@ it("a previous Void cannot consume a reopened dish window", async () => {
   await userEvent.click(q(el, "[data-sent-line-void]"));
   expect(events.map((event) => event.detail)).toEqual([{ lineId: "l-flan" }]);
 });
+
+it("Sent Comp opens one combined adjustment for the parent and its priced extras", async () => {
+  const el = await openLine("held", {
+    lines: [
+      heldLine(),
+      heldLine({ id: "cream", lineNo: 2, parentLineNo: 1, name: "Cream", unitPriceGross: "1.00" }),
+      heldLine({ id: "free-extra", lineNo: 3, parentLineNo: 1, unitPriceGross: "0.00" }),
+    ],
+    bills: [bill("open")],
+  });
+  const events = capture(el, "adjust");
+  await openMore(el);
+  const comp = q(el, "[data-sent-line-comp]");
+  expect(comp).not.toBeNull();
+  await userEvent.click(comp);
+  await el.updateComplete;
+  expect(
+    events.map((e) => [
+      e.detail.kind,
+      e.detail.combined,
+      e.detail.target.lineId,
+      e.detail.target.total,
+      e.detail.target.extras.map(
+        (x: { lineId: string; total: string; unitTotal: string | null }) => [
+          x.lineId,
+          x.total,
+          x.unitTotal,
+        ],
+      ),
+      e.bubbles,
+      e.composed,
+    ]),
+  ).toEqual([["comp", true, "l-flan", "6.00", [["cream", "2.00", null]], true, true]]);
+  expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
+});
+it.each(["paid", "owner", "missing-line"] as const)(
+  "Sent Comp is absent when %s prevents a financial edit",
+  async (refusal) => {
+    const store = new DraftStore();
+    const orders = structuredClone(current());
+    if (refusal === "paid") orders.groups[2]!.rows[0]!.billStatus = "settled";
+    if (refusal === "owner") store.ownershipLocked = true;
+    const el = await openLine("held", {
+      draftStore: store,
+      currentOrders: orders,
+      lines: refusal === "missing-line" ? [] : [heldLine()],
+      bills: [bill(refusal === "paid" ? "settled" : "open")],
+    });
+    await openMore(el);
+    expect(q(el, "[data-sent-line-comp]")).toBeNull();
+  },
+);
+it.each([
+  "bill",
+  "row",
+  "owner",
+  "busy",
+  "api",
+  "party",
+  "serviceVisit",
+  "window",
+  "gone",
+] as const)("a retained Comp cannot open after %s changes", async (change) => {
+  const store = new DraftStore();
+  const el = await openLine("held", {
+    draftStore: store,
+    lines: [heldLine()],
+    bills: [bill("open")],
+  });
+  const events = capture(el, "adjust");
+  await openMore(el);
+  const comp = q(el, "[data-sent-line-comp]");
+  expect(comp).not.toBeNull();
+  if (change === "bill") el.bills = [bill("settled")];
+  if (change === "row") {
+    const orders = structuredClone(current());
+    orders.groups[2]!.rows[0]!.billStatus = "settled";
+    el.currentOrders = orders;
+  }
+  if (change === "owner") store.ownershipLocked = true;
+  if (change === "busy") el.busy = true;
+  if (change === "api") el.api = {} as TillTableOrderScreen["api"];
+  if (change === "party") el.party = { id: "other" } as TillTableOrderScreen["party"];
+  if (change === "serviceVisit") el.serviceVisit++;
+  if (change === "window") await userEvent.click(q(el, "[data-sent-line-close]"));
+  if (change === "gone") el.lines = [];
+  comp.click();
+  await el.updateComplete;
+  expect(events).toEqual([]);
+});
+
+it("a retained Comp prices the latest dish and new extras before Lit paints the new snapshot", async () => {
+  const el = await openLine("held", { lines: [heldLine()], bills: [bill("open")] });
+  const events = capture(el, "adjust");
+  await openMore(el);
+  const comp = q(el, "[data-sent-line-comp]");
+  expect(comp).not.toBeNull();
+  el.lines = [
+    heldLine({ unitPriceGross: "3.00" }),
+    heldLine({
+      id: "new-extra",
+      name: "Cream",
+      lineNo: 2,
+      parentLineNo: 1,
+      unitPriceGross: "1.00",
+    }),
+  ];
+  comp.click();
+  await el.updateComplete;
+  expect(
+    events.map((e) => [
+      e.detail.target.total,
+      e.detail.target.extras.map((extra: { lineId: string; total: string }) => [
+        extra.lineId,
+        extra.total,
+      ]),
+    ]),
+  ).toEqual([["8.00", [["new-extra", "2.00"]]]]);
+});

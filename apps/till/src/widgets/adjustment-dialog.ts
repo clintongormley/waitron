@@ -5,7 +5,8 @@ import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } fro
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
+import "@waitron/ui/src/components/wt-number-stepper.js";
+import { compareDecimal, decimal, formatMoney, multiplyDecimal } from "@waitron/shared";
 import { trackDialog } from "./track-dialog.js";
 import { parseDecimalInput } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
@@ -18,7 +19,6 @@ import type {
   PersonRole,
 } from "../api/client.js";
 
-/** What the person set out to do; a discount is by a percentage or an amount, chosen in the form. */
 export type AdjustKind = "cancel" | "comp" | "discount";
 
 /** What an adjustment acts on, as the dialog names it before anything is done. */
@@ -34,6 +34,7 @@ export interface AdjustTarget {
    * action may take one of; null when only the whole of it can be adjusted (a weighed dish, or an
    * extra). */
   unitTotal: string | null;
+  extras?: AdjustTarget[];
   started?: boolean;
   /** Sold by weight, which the server refuses to give away or discount in part. */
   weighed?: boolean;
@@ -46,6 +47,7 @@ export interface AdjustTarget {
 /** The person's choices, which the app asks the server about and then applies. */
 export interface AdjustmentChoice {
   action: AdjustmentAction;
+  lineId?: string;
   reasonId: string;
   note: string | null;
   quantity?: string;
@@ -54,7 +56,11 @@ export interface AdjustmentChoice {
 }
 
 type DiscountKind = "percent" | "amount";
+type CompKind = "free" | DiscountKind;
 interface AdjustmentDraft {
+  compKind: CompKind;
+  extraId: string | null;
+  count: string | null;
   quantity: "1" | "all";
   discountKind: DiscountKind;
   reasonId: string;
@@ -112,13 +118,6 @@ const DO: Record<AdjustKind, StringKey> = {
 
 const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 
-/**
- * Cancels, gives away or discounts one dish, or discounts the whole bill (service plan Task 11).
- * The form offers only the reasons that allow the action, then asks the app for a preview; the
- * confirm step shows what the bill actually loses, and who must approve, before anything is done.
- * It holds no request of its own: the app answers `adjust-preview` with {@link preview}, and a
- * refusal with {@link refusal}.
- */
 @customElement("till-adjustment-dialog")
 export class TillAdjustmentDialog extends LitElement {
   static override styles = [
@@ -207,6 +206,7 @@ export class TillAdjustmentDialog extends LitElement {
   ];
 
   @property() kind: AdjustKind = "comp";
+  @property({ type: Boolean }) combined = false;
   @property({ attribute: false }) target: AdjustTarget | null = null;
   /** The venue's active reasons; the form offers those allowing the action. */
   @property({ attribute: false }) reasons: AdjustmentReason[] = [];
@@ -219,6 +219,9 @@ export class TillAdjustmentDialog extends LitElement {
   @property() refusal: string | null = null;
   @property({ type: Boolean }) busy = false;
 
+  @state() private compKind: CompKind = "free";
+  @state() private extraId: string | null = null;
+  @state() private count: string | null = null;
   @state() private quantity: "1" | "all" = "all";
   @state() private discountKind: DiscountKind = "percent";
   @state() private reasonId = "";
@@ -249,6 +252,9 @@ export class TillAdjustmentDialog extends LitElement {
 
   #draft(): AdjustmentDraft {
     return {
+      compKind: this.compKind,
+      extraId: this.extraId,
+      count: this.count,
       quantity: this.quantity,
       discountKind: this.discountKind,
       reasonId: this.reasonId,
@@ -261,19 +267,25 @@ export class TillAdjustmentDialog extends LitElement {
     const typed = draft.value.trim();
     const number = parseDecimalInput(typed) ?? typed;
     const percent = Number(number);
-    const value =
-      this.kind !== "discount"
-        ? null
-        : draft.discountKind === "percent" &&
-            TYPED_AMOUNT.test(number) &&
-            percent > 0 &&
-            percent <= 100
-          ? Math.round(percent * 100)
-          : draft.discountKind === "amount" && /^(0|[1-9]\d*)(\.\d{1,2})?$/.test(number)
-            ? number.replace(/\.0+$|(?<=\.[0-9])0$/, "")
-            : typed;
+    const value = !(this.combined ? draft.compKind !== "free" : this.kind === "discount")
+      ? null
+      : (this.combined ? draft.compKind : draft.discountKind) === "percent" &&
+          TYPED_AMOUNT.test(number) &&
+          percent > 0 &&
+          percent <= 100
+        ? Math.round(percent * 100)
+        : (this.combined ? draft.compKind : draft.discountKind) === "amount" &&
+            /^(0|[1-9]\d*)(\.\d{1,2})?$/.test(number)
+          ? number.replace(/\.0+$|(?<=\.[0-9])0$/, "")
+          : typed;
     return JSON.stringify({
-      action: this.kind === "discount" ? draft.discountKind : this.kind,
+      action: this.combined
+        ? draft.compKind
+        : this.kind === "discount"
+          ? draft.discountKind
+          : this.kind,
+      extraId: this.combined ? draft.extraId : null,
+      count: this.combined && this.#partial() ? (draft.count ?? this.target?.quantity) : null,
       quantity: this.#partial() ? draft.quantity : null,
       reasonId: draft.reasonId,
       note: draft.note.trim() || null,
@@ -306,7 +318,8 @@ export class TillAdjustmentDialog extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
-    if (changed.has("reasons") || changed.has("kind")) {
+    if (this.combined && changed.has("reasons")) this.#pickCompKind();
+    if (!this.combined && (changed.has("reasons") || changed.has("kind"))) {
       const kinds = this.#discountKinds();
       if (!kinds.includes(this.discountKind) && kinds[0] !== undefined) {
         this.discountKind = kinds[0];
@@ -322,6 +335,9 @@ export class TillAdjustmentDialog extends LitElement {
       snapshot: (value) => ({ ...value }),
       equal: (a, b) => this.#comparable(a) === this.#comparable(b),
       restore: (value) => {
+        this.compKind = value.compKind;
+        this.extraId = value.extraId;
+        this.count = value.count;
         this.quantity = value.quantity;
         this.discountKind = value.discountKind;
         this.reasonId = value.reasonId;
@@ -333,6 +349,12 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   #action(): AdjustmentAction {
+    if (this.combined)
+      return this.compKind === "free"
+        ? "comp"
+        : this.compKind === "percent"
+          ? "discount_percent"
+          : "discount_amount";
     if (this.kind !== "discount") return this.kind;
     return this.discountKind === "percent" ? "discount_percent" : "discount_amount";
   }
@@ -348,7 +370,11 @@ export class TillAdjustmentDialog extends LitElement {
 
   #offered(): AdjustmentReason[] {
     const action = this.#action();
-    return this.reasons.filter((reason) => reason.actions.includes(action));
+    return this.reasons.filter((reason) =>
+      this.combined
+        ? reason.actions.some((action) => action !== "cancel")
+        : reason.actions.includes(action),
+    );
   }
 
   #reason(): AdjustmentReason | undefined {
@@ -356,12 +382,16 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   #partial(): boolean {
-    return this.target?.unitTotal != null;
+    return this.#target()?.unitTotal != null;
   }
 
   /** The most a discount can take: one unit, or all the action covers. */
   #covered(): string {
-    const target = this.target!;
+    const target = this.#target()!;
+    if (this.combined && this.#partial())
+      return compareDecimal(decimal(this.#count()), decimal(target.quantity!)) === 0
+        ? target.total
+        : multiplyDecimal(decimal(target.unitTotal!), decimal(this.#count()));
     return this.quantity === "1" && target.unitTotal !== null ? target.unitTotal : target.total;
   }
 
@@ -378,18 +408,29 @@ export class TillAdjustmentDialog extends LitElement {
   #ownErrors(): Map<Field, string> {
     const errors = new Map<Field, string>();
     const reason = this.#reason();
-    if (reason === undefined) errors.set("reason", t("adjust.reason_required"));
+    if (reason === undefined || (this.combined && !reason.actions.includes(this.#action())))
+      errors.set("reason", t("adjust.reason_required"));
     if (reason?.noteRequired === true && this.note.trim() === "")
       errors.set("note", t("adjust.note_required"));
-    if (this.kind === "discount") {
+    if (
+      this.combined &&
+      this.#partial() &&
+      (!/^[1-9]\d*$/.test(this.#count()) ||
+        compareDecimal(decimal(this.#count()), decimal(this.target!.quantity!)) > 0)
+    )
+      errors.set("quantity", codeMessage("adjustment.quantity_invalid"));
+    if (this.kind === "discount" || (this.combined && this.compKind !== "free")) {
       const number = this.#typedNumber();
-      if (this.discountKind === "percent") {
+      if ((this.combined ? this.compKind : this.discountKind) === "percent") {
         const percent = Number(number);
         if (!TYPED_AMOUNT.test(number) || percent <= 0 || percent > 100)
           errors.set("value", t("adjust.percent_invalid"));
       } else if (!TYPED_AMOUNT.test(number) || Number(number) <= 0) {
         errors.set("value", t("adjust.amount_invalid"));
-      } else if (compareDecimal(decimal(number), decimal(this.#covered())) > 0) {
+      } else if (
+        !errors.has("quantity") &&
+        compareDecimal(decimal(number), decimal(this.#covered())) > 0
+      ) {
         errors.set(
           "value",
           t("adjust.amount_too_large").replace("{total}", () => this.#money(this.#covered())),
@@ -402,7 +443,11 @@ export class TillAdjustmentDialog extends LitElement {
   #refusalField(): Field | null {
     return this.shownRefusal === null
       ? null
-      : refusalField(this.shownRefusal, this.kind, this.#partial());
+      : refusalField(
+          this.shownRefusal,
+          this.combined && this.compKind !== "free" ? "discount" : this.kind,
+          this.#partial(),
+        );
   }
 
   /** What each field shows under it: the server's refusal of it, else its own check in `own`. */
@@ -435,7 +480,14 @@ export class TillAdjustmentDialog extends LitElement {
       reasonId: this.reasonId,
       note: note === "" ? null : note,
     };
-    if (this.#partial() && this.quantity === "1") choice.quantity = "1";
+    if (this.combined) {
+      if (this.extraId !== null) choice.lineId = this.extraId;
+      if (
+        this.#partial() &&
+        compareDecimal(decimal(this.#count()), decimal(this.target!.quantity!)) < 0
+      )
+        choice.quantity = this.#count();
+    } else if (this.#partial() && this.quantity === "1") choice.quantity = "1";
     const typed = this.#typedNumber();
     if (choice.action === "discount_percent") choice.percentBp = Math.round(Number(typed) * 100);
     if (choice.action === "discount_amount") choice.amount = typed;
@@ -460,15 +512,26 @@ export class TillAdjustmentDialog extends LitElement {
 
   #confirm(choice: AdjustmentChoice): void {
     if (!this.isConnected || !this.active || this.busy) return;
+    if (
+      this.combined &&
+      (this.#ownErrors().size > 0 ||
+        (["action", "lineId", "reasonId", "note", "quantity", "percentBp", "amount"] as const).some(
+          (key) => this.#choice()[key] !== choice[key],
+        ))
+    ) {
+      this.#emit("adjust-edit");
+      return;
+    }
     this.shownRefusal = null;
     this.#emit("adjust-confirm", choice);
   }
 
   override render() {
-    const target = this.target;
+    const target = this.#target();
     if (target === null) return nothing;
-    const title =
-      this.kind === "discount" && target.lineId === null
+    const title = this.combined
+      ? t("comp.title")
+      : this.kind === "discount" && target.lineId === null
         ? t("adjust.discount_bill_title")
         : t((target.extra === true ? EXTRA_TITLES : TITLES)[this.kind]);
     const noReasons =
@@ -487,11 +550,187 @@ export class TillAdjustmentDialog extends LitElement {
           noReasons
             ? this.#noReasons()
             : this.preview === null || this.choice === null
-              ? this.#form(target)
+              ? this.combined
+                ? this.#compForm(target)
+                : this.#form(target)
               : this.#confirmStep(this.preview, this.choice)
         }
       </div>
     </wt-dialog>`;
+  }
+
+  #target(): AdjustTarget | null {
+    return this.combined && this.extraId !== null
+      ? (this.target?.extras?.find((extra) => extra.lineId === this.extraId) ?? null)
+      : this.target;
+  }
+
+  #count(): string {
+    return this.count ?? this.target?.quantity ?? "1";
+  }
+
+  #compKinds(): CompKind[] {
+    const actions = this.#reason()?.actions ?? [];
+    return [
+      ...(actions.includes("comp") ? ["free" as const] : []),
+      ...(actions.includes("discount_percent") ? ["percent" as const] : []),
+      ...(actions.includes("discount_amount") ? ["amount" as const] : []),
+    ];
+  }
+
+  #pickCompKind(): void {
+    const kinds = this.#compKinds();
+    if (!kinds.includes(this.compKind)) {
+      this.compKind = kinds[0] ?? "free";
+      this.value = "";
+      this.#scope?.changed();
+    }
+  }
+
+  #reasonLabel(reason: AdjustmentReason): string {
+    const kinds = [
+      ...(reason.actions.includes("comp") ? [t("comp.free")] : []),
+      ...(reason.actions.includes("discount_percent")
+        ? [
+            reason.maxPercentBp === null
+              ? "%"
+              : t("comp.up_to").replace(
+                  "{value}",
+                  new Intl.NumberFormat(currentLocale()).format(reason.maxPercentBp / 100) + "%",
+                ),
+          ]
+        : []),
+      ...(reason.actions.includes("discount_amount") ? ["€"] : []),
+    ];
+    const cap =
+      reason.maxAmount === null
+        ? ""
+        : " · " + t("comp.bill_cap").replace("{value}", this.#money(reason.maxAmount));
+    return `${reason.name} · ${kinds.join(", ")}${cap} · ${t("comp.policy")
+      .replace("{apply}", t(`comp.role_${reason.applyRole}`))
+      .replace("{approve}", t(`comp.role_${reason.approverRole}`))}`;
+  }
+
+  #compLabel(choice?: AdjustmentChoice): string {
+    const count =
+      choice?.quantity ?? (this.#partial() ? this.#count() : this.#target()?.quantity) ?? "1";
+    const action = choice?.action ?? this.#action();
+    if (action === "comp") return t("comp.make_free").replace("{n}", count);
+    const typed = this.#typedNumber();
+    const value =
+      action === "discount_percent"
+        ? new Intl.NumberFormat(currentLocale()).format(
+            choice?.percentBp === undefined ? Number(typed) || 0 : choice.percentBp / 100,
+          ) + "%"
+        : this.#money(choice?.amount ?? (TYPED_AMOUNT.test(typed) ? typed : "0"));
+    return t("comp.take_off").replace("{value}", value).replace("{n}", count);
+  }
+
+  #compForm(target: AdjustTarget): TemplateResult {
+    const own = this.attempted ? this.#ownErrors() : new Map<Field, string>();
+    const errors = this.#fieldErrors(own);
+    const kinds = this.#compKinds();
+    const reason = this.#reason();
+    const extras = this.target?.extras ?? [];
+    return html` ${this.#reasonChoice(errors.get("reason"))}
+      ${
+        extras.length === 0
+          ? nothing
+          : html`<fieldset class="choice" data-adjust-target ?disabled=${this.busy}>
+              <legend>${t("comp.what")}</legend>
+              <div class="options">
+                ${[this.target!, ...extras].map((option) =>
+                  this.#radio(
+                    "adjustTarget",
+                    option.lineId!,
+                    option === this.target ? t("comp.whole_dish") : option.name,
+                    (this.extraId ?? this.target!.lineId) === option.lineId,
+                    () => {
+                      this.extraId = option === this.target ? null : option.lineId;
+                      this.count = null;
+                      this.value = "";
+                      this.#changed("quantity");
+                    },
+                  ),
+                )}
+              </div>
+            </fieldset>`
+      }
+      ${
+        kinds.length < 2
+          ? nothing
+          : html`<fieldset class="choice" data-discount-kind ?disabled=${this.busy}>
+              <legend>${t("comp.how_much")}</legend>
+              <div class="options">
+                ${kinds.map((kind) =>
+                  this.#radio(
+                    "discountKind",
+                    kind,
+                    kind === "free" ? t("comp.free") : kind === "percent" ? "%" : "€",
+                    this.compKind === kind,
+                    () => {
+                      this.compKind = kind;
+                      this.value = "";
+                      this.#changed("value");
+                    },
+                  ),
+                )}
+              </div>
+            </fieldset>`
+      }
+      ${this.compKind === "free" ? nothing : this.#discountFields(errors.get("value"))}
+      ${
+        !this.#partial()
+          ? nothing
+          : html`<wt-number-stepper
+              name="adjustQuantity"
+              .label=${t("adjust.quantity")}
+              .value=${this.#count()}
+              .min=${1}
+              .max=${Number(target.quantity)}
+              .disabled=${this.busy}
+              .error=${errors.get("quantity") ?? ""}
+              .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
+              .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
+              @keydown=${(event: KeyboardEvent) => this.#enter(event)}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                if (this.isConnected && this.active && !this.busy) {
+                  this.count = event.detail.value;
+                  this.#changed("quantity");
+                }
+              }}
+            ></wt-number-stepper>`
+      }
+      <wt-input
+        name="note"
+        autocomplete="off"
+        .disabled=${this.busy}
+        .maxlength=${500}
+        .label=${t("adjust.note")}
+        .value=${live(this.note)}
+        .required=${reason?.noteRequired === true}
+        .error=${errors.get("note") ?? ""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          if (this.isConnected && this.active && !this.busy) {
+            this.note = event.detail.value;
+            this.#changed("note");
+          }
+        }}
+        @keydown=${(event: KeyboardEvent) => this.#enter(event)}
+      ></wt-input>
+      ${target.weighed === true ? html`<p class="detail" data-weighed-hint>${codeMessage("adjustment.weighed_partial")}</p>` : nothing}
+      <wt-form-actions .error=${this.#bottomMessage(errors)}
+        >${this.#closeButton("cancel")}<wt-button
+          variant=${reason === undefined ? "secondary" : "primary"}
+          data-adjust-continue
+          .loading=${this.busy}
+          .disabled=${this.busy || reason === undefined || own.size > 0}
+          @click=${() => void this.#continue()}
+          >${this.#compLabel()}</wt-button
+        ></wt-form-actions
+      >`;
   }
 
   #scopeTitle(target: AdjustTarget): string {
@@ -645,7 +884,7 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   #discountFields(error: string | undefined): TemplateResult {
-    const kinds = this.#discountKinds();
+    const kinds = this.combined ? [] : this.#discountKinds();
     const pickKind = (kind: DiscountKind) => {
       this.discountKind = kind;
       this.value = "";
@@ -675,12 +914,12 @@ export class TillAdjustmentDialog extends LitElement {
           : nothing
       }
       <wt-input
-        name=${this.discountKind}
+        name=${this.combined ? this.compKind : this.discountKind}
         decimal-locale=${currentLocale()}
         autocomplete="off"
         .disabled=${this.busy}
         required
-        .label=${t(this.discountKind === "percent" ? "adjust.percent" : "adjust.amount")}
+        .label=${t((this.combined ? this.compKind : this.discountKind) === "percent" ? "adjust.percent" : "adjust.amount")}
         .value=${live(this.value)}
         .error=${error ?? ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -704,10 +943,11 @@ export class TillAdjustmentDialog extends LitElement {
           this.#radio(
             "reason",
             reason.id,
-            reason.name,
+            this.combined ? this.#reasonLabel(reason) : reason.name,
             this.reasonId === reason.id,
             () => {
               this.reasonId = reason.id;
+              if (this.combined) this.#pickCompKind();
               this.#changed("reason");
             },
             invalid,
@@ -734,7 +974,13 @@ export class TillAdjustmentDialog extends LitElement {
         choice.quantity === undefined
           ? nothing
           : html`<p class="detail" data-quantity-shown>
-              ${t("adjust.quantity_shown").replace("{n}", () => this.target!.quantity!)}
+              ${
+                this.combined
+                  ? t("comp.quantity_shown")
+                      .replace("{count}", () => choice.quantity!)
+                      .replace("{n}", () => this.#target()!.quantity!)
+                  : t("adjust.quantity_shown").replace("{n}", () => this.target!.quantity!)
+              }
             </p>`
       }
       ${
@@ -784,7 +1030,7 @@ export class TillAdjustmentDialog extends LitElement {
           .disabled=${this.busy}
           @click=${() => this.#confirm(choice)}
         >
-          ${preview.needsApproval === null ? t(DO[this.kind]) : t("adjust.ask_approval")}
+          ${preview.needsApproval === null ? (this.combined ? this.#compLabel(choice) : t(DO[this.kind])) : t("adjust.ask_approval")}
         </wt-button>
       </wt-form-actions>`;
   }

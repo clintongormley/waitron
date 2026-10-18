@@ -13,6 +13,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
+import { DraftStore } from "./state/draft-sync.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -1468,17 +1469,15 @@ describe("till-app: service cancellation consent", () => {
       });
       const methods = apiFor(read, {
         readCurrentOrders,
-        getPartyBills: vi
-          .fn()
-          .mockResolvedValue([
-            {
-              ...bill,
-              status,
-              outstanding: status === "settled" ? "0.00" : "30.00",
-              hasPayments: status === "settled",
-              receiptAvailable: status === "settled",
-            },
-          ]),
+        getPartyBills: vi.fn().mockResolvedValue([
+          {
+            ...bill,
+            status,
+            outstanding: status === "settled" ? "0.00" : "30.00",
+            hasPayments: status === "settled",
+            receiptAvailable: status === "settled",
+          },
+        ]),
       });
       const { el } = await mountApp(methods);
       const order = await openMesa4(el);
@@ -2965,4 +2964,112 @@ describe("table adjustment reason-read identity", () => {
     expect(dialog(el)).toBeNull();
     expect(replacement.listAdjustmentReasons).not.toHaveBeenCalled();
   });
+});
+
+it("combined Comp previews and applies one whole extra through the existing financial seam", async () => {
+  const { el } = await mountApp();
+  const order = await openMesa4(el);
+  emit(order, "adjust", {
+    kind: "comp",
+    combined: true,
+    target: {
+      lineId: "line-1",
+      name: "Wine",
+      quantity: "3",
+      total: "36.00",
+      unitTotal: "12.00",
+      extras: [
+        {
+          lineId: "extra",
+          name: "Cheese",
+          quantity: "3",
+          total: "6.00",
+          unitTotal: null,
+          extra: true,
+        },
+      ],
+    },
+  });
+  await flush(el);
+  expect(dialog(el)?.combined).toBe(true);
+  await press(el, inDialog(el, 'input[name="reason"][value="r-complaint"]'));
+  await press(el, inDialog(el, 'input[name="adjustTarget"][value="extra"]'));
+  await press(el, inDialog(el, "[data-adjust-continue]"));
+  expect(api.previewAdjustment).toHaveBeenCalledWith(
+    "wo-4",
+    expect.objectContaining({
+      lineId: "extra",
+      action: "comp",
+      reasonId: "r-complaint",
+      expectedRevision: 6,
+    }),
+  );
+  expect(vi.mocked(api.previewAdjustment).mock.calls[0]![1]).not.toHaveProperty("quantity");
+  await press(el, inDialog(el, "[data-adjust-confirm]"));
+  expect(api.applyAdjustment).toHaveBeenCalledWith(
+    "wo-4",
+    expect.objectContaining({
+      lineId: "extra",
+      action: "comp",
+      reasonId: "r-complaint",
+      expectedRevision: 6,
+    }),
+    expect.any(Object),
+  );
+  expect(dialog(el)).toBeNull();
+});
+
+it("a combined amount refusal returns to its amount field and permits correction", async () => {
+  const { el } = await mountApp({
+    listAdjustmentReasons: vi
+      .fn()
+      .mockResolvedValue([{ ...complaint, actions: ["discount_amount"] }]),
+    applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.exceeds_amount" }),
+  });
+  const order = await openMesa4(el);
+  emit(order, "adjust", {
+    kind: "comp",
+    combined: true,
+    target: { lineId: "line-1", name: "Wine", quantity: "1", total: "30.00", unitTotal: null },
+  });
+  await flush(el);
+  await press(el, inDialog(el, 'input[name="reason"]'));
+  const field = inDialog(el, 'wt-input[name="amount"]') as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  await userEvent.fill(page.elementLocator(input), "5");
+  await flush(el);
+  await press(el, inDialog(el, "[data-adjust-continue]"));
+  await press(el, inDialog(el, "[data-adjust-confirm]"));
+  const corrected = inDialog(el, 'wt-input[name="amount"]') as HTMLElement & { error: string };
+  expect(corrected).not.toBeNull();
+  expect(corrected.error).toBe(codeMessage("adjustment.exceeds_amount"));
+  expect(
+    (inDialog(el, "[data-adjust-continue]") as HTMLElement & { disabled: boolean }).disabled,
+  ).toBe(false);
+});
+
+it("a combined Comp preview cannot become a write after its bill is paid", async () => {
+  const { el } = await mountApp();
+  const order = await openMesa4(el);
+  emit(order, "adjust", {
+    kind: "comp",
+    combined: true,
+    target: { lineId: "line-1", name: "Wine", quantity: "1", total: "30.00", unitTotal: null },
+  });
+  await flush(el);
+  await press(el, inDialog(el, 'input[name="reason"][value="r-complaint"]'));
+  await press(el, inDialog(el, "[data-adjust-continue]"));
+  const confirm = inDialog(el, "[data-adjust-confirm]");
+  expect(confirm).not.toBeNull();
+  const store = order.draftStore;
+  expect(store).toBeInstanceOf(DraftStore);
+  if (!(store instanceof DraftStore)) throw new Error("Expected bill draft");
+  store.billStatus = "settled";
+  await press(el, confirm);
+  expect(api.applyAdjustment).not.toHaveBeenCalled();
+  expect(dialog(el)).toBeNull();
+  expect(banner(el)!.textContent).toContain(codeMessage("bill.paid"));
 });

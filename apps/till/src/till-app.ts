@@ -873,6 +873,7 @@ interface Adjusting {
   revision: number;
   visit: number;
   kind: AdjustKind;
+  combined?: true;
   target: AdjustTarget;
   reasons: AdjustmentReason[];
   choice: AdjustmentChoice | null;
@@ -8640,6 +8641,7 @@ export class TillApp extends LitElement {
     if (open === null) return nothing;
     return html`<till-adjustment-dialog
         .kind=${open.kind}
+        .combined=${open.combined === true}
         .target=${open.target}
         .reasons=${open.reasons}
         .preview=${open.preview}
@@ -11528,7 +11530,8 @@ export class TillApp extends LitElement {
   }
 
   async #onAdjust(event: Event): Promise<void> {
-    const { kind, target, offered, counter } = (event as CustomEvent<AdjustDetail>).detail;
+    const { kind, target, offered, counter, combined } = (event as CustomEvent<AdjustDetail>)
+      .detail;
     const surface = counter === true ? "counter" : "table";
     const orderId = surface === "counter" ? this.#store.id : this.activeTabId;
     if (
@@ -11578,6 +11581,7 @@ export class TillApp extends LitElement {
       id: ++this.#adjustments,
       ...opened,
       kind,
+      ...(combined === true ? { combined } : {}),
       target,
       reasons,
       choice: null,
@@ -11743,6 +11747,16 @@ export class TillApp extends LitElement {
 
   #adjustmentReady(open: Adjusting): boolean {
     if (this.#adjustingNow(open.id) === null) return false;
+    if (
+      open.combined === true &&
+      open.surface === "table" &&
+      this.#draftSync?.billStatus !== "open"
+    ) {
+      const paid = this.#draftSync?.billStatus === "settled";
+      this.#closeAdjust();
+      this.errorKey = { code: paid ? "bill.paid" : "working_order.not_open" };
+      return false;
+    }
     if (open.bill === undefined || this.#billCompositionUnchanged(open.bill)) return true;
     this.#closeApprovers();
     this.adjusting = { ...open, busy: false, refusal: "draft.out_of_date", preview: null };
@@ -12025,7 +12039,8 @@ export class TillApp extends LitElement {
       return;
     }
     const refusal = code ?? "server.internal";
-    const onField = refusalField(refusal, open.kind, open.target.unitTotal !== null) !== null;
+    const kind = open.combined === true && open.choice?.action !== "comp" ? "discount" : open.kind;
+    const onField = refusalField(refusal, kind, open.target.unitTotal !== null) !== null;
     let reasons = open.reasons;
     if (REASON_REFUSALS.has(refusal)) {
       try {
