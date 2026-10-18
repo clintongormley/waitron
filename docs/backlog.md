@@ -2338,6 +2338,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   before using its old controls; Move retains the edit version read when its picker opened.
   The primary progress and clock checks now use Sent, including ready age, the pass's recorded
   en-route fact in the dish window and stopping the age clocks when Sent folds.
+  The duplicate course picker and static course labels are removed from the remaining drawer.
+  Sent retains the recorded course. Recalled dishes edit their course in New order, staging the
+  choice until Save; focused checks retain the source identity and quantity through submission.
   A physical till trial, the old drawer's retirement and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and

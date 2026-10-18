@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { TillCourse } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
@@ -145,3 +146,31 @@ describe("course information after sending", () => {
     expect(dialog.querySelector("[data-sent-course]")).toBeNull();
   });
 });
+
+it.each(["held", "fired", "served"] as const)(
+  "opening the drawer cannot edit a %s dish's recorded course",
+  async (kind) => {
+    const { el } = await mount({
+      courses: [course],
+      lines: [
+        {
+          ...storedDish,
+          courseId: course.id,
+          course,
+          firedAt: kind === "held" ? null : "2026-10-10T20:00:00Z",
+          servedAt: kind === "served" ? "2026-10-10T20:01:00Z" : null,
+        },
+      ],
+    });
+    const changed: Event[] = [];
+    el.addEventListener("set-line-course", (event) => changed.push(event));
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await el.updateComplete;
+    const drawer = el.shadowRoot!.querySelector<HTMLElement>("[data-drawer]")!;
+    expect(drawer.querySelector("[data-line-course], [data-line-course-static]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-sent-course]")?.textContent?.trim()).toBe(
+      "Dessert $& $'",
+    );
+    expect(changed).toEqual([]);
+  },
+);

@@ -3,8 +3,9 @@ import {
   currentGroup,
   row as currentRow,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
-import { WorkingOrderStore } from "../state/working-order.js";
+import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { DraftStore } from "../state/draft-sync.js";
+import { toDraftLineInput } from "../state/draft-lines.js";
 import { heldViews, placeFor } from "../state/draft-place.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -2240,81 +2241,151 @@ describe("till-table-order-screen", () => {
     });
   });
 
-  it("renders an editable course picker for a NOT-yet-fired tab line, bound to its current course", async () => {
-    // heldLine: firedAt null, current course Postres ⇒ an editable dropdown bound to it.
+  async function recalledCourse(over: Partial<TillTableOrderScreen> = {}) {
+    const mounted = await mount({ lines: [heldLine], courses, ...over });
+    const draft = grid(mounted.el).store;
+    draft.appendLines([
+      {
+        product: cafe,
+        quantity: heldLine.quantity,
+        courseId: heldLine.courseId!,
+        draftLineId: "recalled-cafe",
+        source: { line: heldLine, extras: [], netAmount: "1.50" },
+        place: { kind: "fire" },
+      },
+    ]);
+    await mounted.el.updateComplete;
+    const form = await openDraftLine(mounted.el, 0);
+    const picker = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!;
+    return { ...mounted, draft, form, picker };
+  }
+
+  it("shows a saved dish's course read-only, with editing available only in recalled New order", async () => {
     const { el } = await mount({ lines: [heldLine], courses });
     await openDrawer(el);
-    const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-line-course="3"]');
-    expect(picker).not.toBeNull();
-    expect(picker!.value).toBe("postres");
-    // The reused picker's options: the no-course placeholder plus one per active venue course.
-    expect(picker!.options.map((o) => o.value)).toEqual(["", "entrantes", "postres"]);
+    expect(el.shadowRoot!.querySelector('[data-line-course="3"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-sent-course]")!.textContent!.trim()).toBe("Postres");
+    const recalled = await recalledCourse();
+    expect(recalled.picker.value).toBe("postres");
+    expect(recalled.picker.options.map((o) => o.value)).toEqual(["", "entrantes", "postres"]);
   });
 
-  it("picks a held tab line's course from a compact shared dropdown, named for the line", async () => {
-    const { el, host } = await mount({ lines: [heldLine], courses });
+  it("picks a recalled dish's course in its named New order window, saving only after confirmation", async () => {
+    const { el, host, draft, form, picker } = await recalledCourse();
     host.style.setProperty("--wt-tap-min", "60px");
-    await openDrawer(el);
-    const picker = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-line-course="3"]');
     expect(picker).not.toBeNull();
-    expect(picker!.name).toBe("course");
-    expect(picker!.hideLabel).toBe(true);
-    expect(picker!.label).toBe(`${t("table.course_label")} · Café`);
-    expect(picker!.getAttribute("search")).toBe("auto");
-    expect(picker!.searchPlaceholder).toBe(t("form.combobox_search"));
-    expect(picker!.noResultsLabel).toBe(t("form.combobox_no_results"));
-    expect(picker!.placeholder).toBe(t("table.course_none"));
-    expect(picker!.options).toEqual([
-      { value: "", label: t("table.course_none") },
+    expect(picker.name).toBe("course");
+    expect(picker.hideLabel).toBe(false);
+    expect(picker.label).toBe(`${t("table.course_label")} · Café`);
+    expect(picker.getAttribute("search")).toBe("auto");
+    expect(picker.searchPlaceholder).toBe(t("form.combobox_search"));
+    expect(picker.noResultsLabel).toBe(t("form.combobox_no_results"));
+    expect(picker.placeholder).toBe(t("table.course_default"));
+    expect(picker.options).toEqual([
+      { value: "", label: t("table.course_default") },
       { value: "entrantes", label: "Entrantes" },
       { value: "postres", label: "Postres" },
     ]);
-    expect(picker!.value).toBe("postres");
-    await picker!.updateComplete;
-    const box = picker!.shadowRoot!.querySelector<HTMLElement>("[part=field]")!;
-    expect(box.getBoundingClientRect().height).toBeGreaterThanOrEqual(60);
-
-    let captured: CustomEvent | undefined;
-    el.addEventListener("set-line-course", (e) => (captured = e as CustomEvent));
-    await chooseOption(picker!, "");
-    expect(captured!.detail).toEqual({ lineNo: 3, courseId: null, expectedEdit: null });
+    expect(picker.value).toBe("postres");
+    await picker.updateComplete;
+    expect(
+      picker.shadowRoot!.querySelector<HTMLElement>("[part=field]")!.getBoundingClientRect().height,
+    ).toBeGreaterThanOrEqual(60);
+    const changed: CustomEvent[] = [];
+    el.addEventListener("set-line-course", (e) => changed.push(e as CustomEvent));
+    await chooseOption(picker, "entrantes");
+    expect(draft.lines[0]!.courseId).toBe("postres");
+    form.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    await el.updateComplete;
+    expect(draft.lines[0]!.courseId).toBe("entrantes");
+    expect(changed).toEqual([]);
   });
 
-  it("shows the held line's course from the server again when a re-read keeps it", async () => {
-    const { el } = await mount({ lines: [heldLine], courses });
-    await openDrawer(el);
-    const picker = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-line-course="3"]')!;
+  it("keeps a staged recalled course while a passive server read repeats its recorded course", async () => {
+    const { el, draft, form, picker } = await recalledCourse();
     await chooseOption(picker, "entrantes");
     el.lines = [{ ...heldLine }];
     await el.updateComplete;
-    expect(picker.value).toBe("postres");
+    expect(picker.value).toBe("entrantes");
+    expect(draft.lines[0]!.courseId).toBe("postres");
+    const closed = new Promise<void>((resolve) =>
+      form.addEventListener("wt-modifier-cancel", () => resolve(), { once: true }),
+    );
+    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>(".cancel")!);
+    await closed;
+    expect((await coursePicker(el, 0))!.value).toBe("postres");
   });
 
-  it("emits set-line-course { lineNo, courseId } when a held tab line is re-pointed", async () => {
-    const { el } = await mount({ lines: [heldLine], courses, orderId: "wo-9" });
-    await openDrawer(el);
-    const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-line-course="3"]')!;
-    let captured: CustomEvent | undefined;
-    el.addEventListener("set-line-course", (e) => (captured = e as CustomEvent));
+  it("saves a recalled course in the outbox without mutating the recorded source", async () => {
+    const { el, draft, form, picker } = await recalledCourse({ orderId: "wo-9" });
     await chooseOption(picker, "entrantes");
-    expect(captured).toBeInstanceOf(CustomEvent);
-    expect(captured!.composed).toBe(true);
-    expect(captured!.bubbles).toBe(true);
-    expect(captured!.detail).toEqual({ lineNo: 3, courseId: "entrantes", expectedEdit: null });
+    const captured: CustomEvent[] = [];
+    el.addEventListener("set-line-course", (event) => captured.push(event as CustomEvent));
+    form.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    await el.updateComplete;
+    expect(draft.lines[0]!.courseId).toBe("entrantes");
+    expect(draft.lines[0]!.source!.line.courseId).toBe("postres");
+    const submitted = await submitDraft(el, "send-all");
+    expect(submitted!.composed).toBe(true);
+    expect(submitted!.bubbles).toBe(true);
+    expect(submitted!.detail.lines).toEqual([]);
+    expect(
+      submitted!.detail.sent.map((line: OrderLine) => ({
+        draftLineId: line.draftLineId,
+        sourceLineId: line.source?.line.id,
+        quantity: line.quantity,
+        courseId: line.courseId,
+      })),
+    ).toEqual([
+      {
+        draftLineId: "recalled-cafe",
+        sourceLineId: "line-3",
+        quantity: "1.000",
+        courseId: "entrantes",
+      },
+    ]);
+    expect(captured).toEqual([]);
   });
 
-  it("clears a held tab line's course to null when the no-course placeholder is picked", async () => {
-    const { el } = await mount({ lines: [heldLine], courses });
-    await openDrawer(el);
-    const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-line-course="3"]')!;
-    let captured: CustomEvent | undefined;
-    el.addEventListener("set-line-course", (e) => (captured = e as CustomEvent));
-    // The "" placeholder is the explicit no-course null (setLineCourse takes `string | null`).
+  it("clears a recalled course override in the saved draft only after confirming the line window", async () => {
+    const { el, draft, form, picker } = await recalledCourse();
     await chooseOption(picker, "");
-    expect(captured!.detail).toEqual({ lineNo: 3, courseId: null, expectedEdit: null });
+    expect(draft.lines[0]!.courseId).toBe("postres");
+    form.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    await el.updateComplete;
+    expect(draft.lines[0]!.courseId).toBeUndefined();
+    expect(draft.lines[0]!.source!.line.courseId).toBe("postres");
+    expect(toDraftLineInput(draft.lines[0]!)).toEqual({
+      id: "recalled-cafe",
+      sourceLineId: "line-3",
+      quantity: "1.000",
+      courseId: null,
+      note: null,
+      makeAt: null,
+      slot: 1,
+      joinGroupId: null,
+      afterGroupId: null,
+    });
+    const submitted = (await submitDraft(el, "send-all"))!;
+    expect(submitted.detail.lines).toEqual([]);
+    expect(
+      submitted.detail.sent.map((line: OrderLine) => ({
+        draftLineId: line.draftLineId,
+        sourceLineId: line.source?.line.id,
+        quantity: line.quantity,
+        courseId: line.courseId,
+      })),
+    ).toEqual([
+      {
+        draftLineId: "recalled-cafe",
+        sourceLineId: "line-3",
+        quantity: "1.000",
+        courseId: undefined,
+      },
+    ]);
   });
 
-  it("direct course and send events carry the shown bill observation", async () => {
+  it("keeps recorded courses read-only while a direct send retains the shown bill observation", async () => {
     const expectedEdit = { billId: "wo-4", editorVersion: 7, draftId: "draft-4", draftRevision: 3 };
     const { el } = await mount({
       lines: [heldLine],
@@ -2327,11 +2398,11 @@ describe("till-table-order-screen", () => {
     const sent: CustomEvent[] = [];
     el.addEventListener("set-line-course", (e) => changed.push(e as CustomEvent));
     el.addEventListener("send-lines", (e) => sent.push(e as CustomEvent));
-    const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-line-course="3"]')!;
-    await chooseOption(picker, "entrantes");
-    expect(changed[0]!.detail).toEqual({ lineNo: 3, courseId: "entrantes", expectedEdit });
+    expect(el.shadowRoot!.querySelector('[data-line-course="3"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-sent-course]")!.textContent!.trim()).toBe("Postres");
     el.shadowRoot!.querySelector<HTMLElement>('[data-send-line="3"]')!.click();
     expect(sent[0]!.detail).toEqual({ lineNos: [3], expectedEdit });
+    expect(changed).toEqual([]);
   });
 
   it("shows a FIRED tab line's course READ-ONLY, offering no editable picker", async () => {

@@ -34,7 +34,6 @@ import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
-import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { type ComboboxOption, baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
 import "../widgets/fired-ago.js";
@@ -580,15 +579,6 @@ export class TillTableOrderScreen extends LitElement {
          with the smaller type the screen already uses for a line's subordinate text. */
       .child-line {
         padding-left: var(--wt-space-4);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      /* A tab line's course: a dropdown on a held line, a muted read-only label on a fired one. Capped
-         so a long course name never crowds out the line total. */
-      .line-course {
-        min-width: 0;
-        max-width: 8rem;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -2197,38 +2187,6 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  #coursePicker(
-    attrs: { lineCourse?: number; roundCourse?: number },
-    lineName: string,
-    selected: string,
-    empty: string,
-    onPick: (courseId: string) => void,
-    retainedCourse?: TillCourse,
-  ): TemplateResult {
-    const options: ComboboxOption[] = [
-      { value: "", label: empty },
-      ...this.courses.map((course) => ({ value: course.id, label: course.name })),
-    ];
-    return html`<wt-combobox
-      class=${attrs.lineCourse === undefined ? nothing : "line-course"}
-      data-line-course=${attrs.lineCourse ?? nothing}
-      data-round-course=${attrs.roundCourse ?? nothing}
-      name="course"
-      label=${`${t("table.course_label")} · ${lineName}`}
-      hide-label
-      search="auto"
-      searchPlaceholder=${t("form.combobox_search")}
-      noResultsLabel=${t("form.combobox_no_results")}
-      placeholder=${retainedCourse?.id === selected && !this.courses.some((course) => course.id === selected) ? retainedCourse.name : empty}
-      .options=${options}
-      .value=${live(selected)}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        onPick(event.detail.value);
-      }}
-    ></wt-combobox>`;
-  }
-
   #makeAtPicker(
     store: WorkingOrderStore,
     line: OrderLine,
@@ -2262,20 +2220,6 @@ export class TillTableOrderScreen extends LitElement {
         );
       }}
     ></wt-combobox>`;
-  }
-
-  #setLineCourse(lineNo: number, courseId: string | null): void {
-    this.dispatchEvent(
-      new CustomEvent("set-line-course", {
-        detail: {
-          lineNo,
-          courseId,
-          expectedEdit: this.billEdit === null ? null : { ...this.billEdit },
-        },
-        bubbles: true,
-        composed: true,
-      }),
-    );
   }
 
   /** Sent and still holding a ticket item, with the venue's setting off: the server refuses to change
@@ -2628,34 +2572,6 @@ export class TillTableOrderScreen extends LitElement {
     return (
       this.courses.find((course) => course.id === courseId)?.name ??
       (retainedCourse?.id === courseId ? retainedCourse.name : courseId)
-    );
-  }
-
-  #courseValue(value: string): string | null {
-    return value === "" ? null : value;
-  }
-
-  /** A FIRED line shows its course READ-ONLY: the server refuses to move it (`ticket.already_fired`). A
-   * CHILD extras row has no course of its own, so it has no picker. */
-  #lineCourse(line: TabLine): TemplateResult | typeof nothing {
-    if (
-      (this.courses.length === 0 &&
-        (line.course === undefined || line.course.id !== line.courseId)) ||
-      this.#isChild(line)
-    )
-      return nothing;
-    if (line.firedAt !== null) {
-      return html`<span class="line-course" data-line-course-static=${line.lineNo}
-        >${this.#courseName(line.courseId, line.course)}</span
-      >`;
-    }
-    return this.#coursePicker(
-      { lineCourse: line.lineNo },
-      this.#nameForLine(line),
-      line.courseId ?? "",
-      t("table.course_none"),
-      (courseId) => this.#setLineCourse(line.lineNo, this.#courseValue(courseId)),
-      line.course,
     );
   }
 
@@ -4592,7 +4508,7 @@ export class TillTableOrderScreen extends LitElement {
         >${name}${this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
       >
       <span class="qty">${this.#displayQty(line.quantity)}</span>
-      ${this.#lineTotal(line)} ${this.#lineCourse(line)} ${this.#lineActions(line)}
+      ${this.#lineTotal(line)} ${this.#lineActions(line)}
     </li>`;
   }
 
@@ -4617,7 +4533,7 @@ export class TillTableOrderScreen extends LitElement {
                       >${this.#nameForLine(line)}${this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
                     >
                     <span class="qty">${this.#displayQty(line.quantity)}</span>
-                    ${this.#lineTotal(line)} ${this.#lineCourse(line)} ${this.#servedActions(line)}
+                    ${this.#lineTotal(line)} ${this.#servedActions(line)}
                   </li>`,
               )}
             </ul>`

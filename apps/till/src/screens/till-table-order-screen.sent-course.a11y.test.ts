@@ -57,6 +57,21 @@ describe.each(["en", "es"] as const)("Sent course in %s", (locale) => {
       );
       host.style.width = "100%";
       await resized(el);
+      const drawerToggle = el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!;
+      await userEvent.click(drawerToggle);
+      await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector(
+          "[data-drawer] [data-line-course], [data-drawer] [data-line-course-static]",
+        ),
+      ).toBeNull();
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        element: el,
+        path: `__screenshots__/a773-course-drawer-${locale}-${theme}-${width}.png`,
+      });
+      await userEvent.click(drawerToggle);
+      await el.updateComplete;
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
       for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
