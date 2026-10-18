@@ -468,11 +468,14 @@ checks are the ones below.
   table two guests paying at once is ordinary, and the reservation is what keeps it safe.
 - **A different bill of the same visit** is never locked by this bill's card payment.
 - **A pending card REFUND locks more than a pending payment** (§6b): while one is pending on a bill,
-  every writer §4.4 names (each payment, refund, void, quantity change, adjustment, split, transfer,
-  join and unjoin), abandoning the bill, and issuing its invoice are refused with
-  `bill.refund_in_progress`.
+  every writer §4.4 names except joining and unjoining tables (each payment, refund, void,
+  quantity change, adjustment, split and transfer), abandoning the bill, and issuing its invoice
+  are refused with `bill.refund_in_progress`.
   _(2026-09-29: a served mark is not refused while a card refund is pending either; owner ruling,
   campaign item A121.)_
+  _(2026-10-18: joining and unjoining tables are not refused while a card refund is pending; they
+  change no amount the bill charges — owner ruling 2026-10-17, campaign item A847;
+  `apps/server/src/table-actions.refund-pending.test.ts`.)_
 
 **Both orders of every race are tested as sequential calls** (the engine takes one write
 transaction at a time, plan Global Constraints): cash then a card's P1 on the same last €40.00 (the
