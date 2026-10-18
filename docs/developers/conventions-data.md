@@ -613,9 +613,8 @@ possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks prof
 Pricing still reads static offer membership; zone closures do not change recorded prices.
 `working-order.ts` performs the zone check when adding lines, separately from its offer read.
 
-**2026-10-18, A723.** A route refuses a zone closure written outside its department's hours; stored
-closures can still lie outside them (backlog, Service periods). The routes refuse a
-closed range the request writes outside its department's hours, read in the same transaction
+**2026-10-18, A723.** Stored closures can still lie outside a department's hours (backlog,
+Service periods). The routes refuse a closed range the request writes outside its department's hours, read in the same transaction
 after the write (`packages/venue-service/src/zone-closure-hours.ts`): `PUT …/seasons/:seasonId/weeks`
 and `PUT …/zones/:zoneId/closed-week` with `zone_closed_time.invalid`, reason `outside_hours`,
 naming `field` (`zones.<i>.days.<j>.ranges.<k>`, or `days.<j>.ranges.<k>` on the closed-week
@@ -774,8 +773,9 @@ A configuration transfer carries both tables under the importing venue's locatio
 (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
 the field, a bundle the writer could not have stored: two special-day dates on one date; a
 special-day day row with a season or a weekday; paint off the quarter-hour or overlapping; paint at a time the clocks skip, a repeating date checked at its
-next occurrence from the venue's date of the bundle's `createdAt`; and a period end offset
-reaching the next day. The cases are under "special days in a configuration bundle" in
+next occurrence from the venue's date of the bundle's `createdAt`; a period end offset
+reaching the next day; and, since A723, a zone's Closed paint outside its department's hours on
+that date (field `zone_day_ranges`), which `saveSpecialDay` itself would store. The cases are under "special days in a configuration bundle" in
 `packages/venue-service/src/configuration-transfer.test.ts` and "special days in a configuration
 transfer" in `apps/server/src/configuration-transfer.test.ts`.
 

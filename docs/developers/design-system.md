@@ -2244,8 +2244,7 @@ opens a month to pick from (`add-dates-calendar.ts`): a click adds a date or rem
 and a double-click counts as one click; a drag (a touch drag too, with no long press), a
 shift-click or Shift+arrow adds every date of the run and leaves the dates already chosen as they
 are, at most 366 at a time (a longer run adds nothing and says "Choose at most 366 dates."). A run
-is drawn marked only while a drag is under way. One hint line under the month says so, and there is
-no Range button. A date another special day holds is marked with that day's name but still offered. Every year notes that it
+is drawn marked only while a drag is under way. One hint line under the month says so. A date another special day holds is marked with that day's name but still offered. Every year notes that it
 follows the holiday's name to its date each year when a stored date was saved on a public holiday
 or a new date is one, and warns that 29 February repeats only in leap years. The grid has a column
 per date, headed by its short weekday, day and month, with a Closed tick under each heading that
@@ -4317,7 +4316,8 @@ Opening hours' Year.
   Month, to the same people; a station's day draws one row per department that sends it dishes, a
   day none of them sends on reads "No orders" once in place of its rows, and a week whose station
   times have not arrived draws no days.
-- **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month. A
+- **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month, and the dates of the
+  special-day editor's Add dates month (`add-dates-calendar.ts`). A
   click picks one day and opens its day box, dragging over days picks the run between them, and
   Shift-click picks the run from the day picked first to the day clicked. A double-click opens the special-day editor: on the picked run when the
   day double-clicked is inside it, otherwise on that day alone, and on a stored special day's date
