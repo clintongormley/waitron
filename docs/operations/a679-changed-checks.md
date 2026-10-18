@@ -1171,3 +1171,92 @@ fixture was changed. No protected writer, fiscal restore hook, production SQL, s
 Streamed-bucket command composition, staged HTTP recovery and genuine process-interruption or
 lost-response recovery remain Task 7 work. Later hour-plan tasks, package coverage, generated-PDF
 acceptance and final whole-branch reviews remain open. This checkpoint does not make #1752 ready.
+
+
+## Streamed-bucket command admission, 2026-10-18
+
+The bucket command accepts `--confirm-sole-recovery` independently of `--confirm-old-box-gone`.
+It reconstructs module preparation from the validated downloaded point, its actual named key and
+the original hour journal. The generation label remains display context; activation binds the exact
+downloaded point. The archive and bucket commands share the same preparation constructor.
+
+Nine cases append to `apps/server/src/hour-recovery-host.test.ts`. Every earlier test body remains
+byte-identical, and no earlier fixture or assertion changes. Imports grow for the signed pointer,
+sealed state, bucket preview and synthetic downloader. The successful case uses the command's
+default stream adapter and actual child-process downloader boundary; the child copies a synthetic
+database file. The other cases use the real stream adapter with an injected download callback so
+they can inspect its domain refusal. No real S3 service or live internet clock is tested.
+
+Run the new cases with:
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/hour-recovery-host.test.ts -t 'bucket command'
+```
+
+The cases retain recovered counters, activate the selected fresh hour, and preserve distinct
+destination rows and identity after offline/disagreeing clocks, missing isolation declarations,
+wrong node or bucket keys, a changed point in the same generation, or an unconfirmed taxpayer.
+The retained assertions compare stored series and allocation rows rather than database bytes.
+
+Initial fixture runs selected a second source under an already used event, then supplied an invalid
+generation name. Both refused during fixture preparation. After those corrections the command
+reproduced the unsupported flag, then the unconfigured runner's `outside_confirmation_missing`.
+A later source check exposed that the fixture hashed before the bucket reader opened the copy;
+the final fixture obtains its selection through `previewRecoveryStream`. No existing check was
+changed to address these fixture errors.
+
+Staged HTTP composition, process interruption, managed transport/restart/Finish and the later
+hour-plan gates remain open. No protected writer, fiscal restore hook, SQL, schema or guard changes.
+
+
+## Staged entry reconstruction and committed process death, 2026-10-18
+
+Staged archive and bucket requests can retain a separate selected-source label and the old-box
+and sole-recovery declarations. The marker carries no authority: the entry reconstructs preparation
+from a validated copy, the original journal and actual named-key authentication. It checks the
+context's types before staging or using it. The shared constructor now serves archive commands,
+bucket commands and the standalone staged runner. HTTP and wizard context wiring remains open.
+
+Sixteen further cases append to `hour-recovery-host.test.ts`, for 25 additions in this checkpoint.
+All earlier test bodies remain byte-identical. Two staged entries first failed with
+`outside_confirmation_missing`; malformed context and missing-key requests then reproduced four
+unexpected successful stagings before their validation was added. Eight refusal cases each retry
+twice against distinct destination counters, retaining the destination, identity, fresh marker and
+original journal. The private bucket preview copy is removed after each refusal.
+
+Two cases start a separate Node process, substitute only the external clock observation and
+release stamp, run real placement and kill that process with `SIGKILL` after the placement callback
+returns. The parent requires that signal and the retained started marker, changes counters to 917,
+then replays on the next day. The restored rows, counters, allocation rows and journal remain equal,
+and the reconstructed parent host observes no internet clock. This checks process death after a
+committed placement, not power loss or interruption inside an activation transaction.
+
+The first staged bucket implementation previewed `restore-request.db` as if its directory held
+`venue.db`, producing `restore.identity_unknown`. The entry now creates a disposable `venue.db`
+copy before preview. This also retains the original staged point for retries. No protected writer,
+fiscal restore hook, production SQL, schema, existing fiscal fixture or guard changes.
+
+Run these cases with:
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/hour-recovery-host.test.ts \
+  -t 'staged'
+```
+
+
+Final installed controls omit the bucket preparation factory, either isolation declaration,
+comparison refresh, the context/key requirement, committed replay dispatch and private-copy
+cleanup. Each produces the intended behavioral failure, and the final restored suite is the
+positive control. The first control wrapper asked for the word “expected” in a promise-refusal
+failure whose actual message was “promise resolved”; its result was read and the classifier was
+corrected before continuing, without repeating the qualified omission. An earlier invocation
+could not start Vitest because its installed entry file was absent. The file state was retained,
+the disposable checkout was reinstalled with the frozen lockfile, and no test evidence is attributed
+to that failed invocation. The cause of the missing dependency file is unverified.
+
+
+The final installed host suite passes 100 cases with no failures or skips after restoration.
+Nine surrounding server suites pass 255 cases, and the protected fiscal pair passes 20 unchanged
+cases. Server type checking, scoped ESLint, source formatting and whitespace checks pass. The
+complete disposable candidate matches the source before removal. These are focused checks;
+full-package coverage, HTTP/wizard integration and the later hour-plan acceptance gates remain open.

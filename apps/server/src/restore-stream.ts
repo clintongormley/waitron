@@ -27,6 +27,7 @@ import {
   validateDatabaseEntries,
   writeValidated,
   type PlacementDeps,
+  type RestoreOperationRunner,
   type ValidatedArtifact,
 } from "./restore.js";
 import { readSealedStateRow, unsealNodeState } from "./sealed-state.js";
@@ -338,11 +339,19 @@ export interface WriteStreamArgs extends PlacementDeps {
 
 /** The archive restore's own validation and write, over the restored database and the unlocked
  * row's entries, with the first-start marker naming the stream. */
-export async function writeStreamRestore(args: WriteStreamArgs): Promise<void> {
+export async function writeStreamRestore(
+  args: WriteStreamArgs,
+  prepareModuleOperations?: (copy: ValidatedArtifact) => Promise<RestoreOperationRunner>,
+): Promise<void> {
   const { databasePath, entries, ...deps } = args;
   const validated = await validateDatabaseEntries(entries, databasePath, deps);
   try {
-    await writeValidated(validated, { ...deps, rebuildSource: "stream" });
+    const withModuleOperations = await prepareModuleOperations?.(validated);
+    await writeValidated(validated, {
+      ...deps,
+      ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
+      rebuildSource: "stream",
+    });
   } finally {
     await validated.discard();
   }
@@ -356,18 +365,25 @@ export async function restoreFromStream(
   deps: PrepareStreamDeps &
     PlacementDeps & {
       confirmVenue: (venue: RestoredVenue) => boolean;
+      prepareModuleOperations?: (
+        copy: ValidatedArtifact,
+        sourceId: string,
+      ) => Promise<RestoreOperationRunner>;
     },
 ): Promise<void> {
   const prepared = await prepareStreamRestore(deps);
+  const prepareModuleOperations = deps.prepareModuleOperations;
   try {
     if (!deps.confirmVenue(prepared.venue)) {
       throw new AppError("restore.stream_venue_unconfirmed", { ...prepared.venue });
     }
-    await writeStreamRestore({
-      ...deps,
-      databasePath: prepared.databasePath,
-      entries: prepared.entries,
-    });
+    await writeStreamRestore(
+      { ...deps, databasePath: prepared.databasePath, entries: prepared.entries },
+      prepareModuleOperations === undefined
+        ? undefined
+        : (copy) =>
+            prepareModuleOperations(copy, `stream:${deps.kit.venueId}:${prepared.generation}`),
+    );
   } finally {
     await prepared.discard();
   }

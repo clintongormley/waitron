@@ -410,8 +410,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the captured evidence through placement. Local archive/bucket cases refuse a newer target before
   replacement, admit older target history and retain the recovered counters. Module checks include
   retired other-node hours and snapshots taken across retirement. These cases still supply the
-  selected runner explicitly; streamed-bucket CLI and source-specific staged HTTP recovery
-  remain part of Task 7.
+  selected runner explicitly; source-specific staged HTTP recovery
+  remains part of Task 7.
   The base restore runner now checks authentication and module preparation before placement.
   Local command and staged archive/bucket cases retain the destination database and identity when
   a node key is wrong; a separate case retains them when module preparation is missing.
@@ -432,8 +432,17 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   New command cases retain the selected hour and recovered counters, refuse invalid admission
   before replacing distinct destination rows, refresh reconstructed comparisons and retain exact
   committed replay without another comparison. The archive-pack downloader uses synthetic transport
-  in these checks. Streamed-bucket CLI and staged HTTP composition, interrupted activation and the
-  remaining hour-plan gates stay open.
+  in these checks. The streamed-bucket command now prepares from the validated downloaded point
+  and the original hour journal, with independent old-box and sole-recovery declarations. Local
+  cases exercise its default stream adapter with a synthetic downloader and its real signed-pointer,
+  sealed-state, validation and placement path. Refusal cases retain distinct destination counters
+  and identity after key, clock, source and confirmation failures. The standalone staged runner
+  now rebuilds the same preparation from independently retained source/isolation context and
+  preserves its original bucket point in a private preview copy. New cases repeat refused
+  admission without replacing the destination and kill a child after placement commits; next-day
+  replay retains changed counters and allocation rows without another comparison. HTTP/wizard
+  context wiring, managed transport/restart/Finish, interruption within activation and the remaining
+  hour-plan gates stay open.
   Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,

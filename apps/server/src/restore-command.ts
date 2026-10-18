@@ -1,8 +1,4 @@
-import {
-  assertVenueFirstSetupAllowed,
-  createFirstSetupCoordinator,
-  inspectFirstSetupMarker,
-} from "@waitron/provisioning";
+import { assertVenueFirstSetupAllowed, inspectFirstSetupMarker } from "@waitron/provisioning";
 import { lockVenueDatabase } from "@waitron/db";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -29,19 +25,19 @@ import {
   RESTORE_STAGING_DIR,
   restoreFromArtifactFile,
   validateArtifactFile,
-  readArtifactIdentity,
   type RestoreFileDeps,
   type RestoreOperationRunner,
+  type ValidatedArtifact,
 } from "./restore.js";
 import { confirmsVenue, refuseIfArchiveSourceLive, restoreFromStream } from "./restore-stream.js";
 import "./errors.js";
 import {
   createRecoveryRestoreRunner,
   readRecoveryOperationFile,
+  type RecoveryOperationInput,
 } from "./recovery-module-operation.js";
 
-import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
-import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
+import { createRecoveryEntryRunner } from "./recovery-entry.js";
 
 type Env = NodeJS.ProcessEnv;
 type RestoreStream = (deps: Parameters<typeof restoreFromStream>[0]) => Promise<void>;
@@ -100,7 +96,7 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   const args = parseArgs(deps.argv);
   if (args === null) {
     deps.out(
-      "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] | restore --from-archive <pack-file> --archive-key <name> [--confirm-old-box-gone] [--confirm-sole-recovery]",
+      "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-archive <pack-file> --archive-key <name> [--confirm-old-box-gone] [--confirm-sole-recovery]",
     );
     return 2;
   }
@@ -203,7 +199,12 @@ const RESTORE_DISK_FULL =
 
 type ParsedArgs =
   | { artifactPath: string; oldBoxGone: boolean; soleRecovery: boolean }
-  | { kitPath: string; confirmedTaxId: string | undefined; oldBoxGone: boolean }
+  | {
+      kitPath: string;
+      confirmedTaxId: string | undefined;
+      oldBoxGone: boolean;
+      soleRecovery: boolean;
+    }
   | { packPath: string; archiveKey: string; oldBoxGone: boolean; soleRecovery: boolean };
 
 function parseArgs(argv: readonly string[]): ParsedArgs | null {
@@ -245,8 +246,8 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
       : null;
   }
   if (kitPath !== undefined) {
-    return artifactPath === undefined && !soleRecovery
-      ? { kitPath, confirmedTaxId, oldBoxGone }
+    return artifactPath === undefined
+      ? { kitPath, confirmedTaxId, oldBoxGone, soleRecovery }
       : null;
   }
   return artifactPath !== undefined && confirmedTaxId === undefined
@@ -332,31 +333,27 @@ async function archiveRecoveryRunner(
   const operation = await readRecoveryOperationFile(path ?? "");
   const copy = await validateArtifactFile({ ...target, artifactPath, recoveryKey });
   try {
-    const selected = await readRecoveryCopyPreview(copy, copy.sourceId, target);
-    const { node } = readArtifactIdentity(copy.secretEntries);
-    const service = createSelectedRecoveryPreparation({
-      stateDir: target.stateDir,
-      venueDir: target.venueDir,
-      coordinator: createFirstSetupCoordinator(),
-      modules: target.modules,
-      binding: operation.binding,
-      node,
-      secret: deps.env.WAITRON_NODE_RECOVERY_KEY,
-      selected,
-      database() {
-        throw new AppError("module.operation_invalid", { module: operation.binding.module });
-      },
-      // The sole-recovery flag declares taxpayer-wide isolation; local locks do not establish it.
-      readIsolation: async () => ({
-        oldMachineAbsent: false,
-        oldMachineOffline: oldBoxGone,
-        noParallelRecovery: true,
-      }),
-    });
-    return service.runner(operation.input, { refresh: true });
+    return await selectedRecoveryRunner(deps, target, copy, operation, oldBoxGone, copy.sourceId);
   } finally {
     await copy.discard();
   }
+}
+
+async function selectedRecoveryRunner(
+  deps: CommandDeps,
+  target: RestoreTarget,
+  copy: ValidatedArtifact,
+  operation: RecoveryOperationInput,
+  oldBoxGone: boolean,
+  sourceId: string,
+): Promise<RestoreOperationRunner> {
+  return createRecoveryEntryRunner({
+    ...target,
+    copy,
+    operation,
+    secret: deps.env.WAITRON_NODE_RECOVERY_KEY,
+    context: { selectedSourceId: sourceId, oldBoxGone, soleRecovery: true },
+  });
 }
 
 function sourceLiveRefusal(err: AppError, subject: string): string | null {
@@ -444,7 +441,7 @@ async function runBucketRestore(
   deps: CommandDeps,
   args: Extract<ParsedArgs, { kitPath: string }>,
 ): Promise<number> {
-  const { kitPath, confirmedTaxId, oldBoxGone } = args;
+  const { kitPath, confirmedTaxId, oldBoxGone, soleRecovery } = args;
   let kitText: string;
   try {
     kitText = await readFile(kitPath, "utf8");
@@ -477,6 +474,19 @@ async function runBucketRestore(
       litestreamBin: resolveLitestreamBin(deps.env),
       openStore: boundedOpener(deps),
       now: clock,
+      ...(soleRecovery
+        ? {
+            prepareModuleOperations: async (copy: ValidatedArtifact, sourceId: string) =>
+              selectedRecoveryRunner(
+                deps,
+                target,
+                copy,
+                await readRecoveryOperationFile(deps.env.WAITRON_RECOVERY_OPERATION_FILE ?? ""),
+                oldBoxGone,
+                sourceId,
+              ),
+          }
+        : {}),
       confirmVenue: (venue) => {
         deps.out(
           `the copy in the bucket is: ${venue.legalName}, tax id ${venue.taxId}, location ${venue.locationName}`,

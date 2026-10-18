@@ -1,6 +1,7 @@
 import { assertVenueFirstSetupAllowed, inspectFirstSetupMarker } from "@waitron/provisioning";
 import { lockVenueDatabase } from "@waitron/db";
-import { chmod, copyFile, open, readFile, rename, rm } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, open, readFile, rename, rm } from "node:fs/promises";
+import { VENUE_FILE } from "@waitron/store";
 import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
@@ -11,6 +12,7 @@ import { ALL_MODULES } from "./modules.js";
 import {
   RESTORE_STAGING_DIR,
   restoreFromArtifactFile,
+  validateArtifactFile,
   validateDatabaseEntries,
   type EntryValidationDeps,
   type RestoreFileDeps,
@@ -36,6 +38,7 @@ import {
   recoveryArchiveFileSourceId,
   recoveryStreamSourceId,
 } from "./recovery-source.js";
+import { createRecoveryEntryRunner, type RecoveryEntryContext } from "./recovery-entry.js";
 
 const ARTIFACT = "restore-request.artifact";
 const KEY = "restore-request.key";
@@ -87,6 +90,41 @@ function nodeKey(value: unknown): string {
   return value;
 }
 
+function recoveryContext(value: unknown): RecoveryEntryContext | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== 3 ||
+    !Object.hasOwn(value, "selectedSourceId") ||
+    !Object.hasOwn(value, "oldBoxGone") ||
+    !Object.hasOwn(value, "soleRecovery")
+  )
+    return invalidRecoveryContext();
+  const context = value as Record<string, unknown>;
+  if (
+    typeof context.selectedSourceId !== "string" ||
+    context.selectedSourceId.trim() === "" ||
+    context.selectedSourceId.length > 256 ||
+    typeof context.oldBoxGone !== "boolean" ||
+    typeof context.soleRecovery !== "boolean"
+  )
+    return invalidRecoveryContext();
+  return {
+    selectedSourceId: context.selectedSourceId,
+    oldBoxGone: context.oldBoxGone,
+    soleRecovery: context.soleRecovery,
+  };
+}
+
+function invalidRecoveryContext(): never {
+  throw new AppError("server.config_invalid", {
+    variable: "WAITRON_RECOVERY_OPERATION_FILE",
+    reason: "invalid_operation",
+  });
+}
+
 async function readStagedNodeKey(stateDir: string): Promise<string> {
   let file;
   try {
@@ -116,6 +154,7 @@ export interface ArchiveRestoreRequest {
   managedCloud?: { requestId: string; pointId: string };
   recoveryOperation?: RecoveryOperationInput;
   nodeRecoverySecret?: string;
+  recoveryContext?: RecoveryEntryContext;
 }
 
 /** A rebuild from the bucket: the downloaded database and the unlocked secrets row's entries. */
@@ -126,6 +165,7 @@ export interface StreamRestoreRequest {
   environment: DeploymentEnvironment;
   recoveryOperation?: RecoveryOperationInput;
   nodeRecoverySecret?: string;
+  recoveryContext?: RecoveryEntryContext;
 }
 
 export type RestoreRequest = ArchiveRestoreRequest | StreamRestoreRequest;
@@ -154,6 +194,9 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
   const secret =
     request.nodeRecoverySecret === undefined ? undefined : nodeKey(request.nodeRecoverySecret);
   if (secret !== undefined && recoveryOperation === undefined) invalidNodeKey();
+  const context = recoveryContext(request.recoveryContext);
+  if (context !== undefined && (secret === undefined || recoveryOperation === undefined))
+    invalidRecoveryContext();
   await validate?.(request);
   if (secret !== undefined && recoveryOperation !== undefined) {
     assertSource(
@@ -187,6 +230,7 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
             : { managedCloud: request.managedCloud }),
         ...(recoveryOperation === undefined ? {} : { recoveryOperation }),
         ...(secret === undefined ? {} : { nodeRecoveryKey: true }),
+        ...(context === undefined ? {} : { recoveryContext: context }),
       }),
       0o600,
     );
@@ -306,6 +350,7 @@ export async function runStagedRestore(
       recoveryOperation?: unknown;
       nodeRecoveryKey?: unknown;
       placementStarted?: unknown;
+      recoveryContext?: unknown;
     };
     if (
       marker.version !== 1 ||
@@ -338,6 +383,9 @@ export async function runStagedRestore(
           : await readRecoveryOperationFile(deps.recoveryOperationPath)
         : parseRecoveryOperationInput(marker.recoveryOperation);
     if (operation === null) throw new Error("invalid staged restore request");
+    const context = recoveryContext(marker.recoveryContext);
+    if (context !== undefined && (operation === undefined || marker.nodeRecoveryKey !== true))
+      invalidRecoveryContext();
     if (marker.nodeRecoveryKey === true && operation !== undefined) {
       assertSource(
         operation,
@@ -355,10 +403,53 @@ export async function runStagedRestore(
       marker.nodeRecoveryKey === true
         ? await readStagedNodeKey(deps.stateDir)
         : deps.recoverySecret;
-    const withModuleOperations =
+    let withModuleOperations =
       operation === undefined
         ? deps.withModuleOperations
         : createRecoveryRestoreRunner(ALL_MODULES, operation, secret);
+    if (context !== undefined && operation !== undefined) {
+      const validation = {
+        ...deps,
+        environment,
+        modules: ALL_MODULES,
+        stagingDir: join(deps.stateDir, RESTORE_STAGING_DIR),
+      };
+      const copy =
+        marker.kind === "stream"
+          ? await (async () => {
+              const directory = await mkdtemp(join(deps.stateDir, "restore-entry-"));
+              const discard = () => rm(directory, { recursive: true, force: true });
+              try {
+                const databasePath = join(directory, VENUE_FILE);
+                await copyFile(join(deps.stateDir, STREAM_DB), databasePath);
+                const validated = await validateDatabaseEntries(
+                  unpackArchive(await readFile(join(deps.stateDir, STREAM_ENTRIES))),
+                  databasePath,
+                  validation,
+                );
+                return { ...validated, discard };
+              } catch (error) {
+                await discard();
+                throw error;
+              }
+            })()
+          : await validateArtifactFile({
+              ...validation,
+              artifactPath: join(deps.stateDir, ARTIFACT),
+              recoveryKey: await readFile(join(deps.stateDir, KEY), "utf8"),
+            });
+      try {
+        withModuleOperations = await createRecoveryEntryRunner({
+          ...validation,
+          copy,
+          operation,
+          secret,
+          context,
+        });
+      } finally {
+        await copy.discard();
+      }
+    }
     const admission = withModuleOperations?.checkBeforePlacement;
     if (
       marker.nodeRecoveryKey === true &&

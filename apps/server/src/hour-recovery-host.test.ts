@@ -1,4 +1,13 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,8 +41,8 @@ import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 import { buildManifest } from "./backup-manifest.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
-import { previewRecoveryArchive } from "./recovery-backup-preview.js";
-import { writeStreamRestore } from "./restore-stream.js";
+import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
+import { restoreFromStream, writeStreamRestore } from "./restore-stream.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
 import { runRestore } from "./restore-command.js";
 import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
@@ -50,6 +59,10 @@ import { drain } from "@waitron/fiscal-verifactu/src/drain.js";
 import { decodeRegistroRow, fromRegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
+import { generateNodeKeyPair } from "@waitron/membership";
+import { encodeRecoveryKit, signPointer, writePointer } from "@waitron/stream";
+import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
+import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -2211,4 +2224,478 @@ describe("selected-hour admission before archive placement", () => {
       123, 123, 123,
     ]);
   });
+
+  async function bucketCommand() {
+    const f = await archiveHost("stream");
+    const command = await archiveCommand(f);
+    const signer = generateNodeKeyPair();
+    const generation = `gen-0-${node.nodeId}-20261016T124000Z`;
+    const kit = {
+      version: 1 as const,
+      venueId: node.locationId,
+      bucket: {
+        region: "eu-west-1",
+        bucket: "synthetic-hour-recovery",
+        prefix: "",
+        accessKeyId: "synthetic-access",
+        secretAccessKey: "synthetic-secret",
+      },
+      recoveryKey: "separate bucket password",
+      pointerSignerPublicKey: signer.publicKey,
+    };
+    await writeSealedStateRow(
+      suite.db,
+      node.nodeId,
+      await sealNodeState(f.entries, kit.recoveryKey),
+      new Date(),
+    );
+    await suite.db.archiveTo(f.database);
+    const kitPath = join(root, "bucket-kit.txt");
+    await writeFile(kitPath, encodeRecoveryKit(kit));
+    const store = createMemoryObjectStore({ now: () => new Date() });
+    await writePointer(
+      store,
+      kit.venueId,
+      signPointer(
+        {
+          venueId: kit.venueId,
+          nodeId: node.nodeId,
+          generation,
+          term: 0,
+          writtenAt: new Date().toISOString(),
+        },
+        signer.privateKey,
+      ),
+      null,
+    );
+    const selected = await previewRecoveryStream({
+      ...f.restore,
+      kit,
+      oldBoxGone: true,
+      now: () => new Date(),
+      litestreamBin: "/unused",
+      openStore: () => store,
+      restoreGeneration: async ({ outPath }) => {
+        await copyFile(f.database, outPath);
+      },
+    });
+    const operationBinding = {
+      ...f.options.binding,
+      sourceId: selected.activationSourceId!,
+      eventId: "bucket-entry",
+    };
+    vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
+    const service = createSelectedRecoveryPreparation({
+      ...f.options,
+      binding: operationBinding,
+      selected,
+    });
+    const challenge = (await service.prepare({ action: "clock-challenge" })) as { id: string };
+    await service.prepare({
+      action: "compare-clocks",
+      browser: { challengeId: challenge.id, instantMs: Date.now() },
+    });
+    const outcome = (await service.prepare({ action: "select", answer: "no" })) as {
+      input: unknown;
+    };
+    await writeFile(
+      command.operationPath,
+      JSON.stringify({ binding: operationBinding, input: outcome.input }),
+    );
+    external.internet.mockImplementation(async () => ({
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 0,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: performance.now(),
+      monotonicFinishedMs: performance.now(),
+    }));
+    const failures: unknown[] = [];
+    return {
+      f,
+      command,
+      kitPath,
+      kit,
+      failures,
+      deps: {
+        env: command.env,
+        argv: [
+          "restore",
+          "--from-bucket",
+          kitPath,
+          "--confirm-venue",
+          scope.taxpayerNif,
+          "--confirm-old-box-gone",
+          "--confirm-sole-recovery",
+        ],
+        openStore: () => store,
+        restoreStream: (args: Parameters<typeof restoreFromStream>[0]) =>
+          restoreFromStream({
+            ...args,
+            restoreGeneration: async ({ outPath }) => {
+              await copyFile(f.database, outPath);
+            },
+          }).catch((error) => {
+            failures.push(error);
+            throw error;
+          }),
+      },
+    };
+  }
+
+  it("the bucket command reconstructs selected-hour admission from the downloaded exact point", async () => {
+    const { f, deps, kitPath } = await bucketCommand();
+    const journal = await readModulePreparationHistory(f.roots, binding.module);
+    const output: string[] = [];
+    const downloader = join(root, "synthetic-litestream.cjs");
+    await writeFile(
+      downloader,
+      `#!${process.execPath}\nrequire("node:fs").copyFileSync(${JSON.stringify(f.database)}, process.argv[process.argv.indexOf("-o") + 1]);\n`,
+      { mode: 0o700 },
+    );
+    const result = await runRestore({
+      ...deps,
+      env: { ...deps.env, WAITRON_LITESTREAM_BIN: downloader },
+      restoreStream: undefined,
+      out: (line) => output.push(line),
+    });
+    expect(output.at(-1)).toBe(`restored from the bucket named in ${kitPath}`);
+    expect(result).toBe(0);
+    const restored = await openVenueDatabase(f.roots.venueDir);
+    try {
+      const rows = await restored.venue.select().from(invoiceSeries);
+      expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
+        "A-06RD",
+        "FF-06RD",
+        "R-06RD",
+      ]);
+      expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
+        123, 123, 123,
+      ]);
+      expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
+    } finally {
+      await restored.close();
+    }
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
+    expect(output.join("\n")).not.toContain(key.secret);
+    expect(output.join("\n")).not.toContain("separate bucket password");
+    expect(
+      (await readdir(f.roots.stateDir)).filter((name) => name.startsWith("stream-restore-")),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ["offline", "sif.allocation_invalid"],
+    ["disagreement", "sif.allocation_invalid"],
+    ["old seller", "sif.allocation_invalid"],
+    ["missing sole confirmation", "sif.allocation_invalid"],
+    ["wrong node key", "promotion.break_glass_invalid"],
+    ["wrong bucket password", "recovery.passphrase_invalid"],
+    ["changed point", "module.operation_invalid"],
+    ["unconfirmed venue", "restore.stream_venue_unconfirmed"],
+  ])("the bucket command retains the destination after %s", async (reason, code) => {
+    const { f, command, kitPath, kit, deps, failures } = await bucketCommand();
+    if (reason === "offline")
+      external.internet.mockResolvedValue({
+        source: "internet",
+        result: "unavailable",
+        reason: "offline",
+      });
+    if (reason === "disagreement")
+      external.internet.mockImplementation(async () => ({
+        source: "internet",
+        result: "usable",
+        instantMs: Date.now() + 180_000,
+        uncertaintyMs: 0,
+        wallStartedMs: Date.now(),
+        wallFinishedMs: Date.now(),
+        monotonicStartedMs: performance.now(),
+        monotonicFinishedMs: performance.now(),
+      }));
+    if (reason === "old seller")
+      deps.argv = deps.argv.filter((arg) => arg !== "--confirm-old-box-gone");
+    if (reason === "missing sole confirmation")
+      deps.argv = deps.argv.filter((arg) => arg !== "--confirm-sole-recovery");
+    if (reason === "wrong node key") command.env.WAITRON_NODE_RECOVERY_KEY = "wrong node key";
+    if (reason === "wrong bucket password")
+      await writeFile(kitPath, encodeRecoveryKit({ ...kit, recoveryKey: "wrong bucket password" }));
+    if (reason === "unconfirmed venue")
+      deps.argv[deps.argv.indexOf("--confirm-venue") + 1] = "another taxpayer";
+    if (reason === "changed point") {
+      await suite.db.update(invoiceSeries).set({ nextNumber: 789 });
+      await suite.db.archiveTo(f.database);
+    }
+    await suite.db.update(invoiceSeries).set({ nextNumber: 456 });
+    await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
+    const previous = await suite.db.select().from(invoiceSeries);
+    const allocations = await suite.db.select().from(fiscalAllocations);
+    await writeFile(join(f.roots.stateDir, "trading.env"), "untouched bucket destination");
+    const journal = await readModulePreparationHistory(f.roots, binding.module);
+    const output: string[] = [];
+    expect(await runRestore({ ...deps, out: (line) => output.push(line) })).toBe(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({ code });
+    const retained = await openVenueDatabase(f.roots.venueDir);
+    try {
+      expect(await retained.venue.select().from(invoiceSeries)).toEqual(previous);
+      expect(await retained.venue.select().from(fiscalAllocations)).toEqual(allocations);
+    } finally {
+      await retained.close();
+    }
+    expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+      "untouched bucket destination",
+    );
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
+    expect(output.join("\n")).not.toContain(key.secret);
+    expect(output.join("\n")).not.toContain(kit.recoveryKey);
+    expect(
+      (await readdir(f.roots.stateDir)).filter((name) => name.startsWith("stream-restore-")),
+    ).toEqual([]);
+  });
+
+  it.each(["archive", "stream"] as const)(
+    "reconstructs selected-hour preparation for staged %s recovery",
+    async (kind) => {
+      const f = await archiveHost(kind);
+      const credentials = {
+        environment: "preproduction" as const,
+        recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
+        nodeRecoverySecret: key.secret,
+        recoveryContext: {
+          selectedSourceId: f.options.selected.sourceId,
+          oldBoxGone: true,
+          soleRecovery: true,
+        },
+      };
+      await stageRestoreRequest(
+        f.roots.stateDir,
+        kind === "archive"
+          ? { ...credentials, artifact: f.restore.artifact, recoveryKey: "archive password" }
+          : { ...credentials, kind: "stream", databasePath: f.database, entries: f.entries },
+      );
+      external.internet.mockImplementation(async () => ({
+        source: "internet",
+        result: "usable",
+        instantMs: Date.now(),
+        uncertaintyMs: 0,
+        wallStartedMs: Date.now(),
+        wallFinishedMs: Date.now(),
+        monotonicStartedMs: performance.now(),
+        monotonicFinishedMs: performance.now(),
+      }));
+      const journal = await readModulePreparationHistory(f.roots, binding.module);
+      expect(await runStagedRestore(f.restore)).toBe(true);
+      const restored = await openVenueDatabase(f.roots.venueDir);
+      try {
+        const rows = await restored.venue.select().from(invoiceSeries);
+        expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
+          "A-06RC",
+          "FF-06RC",
+          "R-06RC",
+        ]);
+        expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
+          123, 123, 123,
+        ]);
+        expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
+      } finally {
+        await restored.close();
+      }
+      expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
+      expect(await runStagedRestore(f.restore)).toBe(false);
+      expect(
+        (await readdir(f.roots.stateDir)).filter((name) => name.startsWith("restore-request")),
+      ).toEqual([]);
+    },
+  );
+
+  it.each(["bad source", "coerced old-box flag", "coerced sole flag", "missing key"])(
+    "refuses staged recovery context with %s before writing a request",
+    async (reason) => {
+      const f = await archiveHost();
+      const context = {
+        selectedSourceId: reason === "bad source" ? "" : f.options.selected.sourceId,
+        oldBoxGone: reason === "coerced old-box flag" ? "true" : true,
+        soleRecovery: reason === "coerced sole flag" ? "true" : true,
+      };
+      const before = await readdir(f.roots.stateDir);
+      await expect(
+        stageRestoreRequest(f.roots.stateDir, {
+          artifact: f.restore.artifact,
+          recoveryKey: "archive password",
+          environment: "preproduction",
+          recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
+          ...(reason === "missing key" ? {} : { nodeRecoverySecret: key.secret }),
+          recoveryContext: context as never,
+        }),
+      ).rejects.toMatchObject({ code: "server.config_invalid" });
+      expect(await readdir(f.roots.stateDir)).toEqual(before);
+    },
+  );
+
+  it.each([
+    ["archive", "offline"],
+    ["stream", "offline"],
+    ["archive", "old seller"],
+    ["stream", "old seller"],
+    ["archive", "parallel recovery"],
+    ["stream", "parallel recovery"],
+    ["archive", "wrong key"],
+    ["stream", "wrong key"],
+  ] as const)(
+    "retains staged %s recovery after a reconstructed %s refusal",
+    async (kind, reason) => {
+      const f = await archiveHost(kind);
+      const credentials = {
+        environment: "preproduction" as const,
+        recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
+        nodeRecoverySecret: reason === "wrong key" ? "wrong node key" : key.secret,
+        recoveryContext: {
+          selectedSourceId: f.options.selected.sourceId,
+          oldBoxGone: reason !== "old seller",
+          soleRecovery: reason !== "parallel recovery",
+        },
+      };
+      await stageRestoreRequest(
+        f.roots.stateDir,
+        kind === "archive"
+          ? { ...credentials, artifact: f.restore.artifact, recoveryKey: "archive password" }
+          : { ...credentials, kind: "stream", databasePath: f.database, entries: f.entries },
+      );
+      await suite.db.update(invoiceSeries).set({ nextNumber: 456 });
+      await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
+      await writeFile(join(f.roots.stateDir, "trading.env"), "staged destination identity");
+      const previous = await suite.db.select().from(invoiceSeries);
+      const allocations = await suite.db.select().from(fiscalAllocations);
+      const marker = await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8");
+      const journal = await readModulePreparationHistory(f.roots, binding.module);
+      if (reason !== "offline")
+        external.internet.mockImplementation(async () => ({
+          source: "internet",
+          result: "usable",
+          instantMs: Date.now(),
+          uncertaintyMs: 0,
+          wallStartedMs: Date.now(),
+          wallFinishedMs: Date.now(),
+          monotonicStartedMs: performance.now(),
+          monotonicFinishedMs: performance.now(),
+        }));
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await expect(runStagedRestore(f.restore)).rejects.toMatchObject({
+          code: reason === "wrong key" ? "promotion.break_glass_invalid" : "sif.allocation_invalid",
+        });
+        const retained = await openVenueDatabase(f.roots.venueDir);
+        try {
+          expect(await retained.venue.select().from(invoiceSeries)).toEqual(previous);
+          expect(await retained.venue.select().from(fiscalAllocations)).toEqual(allocations);
+        } finally {
+          await retained.close();
+        }
+        expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+          "staged destination identity",
+        );
+        expect(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")).toBe(marker);
+        expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
+        expect(
+          (await readdir(f.roots.stateDir)).filter((name) => name.startsWith("restore-entry-")),
+        ).toEqual([]);
+      }
+    },
+  );
+
+  it.each(["archive", "stream"] as const)(
+    "replays staged %s recovery after process death following committed placement",
+    async (kind) => {
+      const f = await archiveHost(kind);
+      const credentials = {
+        environment: "preproduction" as const,
+        recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
+        nodeRecoverySecret: key.secret,
+        recoveryContext: {
+          selectedSourceId: f.options.selected.sourceId,
+          oldBoxGone: true,
+          soleRecovery: true,
+        },
+      };
+      await stageRestoreRequest(
+        f.roots.stateDir,
+        kind === "archive"
+          ? { ...credentials, artifact: f.restore.artifact, recoveryKey: "archive password" }
+          : { ...credentials, kind: "stream", databasePath: f.database, entries: f.entries },
+      );
+      const internetModule = `export async function observeInternetHourClock() {
+        return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0,
+          wallStartedMs: Date.now(), wallFinishedMs: Date.now(),
+          monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() };
+      }`;
+      const releaseModule = `export function readHourRelease() { return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
+      const source = `
+        import { registerHooks } from "node:module";
+        const realDate = Date;
+        globalThis.Date = class extends realDate {
+          constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:40:00Z"])); }
+          static now() { return realDate.parse("2026-10-16T12:40:00Z"); }
+        };
+        registerHooks({ resolve(specifier, context, next) {
+          if (specifier.endsWith("/hour-clock-internet.js")) return { shortCircuit: true, url: ${JSON.stringify(`data:text/javascript,${encodeURIComponent(internetModule)}`)} };
+          if (specifier.endsWith("/hour-release.js")) return { shortCircuit: true, url: ${JSON.stringify(`data:text/javascript,${encodeURIComponent(releaseModule)}`)} };
+          return next(specifier, context);
+        }});
+        const { runStagedRestore } = await import(${JSON.stringify(new URL("./restore-request.ts", import.meta.url).href)});
+        const { restoreFromArtifactFile } = await import(${JSON.stringify(new URL("./restore.ts", import.meta.url).href)});
+        const { writeStreamRestore } = await import(${JSON.stringify(new URL("./restore-stream.ts", import.meta.url).href)});
+        await runStagedRestore({ ...JSON.parse(process.argv[1]), log() {} },
+          async (args) => { await restoreFromArtifactFile(args); process.kill(process.pid, "SIGKILL"); },
+          async (args) => { await writeStreamRestore(args); process.kill(process.pid, "SIGKILL"); });
+      `;
+      await expect(
+        promisify(execFile)(
+          process.execPath,
+          [
+            "--import",
+            import.meta.resolve("tsx"),
+            "--input-type=module",
+            "-e",
+            source,
+            JSON.stringify({ ...f.roots, migrationsRoot: null }),
+          ],
+          { timeout: 45_000 },
+        ),
+      ).rejects.toMatchObject({ signal: "SIGKILL" });
+      expect(
+        JSON.parse(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")),
+      ).toMatchObject({ placementStarted: true });
+      const restored = await openVenueDatabase(f.roots.venueDir);
+      let rows;
+      let allocations;
+      try {
+        expect(
+          (await restored.venue.select().from(invoiceSeries))
+            .filter((row) => row.retiredAt === null)
+            .map((row) => row.code),
+        ).toEqual(["A-06RC", "FF-06RC", "R-06RC"]);
+        await restored.venue.update(invoiceSeries).set({ nextNumber: 917 });
+        rows = await restored.venue.select().from(invoiceSeries);
+        allocations = await restored.venue.select().from(fiscalAllocations);
+      } finally {
+        await restored.close();
+      }
+      const journal = await readModulePreparationHistory(f.roots, binding.module);
+      vi.setSystemTime(new Date("2026-10-17T14:40:00Z"));
+      external.internet.mockClear();
+      expect(await runStagedRestore(f.restore)).toBe(true);
+      expect(external.internet).not.toHaveBeenCalled();
+      const replayed = await openVenueDatabase(f.roots.venueDir);
+      try {
+        expect(await replayed.venue.select().from(invoiceSeries)).toEqual(rows);
+        expect(await replayed.venue.select().from(fiscalAllocations)).toEqual(allocations);
+      } finally {
+        await replayed.close();
+      }
+      expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
+      expect(await runStagedRestore(f.restore)).toBe(false);
+    },
+    120_000,
+  );
 });
