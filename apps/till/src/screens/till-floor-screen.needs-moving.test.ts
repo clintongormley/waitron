@@ -425,6 +425,33 @@ describe("till-floor-screen: a table that needs moving", () => {
     expect(offer(fresh)).toBeNull();
   });
 
+  it("offers nothing in another room when Mark moved is refused after the room was changed", async () => {
+    const api = stubApi();
+    let refuse!: () => void;
+    const pending = new Promise<{ zoneId: string; revision: number }>((_, reject) => {
+      refuse = () => reject(newPlaceTaken);
+    });
+    api.markMovedToday.mockReturnValue(pending);
+    const el = await mount([moving("t3", 12), { ...planned("t5", 30), zoneId: "z2" }], api);
+    el.zones = [zone, { ...zone, id: "z2", name: "Terraza", displayOrder: 1 }];
+    await el.updateComplete;
+    await refuseMarkMoved(el);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z2"]')!);
+    await settle(el);
+    expect(mapOf(el).tables.map((table) => table.id)).toEqual(["t5"]);
+
+    refuse();
+    await pending.catch(() => {});
+    await settle(el);
+    const stale = offer(el);
+    if (stale !== null) {
+      await userEvent.click(stale);
+      await settle(el);
+    }
+    expect(api.leaveHereToday).not.toHaveBeenCalled();
+    expect(stale).toBeNull();
+  });
+
   it("names both tables in Spanish", async () => {
     setLocale("es");
     const api = stubApi();

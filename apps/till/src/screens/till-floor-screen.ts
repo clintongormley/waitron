@@ -973,7 +973,7 @@ export class TillFloorScreen extends LitElement {
   #leaveHereOffer(): TemplateResult | typeof nothing {
     const offer = this.leaveOffer;
     if (offer === null || offer.message !== this.refusal || !this.canChangeToday) return nothing;
-    const table = this.tables.find((each) => each.id === offer.tableId);
+    const table = this.#zone.visible.find((each) => each.id === offer.tableId);
     if (table === undefined || !needsMovingToday(table)) return nothing;
     return html`<wt-button
       data-leave-here-offer
