@@ -1697,6 +1697,108 @@ describe("Update layout", () => {
     expect(await zoneRevisionOf(v, d.zoneId)).toBe(from);
   });
 
+  it("applies null for a room whose running layout stands none of its tables, and records the due layout", async () => {
+    fixedAt = LUNCH;
+    const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
+    const empty = await inTx(v, (tx) =>
+      readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
+    );
+    await inTx(v, (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        { setId: d.standard, zoneId: d.zoneId },
+        { revision: empty.revision, tables: [] },
+        LUNCH,
+      ),
+    );
+    expect((await send("GET", "/api/tables/state")).status).toBe(200);
+    expect(await recordOf(d.zoneId)).toMatchObject({ setId: d.standard });
+    const plan = await inTx(v, (tx) =>
+      readLayout(tx, v.cfg, { setId: d.dinner, zoneId: d.zoneId }),
+    );
+    const { ids } = await inTx(v, (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        { setId: d.dinner, zoneId: d.zoneId },
+        {
+          revision: plan.revision,
+          tables: [
+            {
+              key: "one",
+              label: `1 ${randomUUID().slice(0, 6)}`,
+              seats: 4,
+              fixed: false,
+              placement: { x: 100, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
+              partKeys: [],
+            },
+          ],
+        },
+        LUNCH,
+      ),
+    );
+    const read = await send("GET", "/api/tables/state");
+    expect(read.status).toBe(200);
+    const tables = (await read.json()) as { zoneId: string | null; today: unknown }[];
+    expect(tables.filter((t) => t.zoneId === d.zoneId && t.today !== null)).toEqual([]);
+    const from = (await zoneRevisionOf(v, d.zoneId))!;
+    fixedAt = AFTER_LUNCH;
+    const offer = (await offered(d.zoneId))!;
+    expect(offer).toMatchObject({ setId: d.dinner, periodName: "Dinner" });
+
+    await expectRevision(
+      v,
+      updateLayout(d.zoneId, {
+        zoneRevision: null,
+        setId: offer.setId,
+        layoutRevision: offer.revision,
+      }),
+      d.zoneId,
+      from + 1,
+    );
+
+    const dinner = await inTx(v, (tx) =>
+      readLayout(tx, v.cfg, { setId: d.dinner, zoneId: d.zoneId }),
+    );
+    const one = dinner.tables.find((t) => t.id === ids.one)!.liveTableId!;
+    expect(await todayRow(v, one)).toMatchObject({ x: 100 });
+    expect(await recordOf(d.zoneId)).toMatchObject({
+      setId: d.dinner,
+      layoutRevision: offer.revision,
+    });
+    expect(await offered(d.zoneId)).toBeNull();
+  });
+
+  it("refuses null once a table of the room has a today's row, and writes nothing", async () => {
+    const { d } = await ownersExample();
+    fixedAt = AFTER_LUNCH;
+    const offer = (await offered(d.zoneId))!;
+    const from = (await zoneRevisionOf(v, d.zoneId))!;
+    const before = await everything();
+    const record = await recordOf(d.zoneId);
+
+    expect(
+      await refusal(
+        updateLayout(d.zoneId, {
+          zoneRevision: null,
+          setId: offer.setId,
+          layoutRevision: offer.revision,
+        }),
+      ),
+    ).toEqual({
+      status: 409,
+      body: {
+        error: { code: "floor_today.out_of_date", params: { zoneId: d.zoneId, revision: from } },
+      },
+    });
+    expect(await everything()).toEqual(before);
+    expect(await recordOf(d.zoneId)).toEqual(record);
+    expect(await zoneRevisionOf(v, d.zoneId)).toBe(from);
+  });
+
   it("refuses a malformed body", async () => {
     const { d } = await ownersExample();
     for (const [body, field] of [

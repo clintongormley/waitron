@@ -176,6 +176,19 @@ describe("till-floor-screen: the layout banner", () => {
     expect(asked).toEqual([{ zones: true }]);
   });
 
+  it("sends null as the room's revision when the read holds no table of the zone with a today's row", async () => {
+    const { el, api } = await mount([zone("z1", "Terrace", dinner)], {
+      tables: [table("t1", "z1", null), table("t2", "z2", {})],
+    });
+    updateButton(el)!.click();
+    await settle(el);
+    expect(api.updateLayoutToday).toHaveBeenCalledExactlyOnceWith(
+      "z1",
+      { setId: "set-dinner", revision: 3 },
+      null,
+    );
+  });
+
   it("says the layout changed when refused, and still asks for the zones and the tables", async () => {
     setLocale("en-GB");
     const api = {

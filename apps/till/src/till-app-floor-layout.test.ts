@@ -149,6 +149,23 @@ it("re-reads the zones and the tables after Update layout, so the banner goes at
   expect(banner(floor)).toBeNull();
 });
 
+it("sends null for a room the tables read holds none of, and the banner goes after the update", async () => {
+  const listZones = vi.fn().mockResolvedValueOnce([offered]).mockResolvedValue([updated]);
+  const updateLayoutToday = vi.fn().mockResolvedValue({ zoneId: "z1", revision: 2 });
+  const { floor } = await mount({
+    listZones,
+    updateLayoutToday,
+    getTablesState: vi.fn().mockResolvedValue([]),
+  });
+  await press(floor);
+  expect(updateLayoutToday).toHaveBeenCalledExactlyOnceWith(
+    "z1",
+    { setId: "set-dinner", revision: 3 },
+    null,
+  );
+  expect(banner(floor)).toBeNull();
+});
+
 it("re-reads both after a layout_changed refusal and shows what is now due", async () => {
   const later = { ...offered, layoutDue: { setId: "set-late", revision: 1, periodName: "Late" } };
   const listZones = vi.fn().mockResolvedValueOnce([offered]).mockResolvedValue([later]);

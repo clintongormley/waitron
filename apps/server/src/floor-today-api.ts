@@ -102,12 +102,28 @@ function partsBody(body: Record<string, unknown>): { partIds: string[]; seats: n
 }
 
 /**
- * The zone reset's `zoneRevision`: a whole number from 0, or `null` for a read that held no table
+ * A zone route's `zoneRevision`: a whole number from 0, or `null` for a read that held no table
  * of the zone with a today's row.
  */
-async function resetRevision(c: Context): Promise<number | null> {
-  const body = await bodyOf(c);
+function zoneRevision(body: Record<string, unknown>): number | null {
   return body.zoneRevision === null ? null : requiredRevision(body);
+}
+
+/**
+ * Refuses `floor_today.out_of_date` for a `sent` other than `from`, or for a null once the zone has
+ * a today's row.
+ */
+async function refuseStaleZone(
+  tx: Transaction,
+  locationId: string,
+  zoneId: string,
+  sent: number | null,
+  from: number,
+): Promise<void> {
+  if (sent !== null) refuseStale(zoneId, sent, from);
+  else if (await hasTodayRow(tx, locationId, zoneId)) {
+    throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
+  }
 }
 
 async function hasTodayRow(tx: Transaction, locationId: string, zoneId: string): Promise<boolean> {
@@ -240,17 +256,14 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
       const zoneId = id.toLowerCase();
-      const sent = await resetRevision(c);
+      const sent = zoneRevision(await bodyOf(c));
       const revision = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const active = await zoneActive(tx, deps.cfg, zoneId);
         const now = deps.clock.now().instant;
         const day = await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
-        if (sent !== null) refuseStale(zoneId, sent, from);
-        else if (await hasTodayRow(tx, deps.cfg.locationId, zoneId)) {
-          throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
-        }
+        await refuseStaleZone(tx, deps.cfg.locationId, zoneId, sent, from);
         if (!active || day === null) return from;
         const onto = await recordedOnto(tx, deps.cfg, zoneId, day);
         if (onto === null) return from;
@@ -267,7 +280,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
       const zoneId = id.toLowerCase();
       const body = await bodyOf(c);
-      const sent = requiredRevision(body);
+      const sent = zoneRevision(body);
       if (typeof body.setId !== "string" || !isUuid(body.setId)) throw invalid("setId");
       const layout = {
         setId: body.setId.toLowerCase(),
@@ -279,7 +292,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         const now = deps.clock.now().instant;
         const day = await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
-        refuseStale(zoneId, sent, from);
+        await refuseStaleZone(tx, deps.cfg.locationId, zoneId, sent, from);
         if (!active) return from;
         return updateLayout(tx, deps.cfg, removals, zoneId, day, now, layout);
       });

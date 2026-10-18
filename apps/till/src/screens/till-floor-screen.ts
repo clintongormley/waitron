@@ -113,8 +113,7 @@ function tableChips(table: TableState) {
   return signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
 }
 
-/** `poll` is the 15-second re-read; `zones` asks for the zones as well as the tables. An action
- * that changes neither sends no detail. */
+/** `poll` is the 15-second re-read; `zones` asks for the zones as well as the tables. */
 export interface FloorRefreshDetail {
   poll?: true;
   zones?: true;
@@ -943,8 +942,8 @@ export class TillFloorScreen extends LitElement {
     return this.zones.find((zone) => zone.id === zoneId);
   }
 
-  /** A null revision is answered here as a stale one is, without being sent: only the zone reset's
-   * route accepts null. */
+  /** A null revision is answered here as a stale one is, without being sent: only the zone routes
+   * accept null. */
   #send<T>(revision: number | null, call: (revision: number) => Promise<T>): Promise<T> {
     return revision === null ? Promise.reject({ code: "floor_today.out_of_date" }) : call(revision);
   }
