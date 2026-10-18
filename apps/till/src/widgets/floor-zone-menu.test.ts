@@ -17,7 +17,7 @@ const terrace: FloorZone = {
   closesAt: null,
   closed: false,
   hasPlan: false,
-  layoutSetName: null,
+  layoutSetName: "Dinner",
   layoutDue: null,
   serviceMode: "table_tab",
 };
@@ -64,6 +64,7 @@ async function mount(tables: TableState[] = [placed, spare, fixedSpare, takenOff
   const { el } = await mountWidget<TillFloorZoneMenu>("till-floor-zone-menu", {
     zone: terrace,
     tables,
+    canChangeToday: true,
   });
   return el;
 }
@@ -100,7 +101,7 @@ it("is a menu named Today's plan holding the three actions", async () => {
   expect([...menu.querySelectorAll("wt-button")].map(text)).toEqual([
     "Add a spare table",
     "Taken off today",
-    "Reset to saved plan",
+    "Reset to Dinner plan",
   ]);
   expect(dialogOf(el, "spares").open).toBe(false);
   expect(dialogOf(el, "taken-off").open).toBe(false);
@@ -210,7 +211,7 @@ it("asks before resetting the zone, and sends nothing on Cancel", async () => {
   expect(dialog.open).toBe(true);
   expect(dialog.heading).toBe("Reset Terrace?");
   expect(text(dialog.querySelector("[data-reset-body]"))).toBe(
-    "Free tables go back now, occupied ones once free.",
+    "Free tables go back now; occupied ones show Needs moving once free.",
   );
   const confirm = dialog.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-reset-confirm]")!;
   expect(text(confirm)).toBe("Reset");
@@ -266,12 +267,12 @@ it("speaks Spanish", async () => {
   expect([...menu.querySelectorAll("wt-button")].map(text)).toEqual([
     "Añadir mesa de reserva",
     "Quitadas hoy",
-    "Volver al plano guardado",
+    "Volver al plano Dinner",
   ]);
   await choose(el, "reset");
   expect(dialogOf(el, "reset").heading).toBe("¿Restablecer Terrace?");
   expect(text(dialogOf(el, "reset").querySelector("[data-reset-body]"))).toBe(
-    "Las libres vuelven ya; las ocupadas, al quedar libres.",
+    "Las libres vuelven ya; las ocupadas quedan por mover al quedar libres.",
   );
   expect(text(dialogOf(el, "reset").querySelector("[data-reset-confirm]"))).toBe("Restablecer");
   expect(text(dialogOf(el, "reset").querySelector("[data-cancel]"))).toBe("Cancelar");
