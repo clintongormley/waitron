@@ -1319,31 +1319,6 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   now"; a line with no stored snapshot whose product the till no longer offers is still dropped with
   `held.product_gone`, and the first edit of the order removes such an extra.
 
-## A752. Device profile form: an empty starting-zone list and errors that cannot be cleared
-
-**A752 (owner, 2026-10-16).** Seen on the Santet venue: a device profile's "Where it serves" with
-department Santet Deli Co and "Every zone in this department" switched on. The Starting zone
-dropdown says "No results", and the form shows two errors nobody can clear: "Choose at least one
-zone, or switch on Every zone in this department" (the switch is already on) and "Choose the zone
-a device starts in" (there is nothing to choose).
-
-In a copy of that venue's database taken on 13 October, all five zones (Counter, Front Bar, Main
-Bar, Saloon, Terrace) are active and every one has a `zone_service_policies` row naming that
-department, so the list should not be empty. The form lists a department's zones with
-`activeZones` (`apps/dashboard/src/screens/device-profiles-screen.ts:271`), filtering the reply of
-`GET /management-api/venue-service/departments-and-zones` by `departmentId` and `active`. Which
-side loses them was not traced.
-
-1. **Find why the list is empty** — a failing test first, through the real route.
-2. **A department with no switched-on zones says so**, and where zones are added, instead of
-   asking for a switch that is already on.
-3. **The starting zone is not marked as a required error when there is nothing to pick**; the
-   department's message covers it.
-
-The form's two "?", beside Department and Starting zone, are help-mode badges since A582's slice
-2b, which settles them for A237 (A582 design §7;
-[setup.md](setup.md#remaining--buttons-that-should-be-hints-a237-owner-2026-10-03)).
-
 ## A757. Table states: review the lifecycle, then retire the Tables tab
 
 **A757 (owner, 2026-10-16) — design first; it comes back to the owner before anything is built.**

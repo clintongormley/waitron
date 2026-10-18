@@ -272,7 +272,7 @@ describe("deleted service targets", () => {
     expect(model.departments.map((row) => row.id)).toEqual([f.live]);
     expect(model.departments.flatMap((row) => row.periods)).toEqual([]);
   });
-  it("hides deleted zones from the service list with the old include flag", async () => {
+  it("hides deleted zones from the service list when it marks zones active", async () => {
     const f = await fixture();
     expect(await run((tx) => service.listServiceZones(tx, f.cfg, { withActive: true }))).toEqual([
       expect.objectContaining({ id: f.liveZone }),
