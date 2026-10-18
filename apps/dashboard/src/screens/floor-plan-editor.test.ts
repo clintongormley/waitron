@@ -141,6 +141,84 @@ it("opens the zone the URL names, headed with its name", async () => {
   expect(heading(el)).toBe("Terrace · Standard");
 });
 
+it.each([
+  [
+    "en-GB",
+    "Tables are shared by every set. Adding, renaming or deleting one here does it in every set.",
+  ],
+  [
+    "es-ES",
+    "Las mesas son comunes a todos los conjuntos. Añadir, renombrar o eliminar una aquí lo hace en todos.",
+  ],
+])(
+  "opens the set's layout the address names, titled zone · set, with the shared-tables line (%s)",
+  async (locale, line) => {
+    setLocale(locale);
+    const dinner = { ...terrace(), setId: "s9", setName: "Dinner" };
+    const api = stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(dinner),
+      listZones: vi
+        .fn()
+        .mockResolvedValue([{ id: "z1", name: "Inside", displayOrder: 0, active: true }]),
+    });
+    const el = await open(api, "/manage/floor-plan/set/s9/zone/z1?back=%2Fmanage%2Ffloor-plans");
+    expect(api.getFloorPlan).toHaveBeenCalledWith("s9", "z1");
+    expect(heading(el)).toBe("Inside · Dinner");
+    const shared = el.shadowRoot!.querySelector("header h1 + [data-shared-tables]");
+    expect(shared!.textContent!.trim()).toBe(line);
+    expect(el.shadowRoot!.querySelector("a[data-action=close]")!.getAttribute("href")).toBe(
+      "/manage/floor-plans",
+    );
+  },
+);
+
+it("saves to the set and zone the address names", async () => {
+  const save = vi.fn().mockResolvedValue({ revision: 4, ids: { m1: "m1", m2: "m2" } });
+  const el = await open(
+    stubApi({ saveFloorPlan: save } as Partial<DashboardApi>),
+    "/manage/floor-plan/set/s9/zone/z1",
+  );
+  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  await press(el, "save");
+  await flush(el);
+  expect(save).toHaveBeenCalledWith("s9", "z1", expect.objectContaining({ revision: 3 }));
+});
+
+it("an address naming no set opens nothing", async () => {
+  const api = stubApi();
+  const el = await open(api, "/manage/floor-plan/zone/z1");
+  expect(api.getFloorPlan).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelector("wt-floor-plan-canvas")).toBeNull();
+});
+
+it.each(["floor_plan_set.not_found", "floor_plan_set.invalid"])(
+  "a %s load shows the deleted zone's not-found state",
+  async (code) => {
+    const el = await open(stubApi({ getFloorPlan: vi.fn().mockRejectedValue({ code }) }));
+    expect(el.shadowRoot!.querySelector("[data-load-error]")!.textContent!.trim()).toBe(
+      "That zone no longer exists",
+    );
+    expect(el.shadowRoot!.querySelector("wt-floor-plan-canvas")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-shared-tables]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("a[data-action=close]")).not.toBeNull();
+  },
+);
+
+it("another set in the address loads that set's layout afresh", async () => {
+  const getFloorPlan = vi.fn((setId: string) =>
+    Promise.resolve({ ...terrace(), setId, setName: setId === "s2" ? "Dinner" : "Standard" }),
+  );
+  const el = await open(stubApi({ getFloorPlan } as Partial<DashboardApi>));
+  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  history.pushState(null, "", "/manage/floor-plan/set/s2/zone/z1");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  expect(getFloorPlan).toHaveBeenLastCalledWith("s2", "z1");
+  expect(heading(el)).toBe("Terrace · Dinner");
+  expect(button(el, "undo").disabled).toBe(true);
+  expectSaveQuiet(el);
+});
+
 it("heads a zone the zone list lacks as Floor plan", async () => {
   const el = await open(stubApi({ listZones: vi.fn().mockResolvedValue([]) }));
   expect(heading(el)).toBe("Floor plan");

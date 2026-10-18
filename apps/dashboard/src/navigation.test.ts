@@ -269,4 +269,5 @@ it("reads the floor plan editor's zone from its path", () => {
   const url = new UrlStateController(host, () => {}, dashboardPath);
   document.body.append(host);
   expect(url.read("zone")).toBe("z1");
+  expect(url.read("set")).toBe("s1");
 });

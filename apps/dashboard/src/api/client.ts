@@ -668,10 +668,12 @@ export interface DashboardTable {
 
 export type { PlanPlacement, PlanShape } from "@waitron/ui";
 
-/** A zone's master plan as the server reads it (`ZonePlan`, apps/server/src/floor-plan.ts). */
+/** A set's layout of a zone as the server reads it (`ZonePlan`, apps/server/src/floor-plan.ts). */
 export interface FloorPlan {
   zoneId: string;
-  /** 0 when the zone has no master plan. */
+  setId: string;
+  setName: string;
+  /** 0 when the set has no layout of the zone yet. */
   revision: number;
   savedAt: string | null;
   tables: {
@@ -686,6 +688,10 @@ export interface FloorPlan {
     /** The size a table off the plan had when it last left it. */
     keptSize: { width: number; height: number } | null;
   }[];
+}
+
+function layoutPath(setId: string, zoneId: string): string {
+  return `/management-api/floor-plan-sets/${encodeURIComponent(setId)}/zones/${encodeURIComponent(zoneId)}/floor-plan`;
 }
 
 /** A master-plan save (`ZonePlanSave`); `key` names a table within the save. */
@@ -3092,17 +3098,18 @@ export class DashboardApi {
     );
   }
 
-  getFloorPlan(zoneId: string): Promise<FloorPlan> {
-    return this.#request<FloorPlan>(`/management-api/zones/${zoneId}/floor-plan`, "GET");
+  getFloorPlan(setId: string, zoneId: string): Promise<FloorPlan> {
+    return this.#request<FloorPlan>(layoutPath(setId, zoneId), "GET");
   }
 
   /** `ids` maps each saved table's `key` to its master table's id. */
   saveFloorPlan(
+    setId: string,
     zoneId: string,
     body: FloorPlanSave,
   ): Promise<{ revision: number; ids: Record<string, string> }> {
     return this.#request<{ revision: number; ids: Record<string, string> }>(
-      `/management-api/zones/${zoneId}/floor-plan`,
+      layoutPath(setId, zoneId),
       "PUT",
       body,
     );
