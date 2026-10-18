@@ -886,6 +886,49 @@ it("a save that lands after its edited zone was removed leaves nothing to save",
   expect(frame(painter).refusal).toBe("Terrace was removed; its changes were dropped.");
 });
 
+it("a save whose later edit was dropped for a department removed meanwhile is not clean, and the notice stays", async () => {
+  let succeed!: () => void;
+  const late = new Promise<void>((resolve) => (succeed = resolve));
+  const { painter, writes } = await mount(thursdayOpen(), [late]);
+  const saved: boolean[] = [];
+  painter.addEventListener("season-week-saved", (event) =>
+    saved.push((event as CustomEvent<{ clean: boolean }>).detail.clean),
+  );
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  saveButton(painter).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await pick(painter, "d3");
+  await drag(painter, "4", 7 * 60, 9 * 60);
+  expect(painter.edited().departments).toContain("d3");
+  painter.model = withoutBar();
+  await settle(painter);
+  expect(frame(painter).refusal).toBe("Bar was removed; its changes were dropped.");
+  succeed();
+  await expect.poll(() => saved).toEqual([false]);
+  await expect.poll(() => frame(painter).busy).toBe(false);
+  await settle(painter);
+  expect(frame(painter).refusal).toBe("Bar was removed; its changes were dropped.");
+});
+
+it("a save whose own sent edit's zone was removed meanwhile, with nothing edited since, is clean", async () => {
+  let succeed!: () => void;
+  const late = new Promise<void>((resolve) => (succeed = resolve));
+  const { painter, writes } = await mount(thursdayOpen(), [late]);
+  const saved: boolean[] = [];
+  painter.addEventListener("season-week-saved", (event) =>
+    saved.push((event as CustomEvent<{ clean: boolean }>).detail.clean),
+  );
+  await pick(painter, "zone:z2");
+  await drag(painter, "4", 0, 3 * 60);
+  await pick(painter, "d1");
+  saveButton(painter).click();
+  await expect.poll(() => writes.length).toBe(1);
+  painter.model = withoutTerrace();
+  await settle(painter);
+  succeed();
+  await expect.poll(() => saved).toEqual([true]);
+});
+
 const mondayLunch = [slot("p1", "13:00", "16:00")];
 const mondayDinner = [slot("p2", "18:00", "21:00")];
 const earlyWednesday = [slot("p1", "07:00", "09:00")];

@@ -201,6 +201,9 @@ export class SeasonPainter extends LitElement {
   private revision = 0;
   /** Replaced whenever a save's answer would land on a draft it no longer belongs to. */
   private generation = {};
+  /** The weeks the save in flight sent, and whether a refresh since dropped an edit it did not
+   *  send: that save is then not clean, as the special-day editor's is not. */
+  private inFlight?: { sent: Draft; dropped: boolean };
   private scope?: DraftScope<Draft>;
   private coordinator?: LeaveCoordinator;
 
@@ -359,6 +362,8 @@ export class SeasonPainter extends LitElement {
         const owner = departmentOf(this.model, key);
         if (owner && !owner.active) inactive.add(owner.name);
         else gone.push(ownerName(previous, key));
+        if (this.inFlight && !sameWeek(week, this.inFlight.sent.get(key)))
+          this.inFlight.dropped = true;
         continue;
       }
       if (follow) {
@@ -483,6 +488,8 @@ export class SeasonPainter extends LitElement {
         paint: sent.get(key)!.get(String(weekday))!,
       }));
     const generation = this.generation;
+    const flight = { sent, dropped: false };
+    this.inFlight = flight;
     this.saving = true;
     this.notice = "";
     this.refused = undefined;
@@ -514,6 +521,7 @@ export class SeasonPainter extends LitElement {
       return;
     } finally {
       if (generation === this.generation) this.saving = false;
+      if (this.inFlight === flight) this.inFlight = undefined;
     }
     if (generation !== this.generation) return;
     const baseline = copyDraft(this.baseline);
@@ -526,7 +534,7 @@ export class SeasonPainter extends LitElement {
     };
     this.dispatchEvent(
       new CustomEvent<{ clean: boolean }>("season-week-saved", {
-        detail: { clean: !this.scope?.isDirty() },
+        detail: { clean: !flight.dropped && !this.scope?.isDirty() },
         bubbles: true,
         composed: true,
       }),
