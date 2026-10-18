@@ -2,13 +2,13 @@ import { randomBytes } from "node:crypto";
 import { credentialRevision, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { makeAuthority, type Candidate } from "../test/certificate-fixtures.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantTillSif, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { readCertificateCard } from "./certificate-card.js";
+import { lastAcceptedQuery, readCertificateCard } from "./certificate-card.js";
 import { recordInstall } from "./certificate-record.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { envios } from "./schema/index.js";
@@ -210,7 +210,7 @@ describe("readCertificateCard", () => {
     expect(card.installed).toMatchObject({ daysLeft: -2, stage: "expired" });
   });
 
-  it("answers the latest acceptance at or after the install, either accepted state, on this node", async () => {
+  it("answers the latest acceptance at or after the install, either accepted state, on any node", async () => {
     await seedTenantTillSif(suite.db);
     const seeded = await seedPendingEnvios(suite.db, { count: 5 });
     const other = await seedPendingEnvios(suite.db, { count: 1 });
@@ -230,11 +230,29 @@ describe("readCertificateCard", () => {
     await setEnvio(other.registroIds[0] as string, "aceptado", "2026-10-07T10:00:00.000Z");
 
     const card = await readCertificateCard(depsFor(seeded.nodeId), NOW);
-    expect(card.installed?.lastAcceptedAt).toBe("2026-10-05T10:00:00.000Z");
+    expect(card.installed?.lastAcceptedAt).toBe("2026-10-07T10:00:00.000Z");
+
+    await setEnvio(other.registroIds[0] as string, "pendiente", null);
+    const ownNode = await readCertificateCard(depsFor(seeded.nodeId), NOW);
+    expect(ownNode.installed?.lastAcceptedAt).toBe("2026-10-05T10:00:00.000Z");
 
     await setEnvio(withErrors, "pendiente", null);
     const atBoundary = await readCertificateCard(depsFor(seeded.nodeId), NOW);
     expect(atBoundary.installed?.lastAcceptedAt).toBe(INSTALLED_AT);
+  });
+
+  it("walks the confirmation index newest first for the latest acceptance", async () => {
+    const plan = await withTransaction(suite.db, async (tx) => {
+      const query = lastAcceptedQuery(tx, new Date(INSTALLED_AT)).toSQL();
+      const parts = query.sql.split("?");
+      const chunks = parts.flatMap((part, i) =>
+        i < query.params.length ? [sql.raw(part), sql`${query.params[i]}`] : [sql.raw(part)],
+      );
+      return tx.execute<{ detail: string }>(sql`explain query plan ${sql.join(chunks)}`);
+    });
+    const detail = plan.rows.map((row) => row.detail).join("\n");
+    expect(detail).toContain("SEARCH envios USING INDEX envios_confirmado_idx (confirmado_en>?)");
+    expect(detail).not.toContain("TEMP B-TREE");
   });
 
   it("answers no acceptance when every accepted envío predates the install", async () => {

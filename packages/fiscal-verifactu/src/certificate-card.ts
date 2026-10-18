@@ -1,12 +1,12 @@
 import { credentialRevision } from "@waitron/credentials";
 import { readTenant, withTransaction, type Database, type Transaction } from "@waitron/db";
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, gte, sql } from "drizzle-orm";
 import type { CertKind } from "./aeat-transport.js";
 import { calendarDaysLeft, certificateStage, type CertificateStage } from "./certificate-dates.js";
 import { normaliseTaxId } from "./certificate-file.js";
 import { venueTimeZone } from "./certificate-install.js";
 import { latestInstall } from "./certificate-record.js";
-import { envios, registrosFacturacion } from "./schema/index.js";
+import { envios } from "./schema/index.js";
 
 export interface CertificateCard {
   revision: string | null;
@@ -36,24 +36,26 @@ export interface CertificateCardDeps {
   nameOf(tx: Transaction, personId: string): Promise<string | null>;
 }
 
-async function lastAcceptedSince(
-  tx: Transaction,
-  nodeId: string,
-  since: Date,
-): Promise<Date | null> {
-  const [row] = await tx
+// Every node's envíos count: the vault holds one certificate for the venue and the drain files
+// every node's records with it.
+export function lastAcceptedQuery(tx: Transaction, since: Date) {
+  return tx
     .select({ confirmadoEn: envios.confirmadoEn })
     .from(envios)
-    .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, envios.registroId))
     .where(
       and(
-        eq(registrosFacturacion.nodeId, nodeId),
-        inArray(envios.estado, ["aceptado", "aceptado_con_errores"]),
+        // The unary `+` keeps the planner off `envios_drenaje_idx`: on estado it would sort every
+        // accepted envío before taking one, where `envios_confirmado_idx` stops at the first.
+        sql`+${envios.estado} in (${"aceptado"}, ${"aceptado_con_errores"})`,
         gte(envios.confirmadoEn, since),
       ),
     )
     .orderBy(desc(envios.confirmadoEn))
     .limit(1);
+}
+
+async function lastAcceptedSince(tx: Transaction, since: Date): Promise<Date | null> {
+  const [row] = await lastAcceptedQuery(tx, since);
   return row?.confirmadoEn ?? null;
 }
 
@@ -75,7 +77,7 @@ export async function readCertificateCard(
       throw new Error("tenants is empty: there is no taxpayer to match the certificate against");
     }
     const installedByName = row.personId === null ? null : await deps.nameOf(tx, row.personId);
-    const lastAccepted = await lastAcceptedSince(tx, deps.nodeId, row.installedAt);
+    const lastAccepted = await lastAcceptedSince(tx, row.installedAt);
     return {
       revision,
       timeZone,

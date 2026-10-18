@@ -57,6 +57,13 @@
       "when": 1792354127141,
       "tag": "0007_certificate_installs",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792358085639,
+      "tag": "0008_envio_confirmado_index",
+      "breakpoints": true
     }
   ]
 }
