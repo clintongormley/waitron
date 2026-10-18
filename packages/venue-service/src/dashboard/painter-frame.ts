@@ -1,5 +1,6 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import type { CalendarColour } from "@waitron/shared";
 import {
   baseStyles,
   saveActionState,
@@ -10,7 +11,11 @@ import {
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
+import { SPECIAL_DAY_LINE, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
+
+/** What the painter edits: a season's calendar colour, "special" for a special day, "" for none. */
+export type PainterBand = CalendarColour | "special" | "";
 
 /**
  * A painter's full-screen frame: one bar (close, heading, the `picker`, `link` and `actions`
@@ -26,6 +31,7 @@ import { t } from "./strings.js";
 export class PainterFrame extends LitElement {
   static override styles = [
     baseStyles,
+    seasonTintStyles,
     css`
       :host {
         display: contents;
@@ -39,6 +45,17 @@ export class PainterFrame extends LitElement {
       header {
         flex: none;
         container-type: inline-size;
+      }
+      .band {
+        block-size: var(--wt-space-2);
+        border-radius: var(--wt-radius-full);
+        margin-block-end: var(--wt-space-2);
+      }
+      .band[data-tint] {
+        background: var(--season-tint-line);
+      }
+      .band[data-special] {
+        background: ${unsafeCSS(SPECIAL_DAY_LINE)};
       }
       .bar {
         display: grid;
@@ -135,6 +152,7 @@ export class PainterFrame extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** The message shown beside Save: a refused save, or a notice from the host. */
   @property() refusal = "";
+  @property() band: PainterBand = "";
   /** Nothing can be changed, so only ✕ is offered. */
   @property({ type: Boolean }) readOnly = false;
 
@@ -177,6 +195,17 @@ export class PainterFrame extends LitElement {
     >
       <div class="frame">
         <header>
+          ${
+            this.band
+              ? html`<div
+                  class="band"
+                  data-test="band"
+                  aria-hidden="true"
+                  data-tint=${this.band === "special" ? nothing : this.band}
+                  ?data-special=${this.band === "special"}
+                ></div>`
+              : nothing
+          }
           <div class="bar" ?data-actions=${this.hasActions && !this.readOnly}>
             <wt-button
               class="close"

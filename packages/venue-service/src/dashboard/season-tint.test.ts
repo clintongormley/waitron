@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CALENDAR_COLOURS } from "@waitron/shared";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed } from "@waitron/ui/src/a11y-helpers.js";
-import { SEASON_TINT_TOKENS, seasonTintStyles, seasonTints } from "./season-tint.js";
+import {
+  SEASON_TINT_TOKENS,
+  SPECIAL_DAY_LINE,
+  seasonTintStyles,
+  seasonTints,
+} from "./season-tint.js";
 import { STATION_COLOUR_TOKENS } from "./station-colour-styles.js";
 
 afterEach(cleanup);
@@ -99,5 +104,25 @@ describe.each(["light", "dark"] as const)("season paints (%s)", (theme) => {
       expect(contrast(edge, fill), `${colour} line on tint`).toBeGreaterThanOrEqual(3);
       expect(contrast(edge, surfaceColour), `${colour} line on surface`).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it("each season's line and the special-day line read on the painter's raised surface", async () => {
+    await mountThemed("<div></div>", theme);
+    const paint = (property: "color" | "backgroundColor", value: string) => {
+      const probe = document.createElement("span");
+      probe.style[property] = value;
+      host.append(probe);
+      return getComputedStyle(probe)[property];
+    };
+    const raised = paint("color", "var(--wt-color-surface-raised)");
+    for (const colour of CALENDAR_COLOURS) {
+      const line = paint("color", SEASON_TINT_TOKENS[colour].line);
+      expect(contrast(line, raised), `${colour} line on raised`).toBeGreaterThanOrEqual(3);
+    }
+    const special = paint("color", SPECIAL_DAY_LINE);
+    for (const ground of ["--wt-color-surface", "--wt-color-surface-raised", "--wt-color-bg"]) {
+      expect(contrast(special, paint("color", `var(${ground})`)), ground).toBeGreaterThanOrEqual(3);
+    }
+    expect(special).toBe(paint("color", "var(--wt-color-palette-purple)"));
   });
 });

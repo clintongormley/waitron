@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { CALENDAR_COLOURS } from "@waitron/shared";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { LeaveCoordinator } from "@waitron/ui";
 import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
 import type { PainterFrame } from "./painter-frame.js";
 import type { PaintGrid } from "./paint-grid.js";
+import { SEASON_TINT_TOKENS, SPECIAL_DAY_LINE } from "./season-tint.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
 
@@ -413,4 +415,97 @@ test("read-only: the actions slot is not shown", async () => {
   await frame.updateComplete;
   expect(remove.assignedSlot).toBeNull();
   expect(remove.getBoundingClientRect().width).toBe(0);
+});
+
+describe("the band in what the painter edits", () => {
+  const band = (frame: PainterFrame) => frame.shadowRoot!.querySelector<HTMLElement>(".band");
+  function painted(frame: PainterFrame, value: string) {
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = value;
+    frame.append(probe);
+    const colour = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return colour;
+  }
+
+  test("draws no band unless told what it edits", async () => {
+    const { frame } = await open();
+    expect(band(frame)).toBeNull();
+  });
+
+  test("a season's band runs the header's full width above the bar, in that season's line colour", async () => {
+    const { frame } = await open();
+    for (const colour of CALENDAR_COLOURS) {
+      frame.band = colour;
+      await frame.updateComplete;
+      const drawn = band(frame)!;
+      expect(drawn, colour).not.toBeNull();
+      expect(drawn.getAttribute("aria-hidden")).toBe("true");
+      expect(getComputedStyle(drawn).backgroundColor, colour).toBe(
+        painted(frame, SEASON_TINT_TOKENS[colour].line),
+      );
+      const box = drawn.getBoundingClientRect();
+      const bar = part(frame, ".bar").getBoundingClientRect();
+      expect(box.height).toBeGreaterThan(0);
+      expect(Math.abs(box.width - bar.width)).toBeLessThanOrEqual(1);
+      expect(box.bottom).toBeLessThanOrEqual(bar.top);
+    }
+  });
+
+  test("a special day's band is the special-day purple", async () => {
+    const { frame } = await open();
+    frame.band = "special";
+    await frame.updateComplete;
+    const special = painted(frame, SPECIAL_DAY_LINE);
+    expect(special).toBe(painted(frame, "var(--wt-color-palette-purple)"));
+    expect(getComputedStyle(band(frame)!).backgroundColor).toBe(special);
+    expect(band(frame)!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("the band stays put while the grid scrolls, and a viewer sees it too", async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(1280, 500);
+      const { frame } = await open();
+      frame.band = "green";
+      await frame.updateComplete;
+      const top = band(frame)!.getBoundingClientRect().top;
+      const content = frame
+        .querySelector<PaintGrid>("paint-grid")!
+        .shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+      content.scrollTop = 150;
+      expect(content.scrollTop).toBe(150);
+      expect(band(frame)!.getBoundingClientRect().top).toBe(top);
+      frame.readOnly = true;
+      await frame.updateComplete;
+      expect(band(frame)).not.toBeNull();
+      expect(band(frame)!.getBoundingClientRect().height).toBeGreaterThan(0);
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
+
+  test("at 390 px a band leaves ✕, the heading, Cancel and Save on screen", async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(390, 800);
+      expect(window.innerWidth).toBe(390);
+      const { frame } = await open();
+      frame.band = "special";
+      await frame.updateComplete;
+      for (const [name, element] of [
+        ["✕", dismiss(frame)],
+        ["heading", part(frame, "h2")],
+        ["Cancel", cancel(frame)],
+        ["Save", save(frame)],
+      ] as const) {
+        const box = element.getBoundingClientRect();
+        expect(box.width, name).toBeGreaterThan(0);
+        expect(box.left, name).toBeGreaterThanOrEqual(0);
+        expect(box.right, name).toBeLessThanOrEqual(391);
+      }
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
 });
