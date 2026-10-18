@@ -258,6 +258,11 @@ async function recallControl(el: TillTableOrderScreen, lineNo: number) {
   );
 }
 
+async function voidControl(el: TillTableOrderScreen, lineNo: number) {
+  await recallControl(el, lineNo);
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-sent-line-void]");
+}
+
 afterEach(cleanupWidgets);
 
 const draftAction = (el: TillTableOrderScreen, kind: string) =>
@@ -532,7 +537,10 @@ describe("till-table-order-screen", () => {
   it("hides the badge and duplicate To serve card after the last pending dish is served", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
     await openDrawer(el);
-    expect(el.shadowRoot!.querySelector(".pending-line")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".pending-line")).toBeNull();
+    expect((await sentFallbackFor(el)).querySelectorAll("[data-sent-fallback-line]")).toHaveLength(
+      2,
+    );
     el.lines = [{ ...pendingLine, servedAt: servedLine.servedAt }, servedLine];
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
@@ -570,9 +578,9 @@ describe("till-table-order-screen", () => {
     dialog.closeAfter("saved");
     await closed;
     await openDrawer(el);
-    expect(el.shadowRoot!.querySelectorAll(".pending-line")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelectorAll(".pending-line")).toHaveLength(0);
     expect(el.shadowRoot!.querySelector(".served-line, [data-serve]")).toBeNull();
-    expect(el.shadowRoot!.textContent).toContain(t("table.pending_title"));
+    expect(el.shadowRoot!.textContent).not.toContain(t("table.pending_title"));
   });
 
   it("keeps an extras row's figures in its dish's columns", async () => {
@@ -2754,22 +2762,19 @@ describe("till-table-order-screen", () => {
       expect(captured).toEqual([]);
     });
 
-    it("renders no Send, Recall or course picker on a child extras line, only its dish's Cancel", async () => {
-      // Parent (fired + queued) is recallable and shows its read-only course; the child shows neither.
+    it("keeps extras without separate actions and offers Void on their dish in Sent", async () => {
       const { el } = await mount({ lines: [pendingLine, childLine], courses });
       await openDrawer(el);
       expect(await recallControl(el, 1)).not.toBeNull();
-      // The child row: no Send or Recall action, and Cancel because its dish offers it…
       expect(el.shadowRoot!.querySelector('[data-send-line="2"]')).toBeNull();
       expect(await recallControl(el, 2)).toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).not.toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).not.toBeNull();
-      // …and no course control at all (neither the editable held picker nor the fired static span).
+      expect(await voidControl(el, 1)).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-line-course="2"]')).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-line-course-static="2"]')).toBeNull();
     });
 
-    it("offers Cancel for a queued split-off extra when its no-preparation dish cannot be cancelled", async () => {
+    it("offers Void on the no-preparation dish rather than a separate action on its queued extra", async () => {
       const dish: TabLine = {
         ...pendingLine,
         sentAt: pendingLine.sentAt,
@@ -2785,7 +2790,8 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({ lines: [dish, chips], courses });
       await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).not.toBeNull();
+      expect(await voidControl(el, 1)).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).toBeNull();
     });
 
     it("paints a child extras row as belonging to its dish, never as a dish of its own", async () => {
@@ -2958,8 +2964,7 @@ describe("till-table-order-screen", () => {
       const recall = await recallControl(el, 1);
       expect(recall).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-send-line="1"]')).toBeNull();
-      // Owner decision (menus plan Task 7c): a queued line is cancellable too, beside Recall.
-      expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-sent-line-void]")).not.toBeNull();
 
       let captured: CustomEvent | undefined;
       el.addEventListener("recall-lines", (e) => (captured = e as CustomEvent));
@@ -2969,31 +2974,32 @@ describe("till-table-order-screen", () => {
       expect(captured!.bubbles).toBe(true);
     });
 
-    it("shows Cancel on a FIRED, started line; pressing it asks the app to cancel it as started", async () => {
+    it("offers Void in Sent for a started line and preserves the app cancellation target", async () => {
       const { el } = await mount({ lines: [preparingLine], courses });
       await openDrawer(el);
-      const cancel = el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="1"]');
+      const cancel = await voidControl(el, 1);
       expect(cancel).not.toBeNull();
-      // A started line is cancel-only — no Send, no Recall.
       expect(el.shadowRoot!.querySelector('[data-send-line="1"]')).toBeNull();
       expect(await recallControl(el, 1)).toBeNull();
 
       let captured: CustomEvent | undefined;
       el.addEventListener("adjust", (e) => (captured = e as CustomEvent));
-      cancel!.click();
+      el.cancelOffer = 1;
+      await el.updateComplete;
       expect(captured).toBeInstanceOf(CustomEvent);
       expect(captured!.detail).toEqual({
         kind: "cancel",
+        offered: true,
         target: expect.objectContaining({ lineId: pendingLine.id, started: true }),
       });
       expect(captured!.composed).toBe(true);
       expect(captured!.bubbles).toBe(true);
     });
 
-    it("also shows Cancel (not Recall) on a FIRED, ready line", async () => {
+    it("offers Void rather than Recall in Sent for a ready line", async () => {
       const { el } = await mount({ lines: [readyLine], courses });
       await openDrawer(el);
-      expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).not.toBeNull();
+      expect(await voidControl(el, 1)).not.toBeNull();
       expect(await recallControl(el, 1)).toBeNull();
     });
   });
@@ -3258,12 +3264,12 @@ describe("till-table-order-screen", () => {
       },
     );
 
-    it("offers queued Recall in Sent and Cancel without a direct Change editor", async () => {
+    it("offers queued Recall and Void in Sent without a direct Change editor", async () => {
       const { el } = await mountLines([burgerLine]);
       await openDrawer(el);
       expect(lineAction(el, "change", 5)).toBeNull();
       expect(await recallControl(el, 5)).not.toBeNull();
-      expect(lineAction(el, "cancel", 5)).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-sent-line-void]")).not.toBeNull();
       expect(el.shadowRoot!.querySelector(".change-editor")).toBeNull();
     });
 
@@ -3276,10 +3282,10 @@ describe("till-table-order-screen", () => {
       expect(lineAction(el, "change", 8)).toBeNull();
     });
 
-    it("offers Cancel on a recalled line without direct Send or Change", async () => {
+    it("offers Void in Sent on a recalled line without direct Send or Change", async () => {
       const { el } = await mountLines([recalledLine]);
       await openDrawer(el);
-      expect(lineAction(el, "cancel", 6)).not.toBeNull();
+      expect(await voidControl(el, 6)).not.toBeNull();
       expect(lineAction(el, "send", 6)).toBeNull();
       expect(lineAction(el, "change", 6)).toBeNull();
     });
@@ -3294,11 +3300,11 @@ describe("till-table-order-screen", () => {
       expect(editor(el)).toBeNull();
     });
 
-    it("offers Cancel alone on a line the kitchen has started", async () => {
+    it("offers Void without Change or Recall on a line the kitchen has started", async () => {
       const { el } = await mountLines([preparingBurger, readyBurger]);
       await openDrawer(el);
       for (const lineNo of [9, 10]) {
-        expect(lineAction(el, "cancel", lineNo)).not.toBeNull();
+        expect(await voidControl(el, lineNo)).not.toBeNull();
         expect(lineAction(el, "change", lineNo)).toBeNull();
         expect(await recallControl(el, lineNo)).toBeNull();
       }
@@ -3322,7 +3328,7 @@ describe("till-table-order-screen", () => {
       expect(lineAction(el, "change", 6)).toBeNull();
     });
 
-    it("with changes to sent items switched off, a sent line offers Cancel and neither Change nor Recall", async () => {
+    it("with changes to sent items switched off, Sent offers Void and neither Change nor Recall", async () => {
       const { el } = await mountLines([burgerLine, recalledLine, noRouteLine, preparingBurger], {
         editSentLines: false,
       });
@@ -3330,7 +3336,7 @@ describe("till-table-order-screen", () => {
       for (const lineNo of [5, 6, 9]) {
         expect(lineAction(el, "change", lineNo)).toBeNull();
         expect(await recallControl(el, lineNo)).toBeNull();
-        expect(lineAction(el, "cancel", lineNo)).not.toBeNull();
+        expect(el.shadowRoot!.querySelector("[data-sent-line-void]")).not.toBeNull();
       }
       expect(lineAction(el, "change", 7)).toBeNull();
     });

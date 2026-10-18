@@ -292,14 +292,26 @@ describe("till-table-order-screen: giving away and discounting a dish", () => {
 });
 
 describe("till-table-order-screen: cancelling a dish", () => {
-  it("asks the app to cancel a dish, which one at a time covers even with its extras, as Give away does", async () => {
+  it("keeps the app cancellation offer target and native Sent Void on the whole dish with its extras", async () => {
     const el = await mountScreen({ lines: [{ ...pizza, quantity: "2.000" }, olives] });
     const asked = capture(el);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="2"]')!.click();
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await el.updateComplete;
+    await openSentDish(el, "line-2");
+    await openSentMore(el);
+    const cancelled: CustomEvent[] = [];
+    el.addEventListener("cancel-item", (event) => cancelled.push(event as CustomEvent));
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-void]")!);
+    expect(cancelled.map((event) => [event.detail, event.bubbles, event.composed])).toEqual([
+      [{ lineId: "line-2" }, true, true],
+    ]);
+    el.cancelOffer = 2;
+    await el.updateComplete;
     await comp(el, 2);
     expect(asked).toEqual([
       {
         kind: "cancel",
+        offered: true,
         target: {
           lineId: "line-2",
           name: "Pizza",
@@ -316,7 +328,7 @@ describe("till-table-order-screen: cancelling a dish", () => {
   const cancelOf = (el: TillTableOrderScreen, lineNo: number) =>
     el.shadowRoot!.querySelector<HTMLElement>(`[data-cancel-line="${lineNo}"]`);
 
-  it("cancels an extra on its own and whole, as coming off the bill and telling the kitchen, where its dish offers Cancel", async () => {
+  it("keeps a whole extra as a Comp target without a separate Cancel action", async () => {
     const el = await mountScreen({
       lines: [
         { ...pizza, quantity: "2.000", state: "preparing" },
@@ -324,23 +336,21 @@ describe("till-table-order-screen: cancelling a dish", () => {
       ],
     });
     const asked = capture(el);
-    expect(cancelOf(el, 3)!.getAttribute("aria-label")).toBe(
-      `${t("table.cancel_line")} · ${olivesWithPizza()}`,
-    );
-    cancelOf(el, 3)!.click();
-    expect(asked).toEqual([
+    expect(cancelOf(el, 3)).toBeNull();
+    await comp(el, 2);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.kind).toBe("comp");
+    expect(asked[0]!.combined).toBe(true);
+    expect(asked[0]!.target.extras).toEqual([
       {
-        kind: "cancel",
-        target: {
-          lineId: "line-3",
-          name: olivesWithPizza(),
-          quantity: "2",
-          total: "3.00",
-          unitTotal: null,
-          started: false,
-          extra: true,
-          kitchenTold: true,
-        },
+        lineId: "line-3",
+        name: olivesWithPizza(),
+        quantity: "2",
+        total: "3.00",
+        unitTotal: null,
+        started: false,
+        extra: true,
+        kitchenTold: true,
       },
     ]);
   });

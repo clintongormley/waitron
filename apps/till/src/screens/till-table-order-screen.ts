@@ -505,24 +505,6 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .line {
-        display: grid;
-
-        grid-template-columns: 1fr auto auto auto;
-        align-items: center;
-        gap: var(--wt-space-3);
-        padding: var(--wt-space-2) 0;
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-
-      .line-actions {
-        grid-column: 1 / -1;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: var(--wt-space-2);
-      }
-
       /* Three buttons do not fit on one line of the dialog at phone width, so they wrap rather than
          squeeze their labels onto two lines each. */
       .cancel-actions {
@@ -530,16 +512,6 @@ export class TillTableOrderScreen extends LitElement {
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: var(--wt-space-2);
-      }
-
-      /* A CHILD extras row belongs to the dish above it, and a waiter must be able to see that at a
-         glance: three of a €12.50 cheese is a pick on a burger, not three portions of cheese. Same
-         shape the basket gives a pick (the .option rule in ../widgets/basket.ts) — indented and muted —
-         with the smaller type the screen already uses for a line's subordinate text. */
-      .child-line {
-        padding-left: var(--wt-space-4);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
       }
 
       .qty {
@@ -1155,8 +1127,6 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) billEdit: BillEditExpected | null = null;
   @property({ attribute: false }) routingRevision: number | null = null;
   @property({ attribute: false }) billEdits: readonly BillEditExpected[] = [];
-  /** The venue's setting. When off, the server refuses to change or recall a sent line that has a
-   * ticket item, so those lines offer Cancel instead. */
   @property({ attribute: false }) editSentLines = true;
   /** Set by the app when a change was refused because the kitchen had started the line: that line's
    * Cancel opens. */
@@ -2090,36 +2060,6 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #canCancel(line: TabLine): boolean {
-    if (this.#isChild(line) && line.state === null) {
-      const dish = this.#lineByNo.get(line.parentLineNo!);
-      return dish !== undefined && this.#canCancel(dish);
-    }
-    if (inHeldGroup(line, this.#heldGroupIds!)) return true;
-    const queued = line.state === "queued" && (line.firedAt !== null || line.sentAt !== null);
-    return isStarted(line) || queued;
-  }
-
-  #lineActions(line: TabLine): TemplateResult | typeof nothing {
-    const name = this.#adjustName(line);
-    const label = (key: StringKey) => `${t(key)} · ${name}`;
-    const actions: TemplateResult[] = [];
-    if (this.#canCancel(line))
-      actions.push(
-        html`<wt-button
-          class="line-cancel"
-          size="sm"
-          variant="danger"
-          data-cancel-line=${line.lineNo}
-          aria-label=${label("table.cancel_line")}
-          @click=${() => this.#adjust("cancel", this.#lineTarget(line))}
-        >
-          ${t("table.cancel_line")}
-        </wt-button>`,
-      );
-    return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
-  }
-
   /** A bill with no party is adjusted from the counter's basket, not from this screen. */
   #adjustable(): boolean {
     return (
@@ -2332,7 +2272,7 @@ export class TillTableOrderScreen extends LitElement {
                 </section>`
               : this.#ordering(draft)
           }
-          ${this.drawerOpen ? this.#drawer(pending) : nothing}
+          ${this.drawerOpen ? this.#drawer() : nothing}
         </div>
         ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#serveDialog()}
         ${this.#takeOverDialog()} ${this.#billChoiceDialog()} ${this.#nameDialog()}
@@ -2806,8 +2746,8 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`
               <p class="move-dish">
-                ${row.name}${this.#nutrition(row)}
-                ×${this.#displayQty(row.quantity)}${this.#sentDetails(row)}
+                ${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}
+                ${this.#sentDetails(row)}
               </p>
               ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
               <div class="total-row">
@@ -3846,10 +3786,9 @@ export class TillTableOrderScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  #drawer(pending: TabLine[]): TemplateResult {
+  #drawer(): TemplateResult {
     return html`
       <aside class="drawer" data-drawer aria-label=${t("table.open_drawer")}>
-        ${this.#pendingSection(pending)}
         <div class="total-row">
           <span class="label">${t("label.total")}</span>
           <span class="amount" data-tab-total
@@ -4159,16 +4098,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#dispatch("take-payment", { workingOrderId: bill.workingOrderId });
   }
 
-  #pendingSection(pending: TabLine[]): TemplateResult | typeof nothing {
-    if (pending.length === 0) return nothing;
-    return html`<section class="pending">
-      <h2>${t("table.pending_title")}</h2>
-      <ul>
-        ${pending.map((line) => this.#pendingLine(line))}
-      </ul>
-    </section>`;
-  }
-
   #lineNote(line: TabLine): TemplateResult | typeof nothing {
     return line.note === null
       ? nothing
@@ -4187,17 +4116,6 @@ export class TillTableOrderScreen extends LitElement {
       line.nutrition?.allergens,
       nutritionDietLabels(undefined, line.nutrition?.dietaryDeclarations),
     );
-  }
-
-  #pendingLine(line: TabLine): TemplateResult {
-    const name = this.#nameForLine(line);
-    return html`<li class="line pending-line${this.#isChild(line) ? " child-line" : ""}">
-      <span class="name"
-        >${name}${this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
-      >
-      <span class="qty">${this.#displayQty(line.quantity)}</span>
-      ${this.#lineTotal(line)} ${this.#lineActions(line)}
-    </li>`;
   }
 
   #sentOf(group: CurrentOrderGroup): TemplateResult {
