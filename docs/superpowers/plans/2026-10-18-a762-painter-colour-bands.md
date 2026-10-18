@@ -297,9 +297,9 @@ export type PainterBand = CalendarColour | "special" | "";
 and renders, first inside `<header>`, when `band` is not `""`:
 `<div class="band" data-test="band" aria-hidden="true" data-tint=… ?data-special=…></div>` —
 `data-tint` carries the colour for a season, `data-special` marks a special day. `.band` is
-`block-size: var(--wt-space-2)`, `border-radius: var(--wt-radius-full)`, `margin-block-end:
-var(--wt-space-2)`; `.band[data-tint]` paints `var(--season-tint-line)`, `.band[data-special]`
-paints `SPECIAL_DAY_LINE` (through `unsafeCSS`). Shown read-only too.
+`block-size: var(--wt-space-2)`, `border-radius: var(--wt-radius-full)`; `.band[data-tint]` paints
+`var(--season-tint-line)`, `.band[data-special]` paints `SPECIAL_DAY_LINE` (through `unsafeCSS`).
+Shown read-only too.
 
 - [ ] **Step 1: failing tests.**
   - `season-tint.test.ts`, inside `describe.each(["light","dark"])("season paints (%s)")`, a new

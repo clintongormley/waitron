@@ -50,7 +50,9 @@ export class PainterFrame extends LitElement {
       .band {
         block-size: var(--wt-space-2);
         border-radius: var(--wt-radius-full);
-        margin-block-end: var(--wt-space-2);
+        /* Pulled up into the modal body's top padding (wt-dialog's --wt-space-5), so the band takes
+           no height from the grid: on a phone in Spanish the grid has only about half the screen. */
+        margin-block: calc(-1 * var(--wt-space-4)) var(--wt-space-2);
       }
       .band[data-tint] {
         background: var(--season-tint-line);
