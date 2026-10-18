@@ -222,6 +222,21 @@ describe("dashboard-aeat-certificate-dialog", () => {
     expect(actions(dialog).error).toBe(FIX);
   });
 
+  it.each([
+    ["the file, when it is too large", new Uint8Array(100 * 1024 + 1), "", "file"],
+    ["the passphrase, when it is empty", BYTES, "", "passphrase"],
+  ] as const)("moves focus to %s, after an invalid Save", async (_name, bytes, pass, field) => {
+    const { dialog } = await open({});
+    await choose(dialog, new File([bytes], "bar-lucia-2026.p12"));
+    await type(dialog, pass);
+    await press(dialog);
+    await vi.waitFor(() =>
+      expect(dialog.shadowRoot!.activeElement).toBe(
+        field === "file" ? fileField(dialog) : passField(dialog),
+      ),
+    );
+  });
+
   it("marks a file over 100 KiB under the file without a request, and sends one of exactly 100 KiB", async () => {
     const { dialog, install } = await open({
       install: async () => ({ outcome: "refused", reason: "unreadable", field: "file" }),
