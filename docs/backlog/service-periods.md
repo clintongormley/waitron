@@ -165,7 +165,7 @@ outside (menu publication dates, imports), so it needs a decision.
 
 ## A server write that changes a department's hours leaves its zones' closures outside them
 
-Left open by A723.
+Left open by A723 (#1849).
 
 A write that changes only a department's hours is not refused and does not cut the zone closures
 already stored: the menu-week route (`replaceMenuWeek`), deleting a period (`period-delete.ts`),
@@ -180,7 +180,7 @@ writes is the plan's reading of the code, not run here.)
 
 ## The zone-closure hours check runs at the routes, not inside the writers
 
-Left open by A723.
+Left open by A723 (#1849).
 
 The check that a zone closure lies inside its department's hours runs in the season-week,
 closed-week and special-day routes and in the configuration import (`configuration-transfer.ts`),
@@ -194,7 +194,7 @@ would break under a check inside them. (A723 plan, Decision 1.)
 
 ## Unticking a special date's "Closed all day" brings back its zone paint unchecked
 
-Left open by A723.
+Left open by A723 (#1849).
 
 The server does not check zone closures on a date ticked closed all day
 (`assertDatedClosuresInHours` skips it), because the day's resolver ignores zone paint there. Zone
@@ -205,7 +205,7 @@ from what is saved. So a stored closure outside the department's hours that date
 
 ## A change to a department's season week can leave a special date's zone closure outside its new hours
 
-Left open by A723.
+Left open by A723 (#1849).
 
 A special date's department hours come from the season week its date falls in, with the day's own
 paint laid over them. A change to that week (a season-painter save, the menu-week route) or to
@@ -216,7 +216,7 @@ save sends.
 
 ## A yearly special day's zone paint is checked against its stored date only
 
-Left open by A723.
+Left open by A723 (#1849).
 
 `assertDatedClosuresInHours` checks each stored date against its department's hours on that date.
 A special day that repeats every year falls in later years on other weekdays, and perhaps in other
@@ -224,7 +224,7 @@ seasons, where the department's hours can differ; its zone closures are not chec
 
 ## A special day whose dates have different changeovers is cut on the first date's changeover
 
-Left open by A723.
+Left open by A723 (#1849).
 
 The special-day editor draws every date from the first date's changeover (`cutover`,
 `special-day-painter.ts`) and cuts every date's zone Closed paint on it, while the server checks
@@ -235,7 +235,7 @@ editor shows its reason. Read in the code, not run.
 
 ## The season-week and closed-week routes do not lower-case a zone or season id, as the special-day route does
 
-Found during A723.
+Found during A723 (#1849).
 
 The season-week route (`PUT …/seasons/:seasonId/weeks`) and the closed-week route
 (`PUT …/zones/:zoneId/closed-week`) take a zone or season id as sent (`requireUuidParam`,
@@ -247,7 +247,7 @@ and then an upper-case season id, sent to each of the two routes was answered 40
 
 ## A cut-away zone stroke hides another day's refusal marker until the next Save
 
-Left open by A723.
+Left open by A723 (#1849).
 
 In both opening-hours painters, a change to a zone's day whose Closed paint is cut away entirely
 replaces the whole refusal beside Save with "A zone can only close while its department is open."
@@ -257,7 +257,7 @@ message wins.
 
 ## A season closure on a special date is not cut or checked against that date's shorter hours
 
-Found during A723.
+Found during A723 (#1849).
 
 On a special date, a zone's closures from its season week still apply, with the date's zone paint
 laid over them (`layerZonePaint` in `resolveZoneClosedDays`, `day-resolver.ts`). When the
@@ -269,7 +269,7 @@ closure can lie outside that date's department hours. Found by reading the code,
 
 ## A723's plan defaults sent to the owner as an FYI
 
-Left open by A723.
+Left open by A723 (#1849).
 
 A723's plan made these choices by default and sent them to the owner to overrule if wanted
 ([plan](../superpowers/plans/2026-10-18-a723-painters-standard-week.md), "Decisions this plan

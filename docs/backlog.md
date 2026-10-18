@@ -1459,35 +1459,35 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
     uses the commands.
 
 - **A server write that changes a department's hours leaves its zones' closures outside them** —
-  left open by A723; the next save of such a zone is refused. [Detail](backlog/service-periods.md#a-server-write-that-changes-a-departments-hours-leaves-its-zones-closures-outside-them)
+  left open by A723 (#1849); the next save of such a zone is refused. [Detail](backlog/service-periods.md#a-server-write-that-changes-a-departments-hours-leaves-its-zones-closures-outside-them)
 
-- **The zone-closure hours check runs at the routes, not inside the writers** — left open by A723;
+- **The zone-closure hours check runs at the routes, not inside the writers** — left open by A723 (#1849);
   a direct caller of the writers is not checked. [Detail](backlog/service-periods.md#the-zone-closure-hours-check-runs-at-the-routes-not-inside-the-writers)
 
 - **Unticking a special date's "Closed all day" brings back its zone paint unchecked** — left open
-  by A723. [Detail](backlog/service-periods.md#unticking-a-special-dates-closed-all-day-brings-back-its-zone-paint-unchecked)
+  by A723 (#1849). [Detail](backlog/service-periods.md#unticking-a-special-dates-closed-all-day-brings-back-its-zone-paint-unchecked)
 
 - **A change to a department's season week can leave a special date's zone closure outside its
-  new hours** — left open by A723; nothing checks it. [Detail](backlog/service-periods.md#a-change-to-a-departments-season-week-can-leave-a-special-dates-zone-closure-outside-its-new-hours)
+  new hours** — left open by A723 (#1849); nothing checks it. [Detail](backlog/service-periods.md#a-change-to-a-departments-season-week-can-leave-a-special-dates-zone-closure-outside-its-new-hours)
 
 - **A yearly special day's zone paint is checked against its stored date only** — left open by
-  A723, not against each later year's weekday and season. [Detail](backlog/service-periods.md#a-yearly-special-days-zone-paint-is-checked-against-its-stored-date-only)
+  A723 (#1849), not against each later year's weekday and season. [Detail](backlog/service-periods.md#a-yearly-special-days-zone-paint-is-checked-against-its-stored-date-only)
 
-- **`opening.follow_week` and `menu.normal_week` have no reader** — found during A723; it
+- **`opening.follow_week` and `menu.normal_week` have no reader** — found during A723 (#1849); it
   predates A723. Both strings, English and Spanish, are in
   `packages/venue-service/src/dashboard/strings.ts` and nothing reads them; delete them or use them.
 
 - **A special day whose dates have different changeovers is cut on the first date's changeover** —
-  left open by A723; the server checks each date on its own and can refuse. [Detail](backlog/service-periods.md#a-special-day-whose-dates-have-different-changeovers-is-cut-on-the-first-dates-changeover)
+  left open by A723 (#1849); the server checks each date on its own and can refuse. [Detail](backlog/service-periods.md#a-special-day-whose-dates-have-different-changeovers-is-cut-on-the-first-dates-changeover)
 
 - **The season-week and closed-week routes do not lower-case a zone or season id, as the
-  special-day route does** — found during A723; it predates A723. [Detail](backlog/service-periods.md#the-season-week-and-closed-week-routes-do-not-lower-case-a-zone-or-season-id-as-the-special-day-route-does)
+  special-day route does** — found during A723 (#1849); it predates A723. [Detail](backlog/service-periods.md#the-season-week-and-closed-week-routes-do-not-lower-case-a-zone-or-season-id-as-the-special-day-route-does)
 
 - **A cut-away zone stroke hides another day's refusal marker until the next Save** — left open by
-  A723. [Detail](backlog/service-periods.md#a-cut-away-zone-stroke-hides-another-days-refusal-marker-until-the-next-save)
+  A723 (#1849). [Detail](backlog/service-periods.md#a-cut-away-zone-stroke-hides-another-days-refusal-marker-until-the-next-save)
 
 - **A season closure on a special date is not cut or checked against that date's shorter hours** —
-  found during A723, by reading. [Detail](backlog/service-periods.md#a-season-closure-on-a-special-date-is-not-cut-or-checked-against-that-dates-shorter-hours)
+  found during A723 (#1849), by reading. [Detail](backlog/service-periods.md#a-season-closure-on-a-special-date-is-not-cut-or-checked-against-that-dates-shorter-hours)
 
 - **A723's plan defaults sent to the owner as an FYI** (Decisions 1, 3, 6, 7 and 9) — the owner may
   overrule any. [Detail](backlog/service-periods.md#a723s-plan-defaults-sent-to-the-owner-as-an-fyi)
