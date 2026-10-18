@@ -1,5 +1,9 @@
 # Extras made at their own station, and tickets that name each other (slice 3c-2) Implementation Plan
 
+> **2026-10-19, A773-1:** standalone table-line Send is retired in the unlanded A773-1 branch.
+> Recalled dishes resend through New order under the [current table-panel design](../specs/2026-10-16-a773-courses-and-groups-design.md#35-the-new-order).
+> The `sendsAlone` observations and helper tests below describe the earlier interface.
+
 > 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
 > Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
 > governs retained history, routing cleanup and empty screen scopes. Earlier station/course

@@ -2111,8 +2111,7 @@ The remaining work includes:
 
 - Retire the duplicate To serve list, its empty state and direct Cancel strip after moving their
   remaining checks to Sent and its native actions. Keep recorded names, notes, prices, extras,
-  paid markers, allergy information, refusals and leave protection. Retire the unused standalone
-  Send helper only after moving its behavioral checks.
+  paid markers, allergy information, refusals and leave protection.
 - Integrate the owner's Q43 cancellation changes after lane C publishes A758's revised design,
   as the watcher's 2026-10-18 instruction requires. Finish the held-dish resolution before Finish
   table (plan T20/T22); the earlier picture-03 implementation is not that revised design.
@@ -2272,9 +2271,7 @@ reach them.
   the target party; the deleted `moveTabLines` ignored groups, and whether the paths that move lines
   now do the same is not checked; a whole-order save replacing a held dish with another variant
   moves it to a new held group at the end; the counter's whole-order save does not answer the
-  party's revision; and the table screen offers no Send on a held no-route dish outside any group
-  (its per-line Send needs a kitchen ticket item, `sendsAlone`,
-  `apps/till/src/state/held-groups.ts`) — whether one can occur on a party's tab is not established.
+  party's revision.
   Left open by service Task 3 (#733, order groups).
 
 ## Task 10 (#908, the service dashboard's attention signals)
