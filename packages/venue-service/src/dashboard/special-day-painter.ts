@@ -17,7 +17,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { layerPaint, stepSpan } from "../day-paint.js";
 import { holidayDateName } from "../holiday-naming.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
-import { addDays, isLocalDate, rangeDates } from "../hours-rules.js";
+import { isLocalDate, rangeDates } from "../hours-rules.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { Paint } from "../paint-model.js";
@@ -48,6 +48,7 @@ import {
   formatWeekday,
 } from "./hours-view.js";
 import { t } from "./strings.js";
+import { runsOf } from "./date-runs.js";
 import "./add-dates-calendar.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
@@ -213,16 +214,6 @@ const byStart = (cutover: string) => (a: Paint, b: Paint) =>
   stepSpan(a, cutover)[0] - stepSpan(b, cutover)[0];
 const columnLabel = (date: LocalDate) =>
   `${formatWeekday(date, "short")} ${formatMonthDay(date.slice(5))}`;
-/** Sorted dates as runs of consecutive dates, each its first and last date. */
-function runsOf(dates: readonly LocalDate[]): [LocalDate, LocalDate][] {
-  const runs: [LocalDate, LocalDate][] = [];
-  for (const date of dates) {
-    const last = runs.at(-1);
-    if (last && addDays(last[1], 1) === date) last[1] = date;
-    else runs.push([date, date]);
-  }
-  return runs;
-}
 
 /**
  * One special day in a full-screen painter: its name, dates and Every year in a side panel, and a

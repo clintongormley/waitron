@@ -19,6 +19,7 @@ import {
   placePopover,
   timeRuler,
 } from "./paint-grid-parts.js";
+import { formatDateRuns } from "./date-runs.js";
 
 describe("@waitron/venue-service/painter", () => {
   it("exposes the painter frame and the helpers another module's painter draws with", () => {
@@ -41,6 +42,7 @@ describe("@waitron/venue-service/painter", () => {
       ColumnStroke,
       CopyChooser,
       isDeleteKey,
+      formatDateRuns,
     });
   });
 
