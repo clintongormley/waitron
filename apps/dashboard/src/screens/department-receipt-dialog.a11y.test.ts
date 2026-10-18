@@ -10,6 +10,7 @@ import {
   receiptField,
   receiptModel,
   preview,
+  receiptRoot,
 } from "../testing/department-receipt-dialog-fixture.js";
 
 afterEach(() => {
@@ -41,7 +42,7 @@ it.each(cases)(
           await receiptField(el, "email").updateComplete;
         }
         await expectNoA11yViolations(host);
-        await expect.poll(() => el.shadowRoot!.querySelector(".paper")).toBeTruthy();
+        await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
         const native = dialog.shadowRoot!.querySelector("dialog")!;
         expect(native.getBoundingClientRect().right).toBeLessThanOrEqual(width);
         expect(native.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
@@ -146,15 +147,15 @@ it.each(cases)(
             },
           });
         const { el, host } = await mountReceiptDialog(api, theme);
-        const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+        const upload = receiptRoot(el).querySelector("dashboard-image-upload")!;
         expect(upload.image).toBe(logo);
         expect(
-          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>(
             "wt-switch[name=printAddress]",
           )!.checked,
         ).toBe(state !== "address-off");
         if (state === "no-address")
-          expect(el.shadowRoot!.querySelector("[data-test=venue-address]")!.textContent).toContain(
+          expect(receiptRoot(el).querySelector("[data-test=venue-address]")!.textContent).toContain(
             t("receipts.no_address"),
           );
         if (refused) {
@@ -163,7 +164,7 @@ it.each(cases)(
           if (state === "logo") await expect.poll(() => upload.invalid).toBe(true);
           else if (state === "printAddress")
             await expect
-              .poll(() => el.shadowRoot!.querySelector("[data-field-error=printAddress]"))
+              .poll(() => receiptRoot(el).querySelector("[data-field-error=printAddress]"))
               .toBeTruthy();
           else
             await expect
@@ -174,13 +175,13 @@ it.each(cases)(
               .not.toBe("");
           if (state === "footerMessage") {
             await expect
-              .poll(() => el.shadowRoot!.querySelector("[data-mark=headerSubtitle]"))
+              .poll(() => receiptRoot(el).querySelector("[data-mark=headerSubtitle]"))
               .toBeTruthy();
             receiptField(el, "headerSubtitle-es-ES").focus();
             await expect
               .poll(() =>
-                el
-                  .shadowRoot!.querySelector("[data-mark=headerSubtitle]")!
+                receiptRoot(el)
+                  .querySelector("[data-mark=headerSubtitle]")!
                   .hasAttribute("data-active"),
               )
               .toBe(true);

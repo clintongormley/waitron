@@ -14,6 +14,7 @@ import {
   receiptField,
   receiptSave,
   editReceipt,
+  receiptRoot,
 } from "../testing/department-receipt-dialog-fixture.js";
 import type { DepartmentReceiptDialog } from "./department-receipt-dialog.js";
 import "./department-receipt-dialog.js";
@@ -41,7 +42,7 @@ async function mount(locale = "en-GB", theme: "light" | "dark" = "light") {
     { api, subject: { id: "bar", name: "Bar" } },
     theme,
   );
-  await expect.poll(() => el.shadowRoot?.querySelector("[name=email]")).toBeTruthy();
+  await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
   const dialog = el.shadowRoot!.querySelector("wt-modal")!;
   await expect.poll(() => dialog.shadowRoot?.querySelector("dialog")?.matches(":modal")).toBe(true);
   return {
@@ -86,7 +87,7 @@ it("a live policy and receipt read preserves the host-selected dialog's authored
   await expect.poll(() => receiptField(el, "operationDescription").value).toBe("New elsewhere");
   expect(receiptField(el, "email").value).toBe("draft@example.com");
   expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=receiptPrintMode]")!
+    receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=receiptPrintMode]")!
       .checked,
   ).toBe(false);
   expect(receiptSave(el).disabled).toBe(false);
@@ -114,7 +115,7 @@ it("a declarative selection can reopen the same department after its closed subj
   const { el, dialog, fetchImpl } = await mount();
   const closed = dialogClosed(dialog);
   await userEvent.click(
-    page.elementLocator(el.shadowRoot!.querySelector("[data-test=cancel-receipt]")!),
+    page.elementLocator(receiptRoot(el).querySelector("[data-test=cancel-receipt]")!),
   );
   await closed;
   el.subject = undefined;
@@ -145,7 +146,7 @@ it.each(hostCases)(
       expect(native.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
       expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth + 1);
-      await expect.poll(() => el.shadowRoot!.querySelector(".paper")).toBeTruthy();
+      await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
       if (import.meta.env.VITE_A493_PORT_CAPTURE === "1")
         await page.screenshot({
           path: `__screenshots__/look/a493-port/${locale}-${theme}-${width}.png`,

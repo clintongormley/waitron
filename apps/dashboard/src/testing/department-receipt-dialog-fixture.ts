@@ -89,13 +89,19 @@ export async function mountReceiptDialog(api = receiptApi(), theme: "light" | "d
   )!;
   await el.updateComplete;
   el.show({ id: "bar", name: "Bar" });
-  await expect.poll(() => el.shadowRoot?.querySelector("[name=email]")).toBeTruthy();
+  await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
   const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-modal")!;
   await expect.poll(() => dialog.shadowRoot?.querySelector("dialog")?.matches(":modal")).toBe(true);
   return { app, host, el, dialog, api };
 }
+export function receiptRoot(el: DepartmentReceiptDialog): ShadowRoot {
+  return (
+    el.shadowRoot!.querySelector("dashboard-department-receipt-editor")?.shadowRoot ??
+    el.shadowRoot!
+  );
+}
 export function receiptField(el: DepartmentReceiptDialog, name: string) {
-  return el.shadowRoot!.querySelector<WtInput | WtTextarea>(`[name="${name}"]`)!;
+  return receiptRoot(el).querySelector<WtInput | WtTextarea>(`[name="${name}"]`)!;
 }
 export async function editReceipt(el: DepartmentReceiptDialog, name: string, value: string) {
   const field = receiptField(el, name);
@@ -109,7 +115,7 @@ export async function editReceipt(el: DepartmentReceiptDialog, name: string, val
   await el.updateComplete;
 }
 export function receiptSave(el: DepartmentReceiptDialog) {
-  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+  return receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-button"]>(
     "[data-test=save-receipt]",
   )!;
 }

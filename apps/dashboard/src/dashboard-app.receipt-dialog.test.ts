@@ -11,6 +11,7 @@ import {
   preview,
   editReceipt,
   receiptSave,
+  receiptRoot,
 } from "./testing/department-receipt-dialog-fixture.js";
 import type { DepartmentReceiptDialog } from "./screens/department-receipt-dialog.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
@@ -168,9 +169,9 @@ it.each([true, false])(
       app.shadowRoot!,
       "dashboard-department-receipt-dialog",
     ) as DepartmentReceiptDialog;
-    await expect.poll(() => editor.shadowRoot?.querySelector("[name=email]")).toBeTruthy();
+    await expect.poll(() => receiptRoot(editor).querySelector("[name=email]")).toBeTruthy();
     expect(editor.subject).toEqual({ id: "bar", name: "Bar" });
-    expect(!!editor.shadowRoot!.querySelector("[name=operationDescription]")).toBe(required);
+    expect(!!receiptRoot(editor).querySelector("[name=operationDescription]")).toBe(required);
     expect(deep(app.shadowRoot!, "dashboard-receipts-screen")).toBeNull();
     expect(editor.shadowRoot!.querySelector("wt-modal")!.description).toBe("Bar");
   },
@@ -184,10 +185,10 @@ it("successful receipt save closes the hosted dialog and updates the department 
     app.shadowRoot!,
     "dashboard-department-receipt-dialog",
   ) as DepartmentReceiptDialog;
-  await expect.poll(() => editor.shadowRoot?.querySelector("[name=email]")).toBeTruthy();
+  await expect.poll(() => receiptRoot(editor).querySelector("[name=email]")).toBeTruthy();
   await editReceipt(editor, "email", "bar@example.com");
   const dialog = editor.shadowRoot!.querySelector("wt-modal")!;
-  const toggle = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+  const toggle = receiptRoot(editor).querySelector<HTMLElementTagNameMap["wt-switch"]>(
     "wt-switch[name=printTradingName]",
   )!;
   await toggle.updateComplete;

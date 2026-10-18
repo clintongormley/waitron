@@ -14,6 +14,7 @@ import {
   receiptField,
   editReceipt,
   preview,
+  receiptRoot,
 } from "./testing/department-receipt-dialog-fixture.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 
@@ -515,7 +516,7 @@ for (const locale of ["en-GB", "es-ES"]) {
               receipt: { headerSubtitle: { "es-ES": "Edited heading" } },
             });
           await expect
-            .poll(() => el.shadowRoot!.querySelector(".paper")?.textContent)
+            .poll(() => receiptRoot(el).querySelector(".paper")?.textContent)
             .toContain("Edited heading");
           let left = false;
           for (const decision of ["keep", "discard"] as const) {
@@ -556,7 +557,7 @@ it("the receipt dialog's Cancel protects the appearance before closing", async (
   const input = receiptField(el, "headerSubtitle-es-ES");
   for (const decision of ["keep", "discard"] as const) {
     await userEvent.click(
-      page.elementLocator(el.shadowRoot!.querySelector("[data-test=cancel-receipt]")!),
+      page.elementLocator(receiptRoot(el).querySelector("[data-test=cancel-receipt]")!),
     );
     const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => warning.open).toBe(true);

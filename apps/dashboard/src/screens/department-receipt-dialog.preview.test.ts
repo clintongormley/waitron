@@ -12,6 +12,7 @@ import {
   receiptField,
   receiptModel,
   receiptSave,
+  receiptRoot,
 } from "../testing/department-receipt-dialog-fixture.js";
 
 beforeEach(() => setLocale("en-GB"));
@@ -55,9 +56,9 @@ it("coalesces edits behind one in-flight preview and sends only the latest draft
   old.resolve(preview("OUTDATED"));
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(2);
   expect(api.previewReceiptDraft.mock.lastCall?.[0].receipt.email).toBe("last@example.com");
-  expect(el.shadowRoot!.querySelector(".paper")?.textContent ?? "").not.toContain("OUTDATED");
+  expect(receiptRoot(el).querySelector(".paper")?.textContent ?? "").not.toContain("OUTDATED");
   latest.resolve(preview("LATEST"));
-  await expect.poll(() => el.shadowRoot!.querySelector(".paper")?.textContent).toContain("LATEST");
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")?.textContent).toContain("LATEST");
 });
 it("an unchanged live snapshot leaves an in-flight preview current and does not ask again", async () => {
   const api = receiptApi();
@@ -68,28 +69,30 @@ it("an unchanged live snapshot leaves an in-flight preview current and does not 
   api.liveData.invalidate([{ type: "department_receipts" }]);
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
   held.resolve(preview("CURRENT"));
-  await expect.poll(() => el.shadowRoot!.querySelector(".paper")?.textContent).toContain("CURRENT");
+  await expect
+    .poll(() => receiptRoot(el).querySelector(".paper")?.textContent)
+    .toContain("CURRENT");
   await new Promise<void>((resolve) => setTimeout(resolve, 350));
   expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1);
 });
 it("keeps the last paper when the newest preview refuses, then recovers without clearing a save refusal", async () => {
   const { el, api } = await mountReceiptDialog();
-  await expect.poll(() => el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Sample");
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")?.textContent).toContain("Sample");
   api.previewReceiptDraft.mockRejectedValueOnce({ code: "server.internal" });
   await editReceipt(el, "email", "draft@example.com");
-  await expect.poll(() => el.shadowRoot!.querySelector(".preview [role=alert]")).toBeTruthy();
-  expect(el.shadowRoot!.querySelector(".paper")!.textContent).toContain("Sample");
+  await expect.poll(() => receiptRoot(el).querySelector(".preview [role=alert]")).toBeTruthy();
+  expect(receiptRoot(el).querySelector(".paper")!.textContent).toContain("Sample");
   api.putDepartmentReceipt.mockRejectedValueOnce({ code: "server.internal" });
   await userEvent.click(page.elementLocator(receiptSave(el)));
-  await expect.poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe("");
+  await expect.poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error).not.toBe("");
   await editReceipt(el, "footerMessage-es-ES", "Again");
-  await expect.poll(() => el.shadowRoot!.querySelector(".preview [role=alert]")).toBeNull();
+  await expect.poll(() => receiptRoot(el).querySelector(".preview [role=alert]")).toBeNull();
 });
 it("keeps the chosen preview language and width through typed text and passive live snapshots", async () => {
   const { el, api, app } = await mountReceiptDialog();
-  await expect.poll(() => el.shadowRoot!.querySelector("[name=previewWidth]")).toBeTruthy();
-  await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=previewLanguage]")!, "ca-ES");
-  await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=previewWidth]")!, "58mm");
+  await expect.poll(() => receiptRoot(el).querySelector("[name=previewWidth]")).toBeTruthy();
+  await chooseOption(receiptRoot(el).querySelector("wt-combobox[name=previewLanguage]")!, "ca-ES");
+  await chooseOption(receiptRoot(el).querySelector("wt-combobox[name=previewWidth]")!, "58mm");
   await editReceipt(el, "headerSubtitle-ca-ES", "Cafè");
   api.getDepartmentReceipt.mockResolvedValue({ ...receiptModel, venueAddress: ["New Street"] });
   api.liveData.invalidate([{ type: "locations" }]);
@@ -115,8 +118,8 @@ it.each([{ widths: [] }, { widths: ["80mm"] }])(
       paperWidths: widths as ("58mm" | "80mm")[],
     });
     const { el } = await mountReceiptDialog(api);
-    await expect.poll(() => el.shadowRoot!.querySelector(".paper")).toBeTruthy();
-    expect(el.shadowRoot!.querySelector("[name=previewWidth]")).toBeNull();
+    await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
+    expect(receiptRoot(el).querySelector("[name=previewWidth]")).toBeNull();
   },
 );
 it("a dismissed preview cannot replace the paper after reopening the same department", async () => {
@@ -128,19 +131,19 @@ it("a dismissed preview cannot replace the paper after reopening the same depart
   el.dismiss();
   await expect.poll(() => dialog.open).toBe(false);
   el.show({ id: "bar", name: "Bar" });
-  await expect.poll(() => el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Sample");
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")?.textContent).toContain("Sample");
   held.resolve(preview("OLD OPENING"));
   await held.promise;
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector(".paper")!.textContent).not.toContain("OLD OPENING");
+  expect(receiptRoot(el).querySelector(".paper")!.textContent).not.toContain("OLD OPENING");
 });
 
 it.each(["en-GB", "es-ES"] as const)("labels paper widths in %s", async (locale) => {
   setLocale(locale);
   const { el } = await mountReceiptDialog();
-  await expect.poll(() => el.shadowRoot!.querySelector("[name=previewWidth]")).toBeTruthy();
+  await expect.poll(() => receiptRoot(el).querySelector("[name=previewWidth]")).toBeTruthy();
   const widths =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewWidth]")!;
+    receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewWidth]")!;
   expect(widths.options).toEqual([
     { value: "58mm", label: t("printers.paper_width_58") },
     { value: "80mm", label: t("printers.paper_width_80") },
@@ -175,8 +178,8 @@ it.each([
       marks: { ...preview().marks, [mark]: { start: 0, end: 1 } },
     });
     const { el } = await mountReceiptDialog(api);
-    await expect.poll(() => el.shadowRoot!.querySelector(`[data-mark=${mark}]`)).toBeTruthy();
-    const control = el.shadowRoot!.querySelector<
+    await expect.poll(() => receiptRoot(el).querySelector(`[data-mark=${mark}]`)).toBeTruthy();
+    const control = receiptRoot(el).querySelector<
       HTMLElement & { updateComplete: Promise<unknown> }
     >(`[name="${field}"]`)!;
     await control.updateComplete;
@@ -186,14 +189,14 @@ it.each([
       control.shadowRoot!.querySelector<HTMLElement>("input,textarea,button")!;
     native.focus();
     await expect
-      .poll(() => el.shadowRoot!.querySelector(`[data-mark=${mark}]`)?.hasAttribute("data-active"))
+      .poll(() => receiptRoot(el).querySelector(`[data-mark=${mark}]`)?.hasAttribute("data-active"))
       .toBe(true);
     receiptField(el, "operationDescription").focus();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(`[data-mark=${mark}]`)!.hasAttribute("data-active")).toBe(
+    expect(receiptRoot(el).querySelector(`[data-mark=${mark}]`)!.hasAttribute("data-active")).toBe(
       false,
     );
-    expect(el.shadowRoot!.querySelector("[data-mark=operationDescription]")).toBeNull();
+    expect(receiptRoot(el).querySelector("[data-mark=operationDescription]")).toBeNull();
     expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
   },
 );
@@ -211,22 +214,22 @@ it("renders chosen paper dimensions and preserves the old paper after a width re
   });
   const { el, app } = await mountReceiptDialog(api);
   await expect
-    .poll(() => el.shadowRoot!.querySelector<HTMLElement>(".paper")?.style.width)
+    .poll(() => receiptRoot(el).querySelector<HTMLElement>(".paper")?.style.width)
     .toBe("42ch");
   const width =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewWidth]")!;
+    receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewWidth]")!;
   await chooseOption(width, "58mm");
   await expect
-    .poll(() => el.shadowRoot!.querySelector<HTMLElement>(".paper")?.style.width)
+    .poll(() => receiptRoot(el).querySelector<HTMLElement>(".paper")?.style.width)
     .toBe("30ch");
-  expect(el.shadowRoot!.querySelector(".paper")!.textContent).toContain("Narrow paper");
+  expect(receiptRoot(el).querySelector(".paper")!.textContent).toContain("Narrow paper");
   api.previewReceiptDraft.mockRejectedValue({ code: "management.failed" });
   await chooseOption(width, "80mm");
   await expect
-    .poll(() => el.shadowRoot!.querySelector(".preview [role=alert]")?.textContent)
+    .poll(() => receiptRoot(el).querySelector(".preview [role=alert]")?.textContent)
     .toBe(t("receipts.preview_error"));
   expect(width.value).toBe("80mm");
-  expect(el.shadowRoot!.querySelector<HTMLElement>(".paper")!.style.width).toBe("30ch");
+  expect(receiptRoot(el).querySelector<HTMLElement>(".paper")!.style.width).toBe("30ch");
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
 });
@@ -239,7 +242,7 @@ it("choosing a width sends the latest staged text immediately and cancels its ol
     await editReceipt(el, "headerSubtitle-es-ES", "Latest");
     expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1);
     const width =
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewWidth]")!;
+      receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewWidth]")!;
     width.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "58mm" }, bubbles: true, composed: true }),
     );
@@ -260,12 +263,12 @@ it("choosing a width sends the latest staged text immediately and cancels its ol
 
 it("labels the preview before the width chooser and paper without adding another page title", async () => {
   const { el } = await mountReceiptDialog();
-  await expect.poll(() => el.shadowRoot!.querySelector("[name=previewWidth]")).toBeTruthy();
-  const heading = el.shadowRoot!.querySelector(".preview h3")!;
+  await expect.poll(() => receiptRoot(el).querySelector("[name=previewWidth]")).toBeTruthy();
+  const heading = receiptRoot(el).querySelector(".preview h3")!;
   expect(heading?.textContent).toBe(t("receipts.preview"));
-  const width = el.shadowRoot!.querySelector("[name=previewWidth]")!;
-  const paper = el.shadowRoot!.querySelector(".paper")!;
+  const width = receiptRoot(el).querySelector("[name=previewWidth]")!;
+  const paper = receiptRoot(el).querySelector(".paper")!;
   expect(heading.compareDocumentPosition(width) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(width.compareDocumentPosition(paper) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(el.shadowRoot!.querySelector("h1")).toBeNull();
+  expect(receiptRoot(el).querySelector("h1")).toBeNull();
 });

@@ -12,6 +12,7 @@ import {
   receiptSave,
   clickReceiptSave,
   deferred,
+  receiptRoot,
 } from "../testing/department-receipt-dialog-fixture.js";
 import "./venue-defaults-panel.js";
 
@@ -82,7 +83,7 @@ async function mount() {
   await expect.poll(() => languageField(language)).toBeTruthy();
   async function openReceipt() {
     el.show({ id: "bar", name: "Bar" });
-    await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
+    await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
     const dialog = el.shadowRoot!.querySelector("wt-modal")!;
     await expect
       .poll(() => dialog.shadowRoot!.querySelector("dialog")?.matches(":modal"))

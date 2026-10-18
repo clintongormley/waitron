@@ -10,6 +10,7 @@ import {
   preview,
   receiptApi,
   receiptModel,
+  receiptRoot,
 } from "../testing/department-receipt-dialog-fixture.js";
 import type { DepartmentReceiptDialog } from "./department-receipt-dialog.js";
 
@@ -55,19 +56,19 @@ it.each([1280, 390])(
       const opening = native()!.getBoundingClientRect().width;
       if (width === 1280) expect(opening).toBeCloseTo(1024, 0);
       read.resolve(structuredClone(receiptModel));
-      await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
+      await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
       await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
-      const fields = () => el.shadowRoot!.querySelector(".fields")!.getBoundingClientRect().width;
-      expect(el.shadowRoot!.querySelector(".paper")).toBeNull();
+      const fields = () => receiptRoot(el).querySelector(".fields")!.getBoundingClientRect().width;
+      expect(receiptRoot(el).querySelector(".paper")).toBeNull();
       const loaded = { dialog: native()!.getBoundingClientRect().width, fields: fields() };
       expect(loaded.dialog).toBeCloseTo(opening, 0);
       drawn.resolve(preview());
-      await expect.poll(() => el.shadowRoot!.querySelector(".paper")).toBeTruthy();
+      await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
       expect(native()!.getBoundingClientRect().width).toBeCloseTo(loaded.dialog, 0);
       expect(fields()).toBeCloseTo(loaded.fields, 0);
-      await chooseOption(el.shadowRoot!.querySelector("wt-combobox[name=previewWidth]")!, "58mm");
+      await chooseOption(receiptRoot(el).querySelector("wt-combobox[name=previewWidth]")!, "58mm");
       await expect
-        .poll(() => el.shadowRoot!.querySelector<HTMLElement>(".paper")?.style.width)
+        .poll(() => receiptRoot(el).querySelector<HTMLElement>(".paper")?.style.width)
         .toBe("30ch");
       expect(fields()).toBeCloseTo(loaded.fields, 0);
       expect(native()!.getBoundingClientRect().width).toBeCloseTo(loaded.dialog, 0);
@@ -81,19 +82,19 @@ it("shows no copy of the saved address, and says so when there is none", async (
   const { el, api } = await mountReceiptDialog(
     receiptApi({ ...receiptModel, venueAddress: ["Calle Mayor 1", "28013 Madrid"] }),
   );
-  await expect.poll(() => el.shadowRoot!.querySelector(".paper")).toBeTruthy();
-  expect(el.shadowRoot!.textContent).not.toContain("Calle Mayor 1");
-  expect(el.shadowRoot!.textContent).not.toContain("28013 Madrid");
+  await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
+  expect(receiptRoot(el).textContent).not.toContain("Calle Mayor 1");
+  expect(receiptRoot(el).textContent).not.toContain("28013 Madrid");
   api.getDepartmentReceipt.mockResolvedValue({ ...receiptModel, venueAddress: [] });
   api.liveData.invalidate([{ type: "locations" }]);
   await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-test=venue-address]")?.textContent?.trim())
+    .poll(() => receiptRoot(el).querySelector("[data-test=venue-address]")?.textContent?.trim())
     .toBe(t("receipts.no_address"));
 });
 
 it("does not say the languages are available at the till", async () => {
   const { el } = await mountReceiptDialog();
-  expect(el.shadowRoot!.textContent).not.toContain("Available at the till.");
+  expect(receiptRoot(el).textContent).not.toContain("Available at the till.");
 });
 
 it.each([1280, 390])(
@@ -113,7 +114,7 @@ it.each([1280, 390])(
       const { el } = await mountReceiptDialog(
         receiptApi({ ...receiptModel, receipt: { ...receiptModel.receipt, logo: "wide.png" } }),
       );
-      const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+      const upload = receiptRoot(el).querySelector("dashboard-image-upload")!;
       await upload.updateComplete;
       const img = upload.shadowRoot!.querySelector<HTMLImageElement>(
         "[data-test=choose-image] img",
@@ -129,7 +130,7 @@ it.each([1280, 390])(
       await loaded;
       expect(img.naturalWidth).toBe(2000);
       expect(dialogWidth(el)).toBeCloseTo(without, 0);
-      const fields = el.shadowRoot!.querySelector(".fields")!.getBoundingClientRect();
+      const fields = receiptRoot(el).querySelector(".fields")!.getBoundingClientRect();
       expect(img.getBoundingClientRect().right).toBeLessThanOrEqual(fields.right);
     } finally {
       await page.viewport(before.width, before.height);

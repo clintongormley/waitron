@@ -16,6 +16,7 @@ import {
   receiptModel,
   receiptField,
   receiptSave,
+  receiptRoot,
 } from "../testing/department-receipt-dialog-fixture.js";
 
 beforeEach(() => setLocale("en-GB"));
@@ -46,7 +47,7 @@ it("dirty Escape and Cancel protect the draft with Keep and Discard", async () =
   expect(dialog.open).toBe(true);
   expect(receiptField(el, "email").value).toBe("draft@example.com");
   await userEvent.click(
-    page.elementLocator(el.shadowRoot!.querySelector("[data-test=cancel-receipt]")!),
+    page.elementLocator(receiptRoot(el).querySelector("[data-test=cancel-receipt]")!),
   );
   await expect.poll(() => q.open).toBe(true);
   await q.updateComplete;
@@ -57,14 +58,14 @@ it("dirty Escape and Cancel protect the draft with Keep and Discard", async () =
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
   el.show({ id: "bar", name: "Bar" });
-  await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
+  await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
   expect(receiptField(el, "email").value).toBe("");
   expect(receiptSave(el).disabled).toBe(true);
 });
 it("preview language does not dirty the authored receipt", async () => {
   const { app, el, api } = await mountReceiptDialog();
   await chooseOption(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewLanguage]")!,
+    receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewLanguage]")!,
     "ca-ES",
   );
   await expect
@@ -161,7 +162,7 @@ it.each(["keep", "discard"] as const)(
     await closed;
     expect(await pending).toBe("stale");
     el.show({ id: "replacement", name: "Replacement" });
-    await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
+    await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
     await editReceipt(el, "email", "replacement@example.com");
     stale.click();
     await el.updateComplete;
@@ -190,7 +191,7 @@ it.each(["success", "refusal"] as const)(
     await el.updateComplete;
     expect(dialog.open).toBe(true);
     expect(receiptField(el, "email").value).toBe("new@example.com");
-    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
     expect(receiptSave(el).disabled).toBe(false);
     expect(app.leave.coordinator.isDirty()).toBe(true);
     await editReceipt(el, "email", "");
