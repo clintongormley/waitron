@@ -251,6 +251,10 @@ for reconciliation rather than show a receipt).
 
 ## Decisions and deliberate limits
 
+- **Joining and unjoining tables stay allowed while a card refund of a bill is pending** (owner,
+  2026-10-17, A847). Bill payments design §5.2; test:
+  `apps/server/src/table-actions.refund-pending.test.ts`.
+
 - **An orphaned card payment whose settled amount differs from ours is held, never forgotten**
   (owner, 2026-10-17). It is never refunded automatically while the amounts disagree; its alert
   stays up and reminds daily until a person resolves it, and the sweep re-checks closed periods for
