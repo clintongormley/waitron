@@ -5766,13 +5766,6 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   packages are deprecated.
   Left behind by the esbuild upgrade (#439, 2026-09-19).
 
-- **A844. Resolve one copy of `@types/node` (owner, 2026-10-17; left by #441).** `@types/qrcode`
-  sits on 26.6.2 and every other 26.x user on 26.6.5 (`@types/ssh2` separately holds 18.19.130,
-  since it asks for `^18.11.18`), so `apps/dashboard` under `--skipLibCheck false` reports duplicate
-  identifiers (`NonSharedBuffer` among them) in both 26.6.x copies. Make the workspace resolve one
-  26.x copy, show those duplicate-identifier errors are gone with library checking on
-  (drizzle-orm's own errors there are not this entry's), then delete this entry.
-
 - **Loose ends left by the Node types upgrade (#441, 2026-09-19).**
   - **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** One
     line either way; it needs an owner call on whether Node 24 is still supported.
