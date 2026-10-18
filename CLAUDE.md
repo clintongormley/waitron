@@ -591,9 +591,7 @@ One line each; the mechanism, the measurement and the incident behind every one 
 [testing-guide.md](docs/developers/testing-guide.md). **Read it before writing a database or
 browser test** — most of these rules exist because a test passed while proving nothing.
 
-- **One target.** A suite that needs a database gets a REAL one: `useVenueDb` opens a temporary
-  directory with the product's own opener, applies the migration sets it was given and installs the
-  append-only triggers. Guard: `scripts/venue-db-helper.test.ts`, weaker than its name — it holds
+- **One target.** A suite that needs a database gets a REAL one: `useVenueDb`. Guard: `scripts/venue-db-helper.test.ts`, weaker than its name — it holds
   only that nothing names the retired helper `usePgliteDb`.
 - **Don't own a database in a suite — let `useVenueDb` own it.** Raw `beforeAll`/`afterAll` only
   when the suite legitimately builds its own resource, and then guarded. Guard:
@@ -603,25 +601,21 @@ browser test** — most of these rules exist because a test passed while proving
   `useVenueDb` waits one real timer after every test.** Cost: main run 38932759150's venue-service
   shard 1 lost its worker to the watchdog. Guard: two cases in
   `packages/db/src/testing/venue-db.test.ts`, weaker than the rule — a suite opening its venue
-  folder without `useVenueDb` gets no turn. The watchdog's stamp reads `process.hrtime.bigint` and
-  `setInterval` captured when `@waitron/store` loads, because `vi.useFakeTimers()` fakes both by
-  default. Guard: the cases under "a holder whose test fakes the clock" in
+  folder without `useVenueDb` gets no turn. Guard: the cases under "a holder whose test fakes the clock" in
   `packages/store/src/venue-liveness.test.ts`, weaker than their name: default options only, and
   only when the store loads before the clock is faked. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
 - **No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do.**
   **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with it off an INTERRUPTED run
-  leaks containers; `pnpm reap` removes them by label and age — but not every rig stamps the label.
+  leaks containers; `pnpm reap` removes them.
   Never a blanket `docker volume prune`, and `docker volume inspect` before any manual `rm`.
 - **The stream loop test and the stream pause test need two pinned binaries: without them they are
   SKIPPED locally and FAIL in CI.** Install both with
-  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. A skipped run prints
-  `1 skipped` and nothing else, so a local green run of `apps/server` may not have run them. The S3
+  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. The S3
   rehearsal scenarios, send gate and interrupt suites (`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`,
   `aws-send-gate.e2e.test.ts`, `aws-rehearsal-interrupt.e2e.test.ts`) need versitygw alone and skip
   and fail the same way. Guard:
-  `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as TEXT, so install
-  commands left only in a YAML comment, or in a step an `if:` switches off, pass it.
+  `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as TEXT.
 - **On Vitest 4.1.11 a browser's `connectTimeout` is read only from the OUTER config's
   `test.browser` block**; the command-line flag and a project's own `browser` block are ignored
   without a word. Nothing guards it. Cost: A527's first forced-failure control passed. Receipt:
@@ -642,13 +636,11 @@ browser test** — most of these rules exist because a test passed while proving
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
-  `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
+  `pnpm reap` sweeps these.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second
-  one belongs OUTSIDE the package.** Vitest cleans a shared directory, so two overlapping runs over
-  the same package end in `ENOENT`.
-- **Locate the unfinished package before diagnosing a silent shard as database contention.** A
-  Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline, and
-  never a retry as proof of repair.
+  one belongs OUTSIDE the package.**
+- **Locate the unfinished package before diagnosing a silent shard as database contention.** Use an
+  outer deadline, and never a retry as proof of repair.
 - **A recurrent stall needs a retained log and a snapshot of whatever it was waiting on.** Locate the
   stalled operation before assigning its cause to resource contention.
 - **On Vitest 4 a project's own `maxWorkers` wins, and the outer config's is only the fallback**. **A
@@ -656,20 +648,17 @@ browser test** — most of these rules exist because a test passed while proving
   `scripts/fiscal-test-budget.test.ts`, weaker than its name — it pins one arrangement, not how
   Vitest resolves the limit.
 - **A package that pins one worker inside one of several projects numbers its `groupOrder`s from 1,
-  never 0**: Vitest 4 runs a `groupOrder: 0` project that runs one isolated worker AFTER every
-  other group. Guard: `scripts/bookings-test-budget.test.ts` — which pins bookings alone.
+  never 0**. Guard: `scripts/bookings-test-budget.test.ts` — which pins bookings alone.
 - **A suite whose test outlasts Vitest's per-test timeout fails HEALTHY runs.** Set the bound above
   the SUM of its waits plus its untimed work, not the largest one; under `packages/` and `apps/` the
   bound usually comes from the package's `vitest.config.ts`. Guard:
   `scripts/spawn-timeout-budget.test.ts`, which scans `scripts/` ALONE — nothing checks the rule
   under `packages/` and `apps/` — and is weaker than its name over the half it covers: it reads
   TEXT and checks only the largest SINGLE wait.
-- **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included**, or it kills
-  the child and returns `status: null`, which reads as a broken test. Cut the WAIT, not the retrying
+- **A `spawnSync` timeout must clear the CHILD's own worst case, retry loops included**. Cut the WAIT, not the retrying
   (`WAITRON_SH_HEALTH_DELAY`). Nothing guards the rule in general.
 - **A `spawnSync` timeout kills only the process it started; the script's own children keep
-  running, so each run of a script keeps its files apart from the next.** `exec` shortens the
-  leftover, it does not end it. Cost: lane G's push failed `ci-workflow`'s paging case on a killed
+  running, so each run of a script keeps its files apart from the next.** Cost: lane G's push failed `ci-workflow`'s paging case on a killed
   run's leftover call (A751). Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-spawnsync-timeout-kills-only-the-process-it-started).
   Guard: the leftover-call case in `scripts/ci-workflow.test.mjs`, weaker than the rule — it covers
@@ -677,15 +666,12 @@ browser test** — most of these rules exist because a test passed while proving
 - **A suite's executable stubs are built ONCE per file, not once per test** — move what each case
   varies into environment variables the stub reads. It pays only on macOS and only where the stubs
   are a large share of the runtime — measure first.
-- **A test that shells out to `git` must clear `GIT_DIR` and its family.** Git exports `GIT_DIR` to
-  every hook, so a hand-isolated fixture writes into the real repo. Run such a suite once under
+- **A test that shells out to `git` must clear `GIT_DIR` and its family.** Run such a suite once under
   `GIT_DIR` before trusting it.
 - **A test that changes the screen's global language restores it before the next case.** Cost:
-  A284's split test changed the labels in later transfer cases; receipt: [testing-guide.md](docs/developers/testing-guide.md).
-- **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.** A module
-  mock cannot replace an already-loaded browser ES module.
-- **Browser recovery tests read the native control inside a shared component.** A host's `checked`
-  property can report the expected value while its inner checkbox is visibly wrong.
+  A284's split test changed the labels in later transfer cases; receipt: [testing-guide.md](docs/developers/testing-guide.md#restore-the-screen-language-after-a-test).
+- **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.**
+- **Browser recovery tests read the native control inside a shared component.**
 - **A reopened polling dialog owns a new in-flight gate.** Reset it on close and guard its release
   with the request's generation, or an old read blocks the reopened dialog.
 - **A browser test using fake timers must advance an awaited animation frame or restore real timers
@@ -703,30 +689,22 @@ browser test** — most of these rules exist because a test passed while proving
   answered — never by a fixed sleep.** Cost: the Payments screen's reader-status tests failed CI on
   a late grant, fixed twice — W59 (#1168), then A320 (#1342). Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-waits-for-a-browser-grant-by-tracking-the-request-never-by-a-fixed-sleep).
-- **Dispatch events when testing a `composedPath()` guard.** An undispatched `KeyboardEvent` has an
-  empty path, so the test can pass without reaching the branch it claims to check.
+- **Dispatch events when testing a `composedPath()` guard.**
 - **A click whose outcome depends on whether an update one listener schedules has run before a
   later listener sees the click is tested with `userEvent.click`, not `element.click()`.** Cost: A505's row menu stayed open on the real page while every scripted test closed it.
   Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-scripted-click-runs-microtasks-only-after-the-whole-dispatch).
-- **Position a native popover before its first paint.** Positioning from the asynchronous `toggle`
-  event left the menu at `(0, 0)` for its first frame.
+- **Position a native popover before its first paint.**
 - **A placement check measures a box after the content that sizes it arrives, with room for CI's
   larger fonts on the side it expects the box.** Cost: A771, the check failed 3 of 7 main runs.
   Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-placement-check-measures-a-box-at-its-final-size-with-room-for-cis-fonts).
-- **Test public recovery links through the real boot modes that serve them.** Mounting a route on a
-  bare Hono app cannot establish that trading or recovery boot installs it.
-- **Test provider HTTP refusals through the real client, as well as a throwing fake seat.** A fake
-  proved the thrown error preserved the local reader while the HTTP client silently accepted 401/403/409.
-- **Local reactivation cannot restore a removed provider registration.** Successful unpair records a
-  marker that only provider-verified adoption clears.
-- **Source scanners select files, not just paths ending in `.ts`.** A failing browser test creates a
-  screenshot DIRECTORY named `*.test.ts`; `sourceFilesIn` checks `isFile()`.
-- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the ungated
-  `root-guards` job and the hook run on every non-docs push. The root project does not typecheck, and a module
-  tested only from there must be in the root `coverage.include` (a `scripts/**/*.mjs` pattern plus named
-  paths) to be measured at all, and excluded from its own package's.
+- **Test public recovery links through the real boot modes that serve them.**
+- **Test provider HTTP refusals through the real client, as well as a throwing fake seat.**
+- **Local reactivation cannot restore a removed provider registration.**
+- **Source scanners select files, not just paths ending in `.ts`.**
+- **A guard that reads the whole tree belongs in the ROOT Vitest project**. The root project does not typecheck, and a module
+  tested only from there must be in the root `coverage.include` to be measured at all, and excluded from its own package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
 - **A proof by deletion says nothing about what the guard wrongly REFUSES, and that needs its own
   case** — the legitimate call that must still be served. Cost: a write-queue re-entrancy guard
@@ -744,8 +722,7 @@ browser test** — most of these rules exist because a test passed while proving
 - **Treat "there is a test" as an unfinished sentence.** Coverage proves a line executed, not that
   anything asserted on the result. Ask which assertion would fail if the behaviour were deleted; "it
   doesn't throw" is not an answer. `pnpm --filter @waitron/ui mutation` checks this systematically.
-- **Rejected writes assert the domain error code.** A database constraint error also satisfies
-  `toBeInstanceOf(Error)`.
+- **Rejected writes assert the domain error code.**
 - **`errors.ts` reachability is guarded once, in `scripts/errors-reachable.test.ts`**, weaker than
   its name — it reads text.
 - **Vitest 4 ships no default coverage excludes at all.** What scopes a package's report now is its own `coverage.include`.
@@ -753,8 +730,7 @@ browser test** — most of these rules exist because a test passed while proving
   with the thresholds intact, so read the per-file table rather than the exit code.
 - **A package config must name its own source tree in `coverage.include`, or an untested file stops
   being counted** — and moving code into one RAISES the percentage. Guard:
-  `scripts/coverage-thresholds.test.ts`, which looks for one exact string. That include is not
-  anchored to the package, so a sibling whose name extends this one's can land in its report.
+  `scripts/coverage-thresholds.test.ts`, which looks for one exact string.
 - **Use the `/* v8 ignore start */` … `/* v8 ignore stop */` pair, not `/* v8 ignore next */`.**
   Marked `next`, a package's guards failed its branch bar silently (#437). Nothing guards it.
 - **A page asserted as a STRING, or reached only through its API, has nothing checking that it
