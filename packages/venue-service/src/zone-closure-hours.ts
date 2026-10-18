@@ -63,7 +63,8 @@ export async function assertSeasonClosuresInHours(
 }
 
 /** After a special-day write, inside its transaction: each sent zone entry's closed ranges
- *  against its department's resolved day on that date. Dates `closedAllDay` names are skipped. */
+ *  against its department's resolved day on that date. Dates `closedAllDay` names are skipped.
+ *  A zone id is read in lower case, as `saveSpecialDay` stores it. */
 export async function assertDatedClosuresInHours(
   tx: Transaction,
   cfg: VenueScope,
@@ -74,7 +75,9 @@ export async function assertDatedClosuresInHours(
   }[],
   closedAllDay: ReadonlySet<LocalDate>,
 ): Promise<void> {
-  const checked = [...zonePaint.entries()].filter(([, entry]) => !closedAllDay.has(entry.date));
+  const checked = [...zonePaint.entries()]
+    .filter(([, entry]) => !closedAllDay.has(entry.date))
+    .map(([i, entry]) => [i, { ...entry, zoneId: entry.zoneId.toLowerCase() }] as const);
   if (checked.length === 0) return;
   const clock = await readLocationClock(tx, cfg.locationId);
   const departmentOf = new Map(
