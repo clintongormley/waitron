@@ -309,6 +309,35 @@ describe("the floor plan sets port", () => {
     });
   });
 
+  it("counts a zone's tables, joined ones included, without reading parts when asked for no layout", async () => {
+    const d = await department();
+    await save(d.dinner, d.zoneId, {
+      revision: 0,
+      tables: [
+        entry("a", fresh("1"), { placement: null }),
+        entry("b", fresh("2"), { placement: null }),
+        entry("ab", fresh("1+2"), { partKeys: ["a", "b"] }),
+      ],
+    });
+    const read = await inTx(v, async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        const counts = await sets().readLayouts(tx, [d.zoneId], []);
+        return {
+          counts,
+          sql: spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql),
+        };
+      } finally {
+        spy.mockRestore();
+      }
+    });
+    expect(read.counts).toEqual({ tableCounts: new Map([[d.zoneId, 3]]), layouts: [] });
+    expect(read.sql.filter((q) => q.includes("floor_plan_table_parts"))).toEqual([]);
+  });
+
   it("reads only the layouts of the pairs asked for", async () => {
     const d = await department();
     await save(d.dinner, d.zoneId, {

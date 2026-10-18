@@ -163,15 +163,25 @@ async function readLayouts(
     if (zones === undefined) zonesOfSet.set(setId, [zoneId]);
     else zones.push(zoneId);
   }
-  const tables = await tx
-    .select({
-      id: floorPlanTables.id,
-      zoneId: floorPlanTables.zoneId,
-      partOf: floorPlanTableParts.joinedTableId,
-    })
-    .from(floorPlanTables)
-    .leftJoin(floorPlanTableParts, eq(floorPlanTableParts.partTableId, floorPlanTables.id))
-    .where(inArray(floorPlanTables.zoneId, zoneIds));
+  // Counting a zone's tables needs no parts, so a caller asking for no layout reads none and its
+  // live watch need not follow floor_plan_table_parts, which every layout save rewrites.
+  const tables =
+    pairs.length === 0
+      ? (
+          await tx
+            .select({ id: floorPlanTables.id, zoneId: floorPlanTables.zoneId })
+            .from(floorPlanTables)
+            .where(inArray(floorPlanTables.zoneId, zoneIds))
+        ).map((t) => ({ ...t, partOf: null }))
+      : await tx
+          .select({
+            id: floorPlanTables.id,
+            zoneId: floorPlanTables.zoneId,
+            partOf: floorPlanTableParts.joinedTableId,
+          })
+          .from(floorPlanTables)
+          .leftJoin(floorPlanTableParts, eq(floorPlanTableParts.partTableId, floorPlanTables.id))
+          .where(inArray(floorPlanTables.zoneId, zoneIds));
   const plans =
     pairs.length === 0
       ? []
