@@ -1409,6 +1409,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Loose ends left by A755 (#1809).**
   - The Business day card's actions with a scheduled change: queued as A788 (owner, 2026-10-17: no
     scheduling; a change applies at the next changeover).
+    [Design](superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md), waiting for
+    the owner's answers to its five questions.
   - The Venue card says nothing about a time zone locked by a past business-day change. The server
     gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
     `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
