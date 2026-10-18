@@ -1111,7 +1111,7 @@ help about anything you want very quickly."
   interactive set; a throwaway check in #1848's review showed it would fail that guard's focus
   check, because focus on the element does not pass to its inner button. Decide whether it should
   delegate focus, then add it to the set.
-- **Slice 2b (this pull request, 2026-10-18).** Signed in, the dashboard banner has a "?" switch
+- **Slice 2b landed (#1851, 2026-10-18).** Signed in, the dashboard banner has a "?" switch
   between the alerts bell and the account menu; help stays on across screens and goes off whenever
   the dashboard returns to the sign-in screen. The five existing "?" (two in a device profile's
   editor, one each on the staff screen, the unit form and SumUp's affiliate fields, SumUp's in a
@@ -1120,7 +1120,7 @@ help about anything you want very quickly."
   Products has help on the price, VAT, default course, the Variants section and the list's
   Availability column; the account menu's Account settings and a variant's Keep carry a badge.
   The owner's answer to Q41 (B): signed in, the language choices are in the account menu after
-  Theme, and the banner keeps its height. Slice 2 is complete: 2a #1848, 2b this pull request.
+  Theme, and the banner keeps its height. Slice 2 is complete: 2a #1848, 2b #1851.
 - **Remaining slices** (design §8): **3** guide pages served by the box (EN and ES; a new unauthenticated
   route, FULL review); **4** tills and handhelds — the bar switch that never leaves the bar (at phone
   width the language chooser leaves first), the till's More and person menus, badges on Counter,

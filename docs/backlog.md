@@ -3722,7 +3722,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [mockups/a582-help-mode/](backlog/mockups/a582-help-mode/)). Slice 1 of 5 landed (#1846: the
   help badge, the help switch's state and the help slots in `packages/ui`), and the shared half of
   slice 2 landed (#1848: a menu option with a help badge beside it, the help switch button, and
-  help on table columns and tabs, in `packages/ui`); its dashboard half is this pull request (the
+  help on table columns and tabs, in `packages/ui`); its dashboard half landed (#1851: the
   "?" in the banner, help on Products and in two menus, the five existing "?" shown only in help
   mode, and, by the owner's answer B to Q41, the language choices in the account menu when signed
   in). Next: slices 3–5, in the design's §8 order. On the dashboard and on every device — tills, handhelds, and probably the
