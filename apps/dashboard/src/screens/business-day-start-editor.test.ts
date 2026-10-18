@@ -841,9 +841,24 @@ it.each([
   "names a changeover that passed during Save in %s and previews again",
   async (locale, message) => {
     setLocale(locale);
-    const previews = vi.fn(async () => octoberPreview());
+    const later = deferred<BusinessDayStartPreview>();
+    const previews = vi.fn(async () =>
+      previews.mock.calls.length === 1 ? octoberPreview() : later.promise,
+    );
+    const writes: BusinessDayStartInput[] = [];
     const { el } = await rig(
-      { previewBusinessDayStart: previews, ...refusing({ reason: "changeover_passed" }) },
+      {
+        previewBusinessDayStart: previews,
+        putBusinessDayStart: async (input: BusinessDayStartInput) => {
+          writes.push(input);
+          if (writes.length === 1)
+            throw {
+              code: "venue.business_day_invalid",
+              params: { field: "dayCutover", reason: "changeover_passed" },
+            };
+          return { changed: true, model: venueDetailsFixture() };
+        },
+      },
       october(),
     );
     await ready(el);
@@ -851,8 +866,20 @@ it.each([
     await click(el, "save");
     expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe(message);
     expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(message);
-    await expect.poll(() => previews.mock.calls.length).toBe(2);
+    expect(previews).toHaveBeenCalledTimes(2);
     expect(q<WtInput>(el, "[name=dayCutover]")!.value).toBe("03:00");
+    expect(save(el).variant).toBe("secondary");
+    expect(save(el).disabled).toBe(true);
+    later.resolve({
+      ...octoberPreview(),
+      previousDay: { ...octoberPreview().previousDay, businessDay: "2026-10-21" },
+      effectiveDay: { ...octoberPreview().effectiveDay, businessDay: "2026-10-22" },
+    });
+    await flush(el);
+    expect(save(el).variant).toBe("primary");
+    expect(save(el).disabled).toBe(false);
+    await click(el, "save");
+    expect(writes.map((write) => write.effectiveBusinessDay)).toEqual(["2026-10-21", "2026-10-22"]);
   },
 );
 it.each([
@@ -876,7 +903,7 @@ it.each([
   expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe(message);
   expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(message);
 });
-it("says when a preview will work after the clocks change", async () => {
+it("puts a preview refusal naming the time under the field, without Retry", async () => {
   setLocale("en-GB");
   const { el } = await rig(
     {
@@ -896,8 +923,29 @@ it("says when a preview will work after the clocks change", async () => {
   );
   await click(el, "change");
   await change(el, "dayCutover", "02:30");
-  await expect
-    .poll(() => text(q(el, "p[role=alert]")))
-    .toBe("The clocks change on Sun 25 Oct. Save again from Mon 26 Oct, 02:30.");
+  const message = "The clocks change on Sun 25 Oct. Save again from Mon 26 Oct, 02:30.";
+  await expect.poll(() => q<WtInput>(el, "[name=dayCutover]")!.error).toBe(message);
+  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(message);
+  expect(q(el, "[data-test=preview-retry]")).toBeNull();
   expect(save(el).disabled).toBe(true);
+  await change(el, "dayCutover", "02:45");
+  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(message);
+  await change(el, "dayCutover", "05:00");
+  expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe("");
+  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe("");
+});
+it("offers Retry when a preview fails without naming a field", async () => {
+  setLocale("en-GB");
+  const { el } = await rig(
+    {
+      previewBusinessDayStart: async () => {
+        throw { code: "connection.failed" };
+      },
+    },
+    october(),
+  );
+  await click(el, "change");
+  await change(el, "dayCutover", "03:00");
+  await expect.poll(() => q(el, "[data-test=preview-retry]")).toBeTruthy();
+  expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe("");
 });

@@ -253,6 +253,13 @@ New cases beside them: mockup 02's three lines, the request carrying only the ti
 
 New cases beside them: a ready 05:00 → 03:00 preview makes Save primary and enabled with no acknowledge button and writes `{ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00", expectedClockRevision: 4 }`; clashes keep Save secondary and disabled and a submitted form writes nothing; `changeover_passed` in EN and ES under the field and at the bottom, with a second preview request and the draft kept; `clock_transition` in EN and ES on Save, and in EN on the preview; unsaved: a `changeover_passed` refusal keeps the protected draft. No other existing assertion failed.
 
+Task 14b fix round 1 (lines at `34dca7fd7`):
+
+| File:line (at `34dca7fd7`) | Before → after | Why |
+| --- | --- | --- |
+| `apps/dashboard/src/screens/business-day-start-editor.test.ts:879-903` ("says when a preview will work after the clocks change") | the message in the editor's `p[role=alert]` (the preview error line) → renamed "puts a preview refusal naming the time under the field, without Retry": the same exact message as the time field's `error` and the bottom line, no `[data-test=preview-retry]`, Save disabled; the bottom line is cleared once the time is set back | Forms: a refusal naming a shown field goes under that field (review I1) |
+| `business-day-start-editor.test.ts:840-857` (changeover_passed, EN/ES) | the second preview answered at once with the same day; checks message, two preview calls, draft kept → the second preview is held back: Save `secondary` and disabled while it waits; after it answers `2026-10-22`, Save `primary` and enabled, and the retried write sends `2026-10-22` after a first write of `2026-10-21` | rule 7: the retried Save carries the new preview's date (review M1) |
+
 ## Review focus (inputs no task's main tests reach; each line names the test that pins it)
 
 1. **The rule-2 flip mid-dialog**: a preview taken at 00:20 for 00:30 and a Save at 00:31 must be

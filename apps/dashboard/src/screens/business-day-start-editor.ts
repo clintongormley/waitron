@@ -95,6 +95,7 @@ export class BusinessDayStartEditor extends LitElement {
   #revision = 0;
   #clockIdentity = "";
   #previewIdentity = "";
+  #previewRefusal = "";
   #sequence = 0;
   #generation = 0;
   #scope?: DraftScope<Draft>;
@@ -265,6 +266,8 @@ export class BusinessDayStartEditor extends LitElement {
     const sequence = ++this.#sequence;
     this.preview = undefined;
     this.previewError = "";
+    if (this.#previewRefusal && this.actionError === this.#previewRefusal) this.actionError = "";
+    this.#previewRefusal = "";
     if (
       !this.draft ||
       this.readOnly ||
@@ -285,8 +288,15 @@ export class BusinessDayStartEditor extends LitElement {
         this.preview = preview;
       })
       .catch((error: unknown) => {
-        if (sequence === this.#sequence && this.isConnected)
-          this.previewError = this.#refusal(error);
+        if (sequence !== this.#sequence || !this.isConnected) return;
+        const message = this.#refusal(error);
+        if (this.#params(error)?.field !== "dayCutover") {
+          this.previewError = message;
+          return;
+        }
+        this.#previewRefusal = message;
+        this.errors = { dayCutover: message };
+        this.actionError = message;
       });
   }
   #change(field: keyof Draft, event: CustomEvent<{ value: string }>): void {
