@@ -1124,3 +1124,50 @@ composition, the default S3 downloader, successful staged-process interruption o
 recovery after process death. The managed callback places the archive directly rather than
 running the setup route and restart sequence. Those Task 7 entry checks remain open. No protected
 writer, restore hook, production SQL, schema, guard or earlier fiscal check changes.
+
+
+## Reconstructed archive command admission, 2026-10-18
+
+An already selected archive recovery needs its original preparation journal and fresh clock
+observations when a command constructs a new host. The archive command and archive-pack command
+now construct the selected-source service from the validated copy. You supply the matching node
+key and the separate archive password as before. `--confirm-old-box-gone` and
+`--confirm-sole-recovery` declare isolation independently of the allocation input. The latter
+is your taxpayer-wide declaration; a local lock cannot establish what another venue is doing.
+
+The generic module preparation contract adds `resumeRecovery`. Its fiscal implementation compares
+the box with the authenticated internet observer without inventing a browser reading or manual
+confirmation. Offline or disagreeing observations refuse admission before placement. A failed
+admission can refresh again; each subsequent placement admission refreshes its transient comparison.
+A checked committed event skips that comparison and retains its recorded hour, rows and counters.
+
+Thirteen cases append to `apps/server/src/hour-recovery-host.test.ts`. Its original test bodies and
+all 155 earlier matcher expressions remain unchanged; imports grow for migration-folder links and
+the archive-pack fixture. This is a source comparison, not a claim of runtime equivalence.
+The command cases use the default restore adapters and real archive validation, migration and
+placement. The archive-pack case runs the actual downloader against a synthetic file-store
+transport and checks that the pack password wins over a different environment password.
+Refusal destinations carry counters different from the selected backup, so replacing the target
+cannot satisfy the preservation assertions.
+
+You can run the new cases with:
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/hour-recovery-host.test.ts \
+  -t 'reconstructed|default archive command|archive-pack command'
+```
+
+In an independently installed disposable checkout, omitting the refresh call, the committed-event
+skip, either isolation declaration, archive-pack entry dispatch or repeated-admission refresh
+made its corresponding new case fail. Restoring those changes supplies the positive control.
+These are controlled clock/transport experiments, not live internet-clock qualification.
+
+The initial new refusal fixture used an invalid destination file and could have refused before
+reaching its intended clock check. Its replacement uses a valid destination with distinct counters.
+A subsequent whole-file byte comparison failed on SQLite's WAL header changes; the retained cases
+compare the saved series and allocation rows plus the identity instead. No earlier assertion or
+fixture was changed. No protected writer, fiscal restore hook, production SQL, schema or guard changes.
+
+Streamed-bucket command composition, staged HTTP recovery and genuine process-interruption or
+lost-response recovery remain Task 7 work. Later hour-plan tasks, package coverage, generated-PDF
+acceptance and final whole-branch reviews remain open. This checkpoint does not make #1752 ready.

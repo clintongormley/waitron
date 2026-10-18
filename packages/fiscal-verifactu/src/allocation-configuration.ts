@@ -58,6 +58,11 @@ function configuredOperations(
         throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
       return hostedHourRecovery(host).recovery(operation, proposal);
     },
+    async resumeRecovery(operation) {
+      if (host === undefined)
+        throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
+      await hostedHourRecovery(host).resume(operation);
+    },
     async prepare(supplied, run) {
       const operation = {
         ...supplied,

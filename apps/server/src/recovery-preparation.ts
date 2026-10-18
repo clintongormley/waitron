@@ -59,7 +59,7 @@ type Options = BaseOptions &
 export function createSelectedRecoveryPreparation(options: Options): {
   readonly modules: readonly WaitronModule[];
   prepare(proposal: unknown): Promise<unknown>;
-  runner(input: unknown): RestoreOperationRunner;
+  runner(input: unknown, options?: { refresh: true }): RestoreOperationRunner;
 } {
   const binding = Object.freeze({ ...options.binding });
   const node = Object.freeze({ ...options.node });
@@ -197,13 +197,28 @@ export function createSelectedRecoveryPreparation(options: Options): {
         (authority) => contribution.recovery!({ binding, authority }, proposal),
       );
     },
-    runner(input) {
+    runner(input, entry) {
       checkSelection();
       const runner = createRecoveryRestoreRunner(modules, { binding, input }, secret);
+      let refreshed = false;
       const scoped: RestoreOperationRunner = (context, run) =>
-        databases.run(context.db, () => runner(context, run));
+        databases.run(context.db, async () => {
+          if (entry?.refresh === true && !refreshed) {
+            if (contribution?.resumeRecovery === undefined) return refuse();
+            await withRecoveryKeyAuthority(
+              { db: context.db, nodeId: node.nodeId },
+              binding,
+              secret,
+              (authority) => contribution.resumeRecovery!({ binding, authority }),
+            );
+          }
+          const result = await runner(context, run);
+          refreshed = true;
+          return result;
+        });
       scoped.checkBeforePlacement = async (context) => {
         if (context.sourceId !== binding.sourceId) return refuse();
+        refreshed = false;
         await scoped(context, async () => ({ seriesId: "", reports: [] }));
       };
       return scoped;

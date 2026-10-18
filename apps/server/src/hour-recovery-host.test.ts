@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
@@ -35,6 +36,7 @@ import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { writeStreamRestore } from "./restore-stream.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
 import { runRestore } from "./restore-command.js";
+import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { eq, sql } from "drizzle-orm";
 import { execFile } from "node:child_process";
@@ -1857,4 +1859,356 @@ describe("selected-hour admission before archive placement", () => {
       expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(1);
     },
   );
+
+  it("refreshes reconstructed recovery clocks before archive admission without changing its hour", async () => {
+    const f = await archiveHost();
+    const before = await readModulePreparationHistory(f.roots, binding.module);
+    external.internet.mockImplementation(async () => ({
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 0,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: performance.now(),
+      monotonicFinishedMs: performance.now(),
+    }));
+    const reconstructed = createSelectedRecoveryPreparation(f.options);
+    await restoreFromArtifact({
+      ...f.restore,
+      withModuleOperations: reconstructed.runner(f.outcome.input, { refresh: true }),
+    });
+    const restored = await openVenueDatabase(f.roots.venueDir);
+    try {
+      expect(
+        (await restored.venue.select().from(invoiceSeries))
+          .filter((row) => row.retiredAt === null)
+          .map(({ code, nextNumber }) => ({ code, nextNumber })),
+      ).toEqual([
+        { code: "A-06RC", nextNumber: 1 },
+        { code: "FF-06RC", nextNumber: 1 },
+        { code: "R-06RC", nextNumber: 1 },
+      ]);
+    } finally {
+      await restored.close();
+    }
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(before);
+  });
+
+  async function archiveCommand(f: Awaited<ReturnType<typeof archiveHost>>) {
+    const artifactPath = join(root, "entry.backup.enc");
+    const operationPath = join(root, "entry-operation.json");
+    const migrationRoot = join(root, "migrations");
+    await mkdir(migrationRoot);
+    const sets = manifestSets();
+    const folders = migrationOptionsFor(sets, null);
+    for (const [index, set] of sets.entries())
+      await symlink(folders[index]!.migrationsFolder, join(migrationRoot, set.name));
+    await writeFile(artifactPath, f.restore.artifact);
+    await writeFile(
+      operationPath,
+      JSON.stringify({ binding: f.options.binding, input: f.outcome.input }),
+    );
+    return {
+      artifactPath,
+      operationPath,
+      argv: ["restore", artifactPath, "--confirm-old-box-gone", "--confirm-sole-recovery"],
+      env: {
+        WAITRON_ENV: "dev",
+        WAITRON_STATE_DIR: f.roots.stateDir,
+        WAITRON_VENUE_DIR: f.roots.venueDir,
+        WAITRON_MIGRATIONS_DIR: migrationRoot,
+        WAITRON_BACKUP_RECOVERY_KEY: "archive password",
+        WAITRON_RECOVERY_OPERATION_FILE: operationPath,
+        WAITRON_NODE_RECOVERY_KEY: key.secret,
+      },
+    };
+  }
+
+  it("the default archive command reconstructs selected-hour preparation with explicit isolation", async () => {
+    const f = await archiveHost();
+    const command = await archiveCommand(f);
+    const journal = await readModulePreparationHistory(f.roots, binding.module);
+    external.internet.mockImplementation(async () => ({
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 0,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: performance.now(),
+      monotonicFinishedMs: performance.now(),
+    }));
+    const output: string[] = [];
+    const result = await runRestore({
+      ...command,
+      out: (line) => output.push(line),
+    });
+    expect(output.join("\n")).toContain(`restored ${command.artifactPath}`);
+    expect(result).toBe(0);
+    const restored = await openVenueDatabase(f.roots.venueDir);
+    try {
+      const rows = await restored.venue.select().from(invoiceSeries);
+      expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
+        "A-06RC",
+        "FF-06RC",
+        "R-06RC",
+      ]);
+      expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
+        123, 123, 123,
+      ]);
+      expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
+    } finally {
+      await restored.close();
+    }
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
+    expect(output.join("\n")).not.toContain(key.secret);
+    expect(output.join("\n")).not.toContain("archive password");
+  });
+
+  it.each([
+    "offline",
+    "disagreement",
+    "old seller",
+    "wrong node key",
+    "wrong archive password",
+    "wrong source",
+    "missing sole confirmation",
+  ])("the default archive command refuses %s before replacing the destination", async (reason) => {
+    const f = await archiveHost();
+    const command = await archiveCommand(f);
+    external.internet.mockImplementation(async () =>
+      reason === "offline"
+        ? { source: "internet", result: "unavailable", reason: "offline" }
+        : {
+            source: "internet",
+            result: "usable",
+            instantMs: Date.now() + (reason === "disagreement" ? 180_000 : 0),
+            uncertaintyMs: 0,
+            wallStartedMs: Date.now(),
+            wallFinishedMs: Date.now(),
+            monotonicStartedMs: performance.now(),
+            monotonicFinishedMs: performance.now(),
+          },
+    );
+    if (reason === "old seller")
+      command.argv = command.argv.filter((arg) => arg !== "--confirm-old-box-gone");
+    if (reason === "missing sole confirmation")
+      command.argv = command.argv.filter((arg) => arg !== "--confirm-sole-recovery");
+    if (reason === "wrong node key") command.env.WAITRON_NODE_RECOVERY_KEY = "wrong node key";
+    if (reason === "wrong archive password")
+      command.env.WAITRON_BACKUP_RECOVERY_KEY = "wrong archive password";
+    if (reason === "wrong source")
+      await writeFile(
+        command.operationPath,
+        JSON.stringify({
+          binding: { ...f.options.binding, sourceId: "another artifact" },
+          input: f.outcome.input,
+        }),
+      );
+    await suite.db.update(invoiceSeries).set({ nextNumber: 456 });
+    await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
+    const previous = await suite.db.select().from(invoiceSeries);
+    const previousAllocations = await suite.db.select().from(fiscalAllocations);
+    external.internet.mockClear();
+    await writeFile(join(f.roots.stateDir, "trading.env"), "untouched identity");
+    const journal = await readModulePreparationHistory(f.roots, binding.module);
+    const output: string[] = [];
+    expect(await runRestore({ ...command, out: (line) => output.push(line) })).toBe(1);
+    const retained = await openVenueDatabase(f.roots.venueDir);
+    try {
+      expect(await retained.venue.select().from(invoiceSeries)).toEqual(previous);
+      expect(await retained.venue.select().from(fiscalAllocations)).toEqual(previousAllocations);
+    } finally {
+      await retained.close();
+    }
+    expect(external.internet).toHaveBeenCalledTimes(
+      ["offline", "disagreement", "old seller"].includes(reason) ? 1 : 0,
+    );
+    expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
+      "untouched identity",
+    );
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
+    expect(output.join("\n")).not.toContain(key.secret);
+    expect(output.join("\n")).not.toContain(command.env.WAITRON_BACKUP_RECOVERY_KEY);
+  });
+
+  it("a reconstructed committed recovery refreshes no clocks or hour intent", async () => {
+    const f = await archiveHost();
+    await restoreFromArtifact({
+      ...f.restore,
+      withModuleOperations: f.service.runner(f.outcome.input),
+    });
+    const restored = await openVenueDatabase(f.roots.venueDir);
+    try {
+      await restored.venue.update(invoiceSeries).set({ nextNumber: 917 });
+      const rows = await restored.venue.select().from(invoiceSeries);
+      const allocations = await restored.venue.select().from(fiscalAllocations);
+      const journal = await readModulePreparationHistory(f.roots, binding.module);
+      vi.setSystemTime(new Date("2026-10-17T14:40:00Z"));
+      external.internet.mockClear();
+      const reconstructed = createSelectedRecoveryPreparation(f.options);
+      await runRestoreHooks({
+        db: restored.venue,
+        node,
+        modules: ALL_MODULES,
+        log: () => {},
+        withModuleOperations: reconstructed.runner(f.outcome.input, { refresh: true }),
+        resumeOperation: f.options.binding,
+      });
+      expect(external.internet).not.toHaveBeenCalled();
+      expect(await restored.venue.select().from(invoiceSeries)).toEqual(rows);
+      expect(await restored.venue.select().from(fiscalAllocations)).toEqual(allocations);
+      expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
+    } finally {
+      await restored.close();
+    }
+  });
+
+  it("refreshes again when the same reconstructed runner retries refused clock admission", async () => {
+    const f = await archiveHost();
+    const reconstructed = createSelectedRecoveryPreparation(f.options);
+    const runner = reconstructed.runner(f.outcome.input, { refresh: true });
+    await expect(
+      restoreFromArtifact({ ...f.restore, withModuleOperations: runner }),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "clock_unconfirmed" },
+    });
+    external.internet.mockImplementation(async () => ({
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 0,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: performance.now(),
+      monotonicFinishedMs: performance.now(),
+    }));
+    await restoreFromArtifact({ ...f.restore, withModuleOperations: runner });
+    const restored = await openVenueDatabase(f.roots.venueDir);
+    try {
+      expect(
+        (await restored.venue.select().from(invoiceSeries))
+          .filter((row) => row.retiredAt === null)
+          .map((row) => row.code),
+      ).toEqual(["A-06RC", "FF-06RC", "R-06RC"]);
+      expect(await restored.venue.select().from(fiscalAllocations)).toHaveLength(2);
+    } finally {
+      await restored.close();
+    }
+  });
+
+  it("the archive-pack command uses the downloaded exact archive and the pack password", async () => {
+    const f = await archiveHost();
+    const command = await archiveCommand(f);
+    const packPath = join(root, "archive-pack.txt");
+    const archiveKey = "waitron-20261016T114000Z-00000000-0000-4000-8000-000000000001.backup.enc";
+    await writeFile(
+      packPath,
+      encodeArchiveRecoveryPack({
+        version: 1,
+        format: "WBK1",
+        venueId: "olivo",
+        bucket: {
+          region: "eu-west-1",
+          bucket: "synthetic-bucket",
+          prefix: "",
+          accessKeyId: "synthetic-access",
+          secretAccessKey: "synthetic-secret",
+        },
+        archivePrefix: "archives/olivo/",
+        recoveryKey: "archive password",
+      }),
+    );
+    external.internet.mockImplementation(async () => ({
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 0,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: performance.now(),
+      monotonicFinishedMs: performance.now(),
+    }));
+    command.env.WAITRON_BACKUP_RECOVERY_KEY = "unused environment password";
+    const output: string[] = [];
+    const unexpected = async (): Promise<never> => {
+      throw new Error("unexpected archive transport call");
+    };
+    const result = await runRestore({
+      env: command.env,
+      argv: [
+        "restore",
+        "--from-archive",
+        packPath,
+        "--archive-key",
+        archiveKey,
+        "--confirm-old-box-gone",
+        "--confirm-sole-recovery",
+      ],
+      out: (line) => output.push(line),
+      openArchiveFiles: (bucket) => {
+        expect(bucket.prefix).toBe("archives/olivo/");
+        return {
+          putFile: unexpected,
+          putBytes: unexpected,
+          readStream: unexpected,
+          deleteMany: unexpected,
+          list: async (prefix) => {
+            expect(prefix).toBe(archiveKey);
+            return [{ key: archiveKey, size: f.restore.artifact.length, lastModified: new Date() }];
+          },
+          getFile: async (name, path) => {
+            expect(name).toBe(archiveKey);
+            await writeFile(path, f.restore.artifact);
+          },
+          close() {},
+        };
+      },
+    });
+    expect(result).toBe(0);
+    expect(output.at(-1)).toBe(
+      `restored archive ${archiveKey} from the bucket named in ${packPath}`,
+    );
+    const restored = await openVenueDatabase(f.roots.venueDir);
+    try {
+      const rows = await restored.venue.select().from(invoiceSeries);
+      expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
+        "A-06RC",
+        "FF-06RC",
+        "R-06RC",
+      ]);
+      expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
+        123, 123, 123,
+      ]);
+    } finally {
+      await restored.close();
+    }
+    expect(await readdir(join(f.roots.stateDir, "restore-staging"))).toEqual([]);
+  });
+
+  it("refreshes each new placement admission when a reconstructed runner is reused", async () => {
+    const f = await archiveHost();
+    external.internet.mockImplementation(async () => ({
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 0,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: performance.now(),
+      monotonicFinishedMs: performance.now(),
+    }));
+    const reconstructed = createSelectedRecoveryPreparation(f.options);
+    const runner = reconstructed.runner(f.outcome.input, { refresh: true });
+    const context = { db: suite.db, node, sourceId: f.options.binding.sourceId };
+    await runner.checkBeforePlacement!(context);
+    vi.advanceTimersByTime(31_000);
+    await runner.checkBeforePlacement!(context);
+    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+    expect((await suite.db.select().from(invoiceSeries)).map((row) => row.nextNumber)).toEqual([
+      123, 123, 123,
+    ]);
+  });
 });

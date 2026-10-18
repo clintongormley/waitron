@@ -1,4 +1,8 @@
-import { assertVenueFirstSetupAllowed, inspectFirstSetupMarker } from "@waitron/provisioning";
+import {
+  assertVenueFirstSetupAllowed,
+  createFirstSetupCoordinator,
+  inspectFirstSetupMarker,
+} from "@waitron/provisioning";
 import { lockVenueDatabase } from "@waitron/db";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -24,6 +28,8 @@ import { ALL_MODULES } from "./modules.js";
 import {
   RESTORE_STAGING_DIR,
   restoreFromArtifactFile,
+  validateArtifactFile,
+  readArtifactIdentity,
   type RestoreFileDeps,
   type RestoreOperationRunner,
 } from "./restore.js";
@@ -33,6 +39,9 @@ import {
   createRecoveryRestoreRunner,
   readRecoveryOperationFile,
 } from "./recovery-module-operation.js";
+
+import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
+import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 
 type Env = NodeJS.ProcessEnv;
 type RestoreStream = (deps: Parameters<typeof restoreFromStream>[0]) => Promise<void>;
@@ -54,6 +63,7 @@ interface CommandDeps {
 }
 
 const CONFIRM_OLD_BOX_GONE = "--confirm-old-box-gone";
+const CONFIRM_SOLE_RECOVERY = "--confirm-sole-recovery";
 const FROM_BUCKET = "--from-bucket";
 const CONFIRM_VENUE = "--confirm-venue";
 const FROM_ARCHIVE = "--from-archive";
@@ -90,13 +100,13 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   const args = parseArgs(deps.argv);
   if (args === null) {
     deps.out(
-      "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] | restore --from-bucket <kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] | restore --from-archive <pack-file> --archive-key <name> [--confirm-old-box-gone]",
+      "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] | restore --from-archive <pack-file> --archive-key <name> [--confirm-old-box-gone] [--confirm-sole-recovery]",
     );
     return 2;
   }
   if ("kitPath" in args) return runBucketRestore(deps, args);
   if ("packPath" in args) return runPackRestore(deps, args);
-  const { artifactPath, oldBoxGone } = args;
+  const { artifactPath, oldBoxGone, soleRecovery } = args;
 
   const recoveryKey = deps.env.WAITRON_BACKUP_RECOVERY_KEY;
   if (isUnset(recoveryKey)) {
@@ -119,9 +129,17 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   const target = await resolveRestoreTarget(deps);
   if (typeof target === "number") return target;
   deps.out(COLD_RESTORE_NOTICE);
-  const restored = await restoreArtifact(deps, target, artifactPath, recoveryKey, oldBoxGone, {
-    keyDoesNotOpen: "restore failed: wrong recovery key or corrupt artifact",
-  });
+  const restored = await restoreArtifact(
+    deps,
+    target,
+    artifactPath,
+    recoveryKey,
+    oldBoxGone,
+    soleRecovery,
+    {
+      keyDoesNotOpen: "restore failed: wrong recovery key or corrupt artifact",
+    },
+  );
   if (!restored) return 1;
   deps.out(`restored ${artifactPath}`);
   return 0;
@@ -140,11 +158,16 @@ async function restoreArtifact(
   artifactPath: string,
   recoveryKey: string,
   oldBoxGone: boolean,
+  soleRecovery: boolean,
   words: { keyDoesNotOpen: string },
 ): Promise<boolean> {
   try {
+    const withModuleOperations = soleRecovery
+      ? await archiveRecoveryRunner(deps, target, artifactPath, recoveryKey, oldBoxGone)
+      : target.withModuleOperations;
     await (deps.restore ?? restoreFromArtifactFile)({
       ...target,
+      withModuleOperations,
       artifactPath,
       recoveryKey,
       checkSourceLive: (validated) =>
@@ -179,27 +202,25 @@ const RESTORE_DISK_FULL =
   "restore failed: the disk filled during the restore; free some space and run it again";
 
 type ParsedArgs =
-  | { artifactPath: string; oldBoxGone: boolean }
+  | { artifactPath: string; oldBoxGone: boolean; soleRecovery: boolean }
   | { kitPath: string; confirmedTaxId: string | undefined; oldBoxGone: boolean }
-  | { packPath: string; archiveKey: string; oldBoxGone: boolean };
+  | { packPath: string; archiveKey: string; oldBoxGone: boolean; soleRecovery: boolean };
 
-/**
- * Each form takes exactly its own flags, each once: `<artifact-path> [--confirm-old-box-gone]`,
- * `--from-bucket <kit-file> [--confirm-old-box-gone] [--confirm-venue <tax-id>]`, or
- * `--from-archive <pack-file> --archive-key <name> [--confirm-old-box-gone]`, in any order.
- * A flag's value may not itself start with `--`. Null for anything else.
- */
 function parseArgs(argv: readonly string[]): ParsedArgs | null {
   const [cmd, ...rest] = argv;
   if (cmd !== "restore") return null;
   const valued: Record<string, string | undefined> = {};
   let artifactPath: string | undefined;
   let oldBoxGone = false;
+  let soleRecovery = false;
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i]!;
     if (arg === CONFIRM_OLD_BOX_GONE) {
       if (oldBoxGone) return null;
       oldBoxGone = true;
+    } else if (arg === CONFIRM_SOLE_RECOVERY) {
+      if (soleRecovery) return null;
+      soleRecovery = true;
     } else if (VALUED_FLAGS.has(arg)) {
       const value = rest[++i];
       if (value === undefined || value.startsWith("--") || arg in valued) return null;
@@ -220,14 +241,16 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
       kitPath === undefined &&
       confirmedTaxId === undefined &&
       artifactPath === undefined
-      ? { packPath, archiveKey, oldBoxGone }
+      ? { packPath, archiveKey, oldBoxGone, soleRecovery }
       : null;
   }
   if (kitPath !== undefined) {
-    return artifactPath === undefined ? { kitPath, confirmedTaxId, oldBoxGone } : null;
+    return artifactPath === undefined && !soleRecovery
+      ? { kitPath, confirmedTaxId, oldBoxGone }
+      : null;
   }
   return artifactPath !== undefined && confirmedTaxId === undefined
-    ? { artifactPath, oldBoxGone }
+    ? { artifactPath, oldBoxGone, soleRecovery }
     : null;
 }
 
@@ -296,6 +319,44 @@ async function resolveRestoreTarget(deps: CommandDeps): Promise<RestoreTarget | 
       () => new Date(),
     ),
   };
+}
+
+async function archiveRecoveryRunner(
+  deps: CommandDeps,
+  target: RestoreTarget,
+  artifactPath: string,
+  recoveryKey: string,
+  oldBoxGone: boolean,
+): Promise<RestoreOperationRunner> {
+  const path = deps.env.WAITRON_RECOVERY_OPERATION_FILE;
+  const operation = await readRecoveryOperationFile(path ?? "");
+  const copy = await validateArtifactFile({ ...target, artifactPath, recoveryKey });
+  try {
+    const selected = await readRecoveryCopyPreview(copy, copy.sourceId, target);
+    const { node } = readArtifactIdentity(copy.secretEntries);
+    const service = createSelectedRecoveryPreparation({
+      stateDir: target.stateDir,
+      venueDir: target.venueDir,
+      coordinator: createFirstSetupCoordinator(),
+      modules: target.modules,
+      binding: operation.binding,
+      node,
+      secret: deps.env.WAITRON_NODE_RECOVERY_KEY,
+      selected,
+      database() {
+        throw new AppError("module.operation_invalid", { module: operation.binding.module });
+      },
+      // The sole-recovery flag declares taxpayer-wide isolation; local locks do not establish it.
+      readIsolation: async () => ({
+        oldMachineAbsent: false,
+        oldMachineOffline: oldBoxGone,
+        noParallelRecovery: true,
+      }),
+    });
+    return service.runner(operation.input, { refresh: true });
+  } finally {
+    await copy.discard();
+  }
 }
 
 function sourceLiveRefusal(err: AppError, subject: string): string | null {
@@ -462,7 +523,7 @@ async function runPackRestore(
   deps: CommandDeps,
   args: Extract<ParsedArgs, { packPath: string }>,
 ): Promise<number> {
-  const { packPath, archiveKey, oldBoxGone } = args;
+  const { packPath, archiveKey, oldBoxGone, soleRecovery } = args;
   let packText: string;
   try {
     packText = await readFile(packPath, "utf8");
@@ -504,9 +565,17 @@ async function runPackRestore(
   }
   let restored: boolean;
   try {
-    restored = await restoreArtifact(deps, target, downloaded.path, pack.recoveryKey, oldBoxGone, {
-      keyDoesNotOpen: PACK_KEY_DOES_NOT_OPEN,
-    });
+    restored = await restoreArtifact(
+      deps,
+      target,
+      downloaded.path,
+      pack.recoveryKey,
+      oldBoxGone,
+      soleRecovery,
+      {
+        keyDoesNotOpen: PACK_KEY_DOES_NOT_OPEN,
+      },
+    );
     if (restored) deps.out(`restored archive ${archiveKey} from the bucket named in ${packPath}`);
   } finally {
     await downloaded.dispose().catch(() => deps.out(DOWNLOAD_LEFT_BEHIND));

@@ -1,5 +1,9 @@
 import { AppError } from "@waitron/shared";
-import type { ModuleOperationHost, ModuleOperationPreparation } from "@waitron/module";
+import type {
+  ModuleOperationHost,
+  ModuleOperationInput,
+  ModuleOperationPreparation,
+} from "@waitron/module";
 import {
   createHourRecoveryPreparation,
   recoveryHourOperator,
@@ -107,7 +111,22 @@ function createHostedHourRecovery(host: ModuleOperationHost) {
       return refuse();
     });
   };
-  return { prepare: preparation.prepare, recovery };
+  return {
+    prepare: preparation.prepare,
+    recovery,
+    async resume(operation: Pick<ModuleOperationInput, "binding" | "authority">) {
+      const held = { ...operation, binding: Object.freeze({ ...operation.binding }) };
+      recoveryHourOperator(held.binding, held.authority);
+      await host.withPreparationState!(held.binding, async () => {
+        const current = await facts(held.binding);
+        recoveryHourOperator(held.binding, held.authority);
+        if (current.priorActivation === "committed") return;
+        confirmed.delete(current.contextKey);
+        await clocks.compare(current.contextKey, current.environment, null);
+        recoveryHourOperator(held.binding, held.authority);
+      });
+    },
+  };
 }
 const hosted = new WeakMap<ModuleOperationHost, ReturnType<typeof createHostedHourRecovery>>();
 export function hostedHourRecovery(host: ModuleOperationHost) {

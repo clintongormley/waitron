@@ -93,6 +93,8 @@ export interface ModuleOperationPreparation {
     operation: Pick<ModuleOperationInput, "binding" | "authority">,
     proposal: unknown,
   ): Promise<unknown>;
+  /** Rebuild transient admission checks without selecting another identity. */
+  resumeRecovery?(operation: Pick<ModuleOperationInput, "binding" | "authority">): Promise<void>;
   prepare<T>(
     operation: ModuleOperationInput,
     run: (prepared: ModuleOperationInput) => Promise<T>,
