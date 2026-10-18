@@ -275,6 +275,7 @@ it("Delete… on a changed draft asks first: keep emits nothing and keeps the dr
       menuId: "lunch",
       staffMenuIds: [],
       endOffsetMinutes: 0,
+      floorPlanSetId: null,
       weekdays: [1],
       routingUses: [],
     };
@@ -353,4 +354,43 @@ it("a dialog given a draft parent is asked about only with that parent", async (
     await app.leave.coordinator.request({ scopes: [root], reason: "navigation", proceed() {} }),
   ).toBe("proceeded");
   expect((await question()).open).toBe(false);
+});
+
+it("a Floor plan-only change protects navigation and choosing the default back makes it clean", async () => {
+  const el = await mount();
+  el.departmentId = "restaurant";
+  el.floorPlans = [
+    {
+      id: "restaurant",
+      name: "Restaurant",
+      zones: [{ id: "inside", name: "Inside", tableCount: 4 }],
+      sets: [
+        { id: "house", name: "House", isDefault: true, usedBy: [], layouts: [] },
+        { id: "dinner", name: "Dinner", isDefault: false, usedBy: [], layouts: [] },
+      ],
+    },
+  ];
+  await el.updateComplete;
+  const plan = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "[name=floorPlanSetId]",
+  )!;
+  expect(plan).not.toBeNull();
+  const pick = async (value: string) => {
+    plan.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  };
+  expect(save(el).disabled).toBe(true);
+  await pick("dinner");
+  expect(unload()).toBe(true);
+  expect(save(el).variant).toBe("primary");
+  expect(save(el).disabled).toBe(false);
+  const close = modal(el).requestClose("cancel");
+  await choose("keep");
+  expect(await close).toBe(false);
+  expect(plan.value).toBe("dinner");
+  await pick("");
+  expect(unload()).toBe(false);
+  expect(save(el).disabled).toBe(true);
 });

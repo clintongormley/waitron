@@ -6,6 +6,7 @@ import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
+import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
@@ -115,6 +116,9 @@ export class PeriodsList extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
       ${chipTints}
+      wt-data-table::part(default-mark) {
+        color: var(--wt-color-text-muted);
+      }
     `,
   ];
   @property({ attribute: false }) api!: OpeningHoursApi;
@@ -124,6 +128,8 @@ export class PeriodsList extends LitElement {
   @state() private painted?: Map<string, PaintedIn>;
   @state() private readError = "";
   @state() private paintedInError = "";
+  @state() private floorPlans?: FloorPlanSetsModel;
+  @state() private floorPlansError = "";
   private periods = new PeriodEditing(this, {
     api: () => this.api,
     model: () => this.model!,
@@ -134,10 +140,12 @@ export class PeriodsList extends LitElement {
     readOnly: () => this.readOnly,
     draftParent: () => this.draftParent,
     onDelete: (_department, period) => this.askDelete(period),
+    floorPlans: () => this.floorPlans,
   });
   @state() private deleting?: Deletion;
   private detach?: () => void;
   private paintedDetach?: () => void;
+  private floorPlansDetach?: () => void;
 
   override connectedCallback() {
     super.connectedCallback();
@@ -167,12 +175,26 @@ export class PeriodsList extends LitElement {
         this.paintedInError = "";
       },
     );
+    this.floorPlansDetach = this.api.watchFloorPlanSets(
+      (model) => {
+        this.floorPlans = model;
+        this.floorPlansError = "";
+      },
+      () => {
+        this.floorPlansError = t("floor_plans.load_error");
+      },
+      () => {
+        this.floorPlansError = "";
+      },
+    );
   }
   override disconnectedCallback() {
     this.detach?.();
     this.paintedDetach?.();
+    this.floorPlansDetach?.();
     this.detach = undefined;
     this.paintedDetach = undefined;
+    this.floorPlansDetach = undefined;
     super.disconnectedCallback();
   }
 
@@ -216,6 +238,35 @@ export class PeriodsList extends LitElement {
           >`,
       )}</span
     >`;
+  }
+  /** Each department with a zone holding tables, by id, with its sets; others are absent. */
+  private planned?: {
+    floorPlans: FloorPlanSetsModel;
+    departments: Map<string, FloorPlanSetsModel["departments"][number]>;
+  };
+  private plannedDepartments() {
+    const floorPlans = this.floorPlans;
+    if (!floorPlans) return undefined;
+    if (this.planned?.floorPlans !== floorPlans)
+      this.planned = {
+        floorPlans,
+        departments: new Map(
+          floorPlans.departments
+            .filter(({ zones }) => zones.some(({ tableCount }) => tableCount > 0))
+            .map((department) => [department.id, department]),
+        ),
+      };
+    return this.planned.departments;
+  }
+  private floorPlanCell(row: PeriodRow) {
+    if (row.kind !== "period") return nothing;
+    const sets = this.plannedDepartments()?.get(row.departmentId)?.sets ?? [];
+    const chosen = sets.find(({ id }) => id === row.floorPlanSetId);
+    if (chosen) return chosen.name;
+    const fallback = sets.find(({ isDefault }) => isDefault);
+    if (!fallback) return nothing;
+    return html`<span part="set-name">${fallback.name}</span>
+      <span part="default-mark">${t("period.default_mark")}</span>`;
   }
   private bin(row: PeriodRow) {
     if (row.kind !== "period") return nothing;
@@ -276,6 +327,15 @@ export class PeriodsList extends LitElement {
               ? row.staffMenuIds.map((id) => this.menuName(id)).join(", ")
               : "—",
       },
+      ...(this.plannedDepartments()?.size
+        ? [
+            {
+              key: "floorPlan",
+              label: t("period.floor_plan"),
+              cell: (row: PeriodRow) => this.floorPlanCell(row),
+            } satisfies DataTableColumn<PeriodRow>,
+          ]
+        : []),
       {
         key: "paintedIn",
         label: t("period.painted_in"),
@@ -307,6 +367,7 @@ export class PeriodsList extends LitElement {
       </div>
       ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}
       ${this.paintedInError ? html`<p role="alert" data-test="painted-in-error">${this.paintedInError}</p>` : nothing}
+      ${this.floorPlansError ? html`<p role="alert" data-test="floor-plans-error">${this.floorPlansError}</p>` : nothing}
       ${
         !model
           ? nothing

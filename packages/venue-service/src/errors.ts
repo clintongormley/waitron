@@ -74,7 +74,12 @@ declare module "@waitron/shared" {
     "menu_period.not_found": { periodId: string };
     "menu_period.not_running": { departmentId: string; menuId: string };
     "menu_period.invalid": {
-      field: "staffMenuIds" | "colour" | "endOffsetMinutes" | "replacementPeriodId";
+      field:
+        | "staffMenuIds"
+        | "colour"
+        | "endOffsetMinutes"
+        | "replacementPeriodId"
+        | "floorPlanSetId";
       reason?: "whole_minutes" | "range" | "placement";
       periodId?: string;
       departmentId?: string;

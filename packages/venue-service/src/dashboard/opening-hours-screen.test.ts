@@ -74,6 +74,7 @@ function model(): OpeningHoursModel {
             menuId: "lunch",
             staffMenuIds: ["staff"],
             endOffsetMinutes: 0,
+            floorPlanSetId: null,
             weekdays: [1, 3],
             routingUses: [],
           },

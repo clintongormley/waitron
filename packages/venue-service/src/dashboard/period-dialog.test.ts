@@ -20,6 +20,7 @@ const period = {
   menuId: "lunch",
   staffMenuIds: ["deli"],
   endOffsetMinutes: 0,
+  floorPlanSetId: null,
   weekdays: [1, 2],
   routingUses: [],
 };
@@ -1229,4 +1230,165 @@ it("typing a name before a department is chosen keeps the chooser's choices", as
   const before = chooser(el).choices;
   await change(el, "name", { value: "Brunch" });
   expect(chooser(el).choices).toBe(before);
+});
+
+const floorPlans = [
+  {
+    id: "restaurant",
+    name: "Restaurant",
+    zones: [
+      { id: "terrace", name: "Terrace", tableCount: 0 },
+      { id: "inside", name: "Inside", tableCount: 12 },
+    ],
+    sets: [
+      { id: "house", name: "House", isDefault: true, usedBy: [], layouts: [] },
+      { id: "banquet", name: "Banquet", isDefault: false, usedBy: [], layouts: [] },
+      { id: "dinner", name: "Dinner", isDefault: false, usedBy: [], layouts: [] },
+    ],
+  },
+  {
+    id: "bar",
+    name: "Bar",
+    zones: [{ id: "counter", name: "Counter", tableCount: 0 }],
+    sets: [{ id: "bar-standard", name: "Standard", isDefault: true, usedBy: [], layouts: [] }],
+  },
+];
+async function mountPlanned(floorPlanSetId: string | null = null, departmentId = "restaurant") {
+  return mountEdit((el) => {
+    el.period = { ...structuredClone(period), floorPlanSetId };
+    el.departmentId = departmentId;
+    el.floorPlans = floorPlans;
+  });
+}
+const shownText = (control: HTMLElement) =>
+  control.shadowRoot!.querySelector<HTMLElement>(".value")!;
+
+it("draws Floor plan after End offset and before Painted in, not required, for a department with tables", async () => {
+  const el = await mountEdit((dialog) => {
+    dialog.period = { ...structuredClone(period), floorPlanSetId: null };
+    dialog.departmentId = "restaurant";
+    dialog.floorPlans = floorPlans;
+    dialog.paintedIn = { seasons: [], specialDays: [] };
+  });
+  const order = [...el.shadowRoot!.querySelectorAll("[name], [data-test=painted-in]")].map(
+    (node) => node.getAttribute("name") ?? node.getAttribute("data-test"),
+  );
+  expect(order).toEqual([
+    "name",
+    "colour",
+    "menuId",
+    "staffMenuIds",
+    "endOffsetMinutes",
+    "floorPlanSetId",
+    "painted-in",
+  ]);
+  expect(field(el, "floorPlanSetId").label).toBe("Floor plan");
+  expect(field(el, "floorPlanSetId").required).toBe(false);
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(field(el, "floorPlanSetId").label).toBe("Plano de sala");
+});
+
+it("offers the default first by its own name, muted, then the other sets in the read's order", async () => {
+  const el = await mountPlanned();
+  const control = field(el, "floorPlanSetId");
+  expect(control.options).toEqual([
+    { value: "", label: "House (default)", muted: true },
+    { value: "banquet", label: "Banquet" },
+    { value: "dinner", label: "Dinner" },
+  ]);
+  expect(control.value).toBe("");
+  expect(control.hasAttribute("show-empty-option")).toBe(true);
+  await (control as unknown as HTMLElementTagNameMap["wt-combobox"]).updateComplete;
+  expect(shownText(control).textContent!.trim()).toBe("House (default)");
+  expect(shownText(control).classList.contains("muted")).toBe(true);
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(field(el, "floorPlanSetId").options[0]).toEqual({
+    value: "",
+    label: "House (predeterminado)",
+    muted: true,
+  });
+});
+
+it("names a default called Standard in English and Spanish", async () => {
+  const el = await mountPlanned(null, "bar");
+  el.floorPlans = [
+    { ...floorPlans[1]!, zones: [{ id: "counter", name: "Counter", tableCount: 3 }] },
+  ];
+  await el.updateComplete;
+  expect(field(el, "floorPlanSetId").options).toEqual([
+    { value: "", label: "Standard (default)", muted: true },
+  ]);
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(field(el, "floorPlanSetId").options[0]!.label).toBe("Standard (predeterminado)");
+});
+
+it("no Floor plan field for a department with no zone holding tables, nor with no read of the sets", async () => {
+  const bar = await mountPlanned(null, "bar");
+  expect(bar.shadowRoot!.querySelector("[name=floorPlanSetId]")).toBeNull();
+  const unread = await mountEdit((el) => {
+    el.period = { ...structuredClone(period), floorPlanSetId: null };
+    el.departmentId = "restaurant";
+  });
+  expect(unread.shadowRoot!.querySelector("[name=floorPlanSetId]")).toBeNull();
+  const writes: { input: object }[] = [];
+  bar.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+  await change(bar, "name", { value: "Evening" });
+  save(bar).click();
+  await bar.updateComplete;
+  expect(writes).toHaveLength(1);
+  expect(writes[0]!.input).not.toHaveProperty("floorPlanSetId");
+});
+
+it("shows the stored set, sends a chosen one, and sends null when the default is chosen", async () => {
+  const el = await mountPlanned("dinner");
+  expect(field(el, "floorPlanSetId").value).toBe("dinner");
+  expect(save(el).disabled).toBe(true);
+  const writes: { input: Record<string, unknown> }[] = [];
+  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+  await change(el, "floorPlanSetId", { value: "banquet" });
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await el.updateComplete;
+  expect(writes[0]!.input.floorPlanSetId).toBe("banquet");
+  expect(el.commitSubmitted(writes[0]!.input as never)).toBe(true);
+  await change(el, "floorPlanSetId", { value: "" });
+  save(el).click();
+  await el.updateComplete;
+  expect(writes).toHaveLength(2);
+  expect(writes[1]!.input.floorPlanSetId).toBeNull();
+});
+
+it("a floorPlanSetId refusal shows under Floor plan, and choosing again clears it", async () => {
+  const el = await mountPlanned();
+  el.refusal = { code: "menu_period.invalid", params: { field: "floorPlanSetId" } };
+  await el.updateComplete;
+  expect(field(el, "floorPlanSetId").error).toBe("This set no longer exists.");
+  await change(el, "floorPlanSetId", { value: "dinner" });
+  expect(field(el, "floorPlanSetId").error).toBe("");
+});
+
+it("adding, the field follows the chosen department and empties on a change of department", async () => {
+  const el = await mountAdd(departments);
+  el.floorPlans = floorPlans;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[name=floorPlanSetId]")).toBeNull();
+  await change(el, "departmentId", { value: "restaurant" });
+  await change(el, "floorPlanSetId", { value: "dinner" });
+  await change(el, "departmentId", { value: "bar" });
+  expect(el.shadowRoot!.querySelector("[name=floorPlanSetId]")).toBeNull();
+  await change(el, "departmentId", { value: "restaurant" });
+  expect(field(el, "floorPlanSetId").value).toBe("");
+  const writes: { input: Record<string, unknown> }[] = [];
+  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+  await change(el, "name", { value: "Dinner" });
+  await change(el, "menuId", { value: "lunch" });
+  save(el).click();
+  await el.updateComplete;
+  expect(writes[0]!.input.floorPlanSetId).toBeNull();
 });

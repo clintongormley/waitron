@@ -40,6 +40,7 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
         menuId: "lunch",
         staffMenuIds: ["deli"],
         endOffsetMinutes: 0,
+        floorPlanSetId: null,
         weekdays: [1],
         routingUses: [],
       };
@@ -143,6 +144,7 @@ describe.each(["en", "es"] as const)("Offset form (%s)", (locale) => {
             menuId: "lunch",
             staffMenuIds: ["staff"],
             endOffsetMinutes: offset,
+            floorPlanSetId: null,
             weekdays: [1],
             routingUses: [],
           };

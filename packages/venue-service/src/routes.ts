@@ -310,6 +310,12 @@ function requireCellTarget(body: Record<string, unknown>): RouteTarget | null {
   return body.target === null ? null : requireRouteTarget(body.target, "target");
 }
 
+/** Absent keeps the period's set; null empties it. */
+function floorPlanSetField(body: Record<string, unknown>): { floorPlanSetId?: string | null } {
+  if (!Object.hasOwn(body, "floorPlanSetId")) return {};
+  return { floorPlanSetId: requireNullableBodyUuid(body.floorPlanSetId, "floorPlanSetId") };
+}
+
 /** A cell being cleared takes no period lines, not even an empty list. */
 function requireCellPeriods(
   body: Record<string, unknown>,
@@ -1177,6 +1183,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "menuId",
           "staffMenuIds",
           "endOffsetMinutes",
+          "floorPlanSetId",
           "expectedClockRevision",
         ]);
         const name = requireString(body.name, "name");
@@ -1189,6 +1196,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...(body.endOffsetMinutes === undefined
             ? {}
             : { endOffsetMinutes: parseEndOffsetMinutes(body.endOffsetMinutes) }),
+          ...floorPlanSetField(body),
         };
         const period = await gated(sessionId, (tx) =>
           saveMenuPeriod(tx, ctx.cfg, departmentId, input, body.expectedClockRevision as number),
@@ -1254,6 +1262,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "menuId",
           "staffMenuIds",
           "endOffsetMinutes",
+          "floorPlanSetId",
           "expectedClockRevision",
         ]);
         if (Object.keys(body).every((key) => key === "expectedClockRevision"))
@@ -1268,6 +1277,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...(body.endOffsetMinutes === undefined
             ? {}
             : { endOffsetMinutes: parseEndOffsetMinutes(body.endOffsetMinutes) }),
+          ...floorPlanSetField(body),
         };
         await gated(sessionId, (tx) =>
           updateMenuPeriod(tx, ctx.cfg, periodId, period, body.expectedClockRevision as number),

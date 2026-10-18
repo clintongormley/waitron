@@ -20,6 +20,7 @@ import "@waitron/ui/src/components/wt-colour-chooser.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
+import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import {
   firstUnusedCalendarColour,
   NO_COLOUR_USERS,
@@ -31,9 +32,11 @@ import { seasonPainterPath, specialDayPainterPath } from "./opening-hours-paths.
 import { seasonTints, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
-type Draft = Omit<MenuPeriodInput, "endOffsetMinutes"> & {
+type Draft = Omit<MenuPeriodInput, "endOffsetMinutes" | "floorPlanSetId"> & {
   colour: CalendarColour;
   endOffsetMinutes: string;
+  /** Empty for the department's default set. */
+  floorPlanSetId: string;
   /** Empty unless the dialog asks for the department. */
   departmentId: string;
 };
@@ -48,6 +51,7 @@ const empty = (users: readonly ColourUser[] = NO_COLOUR_USERS): Draft => ({
   menuId: "",
   staffMenuIds: [],
   endOffsetMinutes: "0",
+  floorPlanSetId: "",
   departmentId: "",
 });
 const fields: Field[] = [
@@ -57,6 +61,7 @@ const fields: Field[] = [
   "menuId",
   "staffMenuIds",
   "endOffsetMinutes",
+  "floorPlanSetId",
 ];
 
 @customElement("period-dialog")
@@ -130,6 +135,8 @@ export class PeriodDialog extends LitElement {
   @property({ type: Boolean }) deletable = false;
   /** Given when adding without a fixed department, so the dialog asks for one. */
   @property({ attribute: false }) departments?: readonly Department[];
+  /** The departments' zones and floor plan sets; absent draws no Floor plan field. */
+  @property({ attribute: false }) floorPlans?: FloorPlanSetsModel["departments"];
   @state() private draft: Draft = empty();
   private colourPicked = false;
   @state() private attempted = false;
@@ -177,6 +184,7 @@ export class PeriodDialog extends LitElement {
             menuId: this.period.menuId,
             staffMenuIds: [...this.period.staffMenuIds],
             endOffsetMinutes: String(this.period.endOffsetMinutes),
+            floorPlanSetId: this.period.floorPlanSetId ?? "",
             departmentId: "",
           }
         : this.departments?.length === 1
@@ -199,6 +207,7 @@ export class PeriodDialog extends LitElement {
           a.colour === b.colour &&
           a.menuId === b.menuId &&
           a.endOffsetMinutes === b.endOffsetMinutes &&
+          a.floorPlanSetId === b.floorPlanSetId &&
           a.departmentId === b.departmentId &&
           a.staffMenuIds.length === b.staffMenuIds.length &&
           a.staffMenuIds.every((id) => b.staffMenuIds.includes(id)),
@@ -229,6 +238,15 @@ export class PeriodDialog extends LitElement {
   private readonly colourChoices = rememberedColourChoices((colour) => t(`hours.colour.${colour}`));
   private readonly usedByLabel = (colour: string, names: string) =>
     format("hours.colour_used_by", { colour, names });
+  /** The sets offered, the default first; undefined when the field is not drawn. */
+  private get floorPlanSets() {
+    const departmentId = this.choosesDepartment ? this.draft.departmentId : this.departmentId;
+    const department = this.floorPlans?.find(({ id }) => id === departmentId);
+    if (!department?.zones.some(({ tableCount }) => tableCount > 0)) return undefined;
+    const fallback = department.sets.find(({ isDefault }) => isDefault);
+    if (!fallback) return undefined;
+    return { fallback, others: department.sets.filter((set) => set !== fallback) };
+  }
   private get choosesDepartment() {
     return !this.period && this.departments !== undefined;
   }
@@ -261,7 +279,8 @@ export class PeriodDialog extends LitElement {
       (refusal.code === "menu_period.invalid" ||
         refusal.code === "menu_timetable.invalid" ||
         refusal.code === "management.request_invalid") &&
-      fields.includes(field as Field)
+      fields.includes(field as Field) &&
+      (field !== "floorPlanSetId" || this.floorPlanSets !== undefined)
     )
       return field as Field;
     if (refusal.code === "catalogue.not_found") {
@@ -277,6 +296,7 @@ export class PeriodDialog extends LitElement {
       if (this.refusal?.code === "menu_period.name_taken") return t("menu.name_taken");
       if (this.refusal?.code === "catalogue.not_found") return t("opening.active_menus_required");
       if (this.refusal?.code === "department.not_found") return t("menu.department_gone");
+      if (field === "floorPlanSetId") return t("floor_plans.set_gone");
       if (field === "endOffsetMinutes" && this.refusal?.params?.reason === "placement")
         return t("menu.offset_placement");
       return t("menu.field_refused");
@@ -291,6 +311,7 @@ export class PeriodDialog extends LitElement {
         staffMenuIds: this.draft.staffMenuIds.filter((id) => id !== value),
       };
     if (field === "colour") this.colourPicked = true;
+    if (field === "departmentId") this.draft = { ...this.draft, floorPlanSetId: "" };
     if (field === "departmentId" && !this.colourPicked)
       this.draft = { ...this.draft, colour: firstUnusedCalendarColour(this.shownColourUsers) };
     if (this.refusalField() === field) this.refusal = undefined;
@@ -307,12 +328,16 @@ export class PeriodDialog extends LitElement {
     }
     this.submittedGeneration = this.generation;
     this.submitted = copy(this.input);
-    const { departmentId, ...input } = copy(this.input);
+    const { departmentId, floorPlanSetId, ...input } = copy(this.input);
     this.dispatchEvent(
       new CustomEvent("period-save", {
         detail: {
           periodId: this.period?.id ?? null,
-          input: { ...input, endOffsetMinutes: offsetNumber(this.draft.endOffsetMinutes)! },
+          input: {
+            ...input,
+            endOffsetMinutes: offsetNumber(this.draft.endOffsetMinutes)!,
+            ...(this.floorPlanSets ? { floorPlanSetId: floorPlanSetId || null } : {}),
+          },
           ...(this.choosesDepartment ? { departmentId } : {}),
         },
         bubbles: true,
@@ -327,6 +352,10 @@ export class PeriodDialog extends LitElement {
       ...input,
       colour: input.colour ?? this.submitted!.colour,
       endOffsetMinutes: String(input.endOffsetMinutes ?? this.submitted!.endOffsetMinutes),
+      floorPlanSetId:
+        input.floorPlanSetId === undefined
+          ? this.submitted!.floorPlanSetId
+          : (input.floorPlanSetId ?? ""),
       departmentId: this.submitted!.departmentId,
     };
     this.baseline = copy(submitted);
@@ -404,6 +433,31 @@ export class PeriodDialog extends LitElement {
     return this.menus
       .filter((menu) => menu.active && menu.id !== exclude)
       .map((menu) => ({ value: menu.id, label: menu.name }));
+  }
+  private floorPlanField(current: () => boolean) {
+    const sets = this.floorPlanSets;
+    if (!sets) return nothing;
+    return html`<wt-combobox
+      name="floorPlanSetId"
+      label=${t("period.floor_plan")}
+      show-empty-option
+      search="never"
+      .value=${this.draft.floorPlanSetId}
+      .options=${[
+        {
+          value: "",
+          label: format("period.floor_plan_default", { set: sets.fallback.name }),
+          muted: true as const,
+        },
+        ...sets.others.map(({ id, name }) => ({ value: id, label: name })),
+      ]}
+      .error=${this.error("floorPlanSetId")}
+      ?disabled=${this.busy}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        if (current()) this.changed("floorPlanSetId", event.detail.value);
+      }}
+    ></wt-combobox>`;
   }
   override render(): unknown {
     if (!this.open) return nothing;
@@ -530,6 +584,7 @@ export class PeriodDialog extends LitElement {
             }}
           ></wt-input>
           <p data-test="offset-explanation">${t("menu.offset_explanation")}</p>
+          ${this.floorPlanField(current)}
           ${this.paintedInSection()}
         </div>
         <wt-form-actions

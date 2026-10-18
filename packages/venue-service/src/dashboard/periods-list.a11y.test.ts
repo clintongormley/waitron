@@ -41,6 +41,7 @@ const period = (id: string, name: string, colour: Period["colour"], menuId: stri
   menuId,
   staffMenuIds: id === "p2" ? ["staff", "wine"] : [],
   endOffsetMinutes: 0,
+  floorPlanSetId: null,
   weekdays: [],
   routingUses: [],
 });

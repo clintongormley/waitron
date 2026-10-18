@@ -45,6 +45,7 @@ const lunch = (): Period => ({
   menuId: "lunch",
   staffMenuIds: ["staff"],
   endOffsetMinutes: 0,
+  floorPlanSetId: null,
   weekdays: [1, 3],
   routingUses: [],
 });
@@ -813,6 +814,7 @@ function liveFixture(): OpeningHoursModel {
           menuId: "m1",
           staffMenuIds: [],
           endOffsetMinutes: 0,
+          floorPlanSetId: null,
           weekdays: [1],
           routingUses: [],
         },

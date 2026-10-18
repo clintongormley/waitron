@@ -1,5 +1,6 @@
 import { html, nothing, type ReactiveController, type ReactiveControllerHost } from "lit";
 import { keyed } from "lit/directives/keyed.js";
+import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { NO_COLOUR_USERS, type ColourUser } from "./calendar-colours.js";
@@ -85,6 +86,8 @@ export class PeriodEditing implements ReactiveController {
       /** Offers Delete… in the dialog; called once the dialog has closed itself to hand over. */
       onDelete?: (department: Department, period: Period) => void;
       draftParent?: () => object | undefined;
+      /** The host's read of the floor plan sets; without it the dialog draws no Floor plan field. */
+      floorPlans?: () => FloorPlanSetsModel | undefined;
     },
   ) {
     host.addController(this);
@@ -259,6 +262,7 @@ export class PeriodEditing implements ReactiveController {
         .colourUsers=${colours.colourUsers}
         .departments=${colours.departments}
         .menus=${model.menus}
+        .floorPlans=${this.options.floorPlans?.()?.departments}
         .busy=${this.busy}
         .deletable=${this.options.onDelete !== undefined}
         .draftParent=${this.options.draftParent?.()}
