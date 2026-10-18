@@ -134,14 +134,12 @@ it("a last-language footer refusal focuses its textarea and survives edits to an
     code: "receipt.invalid",
     params: { field: "footerMessage", language: "ca-ES", maxLength: 300 },
   });
-  const { el, app } = await mountReceiptEditor(api);
-  app.style.cssText = "display: block; height: 300px; overflow: auto";
+  const { el } = await mountReceiptEditor(api);
   await editReceipt(el, "footerMessage-ca-ES", "Draft");
   await clickReceiptSave(el);
   const refused = receiptField(el, "footerMessage-ca-ES");
   await expect.poll(() => refused.error).toBe(t("receipts.trim_too_long").replace("{max}", "300"));
   expect(refused.shadowRoot!.activeElement).toBe(refused.shadowRoot!.querySelector("textarea"));
-  expect(app.scrollTop).toBeGreaterThan(0);
   await editReceipt(el, "email", "bar@example.com");
   expect(refused.error).not.toBe("");
   expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));

@@ -23,11 +23,7 @@ import {
   receiptRoot,
 } from "./testing/department-receipt-editor-fixture.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
-import {
-  departmentDialog,
-  mountReceiptApp,
-  receiptTabEditor,
-} from "./testing/department-receipt-app-fixture.js";
+import { departmentDialog, mountReceiptTab } from "./testing/department-receipt-app-fixture.js";
 
 afterEach(() => {
   cleanupWidgets();
@@ -563,10 +559,7 @@ for (const locale of ["en-GB", "es-ES"]) {
 }
 
 it("the Receipts tab's Cancel protects the appearance before closing", async () => {
-  const { app } = await mountReceiptApp();
-  await expect.poll(() => receiptTabEditor(app)).toBeTruthy();
-  const el = receiptTabEditor(app)!;
-  await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
+  const { app, editor: el } = await mountReceiptTab();
   const dialog = departmentDialog(app)!.shadowRoot!.querySelector("wt-modal")!;
   await editReceipt(el, "headerSubtitle-es-ES", "Edited heading");
   const input = receiptField(el, "headerSubtitle-es-ES");

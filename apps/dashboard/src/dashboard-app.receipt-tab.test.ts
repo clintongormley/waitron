@@ -28,10 +28,7 @@ afterEach(() => {
 it.each([true, false])(
   "mounts the selected protected receipt editor on the Receipts tab with installed description visibility (%s)",
   async (required) => {
-    const { app } = await mount({ required });
-    await expect.poll(() => receiptTabEditor(app)).toBeTruthy();
-    const editor = receiptTabEditor(app)!;
-    await expect.poll(() => receiptRoot(editor).querySelector("[name=email]")).toBeTruthy();
+    const { app, editor } = await mountReceiptTab({ required });
     expect(departmentForm(app)!.tab).toBe("receipt");
     expect(receiptTabEditor(app)!.subject).toEqual({ id: "bar", name: "Bar" });
     expect(!!receiptRoot(editor).querySelector("[name=operationDescription]")).toBe(required);
@@ -42,10 +39,7 @@ it.each([true, false])(
   },
 );
 it("successful receipt save closes the department dialog when the department form is clean", async () => {
-  const { app, fetchImpl } = await mount();
-  await expect.poll(() => receiptTabEditor(app)).toBeTruthy();
-  const editor = receiptTabEditor(app)!;
-  await expect.poll(() => receiptRoot(editor).querySelector("[name=email]")).toBeTruthy();
+  const { app, fetchImpl, editor } = await mountReceiptTab();
   await editReceipt(editor, "email", "bar@example.com");
   expect(departmentForm(app)!.hasUnsavedChanges).toBe(false);
   const dialog = departmentDialog(app)!.shadowRoot!.querySelector("wt-modal")!;
@@ -227,6 +221,46 @@ it("a receipt refusal naming a field that lands while Receipts shows changes no 
   expect(form.tab).toBe("receipt");
   expect(changes).not.toHaveBeenCalled();
   expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/receipt");
+});
+it("a last-language footer refusal at phone width leaves its focused textarea in view in the department dialog's scrolled body", async () => {
+  const viewport = { width: innerWidth, height: innerHeight };
+  await page.viewport(390, 844);
+  try {
+    const { editor, modal } = await mountReceiptTab({
+      respond: (path, init) =>
+        path.endsWith("/bar/receipt") && init.method === "PUT"
+          ? Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  error: {
+                    code: "receipt.invalid",
+                    params: { field: "footerMessage", language: "ca-ES", maxLength: 300 },
+                  },
+                }),
+                { status: 422, headers: { "content-type": "application/json" } },
+              ),
+            )
+          : undefined,
+    });
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const refused = receiptField(editor, "footerMessage-ca-ES");
+    const textarea = refused.shadowRoot!.querySelector("textarea")!;
+    const inView = () => {
+      const shown = body.getBoundingClientRect();
+      const field = textarea.getBoundingClientRect();
+      return field.top >= shown.top && field.bottom <= shown.bottom;
+    };
+    await editReceipt(editor, "footerMessage-ca-ES", "Draft");
+    textarea.blur();
+    body.scrollTop = 0;
+    expect(inView()).toBe(false);
+    receiptSave(editor).click();
+    await expect.poll(() => refused.error).not.toBe("");
+    await expect.poll(inView).toBe(true);
+    expect(refused.shadowRoot!.activeElement).toBe(textarea);
+  } finally {
+    await page.viewport(viewport.width, viewport.height);
+  }
 });
 it("Venue settings no longer hosts a global receipt tab or global receipt reads", async () => {
   const { app, fetchImpl } = await mount({ path: "/manage/venue-settings/view/receipts" });
