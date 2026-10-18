@@ -259,7 +259,12 @@ async function saveDialog(screen: FloorPlansScreen) {
 it("offers Rename… and Copy… on each set row", async () => {
   const { table } = await mountScreen();
   expect(menuItems(table, "set:standard").map((item) => text(item))).toEqual(["Rename…", "Copy…"]);
-  expect(menuItems(table, "set:dinner").map((item) => text(item))).toEqual(["Rename…", "Copy…"]);
+  expect(menuItems(table, "set:dinner").map((item) => text(item))).toEqual([
+    "Rename…",
+    "Copy…",
+    "Make default",
+    "Delete…",
+  ]);
 });
 
 it("+ Add set for a department with no set sends no fromSetId, then reads the page again", async () => {
