@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -449,3 +450,57 @@ it.each(["floor_today_tables", "floor_zones"])(
     expect(api.getSalesOverview).toHaveBeenCalledTimes(2);
   },
 );
+
+describe.each(["light", "dark"] as const)("overview card layout (%s)", (theme) => {
+  it.each([
+    ["en-GB", 1280],
+    ["es-ES", 1280],
+    ["en-GB", 900],
+    ["es-ES", 900],
+    ["en-GB", 390],
+    ["es-ES", 390],
+  ] as const)("fills each card's grid cell in %s at %i px", async (locale, width) => {
+    const previous = [innerWidth, innerHeight] as const;
+    await page.viewport(width, 1000);
+    try {
+      setLocale(locale);
+      const { el } = await mountWidget<OverviewScreen>(
+        "dashboard-overview-screen",
+        { api: stubApi() },
+        theme,
+      );
+      await flush(el);
+      const cards = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".cards > wt-card")];
+      expect(cards).toHaveLength(4);
+      await Promise.all(
+        cards.map(
+          (card) => (card as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete,
+        ),
+      );
+      await document.fonts.ready;
+      const painted = cards.map((card) =>
+        card.shadowRoot!.querySelector(".card")!.getBoundingClientRect(),
+      );
+      if (width >= 900) {
+        const firstRow = width === 900 ? painted.slice(0, 3) : painted;
+        for (const box of firstRow) {
+          expect(box.top).toBeCloseTo(painted[0]!.top, 1);
+          expect(box.bottom).toBeCloseTo(painted[0]!.bottom, 1);
+        }
+        if (width === 900) expect(painted[3]!.top).toBeGreaterThan(painted[0]!.bottom);
+      } else {
+        for (let i = 1; i < painted.length; i++) {
+          expect(painted[i]!.top).toBeGreaterThan(painted[i - 1]!.bottom);
+        }
+      }
+      for (const [index, card] of cards.entries()) {
+        const host = card.getBoundingClientRect();
+        expect(painted[index]!.height).toBeGreaterThan(0);
+        expect(painted[index]!.bottom).toBeCloseTo(host.bottom, 1);
+        expect(painted[index]!.right).toBeLessThanOrEqual(innerWidth);
+      }
+    } finally {
+      await page.viewport(...previous);
+    }
+  });
+});

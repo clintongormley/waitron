@@ -55,6 +55,9 @@ export class OverviewScreen extends LitElement {
         grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
         gap: var(--wt-space-4);
       }
+      .cards > wt-card {
+        display: grid;
+      }
       .metric {
         display: flex;
         justify-content: space-between;
