@@ -99,15 +99,25 @@ afterAll(() => {
   for (const path of scratch) rmSync(path, { recursive: true, force: true });
 });
 
-function predecessor(root: string) {
+// `ahead` names core migrations applied before the cut, restamped just after it, for a fill whose
+// code needs their tables. A run that gets past the cut would apply them a second time.
+function predecessor(root: string, ahead: readonly string[] = []) {
   const core = join(root, "core-prefix");
   cpSync(CORE_MIGRATIONS.migrationsFolder, core, { recursive: true });
   const journalPath = join(core, "meta", "_journal.json");
-  const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { tag: string }[] };
+  const journal = JSON.parse(readFileSync(journalPath, "utf8")) as {
+    entries: { tag: string; when: number }[];
+  };
   const index = journal.entries.findIndex((entry) => entry.tag.endsWith("_retire_canvases"));
   expect(index).toBeGreaterThan(0);
   const tags = journal.entries.map((entry) => entry.tag);
-  journal.entries = journal.entries.slice(0, index);
+  const last = journal.entries[index - 1]!.when;
+  journal.entries = [
+    ...journal.entries.slice(0, index),
+    ...journal.entries
+      .filter((entry) => ahead.some((suffix) => entry.tag.endsWith(suffix)))
+      .map((entry, offset) => ({ ...entry, when: last + offset + 1 })),
+  ];
   writeFileSync(journalPath, JSON.stringify(journal));
   return migrationOptionsFor(manifestSets(), null).map((option) =>
     option.migrationsTable === CORE_MIGRATIONS.migrationsTable
@@ -117,8 +127,8 @@ function predecessor(root: string) {
           appendOnlyTables: predecessorAppendOnly(
             option.appendOnlyTables,
             core,
-            tags.slice(0, index),
-            tags.slice(index),
+            journal.entries.map((entry) => entry.tag),
+            tags.filter((tag) => !journal.entries.some((entry) => entry.tag === tag)),
           ),
         }
       : option,
@@ -293,7 +303,9 @@ it("refuses the populated predecessor for reset and retains every row after roll
   const root = mkdtempSync(join(tmpdir(), "waitron-retire-canvases-"));
   scratch.push(root);
   const venue = join(root, "venue");
-  await applyMigrations(venue, predecessor(root));
+  // The fill uses today's seating and period code, which needs the floor plan sets migration; the
+  // refusal at the canvas retirement rolls the whole run back before it would apply again.
+  await applyMigrations(venue, predecessor(root, ["_floor_plan_sets"]));
   let before: Record<string, unknown[]>;
   const opened = await openVenueDatabase(venue);
   try {
