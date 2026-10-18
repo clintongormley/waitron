@@ -8,9 +8,11 @@ import { DraftStore } from "../state/draft-sync.js";
 import { heldViews, placeFor } from "../state/draft-place.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { WtCombobox } from "@waitron/ui";
+import type { WtCombobox, WtRowActions } from "@waitron/ui";
+import type { TillSentOrders } from "../widgets/sent-orders.js";
+import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, grossOf } from "@waitron/shared";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
@@ -1505,9 +1507,94 @@ describe("till-table-order-screen", () => {
       return mounted;
     }
 
-    const groupRows = (el: TillTableOrderScreen) => [
-      ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group]"),
-    ];
+    async function mountSentGroups(over: Partial<TillTableOrderScreen> = {}) {
+      const lines = over.lines ?? tabLines;
+      const known = over.groups ?? groups;
+      const mounted = await mount({
+        lines,
+        groups: known,
+        orderId: "wo-4",
+        currentOrders: current({
+          reminder: null,
+          groups: known.map((group) => ({
+            ...currentGroup(
+              group.id,
+              group.position,
+              group.state,
+              lines
+                .filter((line) => group.lineIds.includes(line.id))
+                .map((line) =>
+                  currentRow(line.id, line.name ?? "", line.quantity, {
+                    lineNo: line.lineNo,
+                    courseId: line.courseId,
+                    unitPrecision: line.unitPrecision ?? null,
+                    netAmount: grossOf(line.unitPriceGross, line.quantity),
+                    firedAt: line.firedAt,
+                    servedAt: line.servedAt,
+                    servedQuantity: line.servedAt === null ? "0.000" : line.quantity,
+                    released: group.state === "fired",
+                    kitchen:
+                      line.state === null
+                        ? null
+                        : {
+                            stationId: line.stationId,
+                            state: line.state,
+                            movable: line.movable,
+                            firedAt: line.firedAt,
+                            awayAt: null,
+                          },
+                  }),
+                ),
+            ),
+            displayNumber: group.displayNumber,
+            numberPartyId: group.numberPartyId,
+            ...(group.numberPartyLabel === undefined
+              ? {}
+              : { numberPartyLabel: group.numberPartyLabel }),
+          })),
+          ungrouped: [],
+        }),
+        ...over,
+      });
+      if (over.currentOrders === undefined) {
+        mounted.el.currentOrders = {
+          ...mounted.el.currentOrders!,
+          groups: mounted.el.currentOrders!.groups.map((group) =>
+            known.find((known) => known.id === group.id)?.lineIds.includes("l-wine-elsewhere")
+              ? {
+                  ...group,
+                  rows: [
+                    ...group.rows,
+                    currentRow("l-wine-elsewhere", "Wine", "1.000", {
+                      workingOrderId: "wo-other",
+                      released: false,
+                      kitchen: null,
+                    }),
+                  ],
+                }
+              : group,
+          ),
+        };
+        await mounted.el.updateComplete;
+      }
+      const panel = await sentPanelFor(mounted.el);
+      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
+        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector);
+        if (toggle?.getAttribute("aria-expanded") === "false") {
+          await userEvent.click(toggle);
+          await panel.updateComplete;
+        }
+      }
+      return { ...mounted, panel };
+    }
+
+    async function heldMore(panel: TillSentOrders, id: string) {
+      const menu = panel.shadowRoot!.querySelector<WtRowActions>(`[data-group-more="${id}"]`)!;
+      await menu.updateComplete;
+      await userEvent.click(menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+      return menu;
+    }
+
     const groupRow = (el: TillTableOrderScreen, id: string) =>
       el.shadowRoot!.querySelector<HTMLElement>(`[data-group="${id}"]`)!;
     const text = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
@@ -1515,7 +1602,7 @@ describe("till-table-order-screen", () => {
       el.shadowRoot!.querySelector<HTMLElement & { disabled?: boolean }>(selector);
 
     it("keeps permanent heading numbers when firing positions change", async () => {
-      const { el } = await mountGroups({
+      const { panel } = await mountSentGroups({
         groups: groups.map((g) => ({
           ...g,
           displayNumber: g.position,
@@ -1524,13 +1611,18 @@ describe("till-table-order-screen", () => {
           position: g.id === "g5" ? 3 : g.id === "g3" ? 5 : g.position,
         })),
       });
-      const rows = groupRows(el);
-      expect(rows.map((row) => row.dataset.group)).toEqual(["g1", "g2", "g5", "g4", "g3"]);
-      expect(rows.map((row) => text(row.querySelector("[data-group-position]")!))).toEqual(
-        [1, 2, 5, 4, 3].map(
+      const rows = [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-held-group]")];
+      expect(rows.map((row) => row.dataset.heldGroup)).toEqual(["g5", "g4", "g3"]);
+      expect(rows.map((row) => text(row.querySelector("[data-group-drag]")!))).toEqual(
+        [5, 4, 3].map(
           (n) => t("table.group_n").replace("{n}", String(n)) + (n === 5 ? " · Terrace 7" : ""),
         ),
       );
+      expect(
+        [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-fired-line]")].map(
+          (row) => row.dataset.firedLine,
+        ),
+      ).toEqual(["l-beer", "l-salad"]);
     });
 
     function capture(el: TillTableOrderScreen, type: string): CustomEvent[] {
@@ -1539,66 +1631,73 @@ describe("till-table-order-screen", () => {
       return events;
     }
 
-    it("lists every group of the party in position order, the fired ones marked and without controls", async () => {
-      const { el } = await mountGroups();
-      const rows = groupRows(el);
-      expect(rows.map((row) => row.dataset.group)).toEqual(["g1", "g2", "g3", "g4", "g5"]);
-      expect(rows.map((row) => text(row.querySelector("[data-group-position]")!))).toEqual(
-        [1, 2, 3, 4, 5].map((n) => t("table.group_n").replace("{n}", String(n))),
+    it("lists held groups in position order and consolidates fired dishes without held controls", async () => {
+      const { panel } = await mountSentGroups();
+      const rows = [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-held-group]")];
+      expect(rows.map((row) => row.dataset.heldGroup)).toEqual(["g3", "g4", "g5"]);
+      expect(rows.map((row) => text(row.querySelector("[data-group-drag]")!))).toEqual(
+        [3, 4, 5].map((n) => t("table.group_n").replace("{n}", String(n))),
       );
-      expect(rows.map((row) => row.dataset.groupState)).toEqual([
-        "fired",
-        "fired",
-        "held",
-        "held",
-        "held",
-      ]);
-      for (const row of rows.slice(0, 2)) {
-        expect(text(row)).toContain(t("table.group_fired"));
-        expect(row.querySelector("wt-button")).toBeNull();
+      const fired = [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-fired-line]")];
+      expect(fired.map((row) => row.dataset.firedLine)).toEqual(["l-beer", "l-salad"]);
+      for (const row of fired) {
+        expect(row.querySelector("[data-group-fire], [data-group-more]")).toBeNull();
       }
-      for (const row of rows.slice(2)) expect(text(row)).toContain(t("table.group_held"));
-    });
-
-    it("sits above To serve in the drawer, and is absent while the party has no group", async () => {
-      const { el } = await mountGroups();
-      const list = el.shadowRoot!.querySelector("[data-groups]")!;
-      const pending = el.shadowRoot!.querySelector(".pending")!;
-      expect(list.compareDocumentPosition(pending) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-      el.groups = [];
-      await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-groups]")).toBeNull();
-    });
-
-    it("shows each group's contents as the server wrote them, and as rows only this bill's lines", async () => {
-      const { el } = await mountGroups();
-      const mains = groupRow(el, "g4");
-      expect(text(mains.querySelector("[data-group-summary]")!)).toBe(
-        "2 × Steak, 1 × Fish, 1 × Wine",
+      expect(text(panel.shadowRoot!.querySelector("[data-held-toggle]")!)).toContain(
+        t("table.group_held"),
       );
+      expect(text(panel.shadowRoot!.querySelector("h3")!)).toContain(t("table.group_fired"));
+    });
+
+    it("sits above the bill total and hides an empty Sent panel", async () => {
+      const { el, panel } = await mountSentGroups();
+      const list = el.shadowRoot!.querySelector("[data-sent-orders]")!;
+      const total = el.shadowRoot!.querySelector("[data-order-total]");
+      expect(total, "the Sent/New order panel shows the bill total").not.toBeNull();
+      expect(list.compareDocumentPosition(total!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(panel.shadowRoot!.querySelector("[data-sent-panel]")).not.toBeNull();
+      el.groups = [];
+      el.currentOrders = current({ groups: [], ungrouped: [], reminder: null });
+      await el.updateComplete;
+      await panel.updateComplete;
+      expect(panel.shadowRoot!.querySelector("[data-sent-panel]")).toBeNull();
+    });
+
+    it("shows each group's stored dishes, with another bill's companion labelled without its price", async () => {
+      const { panel } = await mountSentGroups();
+      const mains = panel.shadowRoot!.querySelector('[data-held-group="g4"]')!;
       expect(
-        [...mains.querySelectorAll("[data-group-line]")].map((row) => [
-          (row as HTMLElement).dataset.groupLine,
-          text(row.querySelector(".group-line-name")!),
+        [...mains.querySelectorAll("[data-held-line]")].map((row) => [
+          (row as HTMLElement).dataset.heldLine,
+          text(row.querySelector(".what")!),
         ]),
       ).toEqual([
         ["l-steak", "Steak ×2"],
         ["l-fish", "Fish ×1"],
       ]);
-      expect(text(groupRow(el, "g1").querySelector("[data-group-line]")!)).toContain("Beer ×1");
+      const companion = mains.querySelector('[data-companion="l-wine-elsewhere"]')!;
+      expect(text(companion.querySelector(".what")!)).toBe("Wine ×1");
+      expect(text(companion.querySelector(".bill")!)).toBe(t("table.sent_other_bill"));
+      expect(companion.querySelector(".amount, button, wt-button, input")).toBeNull();
+      expect(text(panel.shadowRoot!.querySelector('[data-fired-line="l-beer"] .what')!)).toContain(
+        "Beer ×1",
+      );
     });
 
     it("moves a held group up or down among the held groups, sending the whole held order", async () => {
-      const { el } = await mountGroups();
+      const { el, panel } = await mountSentGroups();
       const reorders = capture(el, "reorder-groups");
-      expect(control(el, '[data-group-up="g3"]')!.disabled).toBe(true);
-      expect(control(el, '[data-group-down="g5"]')!.disabled).toBe(true);
-      expect(control(el, '[data-group-up="g1"]')).toBeNull();
-
-      control(el, '[data-group-down="g3"]')!.click();
-      control(el, '[data-group-up="g5"]')!.click();
-
+      expect(
+        panel.shadowRoot!.querySelector('[data-group-more="g3"] [data-group-earlier]'),
+      ).toBeNull();
+      expect(
+        panel.shadowRoot!.querySelector('[data-group-more="g5"] [data-group-later]'),
+      ).toBeNull();
+      expect(panel.shadowRoot!.querySelector('[data-group-more="g1"]')).toBeNull();
+      const first = await heldMore(panel, "g3");
+      await userEvent.click(first.querySelector<HTMLElement>("[data-group-later]")!);
+      const last = await heldMore(panel, "g5");
+      await userEvent.click(last.querySelector<HTMLElement>("[data-group-earlier]")!);
       expect(reorders.map((event) => event.detail)).toEqual([
         { heldGroupIds: ["g4", "g3", "g5"] },
         { heldGroupIds: ["g3", "g5", "g4"] },
@@ -1711,37 +1810,48 @@ describe("till-table-order-screen", () => {
     });
 
     it("disables every held group's controls while a group command is running, and enables them after", async () => {
-      const { el } = await mountGroups({ fireControl: "waiter", groupCommandBusy: true });
+      const { el, panel } = await mountSentGroups({
+        fireControl: "waiter",
+        groupCommandBusy: true,
+      });
       const controls = [
-        '[data-group-down="g3"]',
-        '[data-group-up="g4"]',
-        '[data-group-down="g4"]',
-        '[data-group-up="g5"]',
+        '[data-group-more="g3"] [data-group-later]',
+        '[data-group-more="g4"] [data-group-earlier]',
+        '[data-group-more="g4"] [data-group-later]',
+        '[data-group-more="g5"] [data-group-earlier]',
         '[data-group-fire="g4"]',
-        '[data-move-line="l-steak"]',
-        '[data-split-group-line="l-steak"]',
       ];
-      const disabled = () => controls.map((selector) => control(el, selector)!.disabled);
+      const disabled = () =>
+        controls.map(
+          (selector) =>
+            panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(selector)!
+              .disabled,
+        );
       expect(disabled()).toEqual(controls.map(() => true));
-
+      expect(
+        panel.shadowRoot!.querySelector("[data-move-line], [data-split-group-line]"),
+      ).toBeNull();
       el.groupCommandBusy = false;
       await el.updateComplete;
+      await panel.updateComplete;
       expect(disabled()).toEqual(controls.map(() => false));
     });
 
     it("Fire on a held group asks first, naming its contents, and fires it once confirmed", async () => {
-      const { el } = await mountGroups({ fireControl: "waiter" });
+      const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
       const fires = capture(el, "fire-group");
       const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
         "[data-fire-dialog]",
       )!;
       expect(
-        [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group-fire]")].map(
+        [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-group-fire]")].map(
           (button) => button.dataset.groupFire,
         ),
       ).toEqual(["g3", "g4", "g5"]);
 
-      control(el, '[data-group-fire="g4"]')!.click();
+      await userEvent.click(
+        panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g4"]')!,
+      );
       await el.updateComplete;
       expect(fires).toEqual([]);
       expect(dialog.open).toBe(true);
@@ -1774,9 +1884,11 @@ describe("till-table-order-screen", () => {
     }
 
     it("fires once, and throws nothing, when Fire's confirmation is pressed twice in one turn", async () => {
-      const { el } = await mountGroups({ fireControl: "waiter" });
+      const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
       const fires = capture(el, "fire-group");
-      control(el, '[data-group-fire="g3"]')!.click();
+      await userEvent.click(
+        panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g3"]')!,
+      );
       await el.updateComplete;
       const confirm = control(el, "[data-fire-confirm]")!;
 
@@ -1808,9 +1920,11 @@ describe("till-table-order-screen", () => {
     });
 
     it("fires nothing when the Fire confirmation is dismissed", async () => {
-      const { el } = await mountGroups({ fireControl: "waiter" });
+      const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
       const fires = capture(el, "fire-group");
-      control(el, '[data-group-fire="g3"]')!.click();
+      await userEvent.click(
+        panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g3"]')!,
+      );
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-fire-dismiss]")!.click();
       await el.updateComplete;
@@ -1821,34 +1935,47 @@ describe("till-table-order-screen", () => {
     });
 
     it.each(["kitchen", "expo"] as const)(
-      "offers no Fire on a held group under fire_control '%s', and still lets the waiter arrange them",
+      "offers Fire and group rearrangement under fire_control '%s', without sent-line Move or Split",
       async (fireControl) => {
-        const { el } = await mountGroups({ fireControl });
-        expect(el.shadowRoot!.querySelector("[data-group-fire]")).toBeNull();
-        expect(control(el, '[data-group-down="g3"]')).not.toBeNull();
-        expect(control(el, '[data-move-line="l-steak"]')).not.toBeNull();
-        expect(control(el, '[data-split-group-line="l-steak"]')).not.toBeNull();
+        const { panel } = await mountSentGroups({ fireControl });
+        expect(
+          [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-group-fire]")].map(
+            (button) => button.dataset.groupFire,
+          ),
+        ).toEqual(["g3", "g4", "g5"]);
+        expect(
+          panel.shadowRoot!.querySelector('[data-group-more="g3"] [data-group-later]'),
+        ).not.toBeNull();
+        expect(panel.shadowRoot!.querySelector('[data-move-line="l-steak"]')).toBeNull();
+        expect(panel.shadowRoot!.querySelector('[data-split-group-line="l-steak"]')).toBeNull();
       },
     );
 
     it("offers Fire on a held group of a no-route line with no course, and not once it has fired", async () => {
-      // The kitchen and the pass fire by course, so the table screen is the only place this group
-      // can be released from.
       const noRoute = dishLine("l-water", 1, "Water", "1.000", "g-held", { state: null });
-      const { el } = await mountGroups({
+      const { el, panel } = await mountSentGroups({
         lines: [noRoute],
         groups: [group("g-held", 1, "held", ["l-water"], "1 × Water")],
         fireControl: "waiter",
       });
-      expect(control(el, '[data-group-fire="g-held"]')).not.toBeNull();
+      expect(panel.shadowRoot!.querySelector('[data-group-fire="g-held"]')).not.toBeNull();
 
       el.groups = [group("g-held", 1, "fired", ["l-water"], "1 × Water")];
+      el.currentOrders = {
+        ...el.currentOrders!,
+        groups: el.currentOrders!.groups.map((group) => ({
+          ...group,
+          state: "fired",
+          rows: group.rows.map((row) => ({ ...row, released: true })),
+        })),
+      };
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-group-fire]")).toBeNull();
+      await panel.updateComplete;
+      expect(panel.shadowRoot!.querySelector("[data-group-fire]")).toBeNull();
     });
 
     it("offers no Fire course section and no tab-level Send all", async () => {
-      const { el } = await mountGroups({ fireControl: "waiter", courses });
+      const { el } = await mountSentGroups({ fireControl: "waiter", courses });
       expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-fire-course]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
@@ -1915,24 +2042,27 @@ describe("till-table-order-screen", () => {
     });
 
     it("gives every held group's control, and its dialogs' buttons, a tap target of 44 px each way", async () => {
-      const { el } = await mountGroups({ fireControl: "waiter" });
-      const listed = el.shadowRoot!.querySelectorAll(
-        "[data-group-up], [data-group-down], [data-group-fire], [data-move-line], [data-split-group-line]",
-      );
-      expect(listed.length).toBe(14);
+      const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
+      const listed = panel.shadowRoot!.querySelectorAll("[data-group-fire], [data-group-more]");
+      expect(listed.length).toBe(6);
       expect(underTapSize(listed)).toEqual([]);
-
-      control(el, '[data-group-fire="g4"]')!.click();
+      await userEvent.click(
+        panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g4"]')!,
+      );
       await el.updateComplete;
       expect(
         underTapSize(el.shadowRoot!.querySelectorAll("[data-fire-confirm], [data-fire-dismiss]")),
       ).toEqual([]);
-      control(el, "[data-fire-dismiss]")!.click();
-      control(el, '[data-move-line="l-steak"]')!.click();
-      await el.updateComplete;
-      expect(
-        underTapSize(el.shadowRoot!.querySelectorAll("[data-move-target], [data-move-dismiss]")),
-      ).toEqual([]);
+      const dialog = el.shadowRoot!.querySelector("[data-fire-dialog]")!;
+      const closed = new Promise<void>((resolve) =>
+        dialog.addEventListener("wt-close", () => resolve(), { once: true }),
+      );
+      await userEvent.click(control(el, "[data-fire-dismiss]")!);
+      await closed;
+      const menu = await heldMore(panel, "g4");
+      const choices = menu.querySelectorAll("[data-group-earlier], [data-group-later]");
+      expect(choices).toHaveLength(2);
+      expect(underTapSize(choices)).toEqual([]);
     });
 
     it("opens a held-group dish's Change with the revision the lines were read at", async () => {
@@ -6123,7 +6253,7 @@ describe("A668 nutrition after table-order names", () => {
       ),
     ).not.toBeNull();
   });
-  it("shows sent dishes from other bills with their own nutrition in Current orders", async () => {
+  it("shows another bill's recorded nutrition only after switching Sent to that bill", async () => {
     const { el } = await mount({
       currentOrders: {
         revision: 1,
@@ -6159,10 +6289,14 @@ describe("A668 nutrition after table-order names", () => {
         ],
       },
     });
-    await openDrawer(el);
-    const row = el.shadowRoot!.querySelector(
-      '[data-group-line="other-bill-line"] .group-line-name',
-    )!;
+    let panel = await sentPanelFor(el);
+    expect(panel.shadowRoot!.querySelector('[data-fired-line="other-bill-line"]')).toBeNull();
+    el.orderId = "other-bill";
+    await el.updateComplete;
+    panel = await sentPanelFor(el);
+    await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
+    await panel.updateComplete;
+    const row = panel.shadowRoot!.querySelector('[data-fired-line="other-bill-line"]')!;
     expect(row.querySelector('wt-icon[name="allergen-nuts"]')?.getAttribute("label")).toMatch(
       /hazelnut|avellana/i,
     );

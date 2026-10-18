@@ -620,7 +620,7 @@ export class TillSentOrders extends LitElement {
           (row) =>
             html`<li class="companion" data-companion=${row.lineId}>
               <div class="dish">
-                ${this.#what(row, row.quantity)}<span class="bill"
+                ${this.#what(row, trimQuantity(row.quantity))}<span class="bill"
                   >${this.billLabels.get(row.workingOrderId) ?? t("table.sent_other_bill")}</span
                 >
               </div>

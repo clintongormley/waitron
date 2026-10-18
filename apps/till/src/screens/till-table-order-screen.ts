@@ -145,6 +145,7 @@ import type { Place } from "../state/draft-place.js";
 import {
   draftLayout,
   fireGroups,
+  panelTotal,
   sendAllGroups,
   type LayoutGroup,
   type SubmitGroup,
@@ -2864,6 +2865,19 @@ export class TillTableOrderScreen extends LitElement {
           }
         </div>
         ${this.#roundControl(draft)} ${this.#otherDraftPanels(draft)} ${this.#retainedDraftPanel()}
+        <div class="total-row" data-order-summary>
+          <span class="label">${t("label.total")}</span>
+          <span class="amount" data-order-total
+            >${this.#money(
+              panelTotal(
+                this.#payStore!.total,
+                this.otherDrafts.length === 0
+                  ? draft.lines
+                  : this.otherDrafts.flatMap((other) => other.lines),
+              ),
+            )}</span
+          >
+        </div>
       </section>
     </div>`;
   }
