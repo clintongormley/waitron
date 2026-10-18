@@ -369,7 +369,7 @@ can have been recorded after 03:00 yet.)
   (`packages/reporting/src/business-day.ts:178`, `:193`). `git blame` dates `currentCutover` to
   `c6a01ad40`, 2026-10-14. Dated start changes and the resolver that reads them had already landed
   on 2026-10-12 (`c373162e2`, #1563), and A755's card followed on 2026-10-16 (`1d1c76c07`). Not part
-  of A788; it should be its own backlog entry, because it shows wrongly as soon as any venue changes
+  of A788; it is backlog entry A851, because it shows wrongly as soon as any venue changes
   its start.
 
 ### Till, reports and fiscal records

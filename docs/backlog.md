@@ -4405,6 +4405,13 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
+- **A851. Staffing reads the venue's first business-day start, not the one in force (found by A788's
+  design).** `currentCutover` (`packages/staffing/src/paint.ts`), the paint, route, rota and month
+  reads use `clock.dayCutover`, the venue's first start; since dated start changes landed (#1563)
+  a venue that changes its start sees staffing on the wrong boundary. Read the start in force for
+  each date instead, with a test that changes the start and checks the painter and the Staffing
+  month. Detail: A788's design, `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`
+  ("The staffing painters read the venue's first start").
 - **A780. The staffing painters read holder names they never show (left open by #1828).** Both
   staff-role feeds (`staff-roles` and `painter-staff-roles`, `packages/staffing/src/dashboard/client.ts`)
   read `GET /management-api/staffing/staff-roles`, which always looks up every holder's name
