@@ -11,7 +11,7 @@ dashboard's five always-visible "?" become help-mode badges in the same change.
 is its §8 item 2, drawing on §3.1 (the dashboard), §3.3 (badges inside menus), §5 (how a screen marks
 a part), §6 (keyboard, screen readers, staying on) and §7 (today's "?" buttons). Slice 1's plan,
 `docs/superpowers/plans/2026-10-18-a582-1-help-badge.md`, and what it landed (#1846) are the base.
-The backlog's "Slice 2 must also" list (`docs/backlog/dashboard.md`, A582) is covered by Tasks 7 and 8.
+The backlog's "Slice 2 must also" list (`docs/backlog/dashboard.md`, A582) is covered by Tasks 7b and 8.
 "Read more in the guide" links are slice 3 and are not in this plan.
 
 **Base:** `main` at `40f4d71f9`. Every file reference below is to that commit. **(read)** marks a
@@ -33,8 +33,9 @@ leaving `main` green and working on its own.
 | --- | --- | --- |
 | Branch | `feat/a582-2-dashboard-help` (this worktree) | `feat/a582-2b-dashboard-help`, made with `python3 ~/workspace/tools/worktree.py new waitron feat/a582-2b-dashboard-help --headless` from `main` **after 2a has landed** |
 | What it adds | in `packages/ui`: `wt-row-actions` keeps a menu open for a badge inside a slotted element and re-places an open menu whose size changes; a new `wt-menu-row`; a new `wt-help-switch`; `help` on `wt-data-table` columns; `help` on `wt-tabs` items; the design-system entries | the banner switch and room for it at phone width; help off on sign-out and session end; the five "?" moved to help mode, with SumUp's given a positioned box; the guard; Products' help; the account-menu and ⋮-menu users of `wt-menu-row`; docs and the backlog |
-| Tasks | 1–6 | 7–11 |
-| What it leaves working | Nothing anyone sees changes: no screen uses the new pieces and nothing turns help on, exactly as slice 1 left it. Every existing `wt-row-actions` menu behaves as before (Task 1's tests pin it). | Help mode works end to end on the dashboard. |
+| Tasks | 1–6 | 7a, 7b, 8–11 |
+| What it leaves working | Nothing a screen draws changes: no screen uses the new pieces and nothing turns help on, exactly as slice 1 left it. One behaviour of every `wt-row-actions` menu does change: an open menu whose content changes size is placed again, so it stays inside the window, and its popup's width becomes `max-content` within the window less a margin (Task 1; the bell keeps its own 44ch width). | Help mode works end to end on the dashboard. |
+| May land | when its review and CI pass | **only after the owner answers the phone-width banner question** (decision 2). Build per the recommended arrangement; if the owner picks the account-menu alternative, Task 7b changes to that before landing |
 
 **Why two.** One pull request would hold eleven tasks across four packages and two dozen test files.
 2a is pure `packages/ui` with no consumer, the same shape as slice 1, so it can be reviewed against
@@ -95,6 +96,16 @@ close the menu.
   help on while it was open showed the badge at once, and the menu grew to width 122.3 with its
   left edge unchanged, so its **right edge went to 408.6, past the 390 px window**. `wt-row-actions`
   places its popup only when it opens (`positionPopup`, `wt-row-actions.ts:111-129`, read).
+- **M3b (re-placing on resize; added after the plan review).** A throwaway
+  `packages/ui/src/zz-probe-c1.test.ts` (2 tests passed; deleted) put a `ResizeObserver` on an open
+  `align="end"` menu at a 390 px window that called `positionPopup` on every report, then appended
+  a long option and read the popup's right edge for six frames, with a window `error` listener.
+  The failing case was stated first: a placement that resizes the box it watches reports a loop.
+  With the popup's width left automatic: right edge 398.8, then 390 every frame (never the 382 its
+  8 px margin asks for), and **five "ResizeObserver loop completed with undelivered notifications"
+  errors**. With `width: max-content; max-width: calc(100vw - 2 * var(--wt-space-2))` on the popup:
+  569.6 in the first frame, then 382 from the second on, and **no errors**. The plan reviewer
+  measured the same two outcomes independently.
 
 ### M4: a badge inside `wt-tabs`' tab strip
 
@@ -164,21 +175,41 @@ the banner, below the lockup, after the legal name (and after the Live pill), le
 ## Decisions made in this plan (for the reviewer)
 
 1. **Two pull requests** — see above.
-2. **The banner at phone width: signed in, the language chooser moves to the end of the second row.**
-   Measured (M6–M8): the switch cannot join the first row without taking the lockup below the 60 px
-   floor at 360 and 390 px, and every margin tweak tried still leaves it below at 360. The spec
-   leaves the method to this plan (§3.1: "Slice 2 finds the room and its plan says how") and keeps
-   the "?" in the first row with the bell and the account menu, which this does. The chooser stays
-   one tap away, on the row that already holds the venue's name. The cost: the signed-in banner is
-   19 px taller below `48rem` (M8), and mockup 03 drew the chooser on the first row; the look step
-   (Task 11) shows the owner the result. Rejected: moving the chooser into the account menu (more
-   work — the chooser is an arrow-key menu of its own, `packages/ui/src/menu-popover.ts` — and one
-   more tap); shrinking the page's 24 px padding at phone width (reaches every screen); lowering the
-   60 px floor (a behaviour check the spec does not change). The rule applies only signed in: signed
-   out there is no switch, and the signed-out banner is unchanged (its own phone-width test,
-   `apps/dashboard/src/dashboard-app.theme.test.ts:274-308`, keeps passing unedited). It applies to
-   the whole phone-width range, not only below 400 px where it is needed, so there is one rule and
-   one breakpoint.
+2. **The banner at phone width (an owner question; 2b waits for the answer).** Recommended:
+   signed in, below `48rem`, the language chooser leaves the first row and joins the second, in the
+   venue row's own flow after the legal name (and the Live pill), pushed to the trailing edge
+   (`margin-inline-start: auto`). This is exactly what M8 measured. Measured (M6–M8): the switch
+   cannot join the first row without taking the lockup below the 60 px floor at 360 and 390 px, and
+   every margin tweak tried still leaves it below at 360. The spec leaves the method to this plan
+   (§3.1: "Slice 2 finds the room and its plan says how") and keeps the "?" in the first row with the
+   bell and the account menu, which this does. The chooser stays one tap away.
+
+   **The arrangement matters for the legal name.** The plan reviewer measured two ways of putting
+   the chooser on the second row with a 41-character legal name (reviewer's measurement, not re-run
+   here): flattening `.banner-actions` into the banner's grid and placing the chooser in a grid cell
+   at the second row's end gave a banner 162 px tall at 320 and 145 px at 360 and 390 (today: 111),
+   with the name squeezed to 75–116 px over four or five lines; the chooser in the venue row's flow
+   (M8's arrangement) gave 128 px at 320 and 121 px at 360 and 390, with 129–199 px for the name.
+   So Task 7b prescribes M8's arrangement.
+
+   **The cost**, against A653 (owner, 2026-10-14: "the amount of space that is used above the table
+   … needs to be minimised, especially for use on mobiles", `docs/backlog/dashboard.md:1126`): the
+   signed-in banner is 19 px taller at phone width for a one-line name (102 → 121, M8), and 17 px
+   for the 41-character name the reviewer used (111 → 128 at 320). Mockup 03 drew the chooser on the
+   first row.
+
+   **The alternative put to the owner:** move the language choices into the account menu, where
+   Theme already sits when signed in (`dashboard-app.ts:1793-1797`, read; design-system "Dashboard
+   banner"), as a "Language" row of choices like Theme's. No banner height is added and the lockup
+   gains the chooser's 53 px; a language change takes one more tap, and the chooser's own list is an
+   arrow-key menu (`packages/ui/src/menu-popover.ts`) that would have to become rows of buttons, as
+   Theme's did. Also rejected: shrinking the page's 24 px padding at phone width (reaches every
+   screen); lowering the 60 px floor (a behaviour check the spec does not change).
+
+   Either way the rule applies only signed in: signed out there is no switch, and the signed-out
+   banner is unchanged (its phone-width test, `apps/dashboard/src/dashboard-app.theme.test.ts:274-308`,
+   keeps passing unedited). It applies to the whole phone-width range, so there is one rule and one
+   breakpoint.
 3. **The switch is a shared primitive, `wt-help-switch`**, in `packages/ui`, not markup in the
    dashboard: slices 4 and 5 need the same button on the till and the kitchen screens (spec §5: "the
    switch … that each app's top bar drives"). It calls `setHelpMode` itself and follows the state
@@ -193,13 +224,15 @@ the banner, below the lockup, after the legal name (and after the Live pill), le
    (`#scheduleSessionExpiry`, `:1319`), a session refused by the server (`#onSessionInvalid`,
    `:954-959`), and another tab's expiry (`#onSessionStorage`, `:981`), all read. A reload starts
    off already because the state is held in memory only (slice 1, `help-mode.test.ts` "nothing is
-   saved"); Task 7 pins it for the dashboard too.
+   saved"); Task 7a pins it for the dashboard too.
 5. **`wt-row-actions` honours `data-keep-open` on any element between the click's target and the
    menu's own element** (the part of `event.composedPath()` before the host), which includes a
    slotted element's shadow root, and still not on an element outside the menu (M1, M2). It also
-   **re-places an open menu whose size changes** (a `ResizeObserver` on the popup, calling
-   `positionPopup` while open), so a menu that gains its badges while open stays inside the window
-   (M3).
+   **re-places an open menu whose size changes** (a `ResizeObserver` on the popup, watched only
+   while the menu is open, calling `positionPopup`), so a menu that gains its badges while open stays
+   inside the window (M3). For that to settle, the popup's width must not depend on where it is
+   placed: it becomes `width: max-content; max-width: calc(100vw - 2 * var(--wt-space-2))`, the bound
+   `alerts-bell.ts:44` already uses (M3b: without it, a loop error every frame).
 6. **The menu row is `wt-menu-row`.** It wraps one option: `<wt-menu-row help=… help-label=…><wt-button …>…</wt-button></wt-menu-row>`.
    The option keeps the row's full height and the rest of its width; the badge sits after it in
    its own `--wt-tap-min` square, in the flow, carrying `data-keep-open`. The badge's accessible
@@ -210,9 +243,14 @@ the banner, below the lockup, after the legal name (and after the Live pill), le
    only a direct child) — recorded as an open risk, not built.
 7. **A column's badge hangs over the heading's label, not the heading cell** (M5): a cell's corner is
    at the scrolling box's edge, where the badge is clipped and the table gains a sideways scroll.
-   `DataTableColumn` gains `help?: string`; the table gains `helpLabel` (English default "Help"),
-   and the badge is named `` `${helpLabel}: ${column.label}` ``. Only a column with `help` gets the
-   label wrapper, so every existing table's heading DOM is unchanged.
+   `DataTableColumn` gains `help?: { text: string; label: string }`: `label` is the badge's whole
+   accessible name, given by the screen (for example the dashboard's "Help: Availability"), because
+   a shared primitive shows no fixed words (spec §2) and this keeps one way of writing "Help: X".
+   Such a heading gets `aria-label=${column.label}` (combined with the existing filtered form,
+   `` `${column.label}: ${this.filteredColumnLabel}` ``, `wt-data-table.ts:2554-2558`, read), because
+   a heading's name is otherwise its whole content and would read "Availability Help: Availability".
+   Only a column with `help` gets the label wrapper and the `aria-label`, so every existing table's
+   heading is unchanged.
 8. **A tab's badge is drawn outside the tab strip** (M4) — in a layer of `.tab-row`, placed by script
    over the tab label's top trailing corner, moved when the strip scrolls or resizes, and hidden
    (`visibility: hidden`, so also out of the Tab order) while that corner is scrolled out of the
@@ -220,12 +258,14 @@ the banner, below the lockup, after the legal name (and after the Live pill), le
    their popups by script (`positionTooltip`, `positionPopup`). CSS anchor positioning was not used:
    nothing in the tree uses it (`grep -rn "anchor-name\|position-anchor" apps packages`, run
    2026-10-18, found nothing) and which browsers the dashboard must support is not written down.
-   `TabItem` gains `help?: string`; `wt-tabs` gains `helpLabel` (English default "Help"). Products
+   `TabItem` gains `help?: { text: string; label: string }`, `label` being the badge's whole name from
+   the screen, as for columns. A tab's name is its button's content, and the badge is outside the
+   button, so the tab's name is unchanged. Products
    has no tabs (read: no `wt-tabs` in `product-list.ts`, `catalogue-browser.ts` or the editor), so
    no screen uses this in slice 2; it is built because spec §8 item 2 names it.
-9. **Badge text keys.** `help.label` ("Help" / "Ayuda") names the switch and is each table's and
-   tabs' `helpLabel`; `help.badge_label` ("Help: {part}" / "Ayuda: {part}") names a badge through the
-   dashboard's `fill` (`apps/dashboard/src/i18n/t.ts:12`, read); a part's text is
+9. **Badge text keys.** `help.label` ("Help" / "Ayuda") names the switch; `help.badge_label` ("Help: {part}" / "Ayuda: {part}") names a badge through the
+   dashboard's `fill` (`apps/dashboard/src/i18n/t.ts:12`, read) — for field badges, menu rows,
+   columns and tabs alike, so "Help: X" is written one way; a part's text is
    `help.<screen>.<part>` (spec §4). No `help.` key exists today (read); the existing `_help` /
    `_help_label` keys of the five "?" are left as they are.
 10. **SumUp's "?"** goes inside a new inline-block, `position: relative` box around the
@@ -244,7 +284,8 @@ the banner, below the lockup, after the legal name (and after the Live pill), le
     **Account settings** (the label does not say what is inside) and the product editor's variant ⋮
     menu's **Keep** (shown on a variant marked to be archived; "Keep" alone does not say it cancels
     that). Nothing else in the account menu or the Products ⋮ menus gets help: Archive already
-    explains itself in its confirmation (`strings.ts:4981`, read).
+    explains itself in its confirmation (`product.archive_warning`, `strings.ts:1995-1996` in English
+    and `:4988-4989` in Spanish, read).
 
 ---
 
@@ -292,6 +333,7 @@ Branch `feat/a582-2-dashboard-help`, worktree
 | `packages/ui/src/components/wt-data-table.ts`, `wt-data-table.help.test.ts` (new), `wt-data-table.a11y.test.ts` | column `help` | 4 |
 | `packages/ui/src/components/wt-tabs.ts`, `wt-tabs.help.test.ts` (new), `wt-tabs.a11y.test.ts` | tab `help` | 5 |
 | `packages/ui/src/index.ts` | export the two new elements' classes and types beside `WtRowActions` | 2, 3 |
+| `packages/ui/demo/main.ts` | the workbench: a menu with a menu row, and the help switch | 2, 3 |
 | `docs/developers/design-system.md` | entries | 6 |
 
 ## Changed test checks (2a)
@@ -318,11 +360,26 @@ private closesMenu(event: MouseEvent): boolean {
   … // the action check, unchanged
 }
 
-readonly #resize = new ResizeObserver(() => {
-  if (this.popup?.matches(":popover-open")) this.positionPopup();
-});
-// observe the popup in firstUpdated; disconnect in disconnectedCallback; re-observe on reconnect
+// Watched only while open: show() observes the popup, and the popup's toggle to closed (and
+// disconnectedCallback) stops it.
+readonly #resize = new ResizeObserver(() => this.positionPopup());
 ```
+
+```css
+/* The popup's width must not depend on where it is placed: a fixed box with an automatic width
+   shrinks with the room beside it, so moving it would resize it and the observer would never
+   settle ("ResizeObserver loop completed…", M3b). The bound is the one alerts-bell.ts:44 uses. */
+[popover] {
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--wt-space-2));
+}
+```
+
+The bell's own `::part(popup) { width: 44ch }` (`apps/dashboard/src/widgets/alerts-bell.ts:42-47`,
+read) still wins over this rule, as a `::part` rule from outside does over the element's own
+styles. A ResizeObserver loop is not harmless here: the dashboard and the till record every window
+`error`, and that message arrives as one (`packages/diagnostics/src/error-capture.ts:31`, read);
+`wt-data-table.ts:1024-1040` documents the same trap (read).
 
 - [ ] **Step 1: Write the failing tests** in `wt-row-actions.test.ts` (use the file's `mountActions`;
   each case defines what it needs inline; `afterEach` already runs `cleanup`):
@@ -336,21 +393,30 @@ readonly #resize = new ResizeObserver(() => {
     control that the scope stayed inside the menu (it passes today, and must still pass).
   - `"an open menu that grows stays inside the window"` — `page.viewport(390, 800)` (restore
     1280 × 900 in `finally`); the menu in `<div style="display:flex;justify-content:flex-end">` with
-    `align="end"`; open; append a `<wt-button>` whose text is 30 characters long; wait one animation
-    frame; the popup's `right` is at most `innerWidth - 8`. (M3: today it stays where it opened.)
+    `align="end"`; listen for window `error` events; open; append a `<wt-button>` whose text is 30
+    characters long; `vi.waitFor` (not one frame) until the popup's `right` is at most
+    `innerWidth - 8`; then wait two more frames and assert that no recorded `error` message mentions
+    `ResizeObserver`. (M3: today it stays where it opened. M3b: placement settles in two frames.)
+  - `"a closed menu is not watched for size"` — spy on `ResizeObserver.prototype.observe` and
+    `unobserve`/`disconnect`: nothing is observed before the first `show()`; closing (Escape, an
+    action, a tap outside) stops it.
 - [ ] **Step 2: See them fail:**
-  `pnpm --filter @waitron/ui exec vitest run src/components/wt-row-actions.test.ts` — the first and
-  third fail, the second passes.
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-row-actions.test.ts` — the first,
+  third and fourth fail, the second passes.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run again; all pass**, with the unchanged suites that use row menus:
-  `pnpm --filter @waitron/ui exec vitest run src/components/wt-row-actions.test.ts src/components/wt-row-actions.a11y.test.ts src/components/wt-data-table.test.ts src/tap-target-and-focus.test.ts`
-  and `pnpm --filter @waitron/dashboard exec vitest run src/widgets/row-actions.test.ts src/screens/devices-screen.test.ts`
-  (the two dashboard files are the ones using `data-keep-open` today, found with
-  `grep -rln "data-keep-open" apps packages`, run 2026-10-18). Then
-  `pnpm --filter @waitron/ui typecheck`.
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-row-actions.test.ts src/components/wt-row-actions.a11y.test.ts src/components/wt-data-table.test.ts src/tap-target-and-focus.test.ts`;
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/row-actions.test.ts src/screens/devices-screen.test.ts src/screens/printers-screen.test.ts src/widgets/alerts-bell.test.ts`
+  (`devices-screen.ts` and `printers-screen.ts:2038`, `:2046` use `data-keep-open` today, found
+  with `grep -rln "data-keep-open" apps packages`, run 2026-10-18; the bell sizes its popup through
+  `::part(popup)`); and the till's shell, whose person and More menus are row menus:
+  `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.test.ts src/widgets/till-shell.a11y.test.ts src/widgets/till-shell.device-zones.test.ts`.
+  Then `pnpm --filter @waitron/ui typecheck`.
 - [ ] **Step 5: Deletion proofs** (each restored after): put `this.contains(node)` back → the first
   case fails; drop the `slice(0, …indexOf(this))` (test every node in the path) → the control case
-  fails; delete the observer's `positionPopup()` → the third case fails.
+  fails; delete the observer's `positionPopup()` → the third case fails on the edge; delete
+  `width: max-content` → the third case fails on its `ResizeObserver` error assertion (measured as
+  M3b); observe from the first render → the fourth case fails.
 - [ ] **Step 6: Commit**, e.g. `Row menus stay open for a help badge inside a menu row, and stay inside the window when they grow (A582)`.
 
 ---
@@ -358,7 +424,9 @@ readonly #resize = new ResizeObserver(() => {
 ### Task 2: `wt-menu-row` — a menu option with a help badge in its own square
 
 **Files:** create `packages/ui/src/components/wt-menu-row.ts`, `wt-menu-row.test.ts`,
-`wt-menu-row.a11y.test.ts`; export from `packages/ui/src/index.ts`.
+`wt-menu-row.a11y.test.ts`; export from `packages/ui/src/index.ts`; add it to the workbench,
+`packages/ui/demo/main.ts` (a menu beside its existing `wt-row-actions` examples, `:235`, with a
+help switch to turn help on; design-system "Adding a primitive", item 7).
 
 **Interface:**
 
@@ -403,8 +471,9 @@ control.
     (slice 1's badge does that; this pins it in a menu).
   - `"with no help text it draws no badge"` — `help=""`, help on: no `wt-help-tooltip` in the row's
     shadow root.
-  - `"the badge is named by help-label and described by its box once open"` — `aria-label` on the
-    badge's button is "Help: Edit"; after opening, `aria-describedby` names the box.
+  - `"the badge is named by help-label, says whether its box is open, and is described by the box once open"` —
+    `aria-label` on the badge's button is "Help: Edit"; `aria-expanded` is `"false"`, then `"true"`
+    after a tap, then `"false"` after Escape; while open, `aria-describedby` names the box.
   - `"paints the badge from the tokens"` — set `--wt-tap-min: 50px` and `--wt-help-badge-size: 30px`
     on `host`: the button is 50 × 50 and its circle 30 × 30; set `--wt-color-primary: rgb(1, 2, 3)`:
     the circle's background follows. (This is the token-painting test the house rule asks of a new
@@ -430,7 +499,8 @@ control.
 ### Task 3: `wt-help-switch` — the button that turns help on and off
 
 **Files:** create `packages/ui/src/components/wt-help-switch.ts`, `wt-help-switch.test.ts`,
-`wt-help-switch.a11y.test.ts`; export from `packages/ui/src/index.ts`.
+`wt-help-switch.a11y.test.ts`; export from `packages/ui/src/index.ts`; add it to the workbench
+(`packages/ui/demo/main.ts`), where it also turns on the Task 2 example's badges.
 
 **Interface:** `@property() label = "Help"`. `delegatesFocus` (`delegatesFocusShadowRootOptions`,
 as `wt-row-actions.ts:10`). Render a native `<button type="button" aria-label=${label} aria-pressed=${on}>`
@@ -470,13 +540,15 @@ on the icon. No `disabled` property.
 **Files:** `packages/ui/src/components/wt-data-table.ts` (`DataTableColumn`, `:32-63`; `#renderHead`,
 `:2491-2579`; styles), create `wt-data-table.help.test.ts`, extend `wt-data-table.a11y.test.ts`.
 
-What changes: `DataTableColumn` gains `/** A help-mode badge over the heading's label. */ help?: string;`.
-The table gains `@property({ attribute: "help-label" }) helpLabel = "Help";`. In `#renderHead`, for a
-column with `help`, the heading content (the plain label or the sort `<button>`, before
-`#treeHeading` wraps it) goes inside
-`<span class="head-label">…<wt-help-tooltip mode="help-mode" aria-label=${`${this.helpLabel}: ${column.label}`}>${column.help}</wt-help-tooltip></span>`,
-with `.head-label { position: relative; display: inline-block; }`. A column without `help` renders
-exactly as today. The badge sits outside the sort button, never inside it.
+What changes: `DataTableColumn` gains
+`/** A help-mode badge over the heading's label; \`label\` is the badge's whole accessible name. */ help?: { text: string; label: string };`
+(decision 7). In `#renderHead`, for a column with `help`, the heading content (the plain label or
+the sort `<button>`, before `#treeHeading` wraps it) goes inside
+`<span class="head-label">…<wt-help-tooltip mode="help-mode" aria-label=${column.help.label}>${column.help.text}</wt-help-tooltip></span>`,
+with `.head-label { position: relative; display: inline-block; }`, and the `th`'s `aria-label`
+(`wt-data-table.ts:2554-2558`, read) becomes `column.label`, or the existing filtered form when the
+column is filtered, whenever the column has `help`. A column without `help` renders exactly as
+today. The badge sits outside the sort button, never inside it.
 
 - [ ] **Step 1: Write the failing tests** in `wt-data-table.help.test.ts` (the file's own mount, as
   `wt-data-table.head-and-cells.test.ts:40-55` does; `afterEach`: `cleanup()`, `setHelpMode(false)`):
@@ -492,7 +564,13 @@ exactly as today. The badge sits outside the sort button, never inside it.
     (`aria-sort` unchanged).
   - `"with sticky-header the badge is not cut off"` — `sticky-header`, help on: the badge button's
     top is at or below `.scroll`'s top.
-  - `"the badge is named Help: and the column's label, and helpLabel changes the word"`.
+  - `"the badge takes its name from help.label"` — `help: { text: "…", label: "Ayuda: Disponibilidad" }`:
+    the badge's button is named "Ayuda: Disponibilidad".
+  - `"a heading with help is still named by its label alone"` — the column header's accessible
+    name (`aria-label`, and axe's computed name in the a11y case) is "Availability", not
+    "Availability Help: Availability"; filtered, it is "Availability: <filteredColumnLabel>" as
+    today. **Control in the same case:** remove the `aria-label` binding and read the header's
+    `textContent` — it holds the badge's text too, which is why the label is set.
   - `"a column without help renders its heading as before"` — no `.head-label`, no badge.
   - `"while help is off the badge cannot be reached"`.
   - `"in a right-to-left page it hangs over the label's top left corner"`.
@@ -517,11 +595,10 @@ exactly as today. The badge sits outside the sort button, never inside it.
 size observer and scroll handling, `:153-276`), create `wt-tabs.help.test.ts`, extend
 `wt-tabs.a11y.test.ts`.
 
-What changes: `TabItem` gains `help?: string`; the element gains
-`@property({ attribute: "help-label" }) helpLabel = "Help"`. A tab with `help` draws its label in
+What changes: `TabItem` gains `help?: { text: string; label: string }` (decision 8). A tab with `help` draws its label in
 `<span class="tab-label">` (only that tab; others unchanged). After the tab strip, inside
 `.tab-row` (which becomes `position: relative`), render one
-`<wt-help-tooltip mode="help-mode" data-key=… aria-label=${`${helpLabel}: ${label}`}>${help}</wt-help-tooltip>`
+`<wt-help-tooltip mode="help-mode" data-key=… aria-label=${item.help.label}>${item.help.text}</wt-help-tooltip>`
 per tab with help, styled `position: absolute; inset: auto; margin: 0; translate: -50% -50%` from
 `wt-tabs`' own shadow CSS. A `#placeBadges()` sets each badge's `left`/`top` (px, relative to
 `.tab-row`) to its tab label's top trailing corner (`right` in left-to-right, `left` in
@@ -545,7 +622,7 @@ help is off, so they are placed when it turns on).
   - `"tapping the badge opens its box and does not select the tab"` — no `wt-tab-change`.
   - `"in a right-to-left page it hangs over the label's top left corner"`.
   - `"while help is off it cannot be reached; with help on, Tab goes from the selected tab to the badges"`.
-  - `"helpLabel names the badge with the tab's label"`.
+  - `"the badge takes its name from help.label, and the tab's own name is unchanged"`.
   In `wt-tabs.a11y.test.ts`, both themes: `"a tab with help, help off"` and `"…, help on"` (with
   `{ enable: ["target-size"] }`). The help-on case is the one that would have failed with the badge
   in the tablist (M4).
@@ -579,8 +656,10 @@ help is off, so they are placed when it turns on).
   the tab strip, because a tablist may own only tabs; hidden while scrolled out of view); name the
   new guards (the four new test files). In the `wt-row-actions` row: `data-keep-open` counts on any
   element inside the menu, including inside a slotted element's shadow root; an open menu that
-  changes size is placed again. Add the new primitives to the primitives table and the axe
-  "verified by running" list with the date.
+  changes size is placed again, and its popup is `max-content` wide within the window less a margin
+  (why: a width that depends on placement makes the observer loop). Add the new primitives to the
+  primitives table and the axe "verified by running" list with the date, and check both are in the
+  workbench (Tasks 2 and 3).
 - [ ] **Step 3: Commit**, e.g. `Describe menu rows, the help switch and column and tab help in the design system (A582)`.
 - [ ] **Step 4: The pull request.** Title, e.g. `Help mode, slice 2a: menu rows, the help switch, and help on table columns and tabs in packages/ui (A582)`.
   Body: what landed; that nothing on any screen changes yet; that 2b uses it; the measurements M1–M5
@@ -593,18 +672,26 @@ help is off, so they are placed when it turns on).
 
 Branch `feat/a582-2b-dashboard-help`, made from `main` after 2a landed:
 `python3 ~/workspace/tools/worktree.py new waitron feat/a582-2b-dashboard-help --headless`. Copy this
-plan's 2b section into the new worktree's ledger (`docs/handoffs/`) before Task 7. Line numbers
+plan's 2b section into the new worktree's ledger (`docs/handoffs/`) before Task 7a. Line numbers
 below are at `40f4d71f9`; 2a touches no file 2b edits, so they should still hold, but re-find each
 before editing.
+
+**2b does not land before the owner answers the phone-width banner question** (decision 2; the
+question is asked when this plan is approved). Build Task 7b per the recommended arrangement (the
+chooser on the second row, in the venue row's flow); if the owner picks the alternative (the
+language choices in the account menu), Task 7b changes to that before the pull request lands, and
+changed checks 2 and 3 change with it (the chooser leaves the banner signed in at phone width
+instead of moving to the second row).
 
 ## File map (2b)
 
 | File | Change | Task |
 | --- | --- | --- |
-| `apps/dashboard/src/dashboard-app.ts` | the switch in the banner; help off in `#returnToLogin`; phone-width layout; account menu's menu row | 7, 9 |
-| `apps/dashboard/src/dashboard-app.help.test.ts` (new) | the switch, staying on, going off, the phone-width banner | 7 |
-| `apps/dashboard/src/dashboard-app.test.ts`, `dashboard-app.theme.test.ts` | changed checks (listed below) | 7, 9 |
-| `apps/dashboard/src/i18n/strings.ts` | `help.*` keys, EN and ES | 7, 9, 10 |
+| `apps/dashboard/src/dashboard-app.ts` | the switch in the banner; help off in `#returnToLogin` (7a); phone-width layout (7b); account menu's menu row (9) | 7a, 7b, 9 |
+| `apps/dashboard/src/dashboard-app.help.test.ts` (new) | the switch, staying on, going off (7a); the phone-width banner (7b); the account menu's badge (9) | 7a, 7b, 9 |
+| `apps/dashboard/src/dashboard-app.test.ts`, `dashboard-app.theme.test.ts` | changed checks (listed below) | 7a, 7b, 9 |
+| `apps/dashboard/src/i18n/strings.ts` | `help.*` keys, EN and ES | 7a, 9, 10 |
+| `apps/dashboard/src/widgets/test-helpers.ts` | `expectNoA11yViolations` takes `{ enable }`, as `packages/ui`'s does | 8 |
 | `apps/dashboard/src/screens/device-profiles-screen.ts`, `staff-screen.ts`, `widgets/unit-form.ts` | `mode="help-mode"` | 8 |
 | `packages/payments-sumup/src/dashboard/sumup-connect-form.ts`, `.test.ts` | positioned box, `mode="help-mode"` | 8 |
 | `apps/dashboard/src/widgets/unit-form.test.ts` | changed check | 8 |
@@ -621,14 +708,17 @@ Each changes because the spec (or this plan's decision under it) changes the beh
 1. `apps/dashboard/src/dashboard-app.test.ts:5425-5437`, "puts the language chooser, then the bell,
    before the account menu in the banner" — the expected children gain `"help-switch"` between
    `"alerts-bell"` and `"account-menu"`. Spec §3.1 puts the switch there.
-2. `dashboard-app.test.ts:5438-5489`, "fits every banner item without overlap at %ipx" (360, 400,
-   480) — the assertion "the language chooser shares the lockup's row" (`:5485-5487`) becomes "the
-   language chooser is on the second row, level with the venue name, at the trailing edge"; the
-   switch joins the measured items and "shares the lockup's row". Decision 2 (spec §3.1 leaves the
-   method to this plan).
-3. `dashboard-app.test.ts:5527-5604`, "when the intent is %s, in %s, fits banner items and the shared
-   bar at %ipx" (360, 390, 480) — the same change at `:5600-5602`. The 60 px lockup floor (`:5587`)
-   is NOT changed and must pass with the switch in the first row.
+2. **CONTROVERSIAL** — `dashboard-app.test.ts:5438-5489`, "fits every banner item without overlap
+   at %ipx" (360, 400, 480) — the assertion "the language chooser shares the lockup's row"
+   (`:5485-5487`) becomes "the language chooser is on the second row, level with the venue name, at
+   the trailing edge"; the switch joins the measured items and "shares the lockup's row". The spec
+   does not change where the chooser sits: this follows from the plan's own layout choice
+   (decision 2), and mockup 03 drew the chooser on the first row. So it waits for the owner's answer
+   to the phone-width question, and takes the alternative's form if he picks that.
+3. **CONTROVERSIAL** — `dashboard-app.test.ts:5527-5604`, "when the intent is %s, in %s, fits banner
+   items and the shared bar at %ipx" (360, 390, 480) — the same change at `:5600-5602`, for the same
+   reason as 2. The 60 px lockup floor (`:5587`) is NOT changed and must pass with the switch in the
+   first row.
 4. `apps/dashboard/src/dashboard-app.theme.test.ts:181-190`, "signed in, the banner has no theme
    chooser and the account menu holds the Theme choices between Account settings and Log out" —
    the account menu's children become `["profile-row", "theme-choices", "logout"]`: Account settings
@@ -648,26 +738,21 @@ unedited: `staff-screen.test.ts:1445-1471`, `staff-filters.test.ts:134-150`,
 
 ---
 
-### Task 7: the banner switch, help going off, and room at phone width
+### Task 7a: the banner switch, and help going off
 
-**Files:** `apps/dashboard/src/dashboard-app.ts` (`#banner`, `:1708-1811`; phone-width CSS,
-`:737-770`; `#returnToLogin`, `:1332`), `apps/dashboard/src/i18n/strings.ts`, create
-`apps/dashboard/src/dashboard-app.help.test.ts`, edit the checks 1–3 above.
+**Files:** `apps/dashboard/src/dashboard-app.ts` (`#banner`, `:1708-1811`; `#returnToLogin`,
+`:1332`), `apps/dashboard/src/i18n/strings.ts`, create `apps/dashboard/src/dashboard-app.help.test.ts`,
+changed check 1.
 
 What changes:
 - Strings: `"help.label": "Help"` / `"Ayuda"`, `"help.badge_label": "Help: {part}"` / `"Ayuda: {part}"`.
 - In `#banner`, signed in only, after the bell and before the account menu:
   `<wt-help-switch data-test="help-switch" label=${t("help.label")}></wt-help-switch>`.
 - `#returnToLogin` calls `setHelpMode(false)` (decision 4).
-- Phone-width layout, signed in (decision 2). Mark the banner (e.g. `data-signed-in` on
-  `.brand-banner` when `authenticated`). Under `@media (max-width: 48rem)`, for the signed-in banner
-  only, `.banner-actions` becomes `display: contents` so its children are grid items: the first row
-  holds toggle, lockup, then bell, switch and account menu at the trailing edge; the second row
-  holds the venue row, then the language chooser at the trailing edge (`justify-self: end`).
-  Keep the 4 px space between the trailing controls and 8 px before them, which is what M7 measured
-  with. Keep the DOM order of `.banner-actions`' children (`language-chooser`, `alerts-bell`,
-  `help-switch`, `account-menu`), so the signed-out banner and its tests are untouched. The
-  implementer may choose different CSS if it meets the acceptance below.
+
+At phone width this task alone leaves the lockup below 60 px at 360 and 390 (M6), so the banner
+fit tests (changed checks 2 and 3) fail until Task 7b; commit 7a and 7b on the branch before
+pushing, and do not push between them.
 
 - [ ] **Step 1: Write the failing tests** in `dashboard-app.help.test.ts` (copy the mount helpers it
   needs from `dashboard-app.test.ts:69-260` and `:5345-5405`, as the sibling `dashboard-app.theme.test.ts`
@@ -681,27 +766,70 @@ What changes:
     `"a refused session turns help off"` (dispatch `waitron-session-invalid` with
     `management_session.expired`), `"another tab's expiry turns help off"` (a `storage` event with
     deadline 0) — one case per path in decision 4, so deleting any one call path is seen.
-  - `"a fresh page starts with help off"` — a second `dashboard-app` mounted after `setHelpMode(false)`
-    and a spy on `Storage.prototype.setItem` shows no help key written while toggling (the reload
-    receipt is slice 1's in-memory state; this pins that the dashboard adds no storage).
-  - `it.each` over `live`/`demo` × `en-GB`/`es-ES` × 320/360/390/480:
+  - `"help is not saved, so a fresh page starts off"` — there is no help storage key, so the check
+    looks for one by name: spy on `Storage.prototype.setItem` (which covers both `localStorage` and
+    `sessionStorage`) and snapshot both storages' keys; turn help on and off with the switch; no
+    `setItem` call's key matches `/help/i`, and neither storage holds a key matching `/help/i`
+    afterwards. A test cannot reload the page (a reload is a fresh module instance), so this
+    storage check and slice 1's "nothing is saved" case (`packages/ui/src/help-mode.test.ts`)
+    together are the receipt that a reload starts off; the case says so in a one-line comment.
+  - `"has no accessibility violations with help on, in both themes"` — the banner and an open account menu.
+- [ ] **Step 2: See them fail:** `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.help.test.ts`.
+- [ ] **Step 3: Implement**, and edit changed check 1.
+- [ ] **Step 4: Run again; all pass:**
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.help.test.ts src/dashboard-app.a11y.test.ts`,
+  and `dashboard-app.test.ts -t "puts the language chooser"`. Then `pnpm --filter @waitron/dashboard typecheck`.
+- [ ] **Step 5: Deletion proof:** delete `setHelpMode(false)` in `#returnToLogin` → all four
+  going-off cases fail.
+- [ ] **Step 6: Commit**, e.g. `A "?" in the dashboard banner turns help on and off, and signing out turns it off (A582)`.
+
+---
+
+### Task 7b: room for the switch at phone width
+
+**Files:** `apps/dashboard/src/dashboard-app.ts` (phone-width CSS, `:737-770`; `#banner`'s venue
+row, `:1729-1740`), `dashboard-app.help.test.ts`, changed checks 2 and 3 (CONTROVERSIAL; see above).
+
+What changes (decision 2, M8's arrangement): signed in, below `48rem`, the language chooser is drawn
+inside the venue row (`.venue-row`, which is already the second row's flex box at phone width,
+`:762-767`, read), after the venue, with `margin-inline-start: auto` so it sits at the trailing
+edge; above `48rem`, and signed out at every width, it stays first in `.banner-actions` as today.
+Do NOT flatten `.banner-actions` into the banner's grid and give the chooser a grid cell: that
+squeezes a long legal name (decision 2, reviewer's measurement). How the one chooser element moves
+between the two places is the implementer's choice — for example render it in `.banner-actions`
+when `!(authenticated && this.narrow)` and in `.venue-row` when `authenticated && this.narrow`,
+where `this.narrow` already follows the drawer breakpoint (`dashboard-app.ts:879`, `:1017-1018`,
+`DRAWER_BREAKPOINT` at `:154`, read) — as long as
+there is only ever one chooser in the page and the acceptance below holds. Changed check 1's
+children list is then `["alerts-bell", "help-switch", "account-menu"]` at phone width signed in;
+check 1 runs at the test page's default width (confirm it is wider than `48rem`), where it stays as
+Task 7a set it.
+
+- [ ] **Step 1: Write the failing tests** in `dashboard-app.help.test.ts`:
+  - `it.each` over `live`/`demo` × `en-GB`/`es-ES` × 320/360/390/480, each with the default legal
+    name and with a 41-character one (for example `"Restaurante Ejemplo de la Plaza Mayor S.L."`):
     `"signed in at %ipx the switch shares the lockup's row and the language chooser takes the second row"` —
     at 360, 390 and 480 the lockup is at least 60 px; at 320 it is at least 31 px (today's width,
     M6); the switch, bell and account menu share the lockup's row; the chooser is below the lockup,
-    at the banner's trailing edge, level with the venue name within 1 px; nothing overlaps; the
-    banner does not scroll sideways. **What the failing case shows:** without the layout change the
-    lockup reads about 23 px at 360 and 53 px at 390 (M6).
+    at the banner's trailing edge, level with the venue name within 1 px for a one-line name;
+    nothing overlaps; the banner does not scroll sideways; **the banner is at most today's height +
+    19 px for the one-line name**, pinned as a number (121 px, from M8's 102 + 19; before writing
+    it, re-measure today's height on the branch's base with a throwaway run and use that if it
+    differs); and **the legal name gets at least 120 px of width**
+    (the reviewer measured 129–199 px with this arrangement and 75–116 px with the grid one, so 120
+    tells them apart). **What the failing case shows:** without the change the lockup reads about
+    23 px at 360 and 53 px at 390 (M6); with the grid arrangement the name gets under 120 px.
   - `"at 1280px the language chooser stays in the first row"`.
-  - `"has no accessibility violations with help on, in both themes"` — the banner and an open account menu.
-- [ ] **Step 2: See them fail:** `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.help.test.ts`.
-- [ ] **Step 3: Implement**, and edit changed checks 1–3.
+  - `"there is one language chooser at every width"` — at 1280 and 390, signed in and out.
+  - `"a language picked from the second row changes the language"` — at 390.
+- [ ] **Step 2: See them fail.**
+- [ ] **Step 3: Implement**, and edit changed checks 2 and 3.
 - [ ] **Step 4: Run again; all pass**, with the banner suites:
   `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.help.test.ts src/dashboard-app.test.ts src/dashboard-app.theme.test.ts src/dashboard-app.a11y.test.ts`
   (`dashboard-app.test.ts` is long: check free memory first). Then
   `pnpm --filter @waitron/dashboard typecheck`.
-- [ ] **Step 5: Deletion proofs:** delete `setHelpMode(false)` in `#returnToLogin` → all four
-  going-off cases fail; delete the phone-width rule → the 360/390 cases fail on the lockup.
-- [ ] **Step 6: Commit**, e.g. `A "?" in the dashboard banner turns help on and off; at phone width the language chooser moves to the second row to make room (A582)`.
+- [ ] **Step 5: Deletion proof:** delete the phone-width move → the 360/390 cases fail on the lockup.
+- [ ] **Step 6: Commit**, e.g. `At phone width the language chooser moves to the banner's second row, making room for the help switch (A582)`.
 
 ---
 
@@ -711,7 +839,8 @@ What changes:
 `apps/dashboard/src/screens/staff-screen.ts:401`; `apps/dashboard/src/widgets/unit-form.ts:372`;
 `packages/payments-sumup/src/dashboard/sumup-connect-form.ts:41-48`, `:245-253` and its test; the a11y
 files listed under "Changed test checks"; `apps/dashboard/src/widgets/unit-form.test.ts:117-140`;
-create `scripts/help-tooltip-mode.test.ts`.
+`apps/dashboard/src/widgets/test-helpers.ts:263` (`expectNoA11yViolations`, which today takes no
+options, read); create `scripts/help-tooltip-mode.test.ts`.
 
 - [ ] **Step 1: Write the guard first**, modelled on `scripts/native-form-fields.test.ts` (read its
   `sourceFilesIn`, `:114-124`, and its literal visitor, `:79-112`): walk `apps` and `packages`,
@@ -731,18 +860,30 @@ create `scripts/help-tooltip-mode.test.ts`.
     help off: not visible; help on: the badge button's centre within 1 px of the heading text box's
     top-right corner. (Without the positioned box it hangs over a far ancestor — slice 1's
     measurement found (414, 0) against the page.)
+  - Give the dashboard's `expectNoA11yViolations` (`apps/dashboard/src/widgets/test-helpers.ts:263`)
+    the same optional `{ enable?: readonly string[] }` that `packages/ui/src/a11y-helpers.ts:64-68`
+    has (it can only add rules axe ships off, never remove one), with one case beside its existing
+    tests: a 10 × 10 px named button passes without the option and fails with
+    `{ enable: ["target-size"] }`.
   - Help-on axe cases (both themes, as each file already loops) in
     `device-profiles-screen.a11y.test.ts` (one editor case), `staff-screen.a11y.test.ts`,
     `unit-form.a11y.test.ts` and `units-screen.a11y.test.ts`, each run with
     `{ enable: ["target-size"] }`; if axe flags an overlap of the badge with the field, that overlap
     is the approved look (spec §3.1): keep the case on default rules and report it.
+  - SumUp has no axe test today (read: `panel.test.ts:27-35` only renders). Add
+    `sumup-connect-form.a11y.test.ts` with the form, help off and help on, in both themes (copy the
+    themed mount from a `packages/payments-stripe` or dashboard a11y file; `packages/ui`'s
+    `expectNoA11yViolations` is reachable as `@waitron/ui`'s helper only if exported — if not, use
+    `axe.run` directly as those helpers do).
   - Changed check 5 in `unit-form.test.ts`.
 - [ ] **Step 3: See the guard and the SumUp case fail**, then implement: `mode="help-mode"` on the
   five; in SumUp, wrap the label `<span>` and the badge in
   `<span class="affiliate-heading">` with `position: relative; display: inline-block`.
 - [ ] **Step 4: Run; all pass:**
   `pnpm exec vitest run scripts/help-tooltip-mode.test.ts`;
-  `pnpm --filter @waitron/payments-sumup exec vitest run src/dashboard/sumup-connect-form.test.ts src/dashboard/panel.test.ts`;
+  `pnpm --filter @waitron/payments-sumup exec vitest run src/dashboard/sumup-connect-form.test.ts src/dashboard/sumup-connect-form.a11y.test.ts src/dashboard/panel.test.ts`;
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/test-helpers.test.ts` (or wherever
+  the helper's own cases live; find them with `grep -rln "expectNoA11yViolations" apps/dashboard/src/widgets/*.test.ts`);
   `pnpm --filter @waitron/dashboard exec vitest run src/widgets/unit-form.test.ts src/widgets/unit-form.a11y.test.ts src/screens/units-screen.a11y.test.ts src/screens/staff-screen.test.ts src/screens/staff-screen.a11y.test.ts src/screens/staff-filters.test.ts src/screens/device-profiles-screen.test.ts src/screens/device-profiles-screen.a11y.test.ts src/dashboard-app.a11y.test.ts`.
   (`@waitron/payments-sumup`, read from its `package.json`.) Then typecheck both packages.
 - [ ] **Step 5: Deletion proofs:** remove `mode="help-mode"` from one site → the guard names it;
@@ -761,8 +902,12 @@ Texts (each a claim; the code it describes is cited, read):
 
 | Key | English | Spanish (draft; match the table's existing words) | What it describes |
 | --- | --- | --- | --- |
-| `help.account.settings` | Your name, email, phone and language, and how you sign in: password, PIN, passkeys, authenticator app and Google. | Tu nombre, correo, teléfono e idioma, y cómo inicias sesión: contraseña, PIN, llaves de acceso, app de autenticación y Google. | `apps/dashboard/src/screens/profile-screen.ts:519` (name, display name, email, phone, language fields), `:877` (password), `:890` (PIN), `:45` and `:535` (passkeys), `:966` (authenticator), `:991-999` (Google), `:1037` (language) |
-| `help.products.keep_variant` | Cancels archiving this variant. Archiving happens only when you save the product. | Cancela el archivado de esta variante. Se archiva solo al guardar el producto. | `variant-table.ts:416-426` (Keep shows only for a variant marked inactive and emits `wt-restore`), `:374-378` and `strings.ts:2000` ("Archived when saved"), `product-editor.ts:1050-1062` (variant edits stay in the draft until save) |
+| `help.account.settings` | Your name, display name, email, phone and language; your password, PIN and passkeys; and extra sign-in checks: an authenticator app and, where set up, Google. | Tu nombre, nombre visible, correo, teléfono e idioma; tu contraseña, PIN y passkeys; y comprobaciones adicionales: una aplicación de autenticación y, si está configurado, Google. | `apps/dashboard/src/screens/profile-screen.ts:519` (first names, last names, display name, email, phone, language fields), `:877` (password), `:890` (PIN), `:45` and `:535` (passkeys), `:966` and `strings.ts:1019` (the authenticator is "an extra sign-in check", not a way in on its own), `:980-999` and `:246`, `:335` (Google shows only when `googleConfigured`; it is "another way to log in", `strings.ts:1032`), `:1037` (language). Spanish terms from `strings.ts:4017` ("Passkeys"), `:3997` ("aplicación de autenticación"), `:4826` ("Nombre visible") |
+| `help.products.keep_variant` | Cancels archiving this variant. Archiving happens only when you save the product. | Cancela el archivado de esta variante. Se archiva solo al guardar el producto. | `variant-table.ts:416-426` (Keep shows only for a variant marked inactive and emits `wt-restore`), `:374-378` and `strings.ts:2000` ("Archived when saved"), `product-editor.ts:1683-1698` (the `wt-restore` handler sets the variant back to active in the draft) and `:1690` (the archive handler only marks the draft) |
+
+Google is both a way to sign in and listed beside the authenticator in the English draft; the
+implementer settles the wording against `profile-screen.ts:975-1000` and the `profile.google_*`
+strings, keeping it to one sentence.
 
 The implementer re-reads each cited place and narrows a text that says more than the code; the
 Spanish for "passkey" and "authenticator app" must match what `strings.ts` already uses (grep the
@@ -773,6 +918,12 @@ Spanish for "passkey" and "authenticator app" must match what `strings.ts` alrea
     open the menu; the `wt-menu-row` holding `[data-test=profile]` shows its badge, named
     "Help: Account settings"; a click on it opens the box, does not open the profile and leaves the
     menu open; with help off, no badge.
+  - `dashboard-app.help.test.ts`: `"a keyboard user can turn help on with the account menu open, and the menu stays open and inside the window"` —
+    at 390 × 844 (restore after): open the account menu with Enter on its button; Shift+Tab until
+    focus is on the help switch (focus leaving a row menu does not close it, spec §3.3); Space; the
+    menu is still open, the badge beside Account settings is visible, and the menu's popup right
+    edge is at most `innerWidth - 8` (Task 1's re-placing); no window `error` mentions
+    `ResizeObserver`.
   - `variant-table.test.ts`: `"with help on, Keep has a badge that explains it, and Keep still works"` —
     a variant marked to be archived; help on; open its ⋮; the badge beside Keep is named
     "Help: Keep"; clicking the badge emits no `wt-restore`; clicking Keep emits it as before.
@@ -797,9 +948,13 @@ Default course `:1157-1177`, Variants `:1620-1713`), `apps/dashboard/src/widgets
 All line numbers read at `40f4d71f9` (a read-only research pass).
 
 Badges: the price, VAT and course fields take
-`<wt-help-tooltip slot="help" mode="help-mode" aria-label=${fill("help.badge_label", { part: <the field's label> })}>${t(<key>)}</wt-help-tooltip>`
+`<wt-help-tooltip slot="help" mode="help-mode" aria-label=${fill("help.badge_label", { part: <the field's label as drawn> })}>${t(<key>)}</wt-help-tooltip>`
 in their existing `help` slots; Variants takes one in `wt-disclosure`'s `help` slot; the
-Availability column gets `help: t("help.products.availability")` and the table `help-label=${t("help.label")}`.
+Availability column gets
+`help: { text: t("help.products.availability"), label: fill("help.badge_label", { part: t("product.availability") }) }`.
+**The price badge's name follows the label the field draws**, which is "Price", "Price per {unit}",
+"Base price" or "Base price per {unit}" (`product-editor.ts:1543-1550`, read: "Base price…" once the
+product has variants), so pass that same expression as `part`, not `t("editor.price")`.
 
 Texts. Each is a claim about behaviour; the right-hand column is the code it describes (read). The
 implementer follows each call chain once more before committing and narrows any sentence the code
@@ -807,17 +962,17 @@ does not bear out (`CLAUDE.md` §1). Owner's standing rule: as short as the mean
 
 | Key | English | Spanish (draft) | Code it describes |
 | --- | --- | --- | --- |
-| `help.products.price` | The price includes VAT. With Each it sells one at a time; with a unit that has decimal places, the till asks how much. | El precio incluye el IVA. Con Unidad se vende de uno en uno; con una unidad con decimales, la caja pregunta la cantidad. | `packages/catalogue/src/pricing.ts:31` (`unitPrice` is gross, per selected unit); `packages/catalogue/src/units.ts:21-29` (no unit reads as Each, precision 0); `apps/till/src/widgets/product-pick.ts:19-33` (the keypad asks for a quantity when the unit's `precision > 0` or it has a scale unit) |
+| `help.products.price` | The price includes VAT, per unit. For a weight or a unit with decimals the till asks how much; otherwise each tap sells one. | El precio incluye el IVA, por unidad. Si se vende al peso o con una unidad con decimales, la caja pregunta la cantidad; si no, cada toque vende una. | `packages/catalogue/src/pricing.ts:31` (`unitPrice` is gross, per selected unit); `packages/catalogue/src/units.ts:21-29` (no unit reads as Each, precision 0); `apps/till/src/widgets/product-pick.ts:26` (the till asks when the unit has a scale unit, `hardwareUnit !== null`, or decimals, `precision > 0`; otherwise `addProduct(product, "1")`, `:30-31`) |
 | `help.products.vat` | The VAT class. A sale uses the class's rate on the day it is invoiced. A change reaches the tills when the menu is published again. | La clase de IVA. Una venta aplica el tipo de la clase el día de la factura. Un cambio llega a la caja al volver a publicar la carta. | `packages/catalogue/src/vat-rates.ts:4`, `:22-27`, `:76-84` (classes and dated rates); `apps/server/src/issue-moment.ts:17-20` and `pricing.ts:178-206` (rate taken at issue); `packages/catalogue/src/menu-document.ts:756` and `docs/developers/products.md:146-157` (a VAT change is a menu change, reaching tills on republishing) |
-| `help.products.course` | The course this dish goes out in, unless staff change it on the order. Extras have no course. | El curso en que sale este plato, salvo que el personal lo cambie en el pedido. Los extras no llevan curso. | `apps/server/src/working-order.ts:781` (a line's own course, else the product's default) and `:776` (extras lines take none) |
-| `help.products.variants` | Versions of this product with their own name and price, such as sizes. A blank field uses the product's. Once it has a variant, the till sells only its variants. | Versiones de este producto con su propio nombre y precio, como tamaños. Un campo vacío usa el del producto. Con variantes, la caja solo vende las variantes. | `packages/catalogue/src/variant-fallback.ts:101-117` (blank fields inherit); `packages/catalogue/src/variants.ts:506-508` (`product.variant_required`: a product with an active variant cannot be sold as itself) |
-| `help.products.availability` | Unavailable: its Available switch is off, so the tills stop selling it at once, with no publishing. Archived: no longer sold. | No disponible: su interruptor Disponible está apagado, así que la caja deja de venderlo al momento, sin publicar. Archivado: ya no se vende. | `product-list.ts:1234-1245` (what the column shows); `menu-document.ts:431` (`sellable = active && available`) and `:529-600` (`applyLiveFields` reads it from the current rows, so no publish is needed); `catalogue-screen.ts:399-423` (Archive sets `active: false`) |
+| `help.products.course` | The course this dish goes out in, unless staff change it on a table's order. Picked as an extra, it goes out with its dish. | El curso en que sale este plato, salvo que el personal lo cambie en el pedido de una mesa. Pedido como extra, sale con su plato. | `apps/server/src/working-order.ts:781` (a dish line's own course, else the product's default) and `:776` ("A CHILD row takes no course: kitchen coursing is per dish"). Before writing "on a table's order", check where the till lets staff change a line's course (`grep -rn "courseId" apps/till/src/widgets/*.ts`) and narrow it if it is offered elsewhere too |
+| `help.products.variants` | Versions of this product, such as sizes, each with its own name. A variant without a price sells at the product's. Once a menu with an active variant is published, the till sells only the variants. | Versiones de este producto, como tamaños, cada una con su nombre. Una variante sin precio se vende al del producto. Al publicar una carta con una variante activa, la caja solo vende las variantes. | `packages/catalogue/src/offer-price.ts:21-32` (variant menu price, else the variant's price, else the parent's menu price, else the parent's price); `apps/dashboard/src/widgets/variant-form.ts:296-320` (a blank kitchen or customer-facing name shows the variant's own name); `packages/catalogue/src/variants.ts:112-125` (`parentsWithActiveVariants`: a product with an ACTIVE variant, available or not, is never sold as itself) and `:506-508`; `packages/catalogue/src/menu-document.ts:744` (variants are a menu change, reaching tills on republishing) |
+| `help.products.availability` | Unavailable: its Available switch is off, so the tills stop selling it within seconds, without publishing. Archived: no longer sold, for good. | No disponible: su interruptor Disponible está apagado, así que la caja deja de venderlo en segundos, sin publicar. Archivado: ya no se vende, de forma definitiva. | `product-list.ts:1234-1245` (what the column shows); `menu-document.ts:431` (`sellable = active && available`) and `:529-600` (`applyLiveFields` reads it from the current rows, so no publish is needed); `apps/till/src/state/menu-state-poll.ts:4` (an open till reads its menu state every 15 s, `POLL_MS = 15_000`) and `apps/till/src/api/client.ts:452-456` (that answer carries a `liveFields` token); `catalogue-screen.ts:399-423` (Archive sets `active: false`) and `strings.ts:1995-1996` ("This can't be undone") |
 
-Known gaps to check while implementing (from the research pass): "Each" is "Unidad" in Spanish
-(`strings.ts:4907`), so the Spanish price text says "Unidad"; "at once" in the Availability text
-holds only if the till re-reads the live fields without a reload — follow `applyLiveFields` to the
-till's menu read and, if a till must reload or refresh, say "on its next refresh" instead (record
-which in the commit).
+Known gaps to check while implementing: "Each" is "Unidad" in Spanish (`strings.ts:4907`), so a
+Spanish text that names it says "Unidad"; "within seconds" rests on the 15 s poll above — follow
+the poll's `liveFields` token to where the till re-reads the menu (`grep -n "liveFields" apps/till/src -r`)
+and confirm a change is applied on that poll rather than on a later reload; if not, narrow the
+text and record it in the commit.
 
 - [ ] **Step 1: Write the failing tests:** in `product-editor.test.ts` and `product-list.test.ts`
   (find each file's mount helper first):
@@ -849,7 +1004,9 @@ which in the commit).
   Variants section's badge (slice 1's decision 9: it hangs at the end of the heading row, not right
   after "Variants" as mockup 01 draws it — show the owner); the account menu open with help on and
   the Account settings box open; a variant's ⋮ with Keep's badge; the phone-width banner with the
-  chooser on the second row; device profiles' Department badge; SumUp's affiliate badge. Keep the
+  chooser on the second row, with the demo venue's legal name and with a long one; the alerts bell's
+  panel and a ⋮ row menu (their popup width now `max-content`, Task 1); device profiles' Department
+  badge; SumUp's affiliate badge. Keep the
   screenshots outside the worktree (`mktemp -d`) and describe what each showed in the PR body.
   Stop the stack the way `wa-wt` documents, by the ids it started.
 - [ ] **Step 2: Docs.** Read every claim the change retires, across the whole base-to-tip range:
@@ -871,8 +1028,12 @@ which in the commit).
   are touched. Update `docs/backlog.md`'s A582 line to match.
 - [ ] **Step 4: Commit**, e.g. `Describe the dashboard's help mode, its guard and the phone-width banner (A582)`.
 - [ ] **Step 5: The pull request.** Title, e.g. `Help mode, slice 2b: a "?" in the dashboard banner, help on Products, and menu options with help (A582)`.
-  Body: what a person sees; the phone-width banner decision and its measurements (M6–M8); the
-  changed test checks 1–5 with the reason for each; the screenshots' findings; open risks.
+  Body: what a person sees; the phone-width banner decision, the owner's answer to it, and its
+  measurements (M6–M8 and the reviewer's long-name measurement), with its cost against A653 (owner,
+  2026-10-14: minimise the space above tables on mobiles); the changed test checks 1–5 with the
+  reason for each, checks 2 and 3 marked controversial; the screenshots' findings; open risks.
+  **Do not land until the owner has answered the phone-width question** and Task 7b matches the
+  answer.
 
 ---
 
@@ -884,7 +1045,8 @@ which in the commit).
 | Logic | Mutant | Killed by |
 | --- | --- | --- |
 | `closesMenu`'s path slice | whole path; `indexOf` → `0` | Task 1's control case; the shadow keep-open case |
-| the resize observer's open check | always / never re-place | the "grows" case; existing positioning cases |
+| the resize observer, watched only while open | observe from the first render; never unobserve | "a closed menu is not watched for size" |
+| the popup's `max-content` width (CSS) | removed | the "grows" case's `ResizeObserver` error assertion |
 | `wt-menu-row`'s `help ? badge : nothing` | always draw | "no help text draws no badge" |
 | `wt-help-switch`'s `!currentHelpMode()` | `!` removed | "a second click turns it off" |
 | table head wrapper only with `help` | always wrap | "a column without help renders as before" |
@@ -892,10 +1054,15 @@ which in the commit).
 
 ## Review focus
 
-1. **PR 2a changes no screen.** Every existing `packages/ui` test passes unedited; the one shared
-   behaviour change is `wt-row-actions`' keep-open scope and re-placing, pinned in Task 1 with a
-   control that outside elements still do not keep a menu open.
-2. **PR 2b's changed checks are exactly the five listed**, each traced to the spec or decision 2.
+1. **PR 2a changes no screen's drawing, but it does change every row menu in two ways**: an open
+   menu whose content changes size is placed again, and its popup is `max-content` wide within the
+   window less a margin (needed so the re-placing settles, M3b). Task 1 re-runs the dashboard's and
+   the till's row-menu suites; the run-it seat should open the dashboard's account menu, a ⋮ row
+   menu, the alerts bell and the till's More menu and look. The keep-open scope change is pinned
+   with a control that elements outside the menu still do not keep it open.
+2. **PR 2b's changed checks are exactly the five listed.** Checks 1, 4 and 5 follow from the spec;
+   checks 2 and 3 are controversial — they follow from this plan's own layout choice (decision 2),
+   which the owner is asked to confirm before 2b lands.
 3. **Every help text against its cited code** (Tasks 9 and 10): reviewers follow the call chain, not
    the label.
 4. **The phone-width banner** (decision 2) is a visible change the mockup did not draw; the PR's
@@ -903,11 +1070,14 @@ which in the commit).
 
 ## Open risks
 
-- **Decision 2 departs from mockup 03**, which drew the language chooser on the first row. The
-  measurements say it does not fit there with the switch; the owner may prefer the chooser in the
-  account menu instead. Task 11 puts it in the backlog for him to confirm.
-- **The Availability text's "at once"** depends on how quickly a till sees a live field change;
-  Task 10 checks it and narrows the text if needed.
+- **The phone-width banner is the owner's call** (decision 2): the recommended arrangement adds
+  19 px of banner height on phones, against A653's aim of less space above tables, and departs from
+  mockup 03; the alternative puts the language choices in the account menu. 2b waits for his answer.
+- **Row menus' popup width changes** to `max-content` within the window (Task 1). A menu whose
+  options were stretched wider by an automatic width could look narrower; the look step checks the
+  dashboard's menus and the till's.
+- **The Availability text's "within seconds"** rests on the till's 15 s menu-state poll; Task 10
+  follows the poll to where the change is applied and narrows the text if a reload is needed.
 - **A menu row with a link option** loses the link's look (decision 6). No user needs it in this
   slice.
 - **Tab badges are placed by script**, so a layout change that the observer does not see (a font
