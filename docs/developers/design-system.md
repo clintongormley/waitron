@@ -850,11 +850,22 @@ The floor screen hands the map each table's `fixed` and, for a party
 at two or more groups, its `linkId`, so a fixed stool being dragged leaves a copy, with a line to
 the table marked as its drop target, and a party's tables are joined by a line. `canDrag` and the details sheet's
 actions follow `canChangeToday` (the profile's take-orders): without it nothing on the map moves,
-the sheet offers no changes for today and there is no zone menu. With it, on a zone with today's
-plan or a saved plan (the zone list's `hasPlan`, so a saved plan with no tables still offers Reset),
-a `wt-row-actions` ⋮ beside the List/Map toggle opens the zone menu: Add a spare table, Taken off today and Reset to
-saved plan. Each opens a `wt-dialog`; the two lists name their tables by the names they show today, in number order (2, 9, 10),
+the sheet offers no changes for today and the zone menu holds no change. With it, on a zone with
+today's plan or whose department has a floor plan set (the zone list's `hasPlan`), a
+`wt-row-actions` ⋮ named "Today's plan" beside the List/Map toggle opens the zone menu: Add a spare
+table, Taken off today and "Reset to {set} plan", naming the set today's plan was last made from
+(`layoutSetName`; with none, that item is not shown). On a phone (`PHONE_WIDTH`) the List/Map
+toggle is the menu's first item, above a muted "Today's plan · {zone}" heading; a menu holding
+only that item is named "Floor view" (`apps/till/src/widgets/floor-zone-menu.ts`). Each change
+opens a `wt-dialog`; the two lists name their tables by the names they show today, in number order (2, 9, 10),
 each list says so in one line when it is empty, and Reset asks before it resets.
+
+When the zones read offers another layout (`layoutDue`), a device that can change today shows a
+`role="status"` line above the map or the list, "{period} layout is ready." or, with no new period
+to name, "A newer layout is ready.", beside an Update layout button (`#layoutBanner`,
+`apps/till/src/screens/till-floor-screen.ts`). A table that needs moving takes the needs-clearing
+fill on the map (`apps/till/src/state/floor-map.ts`); its list card says "Needs moving" and carries
+Mark moved.
 
 `wt-floor-map` draws the till's tables for a zone, fitted to its box: the tables' crop (two squares
 past them) is scaled to fit and centred, with no grid lines. Its size is its parent's choice; the
@@ -4767,7 +4778,7 @@ Back stop; closing the editor, with Cancel or a save, drops it the same way. Cha
 too and, like any tab change, adds a Back stop.
 
 Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for the till's fixed primary
-screens. Nested views and zones extend those paths, such as `/manage/floor-plan/zone/<id>`.
+screens. Nested views and zones extend those paths, such as `/manage/floor-plan/set/<set>/zone/<zone>`.
 Till Schedule, Kitchen and Pass use `/tabs/<key>/view/<destination>`, with destinations
 `schedule`, `station` and `expo`. The operator Kitchen picker adds `/station/<id>`;
 an embedded station keeps its selection local to its screen. Restore these destinations
@@ -4955,8 +4966,8 @@ shows the same message; its Save remains available. Cases: `floor-plan-tables-pa
 
 A department's menu offers Edit, Add a zone and Delete. A zone's menu offers Edit and Delete.
 The list has no column picker. Its Also edit column links each row's other editor: Receipt, which
-opens Edit receipt, on a department whose receipt can be edited; on a zone, Floor plan, or Add
-floor plan when no table is placed on the zone's plan. Unassigned zones keep their Add to department action.
+opens Edit receipt, on a department whose receipt can be edited; a zone's is empty, as a zone's
+layouts are reached from the Floor plans page. Unassigned zones keep their Add to department action.
 The sidebar returns to the bare list. An editor's deep link keeps that list underneath it;
 closing the editor returns focus to its originating row menu, or Add when that row is gone.
 
@@ -4998,8 +5009,9 @@ a sale there files the default; with no default offered, the field opens empty, 
 no venue receipt page or live venue fallback for receipt decoration.
 
 The zone editor holds only its fields: no opening hours and no floor plan. The floor-plan
-editor returns to the list. Its header ends with Undo and Redo, then Cancel beside Save, the
-owner's exception to Cancel on the left (A502).
+editor returns to its `back` address when that is a dashboard path, else to the dashboard's home;
+the Floor plans page's links set `back` to that page (`layoutPath`). Its header ends with Undo
+and Redo, then Cancel beside Save, the owner's exception to Cancel on the left (A502).
 
 A zone's grip moves it to another live department. The row stays visible while you drag it,
 and Escape cancels. Keyboard users pick up the grip with Space, choose with arrows and move
@@ -5176,9 +5188,8 @@ cannot open or save its configuration. Internal receipt printing keeps the delet
 recorded receipt settings and media; image usage names that department without linking to its editor.
 Closed today and opening hours keep their own actions. Hardware keeps Disable and Enable.
 
-Individual tables follow the master floor plan contract: Delete, after a confirmation, has Undo
-until Save. Saving a
-master edit preserves today's deferred removal rules. See the
+Individual tables follow the floor plan editor's contract: Delete, after a confirmation, has Undo
+until Save. Saving a layout preserves today's deferred removal rules. See the
 [A435 step 6 reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)
 for the hierarchy's separate immediate cleanup and retained-history limits.
 

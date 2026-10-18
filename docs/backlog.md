@@ -90,15 +90,13 @@ Everything not listed here needs more spec work first.
    lands.
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
-2. **A504 — floor plan sets, one per service period** (_The till,
-   devices and table service_).
-3. **A682 — translations: nothing required, every missing name reported, all languages side by
+2. **A682 — translations: nothing required, every missing name reported, all languages side by
    side, with automatic translation** (_Menus and the catalogue_).
-4. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
+3. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
    (_Modules, data and code health_). Its revised design awaits agreement.
-5. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
+4. **A664 — archive or delete a venue's old data once it no longer has to be kept** (_Data
    protection and legal compliance_). Adviser agreement, build and verification remain open.
-6. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
+5. **A582 — help mode: a "?" in the top bar marks everything that has help** (_Users, sign-in and
    the dashboard shell_).
 
 **Ready to queue when a lane is free (owner, 2026-10-18), not ranked against the list above:**
@@ -1420,6 +1418,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   align `setDepartmentSalePolicyField` repair defaults with the existing readers, with a failing
   authenticated route case first. The combined department editor preserves the off fallback.
 
+- **A855. The till's zones read builds date formatters on every call (2026-10-18).** About 0.75 ms
+  of each `GET /api/zones` goes on `new Intl.DateTimeFormat` inside `serviceMomentAt` and
+  `serviceDayContext` (`packages/venue-service`), through the business-day helpers in
+  `@waitron/reporting` and `@waitron/shared`. A504 took the read's median from 1.436 to 3.004 ms on
+  one bench. Next: keep one formatter per time zone. Left open by A504.
+
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
@@ -2476,11 +2480,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** Not known to be reachable. Found reading, not run, in A579 part 4b's review.
   [Detail](backlog/till.md#a604-a-split-off-table-the-tills-read-leaves-out-could-make-reset-table-refuse-as-out-of-date)
 
-- **A600. The floor-wide reset and its catch-up do not look at what stands in a saved place
-  (2026-10-13).** Reset table refuses `table.place_taken`; Reset to saved plan has no such check.
-  Found reading, not run, by the A579 design.
-  [Detail](backlog/till.md#a600-the-floor-wide-reset-and-its-catch-up-do-not-look-at-what-stands-in-a-saved-place)
-
 - **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
   (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
   [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
@@ -2539,13 +2538,27 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   those two deletes taken out, `floor-delete.test.ts` still passed 7 of 7 (A503 part 1, Task 2b).
   Next: delete them, or add a case that reaches them.
 
-- **A504. Floor plan sets, one per service period (owner, 2026-10-11; design revised to the
-  owner's answers of 2026-10-17).** A Floor plans page of named sets per department; a period
-  picks a set; the till offers a period's layout with an Update layout banner and marks occupied
-  tables "Needs moving". No publication dates. A504 adds a Floor plan column to the Periods window
-  and a Floor plan field to the period dialog (`periods-list.ts`, `period-dialog.ts`). Next: the
-  plan.
-  [Detail](backlog/till.md#a504-floor-plan-sets-one-per-service-period)
+- **A856. A table that needs moving looks like one that needs clearing on the till's map
+  (2026-10-18).** It takes the `clearing` fill; its words are on the list card, the Mark moved
+  question and its accessible name. A marker of its own needs a new token pair or badge in
+  `@waitron/ui`, an owner design decision. Left open by A504.
+
+- **A857. A booking can take a table the evening's layout puts away (2026-10-18).** Bookings refuse
+  only a joined table's parts, judged on the booking date's recorded layout (`requireActiveTable`,
+  `packages/bookings/src/bookings.ts`); nothing compares the table with the layout due at the
+  booking's time. Spec §11: the editor could warn, or the booking screen refuse. Left open by A504.
+
+- **A858. No history of a zone's past layouts (2026-10-18).** A layout holds one place per table
+  (`floor_plan_placements_table_key`), so a save overwrites the place before it. Spec §11 names
+  it as a gap. Left open by A504.
+
+- **A859. Floor plans and the till's layout banner: looks left to the owner (2026-10-18).** A504's
+  LOOK passes kept these as built, as judgement calls: the solid "Default" badge (the mock-up's is
+  a pale pill); no explanation line in the Add set dialog; the Delete dialog's "Used by Dinner."
+  reads oddly when a set and a period share a name; the till's banner is a plain line where the
+  mock-up draws a tinted box (`wt-banner` would be close); the 390 px floor menu's heading is in
+  sentence case, not small capitals. Mock-ups: [a504-floor-plans](backlog/mockups/a504-floor-plans/).
+  Left open by A504.
 
 - **A508. A table's QR code: order, call a waiter, ask for the bill or pay (owner, 2026-10-11).**
   When a tab is opened for seated guests, a QR code is printed for them; on their own phone it

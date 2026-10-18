@@ -370,17 +370,6 @@ till send too few and be refused `joined_table.out_of_date` every time. Join aga
 A579 part 4b's review found it by reading; whether a split-off table can be out of service was not
 checked. Next: find whether that state can be reached, and if so make the two lists agree.
 
-## A600. The floor-wide reset and its catch-up do not look at what stands in a saved place
-
-**A600 (2026-10-13).** Reset table (A579 part 4a) refuses to put a joined table back over another
-table standing in its saved place (`table.place_taken`). Reset to saved plan and the catch-up that
-applies it decide each table from its own state only (`planReset`,
-`apps/server/src/floor-reset-plan.ts`; `catchUpPass`, `apps/server/src/floor-today-store.ts`). From
-reading them, not running them, the A579 design believes a table that waited (guests, or held by a
-module) can be put back over a free table moved into its place, and that the reset can put a table
-back over one that waits there. Next: reproduce both in a test, then decide what the reset does with
-a table in the way.
-
 ## A598. A table held by guests when its joined table went live is neither joined nor split off
 
 **A598 (2026-10-13).** Split tables… on a joined table leaves a table that a party held when the
@@ -508,27 +497,6 @@ not where staff moved it" (`apps/server/src/floor-today-reset-table.test.ts`) ex
 
 Take off for today on a joined table with tables split off, the third point, is allowed by the
 owner's A579 design and left as it is.
-
-## A504. Floor plan sets, one per service period
-
-**A504 (owner, 2026-10-11; design revised to the owner's answers of 2026-10-17).** Design:
-[2026-10-17-a504-floor-plans-design.md](../superpowers/specs/2026-10-17-a504-floor-plans-design.md);
-pictures in [mockups/a504-floor-plans/](mockups/a504-floor-plans/).
-
-- **Floor plans get a page of their own (owner, 2026-10-16).** What is edited is a named set of
-  floor plans, one layout per zone, per department, and a period picks the set it uses; an empty
-  choice means the department's default set. The departments table's per-zone floor-plan link
-  (`packages/venue-service/src/dashboard/departments-list.ts:236-240`) goes when that page lands. A504
-  adds the Floor plan column to the Periods window and the field to the period dialog.
-- **A change of layout is offered, never applied by itself (owner, 2026-10-17).** When a period
-  ends, or a dashboard change makes another layout due, the till shows a banner with Update layout;
-  tables with guests show "Needs moving" once free, and move on the map when marked moved.
-- **On a phone, List goes into the floor's ⋮ menu (owner, 2026-10-17).**
-- **No publication dates for layouts** (owner, 2026-10-17, dropping the 2026-10-11 wish). A change
-  that comes back every year is done with seasons.
-
-Next: the plan. Build after A719 (landed), and before or after the A760 migration squash, never
-across it.
 
 ## A508. A table's QR code: order, call a waiter, ask for the bill or pay
 
