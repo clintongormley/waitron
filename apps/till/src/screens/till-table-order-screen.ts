@@ -2664,12 +2664,113 @@ export class TillTableOrderScreen extends LitElement {
     if (
       slice === undefined ||
       slice.kind !== (undo ? "served" : "fired") ||
-      (undo && slice.row.billStatus !== "open")
+      (undo && !this.#sentBillOpen(slice.row))
     )
       return;
     this.sentLinePending = null;
     this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
     this.#requestServe(slice.row, undo);
+  }
+
+  #sentBillOpen(row: CurrentOrderRow): boolean {
+    const bill = this.bills.find((bill) => bill.workingOrderId === row.workingOrderId);
+    return row.billStatus === "open" && (bill === undefined || bill.status === "open");
+  }
+
+  #sentOrderLine(slice: SentSlice): TabLine | undefined {
+    if (
+      slice.kind === "cancelled_charged" ||
+      !this.#sentBillOpen(slice.row) ||
+      this.#draftStore?.editsLocked ||
+      this.#draftStore?.sending
+    )
+      return;
+    return this.lines.find(
+      (line) =>
+        line.id === slice.row.lineId &&
+        line.lineNo === slice.row.lineNo &&
+        line.parentLineNo == null,
+    );
+  }
+
+  #canRecallSent(slice: SentSlice): boolean {
+    const line = this.#sentOrderLine(slice);
+    return (
+      line !== undefined &&
+      this.#canRecall(line) &&
+      (slice.row.kitchen === null || slice.row.kitchen.state === "queued")
+    );
+  }
+
+  #canMoveSent(slice: SentSlice): boolean {
+    const line = this.#sentOrderLine(slice);
+    return (
+      line !== undefined &&
+      line.movable &&
+      !isStarted(line) &&
+      slice.row.kitchen?.movable === true &&
+      slice.row.kitchen.state === "queued"
+    );
+  }
+
+  #canFireSent(slice: SentSlice): boolean {
+    if (slice.kind !== "held") return false;
+    const group = this.currentOrders?.groups.find((group) =>
+      group.rows.some((row) => row.lineId === slice.row.lineId),
+    );
+    return (
+      group !== undefined && this.groups.find((known) => known.id === group.id)?.state !== "fired"
+    );
+  }
+
+  #actOnSentLine(
+    pending: typeof this.sentLinePending,
+    action: "fire" | "recall" | "station",
+  ): void {
+    if (
+      pending === null ||
+      pending !== this.sentLinePending ||
+      !this.isConnected ||
+      this.busy ||
+      this.groupCommandBusy
+    )
+      return;
+    const slice = this.#sentLine();
+    if (
+      slice === undefined ||
+      (action === "fire" && !this.#canFireSent(slice)) ||
+      (action === "recall" && !this.#canRecallSent(slice)) ||
+      (action === "station" && !this.#canMoveSent(slice))
+    )
+      return;
+    this.sentLinePending = null;
+    this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
+    if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
+    else if (action === "recall") this.#recallLine(slice.row.lineNo);
+    else
+      this.#dispatch("move-station", {
+        workingOrderId: slice.row.workingOrderId,
+        lineId: slice.row.lineId,
+        name: slice.row.name,
+        stationId: slice.row.kitchen!.stationId,
+      });
+  }
+
+  #sentLineMore(slice: SentSlice | undefined): TemplateResult | typeof nothing {
+    if (slice === undefined) return nothing;
+    const fire = this.#canFireSent(slice);
+    const recall = this.#canRecallSent(slice);
+    const station = this.#canMoveSent(slice);
+    const unserve = slice.kind === "served" && this.#sentBillOpen(slice.row);
+    if (!fire && !recall && !station && !unserve) return nothing;
+    const pending = this.sentLinePending;
+    const disabled = this.busy || this.groupCommandBusy;
+    return html`<wt-row-actions label=${t("shell.more")}>
+      ${fire ? html`<wt-button variant=${disabled ? "secondary" : "primary"} data-sent-line-fire ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "fire")}>${t("table.destination_fire_now")}</wt-button>` : nothing}
+      ${recall ? html`<wt-button variant="secondary" data-sent-line-recall ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "recall")}>${t("table.recall_line")}</wt-button>` : nothing}
+      ${station ? html`<wt-button variant="secondary" data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
+      ${unserve ? html`<wt-button variant="secondary" data-sent-line-unserve ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button>` : nothing}
+    </wt-row-actions>`;
   }
 
   #sentLineDialog(): TemplateResult {
@@ -2734,7 +2835,7 @@ export class TillTableOrderScreen extends LitElement {
           >${t("table.submitted_close")}</wt-button
         >
         ${slice?.kind === "fired" ? html`<wt-button data-sent-line-serve variant=${disabled ? "secondary" : "primary"} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, false)}>${t("table.serve")}</wt-button>` : nothing}
-        ${slice?.kind === "served" && row?.billStatus === "open" ? html`<wt-row-actions label=${t("shell.more")}><wt-button variant="secondary" data-sent-line-unserve ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button></wt-row-actions>` : nothing}
+        ${this.#sentLineMore(slice)}
       </div>
     </wt-dialog>`;
   }
@@ -4391,6 +4492,7 @@ export class TillTableOrderScreen extends LitElement {
   /** More than one whole unit asks how many; anything else, a weighed dish included, goes whole. */
   #requestServe(row: CurrentOrderRow, undo: boolean): void {
     if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
+    if (undo && !this.#sentBillOpen(row)) return;
     this.#serveAuthority = {
       api: this.api,
       partyId: this.party?.id ?? null,
@@ -4442,6 +4544,7 @@ export class TillTableOrderScreen extends LitElement {
           );
     if (
       current === undefined ||
+      (undo && !this.#sentBillOpen(current)) ||
       (!undo && !current.released) ||
       compareDecimal(quantity, decimal("0")) <= 0 ||
       compareDecimal(quantity, this.#mostToServe(current, undo)) > 0

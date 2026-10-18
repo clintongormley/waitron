@@ -2261,20 +2261,24 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   party changes. The information window shows recorded dish and extra prices, plus the note,
   without editing them. Its partial-serving choice excludes charged cancellations. A quantity
   confirmation sends nothing after a server or visit change, an unread service snapshot, or
-  another device serving the remainder. A served slice offers Not served through More when its
-  Current orders snapshot reports an open bill. Sent keeps its folds during passive reads, opens
+  another device serving the remainder. A served slice offers Undo served through More only while
+  both its service snapshot and the shown bill report open; a newer paid bill also blocks a retained
+  quantity confirmation. The line's native More menu now fires one held dish, including paid food
+  and venues using kitchen/pass fire control. A conflicting fired-group read blocks the retained
+  Fire action. Recall and Move to station use the current line, bill and editor checks; a retained
+  menu action sends nothing after its context or eligibility changes. Sent keeps its folds during passive reads, opens
   for attention on a new visit, and stops its age timer while folded or unread. Focused browser checks
   include native app serving and Undo, both languages and themes, and phone/desktop widths. The app offers five-second Undo only after a serve command succeeds,
   retaining that command's exact line ids and quantities. Another accepted serve replaces the receipt;
   leaving the bill, changing server or signing out removes its authority. A failed refresh keeps
   the accepted receipt, while a refused serve shows no success notice.
   The old Current orders, To serve and Served drawer lists still need their remaining checks moved
-  to Sent before removal. The rest of the sent-line More actions, combined Comp window, held-heading
+  to Sent before removal. The sent-line Void action, combined Comp window, held-heading
   reorder and held-dish Finish resolution also remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
   target recovery. Single-dish Fire now's command/API/client work is qualified on the feature
-  branch at `e65f6005e`; its visible sent-line menu follows in T16.
+  branch at `e65f6005e`; its visible sent-line menu has focused native-browser checks.
   The approved [ownership design](superpowers/specs/2026-10-17-a773-one-editor-design.md) is
   **one editor per bill**: Ana can edit Bill 1 while Luis edits Bill 2 at one table. Takeover,
   read-only/local unsaved recovery, first accepted nonempty save and release are per bill; Pay
