@@ -4991,8 +4991,8 @@ is `service`, `receipt` or `transfers`; Details has none); the list's “Set up 
 description” and the image library's receipt-logo link open Receipts, and an address naming an unknown view,
 or a tab not offered, opens Details and replaces the address without adding a history entry. A
 refusal naming a field, or an invalid Save, of the shared draft shows the first of Details, Service
-and Transfers holding a marked field; a receipt refusal naming a field that lands while another tab
-shows brings back Receipts (`department-receipt-invalid`). A tab shown this way replaces the
+and Transfers holding a marked field; a mark appearing in the receipt editor, such as a refusal naming a
+field, while another tab shows brings back Receipts (`department-receipt-invalid`). A tab shown this way replaces the
 address, the field takes focus, and every tab holding a marked field is marked. A strip too wide for the dialog scrolls sideways inside it. Edit zone
 holds its name and four raw service overrides. Each override offers “Same as department (…)”, and saving that choice writes null. How
 orders start chooses Table service or Counter service. Counter service has a paid-when choice and

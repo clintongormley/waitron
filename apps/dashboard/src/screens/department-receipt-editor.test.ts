@@ -322,7 +322,7 @@ it("opens a host-selected subject once", async () => {
   expect(api.getDepartmentReceipt).toHaveBeenCalledTimes(2);
 });
 
-it("refreshes the selected subject name without replacing its dirty receipt or rereading", async () => {
+it("a renamed subject for the open department keeps its dirty receipt and does not reread", async () => {
   const { el, api } = await mountReceiptEditor();
   await editReceipt(el, "email", "draft@example.com");
   el.subject = { id: "bar", name: "Renamed counter" };

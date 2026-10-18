@@ -419,7 +419,7 @@ it("a receipt refusal while Receipts shows marks the tab and changes no tab", as
   expect(form.tab).toBe("receipt");
   expect(changes).toEqual([]);
 });
-it("a receipt refusal from another department's editor leaves the tab alone", async () => {
+it("a receipt refusal event from another department's editor does not move the tab or take focus", async () => {
   const { el, form } = await mount();
   const editor = await supplyReceiptEditor(el, form);
   const changes = tabChanges(el);
