@@ -1852,3 +1852,51 @@ exclusion, assertion or fixture value was weakened.
 
 Local receipts: `~/waitron-campaign-e/receipts/a679-missing-database-ui-20261018/`, including
 `verification.json`, `controls-final.json`, raw logs, test-preservation audit and the 32 captures.
+
+
+## Interrupted workspace selection interface, 2026-10-18
+
+You can review this checkpoint against starting commit
+`99056a4fb2c0fac15ccbc0852d36b888e3245cfd`. It connects the wizard to the existing
+`/resolution/selection` and `/resolution/resume-selection` routes. It sends the original password
+only after a fresh inspection matches the displayed workspace and accepts a restart only for that
+workspace and selection generation. The password is cleared before the request; a refusal permits
+another entry. Reconnect reads the current selection. A newly selected workspace disposes the old
+setup session so its abandonment, retirement and Finish controls cannot remain on the new page.
+
+Existing test checks changed: **none**. The new behavioral and accessibility suites are
+`apps/setup/src/setup-app-workspace-selection.test.ts` and
+`apps/setup/src/setup-app-workspace-selection.a11y.test.ts`. The new fixture is
+`apps/setup/test/workspace-selection-browser.ts`. Existing test paths retain their bytes. No
+fiscal writer, fiscal assertion, money or permission check, root guard, SQL or migration changes.
+Keep every earlier changed-check inventory for the eventual whole-branch PR.
+
+The first browser run failed because the repair page had no password control. Seven malformed
+snapshot cases then failed before validation was added. A later reconnect case exposed an old
+session's Abandon control beside the new selection; a late initial read also reopened a departed
+page. Both failures preceded their respective fixes. The first late-read probe selected a missing
+native section and was corrected to the actual connection screen. Earlier versions of that
+probe were blind in the installed copy: a frame alone did not await the response body. The final
+probe awaits the complete API read before the frame. Those earlier receipts remain. Final controls
+remove guards from the disposable checkout and check the retained behavioral assertions.
+
+Complete package tests passed on the intermediate implementation but coverage fell below the
+statement bar, first at 97.94% and later at 97.98% after the session fix. The added cases exercise
+connection entry and departure, ordinary repair without a selection, selection-read failure and
+reconnect to an unclaimed workspace. No threshold or exclusion changes. The lane's
+`receipts/a679-workspace-selection-ui-20261018` retains final results and the earlier failures.
+Mounted synthetic-HTTP browser checks and existing certificate-verified HTTPS route suites are
+separate evidence; this checkpoint does not qualify their combined installed journey.
+
+The visual check exposed one more selection-specific refusal defect: the shared owner-required
+message told you to resume in the owner's tab after a rejected original password. The first new refusal
+probe read the shell rather than the field primitive's shadow root and did not qualify the wording.
+The corrected checks read the rendered form message; the final omission control changes it back
+and must fail. The selection path uses the repair plan's approved “Password not accepted” /
+“Contraseña no aceptada” wording. Other ownership messages and server refusals are unchanged.
+
+A follow-up late-inspection control caught another probe issue after the fixture began observing
+API calls: the test awaited the first inspection instead of the pending one. It now awaits the
+latest call before the frame; the inspection and submission omissions each fail that test.
+The final local receipts aggregate nine distinct omissions. Each failed an intended assertion;
+the restored installed suites and source package coverage are recorded separately.

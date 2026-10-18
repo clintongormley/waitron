@@ -5,6 +5,7 @@ export const initialOwnerStrings = {
     resume: "Continue with your setup password",
     password: "Administrator password",
     required: "Enter your password.",
+    passwordNotAccepted: "Password not accepted",
     resumeHelp: "Enter the administrator password you chose during setup.",
     interrupted: "First setup was interrupted",
     missingDatabase:
@@ -39,6 +40,7 @@ export const initialOwnerStrings = {
     resume: "Continuar con tu contraseña de configuración",
     password: "Contraseña de administrador",
     required: "Introduce tu contraseña.",
+    passwordNotAccepted: "Contraseña no aceptada",
     resumeHelp: "Introduce la contraseña de administrador que elegiste al configurar.",
     interrupted: "La configuración inicial se interrumpió",
     missingDatabase:

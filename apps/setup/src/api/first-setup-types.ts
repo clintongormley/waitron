@@ -44,7 +44,15 @@ export interface FirstSetupOwnership {
 export interface FirstSetupStatus {
   claimed: boolean;
   conflict?: boolean;
+  resolution?: boolean;
   state?: FirstSetupState;
+}
+export interface FirstSetupWorkspaceSelection {
+  inspectionId: string;
+  revision: number;
+  ownerGeneration: number;
+  workspaceId: string;
+  selectionGeneration: number;
 }
 export interface FirstSetupInspection {
   version: 2;

@@ -342,7 +342,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   on its repair page after password recovery. Confirmed retirement checks fresh evidence and sends
   recovered ownership; a refused or lost answer requires password recovery again. Mounted browser
   checks and the existing HTTPS retirement suites run separately. Interrupted workspace selection
-  still needs its UI journey.
+  now has password-led wizard controls, fresh binding checks and reconnect handling. Mounted browser
+  checks cover changed evidence, refused or late replies and replacement of an older setup session.
+  The existing HTTPS selection suites run separately; the combined installed journey remains open.
   The exact approved standby wrapper and hour-admission dispatch are implemented. Real-database
   checks refuse the original box's same-hour code and accept the next hour without an advance
   reservation. The branch prints the selected code in first setup and accepts reported codes

@@ -4,6 +4,7 @@ import { FirstSetupSession } from "./first-setup-session.js";
 import type {
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
+  FirstSetupWorkspaceSelection,
 } from "./api/first-setup-types.js";
 import "./screens/initial-setup-screen.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
@@ -712,6 +713,14 @@ export class SetupApp extends LitElement {
       this.developmentMode = status.developmentMode === true;
       const first = await this.api.firstSetupStatus();
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
+      if (first.resolution) {
+        if (!(await this.#inspectFirstSelection())) return;
+        if (!this.isConnected || generation !== this.#connectionGeneration) return;
+        if (this.firstSelection) {
+          this.screen = "first-owner";
+          return;
+        }
+      }
       if (first.claimed || first.conflict) {
         try {
           await this.#openFirstSession();
@@ -753,6 +762,14 @@ export class SetupApp extends LitElement {
       const first = await this.api.firstSetupStatus();
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
       this.connectionAnswered = true;
+      if (first.resolution) {
+        if (!(await this.#inspectFirstSelection())) return;
+        if (!this.isConnected || generation !== this.#connectionGeneration) return;
+        if (this.firstSelection) {
+          this.screen = "first-owner";
+          return;
+        }
+      }
       if (first.claimed || first.conflict) {
         try {
           await this.#openFirstSession();
@@ -999,6 +1016,7 @@ export class SetupApp extends LitElement {
   @state() private firstFinishing = false;
   @state() private firstOfferings: { module: string; version: string }[] = [];
   @state() private firstInspection?: FirstSetupInspection;
+  @state() private firstSelection?: FirstSetupWorkspaceSelection;
   @state() private firstRestartConfirm = false;
   @state() private firstRetireConfirmed = false;
   @state() private firstRestarting = false;
@@ -1007,6 +1025,25 @@ export class SetupApp extends LitElement {
   #firstReplacing = false;
   #firstPasswordOwner = {};
   #firstPasswordScope?: DraftScope<string>;
+
+  async #inspectFirstSelection(): Promise<boolean> {
+    const generation = this.#firstGeneration;
+    const selection = await this.api.inspectFirstSetupWorkspaceSelection();
+    if (!this.isConnected || generation !== this.#firstGeneration) return false;
+    if (selection !== null) {
+      const previous = this.#firstSession;
+      this.#firstSession = undefined;
+      await previous?.dispose();
+      if (!this.isConnected || generation !== this.#firstGeneration) return false;
+      this.firstInspection = undefined;
+      this.firstFinishing = false;
+      this.firstOwnerPassword = "";
+      this.firstPasswordAttempted = false;
+      this.#firstPasswordScope?.commit("");
+    }
+    this.firstSelection = selection ?? undefined;
+    return true;
+  }
 
   async #openFirstSession(): Promise<FirstSetupSession> {
     if (this.#firstSession) return this.#firstSession;
@@ -1121,6 +1158,30 @@ export class SetupApp extends LitElement {
     const generation = ++this.#firstGeneration;
     const current = () => this.isConnected && generation === this.#firstGeneration;
     try {
+      if (this.firstSelection) {
+        const snapshot = this.firstSelection;
+        const fresh = await this.api.inspectFirstSetupWorkspaceSelection();
+        if (!current()) return;
+        if (
+          fresh === null ||
+          fresh.inspectionId !== snapshot.inspectionId ||
+          fresh.revision !== snapshot.revision ||
+          fresh.ownerGeneration !== snapshot.ownerGeneration ||
+          fresh.workspaceId !== snapshot.workspaceId ||
+          fresh.selectionGeneration !== snapshot.selectionGeneration
+        )
+          throw { code: "setup.attempt_conflict" };
+        const result = await this.api.resumeFirstSetupWorkspaceSelection(snapshot, password);
+        if (!current()) return;
+        if (
+          result?.restarting !== true ||
+          result.workspaceId !== snapshot.workspaceId ||
+          result.selectionGeneration !== snapshot.selectionGeneration
+        )
+          throw { code: "setup.attempt_conflict" };
+        this.firstRestarting = true;
+        return;
+      }
       const session = await this.#openFirstSession();
       if (!current()) return;
       if (session.state) {
@@ -1150,7 +1211,11 @@ export class SetupApp extends LitElement {
       if (!current()) return;
       this.#afterFirstOwner();
     } catch (error) {
-      if (current()) this.firstOwnerError = this.#describeFirstError(error);
+      if (current())
+        this.firstOwnerError =
+          this.firstSelection && (error as { code?: string })?.code === "setup.owner_required"
+            ? () => initialOwnerStrings[setupLocale()].passwordNotAccepted
+            : this.#describeFirstError(error);
     } finally {
       if (current()) this.firstOwnerBusy = false;
     }
@@ -1215,6 +1280,13 @@ export class SetupApp extends LitElement {
       this.firstRestartConfirm = false;
       this.firstRetireConfirmed = false;
       this.firstRestarting = false;
+      const status = await this.api.firstSetupStatus();
+      if (!this.isConnected || generation !== this.#firstGeneration) return;
+      if (status.resolution) {
+        if (!(await this.#inspectFirstSelection())) return;
+        if (!this.isConnected || generation !== this.#firstGeneration || this.firstSelection)
+          return;
+      } else this.firstSelection = undefined;
       await this.#openFirstSession();
       const session = this.#firstSession!;
       let inspect = false;
@@ -2041,7 +2113,7 @@ export class SetupApp extends LitElement {
       state?.status === "committed" ||
       state?.status === "publication";
     return html`<section data-test="screen-first-owner">
-      <h1>${inspection ? t.interrupted : t.heading}</h1>
+      <h1>${inspection || this.firstSelection ? t.interrupted : t.heading}</h1>
       ${this.firstRestarting ? html`<p role="status">${t.restarting}</p>` : nothing}
       ${inspection?.password === "uncheckable" ? html`<p>${t.uncheckable}</p>` : nothing}
       ${missing ? html`<p data-test="missing-database">${t.missingDatabase}</p>` : nothing}
@@ -2050,7 +2122,9 @@ export class SetupApp extends LitElement {
         ((!terminal && !authenticatedMissing) || this.#firstSession?.recoveryRequired) &&
         !this.firstOwnerBusy &&
         !this.firstRestarting &&
-        (state !== undefined || inspection?.password === "checkable")
+        (state !== undefined ||
+          inspection?.password === "checkable" ||
+          this.firstSelection !== undefined)
           ? html`<p>${t.resumeHelp}</p>
               <wt-input
                 data-test="resume-password"
@@ -2154,7 +2228,7 @@ export class SetupApp extends LitElement {
           : nothing
       }
       ${
-        !terminal && !inspection && !state && !this.firstOwnerBusy
+        !terminal && !inspection && !state && !this.firstSelection && !this.firstOwnerBusy
           ? html`<wt-form-actions .error=${this.firstOwnerError?.() ?? t.error}></wt-form-actions>`
           : nothing
       }

@@ -9,6 +9,7 @@ import type {
   FirstSetupProvisionBody,
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
+  FirstSetupWorkspaceSelection,
 } from "./first-setup-types.js";
 
 // Local copies of the server's JSON shapes: a runtime import of `@waitron/provisioning` would pull
@@ -502,6 +503,38 @@ export class SetupApi {
 
   inspectFirstSetupResolution(): Promise<FirstSetupInspection> {
     return this.#request("/setup-api/first-setup/resolution", "GET");
+  }
+
+  async inspectFirstSetupWorkspaceSelection(): Promise<FirstSetupWorkspaceSelection | null> {
+    const value = await this.#request<FirstSetupWorkspaceSelection | null>(
+      "/setup-api/first-setup/resolution/selection",
+      "GET",
+    );
+    if (value === null) return null;
+    if (
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      Object.keys(value).length !== 5 ||
+      typeof value.inspectionId !== "string" ||
+      !/^[a-f0-9]{64}$/.test(value.inspectionId) ||
+      typeof value.workspaceId !== "string" ||
+      !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value.workspaceId) ||
+      ![value.revision, value.ownerGeneration, value.selectionGeneration].every(
+        (number) => Number.isSafeInteger(number) && number > 0,
+      )
+    )
+      throw { code: "setup.attempt_conflict" };
+    return value;
+  }
+
+  resumeFirstSetupWorkspaceSelection(
+    snapshot: FirstSetupWorkspaceSelection,
+    password: string,
+  ): Promise<{ workspaceId: string; selectionGeneration: number; restarting: true }> {
+    return this.#request("/setup-api/first-setup/resolution/resume-selection", "POST", {
+      ...snapshot,
+      password,
+    });
   }
 
   recoverFirstSetupOwner(
