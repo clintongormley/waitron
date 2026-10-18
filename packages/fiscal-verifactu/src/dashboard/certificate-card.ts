@@ -3,37 +3,13 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-notice.js";
-import {
-  codeMessage,
-  codeOf,
-  currentLocale,
-  dateTimeFormat,
-  subscribeLocale,
-} from "@waitron/dashboard-kit";
-import type { AeatCertificateClient, CertificateCardView } from "./client.js";
+import { codeMessage, codeOf, subscribeLocale } from "@waitron/dashboard-kit";
+import type { AeatCertificateClient, CertificateCardView, CertificateKind } from "./client.js";
 import { t, type AeatCertificateKey } from "./strings.js";
+import { day, time } from "./dates.js";
+import "./certificate-dialog.js";
 
 type Installed = NonNullable<CertificateCardView["installed"]>;
-
-function parts(iso: string, timeZone: string, options: Intl.DateTimeFormatOptions) {
-  const out: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
-  for (const part of dateTimeFormat(currentLocale(), { timeZone, ...options }).formatToParts(
-    new Date(iso),
-  )) {
-    out[part.type] = part.value;
-  }
-  return out;
-}
-
-function day(iso: string, timeZone: string): string {
-  const p = parts(iso, timeZone, { day: "numeric", month: "short", year: "numeric" });
-  return `${p.day} ${p.month} ${p.year}`;
-}
-
-function time(iso: string, timeZone: string): string {
-  const p = parts(iso, timeZone, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-  return `${p.hour}:${p.minute}`;
-}
 
 function moment(iso: string, timeZone: string): string {
   return `${day(iso, timeZone)}, ${time(iso, timeZone)}`;
@@ -111,6 +87,9 @@ export class AeatCertificateCard extends LitElement {
       .status[data-stage="expired"] {
         border-color: var(--wt-color-danger);
       }
+      .status[data-stage="installed"] {
+        border-color: var(--wt-color-success);
+      }
       .dot {
         flex: none;
         width: var(--wt-space-3);
@@ -121,6 +100,9 @@ export class AeatCertificateCard extends LitElement {
       .status[data-stage="urgent"] .dot,
       .status[data-stage="expired"] .dot {
         background: var(--wt-color-danger);
+      }
+      .status[data-stage="installed"] .dot {
+        background: var(--wt-color-success);
       }
       dl {
         display: grid;
@@ -166,6 +148,9 @@ export class AeatCertificateCard extends LitElement {
   @property({ attribute: false }) readOnly = false;
   @state() private card?: CertificateCardView;
   @state() private loadError = "";
+  @state() private dialog?: { revision: string | null; kind: CertificateKind };
+  /** When AEAT answered the check of a certificate this card just installed. */
+  @state() private checkedAt?: string;
   #generation = 0;
   #unsubscribeLocale?: () => void;
 
@@ -200,6 +185,10 @@ export class AeatCertificateCard extends LitElement {
     return html`<wt-button
       data-test="certificate-action"
       variant=${urgent ? "primary" : "secondary"}
+      @click=${() => {
+        this.checkedAt = undefined;
+        this.dialog = { revision: card.revision, kind: card.installed?.kind ?? "sello" };
+      }}
       >${t(label)}</wt-button
     >`;
   }
@@ -241,6 +230,15 @@ export class AeatCertificateCard extends LitElement {
         ? remaining(c, zone)
         : `${day(c.validUntil, zone)} · ${remaining(c, zone)}`;
     return html`${
+        this.checkedAt === undefined
+          ? nothing
+          : html`<p class="status" data-test="certificate-installed" data-stage="installed">
+              <span class="dot" aria-hidden="true"></span
+              ><span
+                >${t("aeat_certificate.installed_line", { time: time(this.checkedAt, zone) })}</span
+              >
+            </p>`
+      }${
         c.stage === null
           ? nothing
           : html`<wt-notice duration="0">
@@ -287,6 +285,23 @@ export class AeatCertificateCard extends LitElement {
           : state === "loaded"
             ? this.#body(card!)
             : nothing
+      }
+      ${
+        this.dialog === undefined
+          ? nothing
+          : html`<dashboard-aeat-certificate-dialog
+              .client=${this.client}
+              .revision=${this.dialog.revision}
+              .kind=${this.dialog.kind}
+              @aeat-certificate-installed=${(event: CustomEvent<{ checkedAt: string }>) => {
+                event.stopPropagation();
+                this.checkedAt = event.detail.checkedAt;
+                void this.#load();
+              }}
+              @wt-close=${() => {
+                this.dialog = undefined;
+              }}
+            ></dashboard-aeat-certificate-dialog>`
       }
     </section>`;
   }

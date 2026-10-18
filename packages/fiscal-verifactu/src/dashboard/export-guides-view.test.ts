@@ -47,6 +47,9 @@ describe("exportGuidesView", () => {
       "Export the signing certificate on the computer where it is installed.",
     );
     expect(disclosure.textContent).toContain(
+      "Choose the instructions for that computer or browser below.",
+    );
+    expect(disclosure.textContent).toContain(
       "If your certificate is on another computer, export it there and transfer the file to this device.",
     );
     expect(guides.map((g) => [g.id, g.title])).toEqual([
