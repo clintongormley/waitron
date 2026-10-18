@@ -26,6 +26,7 @@ import {
   floorTodayTables,
   floorTodayZones,
   floorZones,
+  resetRowMoves,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -810,24 +811,6 @@ const dueLink = alias(floorResetTableParts, "due_link");
 const dueSibling = alias(floorResetTableParts, "due_sibling");
 
 /**
- * movesTable's rule in SQL, for the reset row `row`: true when its table has a today's row,
- * drawn and not taken off, and is in a merge, split off, or not exactly at the row's placement.
- */
-function movesInSql(row: typeof dueRow | typeof dueMember): SQL {
-  const t = floorTodayTables;
-  return sql`exists (
-    select 1 from ${t}
-    where ${t.tableId} = ${row.tableId} and ${t.takenOff} = 0 and ${t.x} is not null and (
-      ${t.x} is not ${row.x} or ${t.y} is not ${row.y} or ${t.width} is not ${row.width}
-      or ${t.height} is not ${row.height} or ${t.shape} is not ${row.shape}
-      or ${t.rotation} is not ${row.rotation}
-      or exists (select 1 from ${floorTodayJoinTables} where ${floorTodayJoinTables.tableId} = ${row.tableId})
-      or exists (select 1 from ${floorTodaySplitParts} where ${floorTodaySplitParts.partTableId} = ${row.tableId})
-    )
-  )`;
-}
-
-/**
  * Whether the zone holds a pending reset row a catch-up could apply: one not marked ready to
  * move, or a marked one whose table, and every pending, unplaced table of the joined group of a
  * pending joined row holding it (plan decision 8), no longer moves. Weaker than "will apply": a row can still wait for its guests or its name.
@@ -845,7 +828,7 @@ export function catchUpDue(zoneId: SQLWrapper): SQL {
     select 1 from ${floorResetTables} ${as("due_row")}
     where ${r.zoneId} = ${zoneId} and ${r.pending} = 1 and (
       ${r.readyToMove} = 0 or (
-        not ${movesInSql(r)}
+        not ${resetRowMoves(r)}
         and not exists (
           select 1 from ${floorResetTableParts} ${as("due_link")}
           inner join ${floorResetTables} ${as("due_joined")}
@@ -855,7 +838,7 @@ export function catchUpDue(zoneId: SQLWrapper): SQL {
           inner join ${floorResetTables} ${as("due_member")}
             on ${m.id} in (${sibling.joinedResetTableId}, ${sibling.partResetTableId})
           where ${r.id} in (${link.joinedResetTableId}, ${link.partResetTableId})
-            and ${m.pending} = 1 and ${m.placed} = 0 and ${movesInSql(m)}
+            and ${m.pending} = 1 and ${m.placed} = 0 and ${resetRowMoves(m)}
         )
       )
     )

@@ -1,4 +1,11 @@
-import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
+import { sql, type AnyColumn, type SQL, type SQLWrapper } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
+import {
+  floorResetTables,
+  floorTodayJoinTables,
+  floorTodaySplitParts,
+  floorTodayTables,
+} from "./schema/floor-plans.js";
 
 /**
  * A table is a still-joined part while today's copy names its reset row as a part, the joined
@@ -72,25 +79,37 @@ export function joinedOutOfService(tableId: SQLWrapper): SQL {
   return sql`(${stillJoinedPart(tableId)} or ${joinedTableApart(tableId)})`;
 }
 
+type ResetRowColumns = Record<
+  "tableId" | "x" | "y" | "width" | "height" | "shape" | "rotation",
+  AnyColumn
+>;
+
 /**
- * The table's reset row waits for Mark moved: the row is marked ready to move and the table, drawn
- * on today's map, is in a merge, split off, or not exactly at the row's placement — the tables
- * read's "Needs moving" (`movesTable`, apps/server/src/floor-reset-plan.ts).
+ * `movesTable`'s rule (apps/server/src/floor-reset-plan.ts) in SQL, for reset row `row`: its table
+ * has a today's row, drawn and not taken off, and is in a merge, split off, or not exactly at the
+ * row's placement.
  */
+export function resetRowMoves(row: ResetRowColumns): SQL {
+  const t = floorTodayTables;
+  return sql`exists (
+    select 1 from ${t}
+    where ${t.tableId} = ${row.tableId} and ${t.takenOff} = 0 and ${t.x} is not null and (
+      ${t.x} is not ${row.x} or ${t.y} is not ${row.y} or ${t.width} is not ${row.width}
+      or ${t.height} is not ${row.height} or ${t.shape} is not ${row.shape}
+      or ${t.rotation} is not ${row.rotation}
+      or exists (select 1 from ${floorTodayJoinTables} where ${floorTodayJoinTables.tableId} = ${row.tableId})
+      or exists (select 1 from ${floorTodaySplitParts} where ${floorTodaySplitParts.partTableId} = ${row.tableId})
+    )
+  )`;
+}
+
+const markedRow = alias(floorResetTables, "needs_moving_row");
+
+/** The table's reset row waits for Mark moved and its own change moves it: the till's "Needs moving". */
 export function needsMoving(tableId: SQLWrapper): SQL {
   return sql`${tableId} in (
-    select reset_row.table_id
-    from floor_reset_tables reset_row
-    inner join floor_today_tables today_row on today_row.table_id = reset_row.table_id
-    where reset_row.ready_to_move = 1
-      and today_row.taken_off = 0 and today_row.x is not null
-      and (
-        today_row.x is not reset_row.x or today_row.y is not reset_row.y
-        or today_row.width is not reset_row.width or today_row.height is not reset_row.height
-        or today_row.shape is not reset_row.shape or today_row.rotation is not reset_row.rotation
-        or exists (select 1 from floor_today_join_tables merged where merged.table_id = reset_row.table_id)
-        or exists (select 1 from floor_today_split_parts split_off where split_off.part_table_id = reset_row.table_id)
-      )
+    select ${markedRow.tableId} from ${floorResetTables} ${sql.identifier("needs_moving_row")}
+    where ${markedRow.readyToMove} = 1 and ${resetRowMoves(markedRow)}
   )`;
 }
 

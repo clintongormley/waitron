@@ -34,6 +34,7 @@ export {
   joinedOutOfService,
   joinedTableApart,
   needsMoving,
+  resetRowMoves,
   savedPart,
   stillJoinedPart,
 } from "./joined-parts.js";

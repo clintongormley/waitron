@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   joinedOutOfService,
   joinedTableApart,
+  needsMoving,
   savedPart,
   stillJoinedPart,
 } from "./joined-parts.js";
@@ -566,5 +567,83 @@ describe("a layout that stands a joined table's tables", () => {
       .set({ setId: ALL_OFF })
       .where(eq(floorTodayZones.zoneId, INSIDE));
     expect(await read(savedOn(TODAY))).toEqual({ [T4]: 1, [T5]: 1, [T45]: 0 });
+  });
+});
+
+describe("needs moving", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  const place = { x: 10, y: 10, width: 8, height: 8, shape: "rect" as const, rotation: 0 };
+
+  beforeEach(async () => {
+    await seedJoinedToday(suite.db);
+    await suite.db
+      .update(floorResetTables)
+      .set({ ...place, pending: true, readyToMove: true })
+      .where(eq(floorResetTables.id, PLAIN_ROW));
+    await suite.db.insert(floorTodayTables).values({ tableId: PLAIN, seats: 4, ...place });
+  });
+
+  async function plain(): Promise<number | null> {
+    const rows = await suite.db.all<{ moving: number | null }>(
+      sql`select ${needsMoving(sql`dt.id`)} as moving from dining_tables dt where dt.id = ${PLAIN}`,
+    );
+    return rows[0]!.moving;
+  }
+
+  const target = (values: Partial<typeof floorResetTables.$inferInsert>) =>
+    suite.db.update(floorResetTables).set(values).where(eq(floorResetTables.id, PLAIN_ROW));
+  const today = (values: Partial<typeof floorTodayTables.$inferInsert>) =>
+    suite.db.update(floorTodayTables).set(values).where(eq(floorTodayTables.tableId, PLAIN));
+
+  it("is false for a marked table standing exactly at its row's place", async () => {
+    expect(await plain()).toBe(0);
+  });
+
+  it.each([
+    ["x", { x: 11 }],
+    ["y", { y: 11 }],
+    ["width", { width: 9 }],
+    ["height", { height: 9 }],
+    ["shape", { shape: "round" as const }],
+    ["rotation", { rotation: 15 }],
+    ["into store", { x: null, y: null, width: null, height: null, shape: null, rotation: null }],
+  ])("is true when the row's %s differs", async (_, values) => {
+    await target(values);
+    expect(await plain()).toBe(1);
+  });
+
+  it("is true in a merge and split off", async () => {
+    const [join] = await suite.db
+      .insert(floorTodayJoins)
+      .values({ zoneId: ZONE, seats: 8 })
+      .returning({ id: floorTodayJoins.id });
+    await suite.db
+      .insert(floorTodayJoinTables)
+      .values({ joinId: join!.id, tableId: PLAIN, beforeX: 0, beforeY: 0, beforeRotation: 0 });
+    expect(await plain()).toBe(1);
+    await suite.db.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.tableId, PLAIN));
+    expect(await plain()).toBe(0);
+    await suite.db.insert(floorTodaySplitParts).values({ joinedTableId: LONG, partTableId: PLAIN });
+    expect(await plain()).toBe(1);
+  });
+
+  it("is false when the row is not marked, the table is taken off, or not drawn", async () => {
+    await target({ x: 11 });
+    expect(await plain()).toBe(1);
+    await target({ readyToMove: false });
+    expect(await plain()).toBe(0);
+    await target({ readyToMove: true });
+    await today({ takenOff: true });
+    expect(await plain()).toBe(0);
+    await today({
+      takenOff: false,
+      x: null,
+      y: null,
+      width: null,
+      height: null,
+      shape: null,
+      rotation: null,
+    });
+    expect(await plain()).toBe(0);
   });
 });

@@ -32,7 +32,7 @@ import type {
   SaleLineClassification,
   TableSignal,
 } from "@waitron/shared";
-import { movesTable, type Placement } from "./floor-reset-plan.js";
+import type { Placement } from "./floor-reset-plan.js";
 import { placementOf } from "./floor-today-store.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
@@ -92,7 +92,6 @@ import {
   billPayments,
   devices,
   diningTables,
-  floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodayTables,
@@ -7852,17 +7851,10 @@ async function readTodayTables(
       zoneRevision: floorTodayZones.revision,
       name: floorTodayTables.name,
       joinName: floorTodayJoins.name,
-      readyToMove: floorResetTables.readyToMove,
-      targetX: floorResetTables.x,
-      targetY: floorResetTables.y,
-      targetWidth: floorResetTables.width,
-      targetHeight: floorResetTables.height,
-      targetShape: floorResetTables.shape,
-      targetRotation: floorResetTables.rotation,
+      needsMoving: needsMoving(floorTodayTables.tableId).mapWith(Boolean),
     })
     .from(floorTodayTables)
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
-    .leftJoin(floorResetTables, eq(floorResetTables.tableId, floorTodayTables.tableId))
     .leftJoin(floorTodayZones, eq(floorTodayZones.zoneId, diningTables.zoneId))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
@@ -7939,27 +7931,7 @@ async function readTodayTables(
         zoneRevision: row.zoneRevision ?? 0,
         name: row.name,
         joinName: row.joinName,
-        // A group is marked whole; a member shows it only when its own change moves it.
-        needsMoving:
-          row.readyToMove === true &&
-          movesTable(
-            {
-              placement: placementOf(row),
-              takenOff: row.takenOff,
-              inMerge: row.joinId !== null,
-              splitOff: splitOffFrom.has(row.tableId),
-            },
-            {
-              placement: placementOf({
-                x: row.targetX,
-                y: row.targetY,
-                width: row.targetWidth,
-                height: row.targetHeight,
-                shape: row.targetShape,
-                rotation: row.targetRotation,
-              }),
-            },
-          ),
+        needsMoving: row.needsMoving,
       },
     ]),
   );
