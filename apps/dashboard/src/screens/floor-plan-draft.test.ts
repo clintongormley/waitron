@@ -804,4 +804,52 @@ describe("floor plan draft", () => {
     });
     expect(checkDraft(setParts(d, "long", []))).toEqual({ key: "long", problem: "parts_too_few" });
   });
+
+  /** Long table off this layout, Counter 3 and 4 standing in its place. */
+  function partsStanding(): FloorPlanDraft {
+    const d = patchTable(draftFromPlan(joinedPlan), "long", { placement: null });
+    return patchTable(patchTable(d, "c3", { placement: { ...m1Placement, x: 30 } }), "c4", {
+      placement: { ...m1Placement, x: 40 },
+    });
+  }
+
+  it("places a part of a joined table that is off this layout", () => {
+    const d = patchTable(draftFromPlan(joinedPlan), "long", { placement: null });
+    const at = { ...m1Placement, x: 50 };
+    expect(table(placeTable(d, "c5", at), "c5").placement).toEqual(at);
+    expect(table(placeTable(d, "c5"), "c5").placement).not.toBeNull();
+  });
+
+  it("leaves the draft as it is when placing a part whose joined table stands", () => {
+    const d = draftFromPlan(joinedPlan);
+    expect(placeTable(d, "c3")).toBe(d);
+    expect(placeTable(d, "c3", { ...m1Placement, x: 50 })).toBe(d);
+  });
+
+  it("placing a joined table takes its standing parts off in the same change", () => {
+    const d = partsStanding();
+    const at = { ...m1Placement, x: 60 };
+    const placed = placeTable(d, "long", at);
+    expect(table(placed, "long").placement).toEqual(at);
+    expect(table(placed, "c3").placement).toBeNull();
+    expect(table(placed, "c4").placement).toBeNull();
+    expect(table(placed, "m1")).toBe(table(d, "m1"));
+    expect(table(d, "c3").placement).not.toBeNull();
+  });
+
+  it("a placed joined table may take the free spot its parts left", () => {
+    const d = patchTable(patchTable(partsStanding(), "m1", { placement: null }), "c3", {
+      placement: { ...m1Placement, x: 0, y: 0 },
+    });
+    const placed = placeTable(d, "long");
+    expect(table(placed, "long").placement).toMatchObject({ x: 0, y: 0 });
+  });
+
+  it("never sends a joined table and one of its parts both placed", () => {
+    const d = partsStanding();
+    const sent = saveFromDraft(3, placeTable(placeTable(d, "long"), "c5")).tables;
+    const placed = new Set(sent.filter((t) => t.placement !== null).map((t) => t.id));
+    expect(placed.has("long")).toBe(true);
+    expect(["c3", "c4", "c5"].filter((key) => placed.has(key))).toEqual([]);
+  });
 });

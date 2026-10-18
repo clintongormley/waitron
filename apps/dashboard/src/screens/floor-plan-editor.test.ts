@@ -1342,6 +1342,31 @@ function counters(): FloorPlan {
   };
 }
 
+it("placing Long table over its standing parts takes them off, and one Undo puts all three back", async () => {
+  const apart: FloorPlan = {
+    ...counters(),
+    tables: counters().tables.map((t) =>
+      t.id === "long"
+        ? { ...t, placement: null }
+        : t.id === "c3" || t.id === "c4"
+          ? { ...t, placement: { ...placement, x: t.id === "c3" ? 30 : 40 } }
+          : t,
+    ),
+  };
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(apart) }));
+  const keys = () =>
+    canvas(el)
+      .tables.map((t) => t.key)
+      .sort();
+  expect(keys()).toEqual(["c1", "c3", "c4"]);
+  await toggleRow(el, "long");
+  expect(keys()).toEqual(["c1", "long"]);
+  await press(el, "undo");
+  expect(keys()).toEqual(["c1", "c3", "c4"]);
+  expect(placed(el, "c3")).toEqual({ ...placement, x: 30 });
+  expectSaveQuiet(el);
+});
+
 it.each([
   ["en-GB", "Delete Counter 4?", "It leaves the tables list and Long table."],
   ["es-ES", "¿Eliminar Counter 4?", "Sale de la lista de mesas y de Long table."],

@@ -374,6 +374,54 @@ it("clicking a part changes nothing and selects nothing", async () => {
   expect(noRoom).toBe(0);
 });
 
+const apart: FloorPlanDraft = {
+  tables: joined.tables.map((t) =>
+    t.key === "long"
+      ? { ...t, placement: null }
+      : t.key === "c3"
+        ? { ...t, placement: { x: 30, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 } }
+        : t,
+  ),
+};
+
+it("pressing a part of a joined table off this layout places it and selects it", async () => {
+  const el = await open({ draft: apart });
+  const { changes, selects } = listen(el);
+  const part = row(el, "Counter 4");
+  expect(toggle(part).hasAttribute("aria-disabled")).toBe(false);
+  expect(part.querySelector("[data-marker]")!.getAttribute("data-marker")).toBe("spare");
+  expect(madeOf(part)).toBe("in Long table");
+  toggle(part).click();
+  expect(changes).toHaveLength(1);
+  expect(changes[0]!.tables.find((t) => t.key === "c4")!.placement).not.toBeNull();
+  expect(selects).toEqual(["c4"]);
+});
+
+it("a standing part of a joined table off this layout is a placed table: pressing it takes it off", async () => {
+  const el = await open({ draft: apart, selected: "c3" });
+  const { changes, selects } = listen(el);
+  const part = row(el, "Counter 3");
+  expect(part.querySelector("[data-marker]")!.getAttribute("data-marker")).toBe("placed");
+  part.querySelector<HTMLElement>("button[data-action=select]")!.click();
+  expect(selects).toEqual(["c3"]);
+  toggle(part).click();
+  expect(changes[0]!.tables.find((t) => t.key === "c3")!.placement).toBeNull();
+  expect(selects).toEqual(["c3", null]);
+});
+
+it("pressing a joined table whose parts stand places it and takes them off in one change", async () => {
+  const el = await open({ draft: apart });
+  const { changes, selects } = listen(el);
+  toggle(row(el, "Long table")).click();
+  expect(changes).toHaveLength(1);
+  const sent = changes[0]!.tables;
+  expect(sent.find((t) => t.key === "long")!.placement).not.toBeNull();
+  expect(sent.filter((t) => t.parts === null && t.placement !== null).map((t) => t.key)).toEqual([
+    "c1",
+  ]);
+  expect(selects).toEqual(["long"]);
+});
+
 it("Add joined table asks the page to open its window", async () => {
   const el = await open();
   const asked: unknown[] = [];
