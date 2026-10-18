@@ -200,6 +200,26 @@ describe("automatic backups use each candidate business-day boundary", () => {
     ).toBe("2026-11-06T00:26:00.000Z");
   });
 
+  it.each([
+    ["the unchanged clock", null, "2026-10-20T05:45", "2026-10-21T03:33:00.000Z"],
+    ["03:00 from Wed 21", "03:00", "2026-10-21T05:45", "2026-10-22T01:33:00.000Z"],
+    ["21:00 from Wed 21", "21:00", "2026-10-21T05:45", "2026-10-21T19:33:00.000Z"],
+  ])("follows %s when computed after the morning backup", (_, dayCutover, local, expected) => {
+    const clock = {
+      ...MADRID,
+      cutoverChanges:
+        dayCutover === null ? [] : [{ effectiveBusinessDay: "2026-10-21", dayCutover }],
+    };
+    expect(
+      nextFireMs(
+        { kind: "wall-clock", days: "daily", at: "auto" },
+        clock,
+        new Date(`${local}:00+02:00`),
+        "seed",
+      ),
+    ).toBe(Date.parse(expected));
+  });
+
   it("keeps explicit wall time and intervals independent of cutover changes", () => {
     const clock = {
       ...MADRID,
