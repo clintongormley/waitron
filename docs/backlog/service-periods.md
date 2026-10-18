@@ -376,6 +376,23 @@ code, not run again here.
   plan out with `planBusinessDayStart`, and `clockTransitionAt`
   (`apps/server/src/business-day-changeover.ts`) works it out again, then once more for each of up
   to 20 moments when it looks for when a Save refused across a clocks change can be made.
+- **A876, a long day under a special day's paint.** On a day a start change makes longer than 24
+  hours, a season range past the 24th hour is cut at it when any special day is painted on that
+  date, and kept whole when none is: `cutSeason` (`packages/venue-service/src/day-resolver.ts`)
+  caps the day at 1440 minutes for the paint layer, which works on one 1440-minute day. Found by
+  A788's finish review, which ran it: 03:00 changing back to 05:00 on 2026-10-28, a 22:00–04:30
+  dinner on 2026-10-27 drew as 22:00–03:00 beside an unrelated special-day lunch. The test
+  "cuts a longer-than-24-hour special day's season at its own changeover, so the paint keeps it"
+  (`day-resolver.test.ts`) pins the cut. Next: teach the paint layer a day longer than 1440
+  minutes, or decide the cut is the intended drawing.
+- **A877, one answer for "settled or waiting".** A788's finish review (read only) found the
+  question "which start changes have taken effect at this moment, and which still wait" answered
+  five ways: `planBusinessDayStart`, `settledClock`, `inForceClock`, the server's
+  `readBusinessDayClockModel` and venue-service's `readBusinessDayScheduleStatus`, plus the
+  editor's `#waiting()`. Each hours writer also derives its clocks and then calls
+  `assertWaitingChangeFits` by hand, and `assertWaitingChangeFits` re-reads the venue's hours once
+  per waiting change. Next: one browser-safe helper in `@waitron/shared` beside `businessDayAt`
+  that every caller uses, and a write gate that runs the waiting-start check itself.
 
 ## Decisions and deliberate limits
 

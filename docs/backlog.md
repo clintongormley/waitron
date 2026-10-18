@@ -1507,6 +1507,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
     (`business-day-start-editor.ts`, the guard in `willUpdate`).
   - A874. The Business day card re-reads at a waiting change's moment by the browser's clock; a
     server clock behind it leaves the New start row up until the next refresh.
+  - A876. On a day a start change makes longer than 24 hours, a season range past the 24th hour
+    is cut at it only when a special day is painted on that date (`cutSeason`,
+    `packages/venue-service/src/day-resolver.ts`).
+  - A877. Five places work out which start changes have taken effect and which still wait, and
+    each hours writer runs the waiting-start check by hand.
 
 - **Eleven `receipts.*` strings in `apps/dashboard/src/i18n/strings.ts` have no reader** — found
   while doing A755 (#1809); none had one before it either: `departments_zones`,
