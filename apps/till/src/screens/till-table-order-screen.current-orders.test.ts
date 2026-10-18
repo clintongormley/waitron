@@ -97,7 +97,8 @@ async function closeSentDish(el: TillTableOrderScreen) {
   await el.updateComplete;
 }
 
-const rowOf = (el: TillTableOrderScreen, lineId: string) => q(el, `[data-group-line="${lineId}"]`)!;
+const rowOf = (el: TillTableOrderScreen, lineId: string) =>
+  sq(el, `[data-companion="${lineId}"] .what`)!;
 
 function capture(el: TillTableOrderScreen, type: string): CustomEvent[] {
   const events: CustomEvent[] = [];
@@ -482,6 +483,7 @@ describe("Current orders and Sent service", () => {
     });
     const moves = capture(el, "move-group-line");
     const splits = capture(el, "split-group-line");
+    await unfoldSent(el);
     expect(text(rowOf(el, "l-steak"))).toBe("Steak ×2");
     expect(all(el, "[data-split-group-line]").map((b) => b.dataset.splitGroupLine)).toEqual([]);
     expect(q(el, '[data-move-line="l-steak"]')).toBeNull();
@@ -512,6 +514,7 @@ describe("Current orders and Sent service", () => {
       all(el, selector).map((button) => button.getAttribute(attribute));
     expect(offered("[data-move-line]", "data-move-line")).toEqual([]);
     expect(offered("[data-split-group-line]", "data-split-group-line")).toEqual([]);
+    await unfoldSent(el);
     expect(text(rowOf(el, "l-paid"))).toBe("Steak ×2");
     const panel = await unfoldSent(el);
     expect(

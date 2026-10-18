@@ -1896,9 +1896,9 @@ describe("till-table-order-screen", () => {
           group.id === "g4" ? { ...group, lineIds: [unknown.id] } : group,
         ),
       });
-      expect(el.shadowRoot!.querySelector('[data-group-line="l-unknown"]')!.textContent).toContain(
-        "Unknown unit ×2",
-      );
+      expect(
+        el.shadowRoot!.querySelector('[data-sent-fallback-line="l-unknown"]')!.textContent,
+      ).toContain("Unknown unit ×2");
       expect(el.shadowRoot!.querySelector('[data-split-group-line="l-unknown"]')).toBeNull();
     });
 

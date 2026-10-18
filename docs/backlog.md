@@ -2230,8 +2230,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   retain the old direct command's requests and refusals. The drawer's separate Give away and
   Discount buttons are also removed on the branch. You use Sent's More menu to open the combined
   Comp window, where you can choose the whole dish or a priced extra. The app's existing command
-  checks retain their reason, approval, refusal and amount assertions. The duplicate lists and
-  other old row strips remain to be retired. The Sent heading keeps its word on one line beside
+  checks retain their reason, approval, refusal and amount assertions. The drawer's Current orders
+  list is also removed on the branch. You read held groups and fired dishes in Sent; its fallback
+  and load-failure message remain when the detailed read is unavailable. A paid held dish stays held,
+  and its dish window shows whether all or part is paid. Group command checks retain their exact
+  quantities, refusals and retries, with held groups and their dishes checked in visible order.
+  The drawer's To serve and Served lists and its direct Cancel strip remain to be retired.
+  The Sent heading keeps its word on one line beside
   the counts at phone width, including Spanish. Cancellation still follows the earlier picture-03
   implementation on this unlanded branch; the owner's Q43 changes need A758's revised design before integration.
   On the feature branch, a table's open unsent line window closes when editing

@@ -70,9 +70,8 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
       await el.updateComplete;
       const drawer = q("[data-drawer]");
       expect(drawer.querySelector("[data-move-line], [data-split-group-line]")).toBeNull();
-      expect(drawer.querySelector('[data-group-line="stored-dish"]')!.textContent).toContain(
-        "Recorded dish",
-      );
+      expect(drawer.querySelector("[data-group-line]")).toBeNull();
+
       expect(
         drawer.querySelector("[data-recall-line], [data-move-station], [data-send-line]"),
       ).toBeNull();
@@ -97,6 +96,9 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
           await panel.updateComplete;
         }
       }
+      expect(
+        panel.shadowRoot!.querySelector('[data-held-line="stored-dish"]')!.textContent,
+      ).toContain("Recorded dish");
       await userEvent.click(
         panel.shadowRoot!.querySelector<HTMLElement>(
           '[data-held-line="stored-dish"] [data-sent-info]',

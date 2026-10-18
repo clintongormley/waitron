@@ -1,3 +1,5 @@
+import { openSentDish } from "./till-table-order-screen.sent.test-helpers.js";
+import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -257,7 +259,7 @@ describe("till-table-order-screen: items already paid for", () => {
     expect(paidOf(el)).toEqual([]);
   });
 
-  it("keeps a held dish paid for held in Current orders, marked paid", async () => {
+  it("keeps a paid held dish held in Sent and marked paid in its window", async () => {
     const held: OrderGroup = {
       courseIds: [],
       id: "g-2",
@@ -302,11 +304,11 @@ describe("till-table-order-screen: items already paid for", () => {
       }),
     });
 
-    const group = el.shadowRoot!.querySelector<HTMLElement>('[data-group="g-2"]')!;
-    expect(group.dataset.groupState).toBe("held");
-    expect(text(group.querySelector('[data-group-line="line-3"] [data-line-paid]'))).toBe(
-      t("bill_pay.paid"),
-    );
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await el.updateComplete;
+    const dialog = await openSentDish(el, "line-3", "held");
+    expect(text(dialog.querySelector("[data-sent-line-status]"))).toBe(t("table.group_held"));
+    expect(text(dialog.querySelector("[data-line-paid]"))).toBe(t("bill_pay.paid"));
   });
 });
 

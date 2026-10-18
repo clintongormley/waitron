@@ -609,10 +609,11 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       return mounted;
     }
 
-    it("has no violations in the list, a fired group and held ones with every control", async () => {
+    it("has no violations in Sent's recorded-dish fallback", async () => {
       const { el, host } = await withGroups();
       expect(el.shadowRoot!.querySelector("[data-split-group-line], [data-move-line]")).toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-group-line="line-1"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-group-line]")).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-sent-fallback-line="line-1"]')).not.toBeNull();
       await expectNoA11yViolations(host);
     });
 

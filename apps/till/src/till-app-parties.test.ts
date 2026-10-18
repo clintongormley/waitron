@@ -398,20 +398,56 @@ const floor = (el: TillApp) =>
 const tableOrder = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
-/** Group rows, retaining the server summary when the detailed read replaces it. */
-const heldGroupsList = (el: TillApp) =>
-  [...(tableOrder(el)?.shadowRoot?.querySelectorAll<HTMLElement>("[data-group]") ?? [])].map(
-    (row) => ({
-      position: row.querySelector("[data-group-position]")!.textContent!.trim(),
-      state: row.dataset.groupState,
-      summary:
-        row.querySelector("[data-group-summary]")?.textContent!.trim() ??
-        tableOrder(el)!.groups.find((group) => group.id === row.dataset.group)!.summary,
-      lines: [...row.querySelectorAll(".group-line-name")].map((name) =>
-        name.textContent!.replace(/\s+/g, " ").trim(),
-      ),
-    }),
-  );
+async function heldGroupsList(el: TillApp) {
+  const order = tableOrder(el)!;
+  if (order.shadowRoot!.querySelector("[data-drawer]") !== null) {
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await flush(el);
+  }
+  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  if (review?.checkVisibility()) {
+    await userEvent.click(review);
+    await flush(el);
+  }
+  const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  await panel.updateComplete;
+  for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
+    const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector);
+    if (toggle?.getAttribute("aria-expanded") === "false") {
+      await userEvent.click(toggle);
+      await panel.updateComplete;
+    }
+  }
+  const groups = [...order.groups].sort((a, b) => a.position - b.position);
+  expect(
+    [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-held-group]")].map(
+      (group) => group.dataset.heldGroup,
+    ),
+  ).toEqual(groups.filter((group) => group.state === "held").map((group) => group.id));
+  return groups.map((group) => {
+    const held = panel.shadowRoot!.querySelector(`[data-held-group="${group.id}"]`);
+    if (order.currentOrders !== null) expect(held !== null).toBe(group.state === "held");
+    return {
+      position:
+        held?.querySelector("[data-group-drag]")?.textContent!.split(" · ")[0] ??
+        `Group ${group.displayNumber}`,
+      state: group.state,
+      summary: group.summary,
+      lines:
+        held !== null
+          ? [...held.querySelectorAll("[data-held-line] .what, [data-companion] .what")].map(
+              (what) => what.textContent!.replace(/\s+/g, " ").trim(),
+            )
+          : group.lineIds.map((id) => {
+              const what = panel.shadowRoot!.querySelector(
+                `[data-${group.state === "held" ? "held" : "fired"}-line="${id}"] .what`,
+              );
+              expect(what, `Sent dish ${id}`).not.toBeNull();
+              return what!.textContent!.replace(/\s+/g, " ").trim();
+            }),
+    };
+  });
+}
 
 async function toFloor(el: TillApp): Promise<TillFloorScreen> {
   await flush(el);
@@ -5688,7 +5724,7 @@ describe("till-app: the order's groups", () => {
       expect(server.fireGroup.mock.calls).toEqual([["v1", "g3", command(3)]]);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
       expect(server.listGroups).toHaveBeenCalledTimes(groupReads + 1);
-      expect(heldGroupsList(el).map((group) => group.state)).toEqual([
+      expect((await heldGroupsList(el)).map((group) => group.state)).toEqual([
         "fired",
         "held",
         "fired",
@@ -5716,7 +5752,7 @@ describe("till-app: the order's groups", () => {
       await reorderFromSent(el, "g2", "later");
 
       expect(server.reorderGroups.mock.calls).toEqual([["v1", ["g3", "g2", "g4"], command(3)]]);
-      expect(heldGroupsList(el).map((group) => group.summary)).toEqual([
+      expect((await heldGroupsList(el)).map((group) => group.summary)).toEqual([
         "1 × Beer",
         "2 × Steak, 1 × Fish",
         "1 × Croquetas",
@@ -5744,7 +5780,7 @@ describe("till-app: the order's groups", () => {
           },
         ],
       ]);
-      expect(heldGroupsList(el).map((group) => group.lines)).toEqual([
+      expect((await heldGroupsList(el)).map((group) => group.lines)).toEqual([
         ["Beer ×1"],
         ["Croquetas ×1", "Flan ×1"],
         ["Steak ×2", "Fish ×1"],
@@ -5771,7 +5807,7 @@ describe("till-app: the order's groups", () => {
           },
         ],
       ]);
-      expect(heldGroupsList(el).map((group) => group.lines)).toEqual([
+      expect((await heldGroupsList(el)).map((group) => group.lines)).toEqual([
         ["Beer ×1"],
         ["Croquetas ×1"],
         ["Steak ×2"],
@@ -5804,14 +5840,14 @@ describe("till-app: the order's groups", () => {
           ],
         ]);
         expect(server.moveLinesToGroup).not.toHaveBeenCalled();
-        expect(heldGroupsList(el)[2]!.lines).toEqual([
+        expect((await heldGroupsList(el))[2]!.lines).toEqual([
           ...Array<string>(quantity).fill("Steak ×1"),
           "Fish ×1",
         ]);
         expect(tableOrder(el)!.shadowRoot!.querySelector("[data-split-group-line]")).toBeNull();
         expect(banner(el)).toBeNull();
         await reorderFromSent(el, "g3", "earlier");
-        expect(heldGroupsList(el)[1]!.lines).toEqual([
+        expect((await heldGroupsList(el))[1]!.lines).toEqual([
           ...Array<string>(quantity).fill("Steak ×1"),
           "Fish ×1",
         ]);
@@ -5848,7 +5884,7 @@ describe("till-app: the order's groups", () => {
         ],
       ]);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
+      expect((await heldGroupsList(el))[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
       expect(banner(el)!.textContent).toContain(codeMessage("group.not_held"));
     });
 
@@ -5929,7 +5965,7 @@ describe("till-app: the order's groups", () => {
       ]);
       expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
       expect(banner(el)!.textContent).toContain(t("table.error"));
-      expect(heldGroupsList(el)[2]!.lines).toEqual([
+      expect((await heldGroupsList(el))[2]!.lines).toEqual([
         "Steak ×1",
         "Steak ×1",
         "Steak ×1",
@@ -5971,7 +6007,7 @@ describe("till-app: the order's groups", () => {
       expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
       expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
+      expect((await heldGroupsList(el))[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
     });
 
     it("two presses of Move earlier in one turn move the group once, and show no message", async () => {
@@ -5988,7 +6024,7 @@ describe("till-app: the order's groups", () => {
 
       expect(server.reorderGroups.mock.calls).toEqual([["v1", ["g2", "g4", "g3"], command(3)]]);
       expect(banner(el)).toBeNull();
-      expect(heldGroupsList(el).map((group) => group.summary)).toEqual([
+      expect((await heldGroupsList(el)).map((group) => group.summary)).toEqual([
         "1 × Beer",
         "1 × Croquetas",
         "1 × Flan",
@@ -6015,7 +6051,12 @@ describe("till-app: the order's groups", () => {
         ],
       ]);
       expect(banner(el)).toBeNull();
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×1", "Steak ×1", "Steak ×1", "Fish ×1"]);
+      expect((await heldGroupsList(el))[2]!.lines).toEqual([
+        "Steak ×1",
+        "Steak ×1",
+        "Steak ×1",
+        "Fish ×1",
+      ]);
     });
 
     const handheldOrder = (el: TillApp) =>
@@ -6656,13 +6697,21 @@ describe("till-app: submitting the draft", () => {
     await flush(el);
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
-    expect(heldGroupsList(el).map(({ position, state }) => ({ position, state }))).toEqual([
+    expect(
+      tableOrder(el)!.groups.map(({ displayNumber, state }) => ({
+        position: `Group ${displayNumber}`,
+        state,
+      })),
+    ).toEqual([
       { position: "Group 1", state: "fired" },
       { position: "Group 2", state: "fired" },
       { position: "Group 3", state: "held" },
       { position: "Group 4", state: "held" },
       { position: "Group 5", state: "held" },
     ]);
+    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-sent-unread]")!.textContent).toContain(
+      t("table.current_orders_unread"),
+    );
   });
 
   it("shows the notice over the floor without moving it, so a tap as it closes lands where it was aimed", async () => {

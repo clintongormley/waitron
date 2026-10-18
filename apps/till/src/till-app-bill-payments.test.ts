@@ -1,3 +1,4 @@
+import { openSentDish } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import type { TillFindBillDialog } from "./widgets/find-bill-dialog.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
@@ -3744,7 +3745,7 @@ describe("till-app: the owner's split after a contribution", () => {
 });
 
 describe("till-app: a guest leaving early pays for a held dish", () => {
-  it("pays for one held Tiramisu on the table's own bill, which stays held in Current orders, marked paid, and is not offered again", async () => {
+  it("pays for one held Tiramisu on the table's own bill, which stays held in Sent, marked paid in its window, and is not offered again", async () => {
     const tiramisu = line({
       lineNo: 6,
       name: "Tiramisu",
@@ -3851,11 +3852,18 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
     expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="6"]')).toBeNull();
     await press(el, "[data-pay-close]");
     await expect.poll(() => dialog(el)).toBeNull();
-    const group = tableOrder(el).shadowRoot!.querySelector<HTMLElement>('[data-group="g-2"]')!;
-    expect(group.dataset.groupState).toBe("held");
-    expect(text(group.querySelector(`[data-group-line="${tiramisu.id}"] [data-line-paid]`))).toBe(
-      t("bill_pay.paid"),
+    const order = tableOrder(el);
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await flush(el);
+    const dish = await openSentDish(order, tiramisu.id, "held");
+    expect(text(dish.querySelector("[data-sent-line-status]"))).toBe(t("table.group_held"));
+    expect(text(dish.querySelector("[data-line-paid]"))).toBe(t("bill_pay.paid"));
+    const closed = new Promise<void>((resolve) =>
+      dish.addEventListener("wt-close", () => resolve(), { once: true }),
     );
+    await userEvent.click(dish.querySelector<HTMLElement>("[data-sent-line-close]")!);
+    await closed;
+    await flush(el);
     await openDialog(el, "items");
     expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="6"]')).toBeNull();
     expect(api.recordSale).not.toHaveBeenCalled();

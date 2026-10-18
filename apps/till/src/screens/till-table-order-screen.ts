@@ -1,5 +1,5 @@
 import { DraftStore, type RetainedDraftCandidate } from "../state/draft-sync.js";
-import { groupName, groupNumberText } from "../widgets/group-name.js";
+import { groupNumberText } from "../widgets/group-name.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import {
   nutritionIcons,
@@ -852,99 +852,10 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .group-list {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
-      }
-
-      .group {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        padding-bottom: var(--wt-space-3);
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-
-      .group-head,
-      .group-line {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
-      }
-
-      .group-name {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .group[data-group-state="fired"] {
-        color: var(--wt-color-text-muted);
-      }
-
-      .group-state,
-      .group-summary {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .group-line-name {
-        overflow-wrap: anywhere;
-      }
-
       .group-sent {
         margin-inline-end: auto;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-
-      /* Stays at the trailing edge when it wraps below the name. */
-      .group-head .group-state {
-        margin-inline-start: auto;
-      }
-
-      .ungrouped {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        padding-top: var(--wt-space-3);
-      }
-
-      .ungrouped h3 {
-        margin: 0;
-        font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      /* A name is never broken to fit the buttons beside it: they wrap to a line of their own,
-         still at the row's end. */
-      .row-what {
-        flex: 1 1 auto;
-        max-width: 100%;
-        display: flex;
-        flex-direction: column;
-      }
-
-      .row-what .group-line-name {
-        overflow-wrap: break-word;
-      }
-
-      .row-extra,
-      .current-row .line-note,
-      .row-facts {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .row-facts {
-        display: flex;
-        flex-wrap: wrap;
-        column-gap: var(--wt-space-3);
       }
 
       .round-bar {
@@ -1171,8 +1082,6 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) stations: Station[] = [];
   /** The party's order groups, read with {@link lines}. */
   @property({ attribute: false }) groups: OrderGroup[] = [];
-  /** The party's Current orders; null until read, or when the read failed, which leaves the groups
-   * showing this bill's rows and nothing to mark served. */
   @property({ attribute: false }) currentOrders: CurrentOrders | null = null;
   /** The read of Current orders failed, which the screen says where the list would be. */
   @property({ type: Boolean }) currentOrdersUnread = false;
@@ -1932,8 +1841,6 @@ export class TillTableOrderScreen extends LitElement {
   /** Built with {@link groups}: every group, and the held ones, in position order. */
   #groupsInOrder: OrderGroup[] = [];
   #heldInOrder: OrderGroup[] = [];
-  /** Built with {@link lines}, for the held-groups list. */
-  #lineById = new Map<string, TabLine>();
   #lineByNo = new Map<number, TabLine>();
 
   constructor() {
@@ -1974,7 +1881,6 @@ export class TillTableOrderScreen extends LitElement {
         billGross(this.lines, (line) => this.#lineGross(line)),
         this.lines.length,
       );
-      this.#lineById = new Map(this.lines.map((line) => [line.id, line]));
       this.#lineByNo = new Map(this.lines.map((line) => [line.lineNo, line]));
     }
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
@@ -2869,6 +2775,7 @@ export class TillTableOrderScreen extends LitElement {
               <p class="move-dish">
                 ${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}
               </p>
+              ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
               <div class="total-row">
                 <span>${row.name}</span
                 ><span class="amount" data-sent-line-amount
@@ -3908,7 +3815,7 @@ export class TillTableOrderScreen extends LitElement {
   #drawer(pending: TabLine[]): TemplateResult {
     return html`
       <aside class="drawer" data-drawer aria-label=${t("table.open_drawer")}>
-        ${this.#groupsSection()} ${this.#pendingSection(pending)} ${this.#servedSection()}
+        ${this.#pendingSection(pending)} ${this.#servedSection()}
         <div class="total-row">
           <span class="label">${t("label.total")}</span>
           <span class="amount" data-tab-total
@@ -4285,61 +4192,6 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  #groupsSection(): TemplateResult | typeof nothing {
-    const ungrouped = this.currentOrders?.ungrouped ?? [];
-    if (this.groups.length === 0 && ungrouped.length === 0 && !this.currentOrdersUnread)
-      return nothing;
-    return html`<section class="groups" data-groups>
-      <h2>${t("table.groups_title")}</h2>
-      ${
-        this.currentOrdersUnread
-          ? html`<p class="empty" data-current-orders-unread>
-              ${t("table.current_orders_unread")}
-            </p>`
-          : nothing
-      }
-      <ol class="group-list">
-        ${this.#groupsInOrder.map((group) => this.#groupRow(group))}
-      </ol>
-      ${
-        ungrouped.length === 0
-          ? nothing
-          : html`<section class="ungrouped" data-ungrouped>
-              <h3>${t("table.ungrouped_title")}</h3>
-              <ul class="group-lines">
-                ${ungrouped.map((row) => this.#currentRow(row, null))}
-              </ul>
-            </section>`
-      }
-    </section>`;
-  }
-
-  #groupRow(group: OrderGroup): TemplateResult {
-    const isHeld = group.state === "held";
-    const name = groupName(group);
-    const shown = this.currentOrders?.groups.find((candidate) => candidate.id === group.id);
-    const current = this.currentOrders === null ? null : (shown?.rows ?? []);
-    return html`<li class="group" data-group=${group.id} data-group-state=${group.state}>
-      <div class="group-head">
-        <span class="group-name" data-group-position>${name}</span>
-        ${shown === undefined ? nothing : this.#sentOf(shown)}
-        <span class="group-state" data-group-kitchen>${this.#groupProgress(group, current)}</span>
-      </div>
-      ${
-        current === null
-          ? html`<p class="group-summary" data-group-summary>${group.summary}</p>`
-          : nothing
-      }
-      <ul class="group-lines">
-        ${
-          current === null
-            ? this.#billLinesOf(group).map((line) => this.#groupLine(line))
-            : current.map((row) => this.#currentRow(row, isHeld ? group : null))
-        }
-      </ul>
-    </li>`;
-  }
-
   #sentOf(group: CurrentOrderGroup): TemplateResult {
     const time = clockTime(Date.parse(group.sentAt));
     const [withName, unnamed] =
@@ -4350,57 +4202,6 @@ export class TillTableOrderScreen extends LitElement {
     return html`<span class="group-sent" data-group-sent
       >${named(group.sentBy ?? "", at(withName), at(unnamed))}</span
     >`;
-  }
-
-  /** This bill's dish lines of `group`, for want of Current orders. */
-  #billLinesOf(group: OrderGroup): TabLine[] {
-    return group.lineIds.flatMap((id) => {
-      const line = this.#lineById.get(id);
-      return line === undefined || this.#isChild(line) ? [] : [line];
-    });
-  }
-
-  /** Only what a person recorded: a group nobody marked ready reads how long ago it was fired, and
-   * one reads served only once every row of it was marked served. */
-  #groupProgress(group: OrderGroup, rows: CurrentOrderRow[] | null): string | TemplateResult {
-    if (group.state === "held") return t("table.group_held");
-    if (rows !== null && rows.length > 0 && rows.every((row) => row.servedAt !== null))
-      return t("table.row_served");
-    if (group.away) return t("table.group_away");
-    if (group.ready) return t("table.group_ready");
-    if (group.firedAt === null) return t("table.group_fired");
-    return html`<till-fired-ago .firedAt=${group.firedAt} .now=${this.now}></till-fired-ago>`;
-  }
-
-  #currentRow(row: CurrentOrderRow, held: OrderGroup | null): TemplateResult {
-    const state = held === null ? this.#rowState(row) : nothing;
-    const served = decimal(row.servedQuantity);
-    const partly = compareDecimal(served, decimal("0")) > 0 && row.servedAt === null;
-    return html`<li class="group-line current-row" data-group-line=${row.lineId}>
-      <span class="row-what">
-        <span class="group-line-name"
-          >${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}</span
-        >
-        ${row.extras.map(
-          (extra) =>
-            html`<span class="row-extra">${extra.name} ×${this.#displayQty(extra.quantity)}</span>`,
-        )}
-        ${
-          row.note === null
-            ? nothing
-            : html`<span class="line-note">${t("line.note.label")}: ${row.note}</span>`
-        }
-        ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
-        ${
-          state === nothing && !partly
-            ? nothing
-            : html`<span class="row-facts">
-                ${state === nothing ? nothing : html`<span data-row-state>${state}</span>`}
-                ${partly ? html`<span data-row-served>${this.#servedOf(row)}</span>` : nothing}
-              </span>`
-        }
-      </span>
-    </li>`;
   }
 
   /** What was recorded of a row, and nothing more: no kitchen item means no kitchen state. */
@@ -4587,16 +4388,6 @@ export class TillTableOrderScreen extends LitElement {
         </wt-button>
       </div>
     </wt-dialog>`;
-  }
-
-  #groupLine(line: TabLine): TemplateResult {
-    const name = this.#nameForLine(line);
-    return html`<li class="group-line" data-group-line=${line.id}>
-      <span class="group-line-name"
-        >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
-      >
-      ${this.#paidMark(line.lineNo, line.quantity)}
-    </li>`;
   }
 
   #requestFireGroup(group: OrderGroup): void {
