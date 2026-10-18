@@ -395,7 +395,7 @@ it.each(["success", "refusal"] as const)(
   async (outcome) => {
     const api = receiptApi();
     if (outcome === "refusal") api.putDepartmentReceipt.mockRejectedValue(new Error("offline"));
-    const { el } = await mountReceiptEditor(api);
+    const { el, events } = await mountReceiptEditor(api);
     const toggle =
       receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=printTradingName]")!;
     await toggle.updateComplete;
@@ -418,6 +418,14 @@ it.each(["success", "refusal"] as const)(
       ],
     ]);
     if (outcome === "success") {
+      await expect.poll(() => events).toEqual(["department-receipt-saved:bar"]);
+      el.subject = undefined;
+      await el.updateComplete;
+      el.subject = { id: "bar", name: "Bar" };
+      await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+      await expect
+        .poll(() => receiptRoot(el).querySelector("[name=printTradingName]"))
+        .toBeTruthy();
       await expect
         .poll(
           () =>

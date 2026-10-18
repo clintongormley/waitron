@@ -37,14 +37,16 @@ it("pending Save blocks a duplicate request", async () => {
   const api = receiptApi();
   const held = deferred<void>();
   api.putDepartmentReceipt.mockImplementationOnce(() => held.promise);
-  const { el, events } = await mountReceiptEditor(api);
+  const { el, app, events } = await mountReceiptEditor(api);
   await editReceipt(el, "email", "sent@example.com");
   await clickReceiptSave(el);
   await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
   receiptSave(el).click();
   expect(api.putDepartmentReceipt).toHaveBeenCalledTimes(1);
+  expect(app.leave.coordinator.isDirty()).toBe(true);
   held.resolve();
   await expect.poll(() => events).toEqual(["department-receipt-saved:bar"]);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 it("reconnecting the same receipt keeps its draft and original Save baseline", async () => {
   const { app, el, api } = await mountReceiptEditor();
@@ -61,12 +63,12 @@ it("reconnecting the same receipt keeps its draft and original Save baseline", a
   expect(receiptSave(el).disabled).toBe(true);
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it("a removed department releases its receipt draft and sends department-receipt-closed", async () => {
-  const { app, el, api, events } = await mountReceiptEditor();
+it("a removed editor releases its mounted receipt draft", async () => {
+  const { app, el } = await mountReceiptEditor();
   await editReceipt(el, "email", "draft@example.com");
-  api.getDepartmentReceipt.mockRejectedValue({ code: "department.not_found" });
-  api.liveData.invalidate([{ type: "departments" }]);
-  await expect.poll(() => events).toEqual(["department-receipt-closed:bar"]);
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  el.remove();
+  await el.updateComplete;
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 

@@ -94,7 +94,7 @@ export async function mountReceiptEditor(api = receiptApi(), theme: "light" | "d
     "department-receipt-cancel",
     "department-receipt-closed",
   ])
-    el.addEventListener(type, (event) =>
+    app.addEventListener(type, (event) =>
       events.push(
         `${type}:${(event as CustomEvent<{ departmentId: string }>).detail.departmentId}`,
       ),
