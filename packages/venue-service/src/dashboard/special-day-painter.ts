@@ -1682,6 +1682,7 @@ export class SpecialDayPainter extends LitElement {
     const stored = this.specialDayId !== null && !this.loading && !this.loadFailed;
     return html`<painter-frame
         .open=${this.open}
+        band="special"
         .heading=${this.heading()}
         .scope=${this.scope}
         .coordinator=${this.coordinator}

@@ -1491,3 +1491,36 @@ describe("taken off the page while a request is out, and put back", () => {
     expect(months).toEqual(["2026-12", "2026-12"]);
   });
 });
+
+it("a stored day and a new one both carry the special-day band, a viewer's too", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  painter = document.createElement("special-day-painter");
+  painter.api = specialDayApi([], { days: { sd1: storedDay() } });
+  const api = painter.api.specialDays;
+  const read = api.readSpecialDay.bind(api);
+  api.readSpecialDay = async (id, options) => {
+    await held;
+    return read(id, options);
+  };
+  painter.model = painterModel();
+  painter.specialDayId = "sd1";
+  painter.open = true;
+  applyTokens(painter);
+  document.body.append(painter);
+  await settle(painter);
+  expect(part(painter, "loading")).not.toBeNull();
+  expect(frame(painter).band, "while the stored day is read").toBe("special");
+  release();
+  await loaded(painter);
+  expect(frame(painter).band, "stored").toBe("special");
+  painter.remove();
+  painter = (await mount({ specialDayId: null, date: "2026-12-14" })).painter;
+  expect(frame(painter).band, "new").toBe("special");
+  painter.remove();
+  painter = (await mount({ readOnly: true })).painter;
+  expect(frame(painter).band, "read-only").toBe("special");
+  expect(
+    frame(painter).shadowRoot!.querySelector<HTMLElement>(".band")!.getBoundingClientRect().height,
+  ).toBeGreaterThan(0);
+});
