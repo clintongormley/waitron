@@ -220,9 +220,12 @@ export class WtColourChooser extends LitElement {
     popup.style.maxHeight = `${innerHeight - 16}px`;
     // Set here, not through render(): the line count below reads this layout at once.
     const group = popup.querySelector<HTMLElement>('[role="radiogroup"]')!;
+    // Four columns are shorter, so trying them clamps the scroll position.
+    const scrollTop = popup.scrollTop;
     group.dataset.columns = "4";
     if ([...group.querySelectorAll(".colour-name")].some((name) => lineCount(name) > 1))
       group.dataset.columns = "2";
+    popup.scrollTop = scrollTop;
     const box = popup.getBoundingClientRect();
     const maxLeft = Math.max(0, innerWidth - box.width - 8);
     popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;

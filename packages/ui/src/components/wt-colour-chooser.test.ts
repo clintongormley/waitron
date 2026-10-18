@@ -911,6 +911,36 @@ describe("columns", () => {
       }
     });
   });
+
+  test("in a 390x400 window, a re-render of the open panel keeps where it was scrolled to", async () => {
+    await atViewport(390, 400, async () => {
+      const { el, panel } = await mountSixteen();
+      await openByClick(el);
+      expect(columns(el)).toBe(2);
+      panel.scrollTop = panel.scrollHeight;
+      const scrolled = panel.scrollTop;
+      expect(scrolled).toBeGreaterThan(0);
+      el.label = "Choose colour";
+      await el.updateComplete;
+      expect(columns(el)).toBe(2);
+      expect(panel.scrollTop).toBe(scrolled);
+    });
+  });
+
+  test("in a 390x400 window, opened on the last colour, its tile is focused and inside the panel", async () => {
+    await atViewport(390, 400, async () => {
+      const { el, root, panel, trigger, tile } = await mountSixteen(sixteen("en"), "grey");
+      await openByClick(el);
+      await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("true"));
+      await el.updateComplete;
+      expect(panel.scrollHeight).toBeGreaterThan(panel.clientHeight);
+      expect(root.activeElement).toBe(tile("grey"));
+      const box = panel.getBoundingClientRect();
+      const last = tile("grey").getBoundingClientRect();
+      expect(last.top).toBeGreaterThanOrEqual(box.top - 0.5);
+      expect(last.bottom).toBeLessThanOrEqual(box.bottom + 0.5);
+    });
+  });
 });
 
 describe("keys that the chooser prevents", () => {
