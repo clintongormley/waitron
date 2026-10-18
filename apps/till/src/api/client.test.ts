@@ -4634,6 +4634,7 @@ describe("TillApi: a party's drafts", () => {
       submissionId: "sub-1",
       expectedPartyRevision: 4,
       draftRevision: 2,
+      expectedEdit: { ...observed, draftRevision: 2 },
       groups: [
         { lineIds: ["dl-1"], release: "fire" as const },
         { lineIds: ["dl-2", "dl-3"], release: "hold" as const },
@@ -4653,6 +4654,7 @@ describe("TillApi: a party's drafts", () => {
       submissionId: "sub-2",
       expectedPartyRevision: 5,
       draftRevision: 3,
+      expectedEdit: { ...observed, draftRevision: 3 },
       groups: [{ lineIds: ["dl-1"], release: "hold" as const }],
       joinGroupId: "g2",
     };
@@ -4674,6 +4676,7 @@ describe("TillApi: a party's drafts", () => {
       submissionId: "sub-3",
       expectedPartyRevision: 5,
       draftRevision: 3,
+      expectedEdit: { ...observed, draftRevision: 3 },
       groups: [{ lineIds: ["dl-1"], release: "fire" as const }],
       billId: "wo-2",
     };
@@ -4696,6 +4699,7 @@ describe("TillApi: a party's drafts", () => {
         submissionId: "sub-3",
         expectedPartyRevision: 1,
         draftRevision: 2,
+        expectedEdit: { ...observed, draftRevision: 2 },
         groups: [{ lineIds: ["dl-1"], release: "fire" }],
       }),
     ).rejects.toMatchObject({ code: "party.out_of_date", status: 409 });

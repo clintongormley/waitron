@@ -101,7 +101,7 @@ it("removes a dead-end line and confirms only the remaining dish with recomputed
   });
   el.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
   expect(submitted?.sent.map((line) => line.product.name)).toEqual(["Flan"]);
-  expect(submitted?.groups).toEqual([{ release: "hold", lineIndexes: [0] }]);
+  expect(submitted?.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
 });
 
 it("clears a saved making station that has since been switched off", async () => {

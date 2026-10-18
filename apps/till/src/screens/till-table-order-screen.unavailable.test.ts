@@ -204,7 +204,7 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
     expect(previewText(el)).toContain(t("table.left_out_one").replace("{names}", "Beer ×2"));
     const sent = await confirmed(el);
     expect(sent.sent.map((line) => line.product.name)).toEqual(["Flan"]);
-    expect(sent.groups).toEqual([{ release: "hold", lineIndexes: [0] }]);
+    expect(sent.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
   });
 
   it("leaves it out of Fire all now the same way", async () => {

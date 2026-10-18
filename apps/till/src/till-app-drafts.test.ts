@@ -124,9 +124,9 @@ function catalogue(version: string, prices: Record<string, string> = {}): ZoneOf
 }
 
 const courses = [
-  { id: "drinks", name: "Drinks", displayOrder: 0 },
-  { id: "mains", name: "Mains", displayOrder: 1 },
-  { id: "desserts", name: "Desserts", displayOrder: 2 },
+  { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
+  { id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true },
+  { id: "desserts", name: "Desserts", displayOrder: 2, heldUntilFired: true },
 ];
 
 function party(over: Partial<TableParty> = {}): TableParty {
@@ -1860,6 +1860,7 @@ describe("till-app: sending the draft", () => {
         submissionId: expect.any(String),
         expectedPartyRevision: 3,
         draftRevision: 1,
+        expectedEdit: { billId: "wo-4", editorVersion: 1, draftId: "draft-1", draftRevision: 1 },
         groups: [
           { release: "hold", lineIds: ["line-4"], joinGroupId: "g-desserts" },
           { release: "hold", lineIds: ["line-2"], joinGroupId: "g-mains" },
@@ -2199,7 +2200,17 @@ describe("till-app: sending the draft", () => {
   });
 
   it("sends Send all as one held group per course, under the ids the save answered", async () => {
-    const { el } = await mountApp();
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue({
+        revision: 3,
+        hasGroups: false,
+        nextDisplayNumber: 1,
+        retainedCourses: [],
+        groups: [],
+        ungrouped: [],
+        reminder: null,
+      }),
+    });
     await openMesa(el);
     await tap(el, "Beer");
     await tap(el, "Steak");
@@ -2213,6 +2224,7 @@ describe("till-app: sending the draft", () => {
       submissionId: expect.any(String),
       expectedPartyRevision: 3,
       draftRevision: 1,
+      expectedEdit: { billId: "wo-4", editorVersion: 1, draftId: "draft-1", draftRevision: 1 },
       groups: [
         { release: "hold", lineIds: ["line-2"] },
         { release: "hold", lineIds: ["line-3"] },
@@ -3301,6 +3313,54 @@ describe("till-app: a later addition is decided from the table's own groups", ()
       expect(draft(el).lines.map((line) => line.place)).toEqual([place]);
     },
   );
+
+  it("sends the saved first-order arrangement with its acquired bill observation", async () => {
+    const { el } = await placementApp(false);
+    await tap(el, "Flan");
+    await tap(el, "Beer");
+    await tap(el, "Steak");
+    const sentStore = draft(el);
+    await act(el, "send-all");
+    expect(api.submitDraft.mock.calls[0]![2]).toEqual({
+      submissionId: expect.any(String),
+      expectedPartyRevision: 3,
+      draftRevision: 1,
+      expectedEdit: { billId: "wo-4", editorVersion: 1, draftId: "draft-1", draftRevision: 1 },
+      groups: [
+        { release: "fire", lineIds: ["line-3"] },
+        { release: "hold", lineIds: ["line-4"] },
+        { release: "hold", lineIds: ["line-2"] },
+      ],
+    });
+    expect(sentStore.lines).toEqual([]);
+    expect(tableOrder(el)).toBeNull();
+    expect(server.drafts).toEqual([]);
+  });
+
+  it("keeps an inactive course in Fire now through the rendered Send and saved-line request", async () => {
+    const inactive = catalogue("v1");
+    inactive.offers[0]!.courseId = "retired";
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till(drillFormFactor), courses: placementCourses }),
+      listZoneOffers: vi.fn().mockResolvedValue(inactive),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(inactive),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    expect(draft(el).lines[0]!.place).toEqual({ kind: "fire" });
+    const sentStore = draft(el);
+    await act(el, "send-all");
+    expect(api.submitDraft.mock.calls[0]![2]).toEqual({
+      submissionId: expect.any(String),
+      expectedPartyRevision: 3,
+      draftRevision: 1,
+      expectedEdit: { billId: "wo-4", editorVersion: 1, draftId: "draft-1", draftRevision: 1 },
+      groups: [{ release: "fire", lineIds: ["line-2"] }],
+    });
+    expect(sentStore.lines).toEqual([]);
+    expect(tableOrder(el)).toBeNull();
+    expect(server.drafts).toEqual([]);
+  });
 
   it("sorts first-order courses even when dessert is tapped before a main, and emits one change per tap", async () => {
     const { el } = await placementApp(false);

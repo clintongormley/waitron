@@ -198,9 +198,10 @@ this section once A773 covers it. The reading below is what A773 has to change.
 
 **2026-10-17 owner decision:** a switched-off course behaves like no course: Fire now,
 listed first, for send and move. A773-1 covers automatic new placement and the arriving-bill
-writer. The new placement/store/layout/submission model has focused tests, but the active table
-screen still calls the legacy draft grouping helpers. Keep the send integration open until T11
-replaces those controls; the tests do not establish the rendered screen's behavior.
+writer. The unlanded first-order Send all now uses stored placement, and screen/app checks follow
+an inactive-course dish through the rendered confirmation and saved-line request as Fire now.
+The course sections, later-addition Send and preview still use the legacy controls. Keep this
+entry open until T11/T12 replaces those paths; these checks do not establish their final behavior.
 
 ## A long word in a routing-grid row name still splits at 390 px
 

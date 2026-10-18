@@ -866,6 +866,7 @@ export interface DiscardedDraft {
 /** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
+  expectedEdit: BillEditExpected;
   draftRevision: number;
   groups: {
     lineIds: string[];

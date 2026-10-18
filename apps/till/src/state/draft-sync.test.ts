@@ -672,6 +672,7 @@ describe("DraftSync: after a submission", () => {
     await draft.flush();
     const [sentLine, kept] = draft.store.lines;
     const answered = server.apply("v1", draft.draftId!, {
+      expectedEdit: draft.expectedEdit!,
       submissionId: "s1",
       expectedPartyRevision: 3,
       draftRevision: draft.revision,
@@ -1160,6 +1161,7 @@ describe("DraftSync: what the server says about each line", () => {
     const [sentLine] = draft.store.lines;
     server.unavailable.add("offer-steak");
     const answered = server.apply("v1", draft.draftId!, {
+      expectedEdit: draft.expectedEdit!,
       submissionId: "s1",
       expectedPartyRevision: 3,
       draftRevision: draft.revision,

@@ -10255,6 +10255,7 @@ export class TillApp extends LitElement {
         return;
       }
       const command: DraftSubmission = {
+        expectedEdit: sync.expectedEdit!,
         submissionId: crypto.randomUUID(),
         expectedPartyRevision: party.revision,
         draftRevision: sync.revision,

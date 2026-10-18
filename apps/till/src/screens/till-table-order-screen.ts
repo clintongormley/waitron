@@ -138,9 +138,10 @@ import {
   type DraftEntry,
   type DraftGroup,
   type DraftPreview,
+  type DraftSubmission,
 } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
-import type { SubmitGroup } from "../state/draft-layout.js";
+import { sendAllGroups, type SubmitGroup } from "../state/draft-layout.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuests } from "../state/receipt-guests.js";
@@ -1885,7 +1886,16 @@ export class TillTableOrderScreen extends LitElement {
     const lines = store.lines;
     const entries = this.#draftEntries(lines);
     const selected = this.#selectedIndexes(lines);
-    const submission = draftSubmission(action, entries, this.courses, selected);
+    const submission: Omit<DraftSubmission, "groups"> & { groups: SubmitDraftDetail["groups"] } =
+      action.kind === "send-all"
+        ? {
+            groups: sendAllGroups(lines, this.groups, (index) => !flagged(lines[index]!)).map(
+              ({ indexes, ...group }) => ({ ...group, lineIndexes: indexes }),
+            ),
+            remaining: lines.flatMap((line, index) => (flagged(line) ? [index] : [])),
+            leftOut: lines.flatMap((line, index) => (flagged(line) ? [index] : [])),
+          }
+        : draftSubmission(action, entries, this.courses, selected);
     const preview = draftPreview(submission, entries);
     const order = submission.groups.flatMap((group) => group.lineIndexes);
     const place = new Map(order.map((index, position) => [index, position]));
@@ -1904,6 +1914,8 @@ export class TillTableOrderScreen extends LitElement {
       groups: submission.groups.map((group) => ({
         release: group.release,
         lineIndexes: group.lineIndexes.map((index) => place.get(index)!),
+        ...(group.joinGroupId === undefined ? {} : { joinGroupId: group.joinGroupId }),
+        ...(group.afterGroupId === undefined ? {} : { afterGroupId: group.afterGroupId }),
       })),
       ...(submission.joinGroupId === undefined ? {} : { joinGroupId: submission.joinGroupId }),
       store,

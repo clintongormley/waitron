@@ -4,6 +4,8 @@ import {
   row as currentRow,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { WorkingOrderStore } from "../state/working-order.js";
+import { DraftStore } from "../state/draft-sync.js";
+import { heldViews, placeFor } from "../state/draft-place.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtCombobox } from "@waitron/ui";
@@ -127,14 +129,34 @@ function servedMenu(
   return servedMenus([{ id, name, isDefault, versionId: `${id}-v1` }], offers)[0]!;
 }
 
-const mount = (over: Partial<TillTableOrderScreen> = {}) =>
-  mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+const mount = async (over: Partial<TillTableOrderScreen> = {}) => {
+  const draftStore = new DraftStore();
+  const mounted = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products,
     menus: [servedMenu("menu-table", "Carta", true, over.products ?? products)],
     lines: [],
     statuses: [],
+    draftStore,
     ...over,
   });
+  draftStore.placer = (courseId, exceptIndex) =>
+    placeFor(courseId, {
+      courses: mounted.el.courses,
+      held: heldViews(mounted.el.currentOrders, mounted.el.groups),
+      firstOrder: mounted.el.currentOrders?.hasGroups !== true && mounted.el.groups.length === 0,
+      placed: draftStore.lines.flatMap((line, index) =>
+        index === exceptIndex
+          ? []
+          : [
+              {
+                courseId: line.courseId ?? line.product.courseId ?? null,
+                place: line.place ?? { kind: "fire" as const },
+              },
+            ],
+      ),
+    });
+  return mounted;
+};
 
 const grid = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
