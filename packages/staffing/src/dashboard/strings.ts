@@ -201,6 +201,10 @@ const en = {
   "staffing.grid.people_other": "{count} people",
   "staffing.painter.heading": "Staffing",
   "staffing.painter.week": "{season}: standard week",
+  "staffing.painter.special_day": "{name}: special day, {dates}",
+  "staffing.painter.special_day_undated": "{name}: special day",
+  "staffing.painter.week_covers":
+    "Every week from {from} to {to} needs this staffing, except on special days.",
   "staffing.painter.guide_department": "Shaded: {department}'s opening hours, by period",
   "staffing.painter.guide_station":
     "Shaded: when {station} gets orders, one lane per department that sends it dishes",
@@ -327,10 +331,10 @@ const es: Record<keyof typeof en, string> = {
   "staffing.rota.empty": "No hay áreas activas.",
   "staffing.rota.unpainted_title": "No hay personal pintado para {area} esta semana",
   "staffing.rota.unpainted_season":
-    "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Pinta una vez la semana habitual de {season} y cada semana de la temporada tendrá sus puestos. Puedes seguir añadiendo turnos en Todo el equipo.",
+    "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Pinta una vez la semana estándar de {season} y cada semana de la temporada tendrá sus puestos. Puedes seguir añadiendo turnos en Todo el equipo.",
   "staffing.rota.unpainted_plain":
     "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Puedes seguir añadiendo turnos en Todo el equipo.",
-  "staffing.rota.paint_week": "Pintar la semana habitual de {season}",
+  "staffing.rota.paint_week": "Pintar la semana estándar de {season}",
   "staffing.rota.no_shifts_hint":
     "Aún no hay turnos esta semana. Haz clic en un día de la fila de alguien para cubrir un puesto o añadir un turno.",
   "staffing.rota.no_shifts_hint_phone":
@@ -409,8 +413,8 @@ const es: Record<keyof typeof en, string> = {
   "staffing.day.special": "Día especial",
   "staffing.day.edit_special": "Editar el personal de {name}",
   "staffing.day.show_special": "Ver el personal de {name}",
-  "staffing.day.edit_week": "Editar la semana habitual de {season}",
-  "staffing.day.show_week": "Ver la semana habitual de {season}",
+  "staffing.day.edit_week": "Editar la semana estándar de {season}",
+  "staffing.day.show_week": "Ver la semana estándar de {season}",
   "staffing.grid.label": "Personal por día",
   "staffing.grid.follows_season": "Sigue la temporada",
   "staffing.grid.follow_season": "Seguir la temporada",
@@ -421,6 +425,10 @@ const es: Record<keyof typeof en, string> = {
   "staffing.grid.people_other": "{count} personas",
   "staffing.painter.heading": "Personal",
   "staffing.painter.week": "{season}: semana estándar",
+  "staffing.painter.special_day": "{name}: día especial, {dates}",
+  "staffing.painter.special_day_undated": "{name}: día especial",
+  "staffing.painter.week_covers":
+    "Cada semana del {from} al {to} necesita este personal, salvo los días especiales.",
   "staffing.painter.guide_department":
     "Sombreado: horario de apertura de {department}, por periodo",
   "staffing.painter.guide_station":

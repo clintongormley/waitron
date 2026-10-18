@@ -1,5 +1,6 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import type { CalendarColour } from "@waitron/shared";
 import {
   baseStyles,
   saveActionState,
@@ -10,12 +11,17 @@ import {
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
+import { SPECIAL_DAY_LINE, seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
 
+/** What the painter edits: a season's calendar colour, "special" for a special day, "" for none. */
+export type PainterBand = CalendarColour | "special" | "";
+
 /**
- * A painter's full-screen frame: one bar (close, heading, the `picker`, `link` and `actions`
- * slots, Cancel and Save) over the `row` slot and the default slot, which fills the rest of the
- * screen so what it holds scrolls inside itself and the bar stays put.
+ * A painter's full-screen frame: an optional band in the colour of what it edits, above one bar
+ * (close, heading, the `picker` and `link` slots, then Cancel, the `actions` slot and Save), over
+ * the `row` slot and the default slot, which fills the rest of the screen so what it holds scrolls
+ * inside itself and the bar stays put.
  *
  * The host owns the draft: it hands over the scope and coordinator `draftScopeFor` gave it, which
  * the frame asks before Cancel, close or Escape, and `dirty`, which sets Save. It sends
@@ -26,6 +32,7 @@ import { t } from "./strings.js";
 export class PainterFrame extends LitElement {
   static override styles = [
     baseStyles,
+    seasonTintStyles,
     css`
       :host {
         display: contents;
@@ -39,6 +46,19 @@ export class PainterFrame extends LitElement {
       header {
         flex: none;
         container-type: inline-size;
+      }
+      .band {
+        block-size: var(--wt-space-2);
+        border-radius: var(--wt-radius-full);
+        /* Pulled up into the modal body's top padding (wt-dialog's --wt-space-5), so the band takes
+           no height from the grid: on a phone in Spanish the grid has only about half the screen. */
+        margin-block: calc(-1 * var(--wt-space-4)) var(--wt-space-2);
+      }
+      .band[data-tint] {
+        background: var(--season-tint-line);
+      }
+      .band[data-special] {
+        background: ${unsafeCSS(SPECIAL_DAY_LINE)};
       }
       .bar {
         display: grid;
@@ -102,6 +122,9 @@ export class PainterFrame extends LitElement {
         display: flex;
         gap: var(--wt-space-2);
       }
+      .bar[data-actions] [data-test="save"] {
+        margin-inline-start: var(--wt-space-4);
+      }
       .refusal {
         margin: var(--wt-space-2) 0 0;
         text-align: end;
@@ -135,6 +158,7 @@ export class PainterFrame extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** The message shown beside Save: a refused save, or a notice from the host. */
   @property() refusal = "";
+  @property() band: PainterBand = "";
   /** Nothing can be changed, so only ✕ is offered. */
   @property({ type: Boolean }) readOnly = false;
 
@@ -177,6 +201,17 @@ export class PainterFrame extends LitElement {
     >
       <div class="frame">
         <header>
+          ${
+            this.band
+              ? html`<div
+                  class="band"
+                  data-test="band"
+                  aria-hidden="true"
+                  data-tint=${this.band === "special" ? nothing : this.band}
+                  ?data-special=${this.band === "special"}
+                ></div>`
+              : nothing
+          }
           <div class="bar" ?data-actions=${this.hasActions && !this.readOnly}>
             <wt-button
               class="close"
@@ -194,13 +229,6 @@ export class PainterFrame extends LitElement {
               this.readOnly
                 ? nothing
                 : html`<div class="actions">
-                    <slot
-                      name="actions"
-                      @slotchange=${(event: Event) => {
-                        this.hasActions =
-                          (event.target as HTMLSlotElement).assignedElements().length > 0;
-                      }}
-                    ></slot>
                     <wt-button
                       data-test="cancel"
                       variant="secondary"
@@ -208,6 +236,13 @@ export class PainterFrame extends LitElement {
                       @click=${() => this.close()}
                       >${t("hours.cancel")}</wt-button
                     >
+                    <slot
+                      name="actions"
+                      @slotchange=${(event: Event) => {
+                        this.hasActions =
+                          (event.target as HTMLSlotElement).assignedElements().length > 0;
+                      }}
+                    ></slot>
                     <wt-button
                       data-test="save"
                       variant=${action.variant}

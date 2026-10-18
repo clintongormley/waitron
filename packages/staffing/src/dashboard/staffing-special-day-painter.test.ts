@@ -117,7 +117,7 @@ function heldRereads() {
 it("titles the special day and draws one column per date, which may follow the season, from one passive read", async () => {
   const { painter, request } = await mount();
   expect(frame(painter).open).toBe(true);
-  expect(frame(painter).heading).toBe("Christmas");
+  expect(frame(painter).heading).toBe("Christmas: special day, 24–⁠25 Dec");
   expect(grid(painter).columns).toEqual([
     { key: "eve", label: "Thu 24 Dec" },
     { key: "day", label: "Fri 25 Dec" },
@@ -433,7 +433,7 @@ it("ignores a read that answers after the address has moved to another special d
   await settle(painter);
   first(specialDayStaffing());
   await settle(painter);
-  expect(frame(painter).heading).toBe("New Year");
+  expect(frame(painter).heading).toBe("New Year: special day, 24–⁠25 Dec");
 });
 
 it.each(["succeeds", "is refused"])(
@@ -582,7 +582,7 @@ it("says the venue has no departments or prep stations, and draws no grid to pai
   const { painter } = await mount({
     read: async () => ({ ...specialDayStaffing(), areas: [], guides: {} }),
   });
-  expect(frame(painter).heading).toBe("Christmas");
+  expect(frame(painter).heading).toBe("Christmas: special day");
   expect(byTest(painter, "no-areas")!.textContent).toContain("no departments or prep stations");
   expect(grid(painter)).toBeNull();
   expect(picker(painter)).toBeNull();
@@ -659,7 +659,7 @@ it("says the special day has no dates, and draws no grid to paint", async () => 
       guides: {},
     }),
   });
-  expect(frame(painter).heading).toBe("Christmas");
+  expect(frame(painter).heading).toBe("Christmas: special day");
   expect(byTest(painter, "no-dates")!.textContent).toBe("This special day has no dates yet.");
   expect(grid(painter)).toBeNull();
   expect(picker(painter)).toBeNull();
@@ -736,7 +736,11 @@ it.each([
     expect(STAFFING_STRINGS.es["staffing.painter.guide_station"]).not.toBe(
       STAFFING_STRINGS.en["staffing.painter.guide_station"],
     );
-    expect(frame(painter).heading).toBe("Christmas");
+    expect(frame(painter).heading).toBe(
+      locale === "es"
+        ? "Christmas: día especial, 24–⁠25 dic"
+        : "Christmas: special day, 24–⁠25 Dec",
+    );
     expect(root(painter).querySelector('[data-test="guide-hint"]')?.textContent?.trim()).toBe(
       locale === "es"
         ? STAFFING_STRINGS.es["staffing.painter.guide_department"].replace(
@@ -941,4 +945,125 @@ it("the block editor's Save reaches the special day's draft", async () => {
   await settle(painter);
   expect(grid(painter).days.get("eve")).toEqual([{ ...headChef, headcount: 2 }]);
   expect(saveButton(painter).disabled).toBe(false);
+});
+
+function brokenWords(el: Element): string[] {
+  const text = [...el.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim(),
+  )!;
+  const broken: string[] = [];
+  for (const match of text.textContent!.matchAll(/\S+/g)) {
+    const range = document.createRange();
+    range.setStart(text, match.index);
+    range.setEnd(text, match.index + match[0].length);
+    const tops = new Set([...range.getClientRects()].map((box) => Math.round(box.top)));
+    if (tops.size > 1) broken.push(match[0]);
+  }
+  return broken;
+}
+/** Each line of the element's text, read through a range over every character. */
+function lines(el: Element): string[] {
+  const text = [...el.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim(),
+  )!;
+  const rows = new Map<number, string>();
+  for (let index = 0; index < text.textContent!.length; index++) {
+    const range = document.createRange();
+    range.setStart(text, index);
+    range.setEnd(text, index + 1);
+    const box = range.getClientRects()[0];
+    if (!box) continue;
+    const top = Math.round(box.top);
+    rows.set(top, (rows.get(top) ?? "") + text.textContent![index]);
+  }
+  return [...rows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row.trim());
+}
+const titleOf = (el: StaffingSpecialDayPainter) => frame(el).shadowRoot!.querySelector("h2")!;
+const frameButton = (el: StaffingSpecialDayPainter, test: string) =>
+  frame(el).shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!;
+
+it("titles the special day '<name>: special day, <dates>'", async () => {
+  const { painter } = await mount();
+  expect(frame(painter).heading).toBe("Christmas: special day, 24–⁠25 Dec");
+  painter.remove();
+  setLocale("es");
+  const spanish = (await mount()).painter;
+  expect(frame(spanish).heading).toBe("Christmas: día especial, 24–⁠25 dic");
+});
+
+it("with no areas or no dates the heading is '<name>: special day'", async () => {
+  const noAreas = (
+    await mount({ read: async () => ({ ...specialDayStaffing(), areas: [], guides: {} }) })
+  ).painter;
+  expect(frame(noAreas).heading).toBe("Christmas: special day");
+  noAreas.remove();
+  const noDates = (
+    await mount({
+      read: async () => ({
+        ...specialDayStaffing(),
+        areas: specialDayStaffing().areas.map((area) => ({ ...area, dates: [] })),
+        guides: {},
+      }),
+    })
+  ).painter;
+  expect(frame(noDates).heading).toBe("Christmas: special day");
+  noDates.remove();
+  setLocale("es");
+  const spanish = (
+    await mount({ read: async () => ({ ...specialDayStaffing(), areas: [], guides: {} }) })
+  ).painter;
+  expect(frame(spanish).heading).toBe("Christmas: día especial");
+});
+
+it("carries the special-day band from the moment it opens, while loading, and to a viewer", async () => {
+  let answer: (read: SpecialDayStaffing) => void = () => undefined;
+  const loading = (await mount({ read: () => new Promise((resolve) => (answer = resolve)) }))
+    .painter;
+  expect(frame(loading).heading, "loading").toBe("Staffing");
+  expect(frame(loading).band, "loading").toBe("special");
+  answer(specialDayStaffing());
+  await settle(loading);
+  expect(frame(loading).band, "loaded").toBe("special");
+  loading.remove();
+  const viewer = (await mount({ readOnly: true })).painter;
+  expect(frame(viewer).band, "viewer").toBe("special");
+  expect(
+    frame(viewer)
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=band]")!
+      .getBoundingClientRect().height,
+  ).toBeGreaterThan(0);
+});
+
+it("a day of five scattered dates at 390 px wraps its heading and keeps ✕, Cancel and Save on screen", async () => {
+  const old = [window.innerWidth, window.innerHeight];
+  try {
+    await page.viewport(390, 844);
+    const scattered = ["2026-12-01", "2026-12-03", "2026-12-05", "2026-12-07", "2026-12-09"];
+    const { painter } = await mount({
+      read: async () => {
+        const read = specialDayStaffing();
+        for (const area of read.areas)
+          area.dates = scattered.map((date) => ({ dateId: date, date, blocks: null }));
+        read.guides = {};
+        return read;
+      },
+    });
+    const title = titleOf(painter);
+    expect(title.textContent).toBe("Christmas: special day, 1 Dec, 3 Dec, 5 Dec, 7 Dec, 9 Dec");
+    expect(lines(title).length).toBeGreaterThan(1);
+    expect(brokenWords(title)).toEqual([]);
+    for (const each of [
+      frameButton(painter, "dismiss"),
+      frameButton(painter, "cancel"),
+      frameButton(painter, "save"),
+      title,
+    ]) {
+      const box = each.getBoundingClientRect();
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(391);
+    }
+  } finally {
+    await page.viewport(old[0]!, old[1]!);
+  }
 });

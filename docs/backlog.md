@@ -1429,12 +1429,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   `language_copies`, `language_receipts`, `language_save_error`, `not_printed`, `preview_for`,
   `preview_paper`, `trading_name_location`, `trim_save_error`, `venue_defaults` and `venue_wide`.
 
-- **A762. Every painter says what it edits in its colour, and the Staffing month marks special days
-  (owner, 2026-10-16).** All four painters get a band in the season's or the special day's colour;
-  the staffing painters take A723's "Winter: standard week" wording; the Staffing month marks a
-  special day's dates as one coloured run. After A723.
-  [Detail](backlog/service-periods.md#a762-every-painter-says-what-it-edits-in-its-colour-and-the-staffing-month-marks-special-days)
-
 - **Loose ends left by A720.**
   - Look at a picked, focused today in the Month. `--wt-focus-offset` and
     `--wt-field-line-width-active` are both 2px (`packages/ui-core/src/tokens/structure.css`), so
@@ -1489,8 +1483,24 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A season closure on a special date is not cut or checked against that date's shorter hours** —
   found during A723 (#1849), by reading. [Detail](backlog/service-periods.md#a-season-closure-on-a-special-date-is-not-cut-or-checked-against-that-dates-shorter-hours)
 
-- **A723's plan defaults sent to the owner as an FYI** (Decisions 1, 3, 6, 7 and 9) — the owner may
-  overrule any. [Detail](backlog/service-periods.md#a723s-plan-defaults-sent-to-the-owner-as-an-fyi)
+- **A723's plan defaults sent to the owner as an FYI** (Decisions 1, 3, 6 and 7; A762's Decision 3
+  superseded Decision 9) — the owner may overrule any.
+  [Detail](backlog/service-periods.md#a723s-plan-defaults-sent-to-the-owner-as-an-fyi)
+
+- **A762's plan defaults sent to the owner as an FYI** (Decisions 1, 2, 3, 8 and 10) — left open by
+  A762; the owner may overrule any.
+  [Detail](backlog/service-periods.md#a762s-plan-defaults-sent-to-the-owner-as-an-fyi)
+
+- **A purple season looks like a special day** — left open by A762. A purple season's band and
+  Staffing-month line are 1.26:1 (light) and 1.63:1 (dark) from the special-day purple.
+  [Detail](backlog/service-periods.md#a-purple-season-looks-like-a-special-day)
+
+- **The Opening hours Month marks a special day only by its name** — left open by A762 (its plan's
+  Decision 11): the Staffing month draws a purple run over a special day's dates, the Opening hours
+  Month does not. The owner's "even on the month view the special day is not shown" may mean it too.
+
+- **Special days have no colour of their own** — left open by A762 (its plan's Decision 2): every
+  special day is the Calendar's special-day purple; a colour per day needs a column and a chooser.
 
 - **Which name a record sent across a legal-name change carries** (A494 follow-up, 2026-10-11). A
   record keeps the name it was written with, so one written before the change but sent after it

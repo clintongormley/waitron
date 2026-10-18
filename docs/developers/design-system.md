@@ -261,14 +261,21 @@ names no calendar colour as grey. The season chips (`season-chips.ts`), the Year
 (`season-painter.ts`, `staffing-season-painter.ts`), the period dialog's and the Periods window's
 season chips (the Periods window's through `::part(tint-<colour>)` rules over `SEASON_TINT_TOKENS`,
 `periods-list.ts`), and the swatches of a viewer's Seasons window take the tint, and the Month's and the Staffing month's days
-take the line as their top border.
+take the line as their top border. The band along the top of both season painters' bars takes the
+line too (`band` on `painter-frame.ts`). A special day stores no colour: the band of both
+special-day painters, and the run the Staffing month draws over a special day's dates in place of
+the season's line, are `SPECIAL_DAY_LINE` (`season-tint.ts`), `--wt-color-palette-purple`, the
+colour the Calendar already marks special days with.
 Two seasons may share a colour. A new venue's four seasons are Spring green, Summer amber, Autumn
 orange and Winter blue (`DEFAULT_SEASONS`, `packages/venue-service/src/season-rules.ts`). The
 season's name and dates are always written on its chip.
 
 The "season paints" cases in `season-tint.test.ts` hold, in both themes and for every calendar
 colour, grey included, that the text is 4.5:1 or more on the tint and that the line is 3:1 or more
-from the tint and from `--wt-color-surface`.
+from the tint, from `--wt-color-surface` and from `--wt-color-surface-raised` (a painter's
+background); and that `SPECIAL_DAY_LINE` is 3:1 or more from `--wt-color-surface`,
+`--wt-color-surface-raised` and `--wt-color-bg`. They do not hold that a purple season's line is
+told apart from `SPECIAL_DAY_LINE`: it is not (backlog, "A purple season looks like a special day").
 
 A prep station's colour (`STATION_COLOURS`, `packages/shared/src/station-colours.ts`) paints its
 Routes cells and its key swatch with `--wt-color-station-<colour>` and its period-line dots with
@@ -2247,7 +2254,9 @@ and paint with it" (the opening-hours seasons spec, mockup 9); opened from the P
 
 The season painter (`season-painter.ts`, under `packages/venue-service/src/dashboard/`) edits one
 season's week for every active department and zone, in a full-screen frame (`painter-frame.ts`, a
-`wt-modal size="full"`). Its bar holds ✕, the heading "<season>: standard week", ‹ the season chip
+`wt-modal size="full"`). A band in the season's colour (its line; grey for a stored colour that
+names no calendar colour) runs along the top of the bar, `aria-hidden`; the words say what it means.
+The bar holds ✕, the heading "<season>: standard week", ‹ the season chip
 ›, the department-or-zone picker, a Periods link that opens the Periods window over the painter,
 and Cancel and Save; the bar stays in view while the
 paint grid (`paint-grid.ts`) scrolls in the space under it. A heading too long for its room wraps
@@ -2285,9 +2294,19 @@ edits, or makes a department with edits inactive, drops those edits and says so 
 sideways with its time column pinned. A venue viewer gets ✕ alone, no paint row, and a grid that
 does not change.
 
-The special-day painter (`special-day-painter.ts`) edits one special day in the same frame. Its bar
-holds ✕, the day's name as heading ("New special day" before it has one), Delete on a stored day,
-the department-or-zone picker, and Cancel and Save. A side panel holds the required name, the
+The special-day painter (`special-day-painter.ts`) edits one special day in the same frame. A band
+in the special-day purple runs along the top of its bar from the moment it opens, a viewer's too.
+The bar holds ✕; the heading "<name>: special day, <dates>", or "<name>: special day" while the day
+has no dates, "New special day" before a new day has a name and "Edit special day" for a stored day
+whose draft has no name, following the draft's name and dates as they are edited; the
+department-or-zone picker; then Cancel, Delete with the danger look on a stored day, and Save,
+which stands apart: while the bar holds Delete, Save takes a `--wt-space-4` margin beside the
+group's `--wt-space-2` gap (`.bar[data-actions]`, `painter-frame.ts`), and without it Cancel and
+Save keep the plain gap. The heading writes the dates as runs in date order, joined by ", ": "24
+Dec", "12–15 Feb", "30 Jan – 2 Feb", each with its year only when the dates span more than one year
+(`formatDateRuns`, `date-runs.ts`). A U+2060 word joiner follows the dash of a run inside one month,
+so the heading never breaks there (an English case in `special-day-painter.test.ts` checks it at 390
+px). A side panel holds the required name, the
 required dates as chips each with a remove button, + Add dates…, and Every year as No or Yes. + Add dates…
 opens a month to pick from (`add-dates-calendar.ts`): a click adds a date or removes a chosen one,
 and a double-click counts as one click; a drag (a touch drag too, with no long press), a
@@ -2339,9 +2358,14 @@ read-only: no paint row, no Delete, and nothing in the panel or grid changes.
 The staffing painters (`staffing-season-painter.ts` and `staffing-special-day-painter.ts`, under
 `packages/staffing/src/dashboard/`) paint how many people of each staff role a department or prep
 station needs, in the same frame, on a staffing grid (`staffing-grid.ts`) built from the parts
-venue-service exports from `@waitron/venue-service/painter`. The season painter's bar holds ✕, the
+venue-service exports from `@waitron/venue-service/painter`. Each carries its Opening hours twin's
+band: the season painter's in its season's colour once its read names the season, the special-day
+painter's in the special-day purple from the moment it opens. The season painter's bar holds ✕, the
 heading "<season>: standard week", ‹ the season chip ›, a department-or-prep-station picker, and
-Cancel and Save, over a column per weekday. The special-day painter's bar holds ✕, the special day's name, the
+Cancel and Save, with the line "Every week from <first day> to <last day> needs this staffing,
+except on special days." under it, over a column per weekday. The special-day painter's bar holds
+✕, the heading "<name>: special day, <dates>" (the dates of its read's first area, written as runs as
+in the Opening hours editor; "<name>: special day" when it has none; "Staffing" while it loads), the
 picker, and Cancel and Save, over a column per date of the day. A paint row offers the staff roles,
 + New staff role, which opens the staff-role dialog with “Add and paint with it” and chooses the
 role it saves, and How many, from 1 to 50. The paint row reuses the “Drag down a day to paint”
@@ -2649,7 +2673,9 @@ it stays on the bottom left. The floor plan editor's header is the owner's excep
 then Cancel beside Save (A502). **A destructive action in the row — Delete, Clear setting — goes in
 the `cancel` slot after Cancel, keeping its danger look, the two in one wrapping flex group, so Save
 stands alone on the right: `[Cancel] [Delete] … [Save]`** (owner, 2026-10-16, making general what
-A726 chose for the Routes cell editor on 2026-10-15). Nothing guards it across screens. A secondary action that belongs beside the primary action goes in the
+A726 chose for the Routes cell editor on 2026-10-15). The special-day editor's top bar follows it
+too, Cancel, Delete, then Save set apart (special-day painter, above; A762 plan, Decision 10, a plan
+default extending the rule from a form's bottom row to a painter's bar). Nothing guards it across screens. A secondary action that belongs beside the primary action goes in the
 `secondary` slot. The row's message runs from the form's left edge only when the row is the form's
 full width. Where the row shares a line with something else, show the message with `formMessage`
 directly before that line, or let the row take the full width (in a `wt-modal`, no wider than the form width)
@@ -4198,7 +4224,11 @@ Monday, or, when the Week shows one day, that day's month. The Staffing view
 covering a month; each day lists the areas with a bar whose width is the area's share of the
 month's largest number, and the number. ‹ › step months, its title keeps one width as the Month's
 does, its year is plain text, and a Show picker offers All areas or one area
-(kept in the address as `area`), and a day closed all day reads Closed. It has no row of season
+(kept in the address as `area`), and a day closed all day reads Closed. Each day's top border takes
+its season's line; on a special day's dates a purple run (`SPECIAL_DAY_LINE`) covers it, bridging
+the table's gap (`--staffing-month-gap`, halved below 560 px) to the next date of the same special
+day in the same week row, with rounded ends at the run's first and last date and at a week's end.
+Two special days on neighbouring dates are two runs. It has no row of season
 chips and no legend. Every day is a button that opens the shared day box (Day box below): the
 date, the special day's name, a line saying which season's standard staffing the day follows or
 that a special day replaces it ("Special day" when no season holds it), and each shown area's number, with ", N unfilled" when the week

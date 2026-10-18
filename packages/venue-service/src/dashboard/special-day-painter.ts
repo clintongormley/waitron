@@ -17,7 +17,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { layerPaint, stepSpan } from "../day-paint.js";
 import { holidayDateName } from "../holiday-naming.js";
 import type { HolidayFact, LocalDate } from "../hours-types.js";
-import { addDays, isLocalDate, rangeDates } from "../hours-rules.js";
+import { isLocalDate, rangeDates } from "../hours-rules.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { Paint } from "../paint-model.js";
@@ -48,6 +48,7 @@ import {
   formatWeekday,
 } from "./hours-view.js";
 import { t } from "./strings.js";
+import { formatDateRuns, runsOf } from "./date-runs.js";
 import "./add-dates-calendar.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
@@ -213,16 +214,6 @@ const byStart = (cutover: string) => (a: Paint, b: Paint) =>
   stepSpan(a, cutover)[0] - stepSpan(b, cutover)[0];
 const columnLabel = (date: LocalDate) =>
   `${formatWeekday(date, "short")} ${formatMonthDay(date.slice(5))}`;
-/** Sorted dates as runs of consecutive dates, each its first and last date. */
-function runsOf(dates: readonly LocalDate[]): [LocalDate, LocalDate][] {
-  const runs: [LocalDate, LocalDate][] = [];
-  for (const date of dates) {
-    const last = runs.at(-1);
-    if (last && addDays(last[1], 1) === date) last[1] = date;
-    else runs.push([date, date]);
-  }
-  return runs;
-}
 
 /**
  * One special day in a full-screen painter: its name, dates and Every year in a side panel, and a
@@ -1511,7 +1502,12 @@ export class SpecialDayPainter extends LitElement {
 
   private heading(): string {
     const name = this.draft.name.trim();
-    if (name) return name;
+    if (name) {
+      const dates = formatDateRuns(this.draft.dates.map(({ date }) => date));
+      return dates
+        ? format("painter.special_day", { name, dates })
+        : format("painter.special_day_undated", { name });
+    }
     return t(this.specialDayId === null ? "special.new" : "special.edit");
   }
   private message(): string {
@@ -1691,6 +1687,7 @@ export class SpecialDayPainter extends LitElement {
     const stored = this.specialDayId !== null && !this.loading && !this.loadFailed;
     return html`<painter-frame
         .open=${this.open}
+        .band=${"special"}
         .heading=${this.heading()}
         .scope=${this.scope}
         .coordinator=${this.coordinator}
@@ -1724,7 +1721,7 @@ export class SpecialDayPainter extends LitElement {
             ? html`<wt-button
                 slot="actions"
                 data-test="delete"
-                variant="secondary"
+                variant="danger"
                 ?disabled=${this.saving}
                 @click=${() => {
                   this.deleting = { busy: false, message: "" };

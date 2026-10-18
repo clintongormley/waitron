@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { CALENDAR_COLOURS } from "@waitron/shared";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { LeaveCoordinator } from "@waitron/ui";
 import { cleanup, host, mount } from "@waitron/ui/src/test-helpers.js";
 import type { PainterFrame } from "./painter-frame.js";
 import type { PaintGrid } from "./paint-grid.js";
+import { SEASON_TINT_TOKENS, SPECIAL_DAY_LINE } from "./season-tint.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
 
@@ -369,7 +371,7 @@ test("read-only: only ✕ is offered, and it closes without asking", async () =>
   expect(saves).toEqual([]);
 });
 
-test("an actions slot sits in the bar between the link and Cancel, and stays put while the grid scrolls", async () => {
+test("an actions slot sits in the bar between Cancel and Save, apart from Save, and stays put while the grid scrolls", async () => {
   const old = [window.innerWidth, window.innerHeight];
   try {
     await page.viewport(1280, 500);
@@ -382,12 +384,13 @@ test("an actions slot sits in the bar between the link and Cancel, and stays put
     expect(remove.assignedSlot?.name).toBe("actions");
     const bar = part(frame, ".bar");
     expect(bar.contains(remove.assignedSlot)).toBe(true);
+    await expect.poll(() => bar.hasAttribute("data-actions")).toBe(true);
+    await frame.updateComplete;
     const at = remove.getBoundingClientRect();
-    const link = frame.querySelector("[data-test=link]")!.getBoundingClientRect();
     const quit = cancel(frame).getBoundingClientRect();
     expect(at.width).toBeGreaterThan(0);
-    expect(at.left).toBeGreaterThanOrEqual(link.right);
-    expect(at.right).toBeLessThanOrEqual(quit.left);
+    expect(at.left).toBeGreaterThanOrEqual(quit.right);
+    expect(save(frame).getBoundingClientRect().left - at.right).toBeGreaterThanOrEqual(16);
     expect(at.top).toBeLessThan(quit.bottom);
     expect(at.bottom).toBeGreaterThan(quit.top);
     const content = frame
@@ -401,6 +404,34 @@ test("an actions slot sits in the bar between the link and Cancel, and stays put
   }
 });
 
+test.each([390, 1280])(
+  "without an action, Cancel and Save keep their usual gap and the heading its room (%i px)",
+  async (width) => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(width, 800);
+      const { frame } = await open();
+      const gap = parseFloat(getComputedStyle(part(frame, ".actions")).columnGap);
+      expect(gap).toBe(8);
+      const quit = cancel(frame).getBoundingClientRect();
+      const keep = save(frame).getBoundingClientRect();
+      expect(Math.abs(keep.left - quit.right - gap)).toBeLessThanOrEqual(0.5);
+      if (width === 390) {
+        const sameLine = (a: Element, b: Element) => {
+          const [x, y] = [a.getBoundingClientRect(), b.getBoundingClientRect()];
+          return x.top < y.bottom && y.top < x.bottom;
+        };
+        const title = part(frame, "h2");
+        for (const each of [dismiss(frame), cancel(frame), save(frame)]) {
+          expect(sameLine(title, each)).toBe(true);
+        }
+      }
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  },
+);
+
 test("read-only: the actions slot is not shown", async () => {
   const { frame } = await open();
   const remove = document.createElement("button");
@@ -413,4 +444,97 @@ test("read-only: the actions slot is not shown", async () => {
   await frame.updateComplete;
   expect(remove.assignedSlot).toBeNull();
   expect(remove.getBoundingClientRect().width).toBe(0);
+});
+
+describe("the band in what the painter edits", () => {
+  const band = (frame: PainterFrame) => frame.shadowRoot!.querySelector<HTMLElement>(".band");
+  function painted(frame: PainterFrame, value: string) {
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = value;
+    frame.append(probe);
+    const colour = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return colour;
+  }
+
+  test("draws no band unless told what it edits", async () => {
+    const { frame } = await open();
+    expect(band(frame)).toBeNull();
+  });
+
+  test("a season's band runs the header's full width above the bar, in that season's line colour", async () => {
+    const { frame } = await open();
+    for (const colour of CALENDAR_COLOURS) {
+      frame.band = colour;
+      await frame.updateComplete;
+      const drawn = band(frame)!;
+      expect(drawn, colour).not.toBeNull();
+      expect(drawn.getAttribute("aria-hidden")).toBe("true");
+      expect(getComputedStyle(drawn).backgroundColor, colour).toBe(
+        painted(frame, SEASON_TINT_TOKENS[colour].line),
+      );
+      const box = drawn.getBoundingClientRect();
+      const bar = part(frame, ".bar").getBoundingClientRect();
+      expect(box.height).toBeGreaterThan(0);
+      expect(Math.abs(box.width - bar.width)).toBeLessThanOrEqual(1);
+      expect(box.bottom).toBeLessThanOrEqual(bar.top);
+    }
+  });
+
+  test("a special day's band is the special-day purple", async () => {
+    const { frame } = await open();
+    frame.band = "special";
+    await frame.updateComplete;
+    const special = painted(frame, SPECIAL_DAY_LINE);
+    expect(special).toBe(painted(frame, "var(--wt-color-palette-purple)"));
+    expect(getComputedStyle(band(frame)!).backgroundColor).toBe(special);
+    expect(band(frame)!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("the band stays put while the grid scrolls, and a viewer sees it too", async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(1280, 500);
+      const { frame } = await open();
+      frame.band = "green";
+      await frame.updateComplete;
+      const top = band(frame)!.getBoundingClientRect().top;
+      const content = frame
+        .querySelector<PaintGrid>("paint-grid")!
+        .shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+      content.scrollTop = 150;
+      expect(content.scrollTop).toBe(150);
+      expect(band(frame)!.getBoundingClientRect().top).toBe(top);
+      frame.readOnly = true;
+      await frame.updateComplete;
+      expect(band(frame)).not.toBeNull();
+      expect(band(frame)!.getBoundingClientRect().height).toBeGreaterThan(0);
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
+
+  test("at 390 px a band leaves ✕, the heading, Cancel and Save on screen", async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(390, 800);
+      expect(window.innerWidth).toBe(390);
+      const { frame } = await open();
+      frame.band = "special";
+      await frame.updateComplete;
+      for (const [name, element] of [
+        ["✕", dismiss(frame)],
+        ["heading", part(frame, "h2")],
+        ["Cancel", cancel(frame)],
+        ["Save", save(frame)],
+      ] as const) {
+        const box = element.getBoundingClientRect();
+        expect(box.width, name).toBeGreaterThan(0);
+        expect(box.left, name).toBeGreaterThanOrEqual(0);
+        expect(box.right, name).toBeLessThanOrEqual(391);
+      }
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
 });

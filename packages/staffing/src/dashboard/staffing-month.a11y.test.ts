@@ -75,6 +75,20 @@ const states: Record<string, () => Promise<void>> = {
   "the day box, a viewer": async () => {
     await openBox(false);
   },
+  "a special-day run": async () => {
+    const fair = { id: "sd-fair", name: "Fair" };
+    const el = await view(async (month) => {
+      const read = staffingMonth(month);
+      return {
+        ...read,
+        days: read.days.map((day) => ({
+          ...day,
+          specialDay: ["2026-12-15", "2026-12-16", "2026-12-17"].includes(day.date) ? fair : null,
+        })),
+      };
+    });
+    expect(root(el).querySelectorAll("[data-test=special-run]")).toHaveLength(3);
+  },
   "a read failure": async () => {
     const el = await view(() => Promise.reject({ code: "connection.failed" }));
     expect(root(el).querySelector("[data-test=load-error]")).not.toBeNull();

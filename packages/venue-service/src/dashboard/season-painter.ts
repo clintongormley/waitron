@@ -694,6 +694,7 @@ export class SeasonPainter extends LitElement {
       : NOTHING_BY_KEY;
     return html`<painter-frame
         .open=${this.open}
+        .band=${seasonTints(this.model!.seasons).get(season.id) ?? "grey"}
         .heading=${format("painter.week", { season: season.name })}
         .scope=${this.scope}
         .coordinator=${this.coordinator}

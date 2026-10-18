@@ -1295,3 +1295,117 @@ for (const theme of ["light", "dark"] as const)
     );
     expect(focused.hasAttribute("aria-current")).toBe(false);
   });
+
+describe("a special day's run", () => {
+  function withSpecialDays(marks: Record<string, { id: string; name: string }>) {
+    const { api } = fakeApi(async (month) => {
+      const read = staffingMonth(month);
+      return {
+        ...read,
+        days: read.days.map((day) => ({ ...day, specialDay: marks[day.date] ?? null })),
+      };
+    });
+    return api;
+  }
+  const fair = { id: "sd-fair", name: "Fair" };
+  const fairDays = withSpecialDays({
+    "2026-12-15": fair,
+    "2026-12-16": fair,
+    "2026-12-17": fair,
+  });
+  const runs = (el: StaffingMonthView, date: string) => [
+    ...cell(el, date).querySelectorAll<HTMLElement>("[data-test=special-run]"),
+  ];
+  const run = (el: StaffingMonthView, date: string) => {
+    const found = runs(el, date);
+    expect(found).toHaveLength(1);
+    return found[0]!.getBoundingClientRect();
+  };
+  const day = (el: StaffingMonthView, date: string) =>
+    cell(el, date).querySelector<HTMLElement>(".day")!;
+  const probe = (el: StaffingMonthView, colour: string) => {
+    const span = document.createElement("span");
+    span.style.backgroundColor = colour;
+    el.parentElement!.append(span);
+    return getComputedStyle(span).backgroundColor;
+  };
+
+  async function expectOneRun(el: StaffingMonthView) {
+    const purple = probe(el, "var(--wt-color-palette-purple)");
+    for (const date of ["2026-12-15", "2026-12-16", "2026-12-17"]) {
+      const [mark] = runs(el, date);
+      expect(runs(el, date)).toHaveLength(1);
+      expect(getComputedStyle(mark!).backgroundColor).toBe(purple);
+      const box = day(el, date);
+      expect(run(el, date).top).toBeCloseTo(box.getBoundingClientRect().top, 1);
+      expect(run(el, date).height).toBeGreaterThanOrEqual(
+        parseFloat(getComputedStyle(box).borderTopWidth),
+      );
+    }
+    expect(Math.abs(run(el, "2026-12-15").right - run(el, "2026-12-16").left)).toBeLessThanOrEqual(
+      0.5,
+    );
+    expect(Math.abs(run(el, "2026-12-16").right - run(el, "2026-12-17").left)).toBeLessThanOrEqual(
+      0.5,
+    );
+    expect(run(el, "2026-12-17").right).toBeLessThanOrEqual(
+      day(el, "2026-12-17").getBoundingClientRect().right + 0.5,
+    );
+    expect(run(el, "2026-12-15").left).toBeGreaterThanOrEqual(
+      day(el, "2026-12-15").getBoundingClientRect().left - 0.5,
+    );
+    expect(runs(el, "2026-12-14")).toHaveLength(0);
+    expect(runs(el, "2026-12-18")).toHaveLength(0);
+  }
+
+  it("marks a special day's dates in the special-day colour along their tops, as one run", async () => {
+    const { el } = await mount({ api: fairDays });
+    await expectOneRun(el);
+  });
+
+  it("a run breaks at a week's end", async () => {
+    const { el } = await mount({
+      api: withSpecialDays({
+        "2026-12-19": fair,
+        "2026-12-20": fair,
+        "2026-12-21": fair,
+        "2026-12-22": fair,
+      }),
+    });
+    expect(run(el, "2026-12-20").right).toBeLessThanOrEqual(
+      day(el, "2026-12-20").getBoundingClientRect().right + 0.5,
+    );
+    expect(run(el, "2026-12-21").left).toBeGreaterThanOrEqual(
+      day(el, "2026-12-21").getBoundingClientRect().left - 0.5,
+    );
+  });
+
+  it("two special days on neighbouring dates are two runs", async () => {
+    const { el } = await mount({
+      api: withSpecialDays({
+        "2026-12-24": { id: "sd-eve", name: "Christmas Eve" },
+        "2026-12-25": { id: "sd-xmas", name: "Christmas Day" },
+      }),
+    });
+    expect(run(el, "2026-12-25").left - run(el, "2026-12-24").right).toBeGreaterThanOrEqual(1);
+  });
+
+  it("at a phone's width the run still joins its dates", async () => {
+    await useViewport(390, 844);
+    const { el } = await mount({ api: fairDays });
+    expect(window.innerWidth).toBe(390);
+    await expectOneRun(el);
+    const { el: wide } = await mount({ api: fairDays, width: "1280px" });
+    const gap = (view: StaffingMonthView) =>
+      cell(view, "2026-12-16").getBoundingClientRect().left -
+      cell(view, "2026-12-15").getBoundingClientRect().right;
+    expect(gap(el)).toBeCloseTo(gap(wide) / 2, 1);
+  });
+
+  it("a day of no special day keeps its season's line", async () => {
+    const { el } = await mount({ api: fairDays });
+    const blue = probe(el, "var(--wt-color-station-blue-dot)");
+    expect(getComputedStyle(day(el, "2026-12-23")).borderTopColor).toBe(blue);
+    expect(runs(el, "2026-12-23")).toHaveLength(0);
+  });
+});

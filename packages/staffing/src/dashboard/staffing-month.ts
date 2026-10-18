@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { QueryController, codeMessage, codeOf } from "@waitron/dashboard-kit";
@@ -6,7 +6,11 @@ import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { CALENDAR_YEAR_MAX, CALENDAR_YEAR_MIN } from "@waitron/venue-service/hours-types";
-import { seasonTints, seasonTintStyles } from "@waitron/venue-service/dashboard/season-tint";
+import {
+  SPECIAL_DAY_LINE,
+  seasonTints,
+  seasonTintStyles,
+} from "@waitron/venue-service/dashboard/season-tint";
 import { fixedTitle, fixedTitleStyles } from "@waitron/venue-service/dashboard/fixed-title";
 import "@waitron/venue-service/dashboard/calendar-day-box";
 import { areaKey } from "../slots.js";
@@ -27,6 +31,10 @@ function stepMonth(month: string, by: number): string {
   return `${String(Math.floor(index / 12)).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
 }
 
+function sameSpecialDay(day: Day, neighbour: Day | undefined): boolean {
+  return !!day.specialDay && day.specialDay.id === neighbour?.specialDay?.id;
+}
+
 /** The Calendar's Staffing view: one month of whole Monday-to-Sunday weeks, each day listing the
  *  people needed per area as a bar and a number. ‹ › and the area picker move the Calendar's address
  *  through `open`; the host passes the address back as `month` and `params`. */
@@ -41,6 +49,7 @@ export class StaffingMonthView extends LitElement {
         display: block;
         min-width: 0;
         container: staffing-month / inline-size;
+        --staffing-month-gap: var(--wt-space-1);
       }
       .head {
         display: flex;
@@ -60,7 +69,7 @@ export class StaffingMonthView extends LitElement {
       table {
         width: 100%;
         border-collapse: separate;
-        border-spacing: var(--wt-space-1);
+        border-spacing: var(--staffing-month-gap);
         table-layout: fixed;
       }
       th {
@@ -78,6 +87,7 @@ export class StaffingMonthView extends LitElement {
         vertical-align: top;
       }
       .cell {
+        position: relative;
         display: flex;
         flex-direction: column;
         height: 100%;
@@ -117,6 +127,24 @@ export class StaffingMonthView extends LitElement {
         font-size: var(--wt-font-size-sm);
         text-align: start;
         overflow: hidden;
+      }
+      .run {
+        position: absolute;
+        inset-block-start: 0;
+        inset-inline: 0;
+        block-size: var(--wt-space-1);
+        background: ${unsafeCSS(SPECIAL_DAY_LINE)};
+        border-radius: var(--wt-radius-sm);
+        pointer-events: none;
+      }
+      .run[data-joins-next] {
+        inset-inline-end: calc(-1 * var(--staffing-month-gap));
+        border-start-end-radius: 0;
+        border-end-end-radius: 0;
+      }
+      .run[data-joins-previous] {
+        border-start-start-radius: 0;
+        border-end-start-radius: 0;
       }
       button.day {
         width: 100%;
@@ -210,7 +238,7 @@ export class StaffingMonthView extends LitElement {
       /* A phone's width: the bar sits above its label, and today is marked on the number. */
       @container staffing-month (width < 560px) {
         table {
-          border-spacing: calc(var(--wt-space-1) / 2);
+          --staffing-month-gap: calc(var(--wt-space-1) / 2);
         }
         .day {
           padding: var(--wt-space-1) calc(var(--wt-space-1) / 4);
@@ -468,9 +496,11 @@ export class StaffingMonthView extends LitElement {
           ${weeks.map(
             (week) =>
               html`<tr>
-                ${week.map((day) =>
+                ${week.map((day, index) =>
                   this.#cell(day, month.today, chosen, names, largest, tints, cellLabel, {
                     stop: day.date === stop,
+                    joinsPrevious: sameSpecialDay(day, week[index - 1]),
+                    joinsNext: sameSpecialDay(day, week[index + 1]),
                   }),
                 )}
               </tr>`,
@@ -570,7 +600,11 @@ export class StaffingMonthView extends LitElement {
     largest: number,
     tints: Map<string, string>,
     cellLabel: Intl.DateTimeFormat,
-    { stop }: { stop: boolean },
+    {
+      stop,
+      joinsPrevious,
+      joinsNext,
+    }: { stop: boolean; joinsPrevious: boolean; joinsNext: boolean },
   ) {
     const isToday = day.date === today;
     const shown = this.#shown(day, chosen, names);
@@ -583,6 +617,17 @@ export class StaffingMonthView extends LitElement {
       ?data-closed=${day.closedAllDay}
     >
       <div class="cell">
+        ${
+          day.specialDay
+            ? html`<span
+                class="run"
+                data-test="special-run"
+                aria-hidden="true"
+                ?data-joins-previous=${joinsPrevious}
+                ?data-joins-next=${joinsNext}
+              ></span>`
+            : nothing
+        }
         <button
           type="button"
           class="day"

@@ -282,31 +282,45 @@ makes"):
   save keeps it open, unsaved.
 - Decision 7: a zone's day on which its department is closed shows "<department> closed all day"
   behind the zone's paint, which stays drawn on top.
-- Decision 9: the special-day editor keeps the day's name as its heading, with no line naming its
-  dates.
 
-## A762. Every painter says what it edits in its colour, and the Staffing month marks special days
+A762's plan, Decision 3, superseded Decision 9 (the special-day editor kept the day's name as its
+heading): the editor is now titled "<name>: special day, <dates>".
 
-**A762 (owner, 2026-10-16).** Owner: "we need to make it more obvious that we're editing a standard
-week vs a special range. maybe through the use of colour. even on the month view the special day is
-not shown". Files: `packages/venue-service/src/dashboard/season-painter.ts`,
-`special-day-painter.ts`, `painter-frame.ts`; `packages/staffing/src/dashboard/staffing-season-painter.ts`,
-`staffing-special-day-painter.ts`, `staffing-month.ts`. After A723 (the opening-hours painters'
-wording); the stored season colours it paints with landed in A721.
+## A762's plan defaults sent to the owner as an FYI
 
-1. **All four painters — opening hours and staffing, standard week and special day — carry the
-   colour of what they edit** (owner chose all four, 2026-10-16): a band along the top bar in the
-   season's colour for a standard week, in the special day's own colour for a special day.
-2. **The staffing painters take A723's wording too:** "Winter: standard week" or "Foo: special day,
-   12–15 Feb", with A723's line under the top bar saying which dates it covers. Today the staffing
-   special-day painter shows only "Foo" and a department.
-   A723 kept the special-day editor's heading as the day's name with no dates line (A723 plan,
-   Decision 9). The staffing Spanish strings still say "semana habitual" (`staffing.rota.paint_week`,
-   `staffing.day.edit_week`, `staffing.day.show_week` and `staffing.rota.unpainted_season`,
-   `packages/staffing/src/dashboard/strings.ts`) where Opening hours and the staffing painter's own
-   title now say "semana estándar".
-3. **The Staffing month marks a special day's dates in its colour**, as one run the way the season
-   bar marks a season. Today each date only carries the name in coloured text.
+Left open by A762.
+
+A762's plan made these choices by default and sent them to the owner to overrule if wanted
+([plan](../superpowers/plans/2026-10-18-a762-painter-colour-bands.md), "Decisions this plan
+makes"):
+
+- Decision 1: the band is a strip, not a tinted bar: `--wt-space-2` tall, the bar's full width,
+  rounded ends, above the bar, `aria-hidden`, in the season's line colour. Nothing but colour sits
+  on it, so it needs only 3:1 against the painter's background, which `season-tint.test.ts` holds.
+- Decision 2: a special day's colour is the Calendar's special-day purple
+  (`SPECIAL_DAY_LINE`, `--wt-color-palette-purple`); special days store no colour.
+- Decision 3: both special-day painters, Opening hours' too, are titled "<name>: special day,
+  <dates>"; "<name>: special day" with no dates; "New special day" before a new day has a name.
+  It supersedes A723's Decision 9.
+- Decision 8: the Staffing month draws a special day's dates as one purple run over the season's
+  line, joined across the gaps within a week and broken at a week's end; two special days on
+  neighbouring dates are two runs.
+- Decision 10: the special-day editor's Delete comes after Cancel with the danger look, and Save
+  stands apart. This extends the owner's 2026-10-16 rule for a form's bottom row
+  (`[Cancel] [Delete] … [Save]`, design-system.md → Forms) to a painter's top bar.
+
+## A purple season looks like a special day
+
+Left open by A762.
+
+A purple season's line (`--wt-color-station-purple-dot`) against the special-day purple
+(`--wt-color-palette-purple`) is 1.26:1 in light and 1.63:1 in dark (hand-computed over the token
+values, the plan's "Receipts for the contrast decisions"). So a purple season's band in the
+painters looks like the special-day band, and its line in the Staffing month like a special day's
+run. What tells them apart today: the painter's heading says "standard week" or "special day", and
+the month's special-day run is joined across the gaps between its dates where a season's line
+keeps them. Options: keep purple out of the season chooser, or give the special-day marks a shape
+of their own.
 
 ## Two holidays with one name in one year's list
 
@@ -372,6 +386,24 @@ Re-check when a new year's list is added.
 - **"Standard week" in English and "semana estándar" in Spanish wherever Opening hours names a
   season's week (A723 plan, Decision 8; plan default).** `day.standard` ("Horario habitual de
   {season}") names hours, not a week, and stays.
+
+- **A special day's dates are written as runs (A762 plan, Decision 4; plan default).** "24 Dec",
+  "12–15 Feb", "30 Jan – 2 Feb", in date order, joined by ", ", with years only when the dates span
+  more than one; a U+2060 word joiner after a one-month run's dash keeps it from breaking there.
+
+- **Only the season painters have a line under the bar (A762 plan, Decision 5; plan default).** A
+  special-day heading already names its dates.
+
+- **The staffing special-day painter reads its dates from its read's first area (A762 plan,
+  Decision 6; plan default)**, as every area carries the same dates; no server read changed.
+
+- **When the band shows (A762 plan, Decision 7; plan default).** A special-day painter's from the
+  moment it opens; a staffing season painter's once its read names the season's colour; a viewer's
+  too.
+
+- **Staffing's Spanish says "semana estándar" in the four strings that name a season's week (A762
+  plan, Decision 9; plan default).** `staffing.day.standard` and `staffing.day.replaces` name the
+  staffing, not a week, and stay.
 
 - **In the Calendar's Month and Week a day's name breaks only between its words, a word too wide
   for its place cut with "…" and kept whole in the name's title; the day box shows the name whole,

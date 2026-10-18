@@ -2,6 +2,9 @@ import { CALENDAR_COLOURS, isStationColour, type CalendarColour } from "@waitron
 import { css, unsafeCSS } from "lit";
 import { STATION_COLOUR_TOKENS } from "./station-colour-styles.js";
 
+/** The Calendar's special-day colour, as a band or a run's line. */
+export const SPECIAL_DAY_LINE = "var(--wt-color-palette-purple)";
+
 export const SEASON_TINT_TOKENS = Object.fromEntries(
   CALENDAR_COLOURS.map((colour) => [
     colour,

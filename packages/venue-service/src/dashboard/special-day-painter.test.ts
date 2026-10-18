@@ -129,7 +129,7 @@ async function save(el: SpecialDayPainter, writes: Write[]) {
 describe("a stored special day", () => {
   it("opens on its stored facts: name, a chip and a column per date, and each date's Closed tick", async () => {
     const { painter } = await mount();
-    expect(frame(painter).heading).toBe("Christmas dinners");
+    expect(frame(painter).heading).toBe("Christmas dinners: special day, 14–⁠15 Dec, 25 Dec");
     expect(
       painter.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-input[name=name]")!
         .value,
@@ -180,7 +180,7 @@ describe("a stored special day", () => {
     painter.specialDayId = "sd1";
     painter.specialDayId = "sd2";
     await loaded(painter);
-    expect(frame(painter).heading).toBe("Fair week");
+    expect(frame(painter).heading).toBe("Fair week: special day, 20 Apr");
     expect(chips(painter)).toEqual(["2027-04-20"]);
     expect(saveButton(painter).disabled).toBe(true);
     painter.specialDayId = "sd1";
@@ -190,7 +190,7 @@ describe("a stored special day", () => {
     release();
     await new Promise((resolve) => setTimeout(resolve, 20));
     await settle(painter);
-    expect(frame(painter).heading).toBe("Fair week");
+    expect(frame(painter).heading).toBe("Fair week: special day, 20 Apr");
   });
 
   it("a read that fails says so beside Save and offers nothing to save", async () => {
@@ -198,6 +198,42 @@ describe("a stored special day", () => {
     expect(frame(painter).refusal).toBe("This special day could not be loaded.");
     expect(saveButton(painter).disabled).toBe(true);
   });
+
+  it.each([1280, 390])(
+    "Delete sits after Cancel with the danger look, and Save stands alone at the end (%i px)",
+    async (width) => {
+      const old = [window.innerWidth, window.innerHeight];
+      try {
+        await page.viewport(width, 844);
+        const { painter } = await mount();
+        const bar = frame(painter).shadowRoot!;
+        const remove = part<HTMLElement & { variant: string }>(painter, "delete")!;
+        expect(remove.variant).toBe("danger");
+        const [quit, at, keep] = [
+          bar.querySelector("[data-test=cancel]")!.getBoundingClientRect(),
+          remove.getBoundingClientRect(),
+          bar.querySelector("[data-test=save]")!.getBoundingClientRect(),
+        ];
+        expect(quit.right).toBeLessThanOrEqual(at.left);
+        expect(keep.left - at.right).toBeGreaterThanOrEqual(16);
+        for (const [x, y] of [
+          [quit, at],
+          [at, keep],
+          [quit, keep],
+        ] as const) {
+          expect(x.top).toBeLessThan(y.bottom);
+          expect(y.top).toBeLessThan(x.bottom);
+        }
+        for (const box of [quit, at, keep]) {
+          expect(box.width).toBeGreaterThan(0);
+          expect(box.left).toBeGreaterThanOrEqual(0);
+          expect(box.right).toBeLessThanOrEqual(width + 1);
+        }
+      } finally {
+        await page.viewport(old[0]!, old[1]!);
+      }
+    },
+  );
 });
 
 describe("a stored special day opened with a date to add", () => {
@@ -863,7 +899,7 @@ describe("Save", () => {
       },
     ]);
     expect(saveButton(painter).disabled).toBe(true);
-    expect(frame(painter).heading).toBe("Staff dinners");
+    expect(frame(painter).heading).toBe("Staff dinners: special day, 14–⁠15 Dec, 25 Dec");
     expect(events.map(({ type }) => type)).toEqual(["special-day-saved"]);
     expect((events[0]!.detail as { detail: SpecialDayDetail }).detail.name).toBe("Staff dinners");
   });
@@ -932,7 +968,7 @@ describe("Save", () => {
     await save(painter, writes);
     expect(frame(painter).refusal).toBe("Staff party already holds Tue, 15 Dec 2026.");
     expect(grid(painter).columnErrors.get("2026-12-15")).toBe(frame(painter).refusal);
-    expect(frame(painter).heading).toBe("Renamed");
+    expect(frame(painter).heading).toBe("Renamed: special day, 14–⁠15 Dec, 25 Dec");
     expect(saveButton(painter).disabled).toBe(false);
     await save(painter, writes);
     expect(writes).toHaveLength(2);
@@ -1118,7 +1154,7 @@ describe("edges", () => {
     release();
     await new Promise((resolve) => setTimeout(resolve, 20));
     await settle(painter);
-    expect(frame(painter).heading).toBe("Fair week");
+    expect(frame(painter).heading).toBe("Fair week: special day, 14–⁠15 Dec, 25 Dec");
     expect(frame(painter).busy).toBe(false);
     expect(events).toEqual([]);
   });
@@ -1345,7 +1381,7 @@ describe("taken off the page while a request is out, and put back", () => {
     await expect.poll(() => frame(painter).busy).toBe(false);
     await settle(painter);
     expect(dismiss(painter).disabled).toBe(false);
-    expect(frame(painter).heading).toBe("Renamed");
+    expect(frame(painter).heading).toBe("Renamed: special day, 14–⁠15 Dec, 25 Dec");
     expect(saveButton(painter).disabled).toBe(true);
     expect(writes).toHaveLength(1);
   });
@@ -1397,7 +1433,7 @@ describe("taken off the page while a request is out, and put back", () => {
     await held.promise;
     document.body.append(painter);
     await loaded(painter);
-    expect(frame(painter).heading).toBe("Christmas dinners");
+    expect(frame(painter).heading).toBe("Christmas dinners: special day, 14–⁠15 Dec, 25 Dec");
     expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-25"]);
     expect(reads).toBe(2);
   });
@@ -1436,7 +1472,9 @@ describe("taken off the page while a request is out, and put back", () => {
     await first.promise;
     document.body.append(painter);
     await settle(painter);
-    await expect.poll(() => frame(painter).heading).toBe("Renamed elsewhere");
+    await expect
+      .poll(() => frame(painter).heading)
+      .toBe("Renamed elsewhere: special day, 14–⁠15 Dec, 25 Dec");
     expect(saveButton(painter).disabled).toBe(true);
   });
 
@@ -1453,5 +1491,183 @@ describe("taken off the page while a request is out, and put back", () => {
     expect(months).toEqual(["2026-12"]);
     await putBack(painter);
     expect(months).toEqual(["2026-12", "2026-12"]);
+  });
+});
+
+it("a stored day and a new one both carry the special-day band, a viewer's too", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  painter = document.createElement("special-day-painter");
+  painter.api = specialDayApi([], { days: { sd1: storedDay() } });
+  const api = painter.api.specialDays;
+  const read = api.readSpecialDay.bind(api);
+  api.readSpecialDay = async (id, options) => {
+    await held;
+    return read(id, options);
+  };
+  painter.model = painterModel();
+  painter.specialDayId = "sd1";
+  painter.open = true;
+  applyTokens(painter);
+  document.body.append(painter);
+  await settle(painter);
+  expect(part(painter, "loading")).not.toBeNull();
+  expect(frame(painter).band, "while the stored day is read").toBe("special");
+  release();
+  await loaded(painter);
+  expect(frame(painter).band, "stored").toBe("special");
+  painter.remove();
+  painter = (await mount({ specialDayId: null, date: "2026-12-14" })).painter;
+  expect(frame(painter).band, "new").toBe("special");
+  painter.remove();
+  painter = (await mount({ readOnly: true })).painter;
+  expect(frame(painter).band, "read-only").toBe("special");
+  expect(
+    frame(painter).shadowRoot!.querySelector<HTMLElement>(".band")!.getBoundingClientRect().height,
+  ).toBeGreaterThan(0);
+});
+
+function brokenWords(el: Element): string[] {
+  const text = [...el.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim(),
+  )!;
+  const broken: string[] = [];
+  for (const match of text.textContent!.matchAll(/\S+/g)) {
+    const range = document.createRange();
+    range.setStart(text, match.index);
+    range.setEnd(text, match.index + match[0].length);
+    const tops = new Set([...range.getClientRects()].map((box) => Math.round(box.top)));
+    if (tops.size > 1) broken.push(match[0]);
+  }
+  return broken;
+}
+/** Each line of the element's text, read through a range over every character. */
+function lines(el: Element): string[] {
+  const text = [...el.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim(),
+  )!;
+  const rows = new Map<number, string>();
+  for (let index = 0; index < text.textContent!.length; index++) {
+    const range = document.createRange();
+    range.setStart(text, index);
+    range.setEnd(text, index + 1);
+    const box = range.getClientRects()[0];
+    if (!box) continue;
+    const top = Math.round(box.top);
+    rows.set(top, (rows.get(top) ?? "") + text.textContent![index]);
+  }
+  return [...rows.entries()].sort(([a], [b]) => a - b).map(([, row]) => row.trim());
+}
+const titleOf = (el: SpecialDayPainter) => frame(el).shadowRoot!.querySelector("h2")!;
+const frameButton = (el: SpecialDayPainter, test: string) =>
+  frame(el).shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!;
+function onScreen(el: Element, width: number) {
+  const box = el.getBoundingClientRect();
+  expect(box.width).toBeGreaterThan(0);
+  expect(box.left).toBeGreaterThanOrEqual(0);
+  expect(box.right).toBeLessThanOrEqual(width + 1);
+}
+
+describe("the heading names the day, says it is a special day and lists its dates", () => {
+  it("titles a stored day '<name>: special day, <dates>' and follows the draft's dates", async () => {
+    const { painter } = await mount();
+    expect(frame(painter).heading).toBe("Christmas dinners: special day, 14–⁠15 Dec, 25 Dec");
+    await removeRun(painter, "2026-12-25");
+    expect(frame(painter).heading).toBe("Christmas dinners: special day, 14–⁠15 Dec");
+    await typeName(painter, "Fair");
+    expect(frame(painter).heading).toBe("Fair: special day, 14–⁠15 Dec");
+  });
+
+  it("a named day with no dates is '<name>: special day', an unnamed new day 'New special day'", async () => {
+    const { painter } = await mount({ specialDayId: null });
+    expect(frame(painter).heading).toBe("New special day");
+    await typeName(painter, "Fair");
+    expect(frame(painter).heading).toBe("Fair: special day");
+  });
+
+  it("in Spanish", async () => {
+    setLocale("es");
+    const { painter } = await mount();
+    expect(frame(painter).heading).toBe("Christmas dinners: día especial, 14–⁠15 dic, 25 dic");
+  });
+
+  it("a day of five scattered dates at 390 px wraps its heading and keeps ✕, Cancel, Delete and Save on screen", async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(390, 844);
+      const { painter } = await mount({
+        days: {
+          sd1: dated("2026-12-01", "2026-12-03", "2026-12-05", "2026-12-07", "2026-12-09"),
+        },
+      });
+      const title = titleOf(painter);
+      expect(title.textContent).toBe(
+        "Christmas dinners: special day, 1 Dec, 3 Dec, 5 Dec, 7 Dec, 9 Dec",
+      );
+      expect(lines(title).length).toBeGreaterThan(1);
+      expect(brokenWords(title)).toEqual([]);
+      for (const each of [
+        frameButton(painter, "dismiss"),
+        frameButton(painter, "cancel"),
+        part(painter, "delete")!,
+        frameButton(painter, "save"),
+        title,
+      ])
+        onScreen(each, 390);
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
+
+  describe.each(["en", "es"] as const)("a new day at 390 px (%s)", (locale) => {
+    it("a new day with a name and dates at 390 px keeps its heading beside ✕, Cancel and Save, breaking only between words and never after a run's dash", async () => {
+      const old = [window.innerWidth, window.innerHeight];
+      try {
+        await page.viewport(390, 844);
+        setLocale(locale);
+        const { painter } = await mount({ specialDayId: null });
+        await typeName(painter, "Christmas company dinners");
+        await addDates(painter, [
+          "2026-12-14",
+          "2026-12-15",
+          "2026-12-16",
+          "2026-12-22",
+          "2026-12-23",
+        ]);
+        const title = titleOf(painter);
+        expect(title.textContent).toContain("14–⁠16");
+        expect(part(painter, "delete")).toBeNull();
+        expect(brokenWords(title)).toEqual([]);
+        for (const line of lines(title)) expect(line.endsWith("–")).toBe(false);
+        const [head, close] = [title, frameButton(painter, "dismiss")].map((each) =>
+          each.getBoundingClientRect(),
+        );
+        expect(head!.top < close!.bottom && close!.top < head!.bottom, "beside ✕").toBe(true);
+        for (const each of [
+          frameButton(painter, "dismiss"),
+          frameButton(painter, "cancel"),
+          frameButton(painter, "save"),
+          title,
+        ])
+          onScreen(each, 390);
+      } finally {
+        await page.viewport(old[0]!, old[1]!);
+      }
+    });
+  });
+
+  it("at 390 px a run's dash where the line is full keeps its last day beside it", async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(390, 844);
+      const { painter } = await mount({ specialDayId: null });
+      await typeName(painter, "Christmas company dinners");
+      await addDates(painter, ["2026-12-01", "2026-12-02", "2026-12-24", "2026-12-25"]);
+      const title = titleOf(painter);
+      expect(lines(title).filter((line) => line.endsWith("–"))).toEqual([]);
+      expect(brokenWords(title)).toEqual([]);
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
   });
 });

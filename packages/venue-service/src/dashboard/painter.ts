@@ -1,4 +1,4 @@
-export { PainterFrame } from "./painter-frame.js";
+export { PainterFrame, type PainterBand } from "./painter-frame.js";
 export { stepAt, stepMinuteAt } from "../paint-model.js";
 export { clockAt } from "../day-paint.js";
 export { periodColourStyles } from "./period-colour-styles.js";
@@ -22,3 +22,4 @@ export {
   type PaintGridHost,
   type Stretch,
 } from "./paint-grid-parts.js";
+export { formatDateRuns } from "./date-runs.js";

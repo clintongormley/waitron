@@ -219,6 +219,8 @@ describe.each(["light", "dark"] as const)("staffing special-day painter (%s)", (
   test.each(Object.keys(states))("%s", async (state) => {
     await mountThemed("<div></div>", theme);
     await states[state]!();
+    const painterEl = host.querySelector("staffing-special-day-painter")!;
+    expect(painterEl.shadowRoot!.querySelector("painter-frame")!.band).toBe("special");
     await expectNoA11yViolations(host);
   });
 });

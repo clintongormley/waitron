@@ -69,9 +69,9 @@ decided on 2026-10-16. No new zoom or scrolling design is agreed.
   ‹ › stepper and its CSS; the staffing paint row's markup, which relies on `paintRowStyles`' class
   names; and the `--paint-grid-fill` height (staffing's `painter-parts.ts`, and venue-service's
   `season-painter.ts` and `special-day-painter.ts`), whose sum depends on the height of the grid's
-  heading row.
-- The special-day painter takes its list of dates from the read's first area, as no top-level list
-  exists in `SpecialDayStaffing`.
+  heading row; the style of the "which weeks it edits" line (`.covers`).
+- The special-day painter takes its list of dates, and the dates in its heading, from the read's
+  first area, as no top-level list exists in `SpecialDayStaffing`.
 
 Left open by A585-4.
 

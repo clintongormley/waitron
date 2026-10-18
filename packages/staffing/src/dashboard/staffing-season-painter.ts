@@ -94,6 +94,11 @@ export class StaffingSeasonPainter extends LitElement {
         color: var(--season-on-tint);
         border-color: var(--season-tint-line);
       }
+      .covers {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
 
@@ -438,13 +443,13 @@ export class StaffingSeasonPainter extends LitElement {
     const shown = read ? this.areaShown(read) : "";
     const chosen = this.chosenRole();
     const shownArea = read?.areas.find(({ area }) => areaKey(area) === shown);
+    const season = read?.seasons.find(({ id }) => id === this.seasonId);
     return html`<painter-frame
         .open=${true}
+        .band=${read ? (seasonTints(read.seasons).get(this.seasonId) ?? "grey") : ""}
         .heading=${
           read
-            ? tf("staffing.painter.week", {
-                season: read.seasons.find(({ id }) => id === this.seasonId)!.name,
-              })
+            ? tf("staffing.painter.week", { season: season!.name })
             : t("staffing.painter.heading")
         }
         .scope=${this.scope}
@@ -457,6 +462,16 @@ export class StaffingSeasonPainter extends LitElement {
         @painter-close=${() => this.open("staffing", this.addressParams())}
       >
         ${read ? this.seasonChip(read) : nothing}
+        ${
+          read
+            ? html`<p slot="row" class="covers" data-test="covers">
+                ${tf("staffing.painter.week_covers", {
+                  from: monthDay(season!.startsOn),
+                  to: monthDay(seasonLastDay(read.seasons, season!.startsOn)),
+                })}
+              </p>`
+            : nothing
+        }
         ${read?.areas.length ? areaPicker(read.areas, shown, this.saving, (value) => this.pick(value)) : nothing}
         ${
           read?.areas.length && !this.readOnly

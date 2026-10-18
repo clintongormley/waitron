@@ -1250,3 +1250,60 @@ it("the Periods link asks for the Periods window on a plain left click, and leav
     window.removeEventListener("click", settled);
   }
 });
+
+describe("the band in what the painter edits", () => {
+  const drawn = (el: SeasonPainter) => frame(el).shadowRoot!.querySelector<HTMLElement>(".band")!;
+  function painted(el: SeasonPainter, value: string) {
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = value;
+    frame(el).append(probe);
+    const colour = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return colour;
+  }
+
+  it("the band takes the season's stored colour, and follows the painter to another season", async () => {
+    const { painter } = await mount();
+    expect(frame(painter).band).toBe("blue");
+    expect(getComputedStyle(drawn(painter)).backgroundColor).toBe(
+      painted(painter, "var(--wt-color-station-blue-dot)"),
+    );
+    painter.seasonId = "spring";
+    await settle(painter);
+    expect(frame(painter).band).toBe("green");
+    expect(getComputedStyle(drawn(painter)).backgroundColor).toBe(
+      painted(painter, "var(--wt-color-station-green-dot)"),
+    );
+  });
+
+  it("the band is the colour the season stores, not one fixed per season", async () => {
+    const model = painterModel();
+    const { painter } = await mount({
+      model: {
+        ...model,
+        seasons: model.seasons.map((season) =>
+          season.id === "winter" ? { ...season, colour: "purple" } : season,
+        ),
+      },
+    });
+    expect(frame(painter).band).toBe("purple");
+    expect(getComputedStyle(drawn(painter)).backgroundColor).toBe(
+      painted(painter, "var(--wt-color-station-purple-dot)"),
+    );
+  });
+
+  it("a viewer sees the band too", async () => {
+    painter = document.createElement("season-painter");
+    painter.api = painterApi([]);
+    painter.model = painterModel();
+    painter.seasonId = "winter";
+    painter.departmentId = "d1";
+    painter.readOnly = true;
+    painter.open = true;
+    applyTokens(painter);
+    document.body.append(painter);
+    await settle(painter);
+    expect(frame(painter).band).toBe("blue");
+    expect(drawn(painter).getBoundingClientRect().height).toBeGreaterThan(0);
+  });
+});
