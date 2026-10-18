@@ -1961,3 +1961,48 @@ acceptance, final reviews and current-head CI remain required before A679 can la
 
 Local receipts: `~/waitron-campaign-e/receipts/a679-manager-ui-20261018/`, including
 `verification.json`, `controls.py`, `controls.json`, `test-preservation.json`, raw logs and captures.
+
+
+## Installed setup, recovery-key and manager journeys (2026-10-18)
+
+The installed Chrome probe uses the built setup and dashboard, a real local HTTPS listener and
+a fresh migrated venue directory. Chrome pins the generated leaf's public key. Only outside
+certificate validation/sealing, AEAT drain, internet time and SMTP delivery use synthetic responses.
+Native administrator, venue, certificate and email controls reach hour selection, a real PDF
+download, explicit kept confirmation and one activation. English and Spanish both pass.
+
+The exact downloaded PDF is selected through the native recovery picker. An actual annotation and
+resave changes the PDF hash while retaining identical attachment bytes. Chrome prints the rendered
+page to an attachment-free PDF; uploading it requests manual entry. Values extracted from the
+rendered page, with grouping, lowercase and look-alike characters, enter the native controls and
+authenticate an operation against a real copy of the saved database. The wrong key is refused.
+This is not a full archive, bucket or Cloud restore.
+
+After restart, the built dashboard uses a real manager session to replace the key once and
+download identical repeat bytes. The downloaded key authenticates against the current verifier;
+the former key does not. The saved hour journal and activation count remain unchanged. The manager
+session is seeded through the real session writer; the login UI is not exercised. Sixteen setup
+and manager views cover EN/ES, light/dark and 390/1280. Generated A4 PDFs are copied to
+`~/My Drive/Waitron mockups/2026-10-18 A679 recovery PDF/` for the owner's required LOOK approval.
+
+The command-line qualification exposed an eager font asset import that Node v26.11.1 with tsx
+4.23.15 refuses as `ERR_UNKNOWN_FILE_EXTENSION`. The new
+`apps/server/src/recovery-pdf-source.test.ts` first failed both EN/ES cases at that import.
+`recovery-pdf-node.ts` now imports the embedded asset when its loader is available and otherwise
+reads the source font file. Both source cases pass, including rendered key/check text and the
+exact attached document. The existing relocated-bundle checks also pass.
+`recovery-pdf-node.test.ts` adds two source-font fallback cases using its unchanged PDF assertions.
+No existing expected value or assertion changes in this checkpoint. The initial test location
+lacked tsx and failed module resolution; that attempt is retained as an unqualified probe, not
+the behavioral RED. The first installed probe used an attribute instead of the dialog's live
+`open` property and timed out; the corrected native journey passes.
+
+Fresh whole-file boot verification passes all 62 cases, closing the four earlier boot failures
+on this branch. The retained paper-policy suites still fail six cases across
+`first-fiscal-delivery.test.ts`, `module-operation-host.test.ts` and `first-fiscal-launch.test.ts`
+(52 pass). After the font fix, the old CLI public-input case now reaches
+`provisioning.initial_input_invalid` rather than failing to load its font. These failures remain
+branch gates. No old test is weakened or described as green.
+
+Receipts and runnable installed-probe overlay: `~/waitron-campaign-e/receipts/a679-entry-integration-20261018/`.
+Preserve all earlier Changed test checks inventories for the eventual whole-branch PR.

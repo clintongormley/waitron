@@ -334,8 +334,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   now have real trading-listener checks, including retained installation codes. The manager’s
   dashboard now offers a confirmed PDF replacement and one temporary PDF for download or repeat
   printing. The controls require `system.manage` and clear delivery on exit or permission changes.
-  Mounted-browser checks and the HTTPS service checks remain separate; their combined installed
-  journey is still open. The interrupted page now offers
+  Installed Chrome now completes the native first-setup forms and real HTTPS activation, downloads
+  the actual PDF and uploads that exact file through the recovery picker. Rendered grouped keys
+  authenticate against a copied database. The built manager dashboard replaces the named key and
+  downloads identical repeat bytes without another activation or hour-journal change. These checks
+  use synthetic external certificate, clock and email responses; complete restore and interruption
+  journeys remain open. Generated EN/ES A4 setup and replacement PDFs await the owner's viewing
+  approval in `~/My Drive/Waitron mockups/2026-10-18 A679 recovery PDF/`.
+  The interrupted page now offers
   password recovery first and confirmed Start again second. Browser checks cover a new tab,
   refused or late answers, uncheckable passwords and missing or uncertain databases. Recovered
   abandoned or partly activated attempts stay on the recovery page. The Finish interface now

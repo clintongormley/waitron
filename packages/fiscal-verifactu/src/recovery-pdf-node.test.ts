@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { renderRecoveryPdf } from "./recovery-pdf-node.js";
 import { decodeNodeKey } from "./paper-register-compact.js";
@@ -106,6 +106,20 @@ it("rejects an invalid document and locale before delivering bytes", async () =>
   ).rejects.toThrow("Recovery PDF refused");
   await expect(renderRecoveryPdf(document, "fr" as "en")).rejects.toThrow("Recovery PDF refused");
 });
+
+it.each(["en", "es"] as const)(
+  "reads the actual source font when the asset loader is unavailable in %s",
+  async (locale) => {
+    vi.doMock("./assets/register-noto-sans.ttf?inline", () => {
+      throw new Error("No font asset loader");
+    });
+    try {
+      await inspect(await renderRecoveryPdf(document, locale), locale);
+    } finally {
+      vi.doUnmock("./assets/register-noto-sans.ttf?inline");
+    }
+  },
+);
 
 it("carries its font and attachment in a relocated real Node bundle", async () => {
   const root = await mkdtemp(join(tmpdir(), "waitron-recovery-pdf-bundle-"));
