@@ -147,7 +147,7 @@ export async function previewBusinessDayStart(
     invalid("dayCutover", "clock_transition");
   const plan = planBusinessDayStart(model.clock, start.dayCutover, at);
   const effectiveDay = plan.effectiveBusinessDay;
-  await protectHistory(tx, cfg, plan.before, plan.candidate, effectiveDay);
+  await protectHistory(tx, cfg, model.clock, plan.candidate, effectiveDay);
   let conflicts: BusinessDayStartPreview["conflicts"] = [];
   let conflictCount = 0;
   try {
@@ -216,7 +216,7 @@ export async function writeBusinessDayStart(
     });
   for (const removed of plan.removed)
     await protectHistory(tx, cfg, model.clock, plan.candidate, removed);
-  await protectHistory(tx, cfg, plan.before, plan.candidate, effectiveDay);
+  await protectHistory(tx, cfg, model.clock, plan.candidate, effectiveDay);
   await VENUE_SERVICE.assertBusinessDayClockChange(
     tx,
     { locationId: locationId(cfg.locationId) },

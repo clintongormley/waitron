@@ -296,6 +296,11 @@ history for E, and the conflicts catch, with `assertBusinessDayClockChange(tx, c
 candidate, not the stored clock: replacing a waiting 21:00 with 23:00 is a move from the start in
 force, not from 21:00. (Today the stored clock, waiting row included, is `before`,
 `business-day-start.ts:193-199`.) An undo previews the plan's candidate (no row added).
+**Decision (controller ruling, Task 3b fix round 1):** the history check for E compares the STORED
+clock (`model.clock`, waiting rows included) with `plan.candidate`, in the preview and the Save:
+spec §5 refuses only what is recorded at or after the earlier of the stored and the new changeover.
+Measured from `plan.before`, a replace of a waiting 21:00 with 23:00 was refused for an order opened
+at Wed 10:00, which stays in Tuesday under both clocks. Conflicts still compare `plan.before`.
 
 - [ ] **Step 1: failing tests** — the Task 3a rows of the running list, plus at
   `at = 2026-10-20T20:00:00Z` (Tue 22:00 Madrid): preview `03:00` → `effectiveDay.businessDay
@@ -330,7 +335,8 @@ tests `business-day-start.test.ts`, `business-day-history.test.ts`, `boot.clock-
 5. `clockTransitionAt` non-null → `venue.business_day_invalid`
    `{ field: "dayCutover", reason: "clock_transition", clocksChangeOn, saveFrom }`;
 6. `protectHistory(model.clock, plan.candidate, d)` for each removed date `d`, and
-   `protectHistory(plan.before, plan.candidate, E)`; `assertBusinessDayClockChange(plan.before, plan.candidate, E)`;
+   `protectHistory(model.clock, plan.candidate, E)` (the stored clock, per the controller's ruling in
+   fix round 1; see Task 3a's decision); `assertBusinessDayClockChange(plan.before, plan.candidate, E)`;
 7. delete the removed rows, insert `{ E, dayCutover }` unless the plan adds no row, bump revision.
 
 - [ ] **Step 1: failing tests** — the Task 3b rows of the running list, and, at Tue 22:00
