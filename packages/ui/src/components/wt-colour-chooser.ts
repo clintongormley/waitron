@@ -218,10 +218,10 @@ export class WtColourChooser extends LitElement {
     popup.style.minWidth = `${anchor.width}px`;
     popup.style.maxWidth = `${innerWidth - 16}px`;
     popup.style.maxHeight = `${innerHeight - 16}px`;
-    // Set here, not through render(): the line count below reads this layout at once.
-    const group = popup.querySelector<HTMLElement>('[role="radiogroup"]')!;
-    // Four columns are shorter, so trying them clamps the scroll position.
+    // Trying four columns can shorten the panel's content, and the browser then clamps its scroll position.
     const scrollTop = popup.scrollTop;
+    const group = popup.querySelector<HTMLElement>('[role="radiogroup"]')!;
+    // Set here, not through render(): the line count below reads this layout at once.
     group.dataset.columns = "4";
     if ([...group.querySelectorAll(".colour-name")].some((name) => lineCount(name) > 1))
       group.dataset.columns = "2";

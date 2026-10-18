@@ -76,7 +76,8 @@
   --wt-color-on-day-standard: #16181d;
   --wt-color-day-closed: #3a3b42;
   --wt-color-on-day-closed: #ffffff;
-  /* Prep stations: a fill and a dot for each calendar colour but grey, whose paint station-colour-styles.ts mixes from its palette colour. */
+  /* Prep stations: a fill and a dot for each calendar colour but grey; station-colour-styles.ts
+     paints a grey station from --wt-color-palette-grey. */
   --wt-color-station-red: #fde2e1;
   --wt-color-station-red-dot: #d64545;
   --wt-color-station-orange: #fde6cf;

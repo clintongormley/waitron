@@ -4610,6 +4610,14 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   `role-chooser-edit-host-*-390*.png` in `~/waitron-campaign-b/a783-shots/`; `positionPopup` in
   `packages/ui/src/components/wt-colour-chooser.ts`). Left open by A783.
 
+- **A colour chooser left open while its window narrows may hide the chosen colour.** Read from
+  the code by A783's finish-branch re-read on 2026-10-18, not measured: open on the last colour in a
+  wide window short enough that two columns would scroll but four do not, then narrow it until two
+  columns are needed; the resize re-places the panel at the same scroll position and nothing scrolls
+  the chosen tile into view (`positionPopup` in `packages/ui/src/components/wt-colour-chooser.ts`).
+  Next: try it, and if it shows, keep the focused tile in view after the columns change. Left open
+  by A783.
+
 - **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** When the
   changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25
   hours, but `slotsForDay` (`packages/staffing/src/slots.ts`) ends every slot by minute 1440, so no
