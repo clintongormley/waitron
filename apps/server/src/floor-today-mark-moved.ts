@@ -15,7 +15,8 @@ import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { standsIn } from "./joined-split-layout.js";
 import { catchUpZone, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
-import { refuseHeld, refuseUnfree, zoneOfTable } from "./floor-today-table.js";
+import { refuseUnfree, zoneOfTable } from "./floor-today-table.js";
+import { refusedByAModule } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -132,16 +133,21 @@ export async function markMoved(
     keepTakenOff: false,
     carry: new Set(group.map(({ row }) => row.id)),
   });
-  if (await tableNeedsMoving(tx, tableId)) await refuseHeldBack(tx, tableId, [...groupTables]);
+  if (await tableNeedsMoving(tx, tableId))
+    await refuseHeldBack(tx, cfg, removals, now, tableId, [...groupTables]);
 }
 
 /**
- * Throws what still holds back the group of `tables`, which Mark moved could not apply: a party,
- * food on its way or a table needing clearing at one of them, or at a table tied to them by
- * today's merges and splits, as the catch-up's waiting rules tie them.
+ * Throws what still holds back the group of `tables`, which Mark moved could not apply: food on
+ * its way, a party, a table needing clearing or a module's refusal to let a table go, at one of
+ * them or at a table tied to them by today's merges and splits, as the catch-up's waiting rules
+ * tie them. `table.needs_moving` is the answer when none of those is found.
  */
 async function refuseHeldBack(
   tx: Transaction,
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+  now: Date,
   tableId: string,
   tables: readonly string[],
 ): Promise<never> {
@@ -176,8 +182,28 @@ async function refuseHeldBack(
     }
   }
   const ids = [tableId, ...[...tied].filter((id) => id !== tableId)];
-  await refuseHeld(tx, ids);
   for (const id of ids) await refuseDeliveryPending(tx, id);
   await refuseUnfree(tx, ids);
+  const removing = await tx
+    .select({ id: floorResetTables.tableId })
+    .from(floorResetTables)
+    .where(
+      and(
+        inArray(floorResetTables.tableId, ids),
+        eq(floorResetTables.pending, true),
+        eq(floorResetTables.remove, true),
+      ),
+    );
+  const refusals = await refusedByAModule(
+    tx,
+    cfg,
+    removals,
+    removing.map((row) => row.id!),
+    now,
+  );
+  for (const id of ids) {
+    const refusal = refusals.get(id);
+    if (refusal !== undefined) throw refusal;
+  }
   throw new AppError("table.needs_moving", { tableId });
 }

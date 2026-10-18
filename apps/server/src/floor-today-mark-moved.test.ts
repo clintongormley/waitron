@@ -360,6 +360,67 @@ describe("Mark moved", () => {
     expect(await refusal(markMoved(c4))).toEqual(newPlaceTaken(c4, t8));
   });
 
+  it("is refused, writing nothing, while guests sit at a part of the group with no place today", async () => {
+    const z = await plannedZone(
+      v,
+      [
+        { key: "c3", place: { x: 0, y: 0 } },
+        { key: "c4", place: { x: 20, y: 0 } },
+        { key: "c9", place: null },
+      ],
+      NOW,
+    );
+    const [c3, c4, c9] = [z.table.c3!, z.table.c4!, z.table.c9!];
+    const partyId = await seatAt(c3);
+    await inTx(v, async (tx) => {
+      const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+      const plan = await readLayout(tx, v.cfg, layout);
+      await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        layout,
+        {
+          revision: plan.revision,
+          tables: [
+            ...plan.tables.map((t) => ({
+              id: t.id,
+              key: t.id,
+              label: t.label,
+              seats: t.seats,
+              fixed: t.fixed,
+              placement: null,
+              partKeys: t.partIds,
+            })),
+            {
+              key: "long",
+              label: fresh("Long"),
+              seats: 8,
+              fixed: false,
+              placement: { x: 0, y: 40, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
+              partKeys: [z.master.c3!, z.master.c4!, z.master.c9!],
+            },
+          ],
+        },
+        NOW,
+      );
+      await resetZone(tx, v.cfg, REMOVALS, z.zoneId, NOW, "due");
+    });
+    await finish(partyId);
+    expect(await needsMoving(c4)).toBe(true);
+    expect(await needsMoving(c9)).toBe(false);
+    await seatAt(c9);
+    const before = await everything();
+
+    expect(await refusal(markMoved(c4))).toEqual({
+      status: 409,
+      body: { error: { code: "tab.already_open", params: { tableId: c9 } } },
+    });
+
+    expect(await everything()).toEqual(before);
+    expect(await needsMoving(c4)).toBe(true);
+  });
+
   it("Back to its saved place on a table that needs moving is Mark moved", async () => {
     const z = await threeNeedsMoving();
 

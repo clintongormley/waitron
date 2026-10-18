@@ -1960,6 +1960,54 @@ describe("a reset over a joined table split today", () => {
     expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
   });
 
+  it("Mark moved is refused with a module's refusal to let go of Counter 5, which the saved plan drops", async () => {
+    const { zoneId, master, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    await markNeedsClearing(table.c5!);
+    const order = await counterOrder(v, "Paella");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table.c5! })
+        .where(eq(workingOrders.id, order)),
+    );
+    await resave(zoneId, (tables) =>
+      tables
+        .filter((entry) => entry.id !== master.c5)
+        .map((entry) =>
+          entry.id === master.long ? { ...entry, partKeys: [master.c3!, master.c4!] } : entry,
+        ),
+    );
+    await reset(zoneId);
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+    const marked = [table.long!, table.c3!, table.c4!].sort();
+    expect(await readyToMoveIn(zoneId)).toEqual(marked);
+    const bookings: TableRemoval = {
+      refuse: (_tx, _cfg, tableIds) =>
+        Promise.resolve(
+          new Map(
+            tableIds
+              .filter((id) => id === table.c5)
+              .map((tableId) => [tableId, new AppError("table.booked", { tableId })]),
+          ),
+        ),
+      release: () => Promise.resolve(),
+    };
+
+    const refused = await inTx(v, (tx) => markMoved(tx, v.cfg, [bookings], table.long!, NOW)).then(
+      () => null,
+      (error: unknown) => error as AppError,
+    );
+
+    expect({ code: refused?.code, params: refused?.params }).toEqual({
+      code: "table.booked",
+      params: { tableId: table.c5! },
+    });
+    expect(await readyToMoveIn(zoneId)).toEqual(marked);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+  });
+
   it("Mark moved on Long table, marked while the saved plan drops Counter 5, puts Long table back and keeps Counter 5 off the map for its unpaid order", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
