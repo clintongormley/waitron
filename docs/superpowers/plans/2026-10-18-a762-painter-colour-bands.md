@@ -121,8 +121,11 @@ Cancel, keeping its danger look, so Save stands alone: `[Cancel] [Delete] … [S
   4.09:1 (`#e15656` on `#22262e`). All thirteen ≥ 3:1 in both themes.
 - `--wt-color-palette-purple` against the surface / raised surface: light 6.38:1, dark 7.53:1 /
   6.69:1.
-- `--wt-color-palette-purple` against `--wt-color-station-purple-dot` (a purple season's line):
-  1.26:1 light — they look alike (Decision 8, open point).
+- `--wt-color-palette-purple` against `--wt-color-station-purple-dot` (a purple season's line and
+  band): 1.26:1 light, 1.63:1 dark — they look alike, in the painters' bands and in the Staffing
+  month (Decisions 2 and 8, open point).
+- `--wt-color-palette-purple` against `--wt-color-bg` (the page under the month's bridges): 5.96:1
+  light, 8.27:1 dark (the plan review's calculation).
 
 ## Decisions this plan makes (defaults; each may be overruled)
 
@@ -135,7 +138,9 @@ Cancel, keeping its danger look, so Save stands alone: `[Cancel] [Delete] … [S
    exported as `SPECIAL_DAY_LINE`.** Why: special days store no colour (`seasons.colour` and
    `menu_periods.colour` are the only colour columns, `schema/seasons.ts:31`, `schema/menus.ts:16`);
    a colour per special day needs a migration and a chooser the spec does not ask for, and purple is
-   what every Calendar view already marks special days with. Owner FYI.
+   what every Calendar view already marks special days with. Cost: a purple season's band looks
+   like the special-day band (1.26:1 light, 1.63:1 dark) — the words in the heading tell them apart;
+   filed as an open point with the month's look-alike (Task 9 (b)). Owner FYI.
 3. **Both special-day painters — the Opening hours editor too — are titled "<name>: special day,
    <dates>"; a named day with no dates "<name>: special day"; an unnamed new day keeps "New special
    day".** Why: the spec calls this A723's wording, the owner's complaint is telling a standard week
@@ -146,7 +151,13 @@ Cancel, keeping its danger look, so Save stands alone: `[Cancel] [Delete] … [S
    spaces); a run across months "30 Jan – 2 Feb"; runs in date order, each date once, joined by
    ", "; every date carries its year only when the dates span more than one year (as the editor's
    date chips do, `special-day-painter.ts:1574`). Every run is listed; a long heading wraps, as the
-   frame already lets it (`painter-frame.ts:78-84`).
+   frame already lets it (`painter-frame.ts:78-84`). **A run never breaks after its dash:** a
+   U+2060 WORD JOINER follows the en dash in a run inside one month ("14–\u206015 Dec"), so the
+   line-break rules see "14–15" as one word (an en dash otherwise allows a break after it). Chosen
+   over a styled span because the heading is a plain string the frame writes into its `h2` and the
+   modal's accessible name; the joiner is invisible and is not spoken. A run across months
+   ("30 Jan – 2 Feb") may break at its spaces, between words. Whether Chromium honours it under the
+   `h2`'s `overflow-wrap: anywhere` is what Task 5's narrow case checks (not yet measured).
 5. **Only the season painters get a line under the bar.** A special-day heading already names its
    dates. Staffing's line: "Every week from {from} to {to} needs this staffing, except on special
    days."
@@ -169,9 +180,13 @@ Cancel, keeping its danger look, so Save stands alone: `[Cancel] [Delete] … [S
    staffing, not a week, and stay — as A723 Decision 8 kept `day.standard`
    (`staffing-month.test.ts:1204` pins `replaces` and is unchanged).
 10. **The special-day editor's Delete moves after Cancel, with the danger look, and Save stands
-    alone at the end:** the frame renders Cancel, the `actions` slot, then Save after a fixed
-    `--wt-space-4` gap. Why: the owner's 2026-10-16 house rule, applied to the one destructive
-    action in a painter's bar, whose header this branch is changing anyway. Owner FYI.
+    alone at the end:** the frame renders Cancel, the `actions` slot, then Save — after a fixed
+    `--wt-space-4` gap only while the `actions` slot holds something (`.bar[data-actions]`, the
+    frame's `hasActions`); without an action Cancel and Save keep today's `--wt-space-2` gap and the
+    heading its room. Why: this **extends** the owner's 2026-10-16 house rule, whose words cover a
+    form's bottom row (`wt-form-actions`, `design-system.md:2646-2651`), to a painter's top bar —
+    the one destructive action in a painter's bar, in a header this branch is changing anyway. An
+    extension, not an application: Owner FYI.
 11. **The Opening hours Month is not changed** (point 3 names the Staffing month); filed as an open
     point, since the owner's quote ("even on the month view the special day is not shown") may mean
     it too.
@@ -233,8 +248,10 @@ Cancel, keeping its danger look, so Save stands alone: `[Cancel] [Delete] … [S
 | `staffing.day.show_week` (`:413`) | unchanged | `Ver la semana estándar de {season}` |
 | `staffing.rota.unpainted_season` (`:329-330`) | unchanged | `Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Pinta una vez la semana estándar de {season} y cada semana de la temporada tendrá sus puestos. Puedes seguir añadiendo turnos en Todo el equipo.` |
 
-Date runs (Decision 4), English / Spanish: `24 Dec` / `24 dic`; `12–15 Feb` / `12–15 feb`;
-`30 Jan – 2 Feb` / `30 ene – 2 feb`; `14–15 Dec, 25 Dec` / `14–15 dic, 25 dic`. The Spanish short
+Date runs (Decision 4), English / Spanish — every run inside one month carries a U+2060 after its
+dash, shown here as `\u2060` and spelled so in test literals: `24 Dec` / `24 dic`;
+`12–\u206015 Feb` / `12–\u206015 feb`;
+`30 Jan – 2 Feb` / `30 ene – 2 feb`; `14–\u206015 Dec, 25 Dec` / `14–\u206015 dic, 25 dic`. The Spanish short
 months are as Chromium wrote them for A723 (`season-painter.test.ts:115-117`: "1 dic", "28 feb");
 "ene" was seen only in Node v26.11.1's ICU — if Chromium writes another form, the test takes
 Chromium's and the task report says so.
@@ -243,8 +260,9 @@ Chromium's and the task report says so.
 
 1. **Stepping to another season with ‹ ›.** Expected: the band takes the new season's colour.
    Pinned in Tasks 4 and 6.
-2. **A season stored with a colour no calendar colour names** (a value written before A721's set,
-   `seasons.colour` has no CHECK). Expected: a grey band, as its chip. Pinned in Task 4.
+2. **A season stored with a colour no calendar colour names** (`seasons.colour` has no CHECK).
+   Expected: a grey band, as its chip. Held by `seasonTints`' own case
+   (`season-tint.test.ts:28-38`), which both season painters take their band from (Tasks 4 and 6).
 3. **A special day of five scattered dates at 390 px.** Expected: the heading wraps between words,
    and ✕, Cancel, Delete and Save stay on screen. Pinned in Tasks 5 and 7.
 4. **In the Staffing month, a special day crossing a week's end, and two special days on
@@ -288,8 +306,9 @@ paints `SPECIAL_DAY_LINE` (through `unsafeCSS`). Shown read-only too.
     case **"each season's line and the special-day line read on the painter's raised surface"**:
     a probe painted `var(--wt-color-surface-raised)`; for every `CALENDAR_COLOURS` value
     `contrast(line, raised) >= 3`; `SPECIAL_DAY_LINE` against `--wt-color-surface` and
-    `--wt-color-surface-raised` `>= 3`; and `SPECIAL_DAY_LINE` computes to the same colour as a
-    probe painted `var(--wt-color-palette-purple)`.
+    `--wt-color-surface-raised` and `--wt-color-bg` (the page under the Staffing month's bridges,
+    Task 8) `>= 3`; and `SPECIAL_DAY_LINE` computes to the same colour as a probe painted
+    `var(--wt-color-palette-purple)`.
   - `painter-frame.test.ts`: **"draws no band unless told what it edits"** (`.band` null by
     default); **"a season's band runs the header's full width above the bar, in that season's line
     colour"** — for each `CALENDAR_COLOURS` colour set `band`, the band's computed background equals
@@ -315,15 +334,23 @@ paints `SPECIAL_DAY_LINE` (through `unsafeCSS`). Shown read-only too.
 Decision 10.
 
 **Files:** Modify `painter-frame.ts:193-219` (the `actions` slot moves between Cancel and Save;
-Save gets `margin-inline-start: var(--wt-space-4)`), `special-day-painter.ts:1722-1733`
+Save gets `margin-inline-start: var(--wt-space-4)` only under `.bar[data-actions]`, the attribute
+the frame already sets from `hasActions`, `:180`), `special-day-painter.ts:1722-1733`
 (`variant="danger"`); Test `painter-frame.test.ts`, `special-day-painter.test.ts`.
 
 - [ ] **Step 1: failing tests.** `painter-frame.test.ts`: the changed case below.
   `special-day-painter.test.ts`, under "a stored special day": **"Delete sits after Cancel with the
   danger look, and Save stands alone at the end"** — at 1280 and 390 px: `delete.variant ===
   "danger"`; `cancel.right ≤ delete.left`; `save.left − delete.right ≥ 16`; all three on one line
-  (`top < other.bottom` both ways) and on screen.
-- [ ] **Step 2:** run both files — FAIL (Delete before Cancel; variant secondary).
+  (`top < other.bottom` both ways) and on screen. `painter-frame.test.ts`: **"without an action,
+  Cancel and Save keep their usual gap and the heading its room"** — no `actions` child, at 390
+  and 1280 px: `save.left − cancel.right` within 0.5 px of the `.actions` group's computed
+  `column-gap` (8 px, `--wt-space-2`); at 390 px the heading shares the first row with ✕, Cancel
+  and Save (same-line check, as `:327-331`). This case passes before and after the change; it is
+  the control that fails if the gap is made unconditional (check that once by removing the
+  `[data-actions]` condition, then put it back).
+- [ ] **Step 2:** run both files — the Delete-order cases FAIL (Delete before Cancel; variant
+  secondary).
 - [ ] **Step 3:** implement.
 - [ ] **Step 4:** PASS for both files and `painter-frame.a11y.test.ts`,
   `special-day-painter.a11y.test.ts`; typecheck, lint; `pnpm format:check`.
@@ -358,21 +385,28 @@ Built on `formatShortDate(date, years)` (`hours-view.ts:47`); a run inside one m
 date's day number, "–", then `formatShortDate(last, years)`.
 
 - [ ] **Step 1: failing tests** (`date-runs.test.ts`): **"writes one date, a run in one month and a
-  run across months"** — `["2027-12-24"]` → `24 Dec`; 12–15 Feb 2027 → `12–15 Feb`; 30 Jan – 2 Feb
-  2027 → `30 Jan – 2 Feb`; **"joins runs with commas in date order, each date once, whatever order
-  they come in"** — `["2026-12-25","2026-12-14","2026-12-15","2026-12-14"]` → `14–15 Dec, 25 Dec`;
+  run across months"** — `["2027-12-24"]` → `24 Dec`; 12–15 Feb 2027 → `12–\u206015 Feb` (the word
+  joiner of Decision 4); 30 Jan – 2 Feb 2027 → `30 Jan – 2 Feb` (no joiner); **"joins runs with commas in date order, each date once, whatever order
+  they come in"** — `["2026-12-25","2026-12-14","2026-12-15","2026-12-14"]` →
+  `14–\u206015 Dec, 25 Dec`;
   **"a run over a leap day is one run"** — 28 Feb – 1 Mar 2028 → `28 Feb – 1 Mar`; **"writes each
   date's year when the dates span two years"** — 30 Dec 2026 – 2 Jan 2027 → `30 Dec 2026 – 2 Jan
-  2027`; `["2026-12-30","2026-12-31","2027-01-06"]` → `30–31 Dec 2026, 6 Jan 2027`; **"no dates is
-  the empty string"**; **"in Spanish"** — `12–15 feb`, `30 ene – 2 feb`, `14–15 dic, 25 dic`
-  (restoring English).
+  2027`; `["2026-12-30","2026-12-31","2027-01-06"]` → `30–\u206031 Dec 2026, 6 Jan 2027`; **"no dates
+  is the empty string"**; **"in Spanish"** — `12–\u206015 feb`, `30 ene – 2 feb`,
+  `14–\u206015 dic, 25 dic` (restoring English).
 - [ ] **Step 2:** run `src/dashboard/date-runs.test.ts` — FAIL (no module).
 - [ ] **Step 3:** implement; move `runsOf`.
-- [ ] **Step 4:** PASS, and `special-day-painter.test.ts` (the date chips use `runsOf`) PASS;
-  typecheck, lint (venue-service, staffing); `pnpm format:check`.
+- [ ] **Step 4:** PASS, and `special-day-painter.test.ts` (the date chips use `runsOf`) and
+  `painter.test.ts` (the entry point's export list) PASS; typecheck, lint (venue-service,
+  staffing); `pnpm format:check`.
 - [ ] **Step 5:** `git commit -s -m "A special day's dates written as runs, '14–15 Dec, 25 Dec' (A762)"`
 
-**Existing checks that change:** none.
+**Existing checks that change:**
+- `painter.test.ts:24-45` "exposes the painter frame and the helpers another module's painter draws
+  with" pins the entry point's whole export list with `toEqual`; it gains the one key
+  `formatDateRuns` (imported from `./date-runs.js`), every existing key and value unchanged (owner
+  2026-09-27: a whole-shape pin may gain the new field's key). Reason: a new export staffing uses
+  (Task 7). Task 1's `PainterBand` is a type and does not touch it.
 
 ## Task 4: The Opening hours painters show their band
 
@@ -386,9 +420,12 @@ date's day number, "–", then `formatShortDate(last, years)`.
 - [ ] **Step 1: failing tests.** `season-painter.test.ts`: **"the band takes the season's stored
   colour, and follows the painter to another season"** — Winter → `band === "blue"` and the frame's
   `.band` paints the computed `--wt-color-station-blue-dot`; set `seasonId = "spring"` → `"green"`
-  (Review Focus 1); **"a season stored with a colour no calendar colour names gets a grey band"** —
-  `painterModel()` with Winter's `colour: "mauve"` → `"grey"` (Review Focus 2); **"a viewer sees the
-  band too"**. `special-day-painter.test.ts`: **"a stored day and a new one both carry the
+  (Review Focus 1); **"the band is the colour the season stores, not one fixed per season"** —
+  `painterModel()` with Winter's `colour: "purple"` (a `CalendarColour`, `season-rules.ts:7`; no
+  cast) → `band === "purple"`, painting the computed `--wt-color-station-purple-dot`; **"a viewer
+  sees the band too"**. An unknown stored colour cannot be written through the `Season` type; the
+  painter takes its band from `seasonTints`, whose "reads an unknown colour as grey" case
+  (`season-tint.test.ts:28-38`) holds the grey (Review Focus 2). `special-day-painter.test.ts`: **"a stored day and a new one both carry the
   special-day band, a viewer's too"** (`frame(painter).band === "special"`, and before the stored
   read answers).
 - [ ] **Step 2:** run both files — FAIL (`band` is `""`).
@@ -419,7 +456,12 @@ formatDateRuns(draft dates) })`; with no dates → `painter.special_day_undated`
   **"in Spanish"** → `Christmas dinners: día especial, 14–15 dic, 25 dic`; **"a day of five
   scattered dates at 390 px wraps its heading and keeps ✕, Cancel, Delete and Save on screen"**
   (dates 1, 3, 5, 7 and 9 Dec 2026; the heading breaks only between words, as
-  `painter-frame.test.ts:281-294`'s `brokenWords`; Review Focus 3).
+  `painter-frame.test.ts:281-294`'s `brokenWords`; Review Focus 3); **"a new day with a name and
+  dates at 390 px keeps its heading beside ✕, Cancel and Save, breaking only between words and never
+  after a run's dash"** — a new day (no Delete, so the heading shares the first row) named
+  "Christmas company dinners" with 14, 15, 16, 22 and 23 Dec 2026, in English and Spanish:
+  `brokenWords` finds nothing, and no line of the `h2` ends in "–" (read each line's text from a
+  `Range` over the heading, as `brokenWords` does); ✕, Cancel and Save on screen.
 - [ ] **Step 2:** run `special-day-painter.test.ts` — the new cases FAIL (the heading is the name).
 - [ ] **Step 3 — change `heading()`, then look:** run every `special-day-painter*.test.ts` and
   `opening-hours-screen.special-day.test.ts`; write down every failure (file:line, test name, old
@@ -468,7 +510,11 @@ too, in `--wt-color-text-muted`, `--wt-font-size-sm`, no margin (as `season-pain
 - [ ] **Step 5:** `git commit -s -m "The staffing season painter shows its season's band, says which weeks it edits, and Spanish says 'semana estándar' (A762)"`
 
 **Existing checks that change:** none expected — no test pins the four Spanish strings
-(`git grep "semana habitual"` over `packages/**/*.test.ts` finds none); any failure is a STOP.
+(`git grep "semana habitual"` over `packages/**/*.test.ts` finds none). **Checks at risk from the
+added height** (the band and the new line take height from the grid; worked out by reading, not
+measured): `staffing-season-painter.test.ts:788-801` (the grid's slot over 600 px at 1280×900) and
+the A724 LOOK cases `:843-930` (each `.day` over 300 px at 390×900, Spanish included). If one fails,
+STOP and report the measured heights; do not edit the check or shrink the band or line to fit.
 
 ## Task 7: The staffing special-day painter: band and "<name>: special day, <dates>"
 
@@ -576,7 +622,8 @@ STOP.
 - [ ] New entries in the Service periods area (one line each in `backlog.md`, detail in
   `service-periods.md` when past four lines), each naming "left open by A762, #<PR>":
   (a) **A762's plan defaults sent to the owner as an FYI** — Decisions 1, 2, 3, 8 and 10;
-  (b) **A purple season's line looks like a special day's run** (1.26:1 light, receipt above);
+  (b) **A purple season looks like a special day** — its band in the painters and its line in the
+  Staffing month against the special-day band and run (1.26:1 light, 1.63:1 dark, receipt above);
   (c) **The Opening hours Month marks a special day only by its name** (Decision 11);
   (d) **Special days have no colour of their own** (Decision 2: one purple for all).
 - [ ] `service-periods.md` "## Decisions and deliberate limits": Decisions 4, 5, 6, 7 and 9, one
@@ -596,7 +643,9 @@ STOP.
   colours (band, title, line); the special-day editor on a stored multi-date day (purple band,
   "<name>: special day, <dates>", Cancel · Delete · Save) and on a new day before and after naming
   it; both staffing painters (bands, the season line, the special-day heading); the Staffing month
-  with a special day of three or more dates in one week and one crossing a week's end. If the demo
+  with a special day of three or more dates in one week and one crossing a week's end — looking
+  in particular at the month's staffing bars, which are the same `--wt-color-palette-purple` as the
+  run, beside it. If the demo
   venue has no such special day, make one through the dashboard and delete it afterwards; say what
   was changed and restored.
 - [ ] `wa-wt down waitron-feat-a762-painter-colour-bands`; check by the recorded process group and
