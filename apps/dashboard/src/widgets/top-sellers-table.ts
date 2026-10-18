@@ -36,27 +36,36 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
       </tr>
     </thead>
     <tbody>
-      ${rows.map(
-        (row, i) =>
-          html`<tr data-test=${`seller-row-${i}`}>
-              <th scope="row" data-test="seller-name">${row.name}</th>
-              <td class="num">${row.quantity}</td>
-              <td class="num">${formatMoney(row.total, currentLocale())}</td>
-            </tr>
-            ${row.variants.map(
-              (variant, j) =>
-                html`<tr data-test=${`seller-row-${i}-variant-${j}`}>
-                  <th scope="row" class="seller-variant">
-                    <span class="visually-hidden">${row.name}, </span
-                    ><span data-test="variant-name">${variant.name}</span>
-                  </th>
-                  <td class="num">${variant.quantity}</td>
-                  <td class="num">${formatMoney(variant.total, currentLocale())}</td>
-                </tr>`,
-            )}`,
-      )}
+      ${rows.map((row, i) => {
+        const name = sellerWords(row.name);
+        return html`<tr data-test=${`seller-row-${i}`}>
+            <th scope="row" data-test="seller-name" title=${row.name}>${name}</th>
+            <td class="num">${row.quantity}</td>
+            <td class="num">${formatMoney(row.total, currentLocale())}</td>
+          </tr>
+          ${row.variants.map(
+            (variant, j) =>
+              html`<tr data-test=${`seller-row-${i}-variant-${j}`}>
+                <th scope="row" class="seller-variant">
+                  <span class="visually-hidden">${row.name}, </span
+                  ><span data-test="variant-name" title=${variant.name}
+                    >${sellerWords(variant.name)}</span
+                  >
+                </th>
+                <td class="num">${variant.quantity}</td>
+                <td class="num">${formatMoney(variant.total, currentLocale())}</td>
+              </tr>`,
+          )}`;
+      })}
     </tbody>
   </table>`;
+}
+
+// Keep whitespace outside each clipped word so a name can wrap between words.
+function sellerWords(name: string): (string | TemplateResult)[] {
+  return name
+    .split(/(\s+)/u)
+    .map((word, index) => (index % 2 ? word : html`<span class="seller-word">${word}</span>`));
 }
 
 export const topSellersStyles = css`
