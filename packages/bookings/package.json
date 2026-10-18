@@ -36,7 +36,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "@waitron/migrations": "workspace:*",
     "drizzle-kit": "^0.31.11",
-    "playwright": "^1.64.0",
+    "playwright": "^1.64.1",
     "typescript": "^7.0.0",
     "vitest": "^4.1.11"
   }

@@ -36,7 +36,7 @@
     "demo:recipes": "tsx scripts/recipes-demo.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.1151.0",
+    "@aws-sdk/client-s3": "3.1152.0",
     "@hono/node-server": "^2.1.5",
     "@waitron/adjustments": "workspace:*",
     "@waitron/bookings": "workspace:*",
