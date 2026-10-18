@@ -13,7 +13,7 @@ export interface GuidePagesDeps {
   root?: string;
 }
 
-/** Copies of `packages/ui-core/src/tokens/*.css`, as [light, dark] or one value; Task 5's guard compares them. */
+/** Copies of `packages/ui-core/src/tokens/*.css`, as [light, dark] or one value; `scripts/guide-page-tokens.test.ts` compares them. */
 export const GUIDE_PAGE_TOKENS: Readonly<Record<string, readonly [string, string] | string>> = {
   "--wt-color-bg": ["#f7f7f8", "#101216"],
   "--wt-color-surface-sunken": ["#d6d9e0", "#101216"],
