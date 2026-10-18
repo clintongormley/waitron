@@ -518,56 +518,57 @@ export class BusinessDayStartEditor extends LitElement {
         ${
           draft
             ? html`<form
-                @submit=${(event: Event) => {
-                  event.preventDefault();
-                  if (active()) void this.#save();
-                }}
-              >
-                <wt-input
-                  name="dayCutover"
-                  label=${t("venue_details.dayCutover")}
-                  placeholder="HH:MM"
-                  required
-                  .value=${draft.dayCutover}
-                  .error=${this.errors.dayCutover ?? ""}
-                  ?disabled=${this.busy || this.readOnly}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    if (active()) this.#change("dayCutover", event);
+                  @submit=${(event: Event) => {
+                    event.preventDefault();
+                    if (active()) void this.#save();
                   }}
-                ></wt-input>
-                ${
-                  preview
-                    ? html`<div class="preview" data-test="preview">
-                        ${this.#previewLines(preview)}
-                        ${
-                          preview.conflictCount
-                            ? html`<p data-test="conflicts">
-                                  ${t("business_day.conflicts")} ${conflicts!.count}.
-                                  <a href="/manage/opening-hours"
-                                    >${t("business_day.open_hours")}</a
-                                  >
-                                </p>
-                                <ul data-test="conflict-rows">
-                                  ${conflicts!.lines.map((line) => html`<li>${line}</li>`)}
-                                </ul>`
-                            : nothing
-                        }
-                      </div>`
-                    : nothing
-                }
-                ${
-                  this.previewError
-                    ? html`<p role="alert" class="error">${this.previewError}</p>
-                        <wt-button
-                          data-test="preview-retry"
-                          @click=${() => {
-                            if (active()) this.#refreshPreview();
-                          }}
-                          >${t("venue_details.retry_preview")}</wt-button
-                        >`
-                    : nothing
-                }
-                <wt-form-actions .error=${this.actionError}
+                >
+                  <wt-input
+                    name="dayCutover"
+                    label=${t("venue_details.dayCutover")}
+                    placeholder="HH:MM"
+                    required
+                    .value=${draft.dayCutover}
+                    .error=${this.errors.dayCutover ?? ""}
+                    ?disabled=${this.busy || this.readOnly}
+                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                      if (active()) this.#change("dayCutover", event);
+                    }}
+                  ></wt-input>
+                  ${
+                    preview
+                      ? html`<div class="preview" data-test="preview">
+                          ${this.#previewLines(preview)}
+                          ${
+                            preview.conflictCount
+                              ? html`<p data-test="conflicts">
+                                    ${t("business_day.conflicts")} ${conflicts!.count}.
+                                    <a href="/manage/opening-hours"
+                                      >${t("business_day.open_hours")}</a
+                                    >
+                                  </p>
+                                  <ul data-test="conflict-rows">
+                                    ${conflicts!.lines.map((line) => html`<li>${line}</li>`)}
+                                  </ul>`
+                              : nothing
+                          }
+                        </div>`
+                      : nothing
+                  }
+                  ${
+                    this.previewError
+                      ? html`<p role="alert" class="error">${this.previewError}</p>
+                          <wt-button
+                            data-test="preview-retry"
+                            @click=${() => {
+                              if (active()) this.#refreshPreview();
+                            }}
+                            >${t("venue_details.retry_preview")}</wt-button
+                          >`
+                      : nothing
+                  }
+                </form>
+                <wt-form-actions slot="footer" .error=${this.actionError}
                   ><wt-button
                     slot="cancel"
                     data-test="cancel"
@@ -585,8 +586,7 @@ export class BusinessDayStartEditor extends LitElement {
                     }}
                     >${t("action.save")}</wt-button
                   ></wt-form-actions
-                >
-              </form>`
+                >`
             : nothing
         }</wt-dialog
       >`;

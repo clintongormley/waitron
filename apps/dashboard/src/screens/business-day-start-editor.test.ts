@@ -985,3 +985,10 @@ it("offers Retry when a preview fails without naming a field", async () => {
   await expect.poll(() => q(el, "[data-test=preview-retry]")).toBeTruthy();
   expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe("");
 });
+it("puts Cancel and Save in the dialog's footer, so a long clash list cannot scroll them away", async () => {
+  const { el } = await rig();
+  await click(el, "change");
+  const actions = q<WtFormActions>(el, "wt-form-actions")!;
+  expect(actions.slot).toBe("footer");
+  expect(actions.parentElement!.tagName).toBe("WT-DIALOG");
+});
