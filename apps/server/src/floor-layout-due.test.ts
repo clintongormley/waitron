@@ -72,6 +72,12 @@ describe("the layout offered to a zone", () => {
     ).toEqual({ setId: "standard", revision: 3, periodName: null });
   });
 
+  it("names the new period when the recorded set was deleted and the due run is another", () => {
+    expect(
+      layoutOffer(state({ setId: null, revision: 2, occurrence: LUNCH }, standard(3, DINNER))),
+    ).toEqual({ setId: "standard", revision: 3, periodName: "Dinner" });
+  });
+
   it("is nothing before the day's first reset has recorded a layout", () => {
     expect(layoutOffer(state(null, standard(3)))).toBeNull();
   });

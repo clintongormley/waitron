@@ -28,7 +28,7 @@ import {
   type Target,
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
-import { zoneLayouts, type ZoneLayoutState } from "./floor-layout-due.js";
+import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
 import { leaveMerges } from "./floor-today-merges.js";
 import { withMovedSlips } from "./moved-slips.js";
@@ -108,10 +108,21 @@ export async function resetZone(
   await requireZone(tx, cfg, zoneId);
   const day = await todayBusinessDay(tx, cfg, now);
   if (day === null) return null;
-  const target =
-    onto === "due" ? dueOnto((await zoneLayouts(tx, cfg, [zoneId], now)).get(zoneId)!) : onto;
-  const layout = await layoutRowOf(tx, target.setId, zoneId);
-  return resetZoneFor(tx, cfg, removals, zoneId, day, now, target, layout);
+  if (onto !== "due") {
+    const layout = await layoutRowOf(tx, onto.setId, zoneId);
+    return resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout);
+  }
+  const { states, rows } = await zoneLayoutsOn(tx, cfg, [zoneId], now, day);
+  return resetZoneFor(
+    tx,
+    cfg,
+    removals,
+    zoneId,
+    day,
+    now,
+    dueOnto(states.get(zoneId)!),
+    rows.get(zoneId),
+  );
 }
 
 function dueOnto(state: ZoneLayoutState): ResetOnto {
@@ -119,8 +130,6 @@ function dueOnto(state: ZoneLayoutState): ResetOnto {
     ? { setId: null, occurrence: null }
     : { setId: state.due.setId, occurrence: state.due.occurrence };
 }
-
-type LayoutRow = { id: string; revision: number };
 
 async function layoutRowOf(
   tx: Transaction,
@@ -616,13 +625,13 @@ export async function ensureToday(
   const resets = (businessDay: string | null) => businessDay === null || businessDay < day;
   const resetting = zones.flatMap((z) => (resets(z.businessDay) ? [z.zoneId] : []));
   const catchingUp = zones.flatMap((z) => (resets(z.businessDay) ? [] : [z.zoneId]));
-  const layouts = await zoneLayouts(tx, cfg, resetting, now);
+  const layouts = await zoneLayoutsOn(tx, cfg, resetting, now, day);
   const before = catchingUp.length === 0 ? null : await roomPrints(tx, cfg, catchingUp);
   for (const { zoneId, businessDay } of zones) {
     if (resets(businessDay)) {
-      const onto = dueOnto(layouts.get(zoneId)!);
-      const layout = await layoutRowOf(tx, onto.setId, zoneId);
+      const layout = layouts.rows.get(zoneId);
       if (layout !== undefined) {
+        const onto = dueOnto(layouts.states.get(zoneId)!);
         await resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout);
       }
     } else await catchUpZone(tx, cfg, removals, zoneId, now);

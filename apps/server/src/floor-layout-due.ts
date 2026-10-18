@@ -1,4 +1,4 @@
-import { and, inArray } from "drizzle-orm";
+import { and, inArray, isNull, or } from "drizzle-orm";
 import { floorPlans, floorTodayZones, type Transaction } from "@waitron/db";
 import { VENUE_SERVICE } from "./modules.js";
 import { todayBusinessDay } from "./floor-today-store.js";
@@ -31,9 +31,27 @@ export async function zoneLayouts(
   zoneIds: readonly string[],
   now: Date,
 ): Promise<Map<string, ZoneLayoutState>> {
-  const states = new Map<string, ZoneLayoutState>();
-  if (zoneIds.length === 0) return states;
+  if (zoneIds.length === 0) return new Map();
   const day = await todayBusinessDay(tx, cfg, now);
+  return (await zoneLayoutsOn(tx, cfg, zoneIds, now, day)).states;
+}
+
+export type LayoutRow = { id: string; revision: number };
+
+/**
+ * `zoneLayouts` on business day `day`, with each zone's saved row of the layout a reset would
+ * read: the due set's, or the set-less one when no set is due. A zone with no such row is absent.
+ */
+export async function zoneLayoutsOn(
+  tx: Transaction,
+  cfg: TillConfig,
+  zoneIds: readonly string[],
+  now: Date,
+  day: string | null,
+): Promise<{ states: Map<string, ZoneLayoutState>; rows: Map<string, LayoutRow> }> {
+  const states = new Map<string, ZoneLayoutState>();
+  const rows = new Map<string, LayoutRow>();
+  if (zoneIds.length === 0) return { states, rows };
   const records = await tx
     .select({
       zoneId: floorTodayZones.zoneId,
@@ -67,36 +85,42 @@ export async function zoneLayouts(
       [...due.values()].flatMap((layout) => (layout.setId === null ? [] : [layout.setId])),
     ),
   ];
-  const revisions =
-    dueSets.length === 0
-      ? []
-      : await tx
-          .select({
-            setId: floorPlans.setId,
-            zoneId: floorPlans.zoneId,
-            revision: floorPlans.revision,
-          })
-          .from(floorPlans)
-          .where(and(inArray(floorPlans.setId, dueSets), inArray(floorPlans.zoneId, [...zoneIds])));
-  const revisionOf = new Map(revisions.map((row) => [`${row.setId}/${row.zoneId}`, row.revision]));
+  const plans = await tx
+    .select({
+      id: floorPlans.id,
+      setId: floorPlans.setId,
+      zoneId: floorPlans.zoneId,
+      revision: floorPlans.revision,
+    })
+    .from(floorPlans)
+    .where(
+      and(
+        inArray(floorPlans.zoneId, [...zoneIds]),
+        or(isNull(floorPlans.setId), inArray(floorPlans.setId, dueSets)),
+      ),
+    );
+  const planOf = new Map(plans.map((row) => [`${row.setId ?? ""}/${row.zoneId}`, row]));
   for (const zoneId of zoneIds) {
     const layout = due.get(zoneId);
+    const setId = layout?.setId ?? null;
+    const plan = planOf.get(`${setId ?? ""}/${zoneId}`);
+    if (plan !== undefined) rows.set(zoneId, { id: plan.id, revision: plan.revision });
     states.set(zoneId, {
       zoneId,
       recorded: recordOf.get(zoneId) ?? null,
       due:
-        layout === undefined || layout.setId === null
+        layout === undefined || setId === null
           ? null
           : {
-              setId: layout.setId,
+              setId,
               setName: layout.setName!,
-              revision: revisionOf.get(`${layout.setId}/${zoneId}`) ?? 0,
+              revision: plan?.revision ?? 0,
               occurrence: layout.occurrence,
               periodName: layout.periodName,
             },
     });
   }
-  return states;
+  return { states, rows };
 }
 
 /** The banner's facts, or null when the recorded layout is the due one (spec decision 5; plan decision 12). */
