@@ -9111,6 +9111,45 @@ describe("automatic saved-draft routing", () => {
 });
 
 describe("direct New order actions", () => {
+  it("keeps a saved selection and its Move window through an unchanged focus refresh", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await userEvent.click(
+      [...browser(el)!.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
+        (button) => button.querySelector(".name")?.textContent === "Beer",
+      )!,
+    );
+    await expect.poll(() => api.saveDraft.mock.calls.length).toBe(1);
+    await expect.poll(() => tableOrder(el)!.billEdit?.draftRevision).toBe(1);
+    const [selected] = draft(el).lines;
+    const screen = tableOrder(el)!.shadowRoot!;
+    await userEvent.click(screen.querySelector<HTMLElement>("[data-review-open]")!);
+    const tick = screen.querySelector<HTMLElement>("[data-draft-select]")!;
+    await userEvent.click(tick);
+    expect(tick.getAttribute("aria-pressed")).toBe("true");
+    await userEvent.click(screen.querySelector<HTMLElement>("[data-draft-move]")!);
+    const move = screen.querySelector<HTMLElement & { open: boolean }>("[data-draft-move-dialog]")!;
+    expect(move.open).toBe(true);
+    const reads = api.listDrafts.mock.calls.length;
+
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => api.listDrafts.mock.calls.length).toBe(reads + 1);
+    await flush(el, 6);
+
+    expect(draft(el).lines[0]).toBe(selected);
+    expect(screen.querySelector("[data-draft-select]")!.getAttribute("aria-pressed")).toBe("true");
+    expect(move.open).toBe(true);
+    const closed = new Promise<void>((resolve) =>
+      move.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    await userEvent.click(move.querySelector<HTMLElement>('[data-draft-move-to="new"]')!);
+    await closed;
+    await flush(el);
+    expect(draft(el).lines[0]!.place).toEqual({ kind: "new", slot: 1 });
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(api.takeOverDraft).not.toHaveBeenCalled();
+  });
+
   async function direct(el: TillApp, kind: "send-all" | "fire-selected") {
     tableOrder(el)!
       .shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`)!

@@ -116,6 +116,67 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("DraftSync: reading a party's drafts", () => {
+  it("keeps saved row identities when a passive read returns the same bill revision", async () => {
+    seed("p1", beer, steak);
+    const draft = sync();
+    await draft.load();
+    const [first, second] = draft.store.lines;
+    const expected = draft.expectedEdit;
+
+    expect(await draft.load()).toBe(true);
+
+    expect(draft.store.lines[0]).toBe(first);
+    expect(draft.store.lines[1]).toBe(second);
+    expect(draft.expectedEdit).toEqual(expected);
+    expect(replaced).toBe(1);
+    expect(rows(draft)).toEqual(["Beer ×1", "Steak ×1"]);
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    draft.drop();
+  });
+
+  it("updates availability on the same saved rows without replacing the outbox", async () => {
+    seed("p1", beer);
+    const draft = sync();
+    await draft.load();
+    const [shown] = draft.store.lines;
+    server.unavailable.add("offer-beer");
+
+    expect(await draft.load()).toBe(true);
+
+    expect(draft.store.lines[0]).toBe(shown);
+    expect(shown!.unavailableOnServer).toBe(true);
+    expect(replaced).toBe(1);
+    server.unavailable.delete("offer-beer");
+    expect(await draft.load()).toBe(true);
+    expect(draft.store.lines[0]).toBe(shown);
+    expect(shown!.unavailableOnServer).toBeUndefined();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    draft.drop();
+  });
+
+  it("replaces the rows when the same editor's other device saves a newer revision", async () => {
+    const saved = seed("p1", beer);
+    const draft = sync();
+    await draft.load();
+    const [shown] = draft.store.lines;
+    server.save("v1", {
+      billId: "wo-4",
+      draftId: saved.id,
+      revision: saved.revision,
+      lines: saved.lines.map((line) => ({ ...line, quantity: "2" })),
+    });
+
+    expect(await draft.load()).toBe(true);
+
+    expect(draft.store.lines[0]).not.toBe(shown);
+    expect(rows(draft)).toEqual(["Beer ×2"]);
+    expect(draft.revision).toBe(2);
+    expect(replaced).toBe(2);
+    expect(draft.candidate).toBeNull();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+    draft.drop();
+  });
+
   it("shows the signed-in person's own draft and keeps the others' apart", async () => {
     const theirs = seed("p2", steak);
     theirs.billId = "wo-check";

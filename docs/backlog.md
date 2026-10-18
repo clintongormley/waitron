@@ -2227,7 +2227,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Fresh split lines have a header that folds the original family back only while its contents,
   prices and group still match. Folding clears a partial selection; a fully selected family stays
   selected. Recalled source identities remain separate. After a station check, New order retains
-  the station warning when you go back from the preview. You can choose an offered station or
+  the station warning beside its unsent dish. You can choose an offered station or
   remove that dish there. A saved revision now starts a station check after 400 ms on both till
   and handheld layouts, before you press Send. A new edit, bill, editor version or API invalidates
   the old answer; an unanswered check retains the last warning. Moving these details into the
@@ -2237,8 +2237,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   again. Recalled dishes use their saved source references, including when their old offer is
   no longer available. The original main-screen and app checks now use direct actions, saved
   Move to placements and automatic station warnings. A menu update waits while Move to is open,
-  then asks about changed prices after you close it and the next poll runs. Other preview suites
-  still need their useful checks moved before the remaining preview implementation is deleted.
+  then asks about changed prices after you close it and the next poll runs. Routing-warning
+  behavior and accessibility suites now use the automatic saved-revision check, retaining their
+  stale-control, station-choice, theme and width checks. Other preview suites still need their
+  useful checks moved before the remaining preview implementation is deleted.
   The Sent panel and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
@@ -2255,9 +2257,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   app instance. A move waits for this device's pending destination save before reading its
   editing state. If you open another table while it waits, it sends neither the read nor the move.
   Navigation and late command outcomes have
-  focused browser checks, but the remaining panels/actions and delivery are still open. Keep
-  selections and an open Move to window when a focus refresh returns the same saved work; this
-  part of T24 remains open. The empty-bill first-save rule and three exact EN/ES messages have final
+  focused browser checks, but the remaining panels/actions and delivery are still open. On the
+  branch, a focus refresh returning the same saved work keeps its rows, selections and open Move
+  to window. A focused native-browser check moves the selected dish after that refresh. Availability
+  still refreshes in place, and a newer saved revision replaces the rows. The empty-bill first-save
+  rule and three exact EN/ES messages have final
   approval after the relay correction; five earlier Pay name/count strings are withdrawn. Twelve
   cancellation translations stay approved; English Void/Comp naming stands.
   The unlanded floor read now keeps every nonempty bill/editor pair separately, even when

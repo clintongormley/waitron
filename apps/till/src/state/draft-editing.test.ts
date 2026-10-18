@@ -372,8 +372,9 @@ describe("bill-scoped saved work and retained local candidates", () => {
     api.saveDraft.mockImplementationOnce(() => pending.promise);
     const saving = sync.flush();
     await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
-    await sync.close();
+    const closing = sync.close();
     pending.resolve(saved());
+    await closing;
     expect(await saving).toBe("failed");
     expect(sync.edit).toEqual(blank());
     expect(sync.store.lines[0]?.product.name).toBe("Salad");

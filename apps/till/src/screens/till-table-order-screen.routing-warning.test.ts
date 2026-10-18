@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
 import type { DeadEndAnswer } from "../api/client.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
+import type { OrderLine } from "../state/working-order.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { beer, flan, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
 
@@ -17,6 +17,31 @@ const answer: DeadEndAnswer = {
 const root = (el: TillTableOrderScreen) => el.shadowRoot!;
 const warning = (el: TillTableOrderScreen) =>
   root(el).querySelector<HTMLElement>("[data-draft-routing-warning]");
+interface RoutingCheck {
+  sent: readonly OrderLine[];
+  checkId: number;
+}
+function checkSaved(el: TillTableOrderScreen): Promise<RoutingCheck> {
+  const checked = new Promise<RoutingCheck>((resolve) =>
+    el.addEventListener(
+      "check-dead-ends",
+      (event) => {
+        event.preventDefault();
+        resolve((event as CustomEvent<RoutingCheck>).detail);
+      },
+      { once: true },
+    ),
+  );
+  const revision = (el.routingRevision ?? 0) + 1;
+  el.billEdit = {
+    billId: el.orderId!,
+    editorVersion: 1,
+    draftId: "draft",
+    draftRevision: revision,
+  };
+  el.routingRevision = revision;
+  return checked;
+}
 async function checked() {
   const { el, host } = await mount();
   host.style.width = "1280px";
@@ -25,18 +50,15 @@ async function checked() {
   draft.addProduct(beer, "2");
   draft.addProduct(flan, "1");
   await el.updateComplete;
-  el.addEventListener("check-dead-ends", (event) => event.preventDefault());
-  await userEvent.click(root(el).querySelector<HTMLElement>('[data-draft-action="send-all"]')!);
-  el.answerDeadEnds([...draft.lines], answer);
-  await el.updateComplete;
-  await userEvent.click(root(el).querySelector<HTMLElement>("[data-draft-dismiss]")!);
+  const check = await checkSaved(el);
+  el.answerDeadEnds(check.sent, answer, check.checkId);
   await el.updateComplete;
   return { el, draft };
 }
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
-it("keeps a routing refusal beside its unsent dish after Back, with a symbol, reason and replacement stations", async () => {
+it("shows a saved dish's routing refusal with a symbol, reason and replacement stations before Send", async () => {
   const { el, draft } = await checked();
   expect(warning(el)).not.toBeNull();
   expect(warning(el)!.getAttribute("slot")).toBe("after-0");
@@ -134,13 +156,12 @@ it("a response for an old bill cannot clear its retained station or mark the new
   const { el, draft } = await checked();
   draft.setLineMakeAt(0, "old-station");
   await el.updateComplete;
-  await userEvent.click(root(el).querySelector<HTMLElement>('[data-draft-action="send-all"]')!);
-  const sent = [...draft.lines];
+  const check = await checkSaved(el);
   const replacement = new DraftStore();
   replacement.addProduct(beer, "1");
   el.draftStore = replacement;
   el.orderId = "other";
-  el.answerDeadEnds(sent, answer);
+  el.answerDeadEnds(check.sent, answer, check.checkId);
   await el.updateComplete;
   expect(draft.lines[0]!.makeAt).toBe("old-station");
   expect(replacement.lines[0]!.makeAt).toBeUndefined();
@@ -151,10 +172,8 @@ it("a replaced routing answer invalidates an old row's station and Remove contro
   const { el, draft } = await checked();
   expect(warning(el)).not.toBeNull();
   const old = warning(el)!.querySelector("till-dead-ends-section")!;
-  await userEvent.click(root(el).querySelector<HTMLElement>('[data-draft-action="send-all"]')!);
-  el.answerDeadEnds([...draft.lines], { ...answer, deadEnds: [] });
-  await el.updateComplete;
-  await userEvent.click(root(el).querySelector<HTMLElement>("[data-draft-dismiss]")!);
+  const check = await checkSaved(el);
+  el.answerDeadEnds(check.sent, { ...answer, deadEnds: [] }, check.checkId);
   old.dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
   old.dispatchEvent(new CustomEvent("remove", { detail: { key: "0" } }));
   await el.updateComplete;

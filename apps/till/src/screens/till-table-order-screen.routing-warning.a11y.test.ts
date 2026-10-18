@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import type { WtButton, WtCombobox } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
+import type { OrderLine } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { beer, flan, menuOf, resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillDeadEndsSection } from "../widgets/dead-ends-section.js";
@@ -39,26 +40,37 @@ describe.each(["en", "es"] as const)("retained routing warning %s", (locale) => 
         await userEvent.click(el.shadowRoot!.querySelector<WtButton>("[data-review-open]")!);
         await el.updateComplete;
       }
-      el.addEventListener("check-dead-ends", (event) => event.preventDefault());
-      await userEvent.click(
-        el.shadowRoot!.querySelector<WtButton>('[data-draft-action="send-all"]')!,
-      );
-      el.answerDeadEnds([...draft.lines], {
-        sends: true,
-        deadEnds: [
-          {
-            key: "0",
-            name: "Beer",
-            quantity: "2",
-            stationId: "bar",
-            stationName: "Bar",
-            why: "closed",
+      const checked = new Promise<{ sent: readonly OrderLine[]; checkId: number }>((resolve) =>
+        el.addEventListener(
+          "check-dead-ends",
+          (event) => {
+            event.preventDefault();
+            resolve((event as CustomEvent).detail);
           },
-        ],
-        stations: [{ id: "kitchen", name: locale === "es" ? "Cocina" : "Kitchen", open: true }],
-      });
-      await el.updateComplete;
-      await userEvent.click(el.shadowRoot!.querySelector<WtButton>("[data-draft-dismiss]")!);
+          { once: true },
+        ),
+      );
+      el.billEdit = { billId: "bill", editorVersion: 1, draftId: "draft", draftRevision: 1 };
+      el.routingRevision = 1;
+      const check = await checked;
+      el.answerDeadEnds(
+        check.sent,
+        {
+          sends: true,
+          deadEnds: [
+            {
+              key: "0",
+              name: "Beer",
+              quantity: "2",
+              stationId: "bar",
+              stationName: "Bar",
+              why: "closed",
+            },
+          ],
+          stations: [{ id: "kitchen", name: locale === "es" ? "Cocina" : "Kitchen", open: true }],
+        },
+        check.checkId,
+      );
       await el.updateComplete;
       const pane = el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]")!;
       const warning = pane.querySelector<HTMLElement>("[data-draft-routing-warning]")!;

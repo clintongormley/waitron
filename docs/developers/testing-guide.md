@@ -2154,6 +2154,24 @@ pnpm --filter @waitron/till exec vitest run src/till-app.attendance.test.ts \
 The controls removed one guard at a time; the command above runs the restored behavior.
 
 
+## Release a held reply before awaiting shutdown that waits for it
+
+If your test holds a save reply, start shutdown, release the reply, then await shutdown. Awaiting
+shutdown first can leave the test waiting for a reply it has not yet allowed to arrive.
+
+On 2026-10-18, the sign-out case in `apps/till/src/state/draft-editing.test.ts` timed out after
+15 seconds both on checkpoint `be310ae6` and with the unchanged-read fix. `DraftSync.close()` waits
+for its save queue; the test awaited `close()` before resolving its held save. Starting `close()`,
+resolving the reply and then awaiting both kept every existing assertion. Run the case with:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/state/draft-editing.test.ts \
+  -t 'fences an in-flight save answer at sign-out'
+```
+
+Omitting the late-save shutdown check then failed its expected `failed` save-result assertion;
+the restored case passed.
+
 ## Finished browser probes can still be lint inputs
 
 During A585-6 on 2026-10-15, the normal pre-push hook's `pnpm lint` scanned two untracked

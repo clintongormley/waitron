@@ -548,6 +548,26 @@ checks that Pair closed without denying the replacement. Removing the version co
 the first case; removing the shared replacement check failed the second. The tests cover the
 Devices join list, not every screen's mixture of explicit and observed reads.
 
+## An unchanged saved draft keeps its displayed rows
+
+When a passive read returns the same bill editor version, draft id and draft revision, update its
+availability and source facts in place. New order selections refer to the displayed row objects;
+rebuilding equal rows loses those selections. A newer revision still replaces the rows, and local
+unsaved changes still follow the candidate-preservation rules.
+
+On 2026-10-18, these cases exercised an unchanged read, changing availability, a newer save
+from the same editor's other device, and a native Move to flow across a focus refresh:
+
+```sh
+pnpm --filter @waitron/till exec vitest run \
+  src/state/draft-sync.test.ts src/till-app-drafts.test.ts \
+  -t 'passive read returns|availability on the same|other device saves a newer|unchanged focus refresh'
+```
+
+Restoring row replacement failed the identity checks; omitting the in-place refresh failed availability;
+retaining rows across a newer revision failed the replacement check. These cases cover this draft
+sync path, not every screen's snapshot updates.
+
 ## A background API client does not make POST requests passive
 
 The request primitive marks only GETs as passive. Automatic renewal of a pairing hold uses an

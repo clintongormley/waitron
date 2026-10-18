@@ -384,8 +384,8 @@ export class DraftSync {
     this.#authoritative = snapshot.draft;
     this.others =
       snapshot.draft !== null && snapshot.edit.editorId !== this.personId ? [snapshot.draft] : [];
-    if (!unchanged || this.candidate !== null || (!this.#unsaved && !this.#saving))
-      this.#show(snapshot.draft);
+    if (!unchanged || this.candidate !== null) this.#show(snapshot.draft);
+    else if (!this.#unsaved && !this.#saving && snapshot.draft !== null) this.#keep(snapshot.draft);
     this.#lockAuthority();
   }
 
