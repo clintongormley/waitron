@@ -1612,6 +1612,39 @@ test("a Closed stroke wholly outside the column's hours sends paint-outside with
   expect(seen).toEqual([{ key: "mon", day: [shut("20:00", "23:00")] }]);
 });
 
+test("a block changed to Closed wholly outside the column's hours sends paint-outside and leaves the day", async () => {
+  const el = await zoneGrid(
+    { mon: [lunch] },
+    { mon: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
+  );
+  const outside: { key: string }[] = [];
+  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await userEvent.click(menuButton(el, "Closed"));
+  await el.updateComplete;
+  expect(outside).toEqual([{ key: "mon" }]);
+  expect(seen).toEqual([]);
+});
+
+test("Copy whose Closed paint lies wholly outside a bounded column's hours sends paint-outside for it and leaves its day", async () => {
+  const kept = shut("20:00", "21:00");
+  const el = await zoneGrid(
+    { mon: [shut("08:00", "10:00")], tue: [kept] },
+    { tue: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
+  );
+  const outside: { key: string }[] = [];
+  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
+  const seen = changes(el);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "tue"));
+  await el.updateComplete;
+  await userEvent.click(chooserButton(el, "Copy"));
+  await el.updateComplete;
+  expect(outside).toEqual([{ key: "tue" }]);
+  expect(seen).toEqual([]);
+});
+
 test("closedBehind draws its label across the whole day behind the column's paint, which stays drawn and clickable, and a stroke there still runs", async () => {
   const stored = shut("15:00", "17:00");
   const el = await grid({ mon: [], thu: [stored] }, { chosen: null, closedErases: false });

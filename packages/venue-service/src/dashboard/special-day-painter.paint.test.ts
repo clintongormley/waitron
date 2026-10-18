@@ -57,7 +57,7 @@ async function mount(options: SpecialDayAnswers = {}) {
     seasonReads.push([...dates]);
     return read(dates);
   };
-  painter.model = painterModel();
+  painter.model = options.model?.() ?? painterModel();
   painter.specialDayId = "sd1";
   painter.open = true;
   applyTokens(painter);
@@ -943,5 +943,133 @@ describe("a zone's Closed inside its department's hours", () => {
     await settle(painter);
     expect(grid(painter).closedWithin).toBe(within);
     expect(grid(painter).closedBehind).toBe(behind);
+    const updated = vi.spyOn(grid(painter) as unknown as { updated(): void }, "updated");
+    for (let round = 0; round < 3; round++) {
+      painter.requestUpdate();
+      await settle(painter);
+    }
+    expect(updated).toHaveBeenCalledTimes(0);
+  });
+
+  it("a shown zone's grid takes a renamed period of its department", async () => {
+    const { painter } = await mount({ season: restaurantOnly });
+    await pick(painter, "zone:z2");
+    const renamed = painterModel();
+    renamed.departments[0]!.periods[1]!.name = "Supper";
+    painter.model = renamed;
+    await settle(painter);
+    expect(grid(painter).periods.map(({ name }) => name)).toEqual(["Lunch", "Supper", "Open"]);
+  });
+
+  it("a zone's Closed is bounded by its department's draft paint for the date, laid over the season", async () => {
+    const { painter } = await mount({ season: restaurantOnly });
+    await pick(painter, "zone:z2");
+    await pick(painter, "d1");
+    chip(painter, "paint-p2").click();
+    await drag(painter, DEC_15, at("18:00"), at("20:00"));
+    await pick(painter, "zone:z2");
+    await drag(painter, DEC_15, at("17:00"), at("21:00"));
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("18:00", "21:00")]);
+  });
+
+  it("a date unticked from Closed all day while a zone is shown bounds the zone's Closed again", async () => {
+    const { painter } = await mount({ season: restaurantOnly });
+    const tick = () =>
+      painter!.shadowRoot!.querySelector<HTMLInputElement>(`input[name="closed.${DEC_15}"]`)!;
+    tick().click();
+    await settle(painter);
+    await pick(painter, "zone:z2");
+    expect(grid(painter).closedAllDay.has(DEC_15)).toBe(true);
+    tick().click();
+    await settle(painter);
+    expect(grid(painter).closedAllDay.has(DEC_15)).toBe(false);
+    await drag(painter, DEC_15, at("19:00"), at("21:00"));
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("20:00", "21:00")]);
+  });
+
+  it("a season re-read that changes the hours bounds a shown zone's Closed by the new hours", async () => {
+    let hours = [dinner("20:00", "23:30")];
+    const { painter, seasonReads } = await mount({ season: () => ({ ranges: hours }) });
+    await pick(painter, "zone:z2");
+    hours = [lunch("13:00", "16:00")];
+    const moved = painterModel();
+    painter.model = {
+      ...moved,
+      seasons: [{ ...moved.seasons[0]! }, { ...moved.seasons[1]!, startsOn: "11-15" }],
+    };
+    await settle(painter);
+    await expect.poll(() => seasonReads.length).toBe(2);
+    await expect.poll(() => grid(painter).underlay.get(DEC_15)).toEqual([lunch("13:00", "16:00")]);
+    await drag(painter, DEC_15, at("12:00"), at("14:00"));
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("13:00", "14:00")]);
+  });
+
+  it("switching to another department's zone bounds its Closed by that department's hours", async () => {
+    const model = () => {
+      const base = painterModel();
+      const restaurant = base.departments[0]!;
+      return {
+        ...base,
+        departments: [
+          ...base.departments,
+          {
+            ...restaurant,
+            id: "d3",
+            name: "Bar",
+            zones: [{ ...restaurant.zones[0]!, id: "z3", name: "Patio" }],
+          },
+        ],
+      };
+    };
+    const { painter } = await mount({
+      model,
+      season: () => ({
+        ranges: [dinner("20:00", "23:30")],
+        others: [{ departmentId: "d3", ranges: [lunch("12:00", "16:00")] }],
+      }),
+    });
+    await pick(painter, "zone:z2");
+    await pick(painter, "zone:z3");
+    await drag(painter, DEC_15, at("13:00"), at("21:00"));
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("13:00", "16:00")]);
+  });
+
+  it("the label behind a shown zone's paint, and its Open paint's name, follow a change of language", async () => {
+    const { painter } = await mount({
+      season: (date) => (date === DEC_15 ? {} : { ranges: [dinner("20:00", "23:30")] }),
+    });
+    await pick(painter, "zone:z2");
+    const behind = () =>
+      column(painter, DEC_15).querySelector(".all-closed.behind")!.textContent!.trim();
+    expect(behind()).toBe("Restaurant closed all day");
+    try {
+      setLocale("es");
+      painter.requestUpdate();
+      await settle(painter);
+      expect(behind()).toBe("Restaurant cerrado todo el día");
+      expect(grid(painter).periods.at(-1)!.name).toBe("Abierto");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("a zone's Open block changed to Closed wholly outside its department's hours is kept, and says why beside Save", async () => {
+    const { painter } = await mount({ season: restaurantOnly });
+    await pick(painter, "zone:z2");
+    chip(painter, "paint-open").click();
+    await settle(painter);
+    await drag(painter, DEC_15, at("12:00"), at("14:00"));
+    const open = { periodId: "open", startsAt: "12:00", endsAt: "14:00" };
+    expect(grid(painter).days.get(DEC_15)).toEqual([open]);
+    const g = grid(painter);
+    await userEvent.click(column(painter, DEC_15).querySelector<HTMLElement>("button.block")!);
+    await userEvent.click(
+      [...g.shadowRoot!.querySelectorAll<HTMLElement>(".menu wt-button")].find(
+        (button) => button.textContent!.trim() === "Closed",
+      )!,
+    );
+    await settle(painter);
+    expect(grid(painter).days.get(DEC_15)).toEqual([open]);
+    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
   });
 });

@@ -1414,9 +1414,7 @@ export class SpecialDayPainter extends LitElement {
     const zone = this.zone(department);
     const owner = zone ? zoneKey(zone.id) : departmentKey(department.id);
     const chosen = this.effectiveChosen(department, zone !== undefined);
-    const periods: readonly PaintPeriod[] = zone
-      ? [...department.periods, { id: ZONE_OPEN, name: t("special.open"), colour: "green" }]
-      : department.periods;
+    const periods = zone ? this.zonePeriods(department) : department.periods;
     const stopped = this.loading || this.loadFailed || this.offered !== undefined;
     const within = zone ? this.closedWithin(department, cutover) : undefined;
     return html`${notices}${
@@ -1461,6 +1459,21 @@ export class SpecialDayPainter extends LitElement {
             >${ticks}</paint-grid
           >`
     }`;
+  }
+
+  /** A zone's grid periods, kept while its department's periods and the label stay. */
+  private zonePeriodsMemo?: {
+    periods: Department["periods"];
+    label: string;
+    list: readonly PaintPeriod[];
+  };
+  private zonePeriods(department: Department): readonly PaintPeriod[] {
+    const label = t("special.open");
+    const memo = this.zonePeriodsMemo;
+    if (memo?.periods === department.periods && memo.label === label) return memo.list;
+    const list = [...department.periods, { id: ZONE_OPEN, name: label, colour: "green" as const }];
+    this.zonePeriodsMemo = { periods: department.periods, label, list };
+    return list;
   }
 
   /** The dates ticked Closed, kept while they stay so the grid sees the same set. */

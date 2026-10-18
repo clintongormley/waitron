@@ -187,16 +187,7 @@ export class PaintGrid extends LitElement {
         startsAt: clockAt(stretch.start, this.cutover),
         endsAt: clockAt(stretch.end, this.cutover),
       };
-      if (paint.periodId === null && this.#cut(stretch.key, [paint]).length === 0) {
-        this.dispatchEvent(
-          new CustomEvent<{ key: string }>("paint-outside", {
-            detail: { key: stretch.key },
-            bubbles: true,
-            composed: true,
-          }),
-        );
-        return;
-      }
+      if (this.#outside(stretch.key, [paint])) return;
       this.#emit(
         stretch.key,
         paintStretch(this.#day(stretch.key), paint, this.cutover, this.closedErases),
@@ -209,8 +200,10 @@ export class PaintGrid extends LitElement {
       this.renderRoot.querySelector<HTMLElement>(`.heading[data-column="${key}"] wt-row-actions`),
     copy: (from, to) => {
       const copied = copyDay(this.days, from, to);
-      for (const key of to)
-        if (!samePaint(copied.get(key)!, this.#day(key))) this.#emit(key, copied.get(key)!);
+      for (const key of to) {
+        const day = copied.get(key)!;
+        if (!samePaint(day, this.#day(key)) && !this.#outside(key, day)) this.#emit(key, day);
+      }
     },
   });
 
@@ -242,6 +235,20 @@ export class PaintGrid extends LitElement {
       closed,
       { dayCutover: this.cutover, endMinute: DAY },
     ).map((range) => ({ periodId: null, ...range }));
+  }
+  /** Sends `paint-outside` for the column when `day` holds Closed blocks and its hours cut them
+   *  all away, so the caller leaves the day as it was. */
+  #outside(key: string, day: readonly Paint[]): boolean {
+    if (!day.some(({ periodId }) => periodId === null) || this.#cut(key, day).length > 0)
+      return false;
+    this.dispatchEvent(
+      new CustomEvent<{ key: string }>("paint-outside", {
+        detail: { key },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    return true;
   }
   #emit(key: string, painted: Paint[]): void {
     let day = painted;
@@ -325,6 +332,10 @@ export class PaintGrid extends LitElement {
       const [start, end] = stepSpan(paint, this.cutover);
       return start <= from && from < end;
     });
+    if (covering && this.#outside(selected.key, [covering])) {
+      void this.#focusAfter(selected.key, selected.startsAt);
+      return;
+    }
     this.#emit(selected.key, day);
     void this.#focusAfter(selected.key, covering?.startsAt);
   }
