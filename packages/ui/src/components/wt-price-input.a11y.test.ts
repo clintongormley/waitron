@@ -2,8 +2,11 @@ import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "./wt-price-input.js";
+import "./wt-help-tooltip.js";
+import { setHelpMode } from "../help-mode.js";
 
 afterEach(cleanup);
+afterEach(() => setHelpMode(false));
 
 // axe does not score a placeholder's contrast, so a test of a hinted field measures its own ratio.
 // The parser reads rgb()/rgba() only, which is why each colour is checked for that form first.
@@ -196,5 +199,27 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
       theme,
     );
     await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help off", async () => {
+    await mountThemed(
+      '<wt-price-input label="Price" name="price" unit="ea"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Price">What a customer pays.</wt-help-tooltip></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help on", async () => {
+    await mountThemed(
+      '<wt-price-input label="Price" name="price" unit="ea"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Price">What a customer pays.</wt-help-tooltip></wt-price-input>',
+      theme,
+    );
+    const badge = host.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-help-tooltip",
+    )!;
+    setHelpMode(true);
+    await badge.updateComplete;
+    expect(badge.checkVisibility()).toBe(true);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });

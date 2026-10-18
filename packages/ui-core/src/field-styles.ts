@@ -130,6 +130,7 @@ export const fieldStyles = css`
     outline: none;
   }
   .row {
+    position: relative;
     display: flex;
     align-items: center;
     gap: var(--wt-space-2);

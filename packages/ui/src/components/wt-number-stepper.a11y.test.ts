@@ -4,8 +4,11 @@ import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import { registerIcons } from "./wt-icon.js";
 import "./wt-number-stepper.js";
+import "./wt-help-tooltip.js";
+import { setHelpMode } from "../help-mode.js";
 
 afterEach(cleanup);
+afterEach(() => setHelpMode(false));
 
 // Registered so the buttons draw their icons as they do in the app; an icon is aria-hidden, so it
 // never names a button.
@@ -171,5 +174,27 @@ describe.each(["light", "dark"] as const)("wt-number-stepper a11y (%s theme)", (
       theme,
     );
     await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help off", async () => {
+    await mountThemed(
+      '<wt-number-stepper label="Maximum choices" name="max" value="3"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Maximum choices">How many a guest may pick.</wt-help-tooltip></wt-number-stepper>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help on", async () => {
+    await mountThemed(
+      '<wt-number-stepper label="Maximum choices" name="max" value="3"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Maximum choices">How many a guest may pick.</wt-help-tooltip></wt-number-stepper>',
+      theme,
+    );
+    const badge = host.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-help-tooltip",
+    )!;
+    setHelpMode(true);
+    await badge.updateComplete;
+    expect(badge.checkVisibility()).toBe(true);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });

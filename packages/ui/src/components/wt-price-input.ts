@@ -306,42 +306,45 @@ export class WtPriceInput extends LitElement {
     const fixed = this.fixedUnit && this.unit !== "";
     const label = showLabel ? fieldLabel(inputId, this.label, this.required) : nothing;
     return html`
-      <div
-        class=${fixed ? "field fixed" : "field"}
-        part="field"
-        data-label=${fieldLabelState({
-          value: this.value,
-          hint: this.hint,
-          placeholder: this.placeholder,
-        })}
-        ?data-invalid=${invalid}
-        ?data-disabled=${this.disabled}
-        ?data-overriding=${this.overriding}
-        ?data-compact=${!showLabel}
-      >
-        ${fixed ? label : nothing}<span class="amount-box ${currency?.side ?? ""}"
-          >${fixed ? nothing : label}<input
-            class="field-control"
-            id=${inputId}
-            part="amount"
-            name=${this.name || nothing}
-            .value=${live(formatDecimalInput(this.value, this.decimalLocale || this.locale || "en"))}
-            inputmode="decimal"
-            placeholder=${formatDecimalInput(this.placeholder || this.hint, this.decimalLocale || this.locale || "en") || nothing}
-            ?required=${this.required}
-            ?disabled=${this.disabled}
-            aria-label=${this.hideLabel && this.label ? this.label : nothing}
-            aria-invalid=${invalid}
-            aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
-            @input=${this.onInput}
-          />${
-            currency
-              ? html`<span id=${this.currencyId} class="currency" part="currency"
-                  >${currency.symbol}</span
-                >`
-              : nothing
-          }</span
-        >${this.renderUnit()}
+      <div class="row">
+        <div
+          class=${fixed ? "field fixed" : "field"}
+          part="field"
+          data-label=${fieldLabelState({
+            value: this.value,
+            hint: this.hint,
+            placeholder: this.placeholder,
+          })}
+          ?data-invalid=${invalid}
+          ?data-disabled=${this.disabled}
+          ?data-overriding=${this.overriding}
+          ?data-compact=${!showLabel}
+        >
+          ${fixed ? label : nothing}<span class="amount-box ${currency?.side ?? ""}"
+            >${fixed ? nothing : label}<input
+              class="field-control"
+              id=${inputId}
+              part="amount"
+              name=${this.name || nothing}
+              .value=${live(formatDecimalInput(this.value, this.decimalLocale || this.locale || "en"))}
+              inputmode="decimal"
+              placeholder=${formatDecimalInput(this.placeholder || this.hint, this.decimalLocale || this.locale || "en") || nothing}
+              ?required=${this.required}
+              ?disabled=${this.disabled}
+              aria-label=${this.hideLabel && this.label ? this.label : nothing}
+              aria-invalid=${invalid}
+              aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
+              @input=${this.onInput}
+            />${
+              currency
+                ? html`<span id=${this.currencyId} class="currency" part="currency"
+                    >${currency.symbol}</span
+                  >`
+                : nothing
+            }</span
+          >${this.renderUnit()}
+        </div>
+        <slot name="help"></slot>
       </div>
       ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
