@@ -198,6 +198,42 @@ describe("a stored special day", () => {
     expect(frame(painter).refusal).toBe("This special day could not be loaded.");
     expect(saveButton(painter).disabled).toBe(true);
   });
+
+  it.each([1280, 390])(
+    "Delete sits after Cancel with the danger look, and Save stands alone at the end (%i px)",
+    async (width) => {
+      const old = [window.innerWidth, window.innerHeight];
+      try {
+        await page.viewport(width, 844);
+        const { painter } = await mount();
+        const bar = frame(painter).shadowRoot!;
+        const remove = part<HTMLElement & { variant: string }>(painter, "delete")!;
+        expect(remove.variant).toBe("danger");
+        const [quit, at, keep] = [
+          bar.querySelector("[data-test=cancel]")!.getBoundingClientRect(),
+          remove.getBoundingClientRect(),
+          bar.querySelector("[data-test=save]")!.getBoundingClientRect(),
+        ];
+        expect(quit.right).toBeLessThanOrEqual(at.left);
+        expect(keep.left - at.right).toBeGreaterThanOrEqual(16);
+        for (const [x, y] of [
+          [quit, at],
+          [at, keep],
+          [quit, keep],
+        ] as const) {
+          expect(x.top).toBeLessThan(y.bottom);
+          expect(y.top).toBeLessThan(x.bottom);
+        }
+        for (const box of [quit, at, keep]) {
+          expect(box.width).toBeGreaterThan(0);
+          expect(box.left).toBeGreaterThanOrEqual(0);
+          expect(box.right).toBeLessThanOrEqual(width + 1);
+        }
+      } finally {
+        await page.viewport(old[0]!, old[1]!);
+      }
+    },
+  );
 });
 
 describe("a stored special day opened with a date to add", () => {

@@ -119,6 +119,9 @@ export class PainterFrame extends LitElement {
         display: flex;
         gap: var(--wt-space-2);
       }
+      .bar[data-actions] [data-test="save"] {
+        margin-inline-start: var(--wt-space-4);
+      }
       .refusal {
         margin: var(--wt-space-2) 0 0;
         text-align: end;
@@ -223,13 +226,6 @@ export class PainterFrame extends LitElement {
               this.readOnly
                 ? nothing
                 : html`<div class="actions">
-                    <slot
-                      name="actions"
-                      @slotchange=${(event: Event) => {
-                        this.hasActions =
-                          (event.target as HTMLSlotElement).assignedElements().length > 0;
-                      }}
-                    ></slot>
                     <wt-button
                       data-test="cancel"
                       variant="secondary"
@@ -237,6 +233,13 @@ export class PainterFrame extends LitElement {
                       @click=${() => this.close()}
                       >${t("hours.cancel")}</wt-button
                     >
+                    <slot
+                      name="actions"
+                      @slotchange=${(event: Event) => {
+                        this.hasActions =
+                          (event.target as HTMLSlotElement).assignedElements().length > 0;
+                      }}
+                    ></slot>
                     <wt-button
                       data-test="save"
                       variant=${action.variant}

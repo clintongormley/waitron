@@ -1724,7 +1724,7 @@ export class SpecialDayPainter extends LitElement {
             ? html`<wt-button
                 slot="actions"
                 data-test="delete"
-                variant="secondary"
+                variant="danger"
                 ?disabled=${this.saving}
                 @click=${() => {
                   this.deleting = { busy: false, message: "" };

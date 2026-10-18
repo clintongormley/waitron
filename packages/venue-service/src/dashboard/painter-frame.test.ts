@@ -371,7 +371,7 @@ test("read-only: only ✕ is offered, and it closes without asking", async () =>
   expect(saves).toEqual([]);
 });
 
-test("an actions slot sits in the bar between the link and Cancel, and stays put while the grid scrolls", async () => {
+test("an actions slot sits in the bar between Cancel and Save, apart from Save, and stays put while the grid scrolls", async () => {
   const old = [window.innerWidth, window.innerHeight];
   try {
     await page.viewport(1280, 500);
@@ -384,12 +384,13 @@ test("an actions slot sits in the bar between the link and Cancel, and stays put
     expect(remove.assignedSlot?.name).toBe("actions");
     const bar = part(frame, ".bar");
     expect(bar.contains(remove.assignedSlot)).toBe(true);
+    await expect.poll(() => bar.hasAttribute("data-actions")).toBe(true);
+    await frame.updateComplete;
     const at = remove.getBoundingClientRect();
-    const link = frame.querySelector("[data-test=link]")!.getBoundingClientRect();
     const quit = cancel(frame).getBoundingClientRect();
     expect(at.width).toBeGreaterThan(0);
-    expect(at.left).toBeGreaterThanOrEqual(link.right);
-    expect(at.right).toBeLessThanOrEqual(quit.left);
+    expect(at.left).toBeGreaterThanOrEqual(quit.right);
+    expect(save(frame).getBoundingClientRect().left - at.right).toBeGreaterThanOrEqual(16);
     expect(at.top).toBeLessThan(quit.bottom);
     expect(at.bottom).toBeGreaterThan(quit.top);
     const content = frame
@@ -402,6 +403,34 @@ test("an actions slot sits in the bar between the link and Cancel, and stays put
     await page.viewport(old[0]!, old[1]!);
   }
 });
+
+test.each([390, 1280])(
+  "without an action, Cancel and Save keep their usual gap and the heading its room (%i px)",
+  async (width) => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(width, 800);
+      const { frame } = await open();
+      const gap = parseFloat(getComputedStyle(part(frame, ".actions")).columnGap);
+      expect(gap).toBe(8);
+      const quit = cancel(frame).getBoundingClientRect();
+      const keep = save(frame).getBoundingClientRect();
+      expect(Math.abs(keep.left - quit.right - gap)).toBeLessThanOrEqual(0.5);
+      if (width === 390) {
+        const sameLine = (a: Element, b: Element) => {
+          const [x, y] = [a.getBoundingClientRect(), b.getBoundingClientRect()];
+          return x.top < y.bottom && y.top < x.bottom;
+        };
+        const title = part(frame, "h2");
+        for (const each of [dismiss(frame), cancel(frame), save(frame)]) {
+          expect(sameLine(title, each)).toBe(true);
+        }
+      }
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  },
+);
 
 test("read-only: the actions slot is not shown", async () => {
   const { frame } = await open();
