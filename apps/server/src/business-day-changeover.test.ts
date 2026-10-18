@@ -7,6 +7,7 @@ const MADRID: BusinessDayClock = {
   dayCutover: "05:00",
   cutoverChanges: [],
 };
+const FAR_OFF = { effectiveBusinessDay: "2027-10-01", dayCutover: "07:00" };
 
 function minutes(clock: BusinessDayClock, day: string): number {
   const { startAt, endAt } = businessDayBounds(clock, day);
@@ -115,6 +116,41 @@ describe("planBusinessDayStart", () => {
       expect(plan.effectiveBusinessDay).toBe("2026-10-21");
       expect(plan.candidate).toEqual(waiting);
     });
+
+    it("an earlier start keeps tonight's row and removes a far-off one", () => {
+      const clock: BusinessDayClock = {
+        ...waiting,
+        cutoverChanges: [...waiting.cutoverChanges, FAR_OFF],
+      };
+      const plan = planBusinessDayStart(clock, "10:00", wed13);
+      expect(plan.effectiveBusinessDay).toBe("2026-10-22");
+      expect(plan.kept).toEqual([{ effectiveBusinessDay: "2026-10-21", dayCutover: "21:00" }]);
+      expect(plan.removed).toEqual(["2027-10-01"]);
+      expect(plan.candidate.cutoverChanges).toEqual([
+        { effectiveBusinessDay: "2026-10-21", dayCutover: "21:00" },
+        { effectiveBusinessDay: "2026-10-22", dayCutover: "10:00" },
+      ]);
+    });
+  });
+
+  it("a start already passed tonight removes a far-off waiting row", () => {
+    const clock: BusinessDayClock = { ...MADRID, cutoverChanges: [FAR_OFF] };
+    const plan = planBusinessDayStart(clock, "00:30", new Date("2026-10-20T23:00:00Z"));
+    expect(plan.effectiveBusinessDay).toBe("2026-10-22");
+    expect(plan.kept).toEqual([]);
+    expect(plan.removed).toEqual(["2027-10-01"]);
+    expect(plan.candidate.cutoverChanges).toEqual([
+      { effectiveBusinessDay: "2026-10-22", dayCutover: "00:30" },
+    ]);
+  });
+
+  it.each([
+    ["2026-10-21T00:59:59.999Z", "2026-10-21"],
+    ["2026-10-21T01:00:00.000Z", "2026-10-22"],
+  ])("03:00 saved at %s takes effect on %s", (at, effective) => {
+    expect(planBusinessDayStart(MADRID, "03:00", new Date(at)).effectiveBusinessDay).toBe(
+      effective,
+    );
   });
 
   it("an undo removes every waiting row and adds none", () => {
@@ -154,6 +190,36 @@ describe("clockTransitionAt", () => {
     ["2027-03-29T01:00:00Z", null],
   ])("02:30 saved at %s", (at, expected) => {
     expect(clockTransitionAt(MADRID, "02:30", new Date(at))).toEqual(expected);
+  });
+
+  it("a 02:30 start saving 05:00 is refused across the same clocks change", () => {
+    expect(
+      clockTransitionAt(
+        { ...MADRID, dayCutover: "02:30" },
+        "05:00",
+        new Date("2026-10-23T01:00:00Z"),
+      ),
+    ).toEqual({ clocksChangeOn: "2026-10-25", saveFrom: "2026-10-26T01:30:00.000Z" });
+  });
+
+  it("a day that would end before it starts, where midnight is skipped, is a clocks change", () => {
+    expect(
+      clockTransitionAt(
+        { timeZone: "America/Havana", dayCutover: "23:59", cutoverChanges: [] },
+        "00:00",
+        new Date("2027-03-13T11:00:00Z"),
+      ),
+    ).toEqual({ clocksChangeOn: "2027-03-13", saveFrom: "2027-03-15T04:00:00.000Z" });
+  });
+
+  it("a 01:00 start saving 02:30 may save again once the 01:00 changeover passes", () => {
+    expect(
+      clockTransitionAt(
+        { ...MADRID, dayCutover: "01:00" },
+        "02:30",
+        new Date("2026-10-23T01:00:00Z"),
+      ),
+    ).toEqual({ clocksChangeOn: "2026-10-25", saveFrom: "2026-10-26T00:00:00.000Z" });
   });
 
   it.each([
