@@ -1,4 +1,5 @@
 import type { DeleteImpact } from "@waitron/shared";
+import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import type { LocalDate } from "../hours-types.js";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -89,7 +90,6 @@ export interface NamedRow {
 }
 export interface FloorZone extends NamedRow {
   active?: boolean;
-  hasPlacedTables?: boolean;
 }
 export interface VenueServiceModel {
   departments: Department[];
@@ -129,6 +129,8 @@ export interface DepartmentTransfersView {
   destinationDepartmentIds: string[];
   profiles: NamedRow[];
 }
+
+const FLOOR_PLAN_SETS = "/management-api/venue-service/floor-plan-sets";
 
 export class VenueServiceApi {
   readonly openingHours: OpeningHoursApi;
@@ -201,6 +203,26 @@ export class VenueServiceApi {
           undefined,
           { passive: true },
         ),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+
+  floorPlanSets(): Promise<FloorPlanSetsModel> {
+    return this.request<FloorPlanSetsModel>(FLOOR_PLAN_SETS, "GET", undefined, { passive: true });
+  }
+
+  /** Keeps `apply` fed with the Floor plans page's model; every read is passive. */
+  watchFloorPlanSets(
+    apply: (model: FloorPlanSetsModel) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      "venue-service:floor-plan-sets",
+      QUERY_DEPENDENCIES["floor-plan-sets"],
+      () => this.floorPlanSets(),
       apply,
       failed,
       recovered,

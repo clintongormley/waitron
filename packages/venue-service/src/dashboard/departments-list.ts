@@ -211,33 +211,20 @@ export class DepartmentsList extends LitElement {
     );
   }
   #also(row: DepartmentZoneRow) {
-    if (row.kind === "department") {
-      if (this.receiptAvailable?.(row) === false) return nothing;
-      const label = t("venue.receipt");
-      return html`<a
-        part="link"
-        data-own-click
-        data-test=${`receipt-department-${row.id}`}
-        aria-label=${`${row.name}: ${label}`}
-        href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/receipt`}
-        @click=${(event: MouseEvent) => {
-          if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
-            return;
-          event.preventDefault();
-          this.#emit("edit-receipt", { departmentId: row.id });
-        }}
-        >${label}</a
-      >`;
-    }
-    const placed =
-      this.model!.floorZones.find((floor) => floor.id === row.id)?.hasPlacedTables !== false;
-    const label = t(placed ? "venue.floor_plan" : "venue.add_floor_plan");
-    // No data-own-click: the dashboard shell's link handler must route this href itself.
+    if (row.kind !== "department" || this.receiptAvailable?.(row) === false) return nothing;
+    const label = t("venue.receipt");
     return html`<a
       part="link"
-      data-test=${`floor-plan-zone-${row.id}`}
+      data-own-click
+      data-test=${`receipt-department-${row.id}`}
       aria-label=${`${row.name}: ${label}`}
-      href=${`/manage/floor-plan/zone/${encodeURIComponent(row.id)}?back=${encodeURIComponent("/manage/venue-operations")}`}
+      href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/receipt`}
+      @click=${(event: MouseEvent) => {
+        if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+          return;
+        event.preventDefault();
+        this.#emit("edit-receipt", { departmentId: row.id });
+      }}
       >${label}</a
     >`;
   }

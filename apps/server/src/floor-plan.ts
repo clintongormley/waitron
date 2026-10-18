@@ -235,27 +235,6 @@ export async function readLayout(
   };
 }
 
-/** The zones among `zoneIds` with a saved layout that places one of the zone's tables. */
-export async function zonesWithPlacedTables(
-  tx: Transaction,
-  zoneIds: readonly string[],
-): Promise<Set<string>> {
-  if (zoneIds.length === 0) return new Set();
-  const rows = await tx
-    .selectDistinct({ zoneId: floorPlans.zoneId })
-    .from(floorPlans)
-    .innerJoin(floorPlanPlacements, eq(floorPlanPlacements.planId, floorPlans.id))
-    .innerJoin(
-      floorPlanTables,
-      and(
-        eq(floorPlanTables.id, floorPlanPlacements.planTableId),
-        eq(floorPlanTables.zoneId, floorPlans.zoneId),
-      ),
-    )
-    .where(inArray(floorPlans.zoneId, [...zoneIds]));
-  return new Set(rows.map((row) => row.zoneId));
-}
-
 function invalid(field: string): AppError {
   return new AppError("floor_plan.invalid", { field });
 }

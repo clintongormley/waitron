@@ -655,7 +655,6 @@ export interface FloorZone {
   name: string;
   displayOrder: number;
   active: boolean;
-  hasPlacedTables?: boolean;
 }
 
 export interface DashboardTable {

@@ -3,11 +3,13 @@ import { floorZones, type Transaction } from "@waitron/db";
 import type { FloorDeletion, FloorPlanSets, FloorPlanSetSummary } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import type { CalendarColour } from "./hours-types.js";
+import type { FloorPlanSetsModel } from "./floor-plan-set-types.js";
 import { listDepartments, type VenueScope } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
+
+export type { FloorPlanSetsModel };
 
 /** Gives a core floor plan set to a department under `name`; the department's first set is its default. */
 export async function linkFloorPlanSet(
@@ -94,22 +96,6 @@ export async function readFloorPlanSets(
     ...set,
     zoneIds: zones.filter((z) => z.departmentId === set.departmentId).map((z) => z.zoneId),
   }));
-}
-
-export interface FloorPlanSetsModel {
-  departments: {
-    id: string;
-    name: string;
-    zones: { id: string; name: string; tableCount: number }[];
-    sets: {
-      id: string;
-      name: string;
-      isDefault: boolean;
-      /** The default's includes the periods whose Floor plan field is empty. */
-      usedBy: { id: string; name: string; colour: CalendarColour }[];
-      layouts: { zoneId: string; onPlan: number; spare: number }[];
-    }[];
-  }[];
 }
 
 /** The Floor plans page: every active department, its zones and its sets. */

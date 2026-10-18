@@ -94,6 +94,18 @@ export const QUERY_DEPENDENCIES = {
     "floor_today_joins",
   ],
   settings: ["service_settings"],
+  "floor-plan-sets": [
+    "floor_plan_sets",
+    "floor_plans",
+    "floor_plan_placements",
+    "floor_plan_tables",
+    "floor_plan_table_parts",
+    "department_floor_plan_sets",
+    "menu_periods",
+    "departments",
+    "zone_service_policies",
+    "floor_zones",
+  ],
   "prep-stations-list": ["kitchen_stations"],
   routing: [
     "kitchen_timing_defaults",

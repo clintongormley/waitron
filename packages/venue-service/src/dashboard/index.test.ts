@@ -346,6 +346,45 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
   });
 });
 
+it("registers Floor plans in Operations, configured with venue.configure and read with venue.view", async () => {
+  const fetchImpl = vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ departments: [] }),
+    } as Response),
+  );
+  const entry = VENUE_SERVICE_DASHBOARD.moreScreens!.find((x) => x.screen.id === "floor-plans")!;
+  expect(entry.screen).toEqual({
+    id: "floor-plans",
+    navLabelKey: "nav.floor_plans",
+    group: "operations",
+    order: 11,
+    requiresPermission: "venue.configure",
+    readPermission: "venue.view",
+  });
+  expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.floor_plans"]).toBe("Floor plans");
+  expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.floor_plans"]).toBe("Planos de sala");
+  const liveData = new LiveData();
+  const handle = entry.create({
+    request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+    liveData,
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  containers.push(container);
+  render(handle.render(true), container);
+  const screen = container.querySelector("dashboard-floor-plans-screen")!;
+  expect(screen.api.liveData).toBe(liveData);
+  expect(screen.readOnly).toBe(true);
+  render(handle.render(), container);
+  expect(screen.readOnly).toBe(false);
+  await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalled());
+  const [path, init] = (fetchImpl.mock.calls as unknown as [string, RequestInit][])[0]!;
+  expect(path).toBe("/management-api/venue-service/floor-plan-sets");
+  expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+});
+
 it("the Calendar's Periods window is read-only for a viewer and editable for a manager", async () => {
   const model = {
     dayCutover: "06:00",
