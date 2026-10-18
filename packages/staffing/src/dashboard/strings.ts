@@ -201,6 +201,8 @@ const en = {
   "staffing.grid.people_other": "{count} people",
   "staffing.painter.heading": "Staffing",
   "staffing.painter.week": "{season}: standard week",
+  "staffing.painter.special_day": "{name}: special day, {dates}",
+  "staffing.painter.special_day_undated": "{name}: special day",
   "staffing.painter.week_covers":
     "Every week from {from} to {to} needs this staffing, except on special days.",
   "staffing.painter.guide_department": "Shaded: {department}'s opening hours, by period",
@@ -423,6 +425,8 @@ const es: Record<keyof typeof en, string> = {
   "staffing.grid.people_other": "{count} personas",
   "staffing.painter.heading": "Personal",
   "staffing.painter.week": "{season}: semana estándar",
+  "staffing.painter.special_day": "{name}: día especial, {dates}",
+  "staffing.painter.special_day_undated": "{name}: día especial",
   "staffing.painter.week_covers":
     "Cada semana del {from} al {to} necesita este personal, salvo los días especiales.",
   "staffing.painter.guide_department":

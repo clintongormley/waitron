@@ -8,7 +8,7 @@ import {
   type DraftScope,
   type LeaveCoordinator,
 } from "@waitron/ui";
-import { paintRowStyles, periodColourStyles } from "@waitron/venue-service/painter";
+import { formatDateRuns, paintRowStyles, periodColourStyles } from "@waitron/venue-service/painter";
 import { copyBlocks, sameBlocks } from "../block-model.js";
 import { areaKey, type StaffingBlock } from "../slots.js";
 import type { SpecialDayStaffing, SpecialDayStaffingEdit, StaffRole } from "../staffing-types.js";
@@ -374,6 +374,13 @@ export class StaffingSpecialDayPainter extends LitElement {
     ></staffing-grid>`;
   }
 
+  private heading(read: SpecialDayStaffing) {
+    const dates = read.areas[0]?.dates.map(({ date }) => date) ?? [];
+    return dates.length
+      ? tf("staffing.painter.special_day", { name: read.name, dates: formatDateRuns(dates) })
+      : tf("staffing.painter.special_day_undated", { name: read.name });
+  }
+
   override render() {
     const read = this.read;
     const shown = read ? this.areaShown(read) : "";
@@ -382,7 +389,8 @@ export class StaffingSpecialDayPainter extends LitElement {
     const paintable = !!read?.areas[0]?.dates.length;
     return html`<painter-frame
         .open=${true}
-        .heading=${read ? read.name : t("staffing.painter.heading")}
+        .band=${"special"}
+        .heading=${read ? this.heading(read) : t("staffing.painter.heading")}
         .scope=${this.scope}
         .coordinator=${this.coordinator}
         .dirty=${this.scope?.isDirty() ?? false}
