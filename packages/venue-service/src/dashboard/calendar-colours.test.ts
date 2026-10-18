@@ -48,7 +48,7 @@ it("names on each colour the users that have it, in the order given", () => {
 });
 
 it("a user whose colour is not in the palette marks nothing", () => {
-  const choices = calendarColourChoices((colour) => colour, [{ name: "Odd", colour: "magenta" }]);
+  const choices = calendarColourChoices((colour) => colour, [{ name: "Odd", colour: "beige" }]);
   expect(choices.every((choice) => (choice.usedBy ?? []).length === 0)).toBe(true);
 });
 

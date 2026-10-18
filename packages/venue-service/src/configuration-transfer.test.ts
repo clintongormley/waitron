@@ -1022,7 +1022,7 @@ describe("service-period configuration", () => {
     [
       "a colour outside the palette",
       (t: Tables) => {
-        t.menu_periods![0]!.colour = "magenta";
+        t.menu_periods![0]!.colour = "beige";
       },
       "menu_periods.colour",
     ],

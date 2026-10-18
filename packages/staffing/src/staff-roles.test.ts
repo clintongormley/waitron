@@ -148,7 +148,7 @@ describe("staff roles", () => {
       inTx((tx) => createStaffRole(tx, v.cfg, { name: "   ", colour: "blue" })),
     ).rejects.toMatchObject({ code: "staffing.invalid", params: { field: "name" } });
     await expect(
-      inTx((tx) => createStaffRole(tx, v.cfg, { name: "Waiter", colour: "magenta" as "blue" })),
+      inTx((tx) => createStaffRole(tx, v.cfg, { name: "Waiter", colour: "beige" as "blue" })),
     ).rejects.toMatchObject({ code: "staffing.invalid", params: { field: "colour" } });
     const staffRole = await inTx((tx) =>
       createStaffRole(tx, v.cfg, { name: "Waiter", colour: "blue" }),

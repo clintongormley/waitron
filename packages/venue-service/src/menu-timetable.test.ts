@@ -485,7 +485,7 @@ describe("service-period writers", () => {
     ]);
   });
 
-  it.each([null, "magenta", 1])("refuses an explicit invalid colour %s", async (colour) => {
+  it.each([null, "beige", 1])("refuses an explicit invalid colour %s", async (colour) => {
     const v = await venue({ timetable: false });
     await expect(
       scoped((tx) =>
@@ -626,7 +626,7 @@ describe("service-period writers", () => {
         colour: colour as never,
       });
     for (const colour of CALENDAR_COLOURS) await insert(colour);
-    await expect(insert("magenta")).rejects.toThrow(
+    await expect(insert("beige")).rejects.toThrow(
       "CHECK constraint failed: menu_periods_colour_ck",
     );
   });

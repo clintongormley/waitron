@@ -374,7 +374,7 @@ it("a stored colour outside the palette is refused by the form's own check", asy
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
-  el.period = { ...structuredClone(period), colour: "magenta" as never };
+  el.period = { ...structuredClone(period), colour: "beige" as never };
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -474,7 +474,7 @@ it("with no colour chosen, the chooser shows none and its first tile is the tab 
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
-  el.period = { ...structuredClone(period), colour: "magenta" as never };
+  el.period = { ...structuredClone(period), colour: "beige" as never };
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -522,7 +522,7 @@ it("a Save refused only for its colour moves focus to the colour field", async (
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
-  el.period = { ...structuredClone(period), colour: "magenta" as never };
+  el.period = { ...structuredClone(period), colour: "beige" as never };
   el.open = true;
   applyTokens(el);
   hosts.push(el);

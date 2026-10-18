@@ -638,7 +638,7 @@ describe("the opening-hours period API", () => {
     for (const [field, value] of [
       ["colour", null],
       ["colour", ["blue"]],
-      ["colour", "magenta"],
+      ["colour", "beige"],
       ["colour", 1],
       ["staffMenuIds", null],
       ["staffMenuIds", "x"],

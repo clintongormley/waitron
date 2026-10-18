@@ -37,7 +37,7 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
       el.period = {
         id: "p1",
         name: "Lunch",
-        colour: state === "colour-invalid" ? ("magenta" as never) : "green",
+        colour: state === "colour-invalid" ? ("beige" as never) : "green",
         menuId: "lunch",
         staffMenuIds: ["deli"],
         endOffsetMinutes: 0,
