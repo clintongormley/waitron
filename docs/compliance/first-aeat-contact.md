@@ -50,9 +50,10 @@ to return. It is a well-formed reply to a well-formed query, not a fault.
    whose certificate silently expires stops being able to file, and the failure would first appear
    as a drain pass that skips its due work — the same shape as having no certificate at all. Nothing
    currently warns on approaching expiry.
-   > **Pointer, 2026-10-18:** measured since, an expired certificate does NOT appear as a skipped
-   > pass: the filing pass backs it off like a network failure and raises no "awaiting certificate"
-   > alert. See A795's design, §2.3
+   > **Pointer, 2026-10-18:** measured since, against a test server that refuses an expired
+   > certificate during the connection, it does NOT appear as a skipped pass: the filing pass backs
+   > it off like a network failure and raises no "awaiting certificate" alert. That AEAT refuses the
+   > same way is assumed, not measured. See A795's design, §2.3
    > ([2026-10-18-a795-aeat-certificate-after-setup-design.md](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)).
 2. **The obligado's NIF is not the certificate holder's ID.** The certificate identifies a natural
    person acting for the company; the filing is made for the company. `ObligadoEmision.NIF` must be

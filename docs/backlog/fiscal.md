@@ -860,17 +860,35 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   mockups in [mockups/a795-aeat-certificate/](mockups/a795-aeat-certificate/). Measured on the way:
   setup's check never opens the file (a wrong passphrase, random bytes, a keyless file and an expired
   certificate were all accepted); the filing pass reads the certificate afresh each pass, so a new one
-  needs no restart; an expired certificate is backed off like a network failure and raises no
-  "awaiting certificate" alert. Decided against house precedent: a card on Venue settings → Venue
+  needs no restart; against a test server that refuses during the connection, an expired certificate
+  is backed off like a network failure and raises no "awaiting certificate" alert (that AEAT refuses
+  the same way is assumed). Decided against house precedent: a card on Venue settings → Venue
   details, contributed by the Veri*Factu module; checks in order (size, opens, details, dates, not the
   same, tax ID refused on mismatch, a read-only AEAT query with no override) before one short write;
-  the old certificate is not kept; every install recorded in an append-only `local` table; alerts
-  `fiscal.certificate_expiring` (red from 14 days) and `fiscal.certificate_expired`.
+  the old certificate is not kept; every install recorded in an append-only `local` table that holds
+  no personal name or ID number; alerts `fiscal.certificate_expiring` and `fiscal.certificate_expired`;
+  the box making a seal's key is A853.
 - **Waiting on the owner (§9 of the design):** Q1 who may replace it (recommended: managers, through
-  `system.manage`); Q2 when the warning starts (recommended: 60 days); Q3 whether the box emails as
-  expiry nears (recommended: yes).
-- **Before landing:** a consulta to production AEAT and one with a company seal at `www10`, with a
-  real certificate; and where a real seal keeps the company's tax ID.
+  `system.manage`); Q2 when the warning turns amber and red (recommended: by type — a seal 90 and 30
+  days, a representative certificate 60 and 14); Q3 whether the box emails as expiry nears
+  (recommended: yes).
+- **Before landing, with real certificates (§8 of the design):** consultas to production and with a
+  seal at `www10`; what AEAT does with each type at the other type's address; how AEAT answers an
+  expired certificate; where a seal keeps the tax ID and whether representative certificates carry
+  `organizationIdentifier` and `O`; whether real exports use the old RC2 encryption.
+
+## A853. The box makes a company seal's private key itself
+
+- **Decided out of A795 (2026-10-18), design §2.7 and §3.9.** FNMT's seal procedure: «Esta operación
+  deberá realizarse en una máquina del suscriptor» — the key pair and certificate request are made on
+  the subscriber's machine, and FNMT returns only the certificate
+  (`docs/compliance/getting-to-production.md:181-182`, `:199-200`; `action-plan.md:108-109`). Setup
+  and A795 both install only a `.p12` file, so a seal's key has to be made on another computer and
+  moved to the box. The flow: the box makes the key and the request, shows the request to paste into
+  FNMT's form, keeps the key while the request is with FNMT, and takes back only the issued
+  certificate. One design for setup's first install and for renewal on A795's card. It also decides
+  whether the box keeps the previous seal's key, since the owner then has no file of their own, and
+  what the card shows while a request is pending.
 
 ## VAT at line add (M7v, A68)
 

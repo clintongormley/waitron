@@ -443,12 +443,21 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A795 — installing or renewing the AEAT certificate after setup: DESIGNED, waiting on three owner
   questions.** Only the setup wizard can set it (`apps/server/src/setup-api.ts`), and nothing watches
-  when it expires; an expired certificate reads to the filing pass as a network failure, so only the
-  four-hour delay alert fires. The [design](superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)
+  when it expires. Against a test server that refuses an expired certificate during the connection,
+  the filing pass treats it as a network failure, so only the four-hour delay alert fires; that AEAT
+  refuses the same way is assumed. The [design](superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)
   puts a card on Venue settings → Venue details, checks file, passphrase, dates, tax ID and a
   read-only AEAT query before replacing, records every install, and adds expiry alerts. Open: who
-  may replace it, how early the warning starts, and whether the box emails. FULL review; the owner
-  lands it. [Detail](backlog/fiscal.md#installing-or-renewing-the-aeat-certificate-after-setup)
+  may replace it, when the warning turns amber and red, and whether the box emails. FULL review; the
+  owner lands it. [Detail](backlog/fiscal.md#installing-or-renewing-the-aeat-certificate-after-setup)
+
+- **A853. The box makes a company seal's private key itself** (decided out of A795, 2026-10-18).
+  FNMT issues a seal only for a key pair and certificate request made on the subscriber's machine,
+  and never issues a `.p12`; setup and A795 both take only a `.p12`, so today a seal's key must be
+  made elsewhere and moved to the box. Design one flow for setup and renewal: the box makes the key
+  and request, the owner pastes the request into FNMT's form, and the box takes back only the issued
+  certificate. Fiscal: the owner lands it.
+  [Detail](backlog/fiscal.md#a853-the-box-makes-a-company-seals-private-key-itself)
 
 - **VAT at line add (M7v, A68).** — left open by the menus plan. Asesor Q26 (the rate on the day of
   issue) is open. The till computes a basket VAT split (`vatBreakdown`,
@@ -490,10 +499,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
     intent is preparation or live (`apps/server/src/boot.ts`).
 
-- **A852. Setup's fiscal test answers "uncertain, retry" for a certificate whose passphrase is wrong**
-  (found by A795's design). The wizard never opens the file, so the test sale is sent and fails at
-  the connection, which the readiness check reads as uncertain; a retry can never pass.
-  [Detail](backlog/setup.md#a852-setups-fiscal-test-answers-uncertain-retry-for-a-wrong-passphrase)
+- **A852. Setup accepts certificate files filing cannot use** (found by A795's design). The wizard
+  never opens the file, so a wrong passphrase, a file that is not a certificate, one with no private
+  key and an expired one are all sealed; for a wrong passphrase the production fiscal test then says
+  "uncertain, retry", and a retry can never pass.
+  [Detail](backlog/setup.md#a852-setup-accepts-certificate-files-filing-cannot-use)
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
   Several small wizard leftovers remain: a fiscal-test banner that may outlive its screen, an

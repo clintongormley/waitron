@@ -3,21 +3,24 @@
 The open entries are listed in [the backlog](../backlog.md), under "The setup wizard, onboarding and the demo venue". This file holds
 their full text.
 
-## A852. Setup's fiscal test answers "uncertain, retry" for a wrong passphrase
+## A852. Setup accepts certificate files filing cannot use
 
 - Found by A795's design (§2.1, §2.3 of
   [the design](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)). The
   wizard's certificate screen checks only that a file was chosen and the passphrase is not empty
-  (`apps/setup/src/screens/cert-screen.ts`), and the server's `parseAeatCert` never opens the file
-  (measured 2026-10-18: a wrong passphrase was accepted). The fiscal test then seals it, records a
-  test sale and runs a filing pass; the connection fails with `mac verify failure` (measured with
-  `mtlsFetch` against a local server), the pass backs the record off without a skip (measured through
-  the real filing pass with an expired certificate, the same path), and
+  (`apps/setup/src/screens/cert-screen.ts`), and the server's `parseAeatCert` never opens the file.
+  Measured 2026-10-18 (P1): a wrong passphrase, 600 random bytes, a file with no private key and an
+  expired certificate were all accepted and would be sealed.
+- For a wrong passphrase, a production setup's fiscal test then seals it, records a test sale and
+  runs a filing pass; the connection fails with `mac verify failure` (measured with `mtlsFetch`
+  against a local server), the pass backs the record off without a skip (measured through the real
+  filing pass with an expired certificate against a server refusing during the connection), and
   `submitFiscalReadiness` reads no acceptance and no AEAT refusal as `uncertain`
-  (`apps/server/src/fiscal-readiness-runner.ts`, read, not run end to end). The wizard shows "The result
-  is uncertain. Wait a moment and retry", which can never succeed. Fix: open the file in the setup
-  route before the test, with the same checks A795's step 2 uses (`tls.createSecureContext`), and put
-  the refusal under the passphrase field.
+  (`apps/server/src/fiscal-readiness-runner.ts`, read, not run end to end). The wizard shows "The
+  result is uncertain. Wait a moment and retry", which can never succeed.
+- Fix: open the file in the setup route before the test with A795's checks — it opens, the old RC2
+  encryption, a private key, its details, and its dates (design §3.5 steps 2–4) — and put each
+  refusal under its field. Whichever of A795 and A852 lands second reuses the other's function.
 
 ## `#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`
 
