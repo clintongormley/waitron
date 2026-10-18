@@ -2223,7 +2223,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The drawer's held-line Move/Split controls are also gone on that branch: recall a sent dish
   into New order before moving or splitting it. Recall and station moves now use Sent’s More menu
   without duplicate drawer buttons. The duplicate lists and other old row strips remain to
-  be retired. On its feature branch,
+  be retired. On the feature branch, a table's open unsent line window closes when editing
+  becomes locked, so taking the bill back cannot revive its old confirmation. Focused browser
+  checks cover fresh and recalled notes, an ordinary availability refresh and reopening after
+  takeover. Recalling a dish and editing its note also checks the exact autosaved source reference
+  and retained recorded prices. On its feature branch,
   you can select an unsent group and use Move to to keep its saved placement or choose another
   group. Fire now, new groups and joins have separate headings; only mixed groups repeat course
   headings. A whole-unit quantity opens into individual lines from a full-height trailing chevron;
@@ -2355,7 +2359,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The duplicate course picker and static course labels are removed from the remaining drawer.
   Sent retains the recorded course. Recalled dishes edit their course in New order, staging the
   choice until Save; focused checks retain the source identity and quantity through submission.
-  A physical till trial, the old drawer's retirement and held-dish Finish resolution remain open. Its
+  The bare recalled-basket fixture clips the extra row's trailing currency at phone width when
+  its not-offered marker is visible. Recheck that row through the actual read-only table screen
+  during the remaining native acceptance work. A physical till trial, the old drawer's retirement
+  and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
   target recovery. Single-dish Fire now's command/API/client work is qualified on the feature

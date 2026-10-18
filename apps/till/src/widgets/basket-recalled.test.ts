@@ -1,13 +1,14 @@
 import { draftSnapshot, partyDraftSnapshot } from "./test-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { Draft, DraftLine, RecalledDraftLine, TillMenuOffer } from "../api/client.js";
-import { DraftSync } from "../state/draft-sync.js";
+import { DraftStore, DraftSync } from "../state/draft-sync.js";
 import { fromDraftLine, toDraftLineInput } from "../state/draft-lines.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { TillBasket } from "./basket.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 
 type LiveModifier = TillMenuOffer["offeredModifiers"][number];
 
@@ -615,4 +616,163 @@ it("the recalled line window changes note and course without replacing its recor
   expect(original.product.unitPrice).toBe("7.50");
   expect(original.source!.extras[0]!.unitPriceGross).toBe("0.75");
   expect(original.source!.line.optionSnapshots![0]!.labelName).toEqual({ en: "Rare" });
+});
+
+describe("table line windows after editing authority changes", () => {
+  async function opening(recalled: boolean) {
+    const store = new DraftStore();
+    if (recalled) {
+      const wire = source();
+      wire.note = "Saved note";
+      wire.source.line.note = "Saved note";
+      store.loadFrom("draft", [fromDraftLine(wire, new Map([["offer-burger", offer([options])]]))]);
+    } else {
+      store.addProduct(
+        {
+          id: "fresh",
+          name: "Fresh dish",
+          unitPrice: "3.00",
+          vatClass: "general",
+          category: null,
+          allergens: null,
+        },
+        "1",
+        { note: "Saved note" },
+      );
+    }
+    const mounted = await openPicker(store, true);
+    const note = mounted.picker
+      .shadowRoot!.querySelector("wt-textarea")!
+      .shadowRoot!.querySelector("textarea")!;
+    await userEvent.fill(note, "Unconfirmed note");
+    await mounted.picker.updateComplete;
+    return { ...mounted, store };
+  }
+
+  it("keeps an unconfirmed window through an ordinary availability refresh", async () => {
+    const { el, store, picker } = await opening(true);
+    store.setUnavailableOnServer([true]);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBe(picker);
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+    await el.updateComplete;
+    expect(store.lines[0]!.note).toBe("Unconfirmed note");
+    expect(store.total).toBe("17.25");
+  });
+
+  it("leaves a counter's choice-only window disabled during its temporary read lock", async () => {
+    const store = storeWith([options]);
+    const { el, picker } = await openPicker(store);
+    const unlock = store.lockEdits();
+    await el.updateComplete;
+    await picker.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBe(picker);
+    expect(picker.disabled).toBe(true);
+    unlock();
+    await el.updateComplete;
+    await picker.updateComplete;
+    expect(picker.disabled).toBe(false);
+    expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBe(picker);
+  });
+
+  for (const locale of ["en", "es"] as const)
+    for (const theme of ["light", "dark"] as const)
+      it.each([390, 1280])(
+        `keeps the recalled editor and read-only recovery usable (${locale}, ${theme}, %s px)`,
+        async (width) => {
+          const priorLocale = currentLocale();
+          const priorWidth = window.innerWidth;
+          const priorHeight = window.innerHeight;
+          setLocale(locale);
+          await page.viewport(width, 900);
+          try {
+            const { el, store, picker } = await opening(true);
+            el.parentElement!.setAttribute("data-theme", theme);
+            el.parentElement!.style.width = "100%";
+            const modal = picker.shadowRoot!.querySelector("wt-modal")!;
+            await modal.updateComplete;
+            const dialog = modal.shadowRoot!.querySelector("dialog")!;
+            expect(window.innerWidth).toBe(width);
+            expect(dialog.open).toBe(true);
+            expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+            expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+            await expectNoA11yViolations(el.parentElement!);
+            await page.screenshot({
+              element: dialog,
+              path: `__screenshots__/a773-recalled-editor-${locale}-${theme}-${width}.png`,
+            });
+            store.ownershipLocked = true;
+            await el.updateComplete;
+            expect(picker.isConnected).toBe(false);
+            expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+            const detail =
+              el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+                "[data-line-detail]",
+              )!;
+            await detail.updateComplete;
+            expect(detail.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+            expect(el.shadowRoot!.textContent).toContain("Recorded burger");
+            expect(el.shadowRoot!.textContent).toContain("Saved note");
+            await expectNoA11yViolations(el.parentElement!);
+            await page.screenshot({
+              element: el,
+              path: `__screenshots__/a773-recalled-readonly-${locale}-${theme}-${width}.png`,
+            });
+          } finally {
+            cleanupWidgets();
+            setLocale(priorLocale);
+            await page.viewport(priorWidth, priorHeight);
+          }
+        },
+      );
+
+  it.each([false, true])(
+    "closes the %s recalled line window when ownership becomes read-only",
+    async (recalled) => {
+      const { el, store } = await opening(recalled);
+      store.ownershipLocked = true;
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+      expect(store.lines[0]!.note).toBe("Saved note");
+      expect(store.editsLocked).toBe(true);
+    },
+  );
+
+  it.each([false, true])(
+    "does not revive the old %s recalled confirmation after taking the bill back",
+    async (recalled) => {
+      const { el, store, picker } = await opening(recalled);
+      const oldConfirm = picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!;
+      store.ownershipLocked = true;
+      await el.updateComplete;
+      store.ownershipLocked = false;
+      await el.updateComplete;
+      oldConfirm.click();
+      await el.updateComplete;
+      expect(store.lines[0]!.note).toBe("Saved note");
+      expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-line-detail]")!);
+      await el.updateComplete;
+      const reopened = el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+      await reopened.updateComplete;
+      const note = reopened
+        .shadowRoot!.querySelector("wt-textarea")!
+        .shadowRoot!.querySelector("textarea")!;
+      expect(note.value).toBe("Saved note");
+      await userEvent.fill(note, "Reviewed note");
+      await reopened.updateComplete;
+      await userEvent.click(reopened.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+      await el.updateComplete;
+      expect(store.lines[0]!.note).toBe("Reviewed note");
+      if (recalled) {
+        expect(toDraftLineInput(store.lines[0]!)).toMatchObject({
+          sourceLineId: "sent-burger",
+          note: "Reviewed note",
+        });
+        expect(toDraftLineInput(store.lines[0]!)).not.toHaveProperty("options");
+        expect(toDraftLineInput(store.lines[0]!)).not.toHaveProperty("extras");
+        expect(store.total).toBe("17.25");
+      }
+    },
+  );
 });

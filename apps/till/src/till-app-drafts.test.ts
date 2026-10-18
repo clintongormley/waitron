@@ -7674,6 +7674,88 @@ describe("recalled draft source splitting", () => {
       expect(draft(el).editsLocked).toBe(false);
     });
 
+    it("edits the recalled note through New order and autosaves only the source reference", async () => {
+      const { el, order } = await recallOpening({ updateOrderLine: vi.fn() });
+      await openSentDish(order, "source-7");
+      await openSentMore(order);
+      await userEvent.click(
+        order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-recall]")!,
+      );
+      await flush(el, 6);
+      const line = draft(el).lines[0]!;
+      const picker = await openDraftLine(order, 0);
+      const note = picker
+        .shadowRoot!.querySelector("wt-textarea")!
+        .shadowRoot!.querySelector("textarea")!;
+      expect(note.value).toBe("Recorded note");
+      await userEvent.fill(note, "No onions");
+      await picker.updateComplete;
+      await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+      await expect.poll(() => api.saveDraft.mock.calls.length).toBe(1);
+      await flush(el, 6);
+      expect(api.saveDraft).toHaveBeenLastCalledWith(
+        "v1",
+        {
+          billId: "wo-4",
+          draftId: "draft-1",
+          revision: 2,
+          expectedEdit: { billId: "wo-4", editorVersion: 1, draftId: "draft-1", draftRevision: 2 },
+          lines: [
+            {
+              id: "reference-source-7",
+              sourceLineId: "source-7",
+              quantity: "2",
+              note: "No onions",
+              courseId: null,
+              makeAt: null,
+              slot: 0,
+              joinGroupId: "held-3",
+              afterGroupId: null,
+            },
+          ],
+        },
+        { signal: expect.any(AbortSignal) },
+      );
+      expect(api.updateOrderLine).not.toHaveBeenCalled();
+      expect(api.takeOverDraft).not.toHaveBeenCalled();
+      expect(draft(el).lines[0]).toBe(line);
+      expect(line.note).toBe("No onions");
+      expect(line.product.unitPrice).toBe("7.50");
+      expect(line.source!.netAmount).toBe("17.25");
+      expect(line.source!.extras[0]!.unitPriceGross).toBe("0.75");
+      expect(order.revision).toBe(8);
+      expect(banner(el)).toBeNull();
+    });
+
+    it("a refreshed takeover retires an unconfirmed recalled note without saving or taking back the bill", async () => {
+      seedSource();
+      const { el } = await mountApp({ updateOrderLine: vi.fn() });
+      const order = await openMesa(el);
+      const picker = await openDraftLine(order, 0);
+      const note = picker
+        .shadowRoot!.querySelector("wt-textarea")!
+        .shadowRoot!.querySelector("textarea")!;
+      await userEvent.fill(note, "Unconfirmed note");
+      await picker.updateComplete;
+      const oldConfirm = picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!;
+      const saved = server.drafts[0]!;
+      saved.ownerId = "p2";
+      saved.ownerName = "Luis";
+      saved.revision += 1;
+      window.dispatchEvent(new Event("focus"));
+      await flush(el, 6);
+      expect(draft(el).editsLocked).toBe(true);
+      expect(picker.isConnected).toBe(false);
+      oldConfirm.click();
+      await flush(el, 6);
+      expect(server.drafts[0]!.lines[0]!.note).toBe("Recorded note");
+      expect(draft(el).lines[0]!.note).toBe("Recorded note");
+      expect(order.billEdit?.editorVersion).toBe(2);
+      expect(api.saveDraft).not.toHaveBeenCalled();
+      expect(api.updateOrderLine).not.toHaveBeenCalled();
+      expect(api.takeOverDraft).not.toHaveBeenCalled();
+    });
+
     it("saves preceding fresh edits before Recall and sends a repeated press only once", async () => {
       const { el, order } = await recallOpening();
       await tap(el, "Beer");

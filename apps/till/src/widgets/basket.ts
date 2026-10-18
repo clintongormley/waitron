@@ -494,6 +494,10 @@ export class TillBasket extends LitElement {
   }
 
   #onStoreChanged(): void {
+    if (this.lineDetails && this.store.editsLocked) {
+      this.editingLine = null;
+      this.#closeModifierPicker();
+    }
     if (this.store.id !== this.#lastStoreId) {
       this.#lastStoreId = this.store.id;
       this.editingLine = null;

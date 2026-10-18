@@ -19,7 +19,6 @@ import { formatMoney } from "@waitron/shared";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
-import type { TillModifierPicker } from "./widgets/modifier-picker.js";
 import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
@@ -1426,7 +1425,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
   }
 
-  it("saves a note typed into Change with the order's revision, and the line then shows it at the same price", async () => {
+  it("applies the retained line-edit command with its opening revision and shows the note at the same price", async () => {
     const getTabLines = vi
       .fn()
       .mockResolvedValueOnce({ lines: [burgerLine], revision: 7, editSentLines: true })
@@ -1441,17 +1440,20 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
     screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await screen.updateComplete;
-    screen.shadowRoot!.querySelector<HTMLElement>('[data-change-line="5"]')!.click();
-    await screen.updateComplete;
-    const picker = screen.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
-    await picker.updateComplete;
-    const note = picker
-      .shadowRoot!.querySelector('[data-test="line-note"]')!
-      .shadowRoot!.querySelector("textarea")!;
-    note.value = "no onions";
-    note.dispatchEvent(new Event("input"));
-    await picker.updateComplete;
-    picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    emit(screen, "change-line", {
+      lineNo: 5,
+      lineName: "Burger",
+      patch: { note: "no onions" },
+      revision: 7,
+      expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      saleLine: {
+        menuItemId: "menu-item-burger",
+        quantity: "1.000",
+        options: [],
+        extras: [],
+        note: "no onions",
+      },
+    });
     await flush(el);
 
     expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7, {
