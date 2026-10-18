@@ -866,7 +866,7 @@ What changes:
 - **Dashboard banner:** signed OUT, the banner's `.banner-actions` keeps today's
   `wt-language-chooser` (menu layout) exactly as now, at every width. Signed IN, there is no chooser
   in `.banner-actions`; the account menu holds
-  `<wt-language-chooser layout="group" data-test="language-chooser" label=${t("profile.language")} .active=… .loadLocales=${this.#loadLocales}>`
+  `<wt-language-chooser layout="group" data-test="language-chooser" label=${t("profile.language")} .active=… .loadLocales=${this.#loadLocalesPassively}>`
   straight after the Theme choices and before Log out. `#onLocaleSelected` is unchanged (the event
   bubbles out of the menu to the shell's listener, as it does from the banner today). A pick closes
   the menu, as a Theme pick does (`wt-row-actions` closes on a click on a `button` in its path).

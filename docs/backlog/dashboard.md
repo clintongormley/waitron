@@ -1097,15 +1097,14 @@ help about anything you want very quickly."
   (`packages/ui/src/help-mode.ts`), `wt-help-tooltip`'s `mode="help-mode"` badge (hidden while help
   is off, hanging over its box's top trailing corner while on), and `help` slots on
   `wt-price-input`, `wt-number-stepper`, `wt-file-input`, `wt-disclosure`, `wt-dialog` and
-  `wt-modal`. Nothing turns help on yet and no existing "?" uses the new mode, so every "?" still
-  shows as before. Plan: [2026-10-18-a582-1-help-badge.md](../superpowers/plans/2026-10-18-a582-1-help-badge.md).
+  `wt-modal`. Plan: [2026-10-18-a582-1-help-badge.md](../superpowers/plans/2026-10-18-a582-1-help-badge.md).
 - **Slice 2a landed (#1848, 2026-10-18).** `packages/ui` has `wt-menu-row` (a menu option with its
   help badge in its own tap-sized square beside it), `wt-help-switch` (the "?" button that turns
   help on and off, pressed while on), `help` on `wt-data-table` columns (the badge over the
   heading's label) and on `wt-tabs` items (drawn outside the tab strip; hidden, with its box
   closed, while its tab is scrolled out of view). `wt-row-actions` keeps its menu open for a
   `data-keep-open` element inside a slotted element's shadow root, and places an open menu again
-  when its size changes. No screen uses them yet. Plan:
+  when its size changes. Plan:
   [2026-10-18-a582-2-dashboard-help.md](../superpowers/plans/2026-10-18-a582-2-dashboard-help.md)
   (PR 2a is Tasks 1–6).
 - **Left open by 2a:** `wt-help-tooltip` is not in `packages/ui/src/tap-target-and-focus.test.ts`'s

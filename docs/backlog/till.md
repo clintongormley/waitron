@@ -832,10 +832,14 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     space changes the screen's layout, so it is its own change. Likewise the till's
     `.submitted-toast` (`apps/till/src/till-app.ts`) still sits one tap target and two gaps
     above the bottom edge, the room the old bottom-right language button (later the footer)
-    took; decide whether it should drop to the bottom edge. (The dashboard half of this point, the language
-    chooser's menu painting over an arriving alert, no longer arises since A582's slice 2b: signed
-    in, the banner has no language chooser, and alerts arrive only signed in. Read from
-    `apps/dashboard/src/dashboard-app.ts`, `#banner` and `#returnToLogin`, not run.)
+    took; decide whether it should drop to the bottom edge. On the dashboard, the account menu (which
+    since A582's slice 2b also holds the signed-in language choices) is a native popover in the
+    top layer (`wt-row-actions`), so it paints over the alert pop-up (`.alert-toast` in
+    `apps/dashboard/src/dashboard-app.ts`, whose `z-index: 40` the top layer ignores): where the two overlap, an alert arriving while the menu is open is hidden under it,
+    and its countdown keeps running, since `wt-toast` (`packages/ui/src/components/wt-toast.ts`)
+    pauses it only while the pointer or keyboard focus is on the pop-up. Measured in A582 slice
+    2b's review: with the account menu open, the menu covered the pop-up at 400 and 1280 px wide.
+    Decide whether an arriving alert should close the menu.
 
 ## Task 17 (#991, a table that leaves without paying)
 
@@ -1352,8 +1356,9 @@ side loses them was not traced.
 3. **The starting zone is not marked as a required error when there is nothing to pick**; the
    department's message covers it.
 
-The form's two "?" buttons, beside Department and Starting zone, are A237 candidates
-([setup.md](setup.md#remaining--buttons-that-should-be-hints-a237-owner-2026-10-03)).
+The form's two "?", beside Department and Starting zone, are help-mode badges since A582's slice
+2b, which settles them for A237 (A582 design §7;
+[setup.md](setup.md#remaining--buttons-that-should-be-hints-a237-owner-2026-10-03)).
 
 ## A757. Table states: review the lifecycle, then retire the Tables tab
 

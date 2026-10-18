@@ -4,8 +4,8 @@
  *
  * Weaker than its name: it reads TEXT — the template and string literals of each non-test `.ts`
  * file under `apps/` and `packages/`, setup excepted — so a "?" made with `document.createElement`,
- * or whose tag name or `mode` is built at run time, is unseen; and it does not check that a badge
- * sits in a positioned box.
+ * or whose tag name is built at run time, is unseen; it refuses a bound `mode`, even one that
+ * resolves to `help-mode`; and it does not check that a badge sits in a positioned box.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";

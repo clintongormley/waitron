@@ -2106,7 +2106,8 @@ change of person too (A582's later slices).
 
 - A help badge is `<wt-help-tooltip mode="help-mode">` placed in a primitive's `help` slot, or
   drawn by a primitive from its own `help` (a `wt-menu-row`, a `wt-data-table` column, a `wt-tabs`
-  item) — never drawn loose by a screen. With help on it hangs over the top trailing corner of the
+  item) — a screen draws one loose only inside a box it positions itself, as SumUp's affiliate
+  fields do (below). With help on it hangs over the top trailing corner of the
   nearest positioned box, so a badge with no positioned wrapper hangs over some far ancestor's
   corner — except in a `wt-menu-row`, where it takes its own square in the flow, and in `wt-tabs`,
   which places each badge itself (below).
@@ -2167,7 +2168,7 @@ right to left, stretched or beside a long error hangs the badge over the field b
 `wt-data-table.help.test.ts` and `wt-tabs.help.test.ts`, beside them, for the switch, menu rows,
 columns and tabs; and the "a help badge inside a menu row, and a menu that changes size" cases in
 `wt-row-actions.test.ts`. A badge a screen places outside a primitive's `help` slot is checked
-only by that screen's own tests: SumUp's affiliate badge, the one such badge, by the "the affiliate
+only by that screen's own tests: SumUp's affiliate badge by the "the affiliate
 help is hidden until help is on, then hangs over the heading's top trailing corner" case in
 `packages/payments-sumup/src/dashboard/sumup-connect-form.test.ts`; nothing checks a new one.
 
@@ -2918,7 +2919,8 @@ above.
 
 A short explanation of a field is its hint (below), not a question-mark button (owner, 2026-10-03).
 Use `wt-help-tooltip` for an explanation too long for a hint, and for a field that starts filled in,
-where a hint would never show. The setup wizard's shop step decides which field gets which in its
+where a hint would never show. Outside the setup wizard it takes `mode="help-mode"`, so it shows
+only while help is on (see Help mode). The setup wizard's shop step decides which field gets which in its
 `FIELD_HINT` and `FIELD_HELP` maps for its text fields. The location name is in both: `#field` gives
 it the "?" and no hint in Demo, where it starts filled in, and the hint otherwise. The
 receipt-language choice keeps its own

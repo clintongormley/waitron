@@ -3887,6 +3887,14 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   add the countdown and make the limit required. Left open by service Task 11 (#916).
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
+- On the dashboard, the account menu (which since A582's slice 2b also holds the signed-in language
+  choices) is a native popover in the top layer, so it paints over the alert pop-up (`.alert-toast` in
+  `apps/dashboard/src/dashboard-app.ts`): where the two overlap, an alert arriving while the menu
+  is open is hidden under it, and its countdown keeps running. Decide whether an arriving alert
+  should close the menu. Left open by C133 (#1045, the till's tabs fit one screen), under service
+  Task 16 (#981).
+  [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
+
 - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Why that
   screen behaved differently has not been established. Left open by the service, ordering and
   billing plan (Task 1's reasons screen).

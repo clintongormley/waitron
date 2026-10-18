@@ -236,6 +236,7 @@ export class WtLanguageChooser extends LitElement {
     return html`<div class="group" role="group" aria-labelledby="group-label">
       <span id="group-label" class="group-label">${this.label}</span>
       ${choices.map(
+        // The click is left to bubble: an enclosing wt-row-actions closes its menu on it.
         (l) =>
           html`<button
             type="button"
