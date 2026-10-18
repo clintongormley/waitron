@@ -94,9 +94,17 @@ export class VenueDepartmentsShell extends LitElement {
   protected override updated() {
     this.setAttribute("aria-busy", String(this.busy));
     const tab = tabOf(this.view);
-    if (tab && this.#openDepartment() && !offeredDepartmentTabs(this.model).includes(tab))
-      void this.#navigate({ view: null }, true);
+    if (
+      !this.#replacingTab &&
+      tab &&
+      this.#openDepartment() &&
+      !offeredDepartmentTabs(this.model).includes(tab)
+    ) {
+      this.#replacingTab = true;
+      void this.#navigate({ view: null }, true).finally(() => (this.#replacingTab = false));
+    }
   }
+  #replacingTab = false;
   #openDepartment() {
     return this.model?.departments.find((row) => row.id === this.departmentId && row.active);
   }
@@ -382,13 +390,16 @@ export class VenueDepartmentsShell extends LitElement {
     event.stopPropagation();
     void this.#navigate({ department: event.detail.departmentId, view: "receipt", zone: null });
   }
-  #tabChange(event: CustomEvent<{ tab: DepartmentTab; replace: boolean }>) {
+  async #tabChange(event: CustomEvent<{ tab: DepartmentTab; replace: boolean }>) {
     event.stopPropagation();
     if (!tabOf(this.view) || !this.#openDepartment()) return;
-    void this.#navigate(
+    const form = event.composedPath()[0] as HTMLElementTagNameMap["department-settings"];
+    await this.#navigate(
       { view: event.detail.tab === "details" ? null : event.detail.tab, zone: null },
       event.detail.replace,
     );
+    const tab = tabOf(this.view);
+    if (this.isConnected && tab && form.tab !== tab) form.tab = tab;
   }
   async #editorClosed(event: CustomEvent<{ departmentId?: string; zoneId?: string }>) {
     event.stopPropagation();

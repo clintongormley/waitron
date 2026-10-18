@@ -78,7 +78,8 @@ describe.each(["light", "dark"] as const)("department phone bounds (%s)", (theme
       for (const destination of destinations) {
         expect(destination.scrollWidth).toBeLessThanOrEqual(destination.clientWidth);
         const text = document.createRange();
-        text.selectNodeContents(destination);
+        text.setStartAfter(destination.querySelector("input")!);
+        text.setEnd(destination, destination.childNodes.length);
         expect(text.getClientRects().length).toBeGreaterThan(1);
       }
       for (const field of [

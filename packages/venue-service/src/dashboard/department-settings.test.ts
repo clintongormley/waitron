@@ -1286,6 +1286,56 @@ it("a refusal naming a Transfers field shows the Transfers tab and marks it", as
     .poll(() => el.shadowRoot!.activeElement)
     .toBe(el.shadowRoot!.querySelector("[name=receivingProfileId]"));
 });
+it("a refusal naming a Service field shows the Service tab, marks it and focuses the field", async () => {
+  const { el } = await mount(structuredClone(model), {
+    code: "management.request_invalid",
+    params: { field: "orderStart" },
+  });
+  await change(el, "name", "Revised");
+  const events = tabEvents(el);
+  save(el).click();
+  await expect.poll(() => el.tab).toBe("service");
+  expect(events).toEqual([{ tab: "service", replace: true }]);
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.marked)).toEqual([
+    undefined,
+    "needs fixing",
+    undefined,
+  ]);
+  const service = shownPanel(el).querySelector("dashboard-service-settings-fields")!;
+  expect(service).not.toBeNull();
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(service);
+  expect(service.shadowRoot!.activeElement).toBe(
+    service.shadowRoot!.querySelector("[name=orderStart]"),
+  );
+});
+it("a refusal landing while the name is blank marks Details and Transfers and shows Details", async () => {
+  const { el } = await mount();
+  let refuse!: () => void;
+  const refused = new Promise<void>((resolve) => (refuse = resolve));
+  el.api = new VenueServiceApi((async (_path, method) => {
+    if (method === "GET")
+      return { departmentId: "d1", receivingProfileId: "p1", destinationDepartmentIds: [] };
+    await refused;
+    throw { code: "department_transfer.settings_invalid", params: { field: "receivingProfileId" } };
+  }) as DashboardRequest);
+  await change(el, "name", "Revised");
+  save(el).click();
+  await change(el, "name", "");
+  await selectDepartmentTab(el, "service");
+  const events = tabEvents(el);
+  refuse();
+  await expect.poll(() => el.tab).toBe("details");
+  expect(events).toEqual([{ tab: "details", replace: true }]);
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.marked)).toEqual([
+    "needs fixing",
+    undefined,
+    "needs fixing",
+  ]);
+  expect(shownPanel(el).querySelector("[name=name]")).not.toBeNull();
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "name"));
+});
 it("losing the second department while Transfers shows returns to Details and keeps the draft", async () => {
   const { el } = await mount();
   await change(el, "name", "Draft");

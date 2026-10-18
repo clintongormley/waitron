@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { html } from "lit";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, NavigationGuard } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi } from "./client.js";
 import { zonesModel } from "../testing/department-zones-fixture.js";
@@ -194,6 +194,25 @@ it("choosing the Service tab records /view/service and Back returns to Details",
   await expect.poll(() => form.tab).toBe("details");
   expect(form.isConnected).toBe(true);
 });
+it("a tab change whose address write does not land puts the form back on the address's tab", async () => {
+  const shell = await mount("/manage/venue-operations/department/d1");
+  const form = await departmentSettings(shell);
+  let answer!: (outcome: "kept") => void;
+  const guard = new NavigationGuard(window, {
+    isDirty: () => true,
+    request: () => new Promise((resolve) => (answer = resolve)),
+  });
+  const elsewhere = guard.write("/manage/products?source=saved");
+  try {
+    await selectDepartmentTab(form, "service");
+    await expect.poll(() => form.tab).toBe("details");
+    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+  } finally {
+    answer("kept");
+    await elsewhere;
+    guard.dispose();
+  }
+});
 it("/manage/venue-operations/department/d1/view/service opens the dialog on Service", async () => {
   const shell = await mount("/manage/venue-operations/department/d1/view/service");
   const form = await departmentSettings(shell);
@@ -226,6 +245,37 @@ it("when Transfers stops being offered the address returns to Details by replace
   expect(form.tab).toBe("details");
   expect(written(replace)).toEqual(["/manage/venue-operations/department/d1"]);
   expect(push).not.toHaveBeenCalled();
+});
+it("while the replacement for an unoffered tab is in flight, further updates write nothing more", async () => {
+  const shell = await mount("/manage/venue-operations/department/d1/view/transfers");
+  const form = await departmentSettings(shell);
+  expect(form.tab).toBe("transfers");
+  let answer!: (outcome: "proceeded") => void;
+  const guard = new NavigationGuard(window, {
+    isDirty: () => true,
+    request: (proceed) =>
+      new Promise(
+        (resolve) =>
+          (answer = (outcome) => void Promise.resolve(proceed()).then(() => resolve(outcome))),
+      ),
+  });
+  const write = vi.spyOn(guard, "write");
+  try {
+    shell.model = oneDepartment();
+    await shell.updateComplete;
+    await expect.poll(() => write.mock.calls.length).toBe(1);
+    for (let i = 0; i < 3; i++) {
+      shell.requestUpdate();
+      await shell.updateComplete;
+    }
+    expect(write).toHaveBeenCalledTimes(1);
+    answer("proceeded");
+    await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+    await shell.updateComplete;
+    expect(write).toHaveBeenCalledTimes(1);
+  } finally {
+    guard.dispose();
+  }
 });
 it("closing from the Service tab returns focus to that row's menu", async () => {
   const shell = await mount();
