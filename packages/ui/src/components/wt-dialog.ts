@@ -83,6 +83,13 @@ export class WtDialog extends LitElement {
         margin: var(--wt-space-4) 0 0;
       }
 
+      .heading-row {
+        position: relative;
+        display: flex;
+        width: fit-content;
+        max-width: 100%;
+      }
+
       h2 {
         margin: 0 0 var(--wt-space-3);
         font-size: var(--wt-font-size-lg);
@@ -253,7 +260,12 @@ export class WtDialog extends LitElement {
         // Before as well as after: the browser picks opening focus inside showModal(), and on the
         // first render nothing has set a body that is always a tab stop yet.
         this.syncBodyTabStop();
+        // The heading's help badge comes first in the tree, so without this the browser opens on it
+        // with help on rather than where it opens with help off.
+        const help = this.renderRoot.querySelector<HTMLSlotElement>('slot[name="help"]');
+        help?.toggleAttribute("inert", true);
         this.dialog.showModal();
+        help?.removeAttribute("inert");
         this.syncBodyTabStop();
         this.watchContent();
         // An overflowing body is a tab stop ahead of its slotted fields, so opening focus lands on
@@ -449,7 +461,14 @@ export class WtDialog extends LitElement {
              violations, even fully nameless; adding role="dialog" made the same break get
              flagged. Removing this attribute would silently blind wt-dialog.a11y.test.ts. -->
         <div class="body">
-          ${this.heading ? html`<h2 id=${this.headingId}>${this.heading}</h2>` : nothing}
+          ${
+            this.heading
+              ? html`<div class="heading-row">
+                  <h2 id=${this.headingId}>${this.heading}</h2>
+                  <slot name="help"></slot>
+                </div>`
+              : nothing
+          }
           ${
             this.description
               ? html`<p class="description" id=${this.descriptionId}>${this.description}</p>`

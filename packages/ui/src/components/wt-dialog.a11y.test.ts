@@ -4,8 +4,11 @@ import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "./wt-dialog.js";
 import "./wt-button.js";
 import "./wt-form-actions.js";
+import "./wt-help-tooltip.js";
+import { setHelpMode } from "../help-mode.js";
 
 afterEach(cleanup);
+afterEach(() => setHelpMode(false));
 
 type Openable = HTMLElement & { open: boolean; updateComplete: Promise<unknown> };
 
@@ -86,5 +89,31 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
     el.open = true;
     await el.updateComplete;
     await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help off", async () => {
+    const el = (await mountThemed(
+      '<wt-dialog heading="Void sale"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Void sale">What voiding does.</wt-help-tooltip>This will create a corrective record.</wt-dialog>',
+      theme,
+    )) as Openable;
+    el.open = true;
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help on", async () => {
+    const el = (await mountThemed(
+      '<wt-dialog heading="Void sale"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Void sale">What voiding does.</wt-help-tooltip>This will create a corrective record.</wt-dialog>',
+      theme,
+    )) as Openable;
+    setHelpMode(true);
+    el.open = true;
+    await el.updateComplete;
+    const badge = el.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-help-tooltip",
+    )!;
+    await badge.updateComplete;
+    expect(badge.checkVisibility()).toBe(true);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });
