@@ -19,6 +19,45 @@ const json = (body: unknown, status = 200) =>
   });
 
 describe("TillApi draft source commands", () => {
+  it("splits selected unsent rows with their original observation and returns both bill snapshots", async () => {
+    const answer = {
+      billId: "bill-3",
+      revision: 10,
+      source: { draft, edit: { ...expectedEdit, editorId: "ana", editorName: "Ana" } },
+      destination: {
+        draft: { ...draft, id: "draft-2", billId: "bill-3", revision: 0 },
+        edit: {
+          billId: "bill-3",
+          editorId: "ana",
+          editorName: "Ana",
+          editorVersion: 1,
+          draftId: "draft-2",
+          draftRevision: 0,
+        },
+      },
+    };
+    const fetcher = vi.fn().mockResolvedValue(json(answer));
+    const api = new TillApi("https://venue.test", fetcher);
+    const signal = new AbortController().signal;
+    const command = {
+      submissionId: "split-draft-1",
+      expectedPartyRevision: 9,
+      expectedEdit,
+      lineIds: ["fresh-1", "recalled-7"],
+    };
+    expect(await api.splitDraft("party-1", "draft-1", command, { signal })).toEqual(answer);
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+      "https://venue.test/api/parties/party-1/drafts/draft-1/split",
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(command),
+        signal,
+      },
+    );
+  });
+
   it("splits a recalled source through the public group command with session cancellation", async () => {
     const fetcher = vi.fn().mockResolvedValue(json({ revision: 10 }));
     const api = new TillApi("", fetcher);

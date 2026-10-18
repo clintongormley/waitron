@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import {
   kitchenCourses,
   newId,
@@ -41,6 +41,9 @@ import {
   runServiceCommand,
 } from "./parties.js";
 import {
+  createOpenOrder,
+  moveOrderLines,
+  bumpRevision,
   prepareRecalledModifiers,
   readTabLines,
   readOrderRevision,
@@ -66,6 +69,8 @@ import {
   transferBillEditor,
 } from "./bill-editing.js";
 import "./errors.js";
+import { orderTableLabel } from "./kitchen-print.js";
+import { assertBillInvariant } from "./bill-payments.js";
 
 export interface FreshDraftLine {
   sourceLineId: null;
@@ -139,6 +144,160 @@ export type BillEditExpected = Pick<
 export interface BillDraftSnapshot {
   draft: Draft | null;
   edit: BillEditState;
+}
+
+export interface SplitDraftResult {
+  billId: string;
+  revision: number;
+  source: BillDraftSnapshot;
+  destination: BillDraftSnapshot;
+}
+
+export async function splitDraft(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  draftId: string,
+  input: PartyCommandArgs & { expectedEdit: BillEditExpected; lineIds: unknown },
+  attendance?: AttendanceRecorder,
+): Promise<SplitDraftResult> {
+  const id = uuid(draftId, "draftId");
+  const expectedEdit = parseBillEditExpected(input.expectedEdit);
+  if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
+  if (!Array.isArray(input.lineIds) || input.lineIds.length === 0) throw invalid("lineIds");
+  const lineIds = input.lineIds.map((value: unknown) => uuid(value, "lineIds"));
+  if (new Set(lineIds).size !== lineIds.length) throw invalid("lineIds");
+  const submissionId = uuid(input.submissionId, "submissionId");
+  return runServiceCommand(
+    tx,
+    { kind: "party", partyId },
+    submissionId,
+    "draft.split",
+    { partyId, draftId: id, operatorId: input.operatorId, expectedEdit, lineIds },
+    async () => {
+      const draft = await draftOnParty(tx, id, partyId);
+      const billId = uuid(draft.billId, "billId");
+      if (expectedEdit.billId !== billId) throw invalid("expectedEdit.billId");
+      await requireBillOfParty(tx, partyId, billId);
+      await refusePaymentInFlight(tx, [billId]);
+      await requireBillEditor(tx, billId, input.operatorId, expectedEdit);
+      const lines = (await storedLines(tx, cfg, [id])).map(({ line }) => line);
+      const selected = lines.filter((line) => lineIds.includes(line.id));
+      if (selected.length !== lineIds.length) throw invalid("lineIds");
+      const revision = await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
+      const newBillId = newId();
+      await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, cfg, billId), {
+        partyId,
+        existingService: true,
+        copyServiceContextFrom: billId,
+      });
+      await acquireBillEditor(tx, newBillId, input.operatorId, {
+        billId: newBillId,
+        editorVersion: 0,
+        draftId: null,
+        draftRevision: null,
+      });
+      const newDraftId = newId();
+      await tx.insert(orderDrafts).values({
+        id: newDraftId,
+        partyId,
+        billId: newBillId,
+        ownerId: input.operatorId,
+      });
+      const sourceIds = selected.filter(isRecalled).map((line) => line.sourceLineId);
+      if (sourceIds.length > 0) {
+        const families = await tx
+          .select({ lineNo: workingOrderLines.lineNo })
+          .from(workingOrderLines)
+          .where(
+            and(
+              eq(workingOrderLines.workingOrderId, billId),
+              or(
+                inArray(workingOrderLines.id, sourceIds),
+                inArray(workingOrderLines.parentLineId, sourceIds),
+              ),
+            ),
+          );
+        await moveOrderLines(
+          tx,
+          cfg,
+          billId,
+          newBillId,
+          families.map((line) => line.lineNo),
+        );
+        await assertBillInvariant(tx, [billId]);
+        await bumpRevision(tx, [billId, newBillId]);
+        await tx
+          .update(orderDraftRecalledLines)
+          .set({ draftId: newDraftId })
+          .where(
+            and(
+              eq(orderDraftRecalledLines.draftId, id),
+              inArray(orderDraftRecalledLines.id, lineIds),
+            ),
+          );
+      }
+      await tx
+        .update(orderDraftLines)
+        .set({ draftId: newDraftId })
+        .where(and(eq(orderDraftLines.draftId, id), inArray(orderDraftLines.id, lineIds)));
+      const empty = selected.length === lines.length;
+      if (empty) await closeBillDraft(tx, billId, input.operatorId, expectedEdit, "discarded");
+      else
+        await tx
+          .update(orderDrafts)
+          .set({ revision: draft.revision + 1, updatedAt: nowIso() })
+          .where(eq(orderDrafts.id, id));
+      const at = nowIso();
+      await recordDraftEvents(
+        tx,
+        attendance === undefined ? undefined : { recorder: attendance, at },
+        {
+          draftId: newDraftId,
+          kind: "created",
+          fromPerson: null,
+          toPerson: input.operatorId,
+          actorId: input.operatorId,
+          detail: { splitFrom: id, lineIds },
+        },
+      );
+      if (empty)
+        await recordDraftEvents(
+          tx,
+          attendance === undefined ? undefined : { recorder: attendance, at },
+          {
+            draftId: id,
+            kind: "discarded",
+            fromPerson: draft.ownerId,
+            toPerson: draft.ownerId,
+            actorId: input.operatorId,
+            detail: { intoDraftId: newDraftId, lineIds },
+          },
+        );
+      await captureDraft(
+        tx,
+        attendance,
+        cfg.locationId,
+        input.operatorId,
+        id,
+        draft.revision + 1,
+        "save",
+        at,
+      );
+      return {
+        billId: newBillId,
+        revision,
+        source: {
+          draft: empty ? null : await readOpenDraft(tx, cfg, partyId, id),
+          edit: await readBillEditState(tx, billId),
+        },
+        destination: {
+          draft: await readOpenDraft(tx, cfg, partyId, newDraftId),
+          edit: await readBillEditState(tx, newBillId),
+        },
+      };
+    },
+  );
 }
 
 export { normaliseDraftLines };

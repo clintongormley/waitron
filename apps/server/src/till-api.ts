@@ -172,7 +172,7 @@ import {
 } from "./order-groups.js";
 import type { Firer, GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
 import { RETAINED_COURSE } from "./retained-course.js";
-import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
+import { readDrafts, saveDraft, splitDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import type { BillEditState, BillEditExpected } from "./order-drafts.js";
 import {
   requireOrderBillEditor,
@@ -3448,6 +3448,41 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return result;
       });
       return c.json(draft);
+    }),
+  );
+
+  app.post("/api/parties/:id/drafts/:did/split", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const cfg = requestCfg(deps.cfg, session);
+      const partyId = requireDraftPartyParam(c.req.param("id"));
+      const draftId = requireDraftParam(c.req.param("did"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const command = groupCommand(session.personId, body);
+      const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        const split = await splitDraft(
+          tx,
+          cfg,
+          partyId,
+          draftId,
+          {
+            ...command,
+            expectedEdit: parseBillEditExpected(body.expectedEdit),
+            lineIds: body.lineIds,
+          },
+          deps.attendance,
+        );
+        await issueIfFullyPaid(
+          tx,
+          fiscal,
+          sendingCfg(cfg, c, session.device),
+          split.source.edit.billId,
+          session.personId,
+        );
+        return split;
+      });
+      return c.json(result);
     }),
   );
 

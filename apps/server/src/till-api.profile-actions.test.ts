@@ -115,7 +115,7 @@ import {
  * | POST /api/parties/:id/groups/:gid/ready                   | prepare-orders             | prepare-orders        |
  * | POST /api/parties/:id/groups/:gid/away, /served           | hand-over-orders           | hand-over-orders      |
  * | POST /api/parties/:id/served, /unserved                   | hand-over-orders           | hand-over-orders      |
- * | PUT /api/parties/:id/drafts; POST /drafts/:did/take-over, /submit | take-orders        | take-orders           |
+ * | PUT /api/parties/:id/drafts; POST /drafts/:did/take-over, /submit, /split | take-orders        | take-orders           |
  * | POST /api/parties/:id/unpaid-departure                    | take-orders                | take-orders           |
  * | POST /api/working-orders/:id/department-transfers         | take-orders                | department-transfer-api.test.ts: refuses request without the take-orders profile action |
  * | POST /api/department-transfers/:id/withdraw, /accept, /decline | take-orders             | department-transfer-api.test.ts: refuses <verb> without the take-orders profile action |
@@ -442,6 +442,7 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/parties/${id}/move`),
   ordering("POST", `/api/parties/${id}/join`),
   ordering("POST", `/api/parties/${id}/split-table`),
+  ordering("POST", `/api/parties/${id}/drafts/${id}/split`),
   ordering("POST", `/api/parties/${id}/groups`),
   ordering("POST", `/api/parties/${id}/groups/move`),
   ordering("POST", `/api/parties/${id}/groups/split-line`),

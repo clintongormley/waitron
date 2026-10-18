@@ -3915,6 +3915,25 @@ export class TillApi {
     });
   }
 
+  splitDraft(
+    partyId: string,
+    draftId: string,
+    command: GroupCommand & { expectedEdit: BillEditExpected; lineIds: string[] },
+    options: ReadOptions = {},
+  ): Promise<{
+    billId: string;
+    revision: number;
+    source: BillDraftSnapshot;
+    destination: BillDraftSnapshot;
+  }> {
+    return this.#request(
+      `/api/parties/${partyId}/drafts/${draftId}/split`,
+      "POST",
+      command,
+      options.signal,
+    );
+  }
+
   /** Transfer the shown bill's saved outbox in place, with replay under the same submission id. */
   takeOverDraft(
     partyId: string,

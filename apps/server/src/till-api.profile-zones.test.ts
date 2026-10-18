@@ -165,7 +165,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/parties/:id/lines/:lineId/recall | party | own refusing row below; allowed: draft-recall.test.ts |
  * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | party, current profile inside the transaction | line-cancel-api.test.ts: "checks the party zone for %s and admits it once allowed" |
  * | POST /api/parties/:id/drafts/:did/discard | party | own refusing row below; allowed: draft-discard.test.ts |
- * | POST /api/parties/:id/drafts/:did/take-over, /submit    | party                  | refuses POST /api/parties/:id/drafts/:did/<verb>     |
+ * | POST /api/parties/:id/drafts/:did/take-over, /submit, /split | party                  | refuses POST /api/parties/:id/drafts/:did/<verb>     |
  * | POST /api/parties/:id/unpaid-departure                  | party                  | refuses POST /api/parties/:id/unpaid-departure       |
  * | POST /api/dead-ends/draft                               | body party             | refuses POST /api/dead-ends/draft                    |
  * | POST /api/dead-ends/order                               | body order; body zone  | refuses POST /api/dead-ends/order (order), (zone)    |
@@ -1038,7 +1038,7 @@ const ROUTES: readonly Row[] = [
     () => ({ draftId: null, revision: 0 }),
     deliTableZone,
   ],
-  ...(["take-over", "submit"] as const).map((verb): Row => [
+  ...(["take-over", "submit", "split"] as const).map((verb): Row => [
     `POST /api/parties/:id/drafts/:did/${verb}`,
     "POST",
     (x) => `/api/parties/${x.deliParty}/drafts/${id}/${verb}`,
