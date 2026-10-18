@@ -248,7 +248,7 @@ edit is listed here; any other edit an implementer finds necessary is a STOP and
 
 | Task | File | Edit | Why |
 | --- | --- | --- | --- |
-| 2 (own commit) | `scripts/fiscal-allocation-migration.test.ts:25-43, 77-79` | SET-UP ONLY: select the W41s-4 migration by its tag `0006_numerous_roughhouse` instead of `journal.entries.at(-1)`; the "old" folder = the entries before it, the "candidate" folder = the entries up to and including it (later `.sql` files and journal entries removed from both), and each folder's fiscal `appendOnlyTables` filtered to the tables its own entries create. No assertion and no expected value changes. | The test names the newest fiscal migration as "the allocation migration". Measured by the plan review (experiment 1): a throwaway `0007` made `Tests 2 failed | 2 passed (4)` (`expected true to be false`; `expected [] to have a length of 1`), because the orphan corruption then edits the wrong file. On today's tree the edit selects the same migration and the same folders, so it runs exactly what it runs today. Its own commit, so it can be reverted or replaced alone. |
+| 2 (own commit; **owner approved 2026-10-18 ~22:00, plus Step 7a's added check**) | `scripts/fiscal-allocation-migration.test.ts:25-43, 77-79` | SET-UP ONLY: select the W41s-4 migration by its tag `0006_numerous_roughhouse` instead of `journal.entries.at(-1)`; the "old" folder = the entries before it, the "candidate" folder = the entries up to and including it (later `.sql` files and journal entries removed from both), and each folder's fiscal `appendOnlyTables` filtered to the tables its own entries create. No assertion and no expected value changes. | The test names the newest fiscal migration as "the allocation migration". Measured by the plan review (experiment 1): a throwaway `0007` made `Tests 2 failed | 2 passed (4)` (`expected true to be false`; `expected [] to have a length of 1`), because the orphan corruption then edits the wrong file. On today's tree the edit selects the same migration and the same folders, so it runs exactly what it runs today. Its own commit, so it can be reverted or replaced alone. |
 
 **Allowed by the rule (entries, or call arguments gaining what they lack):**
 
@@ -567,7 +567,28 @@ forbids only local↔ledger/state).
   `pnpm --filter @waitron/composition exec vitest run src/composition.test.ts`, and the fiscal
   core suites UNEDITED: `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad` and
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts`.
+- [ ] **Step 7a: the owner's check that A795's migration leaves filed fiscal rows unchanged**
+  (owner answer 2026-10-18 ~22:00, questions.md). New root test
+  `scripts/fiscal-certificate-migration.test.ts`, built the way `scripts/fiscal-allocation-migration.test.ts`
+  builds its databases: an "old" fiscal folder holding every entry BEFORE A795's generated one
+  (find A795's entry by the tag Step 5 generated, never by "newest"), with `appendOnlyTables`
+  filtered to the tables those entries create; seed a till, a sale and its chained alta
+  (`seedTill`, `seedSale`, `appendToChain(…, altaFor(…))` from the same seed helpers), so
+  `registros_facturacion`, `cadenas` and `registro_sif` hold rows, plus any other filed fiscal row
+  an existing seed helper can write without new production code (say in the report which tables
+  held rows); install the change feed as that test does; snapshot EVERY row of EVERY table that
+  exists before the upgrade (list them from `sqlite_master`, `select *` each, plus `typeof()` of
+  each column so a value that changes storage class is caught); apply the real fiscal folder with
+  `applyMigrations`; assert it succeeded and every snapshot is `toEqual` to the same read after.
+  **Prove it by deletion, twice, in a throwaway copy of the candidate folder (never the real
+  `drizzle/` files):** (1) append to A795's SQL an `UPDATE` of one `cadenas` (or other
+  non-append-only filed) row → the test fails AT THE ROW COMPARISON, not at the apply; (2) append
+  `DROP TRIGGER` of `registros_facturacion`'s update trigger followed by an `UPDATE` of one
+  `registros_facturacion` row → the test fails at the row comparison. Record both failing outputs
+  in the report, then remove the throwaway. Name the test in the PR under "Changed test checks"
+  as the owner's added check.
 - [ ] **Step 8: commit** `git commit -s -m "Add the tables that record each AEAT certificate install and each expiry email, append-only and per node (A795)"`
+  (Step 7a's test may be its own commit: `"Check that the certificate migration leaves every filed fiscal row unchanged (A795)"`).
 
 ---
 
