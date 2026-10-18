@@ -2519,6 +2519,7 @@ export class TillTableOrderScreen extends LitElement {
         >${this.#nameForLine(line)}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}
         ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}
         ${this.#isChild(line) ? nothing : this.#sentCourse(line.courseId, line.course)}
+        ${this.#paidMark(line.lineNo, line.quantity)}
       </span>
       <span class="sent-fallback-price" data-sent-fallback-price>${this.#lineTotal(line)}</span>
     </div>`;

@@ -166,3 +166,67 @@ it("omits a colleague's saved recalled family while leaving unrelated bill rows 
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector('[data-sent-fallback-line="stored-dish"]')).not.toBeNull();
 });
+
+it.each([false, true])(
+  "keeps full and partial payment facts in read-only Sent when the service read is unavailable (unread=%s)",
+  async (unread) => {
+    const balance = {
+      workingOrderId: "wo-4",
+      status: "open" as const,
+      total: "14.00",
+      received: "10.00",
+      reserved: "0.00",
+      outstanding: "4.00",
+      tips: "0.00",
+      payments: [],
+      paidLines: [
+        { lineId: storedDish.id, lineNo: 1, paidQuantity: "2.000" },
+        { lineId: storedExtra.id, lineNo: 2, paidQuantity: "2.000" },
+        { lineId: storedServed.id, lineNo: 3, paidQuantity: "1.000" },
+      ],
+    };
+    const { el } = await mount({
+      lines: [storedDish, storedExtra, { ...storedServed, quantity: "3.000" }],
+      currentOrders: null,
+      currentOrdersUnread: unread,
+      billBalance: balance,
+    });
+    const marks = () =>
+      [...el.shadowRoot!.querySelectorAll("[data-sent-fallback] [data-line-paid]")].map((mark) =>
+        mark.textContent!.trim(),
+      );
+    expect(marks()).toEqual([
+      t("bill_pay.paid"),
+      t("bill_pay.paid"),
+      t("bill_pay.paid_part").replace("{paid}", "1").replace("{quantity}", "3"),
+    ]);
+    expect(
+      el
+        .shadowRoot!.querySelector('[data-sent-fallback-extra="stored-extra"] [data-line-paid]')!
+        .textContent!.trim(),
+    ).toBe(t("bill_pay.paid"));
+    expect(
+      el.shadowRoot!.querySelector("[data-sent-fallback] button, [data-sent-fallback] wt-button"),
+    ).toBeNull();
+
+    el.billBalance = { ...balance, workingOrderId: "wo-other" };
+    await el.updateComplete;
+    expect(marks()).toEqual([]);
+    el.orderId = "wo-other";
+    await el.updateComplete;
+    expect(marks()).toHaveLength(3);
+    el.billBalance = { ...balance, workingOrderId: "wo-other", paidLines: [] };
+    await el.updateComplete;
+    expect(marks()).toEqual([]);
+    el.billBalance = {
+      ...balance,
+      workingOrderId: "wo-other",
+      paidLines: [{ lineId: storedDish.id, lineNo: 1, paidQuantity: "0.000" }],
+    };
+    await el.updateComplete;
+    expect(marks()).toEqual([]);
+    el.billBalance = null;
+    await el.updateComplete;
+    expect(marks()).toEqual([]);
+  },
+);

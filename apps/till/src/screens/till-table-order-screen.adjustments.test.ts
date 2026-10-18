@@ -446,6 +446,22 @@ describe("till-table-order-screen: discounting the whole bill", () => {
 });
 
 describe("till-table-order-screen: the price an adjusted line had", () => {
+  async function inspect(el: TillTableOrderScreen, line: TabLine) {
+    const previous =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>("[data-sent-line-dialog]")!;
+    if (previous.open) {
+      const closed = new Promise<void>((resolve) =>
+        previous.addEventListener("wt-close", () => resolve(), { once: true }),
+      );
+      await userEvent.click(previous.querySelector<HTMLElement>("[data-sent-line-close]")!);
+      await closed;
+    }
+    if (el.shadowRoot!.querySelector("[data-drawer]") !== null) {
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+      await el.updateComplete;
+    }
+    return openSentDish(el, line.id, line.servedAt === null ? "fired" : "served");
+  }
   const total = (row: Element) =>
     row
       .querySelector(".line-total")!
@@ -460,17 +476,21 @@ describe("till-table-order-screen: the price an adjusted line had", () => {
         steaks,
       ],
     });
-    const rows = [...el.shadowRoot!.querySelectorAll(".pending-line")];
+    const dialog = await inspect(el, pizza);
+    const rows = [
+      dialog.querySelector("[data-sent-line-amount]")!,
+      dialog.querySelector('[data-sent-extra="line-3"]')!,
+    ];
 
     expect(rows[0]!.querySelector("s")!.textContent).toBe(money("9.00"));
     expect(total(rows[0]!)).toBe(`${t("table.price_was")} ${money("9.00")} ${money("0.00")}`);
     expect(total(rows[1]!)).toBe(`${t("table.price_was")} ${money("1.50")} ${money("0.00")}`);
-    // A line never adjusted shows its price alone.
-    expect(rows[2]!.querySelector("s")).toBeNull();
-    expect(total(rows[2]!)).toBe(money("50.00"));
-    // The struck price is read as the old one, not as a second price.
     const was = rows[0]!.querySelector<HTMLElement>("[data-price-was]")!;
     expect(was.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+    const unadjusted = await inspect(el, steaks);
+    rows.push(unadjusted.querySelector("[data-sent-line-amount]")!);
+    expect(rows[2]!.querySelector("s")).toBeNull();
+    expect(total(rows[2]!)).toBe(money("50.00"));
   });
 
   it("shows a discounted served line's original total, and a split-off part at its own price plainly", async () => {
@@ -480,11 +500,9 @@ describe("till-table-order-screen: the price an adjusted line had", () => {
         { ...steaks, quantity: "1.000", listUnitPriceGross: "25.00" },
       ],
     });
-    const pending = el.shadowRoot!.querySelector(".pending-line")!;
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await el.updateComplete;
-    const served = await openSentDish(el, servedBread.id, "served");
+    const served = await inspect(el, servedBread);
     expect(total(served)).toBe(`${t("table.price_was")} ${money("5.00")} ${money("4.50")}`);
+    const pending = await inspect(el, steaks);
     expect(total(pending)).toBe(money("25.00"));
   });
 });

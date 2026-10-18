@@ -229,8 +229,15 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
 });
 
 describe("till-table-order-screen: items already paid for", () => {
-  const paidOf = (el: TillTableOrderScreen) =>
-    [...el.shadowRoot!.querySelectorAll("[data-line-paid]")].map((mark) => text(mark));
+  const paidOf = (el: TillTableOrderScreen) => {
+    const inList = (selector: string) =>
+      [...el.shadowRoot!.querySelectorAll(`${selector} [data-line-paid]`)].map((mark) =>
+        text(mark),
+      );
+    const sent = inList("[data-sent-fallback]");
+    expect(inList("[data-drawer] .pending")).toEqual(sent);
+    return sent;
+  };
 
   it("marks each line paid for, and how much of a line is", async () => {
     const el = await mountScreen({

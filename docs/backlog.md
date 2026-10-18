@@ -2418,8 +2418,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   and its extras, using the service read for current amounts. It also retains staff option
   answers, extra notes and the displayed bill's extra nutrition from matching stored rows. Focused
   browser checks cover the replacement and price display in both languages and themes at phone
-  and desktop widths. To serve, direct Cancel and the revised A758 cancellation/Finish work remain
-  open; cancellation rules are unchanged by this checkpoint.
+  and desktop widths. When the detailed service read is unavailable, the branch's read-only Sent
+  fallback also keeps the displayed bill's full and partial Paid markers, including paid extras.
+  Focused browser checks cover changing or clearing the balance and another bill's balance;
+  native captures cover both languages and themes at phone and desktop widths. The existing
+  adjusted-price checks now open Sent's dish window, retaining their exact original and adjusted
+  dish/extra prices. To serve, direct Cancel and the revised A758 cancellation/Finish work remain
+  open; cancellation rules are unchanged by these checkpoints.
   **A773-2**, firing and the pass, is planned after A773-1 lands: Requested/pass release, Away/Done
   removal, station settings and counter changes. The [six choices](backlog/mockups/a773-1-open-points/README.md)
   are answered in spec §14. Physical trials and the remaining panel/actions/finish/delivery work
