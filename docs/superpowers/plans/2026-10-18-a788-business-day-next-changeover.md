@@ -188,6 +188,17 @@ Task 7a confirmed the plan's 7a row, took the 7a part of the 7a/7b/8 row, and to
 
 No other existing assertion failed (`pnpm exec vitest run --project node` in `packages/venue-service`: `Tests  2510 passed (2510)`).
 
+Task 10 confirmed the plan's Task 10 row (exact base lines below)
+
+| File:line (base `373b96623`) | Before → after | Why |
+| --- | --- | --- |
+| `packages/venue-service/src/dashboard/seasons-window.test.ts:704-707` (case title "a changed or pending business-day start" → "a changed business-day start, a clash with a waiting one") | `{ code: "hours.clock_change_pending" }` → "Cancel the pending business-day change before editing hours." becomes mockup 06's `hours.clock_change_conflict` refusal → "Dinner 21:00–02:45 clashes with the new business-day start, 03:00 from Wed 21 Oct, 03:00: Hours overlap the changed start." (`mount` also sets `timeZone "Europe/Madrid"`) | the pending refusal is retired; the window names the clashing range |
+| `season-painter.save.test.ts:542-549` (case "a pending business-day change has its own message" → "a clash with a waiting business-day start names the range") | pending code → pending sentence becomes the conflict refusal → the clash sentence, by `toBe` | same |
+| `periods-list.delete.test.ts:404-407,414` | thrown `{ code: "hours.clock_change_pending", params: { effectiveBusinessDay } }` and the pending sentence → the conflict refusal and the clash sentence; every other assertion in the case unchanged | same |
+| `period-delete-dialog.test.ts:251-254,257` and `:311-314` | pending refusal → pending sentence (both cases) becomes the conflict refusal → the clash sentence (`mount` also sets `timeZone "Europe/Madrid"`) | same |
+
+New cases beside them (no existing assertion changed): `clock-change-conflict.test.ts` (EN, ES, each hours reason, the name fallback, the venue's zone, other codes), a `period-dialog.test.ts` bottom-line case, a row in `special-day-painter.save.test.ts`'s beside-Save `it.each`, and a refused special-day delete in `special-day-painter.test.ts`. The department dialog's case is NOT done (see the Task 10 report). No other existing assertion failed in the nine files run (`Tests  399 passed (399)`); the rest of the package's browser suite was not run.
+
 ## Review focus (inputs no task's main tests reach; each line names the test that pins it)
 
 1. **The rule-2 flip mid-dialog**: a preview taken at 00:20 for 00:30 and a Save at 00:31 must be

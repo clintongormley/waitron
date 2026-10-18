@@ -4,6 +4,10 @@ import { applyTokens } from "@waitron/ui";
 import type { PeriodDeleteImpact } from "./opening-hours-client.js";
 import type { PeriodDeleteDialog } from "./period-delete-dialog.js";
 import "./period-delete-dialog.js";
+import {
+  clockChangeConflict,
+  clockChangeConflictSentence,
+} from "../testing/clock-change-conflict.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
@@ -31,6 +35,7 @@ async function mount(impact?: PeriodDeleteImpact) {
   const el = document.createElement("period-delete-dialog");
   el.period = { id: "p1", name: "Lunch" };
   el.impact = impact;
+  el.timeZone = "Europe/Madrid";
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -248,13 +253,10 @@ it("a failed read is shown at the bottom over a refusal, with Try again, and the
 
 it("a failed re-read beside a shown impact keeps a refusal's sentence at the bottom, and offers Try again", async () => {
   const el = await mount(impactOf({ seasons: 2 }));
-  el.refusal = {
-    code: "hours.clock_change_pending",
-    params: { effectiveBusinessDay: "2026-10-20" },
-  };
+  el.refusal = clockChangeConflict;
   el.readError = "What deleting it changes could not be read.";
   await el.updateComplete;
-  expect(bottom(el)).toBe("Cancel the pending business-day change before editing hours.");
+  expect(bottom(el)).toBe(clockChangeConflictSentence);
   expect(el.shadowRoot!.querySelector("[data-test=retry-delete]")).not.toBeNull();
   expect(body(el)).toContain("Painted in 2 seasons.");
   expect(confirm(el).disabled).toBe(false);
@@ -308,10 +310,7 @@ it("any other refusal shows one sentence at the bottom and keeps Confirm", async
       { code: "hours.clock_changed" },
       "The business-day start changed. Check what deleting it changes, then delete it again.",
     ],
-    [
-      { code: "hours.clock_change_pending" },
-      "Cancel the pending business-day change before editing hours.",
-    ],
+    [clockChangeConflict, clockChangeConflictSentence],
     [{ code: "menu_period.not_found" }, "This period no longer exists."],
     [{ code: "department.not_found" }, "This department no longer exists."],
     [

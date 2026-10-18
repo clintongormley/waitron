@@ -8,6 +8,10 @@ import { OpeningHoursApi, type PeriodDeleteImpact } from "./opening-hours-client
 import type { PeriodDeleteDialog } from "./period-delete-dialog.js";
 import type { PeriodDialog } from "./period-dialog.js";
 import type { PeriodRow, PeriodsList } from "./periods-list.js";
+import {
+  clockChangeConflict,
+  clockChangeConflictSentence,
+} from "../testing/clock-change-conflict.js";
 
 import "./periods-list.js";
 
@@ -402,17 +406,14 @@ it("a failed re-read after a refused delete keeps the refusal at the bottom, the
         return impactOf({ seasons: 2 });
       },
       write: () => {
-        throw {
-          code: "hours.clock_change_pending",
-          params: { effectiveBusinessDay: "2026-10-20" },
-        };
+        throw clockChangeConflict;
       },
     }),
   );
   const dialog = await removePeriod(el);
   await impactShown(dialog);
   confirm(dialog).click();
-  const pending = "Cancel the pending business-day change before editing hours.";
+  const pending = clockChangeConflictSentence;
   await expect.poll(() => bottom(dialog)).toBe(pending);
   failImpact = true;
   el.api.rereadWatches();

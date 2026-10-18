@@ -48,6 +48,7 @@ import {
 import { refusalOf, type Refusal } from "./refusal.js";
 import { seasonTintStyles } from "./season-tint.js";
 import { t } from "./strings.js";
+import { clockChangeConflictText } from "./clock-change-conflict.js";
 
 const startOf = (row: SeasonRow): string => `${row.month}-${row.day.padStart(2, "0")}`;
 
@@ -184,6 +185,7 @@ export class SeasonsWindow extends LitElement {
   ];
   @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
   @property({ type: Number }) clockRevision = 0;
+  @property() timeZone = "";
   @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
   @property({ attribute: false }) draftParent?: object;
@@ -655,7 +657,8 @@ export class SeasonsWindow extends LitElement {
         ? refused
           ? ""
           : t("prep.save_error")
-        : seasonRefusalText(this.refusal.refusal, this.seasons, this.specialDays);
+        : (clockChangeConflictText(this.refusal.refusal, this.timeZone) ??
+          seasonRefusalText(this.refusal.refusal, this.seasons, this.specialDays));
     return html`<wt-form-actions
       slot="footer"
       .error=${[refusal, marked ? t("prep.fix_fields") : ""].filter(Boolean).join(" ")}

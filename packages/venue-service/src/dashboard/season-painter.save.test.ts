@@ -18,6 +18,10 @@ import {
   type Write,
 } from "../testing/season-painter-fixture.js";
 import "./season-painter.js";
+import {
+  clockChangeConflict,
+  clockChangeConflictSentence,
+} from "../testing/clock-change-conflict.js";
 
 let painter: SeasonPainter | undefined;
 beforeEach(() => setLocale("en"));
@@ -539,13 +543,11 @@ it("several edited departments made inactive are told together", async () => {
   );
 });
 
-it("a pending business-day change has its own message", async () => {
-  const { painter, writes } = await mount(withBar(), [{ code: "hours.clock_change_pending" }]);
+it("a clash with a waiting business-day start names the range", async () => {
+  const { painter, writes } = await mount(withBar(), [clockChangeConflict]);
   await drag(painter, "3", 7 * 60, 9 * 60);
   await save(painter, writes);
-  expect(frame(painter).refusal).toBe(
-    "Cancel the pending business-day change before editing hours.",
-  );
+  expect(frame(painter).refusal).toBe(clockChangeConflictSentence);
 });
 
 it("the season steps and the picker are disabled while a save is in flight", async () => {

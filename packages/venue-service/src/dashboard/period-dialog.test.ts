@@ -5,6 +5,10 @@ import { applyTokens } from "@waitron/ui";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { PeriodDialog } from "./period-dialog.js";
 import "./period-dialog.js";
+import {
+  clockChangeConflict,
+  clockChangeConflictSentence,
+} from "../testing/clock-change-conflict.js";
 
 const hosts: HTMLElement[] = [];
 const menus = [
@@ -348,6 +352,20 @@ it.each([
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
       .error,
   ).toBe(message);
+  expect(field(el, "name").error).toBe("");
+  expect(save(el).disabled).toBe(false);
+});
+
+it("names the range that clashes with a waiting business-day start at the bottom", async () => {
+  const el = await mount(true);
+  el.timeZone = "Europe/Madrid";
+  await change(el, "name", { value: "Dinner" });
+  el.refusal = clockChangeConflict;
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+      .error,
+  ).toBe(clockChangeConflictSentence);
   expect(field(el, "name").error).toBe("");
   expect(save(el).disabled).toBe(false);
 });
