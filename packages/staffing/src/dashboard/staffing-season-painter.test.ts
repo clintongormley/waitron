@@ -141,6 +141,53 @@ it("the season chip takes the season's stored colour", async () => {
   expect(byTest(autumn.painter, "season")!.dataset.tint).toBe("orange");
 });
 
+it("the band takes the season's stored colour and follows the address to another season", async () => {
+  let answer: (read: SeasonStaffing) => void = () => undefined;
+  const { painter } = await mount({
+    read: () => new Promise<SeasonStaffing>((resolve) => (answer = resolve)),
+  });
+  expect(frame(painter).band, "no band while the read is out").toBe("");
+  answer(seasonStaffing());
+  await settle(painter);
+  expect(frame(painter).band).toBe("blue");
+  painter.remove();
+  const autumn = await mount({ seasonId: "autumn" });
+  expect(frame(autumn.painter).band).toBe("orange");
+});
+
+it("says which weeks it edits under the bar, before the paint row, in English and Spanish", async () => {
+  const { painter } = await mount();
+  const covers = byTest(painter, "covers")!;
+  expect(covers.getAttribute("slot")).toBe("row");
+  expect(covers.textContent!.trim()).toBe(
+    "Every week from 1 Dec to 28 Feb needs this staffing, except on special days.",
+  );
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-text-muted)";
+  root(painter).append(probe);
+  expect(getComputedStyle(covers).color, "muted").toBe(getComputedStyle(probe).color);
+  probe.remove();
+  const row = [...root(painter).querySelectorAll("[slot=row]")];
+  expect(row.indexOf(covers), "the line is the first row").toBe(0);
+  expect(row.indexOf(byTest(painter, "paint-row")!)).toBeGreaterThan(0);
+  painter.remove();
+  setLocale("es");
+  const spanish = (await mount()).painter;
+  expect(byTest(spanish, "covers")!.textContent!.trim()).toBe(
+    "Cada semana del 1 dic al 28 feb necesita este personal, salvo los días especiales.",
+  );
+});
+
+it("a viewer sees the band and the line", async () => {
+  const { painter } = await mount({ readOnly: true });
+  expect(frame(painter).band).toBe("blue");
+  const band = frame(painter).shadowRoot!.querySelector<HTMLElement>('[data-test="band"]')!;
+  expect(band.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(byTest(painter, "covers")!.textContent!.trim()).toBe(
+    "Every week from 1 Dec to 28 Feb needs this staffing, except on special days.",
+  );
+});
+
 it("keeps the same columns from one render to the next", async () => {
   const { painter } = await mount();
   const columns = grid(painter).columns;

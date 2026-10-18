@@ -89,6 +89,24 @@ describe("staffing strings", () => {
     expect(colourName(colour, "es")).toBe(es);
   });
 
+  it("names a season's week 'semana estándar' in Spanish", () => {
+    expect(STAFFING_STRINGS.es["staffing.rota.paint_week"]).toBe(
+      "Pintar la semana estándar de {season}",
+    );
+    expect(STAFFING_STRINGS.es["staffing.day.edit_week"]).toBe(
+      "Editar la semana estándar de {season}",
+    );
+    expect(STAFFING_STRINGS.es["staffing.day.show_week"]).toBe(
+      "Ver la semana estándar de {season}",
+    );
+    expect(STAFFING_STRINGS.es["staffing.rota.unpainted_season"]).toBe(
+      "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Pinta una vez la semana estándar de {season} y cada semana de la temporada tendrá sus puestos. Puedes seguir añadiendo turnos en Todo el equipo.",
+    );
+    expect(
+      Object.values(STAFFING_STRINGS.es).filter((text) => text.includes("semana habitual")),
+    ).toEqual([]);
+  });
+
   it("registers a message for each code the page can meet", () => {
     for (const code of [
       "staff_role.name_taken",
