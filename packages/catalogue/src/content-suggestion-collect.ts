@@ -1,3 +1,4 @@
+import type { TranslationTarget } from "./content-translation-targets.js";
 import { categories, products, tenants, type Transaction } from "@waitron/db";
 import type { ContentLanguages } from "@waitron/shared";
 import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
@@ -15,7 +16,7 @@ import {
   type TranslationRow,
   type TranslationSettings,
 } from "./content-translation-targets.js";
-import type { TranslationRef, TranslationTarget } from "./content-translation-types.js";
+import type { TranslationRef } from "./content-translation-types.js";
 import type { HouseStyleExample, SuggestionItem } from "./content-suggestion-types.js";
 import { menuRoots } from "./menu-structure.js";
 import { contentSuggestions } from "./schema/suggestions.js";

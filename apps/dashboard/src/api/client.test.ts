@@ -3057,9 +3057,9 @@ it("reads and replaces venue kitchen timing defaults with passive background rea
 });
 
 describe("inline translation transport", () => {
-  it("reads encoded language/cursor and repeated target references", async () => {
+  it("reads projected languages, encoded cursor and repeated target references", async () => {
     const page = {
-      language: "en",
+      configuration: "current-config",
       config: { defaultLanguage: "es", languages: ["es", "en"] },
       required: ["es"],
       rows: [],
@@ -3072,21 +3072,26 @@ describe("inline translation transport", () => {
       return new Response(JSON.stringify(page));
     });
     expect(
-      await api.getContentTranslationTargets("en", { after: '{"kind":"unit","id":"a&b"}' }),
+      await api.getContentTranslationTargets({
+        languages: ["en"],
+        missing: { mode: "language", language: "en" },
+        after: '{"kind":"unit","id":"a&b"}',
+      }),
     ).toEqual(page);
     expect(
-      await api.getContentTranslationTargets("en", {
+      await api.getContentTranslationTargets({
+        languages: ["en"],
         targets: [
           { kind: "unit", id: "a&b" },
           { kind: "product", id: "c d" },
         ],
       }),
     ).toEqual(page);
-    await api.getContentTranslationTargets("x/y", {});
+    await api.getContentTranslationTargets({ languages: ["x/y"], missing: { mode: "all" } });
     expect(paths).toEqual([
-      "/management-api/content-translations/en?after=%7B%22kind%22%3A%22unit%22%2C%22id%22%3A%22a%26b%22%7D",
-      "/management-api/content-translations/en?target=unit%3Aa%26b&target=product%3Ac+d",
-      "/management-api/content-translations/x%2Fy",
+      "/management-api/content-translations?language=en&missing=language&missingLanguage=en&after=%7B%22kind%22%3A%22unit%22%2C%22id%22%3A%22a%26b%22%7D",
+      "/management-api/content-translations?language=en&target=unit%3Aa%26b&target=product%3Ac+d",
+      "/management-api/content-translations?language=x%2Fy&missing=all",
     ]);
   });
   it("sends the complete batch once, receives canonical names and keeps background writes active", async () => {
@@ -3097,28 +3102,31 @@ describe("inline translation transport", () => {
           id: "unit",
           expected: "token",
           text: " English ",
-          defaultText: "Español",
+          language: "en",
+          field: "name" as const,
         },
       ],
     };
     let request: RequestInit | undefined;
-    const answer = { saved: [{ kind: "unit", id: "unit", selectedText: "English" }] };
+    const answer = {
+      saved: [{ kind: "unit", id: "unit", language: "en", field: "name", text: "English" }],
+    };
     const api = new DashboardApi("", async (_path, init) => {
       request = init;
       return new Response(JSON.stringify(answer));
     });
-    expect(await api.background.saveContentTranslations("en", input)).toEqual(answer);
+    expect(await api.background.saveContentTranslations(input)).toEqual(answer);
     expect(request?.method).toBe("PUT");
     expect(JSON.parse(request?.body as string)).toEqual(input);
     expect(new Headers(request?.headers).has("x-waitron-live")).toBe(false);
   });
   it("keeps domain cause, target, field and language in a refused batch", async () => {
     const params = {
-      causeCode: "content.translation_required",
-      causeParams: { language: "es" },
+      causeCode: "product.invalid",
+      causeParams: { field: "customerName" },
       kind: "product",
       id: "p",
-      field: "defaultText",
+      field: "name",
       language: "es",
     };
     const api = new DashboardApi(
@@ -3128,7 +3136,7 @@ describe("inline translation transport", () => {
           status: 400,
         }),
     );
-    await expect(api.saveContentTranslations("en", { edits: [] })).rejects.toMatchObject({
+    await expect(api.saveContentTranslations({ edits: [] })).rejects.toMatchObject({
       code: "content.translation_refused",
       params,
     });

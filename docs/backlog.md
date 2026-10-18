@@ -1189,9 +1189,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   their borrowed drafts; unrelated refusals retain them. A full 100-cell batch shows its own status,
   while an over-limit batch keeps its refusal. Reopening and reconnect checks retain pending action
   gates, personal text and deleted-id suppression, including deletion between two readers.
-  The client accepts projected multilingual
-  queries and one whole cell batch on the language-free routes; its legacy call signatures and
-  public DTOs remain to be retired with the remaining editor tests and consumers. Regional
+  The client now accepts only projected multilingual queries and one whole cell batch on the
+  language-free routes. The old draft model and single-language transport signatures are retired;
+  their model, transport, live-refresh and accessibility checks use the current cell contract.
+  Receipt-preservation acceptance uses that same route while retaining its recorded-row and
+  reprint assertions. Discard also removes an overflow suggestion from the waiting count. Regional
   completeness notes wrap in full, with the row actions reachable at phone and desktop widths.
   No intermediate feature is ready to publish. Boot's configured-origin
   forwarding and obsolete callback cleanup wait for lane E. Automatic-translation review, future

@@ -1,8 +1,5 @@
 import type { ContentLanguages } from "@waitron/shared";
-import type {
-  TranslationGapKind,
-  TranslationGapReason,
-} from "./content-translation-report-types.js";
+import type { TranslationGapKind } from "./content-translation-report-types.js";
 
 /** The most UTF-8 bytes the save route takes in one name. */
 export const TRANSLATION_NAME_BYTES = 4096;
@@ -31,7 +28,7 @@ export interface TranslationCell extends TranslationCellRef {
   expected: string;
   staffText: string | null;
   eligible: boolean;
-  unavailableReason: TranslationTarget["unavailableReason"] | "language_disabled";
+  unavailableReason: "missing" | "inactive" | "ownership" | "role" | "language_disabled" | null;
 }
 export interface TranslationItem extends TranslationRef {
   name: string;
@@ -78,37 +75,10 @@ export type TranslationOwners =
       includedMenuId: string;
       includedRootId: string;
     };
-export interface TranslationTarget extends TranslationRef {
-  name: string;
-  parent?: { id: string; name: string };
-  reason: TranslationGapReason;
-  selectedText: string | null;
-  defaultText: string | null;
-  effectiveSelectedText: string | null;
-  effectiveDefaultText: string | null;
-  defaultRequired: boolean;
-  eligible: boolean;
-  unavailableReason: "missing" | "inactive" | "ownership" | "role" | null;
-  owners: TranslationOwners | null;
-  expected: string;
-}
-export interface TranslationPage {
-  language: string;
-  config: ContentLanguages;
-  required: string[];
-  rows: TranslationTarget[];
-  next: string | null;
-  total: number;
-}
 export interface TranslationCellEdit extends TranslationCellRef {
   expected: string;
   text: string | null;
 }
-export interface TranslationEdit extends TranslationRef {
-  expected: string;
-  text: string;
-  defaultText?: string;
-}
 export interface TranslationBatch {
-  edits: TranslationEdit[];
+  edits: TranslationCellEdit[];
 }

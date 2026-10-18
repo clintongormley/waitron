@@ -70,7 +70,7 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountCatalogueApi } from "./catalogue-api.js";
-import type { TranslationPage } from "@waitron/catalogue/src/content-translation-types.js";
+import type { TranslationItemPage } from "@waitron/catalogue/src/content-translation-types.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
@@ -1222,20 +1222,26 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       const session = await startManagementSession(tx, { personId: manager!.id });
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
-    const path = "/management-api/content-translations/es";
-    const read = await app.request(`${path}?target=product:${each.id}`, {
+    const path = "/management-api/content-translations";
+    const read = await app.request(`${path}?language=es&target=product:${each.id}`, {
       headers: { cookie: managerCookie },
     });
     expect(read.status).toBe(200);
-    const target = ((await read.json()) as TranslationPage).rows[0]!;
+    const target = ((await read.json()) as TranslationItemPage).rows[0]!.cells[0]!;
     const response = await app.request(path, {
       method: "PUT",
-      headers: { cookie: managerCookie, "content-type": "application/json" },
+      headers: {
+        cookie: managerCookie,
+        origin: "http://localhost",
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         edits: [
           {
             kind: "product",
             id: each.id,
+            language: "es",
+            field: "name",
             expected: target.expected,
             text: "Agua recién traducida",
           },

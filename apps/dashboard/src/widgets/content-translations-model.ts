@@ -292,6 +292,7 @@ export class TranslationDrafts {
   }
   discardSuggestion(id: string): void {
     this.#dismissed.add(id);
+    this.#waiting.delete(id);
     for (const [key, draft] of this.#drafts) {
       if (draft.origin === "suggested" && draft.suggestionId === id) this.#drafts.delete(key);
     }

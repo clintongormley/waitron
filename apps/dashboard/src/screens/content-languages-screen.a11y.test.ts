@@ -1,5 +1,10 @@
+import type {
+  TranslationQuery,
+  TranslationItemPage,
+  TranslationCell,
+} from "@waitron/catalogue/src/content-translation-types.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi, LanguageTranslationGaps, TranslationPage } from "../api/client.js";
+import type { DashboardApi, LanguageTranslationGaps } from "../api/client.js";
 import type { AddContentLanguageDialog } from "../widgets/add-content-language.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { page, userEvent } from "vitest/browser";
@@ -39,7 +44,7 @@ function stubApi(
       })),
     ),
     getContentSuggestions: vi.fn(async () => ({
-      config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+      config: { defaultLanguage: "es", languages: ["es", "ca", "en"] },
       required: [],
       configuration: "suggestion-config",
       waitingFixes: 0,
@@ -49,32 +54,58 @@ function stubApi(
       service: "not_connected" as const,
       cloudOrigin: null,
     })),
-    getContentTranslationTargets: vi.fn(async (language: string): Promise<TranslationPage> => ({
-      language,
-      config: { defaultLanguage: "es", languages: ["es", "ca", "en"] },
-      required: ["ca", "es"],
-      next: null,
-      rows: (
-        (gaps as LanguageTranslationGaps[]).find((row) => row.language === language)?.gaps ?? []
-      ).map((gap) => ({
-        ...gap,
-        selectedText: null,
-        defaultText: "Nombre predeterminado",
-        effectiveSelectedText: null,
-        effectiveDefaultText: "Nombre predeterminado",
-        defaultRequired: false,
-        eligible: true,
-        unavailableReason: null,
-        owners:
-          gap.kind === "product"
-            ? { kind: "product", parentId: null }
-            : gap.kind === "section"
-              ? { kind: "section", menuId: gap.parent!.id }
-              : { kind: "unit" },
-        expected: "token",
-      })),
-      total: 0,
-    })),
+    getContentTranslationTargets: vi.fn(
+      async (query: TranslationQuery): Promise<TranslationItemPage> => {
+        const language =
+          "missing" in query && query.missing.mode === "language" ? query.missing.language : "ca";
+        const rows = (
+          (gaps as LanguageTranslationGaps[]).find((row) => row.language === language)?.gaps ?? []
+        ).map((gap) => {
+          const owners: TranslationCell["owners"] =
+            gap.kind === "product"
+              ? { kind: "product", parentId: null }
+              : gap.kind === "section"
+                ? { kind: "section", menuId: gap.parent!.id }
+                : { kind: "unit" };
+          return {
+            kind: gap.kind,
+            id: gap.id,
+            name: gap.name,
+            parent: gap.parent,
+            owners,
+            cells: query.languages.flatMap((language) =>
+              (gap.kind === "unit" ? (["name", "abbreviation"] as const) : (["name"] as const)).map(
+                (field): TranslationCell => ({
+                  kind: gap.kind,
+                  id: gap.id,
+                  language,
+                  field,
+                  owners,
+                  text: null,
+                  inheritedText: null,
+                  effectiveText: null,
+                  defaultText: "Nombre predeterminado",
+                  inheritedDefaultText: null,
+                  effectiveDefaultText: "Nombre predeterminado",
+                  staffText: field === "abbreviation" ? "kg" : gap.name,
+                  eligible: true,
+                  unavailableReason: null,
+                  expected: `token-${gap.id}-${language}-${field}`,
+                }),
+              ),
+            ),
+          };
+        });
+        return {
+          config: { defaultLanguage: "es", languages: ["es", "ca", "en"] },
+          required: ["ca", "es"],
+          configuration: "suggestion-config",
+          next: null,
+          rows,
+          total: rows.length,
+        };
+      },
+    ),
     getReceiptLanguage: vi.fn().mockResolvedValue({
       language: "es-ES",
       choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
@@ -162,6 +193,14 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
           .shadowRoot!.querySelector("dashboard-content-translations-dialog")!
           .shadowRoot!.querySelector("wt-modal")!.open,
       ).toBe(true);
+      const dialog = el.shadowRoot!.querySelector("dashboard-content-translations-dialog")!;
+      await vi.waitFor(() => {
+        const window = dialog.shadowRoot!.querySelector("dashboard-content-translation-window");
+        const field = window?.shadowRoot?.querySelector('wt-input[lang="ca"]');
+        expect(field).toBeInstanceOf(HTMLElement);
+        expect(field!.shadowRoot!.querySelector("input")!.value).toBe("");
+        expect(dialog.shadowRoot!.querySelector('[data-test="read-error"]')).toBeNull();
+      });
       await expectNoA11yViolations(host);
       await page.screenshot({
         path: `__screenshots__/look/a420-report-${locale}-${theme}-${width}.png`,

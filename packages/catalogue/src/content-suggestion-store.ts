@@ -1,3 +1,4 @@
+import type { TranslationTarget } from "./content-translation-targets.js";
 import { and, asc, eq, gt, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -33,7 +34,6 @@ import {
   TRANSLATION_NAME_BYTES,
   type TranslationCellRef,
   type TranslationRef,
-  type TranslationTarget,
   type TranslationCellEdit,
 } from "./content-translation-types.js";
 import {

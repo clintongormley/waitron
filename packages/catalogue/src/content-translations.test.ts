@@ -1,3 +1,4 @@
+import type { TranslationTarget } from "./content-translation-targets.js";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
@@ -16,11 +17,7 @@ import {
   listTranslationTargets,
   resolveTranslationTargets,
 } from "./content-translation-targets.js";
-import type {
-  TranslationCellEdit,
-  TranslationRef,
-  TranslationTarget,
-} from "./content-translation-types.js";
+import type { TranslationCellEdit, TranslationRef } from "./content-translation-types.js";
 import { saveContentTranslations } from "./content-translations.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 type TranslationBatch = { edits: TranslationCellEdit[] };

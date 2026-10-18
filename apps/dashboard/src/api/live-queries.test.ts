@@ -1,3 +1,4 @@
+import type { TranslationQuery } from "./client.js";
 import type { DeleteImpact } from "@waitron/shared";
 import { expect, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
@@ -89,6 +90,8 @@ it("reads a card reader's delete impact passively after the first read, and send
   expect(active).toHaveBeenCalledTimes(3);
 });
 
+const translationQuery: TranslationQuery = { languages: ["en"], missing: { mode: "any" } };
+
 it.each([
   ["listMyShifts", ["2026-05-04", "2026-05-11"], "roster_versions"],
   ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "working_orders"],
@@ -115,7 +118,7 @@ it.each([
   ["getContentSuggestions", [], "content_suggestions"],
   ["getContentSuggestions", [], "content_suggestion_jobs"],
   ["getContentTranslationGaps", [], "menu_details"],
-  ["getContentTranslationTargets", ["en", {}], "content_suggestions"],
+  ["getContentTranslationTargets", [translationQuery], "content_suggestions"],
   [
     "getContentTranslationCells",
     [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
@@ -792,7 +795,7 @@ it.each([
     calls.push(init);
     return new Response(
       JSON.stringify({
-        language: "en",
+        configuration: "translation-config",
         config: { defaultLanguage: "es", languages: ["es", "en"] },
         required: [],
         rows: [],
@@ -802,7 +805,7 @@ it.each([
     );
   });
   const observed = api.liveData.observe(
-    dashboardQuery(api, "getContentTranslationTargets", ["en", {}]),
+    dashboardQuery(api, "getContentTranslationTargets", [translationQuery]),
     () => {},
   );
   try {

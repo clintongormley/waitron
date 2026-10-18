@@ -218,20 +218,16 @@ import type {
   TranslationCellRef,
   TranslationCellPage,
   TranslationCell,
-  TranslationCellEdit,
   TranslationItemPage,
-  TranslationQuery as TranslationItemQuery,
-  TranslationPage,
+  TranslationQuery,
   TranslationRef,
-  TranslationTarget,
 } from "@waitron/catalogue/src/content-translation-types.js";
 export type {
   TranslationBatch,
   TranslationCellRef,
   TranslationCellPage,
-  TranslationPage,
   TranslationRef,
-  TranslationTarget,
+  TranslationQuery,
 };
 import type {
   ContentSuggestionQuery,
@@ -245,10 +241,6 @@ export type {
   ContentSuggestionView,
   SuggestionRunView,
 };
-export interface TranslationQuery {
-  after?: string;
-  targets?: TranslationRef[];
-}
 
 import type { MenuPriceRow, MenuPriceVariant } from "@waitron/catalogue/src/menu-types.js";
 export type { MenuPriceRow, MenuPriceVariant };
@@ -2448,36 +2440,21 @@ export class DashboardApi {
     return this.#request(`/management-api/content-translations/cells?${params}`, "GET");
   }
 
-  getContentTranslationTargets(query: TranslationItemQuery): Promise<TranslationItemPage>;
-  getContentTranslationTargets(language: string, query: TranslationQuery): Promise<TranslationPage>;
-  getContentTranslationTargets(
-    language: string | TranslationItemQuery,
-    query?: TranslationQuery,
-  ): Promise<TranslationPage | TranslationItemPage> {
-    if (typeof language !== "string") {
-      const params = new URLSearchParams();
-      for (const code of language.languages) params.append("language", code);
-      if ("targets" in language) {
-        for (const ref of language.targets) params.append("target", `${ref.kind}:${ref.id}`);
-      } else {
-        params.append("missing", language.missing.mode);
-        if (language.missing.mode === "language")
-          params.append("missingLanguage", language.missing.language);
-        if (language.kind !== undefined) params.append("kind", language.kind);
-        if (language.search !== undefined) params.append("search", language.search);
-        if (language.after !== undefined) params.append("after", language.after);
-        if (language.waitingFixes) params.append("waitingFixes", "1");
-      }
-      return this.#request(`/management-api/content-translations?${params}`, "GET");
-    }
+  getContentTranslationTargets(query: TranslationQuery): Promise<TranslationItemPage> {
     const params = new URLSearchParams();
-    if (query?.after !== undefined) params.append("after", query.after);
-    for (const ref of query?.targets ?? []) params.append("target", `${ref.kind}:${ref.id}`);
-    const suffix = params.size ? `?${params}` : "";
-    return this.#request(
-      `/management-api/content-translations/${encodeURIComponent(language)}${suffix}`,
-      "GET",
-    );
+    for (const code of query.languages) params.append("language", code);
+    if ("targets" in query) {
+      for (const ref of query.targets) params.append("target", `${ref.kind}:${ref.id}`);
+    } else {
+      params.append("missing", query.missing.mode);
+      if (query.missing.mode === "language")
+        params.append("missingLanguage", query.missing.language);
+      if (query.kind !== undefined) params.append("kind", query.kind);
+      if (query.search !== undefined) params.append("search", query.search);
+      if (query.after !== undefined) params.append("after", query.after);
+      if (query.waitingFixes) params.append("waitingFixes", "1");
+    }
+    return this.#request(`/management-api/content-translations?${params}`, "GET");
   }
 
   startContentSuggestions(): Promise<{ run: SuggestionRunView | null }> {
@@ -2497,24 +2474,8 @@ export class DashboardApi {
     return this.#request(`/management-api/content-suggestions/${encodeURIComponent(id)}`, "DELETE");
   }
 
-  saveContentTranslations(batch: {
-    edits: TranslationCellEdit[];
-  }): Promise<{ saved: TranslationCell[] }>;
-  saveContentTranslations(
-    language: string,
-    batch: TranslationBatch,
-  ): Promise<{ saved: TranslationTarget[] }>;
-  saveContentTranslations(
-    language: string | { edits: TranslationCellEdit[] },
-    batch?: TranslationBatch,
-  ): Promise<{ saved: TranslationTarget[] } | { saved: TranslationCell[] }> {
-    if (typeof language !== "string")
-      return this.#request("/management-api/content-translations", "PUT", language);
-    return this.#request(
-      `/management-api/content-translations/${encodeURIComponent(language)}`,
-      "PUT",
-      batch,
-    );
+  saveContentTranslations(batch: TranslationBatch): Promise<{ saved: TranslationCell[] }> {
+    return this.#request("/management-api/content-translations", "PUT", batch);
   }
 
   updateContentLanguages(config: ContentLanguages): Promise<void> {

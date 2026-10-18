@@ -1121,3 +1121,32 @@ describe("bounded multilingual translation reads", () => {
     expect(reader.drafts.validate()[0]?.message).toBe("review");
   });
 });
+
+it("takes returned page order while keeping an unchanged personal draft through refresh", async () => {
+  const { reader, api } = setup();
+  api.items
+    .mockResolvedValueOnce(items([row("001")]))
+    .mockResolvedValueOnce(items([row("arrival"), row("001")]));
+  await reader.open();
+  reader.drafts.edit(cell("001"), "My draft");
+  await reader.refresh();
+  expect(reader.page?.rows.map((row) => row.id)).toEqual(["arrival", "001"]);
+  expect(reader.drafts.staged()).toEqual([
+    { kind: "product", id: "001", language: "es", field: "name" },
+  ]);
+  expect(reader.drafts.value(cell("001"))).toBe("My draft");
+  expect(reader.drafts.validate()).toEqual([]);
+  expect(reader.drafts.submission()).toEqual({
+    edits: [
+      {
+        kind: "product",
+        id: "001",
+        language: "es",
+        field: "name",
+        expected: "v1-001-es",
+        text: "My draft",
+      },
+    ],
+  });
+  reader.close();
+});

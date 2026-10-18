@@ -315,12 +315,18 @@ in one database read. Both use the same gap query and count an item at most once
 `listContentTranslationGaps` retains its catalogue-specific identifiers and a variant's product id
 for its internal callers, with the same discovery rules.
 
-The dashboard's Content languages page currently reads the full report through
-`GET /management-api/content-translation-gaps`. Edit translations opens a single-language dialog
-and reads its rows 50 at a time through `GET /management-api/content-translations/:language`.
-These rows now include absent default-language names and absent extras-list names. The approved
-[A682 plan](../superpowers/plans/2026-10-17-a682-translations.md) still has to replace those HTTP
-reads with count summaries and bounded multilingual cell projections, then replace the dialog.
+When you choose Edit translations, you open the same editor from every language row. Missing in
+starts with that row's language. You can compare and edit the enabled languages independently;
+leaving the default blank does not require a second name. Staff fallback appears as a placeholder,
+so it does not fill a translation or remove its gap.
+
+The Content languages page reads count summaries through
+`GET /management-api/content-translation-gaps`. The editor reads up to 50 items and the viewed
+language fields through `GET /management-api/content-translations`. Retained edits refresh through
+`GET /management-api/content-translations/cells`. These reads replace the old language-in-the-path
+routes. One `PUT /management-api/content-translations` submits the selected fields together, each
+with its item, language, field and saved baseline. Clearing a saved value sends `text: null`;
+unchanged fields are omitted. This keeps a deliberate Save together across languages.
 
 Translate all (the button at the top of the same dialog) asks Waitron Cloud for every enabled
 language in which an item has no customer-facing text, the default language included. Its

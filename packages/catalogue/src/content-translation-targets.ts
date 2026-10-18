@@ -4,13 +4,11 @@ import { sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { contentLanguagesOr } from "./content-languages.js";
 import { TRANSLATION_GAP_KINDS as KINDS } from "./content-translation-kinds.js";
-import type { TranslationGapKind } from "./content-translation-report-types.js";
 import type {
-  TranslationOwners,
-  TranslationPage,
-  TranslationRef,
-  TranslationTarget,
-} from "./content-translation-types.js";
+  TranslationGapKind,
+  TranslationGapReason,
+} from "./content-translation-report-types.js";
+import type { TranslationOwners, TranslationRef } from "./content-translation-types.js";
 import {
   namedRows,
   LIVE_CANDIDATE,
@@ -21,6 +19,29 @@ import {
 } from "./content-translation-candidates.js";
 export { liveTranslationRows, blankTranslationSql } from "./content-translation-candidates.js";
 import "./errors.js";
+
+export interface TranslationTarget extends TranslationRef {
+  name: string;
+  parent?: { id: string; name: string };
+  reason: TranslationGapReason;
+  selectedText: string | null;
+  defaultText: string | null;
+  effectiveSelectedText: string | null;
+  effectiveDefaultText: string | null;
+  defaultRequired: boolean;
+  eligible: boolean;
+  unavailableReason: "missing" | "inactive" | "ownership" | "role" | null;
+  owners: TranslationOwners | null;
+  expected: string;
+}
+export interface TranslationTargetPage {
+  language: string;
+  config: ContentLanguages;
+  required: string[];
+  rows: TranslationTarget[];
+  next: string | null;
+  total: number;
+}
 
 export interface TranslationContext {
   fallbackLanguage: string;
@@ -296,7 +317,7 @@ export async function listTranslationTargets(
   language: string,
   query: { after?: string; targets?: TranslationRef[] },
   context: TranslationContext,
-): Promise<TranslationPage> {
+): Promise<TranslationTargetPage> {
   if (query.targets !== undefined && query.after !== undefined) invalid();
   if (query.targets !== undefined) {
     checkedRefs(query.targets, 50);
