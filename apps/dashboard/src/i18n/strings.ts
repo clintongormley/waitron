@@ -773,6 +773,8 @@ export const en = {
   // The next two label icon-only buttons, so each is the button's accessible name.
   "nav.toggle": "Toggle navigation",
   "nav.account_menu": "Account menu",
+  "help.label": "Help",
+  "help.badge_label": "Help: {part}",
   // Theme choice. light/dark/device also name the icon-only buttons in the account menu.
   "theme.label": "Theme",
   "theme.light": "Light",
@@ -3747,6 +3749,8 @@ export const es: Record<StringKey, string> = {
   "nav.sections": "Secciones",
   "nav.toggle": "Mostrar u ocultar la navegación",
   "nav.account_menu": "Menú de cuenta",
+  "help.label": "Ayuda",
+  "help.badge_label": "Ayuda: {part}",
   "theme.label": "Tema",
   "theme.light": "Claro",
   "theme.dark": "Oscuro",

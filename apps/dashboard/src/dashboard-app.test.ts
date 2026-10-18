@@ -5432,6 +5432,7 @@ describe("alerts in the shell", () => {
     expect([...actions.children].map((child) => child.getAttribute("data-test"))).toEqual([
       "language-chooser",
       "alerts-bell",
+      "help-switch",
       "account-menu",
     ]);
   });

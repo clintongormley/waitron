@@ -16,6 +16,7 @@ import {
   themeLabelsPerLocale,
   trackIconTooltip,
   UrlStateController,
+  setHelpMode,
   type ThemeChoice,
   type WtInput,
   type WtToast,
@@ -31,6 +32,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
+import "@waitron/ui/src/components/wt-help-switch.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { currentLocale, setLocale, t, fill } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
@@ -1330,6 +1332,7 @@ export class DashboardApp extends LitElement {
   }
 
   #returnToLogin(code: string | null): void {
+    setHelpMode(false);
     this.leave.forceReset();
     navigationGuardFor(window)?.reset();
     this.#languageQueries.release("getContentLanguages");
@@ -1776,6 +1779,7 @@ export class DashboardApp extends LitElement {
                       ></dashboard-alerts-bell>`
                     : nothing
                 }
+                <wt-help-switch data-test="help-switch" label=${t("help.label")}></wt-help-switch>
                 <wt-row-actions
                   icon="person"
                   align="end"
