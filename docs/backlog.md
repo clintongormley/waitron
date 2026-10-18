@@ -2293,8 +2293,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   checks now use Sent. All served and a fired-row tap leave unreleased food alone, including a
   dish whose extra is still held, while retaining its displayed price. A retained Mark served
   action leaves the dish window open when a newer read says the dish is no longer released.
-  The old Current orders, To serve and Served drawer lists still need their remaining move,
-  fallback, nutrition, refusal and reorder checks moved before removal. Sent's Comp now opens one reason-first
+  You can read a sent dish's course in its information window and in the read-only fallback,
+  including a retired course retained by the service or bill read. Three earlier course-label
+  checks now open Sent and retain their expected labels and read-only checks. The old Current
+  orders, To serve and Served drawer lists still need their remaining own-bill Move/Split,
+  Change/course-edit, refusal and allergy checks moved before removal. Sent's Comp now opens one reason-first
   window on the feature branch.
   You choose the whole dish with its extras or one priced extra, then Free, % or € from the
   reason's allowed actions. A whole dish starts at all units and accepts a count from one to its

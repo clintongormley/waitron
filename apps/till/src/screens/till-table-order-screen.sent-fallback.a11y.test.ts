@@ -82,7 +82,7 @@ describe.each(["en", "es"] as const)("incomplete Sent read in %s", (locale) => {
         }
         await expectNoA11yViolations(host);
         await page.screenshot({
-          path: `a773-sent-fallback-${locale}-${theme}-${width}.png`,
+          path: `__screenshots__/a773-sent-fallback-${locale}-${theme}-${width}.png`,
           element: el.shadowRoot!.querySelector<HTMLElement>("[data-sent-orders]")!,
         });
       },

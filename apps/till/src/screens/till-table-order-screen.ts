@@ -2987,9 +2987,22 @@ export class TillTableOrderScreen extends LitElement {
       <span class="sent-fallback-name"
         >${this.#nameForLine(line)}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}
         ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}
+        ${this.#isChild(line) ? nothing : this.#sentCourse(line.courseId, line.course)}
       </span>
       <span class="sent-fallback-price" data-sent-fallback-price>${this.#lineTotal(line)}</span>
     </div>`;
+  }
+
+  #sentCourse(
+    courseId: string | null,
+    retainedCourse?: TillCourse,
+  ): TemplateResult | typeof nothing {
+    if (
+      this.courses.length === 0 &&
+      (retainedCourse === undefined || retainedCourse.id !== courseId)
+    )
+      return nothing;
+    return html`<span data-sent-course>${this.#courseName(courseId, retainedCourse)}</span>`;
   }
 
   #sentLine(): SentSlice | undefined {
@@ -3232,6 +3245,7 @@ export class TillTableOrderScreen extends LitElement {
               </div>
               ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${this.#displayQty(extra.quantity)}</span><span class="amount">${this.#money(extra.netAmount)}</span></div>`)}
               ${row.note === null ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
+              ${this.#sentCourse(row.courseId, this.currentOrders?.retainedCourses.find((course) => course.id === row.courseId) ?? this.lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo)?.course)}
               <p data-sent-line-status>
                 ${station === undefined ? nothing : html`${station.name} · `}${status}
               </p>

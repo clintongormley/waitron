@@ -682,10 +682,17 @@ describe("till-table-order-screen", () => {
       courses: [],
       lines: [{ ...pendingLine, courseId: course.id, course, firedAt: "2026-10-10T20:00:00Z" }],
     });
-    await openDrawer(el);
-    expect(el.shadowRoot!.querySelector('[data-line-course-static="1"]')?.textContent?.trim()).toBe(
-      course.name,
-    );
+    el.orderId = "wo-4";
+    el.currentOrders = current({
+      groups: [],
+      reminder: null,
+      ungrouped: [
+        currentRow(pendingLine.id, "Café", pendingLine.quantity, { courseId: course.id }),
+      ],
+    });
+    await el.updateComplete;
+    const dialog = await openSentDish(el, pendingLine.id);
+    expect(dialog.querySelector("[data-sent-course]")?.textContent?.trim()).toBe(course.name);
   });
 
   it("renders a per-line course picker per round line, pre-selecting the product's default course", async () => {
@@ -2331,9 +2338,18 @@ describe("till-table-order-screen", () => {
     // A fired line (firedAt set) is not moved here.
     const firedWithCourse: TabLine = { ...pendingLine, lineNo: 1, courseId: "postres" };
     const { el } = await mount({ lines: [firedWithCourse], courses });
-    await openDrawer(el);
-    expect(el.shadowRoot!.querySelector('[data-line-course="1"]')).toBeNull();
-    const stat = el.shadowRoot!.querySelector('[data-line-course-static="1"]');
+    el.orderId = "wo-4";
+    el.currentOrders = current({
+      groups: [],
+      reminder: null,
+      ungrouped: [
+        currentRow(firedWithCourse.id, "Café", firedWithCourse.quantity, { courseId: "postres" }),
+      ],
+    });
+    await el.updateComplete;
+    const dialog = await openSentDish(el, firedWithCourse.id);
+    expect(dialog.querySelector("wt-combobox")).toBeNull();
+    const stat = dialog.querySelector("[data-sent-course]");
     expect(stat).not.toBeNull();
     expect(stat!.textContent).toContain("Postres");
   });
@@ -2342,14 +2358,32 @@ describe("till-table-order-screen", () => {
     const noCourse: TabLine = { ...pendingLine, lineNo: 1, courseId: null };
     const retired: TabLine = { ...servedLine, lineNo: 2, courseId: "gone" };
     const { el } = await mount({ lines: [noCourse, retired], courses });
-    await openDrawer(el);
-    expect(el.shadowRoot!.querySelector('[data-line-course-static="1"]')!.textContent).toContain(
+    el.orderId = "wo-4";
+    el.currentOrders = current({
+      groups: [],
+      reminder: null,
+      ungrouped: [
+        currentRow(noCourse.id, "Café", noCourse.quantity, { courseId: null }),
+        currentRow(retired.id, "Café", retired.quantity, {
+          lineNo: 2,
+          courseId: "gone",
+          servedAt: retired.servedAt,
+          servedQuantity: retired.quantity,
+        }),
+      ],
+    });
+    await el.updateComplete;
+    const dialog = await openSentDish(el, noCourse.id);
+    expect(dialog.querySelector("[data-sent-course]")!.textContent).toContain(
       t("table.course_none"),
     );
-    // A course deactivated since the line was rung falls back to its raw id (the retrieve-path philosophy).
-    expect(el.shadowRoot!.querySelector('[data-line-course-static="2"]')!.textContent).toContain(
-      "gone",
+    const closed = new Promise<void>((resolve) =>
+      dialog.addEventListener("wt-close", () => resolve(), { once: true }),
     );
+    await userEvent.click(dialog.querySelector<HTMLElement>("[data-sent-line-close]")!);
+    await closed;
+    const servedDialog = await openSentDish(el, retired.id, "served");
+    expect(servedDialog.querySelector("[data-sent-course]")!.textContent).toContain("gone");
   });
 
   it("renders no course control at all when the venue has no courses", async () => {
