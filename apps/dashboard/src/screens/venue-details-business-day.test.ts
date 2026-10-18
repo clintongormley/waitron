@@ -56,18 +56,16 @@ it("reads clock-table events passively while retaining the editor draft and a sa
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=change]")!.click();
   await editor.updateComplete;
-  const date = editor.shadowRoot!.querySelector("[name=effectiveBusinessDay]")!;
-  date.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "bad-date" }, bubbles: true, composed: true }),
+  const time = editor.shadowRoot!.querySelector("[name=dayCutover]")!;
+  time.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bad" }, bubbles: true, composed: true }),
   );
   await editor.updateComplete;
   current = { ...current, businessDayClock: { ...current.businessDayClock, revision: 1 } };
   liveData.invalidate([{ type: "location_day_cutover_changes" }]);
   await expect.poll(() => background).toBe(1);
   await expect.poll(() => editor.model.revision).toBe(1);
-  expect(editor.shadowRoot!.querySelector<WtInput>("[name=effectiveBusinessDay]")!.value).toBe(
-    "bad-date",
-  );
+  expect(editor.shadowRoot!.querySelector<WtInput>("[name=dayCutover]")!.value).toBe("bad");
   expect(foreground).toBe(1);
 });
 it("closes the successful editor before a refresh failure and reports a read failure", async () => {
@@ -196,10 +194,7 @@ it("a real child save closes before the parent refresh fails and cannot submit t
   await editor.updateComplete;
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=change]")!.click();
   await editor.updateComplete;
-  for (const [name, value] of [
-    ["effectiveBusinessDay", "2026-11-04"],
-    ["dayCutover", "03:00"],
-  ]) {
+  for (const [name, value] of [["dayCutover", "03:00"]]) {
     editor
       .shadowRoot!.querySelector(`[name=${name}]`)!
       .dispatchEvent(

@@ -509,6 +509,18 @@ Spanish). `{when}` is a weekday, date and
 time in the venue's time zone, "Wed 21 Oct, 03:00" / "mié 21 oct, 03:00"; today's dialog formats a
 year and a zone name instead (`business-day-start-editor.ts:305-317`).
 
+Added 2026-10-18 by the plan's Task 14a, two lines the table above lacks:
+
+| Key | English | Spanish |
+| --- | --- | --- |
+| `business_day.day_runs` | Business day {day} runs {start} → {end}: {duration}. | El día de trabajo {day} va de {start} a {end}: {duration}. |
+| `venue.business_day_invalid` (generic copy) | Check the start time. | Revisa la hora de inicio. |
+
+`day_runs` replaces `today_runs` when the day whose length changes is not today's: when a Save
+falls after midnight but before today's start, the next changeover ends tomorrow's day, so "Today's
+business day" would name the wrong day (review L8). The generic copy loses "the future date"
+because the dialog no longer has a date field.
+
 ## 8. Build slices and review path
 
 **Review path: FULL.** Business-day boundaries decide which day a sale and its report belong to

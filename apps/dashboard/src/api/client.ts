@@ -2955,9 +2955,11 @@ export class DashboardApi {
     return this.#request("/management-api/venue-details/legal-name", "PUT", input);
   }
 
-  previewBusinessDayStart(input: BusinessDayStartInput): Promise<BusinessDayStartPreview> {
+  previewBusinessDayStart(input: {
+    dayCutover: string;
+    expectedClockRevision: number;
+  }): Promise<BusinessDayStartPreview> {
     const query = new URLSearchParams({
-      effectiveBusinessDay: input.effectiveBusinessDay,
       dayCutover: input.dayCutover,
       expectedClockRevision: String(input.expectedClockRevision),
     });

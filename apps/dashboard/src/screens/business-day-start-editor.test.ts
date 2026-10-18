@@ -120,7 +120,6 @@ async function rig(overrides: Partial<DashboardApi> = {}, model = clockModel(), 
 }
 async function ready(el: Editor) {
   await click(el, "change");
-  await change(el, "effectiveBusinessDay", "2026-11-04");
   await change(el, "dayCutover", "03:00");
   await expect.poll(() => q(el, "[data-test=preview]")).toBeTruthy();
   await click(el, "acknowledge");
@@ -131,17 +130,16 @@ afterEach(() => {
   setLocale("es-ES");
 });
 it("keeps Save quiet until a matching preview is acknowledged and sends its date/time/revision", async () => {
+  setLocale("en-GB");
   const { el, writes } = await rig();
   await click(el, "change");
   expect(save(el).disabled).toBe(true);
   expect(save(el).variant).toBe("secondary");
-  expect(q<WtInput>(el, "[name=effectiveBusinessDay]")!.required).toBe(true);
   expect(q<WtInput>(el, "[name=dayCutover]")!.required).toBe(true);
-  await change(el, "effectiveBusinessDay", "2026-11-04");
   await change(el, "dayCutover", "03:00");
   expect(save(el).disabled).toBe(true);
-  expect(q(el, "[data-test=preview]")!.textContent).toContain("22");
-  expect(q(el, '[data-test=preview] time[datetime="2026-11-04T02:00:00.000Z"]')).toBeTruthy();
+  expect(q(el, "[data-test=day-runs]")!.textContent).toContain("22 h");
+  expect(text(q(el, "[data-test=preview] strong"))).toBe("Wed 4 Nov, 03:00");
   await click(el, "acknowledge");
   expect(save(el).disabled).toBe(false);
   await click(el, "save");
@@ -158,16 +156,15 @@ it("ignores a late preview for the previous draft", async () => {
     previewBusinessDayStart: async () => (++calls === 1 ? old.promise : newer.promise),
   });
   await click(el, "change");
-  await change(el, "effectiveBusinessDay", "2026-11-04");
   await change(el, "dayCutover", "03:00");
-  await change(el, "effectiveBusinessDay", "2026-11-05");
+  await change(el, "dayCutover", "04:00");
   old.resolve(preview());
   await flush(el);
   expect(q(el, "[data-test=preview]")).toBeNull();
   expect(save(el).disabled).toBe(true);
   newer.resolve({
     ...preview(),
-    effectiveDay: { ...preview().effectiveDay, businessDay: "2026-11-05" },
+    effectiveDay: { ...preview().effectiveDay, dayCutover: "04:00:00" },
   });
   await flush(el);
   await click(el, "acknowledge");
@@ -176,7 +173,6 @@ it("ignores a late preview for the previous draft", async () => {
 it("refuses a wrong revision preview and preserves the opening revision through live changes", async () => {
   const { el } = await rig({ previewBusinessDayStart: async () => preview(5) });
   await click(el, "change");
-  await change(el, "effectiveBusinessDay", "2026-11-04");
   await change(el, "dayCutover", "03:00");
   expect(save(el).disabled).toBe(true);
   expect(q(el, "[data-test=acknowledge]")).toBeNull();
@@ -199,7 +195,6 @@ it("marks missing and malformed values beside each field and at the bottom", asy
   await click(el, "change");
   await change(el, "dayCutover", "bad");
   await click(el, "save");
-  expect(q<WtInput>(el, "[name=effectiveBusinessDay]")!.error).toBeTruthy();
   expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBeTruthy();
   expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBeTruthy();
   expect(save(el).disabled).toBe(true);
@@ -229,13 +224,13 @@ it("shows a server field refusal without disabling a retry", async () => {
     putBusinessDayStart: async () => {
       throw {
         code: "venue.business_day_invalid",
-        params: { field: "effectiveBusinessDay", reason: "too_soon" },
+        params: { field: "dayCutover", reason: "changeover_passed" },
       };
     },
   });
   await ready(el);
   await click(el, "save");
-  expect(q<WtInput>(el, "[name=effectiveBusinessDay]")!.error).toBeTruthy();
+  expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBeTruthy();
   expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBeTruthy();
   expect(save(el).disabled).toBe(false);
 });
@@ -248,7 +243,6 @@ it("shows schedule conflicts and prevents acknowledgement", async () => {
     }),
   });
   await click(el, "change");
-  await change(el, "effectiveBusinessDay", "2026-11-04");
   await change(el, "dayCutover", "03:00");
   expect(q(el, "[data-test=conflicts]")?.textContent).toContain("1");
   expect(q(el, "[data-test=conflicts] a")?.getAttribute("href")).toBe("/manage/opening-hours");
@@ -303,7 +297,6 @@ it("shows identifying conflict rows with localized reasons while keeping the tot
     }),
   });
   await click(el, "change");
-  await change(el, "effectiveBusinessDay", "2026-11-04");
   await change(el, "dayCutover", "03:00");
   const rows = q(el, "[data-test=conflict-rows]");
   expect(rows?.textContent).toContain("Restaurant");
@@ -312,7 +305,7 @@ it("shows identifying conflict rows with localized reasons while keeping the tot
   expect(rows?.textContent).toContain("2026-11-04");
   expect(rows?.textContent).toContain("Dinner");
   expect(rows?.textContent).toContain("22:00–04:30");
-  expect(rows?.textContent).toContain("crosses the new start");
+  expect(rows?.textContent).toContain("Moves to another day");
   expect(q(el, "[data-test=conflicts]")?.textContent).toContain("23");
   expect(q(el, "[data-test=acknowledge]")).toBeNull();
   expect(save(el).disabled).toBe(true);
@@ -353,7 +346,6 @@ it("shows a range clashing in four seasons as one line", async () => {
     }),
   });
   await click(el, "change");
-  await change(el, "effectiveBusinessDay", "2026-11-04");
   await change(el, "dayCutover", "03:00");
   const lines = [...el.shadowRoot!.querySelectorAll("[data-test=conflict-rows] li")].map(
     (line) => line.textContent,
@@ -362,7 +354,7 @@ it("shows a range clashing in four seasons as one line", async () => {
   expect(lines[0]).toContain("Wed");
   expect(lines[1]).toContain("Thu");
   expect(q(el, "[data-test=conflicts]")?.textContent?.replace(/\s+/g, " ").trim()).toBe(
-    "Conflicting schedules: 2. Review opening hours",
+    "Opening hours that clash with the new start: 2. Review opening hours",
   );
 });
 
@@ -388,7 +380,6 @@ it.each([
     }),
   });
   await click(el, "change");
-  await change(el, "effectiveBusinessDay", "2026-11-04");
   await change(el, "dayCutover", "03:00");
   expect(q(el, "[data-test=conflict-rows]")?.textContent).toContain(label);
 });
@@ -410,18 +401,14 @@ it("retains a refused write message when a passive clock replacement invalidates
   expect(q<WtInput>(el, "[name=dayCutover]")!.value).toBe("03:00");
 });
 
-it("presents preview boundaries on the venue clock while retaining each exact instant", async () => {
+it("presents preview boundaries on the venue clock", async () => {
   setLocale("en-GB");
   const { el } = await rig();
   await ready(el);
-  const view = q(el, "[data-test=preview]")!;
-  expect(view.querySelector('time[datetime="2026-11-03T04:00:00.000Z"]')?.textContent).toContain(
-    "05:00",
+  expect(text(q(el, "[data-test=day-runs]"))).toBe(
+    "Business day Tue 3 Nov runs 05:00 → 03:00: 22 h.",
   );
-  expect(view.querySelector('time[datetime="2026-11-04T02:00:00.000Z"]')?.textContent).toContain(
-    "03:00",
-  );
-  expect(view.textContent).not.toContain(".000Z");
+  expect(q(el, "[data-test=preview]")!.textContent).not.toContain(".000Z");
 });
 
 const seasonConflict = (seasonName: string | undefined, rangeIndex = 0) => ({
@@ -444,7 +431,6 @@ async function conflictLines(
     previewBusinessDayStart: async () => ({ ...preview(), conflicts, conflictCount }),
   });
   await click(el, "change");
-  await change(el, "effectiveBusinessDay", "2026-11-04");
   await change(el, "dayCutover", "03:00");
   return {
     lines: [...el.shadowRoot!.querySelectorAll("[data-test=conflict-rows] li")].map(
@@ -455,8 +441,8 @@ async function conflictLines(
 }
 
 it.each([
-  ["en-GB", "Mon · Dinner · 22:00–04:30 · Range crosses the new start"],
-  ["es-ES", "Lun · Dinner · 22:00–04:30 · El tramo cruza el nuevo inicio"],
+  ["en-GB", "Mon · Dinner · 22:00–04:30 · Moves to another day"],
+  ["es-ES", "Lun · Dinner · 22:00–04:30 · Pasa a otro día"],
 ])("puts the season's name before a season conflict's line (%s)", async (locale, rest) => {
   setLocale(locale);
   const { lines } = await conflictLines([seasonConflict("Winter")], 1);
@@ -464,8 +450,8 @@ it.each([
 });
 
 it.each([
-  ["en-GB", "2026-11-20 · Dinner · 22:00–04:30 · Range crosses the new start"],
-  ["es-ES", "2026-11-20 · Dinner · 22:00–04:30 · El tramo cruza el nuevo inicio"],
+  ["en-GB", "2026-11-20 · Dinner · 22:00–04:30 · Moves to another day"],
+  ["es-ES", "2026-11-20 · Dinner · 22:00–04:30 · Pasa a otro día"],
 ])("puts the special day's name before its conflict's line (%s)", async (locale, rest) => {
   setLocale(locale);
   const conflict = { ...seasonConflict(undefined), weekday: undefined };
@@ -479,7 +465,7 @@ it.each([
 it("leaves a conflict without a season as it was", async () => {
   setLocale("en-GB");
   const { lines } = await conflictLines([seasonConflict(undefined)], 1);
-  expect(lines).toEqual(["Restaurant · Mon · Dinner · 22:00–04:30 · Range crosses the new start"]);
+  expect(lines).toEqual(["Restaurant · Mon · Dinner · 22:00–04:30 · Moves to another day"]);
 });
 
 it("counts the distinct lines it shows", async () => {
@@ -489,10 +475,14 @@ it("counts the distinct lines it shows", async () => {
     2,
   );
   expect(sameSeason.lines).toHaveLength(1);
-  expect(sameSeason.count).toBe("Conflicting schedules: 1. Review opening hours");
+  expect(sameSeason.count).toBe(
+    "Opening hours that clash with the new start: 1. Review opening hours",
+  );
   const twoSeasons = await conflictLines([seasonConflict("Winter"), seasonConflict("Autumn")], 1);
   expect(twoSeasons.lines).toHaveLength(2);
-  expect(twoSeasons.count).toBe("Conflicting schedules: 2. Review opening hours");
+  expect(twoSeasons.count).toBe(
+    "Opening hours that clash with the new start: 2. Review opening hours",
+  );
 });
 
 const cardRows = (el: Editor) =>
@@ -613,4 +603,167 @@ it("clears the re-read when the card leaves the page or the model changes", asyn
   } finally {
     vi.useRealTimers();
   }
+});
+
+const dayModel = (currentBusinessDay = "2026-10-20"): BusinessDayClockModel => ({
+  clock: { timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] },
+  revision: 4,
+  currentBusinessDay,
+  pending: null,
+});
+const changeoverPreview = (
+  previousDay: BusinessDayStartPreview["previousDay"],
+  conflicts: BusinessDayStartPreview["conflicts"] = [],
+): BusinessDayStartPreview => ({
+  revision: 4,
+  previousDay,
+  effectiveDay: {
+    businessDay: "2026-10-21",
+    dayCutover: "03:00",
+    startAt: previousDay.endAt,
+    endAt: "2026-10-22T01:00:00.000Z",
+  },
+  conflicts,
+  conflictCount: conflicts.length,
+  backupDeadlines: { archive: null, cloud: null },
+});
+const tonight: BusinessDayStartPreview["previousDay"] = {
+  businessDay: "2026-10-20",
+  dayCutover: "05:00",
+  startAt: "2026-10-20T03:00:00.000Z",
+  endAt: "2026-10-21T01:00:00.000Z",
+};
+async function previewLines(answer: BusinessDayStartPreview, model = dayModel()) {
+  const previewBusinessDayStart = vi.fn(async () => answer);
+  const { el } = await rig({ previewBusinessDayStart }, model);
+  await click(el, "change");
+  expect(previewBusinessDayStart).not.toHaveBeenCalled();
+  await change(el, "dayCutover", "03:00");
+  await expect.poll(() => q(el, "[data-test=preview]")).toBeTruthy();
+  return {
+    el,
+    calls: previewBusinessDayStart.mock.calls,
+    lines: [...q(el, "[data-test=preview]")!.querySelectorAll("p, li")].map((line) => text(line)),
+  };
+}
+it("previews when the change takes effect and how long today's business day runs", async () => {
+  setLocale("en-GB");
+  const { el, calls, lines } = await previewLines(changeoverPreview(tonight));
+  expect(calls).toEqual([[{ dayCutover: "03:00", expectedClockRevision: 4 }]]);
+  expect(q<WtInput>(el, "[name=effectiveBusinessDay]")).toBeNull();
+  expect(lines).toEqual([
+    "Changes at the next changeover: Wed 21 Oct, 03:00.",
+    "Today's business day (Tue 20 Oct) runs 05:00 → 03:00: 22 h.",
+    "Earlier reports keep their days.",
+  ]);
+  expect(text(q(el, "[data-test=preview] strong"))).toBe("Wed 21 Oct, 03:00");
+});
+it("names the business day by its date when it is not today's", async () => {
+  setLocale("en-GB");
+  const { lines } = await previewLines(
+    changeoverPreview({
+      businessDay: "2026-10-21",
+      dayCutover: "05:00",
+      startAt: "2026-10-21T03:00:00.000Z",
+      endAt: "2026-10-21T22:30:00.000Z",
+    }),
+  );
+  expect(lines[1]).toBe("Business day Wed 21 Oct runs 05:00 → 00:30: 19 h 30 min.");
+});
+it("counts the hour the clocks go back in the day's length", async () => {
+  setLocale("en-GB");
+  const { lines } = await previewLines(
+    changeoverPreview({
+      businessDay: "2026-10-24",
+      dayCutover: "05:00",
+      startAt: "2026-10-24T03:00:00.000Z",
+      endAt: "2026-10-25T02:00:00.000Z",
+    }),
+    dayModel("2026-10-24"),
+  );
+  expect(lines[1]).toBe("Today's business day (Sat 24 Oct) runs 05:00 → 03:00: 23 h.");
+});
+const allYear = (weekday: number, endsAt: string) => ({
+  departmentId: "d",
+  departmentName: "Restaurant",
+  weekday,
+  seasonId: "all",
+  seasonName: "All year",
+  periodId: "p",
+  periodName: "Dinner",
+  startsAt: "21:00",
+  endsAt,
+  rangeIndex: 0,
+  reason: "range" as const,
+});
+const keptOpen = {
+  departmentId: "d",
+  departmentName: "Restaurant",
+  periodId: "p",
+  periodName: "Dinner",
+  endsAt: "04:30",
+  rangeIndex: 0,
+  reason: "kept_open" as const,
+};
+it("lists the opening hours that clash with the new start, season first", async () => {
+  setLocale("en-GB");
+  const { el, lines } = await previewLines(
+    changeoverPreview(tonight, [allYear(5, "04:00"), allYear(6, "04:30")]),
+  );
+  expect(text(q(el, "[data-test=conflicts]"))).toBe(
+    "Opening hours that clash with the new start: 2. Review opening hours",
+  );
+  expect(lines.slice(-2)).toEqual([
+    "All year: Restaurant · Fri · Dinner · 21:00–04:00 · Crosses the new start",
+    "All year: Restaurant · Sat · Dinner · 21:00–04:30 · Crosses the new start",
+  ]);
+});
+it("says until when a period is kept open tonight, without a range", async () => {
+  setLocale("en-GB");
+  const { lines } = await previewLines(changeoverPreview(tonight, [keptOpen]));
+  expect(lines.at(-1)).toBe("Restaurant · Dinner · Kept open until 04:30 tonight");
+});
+it.each([
+  ["range", "Crosses the new start", "Cruza el nuevo inicio"],
+  ["overlap", "Invalid or overlapping range", "Tramo inválido o solapado"],
+  ["endpoint_day", "Moves to another day", "Pasa a otro día"],
+] as const)("labels a %s clash in English and Spanish", async (reason, en, es) => {
+  for (const [locale, label] of [
+    ["en-GB", en],
+    ["es-ES", es],
+  ]) {
+    setLocale(locale);
+    const { lines } = await previewLines(
+      changeoverPreview(tonight, [{ ...allYear(5, "04:00"), reason }]),
+    );
+    expect(lines.at(-1)?.split(" · ").at(-1)).toBe(label);
+    cleanupWidgets();
+  }
+});
+it("previews in Spanish", async () => {
+  setLocale("es-ES");
+  const { el, lines } = await previewLines(
+    changeoverPreview(tonight, [allYear(5, "04:00"), keptOpen]),
+  );
+  expect(lines).toEqual([
+    "Cambia en el próximo cambio de día: mié 21 oct, 03:00.",
+    "El día de trabajo de hoy (mar 20 oct) va de 05:00 a 03:00: 22 h.",
+    "Los informes anteriores conservan sus días.",
+    "Horarios que chocan con el nuevo inicio: 2. Revisar horarios",
+    "All year: Restaurant · Vie · Dinner · 21:00–04:00 · Cruza el nuevo inicio",
+    "Restaurant · Dinner · Abierto hasta las 04:30 esta noche",
+  ]);
+  expect(q<WtInput>(el, "[name=dayCutover]")!.label).toBe("El día de trabajo empieza a las");
+});
+it("names a day that is not today's in Spanish", async () => {
+  setLocale("es-ES");
+  const { lines } = await previewLines(
+    changeoverPreview({
+      businessDay: "2026-10-21",
+      dayCutover: "05:00",
+      startAt: "2026-10-21T03:00:00.000Z",
+      endAt: "2026-10-21T22:30:00.000Z",
+    }),
+  );
+  expect(lines[1]).toBe("El día de trabajo mié 21 oct va de 05:00 a 00:30: 19 h 30 min.");
 });

@@ -82,8 +82,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se puede leer el reloj del día del local.",
   },
   "venue.business_day_invalid": {
-    en: "Check the future date and start time.",
-    es: "Revisa la fecha futura y la hora de inicio.",
+    en: "Check the start time.",
+    es: "Revisa la hora de inicio.",
   },
   "venue.business_day_changed": {
     en: "The business-day clock changed. Reopen the editor.",

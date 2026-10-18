@@ -97,12 +97,11 @@ async function mount(write?: () => Promise<{ changed: boolean; model: VenueDetai
   return { app, editor, writes };
 }
 async function ready(editor: Editor) {
-  await change(editor, "effectiveBusinessDay", "2026-11-04");
   await change(editor, "dayCutover", "03:00");
   await expect.poll(() => editor.shadowRoot!.querySelector("[data-test=acknowledge]")).toBeTruthy();
   await click(editor, "acknowledge");
 }
-for (const name of ["effectiveBusinessDay", "dayCutover"]) {
+for (const name of ["dayCutover"]) {
   it(`protects invalid ${name} and releases on a literal revert`, async () => {
     const { app, editor } = await mount();
     expect(unload()).toBe(false);
@@ -119,13 +118,13 @@ for (const name of ["effectiveBusinessDay", "dayCutover"]) {
       q<WtInput>(editor, `[name=${name}]`).shadowRoot!.querySelector<HTMLInputElement>("input")!
         .value,
     ).toBe("invalid");
-    await change(editor, name, "");
+    await change(editor, name, "05:00");
     expect(unload()).toBe(false);
   });
 }
 it("Cancel asks before discarding without sending a request", async () => {
   const { app, editor, writes } = await mount();
-  await change(editor, "effectiveBusinessDay", "2026-11-04");
+  await change(editor, "dayCutover", "03:00");
   await click(editor, "cancel");
   await choose(app, "keep");
   expect(unload()).toBe(true);

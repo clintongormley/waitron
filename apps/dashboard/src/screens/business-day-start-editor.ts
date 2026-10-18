@@ -21,14 +21,13 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import type {
   DashboardApi,
   BusinessDayClockModel,
-  BusinessDayStartInput,
   BusinessDayStartPreview,
 } from "../api/client.js";
-import { t, fill, currentLocale } from "../i18n/t.js";
+import { t, fill } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 
-type Draft = { effectiveBusinessDay: string; dayCutover: string };
+type Draft = { dayCutover: string };
 type Waiting = { effectiveBusinessDay: string; dayCutover: string; startsAt: string };
 // A longer setTimeout delay fires at once: measured 2026-10-18 in HeadlessChrome 156, 2_147_483_648 ms
 // fired within 200 ms and 2_147_483_647 ms did not.
@@ -66,6 +65,12 @@ export class BusinessDayStartEditor extends LitElement {
       }
       .day-length {
         display: block;
+        color: var(--wt-color-text-muted);
+      }
+      .preview p {
+        margin: 0 0 var(--wt-space-2);
+      }
+      .history {
         color: var(--wt-color-text-muted);
       }
       .preview {
@@ -185,8 +190,7 @@ export class BusinessDayStartEditor extends LitElement {
       id: this,
       current: () => this.draft!,
       snapshot: (value) => ({ ...value }),
-      equal: (a, b) =>
-        a.effectiveBusinessDay === b.effectiveBusinessDay && a.dayCutover === b.dayCutover,
+      equal: (a, b) => a.dayCutover === b.dayCutover,
       restore: (value) => {
         this.draft = value;
         this.errors = {};
@@ -204,10 +208,7 @@ export class BusinessDayStartEditor extends LitElement {
     this.#generation++;
     this.#revision = this.model.revision;
     this.#clockIdentity = this.#identity();
-    this.#baseline = {
-      effectiveBusinessDay: this.model.pending?.effectiveBusinessDay ?? "",
-      dayCutover: this.model.pending?.dayCutover.slice(0, 5) ?? "",
-    };
+    this.#baseline = { dayCutover: this.#waiting().at(-1)?.dayCutover ?? this.#inForce() };
     this.draft = { ...this.#baseline };
     this.actionError = "";
     this.errors = {};
@@ -240,25 +241,12 @@ export class BusinessDayStartEditor extends LitElement {
   }
   #problems(): Partial<Record<keyof Draft, string>> {
     const errors: Partial<Record<keyof Draft, string>> = {};
-    const draft = this.draft!;
-    const date = draft.effectiveBusinessDay;
-    if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
-      !Number.isFinite(Date.parse(`${date}T12:00:00Z`)) ||
-      new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) !== date
-    )
-      errors.effectiveBusinessDay = t("business_day.date_invalid");
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(draft.dayCutover))
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(this.draft!.dayCutover))
       errors.dayCutover = t("venue_details.cutover");
     return errors;
   }
   #key(): string {
-    return JSON.stringify([
-      this.draft?.effectiveBusinessDay,
-      this.draft?.dayCutover,
-      this.#revision,
-      this.#clockIdentity,
-    ]);
+    return JSON.stringify([this.draft?.dayCutover, this.#revision, this.#clockIdentity]);
   }
   #ready(): boolean {
     return (
@@ -266,13 +254,17 @@ export class BusinessDayStartEditor extends LitElement {
       this.#previewIdentity === this.#key() &&
       this.#clockIdentity === this.#identity() &&
       this.preview.revision === this.#revision &&
-      this.preview.effectiveDay.businessDay === this.draft?.effectiveBusinessDay &&
       this.preview.effectiveDay.dayCutover.slice(0, 5) === this.draft?.dayCutover &&
       this.preview.conflictCount === 0
     );
   }
-  #input(): BusinessDayStartInput {
-    return { ...this.draft!, expectedClockRevision: this.#revision };
+  #inForce(): string {
+    const model = this.model;
+    return (
+      model.currentBusinessDay
+        ? cutoverForBusinessDay(model.clock, model.currentBusinessDay)
+        : model.clock.dayCutover
+    ).slice(0, 5);
   }
   #refreshPreview(): void {
     const sequence = ++this.#sequence;
@@ -283,13 +275,16 @@ export class BusinessDayStartEditor extends LitElement {
       !this.draft ||
       this.readOnly ||
       Object.keys(this.#problems()).length ||
+      this.draft.dayCutover === this.#baseline?.dayCutover ||
       this.#clockIdentity !== this.#identity()
     )
       return;
     const identity = this.#key();
-    const input = this.#input();
     void this.api
-      .previewBusinessDayStart(input)
+      .previewBusinessDayStart({
+        dayCutover: this.draft.dayCutover,
+        expectedClockRevision: this.#revision,
+      })
       .then((preview) => {
         if (sequence !== this.#sequence || !this.isConnected) return;
         this.#previewIdentity = identity;
@@ -323,7 +318,11 @@ export class BusinessDayStartEditor extends LitElement {
     this.busy = true;
     this.actionError = "";
     try {
-      const result = await this.api.putBusinessDayStart(this.#input());
+      const result = await this.api.putBusinessDayStart({
+        effectiveBusinessDay: this.preview!.effectiveDay.businessDay,
+        dayCutover: this.draft.dayCutover,
+        expectedClockRevision: this.#revision,
+      });
       if (generation !== this.#generation || !this.isConnected) return;
       this.#close();
       this.dispatchEvent(
@@ -338,8 +337,7 @@ export class BusinessDayStartEditor extends LitElement {
       const code = codeOf(error);
       const message = codeMessage(code);
       const field = params?.field;
-      if (field === "effectiveBusinessDay" || field === "dayCutover")
-        this.errors = { [field]: message };
+      if (field === "dayCutover") this.errors = { dayCutover: message };
       this.actionError = message;
       if (code === "venue.business_day_changed" || code === "venue.business_day_locked") {
         this.preview = undefined;
@@ -349,19 +347,34 @@ export class BusinessDayStartEditor extends LitElement {
       if (generation === this.#generation || !this.draft) this.busy = false;
     }
   }
-  #instant(at: string) {
-    return html`<time datetime=${at}
-      >${new Intl.DateTimeFormat(currentLocale(), {
-        timeZone: this.model.clock.timeZone,
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hourCycle: "h23",
-        timeZoneName: "short",
-      }).format(new Date(at))}</time
-    >`;
+  #clockTime(at: string): string {
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: this.model.clock.timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date(at));
+  }
+  #previewLines(preview: BusinessDayStartPreview) {
+    const [before, after] = t("business_day.takes_effect").split("{when}");
+    const day = preview.previousDay;
+    const runs = {
+      day: formatBusinessDate(day.businessDay),
+      start: this.#clockTime(day.startAt),
+      end: this.#clockTime(day.endAt),
+      duration: formatDayLength((Date.parse(day.endAt) - Date.parse(day.startAt)) / 60_000),
+    };
+    return html`<p data-test="takes-effect">
+        ${before}<strong>${formatChangeoverMoment(preview.effectiveDay.startAt, this.model.clock.timeZone)}</strong>${after}
+      </p>
+      <p data-test="day-runs">
+        ${
+          day.businessDay === this.model.currentBusinessDay
+            ? fill("business_day.today_runs", runs)
+            : fill("business_day.day_runs", runs)
+        }
+      </p>
+      <p class="history">${t("business_day.history")}</p>`;
   }
   #conflict(conflict: BusinessDayStartPreview["conflicts"][number]): string {
     const weekday =
@@ -380,19 +393,19 @@ export class BusinessDayStartEditor extends LitElement {
               ] as const
             )[(conflict.weekday + 6) % 7]!,
           );
-    const reason = t(
-      (
-        {
-          range: "business_day.conflict_range",
-          endpoint_day: "business_day.conflict_endpoint",
-          all_day: "business_day.conflict_all_day",
-          sending_cutoff: "business_day.conflict_sending",
-          transition_strip: "business_day.conflict_strip",
-          overlap: "business_day.conflict_range",
-          kept_open: "business_day.conflict_range",
-        } as const
-      )[conflict.reason],
-    );
+    const key = (
+      {
+        range: "business_day.conflict_range",
+        endpoint_day: "business_day.conflict_endpoint",
+        all_day: "business_day.conflict_all_day",
+        sending_cutoff: "business_day.conflict_sending",
+        transition_strip: "business_day.conflict_strip",
+        overlap: "business_day.conflict_overlap",
+        kept_open: "business_day.conflict_kept_open",
+      } as const
+    )[conflict.reason];
+    const reason =
+      conflict.reason === "kept_open" ? fill(key, { time: conflict.endsAt ?? "" }) : t(key);
     const line = [
       conflict.departmentName ?? conflict.departmentId,
       conflict.zoneName ?? conflict.zoneId,
@@ -423,9 +436,6 @@ export class BusinessDayStartEditor extends LitElement {
   override render() {
     const model = this.model;
     if (!model) return nothing;
-    const current = model.currentBusinessDay
-      ? cutoverForBusinessDay(model.clock, model.currentBusinessDay)
-      : model.clock.dayCutover;
     const draft = this.draft;
     const generation = this.#generation;
     const active = () => this.isConnected && generation === this.#generation;
@@ -454,7 +464,7 @@ export class BusinessDayStartEditor extends LitElement {
         body: settingsRows([
           {
             label: t("business_day.starts_at"),
-            value: current.slice(0, 5),
+            value: this.#inForce(),
             dataTest: "saved-dayCutover",
           },
           ...this.#waiting().map((change) => ({
@@ -484,18 +494,6 @@ export class BusinessDayStartEditor extends LitElement {
                 }}
               >
                 <wt-input
-                  name="effectiveBusinessDay"
-                  label=${t("business_day.date")}
-                  placeholder="YYYY-MM-DD"
-                  required
-                  .value=${draft.effectiveBusinessDay}
-                  .error=${this.errors.effectiveBusinessDay ?? ""}
-                  ?disabled=${this.busy || this.readOnly}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    if (active()) this.#change("effectiveBusinessDay", event);
-                  }}
-                ></wt-input>
-                <wt-input
                   name="dayCutover"
                   label=${t("venue_details.dayCutover")}
                   placeholder="HH:MM"
@@ -507,27 +505,10 @@ export class BusinessDayStartEditor extends LitElement {
                     if (active()) this.#change("dayCutover", event);
                   }}
                 ></wt-input>
-                <p>${t("business_day.history")}</p>
                 ${
                   preview
                     ? html`<div class="preview" data-test="preview">
-                        <p>
-                          ${t("business_day.transition")}
-                          ${String((Date.parse(preview.previousDay.endAt) - Date.parse(preview.previousDay.startAt)) / 3600000)}
-                          h
-                        </p>
-                        <dl>
-                          <dt>${preview.previousDay.businessDay}</dt>
-                          <dd>
-                            ${this.#instant(preview.previousDay.startAt)} →
-                            ${this.#instant(preview.previousDay.endAt)}
-                          </dd>
-                          <dt>${preview.effectiveDay.businessDay}</dt>
-                          <dd>
-                            ${this.#instant(preview.effectiveDay.startAt)} →
-                            ${this.#instant(preview.effectiveDay.endAt)}
-                          </dd>
-                        </dl>
+                        ${this.#previewLines(preview)}
                         ${
                           preview.conflictCount
                             ? html`<p data-test="conflicts">

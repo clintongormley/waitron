@@ -221,6 +221,26 @@ Task 13 confirmed the plan's three Task 13 rows (exact base lines below)
 
 New cases beside them (no existing assertion changed): read-only with two waiting changes, two New start rows after an H1 (b) Save, a change already in force not shown as waiting, the re-read timer, no timer for a change 300 days ahead, and the timer cleared on a new model and on disconnect. The existing read-only case (`:243-248`) is unchanged. No other existing assertion failed (the four brief files: `Tests  159 passed (159)`; `business-day-start-editor.unsaved.test.ts`: `Tests  7 passed (7)`).
 
+## Task 14a — the plan's 14a rows, and the parts of the 14b rows the date field's removal forced (lines at `3749e0147`)
+
+| File:line (at `3749e0147`) | Before → after | Why |
+| --- | --- | --- |
+| `apps/dashboard/src/api/client-routes.test.ts:1385,1390` | `previewBusinessDayStart(input)` with `effectiveBusinessDay` and a query `effectiveBusinessDay=2026-11-05&dayCutover=07%3A00&expectedClockRevision=4` → called with `{ dayCutover: "07:00", expectedClockRevision: 4 }` and the query `dayCutover=07%3A00&expectedClockRevision=4` (whole URL by `toEqual`); the PUT half unchanged | the server's preview takes the start only (Task 3a) |
+| `business-day-start-editor.test.ts:143-144` (14b row, first case) | preview text contains `"22"`, and a `<time datetime="2026-11-04T02:00:00.000Z">` → the day line contains `"22 h"`, and the `<strong>` reads exactly `"Wed 4 Nov, 03:00"` (that instant in Madrid, en-GB); the date field's `required` check `:138` dropped (the field is gone; the time field's stays); the write still `toEqual` `{ effectiveBusinessDay: "2026-11-04", dayCutover: "03:00", expectedClockRevision: 4 }`, the date now taken from the preview | design §5: one field |
+| `business-day-start-editor.test.ts:163,170` (14b row, late preview) | the draft moves by date 11-04 → 11-05 and the newer preview names `businessDay "2026-11-05"` → the draft moves by time 03:00 → 04:00 and the newer preview names `dayCutover "04:00:00"`; assertions unchanged | the draft has no date |
+| `business-day-start-editor.test.ts:202` (14b row) | the date field shows an error → dropped; the time field's error, the bottom message and the disabled Save unchanged | no date field |
+| `business-day-start-editor.test.ts:232,238` (14b row) | refusal `{ field: "effectiveBusinessDay", reason: "too_soon" }` marks the date field → `{ field: "dayCutover", reason: "changeover_passed" }` marks the time field; bottom message and enabled Save unchanged | the server's refusal now names `dayCutover` (Task 3b) |
+| `business-day-start-editor.test.ts:315` | an `endpoint_day` row contains `"crosses the new start"` → contains `"Moves to another day"` | design §7 relabels `endpoint_day` |
+| `business-day-start-editor.test.ts:365,492,495` | `"Conflicting schedules: N. Review opening hours"` → `"Opening hours that clash with the new start: N. Review opening hours"` (exact) | design §7 |
+| `business-day-start-editor.test.ts:413-424` | `<time>` elements for both instants contain 05:00 and 03:00 and no `.000Z` → the day line is exactly `"Business day Tue 3 Nov runs 05:00 → 03:00: 22 h."` and no `.000Z` | the preview prints the venue-clock times in one sentence (mockup 02) |
+| `business-day-start-editor.test.ts:458-459,467-468,482` | `endpoint_day` label `"Range crosses the new start"` / `"El tramo cruza el nuevo inicio"` → `"Moves to another day"` / `"Pasa a otro día"`, whole lines still exact | design §7 |
+| every `change(el, "effectiveBusinessDay", "2026-11-04")` step in `business-day-start-editor.test.ts` (in `ready()` and the conflict cases) | removed; the time change that follows now starts the preview | no date field |
+| `business-day-start-editor.unsaved.test.ts:100,128` (14b row) | a date change before the time change / as the Cancel case's edit → removed / a time change to `03:00` | no date field |
+| `business-day-start-editor.unsaved.test.ts:105,122` (14b row) | the protect-and-revert case runs for the date and the time, reverting to `""` → for the time only, reverting to the start in force `"05:00"` | the dialog opens with the start in force (or the last waiting start), not empty |
+| `venue-details-business-day.test.ts:59-69,200` (14b row) | a bad date `"bad-date"` kept through a live re-read; a date step before the time step → a bad time `"bad"` kept through the same re-read; the date step removed | no date field |
+
+New cases beside them: mockup 02's three lines, the request carrying only the time and revision, no preview request before the time is changed, the not-today day line in EN and ES, the clocks-go-back day (23 h), mockup 04's heading and lines, the `kept_open` line, each clash label in EN and ES, the whole preview in Spanish with the new field label. The acknowledge button and the Save gating are left for Task 14b.
+
 ## Review focus (inputs no task's main tests reach; each line names the test that pins it)
 
 1. **The rule-2 flip mid-dialog**: a preview taken at 00:20 for 00:30 and a Save at 00:31 must be

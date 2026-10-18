@@ -1382,12 +1382,14 @@ it("previews a dated business-day start passively and writes with the loaded rev
     .mockResolvedValueOnce(jsonResponse(result));
   const api = new DashboardApi("", fetchImpl);
   expect(typeof api.previewBusinessDayStart).toBe("function");
-  expect(await api.previewBusinessDayStart(input)).toEqual(preview);
+  expect(
+    await api.previewBusinessDayStart({ dayCutover: "07:00", expectedClockRevision: 4 }),
+  ).toEqual(preview);
   expect(await api.putBusinessDayStart(input)).toEqual(result);
   expect(api).not.toHaveProperty("cancelBusinessDayStart");
   expect(callsOf(fetchImpl)).toEqual([
     [
-      "/management-api/venue-details/business-day-start/preview?effectiveBusinessDay=2026-11-05&dayCutover=07%3A00&expectedClockRevision=4",
+      "/management-api/venue-details/business-day-start/preview?dayCutover=07%3A00&expectedClockRevision=4",
       "GET",
       undefined,
     ],
