@@ -142,7 +142,7 @@ has unsaved changes, because leaving the product would lose them: save the produ
 **Archived when saved** and **Keep** until you save the product. Choose Keep to cancel that
 staged change. Once saved, the till stops offering the variant, its menu prices are deleted,
 and its past sales stay. You cannot bring it back. A variant already archived is hidden from the
-editor; there is no Show disabled link. **Remove** drops a variant you have not saved yet.
+editor. Turn on **Show archived** in the Products list to see it. **Remove** drops a variant you have not saved yet.
 
 If a live or scheduled menu includes the variant, the save is refused and names the menus.
 Take the variant out of those menus and publish before archiving it. You cannot add an Active

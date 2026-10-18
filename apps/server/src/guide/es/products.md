@@ -37,13 +37,13 @@ Cuando eliges una unidad, el precio es por una de esa unidad, y la etiqueta del 
 ejemplo **Precio por kg**. En la caja, un producto vendido en una de las unidades de peso que trae
 Waitron (gramos, kilogramos o miligramos), o en una unidad cuya **Precisión** admite decimales, pide la
 cantidad cada vez, con no más decimales de los que admite la unidad. Cualquier otro producto se vende
-de uno en uno con cada toque. El tique imprime la cantidad con la abreviatura de la unidad, por ejemplo
+de uno en uno con cada toque. El ticket imprime la cantidad con la abreviatura de la unidad, por ejemplo
 0,35 kg. Un producto cuya cantidad pide la caja no admite extras.
 
 ## Da a un producto hasta tres nombres {#names}
 
 El nombre que acabas de escribir es el nombre del **personal**. Es texto sin formato, en ningún idioma
-concreto, y es lo que ves tú y tu personal: la lista de Productos, los botones de la caja, la cesta,
+concreto, y es lo que ves tú y lo que ve tu personal: la lista de Productos, los botones de la caja, la cesta,
 las líneas de una mesa abierta, un pedido recuperado y tus informes de ventas. Usa el nombre con el que
 el local llama de verdad al plato.
 
@@ -51,7 +51,7 @@ Dos nombres opcionales tienen su propia sección. **Descriptores** empieza plega
 abierta:
 
 - Un **nombre para el cliente**, en **Descriptores**, con un campo por cada idioma de contenido. Es lo
-  que lee el comensal: el tique y la factura. Un tique y una factura muestran el nombre para el cliente
+  que lee el comensal: el ticket y la factura. Un ticket y una factura muestran el nombre para el cliente
   del idioma predeterminado sea cual sea el idioma en que se imprimen, o el nombre del personal si
   dejas todos los idiomas en blanco. En cuanto rellenas un idioma, rellena también el predeterminado,
   o el producto no se guardará.
@@ -110,7 +110,7 @@ añadir una. Se abre una ventana pequeña donde das a la variante sus tres nombr
 cliente y de cocina), su precio, su imagen y su disponibilidad; el nombre para el cliente y el de
 cocina recurren al nombre del personal de la variante igual que los del producto. Guarda la ventana
 para añadir esa variante, o cancélala para no añadir nada. En las líneas del pedido de la caja, en un
-tique y en una comanda de cocina, una variante aparece tras el nombre de su producto, entre
+ticket y en una comanda de cocina, una variante aparece tras el nombre de su producto, entre
 paréntesis, por ejemplo Café (Grande), y el informe de ventas muestra cada variante bajo su producto.
 Así que nombra una variante por lo que la distingue: Grande, no Café grande.
 
@@ -151,7 +151,7 @@ cambios sin guardar, porque salir del producto los perdería: guarda primero el 
 **Se archivará al guardar** y **Conservar** hasta que guardas el producto. Elige Conservar para
 cancelar ese cambio preparado. Una vez guardado, la caja deja de ofrecer la variante, se borran sus
 precios en las cartas y se conservan sus ventas pasadas. No puedes recuperarla. Una variante ya
-archivada no aparece en el editor; no hay ningún enlace para mostrar las deshabilitadas. **Eliminar**
+archivada no aparece en el editor. Para verla, activa **Mostrar archivados** en la lista de **Productos**. **Eliminar**
 quita una variante que aún no has guardado.
 
 Si una carta publicada o programada incluye la variante, el guardado se rechaza y nombra las cartas.
@@ -219,7 +219,7 @@ declaraciones, no rechaza la publicación. Si cancelas la confirmación de progr
 fecha y la hora que introdujiste.
 
 Los datos de compras existentes y los datos registrados de los pedidos siguen disponibles, pero los
-alérgenos y la aptitud dietética vigentes de los productos se mantienen en **Productos**.
+alérgenos y la aptitud dietética vigentes de los productos los gestionas en **Productos**.
 
 ## Pon un producto nuevo en tus cartas {#menus}
 
@@ -239,7 +239,7 @@ tipo, sus valores predeterminados y límites, y los precios de los extras.
 
 Cuando aparcas o completas un pedido, Waitron guarda los nombres del producto y la variante elegidos,
 el nombre de cocina, los precios y las respuestas de los modificadores. Los cambios posteriores en el
-catálogo se aplican a las selecciones nuevas. El pedido aparcado, la comanda de cocina, el tique y la
+catálogo se aplican a las selecciones nuevas. El pedido aparcado, la comanda de cocina, el ticket y la
 reimpresión siguen mostrando los datos guardados con ese pedido.
 
 El local de demostración incluye un café con nombre en cada idioma de contenido del local, con dos
