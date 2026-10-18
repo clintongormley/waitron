@@ -28,18 +28,20 @@ their full text.
   Post-invoice returns use the durable `tender_refunds` path (A737 Part 2): the server records
   the request before sending, keeps `tr_<refundId>` on retry and recovers pending outcomes.
 
-## A pending card refund does not refuse joining or unjoining tables, though the bill payments design says it does
+## A847. Allow joining and unjoining tables during a pending card refund
 
-- **A pending card refund does not refuse joining or unjoining tables, though the bill payments
-  design says it does.** The design's §5.2 list ("each payment, refund, void, quantity change,
+- **A847. Allow joining and unjoining tables during a pending card refund.** Today a pending card
+  refund does not refuse joining or unjoining tables, though the bill payments design says it does.
+  The design's §5.2 list ("each payment, refund, void, quantity change,
   adjustment, split, transfer, join and unjoin … are refused with `bill.refund_in_progress`",
   [bill payments design](../superpowers/specs/2026-09-26-bill-payments-design.md)) names join and
   unjoin. The run-it review of #851 (2026-09-29) reported that joining a free table to the party
   and unjoining a table without moving any dishes both succeeded while a card refund of the bill
   was pending; its probes were temporary and are not in the tree. Nobody has yet checked whether
-  either can change what the bill charges. **Next action:** the owner decides whether the code
-  should refuse them or the design should drop them from the list; then a test that tries each
-  during a pending refund.
+  either can change what the bill charges. **Owner, 2026-10-17: allow them and fix the design.**
+  First a test that joins and unjoins during a pending refund and shows neither changes what the
+  bill charges; then drop join and unjoin from §5.2's list. If either can change the charge, stop
+  and ask the owner.
 
 ## The SumUp Solo experiments
 
@@ -219,6 +221,11 @@ for reconciliation rather than show a receipt).
   connections to the box; W18c #1145 and W48 #1162).
 
 ## Decisions and deliberate limits
+
+- **An orphaned card payment whose settled amount differs from ours is held, never forgotten**
+  (owner, 2026-10-17). It is never refunded automatically while the amounts disagree; its alert
+  stays up and reminds daily until a person resolves it, and the sweep re-checks closed periods for
+  orphans still unresolved. The build is A846.
 
 - **Uncertain Stripe reader payments stay unknown** (owner, 2026-10-16, A764).
   Check them automatically after collection ends; keep the order locked until the outcome is known.

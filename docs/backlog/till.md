@@ -2026,8 +2026,6 @@ Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
   and shows recognised provider reasons in English and Spanish. The owner-defined lost, stolen
   and pickup cases show a staff-only keep-card instruction without Retry. The current simulator
   toggle stays until A739. [Provider evidence and reproduction](../research/2026-10-16-card-reader-failure-reasons.md).
-  Stripe's stored timeout outcome remains the separate owner-approved A764 follow-up under M7b2 in
-  [payments.md](payments.md#what-m7b2-left-open-a-manager-clearing-a-stuck-card-payment-702).
 - **Keep the card panel tied to its order.** A767 stores the outcome and Retry's reader, tip and
   offline choice by order id. Moving the panel into the payment window must preserve that link:
   switching orders hides it, returning restores it, and a Retry control from the previous order

@@ -3425,10 +3425,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   an HTML page throws `SyntaxError`. Its one caller is `reverseViaSumUp`; fold it into the neutral
   reversal primitive. Left open by A632.
 
-- Pre-existing `forward` retry backoff.
-
-- **Product decision to take before production:** The orphan drift gate holds a customer's money
-  pending a human, unbounded — nothing re-sweeps a closed period.
+- **A846. An orphaned card payment whose settled amount differs from ours is held, and never
+  forgotten** (owner decision, 2026-10-17). Never refund it automatically while the amounts
+  disagree, but keep its alert up and remind daily until a person resolves it, and have the sweep
+  re-check closed periods for orphans still unresolved. Today the daily reconcile duty asks for one
+  more pass a day later when it finds one (`resweepAfter`, `apps/server/src/reconcile-duty.ts`;
+  read, not run). Done when tests show the alert still raised and reminded on a later day, and a
+  closed period's unresolved orphan found again by the sweep.
 
 - **The reconciler's card reversal records only after the provider call, with a fresh key each time.** **Next
   action:** give the reconciler's reversal the same durable-attempt rule.
@@ -3456,11 +3459,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   the same column. Left open by the table actions plan.
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
-- **A pending card refund does not refuse joining or unjoining tables, though the bill payments
-  design says it does.** Nobody has yet checked whether either can change what the bill charges.
-  **Next action:** the owner decides whether the code should refuse them or the design should drop
-  them from the list; then a test that tries each during a pending refund.
-  [Detail](backlog/payments.md#a-pending-card-refund-does-not-refuse-joining-or-unjoining-tables-though-the-bill-payments-design-says-it-does)
+- **A847. Allow joining and unjoining tables during a pending card refund, and drop them from the
+  bill payments design's refused list** (owner, 2026-10-17). First a test that joins and unjoins
+  during a pending refund and shows neither changes what the bill charges; then take join and
+  unjoin out of the design's §5.2 list. If either can change the charge, stop and ask the owner.
+  [Detail](backlog/payments.md#a847-allow-joining-and-unjoining-tables-during-a-pending-card-refund)
 
 - **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Still
   open: whether we may supply the idempotency key, whether reader webhooks are signed, and whether
@@ -3541,9 +3544,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   unchecked; a sandbox case beside `checkout.sandbox.test.ts` would settle it.
   [Detail](backlog/payments.md#check-how-real-stripe-answers-a-malformed-reader-id-and-one-from-another-stripe-account)
 
-- **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
-  cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
-  shows `sale.error` for any server code it does not name, hiding `sale.empty_basket`.
+- **Tips still need designing** — queued as A793 (lane C).
+
+- **A848. Show a clear message when the till pays, sends or moves an empty order.** `#onPayTab`
+  (`apps/till/src/till-app.ts`) shows `sale.error` for any server code it does not name, which
+  hides `sale.empty_basket`. On the till, try paying, sending and moving an empty order; where no
+  clear message shows, add one in English and Spanish. Done when each of the three has been tried
+  and shows a clear message.
 
 - **The practice-mode simulator writes no `attempting` row**, so a switch during a practice card
   payment is never refused (read, not run). Left open by W97 (#1311), beside the owner's decision
