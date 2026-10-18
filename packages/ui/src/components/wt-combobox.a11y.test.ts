@@ -484,7 +484,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("with a help-mode badge, help off", async () => {
     await mountThemed(
-      '<wt-combobox label="Etiquetas"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Ayuda: Etiquetas">Lo que dice la carta.</wt-help-tooltip></wt-combobox>',
+      '<wt-combobox label="Dietary tags"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Dietary tags">What the menu shows.</wt-help-tooltip></wt-combobox>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -492,7 +492,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("with a help-mode badge, help on", async () => {
     await mountThemed(
-      '<wt-combobox label="Etiquetas"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Ayuda: Etiquetas">Lo que dice la carta.</wt-help-tooltip></wt-combobox>',
+      '<wt-combobox label="Dietary tags"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Dietary tags">What the menu shows.</wt-help-tooltip></wt-combobox>',
       theme,
     );
     const badge = host.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(

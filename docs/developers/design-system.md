@@ -638,7 +638,7 @@ number between them keeps them apart and 24 by 24 CSS px is WCAG 2.2's level AA 
 2.5.8; the 44px figure is the level AAA criterion 2.5.5).
 
 A `wt-help-tooltip` in help mode is also below `--wt-tap-min`, by the approved A582 spec (§3.2):
-while help is on its target is `--wt-help-badge-target` (24px on the dashboard), again WCAG 2.2's
+while help is on its target is `--wt-help-badge-target` (24px), again WCAG 2.2's
 level AA minimum. Its always-mode button stays `--wt-tap-min` square. Pinned by "it is a 24px
 target around a 20px circle" in `packages/ui/src/components/wt-help-tooltip.help-mode.test.ts` and
 the badge case in `packages/ui-core/src/tokens/structure.test.ts`. axe's `target-size` rule cannot
@@ -2114,8 +2114,8 @@ cannot be reached, on hangs over the corner and takes no room, the sizes, the co
 ignoring the switch, turning help off closing an open box) and
 `packages/ui/src/components/wt-help-tooltip.slots.test.ts` (for the six field primitives,
 `wt-disclosure` and `wt-dialog`: the badge takes no room off or on and hangs over the right corner;
-a stretched stepper keeps its width; a stepper wider than its field box, in a grid, a flex column,
-right to left, stretched or beside a long error, hangs the badge over the field box's corner; a dialog opens with focus where it lands with help off; a
+a stretched stepper keeps its width; a stepper in a grid, a flex column,
+right to left, stretched or beside a long error hangs the badge over the field box's corner; a dialog opens with focus where it lands with help off; a
 `wt-modal` at 390px wide gets no sideways scroll from a full-width field's badge). Nothing checks a
 badge a screen slots somewhere else.
 

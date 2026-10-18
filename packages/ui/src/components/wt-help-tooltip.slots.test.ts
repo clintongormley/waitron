@@ -130,7 +130,7 @@ test("wt-number-stepper: stretched to its column by --wt-stepper-field-width: 10
   expect(field.getBoundingClientRect().width).toBe(400);
 });
 
-// Each of these makes the stepper's own box wider than its field box.
+// All but the stretched case make the stepper's own box wider than its field box.
 test.each([
   ["a grid parent", "display: grid", "", ""],
   ["a flex column", "display: flex; flex-direction: column", "", ""],
@@ -384,7 +384,7 @@ test("wt-modal at phone width: a full-width field's badge adds no sideways scrol
     cleanup();
     setHelpMode(false);
 
-    // A till's larger badge hangs further out than the padding, so the measurement can see overflow.
+    // A 32px badge hangs further out than the padding, so the measurement can see overflow.
     const till = await measure("--wt-help-badge-target: 32px");
     expect(till.scrollWidth, JSON.stringify(till)).toBeGreaterThan(till.clientWidth);
   } finally {

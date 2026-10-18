@@ -92,7 +92,7 @@ test("with no mode it is in always mode", async () => {
   expect(badge.getAttribute("mode")).toBe("always");
 });
 
-test("a till's sizes come from the same two tokens", async () => {
+test("larger sizes come from the same two tokens", async () => {
   const { badge } = await mountBadge();
   host.style.setProperty("--wt-help-badge-target", "32px");
   host.style.setProperty("--wt-help-badge-size", "24px");

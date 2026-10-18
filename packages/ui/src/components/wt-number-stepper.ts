@@ -34,7 +34,7 @@ export class WtNumberStepper extends LitElement {
 
       /* .control can be wider than the field (a stretching parent, a long error), so a help-mode
          badge is placed in the field's grid cell, which makes that cell its containing block. Both
-         lines are named: an absolutely positioned item's auto line is the container's edge. */
+         lines are given: an absolutely positioned item's auto line is the container's edge. */
       ::slotted([mode="help-mode"]) {
         grid-column: 1 / 2;
         grid-row: 1 / 2;
