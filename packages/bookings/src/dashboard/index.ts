@@ -1,10 +1,10 @@
 import { html } from "lit";
-import type { DashboardContribution } from "@waitron/dashboard-kit";
+import type { DashboardContribution, DashboardFurtherScreen } from "@waitron/dashboard-kit";
 import { BookingApi } from "./client.js";
 import { BOOKINGS_STRINGS } from "./strings.js";
 import "./bookings-screen.js";
 
-export const BOOKINGS_DASHBOARD: DashboardContribution = {
+export const BOOKINGS_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
   module: "bookings",
   screen: {
     id: "bookings",

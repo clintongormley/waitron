@@ -119,9 +119,7 @@ export interface DashboardSettingsPanel {
   create(ctx: DashboardModuleContext): { render(readOnly?: boolean): TemplateResult };
 }
 
-/** One module's dashboard contribution: its identity, its first screen's placement and factory, any
- * further screens, and its localised strings. */
-export interface DashboardContribution extends DashboardFurtherScreen {
+interface DashboardContributionBase {
   module: string; // == the server descriptor name
   strings: { en: Record<string, string>; es: Record<string, string> };
   /** Mounted, listed, searched and permission-gated exactly as `screen` is. */
@@ -129,4 +127,15 @@ export interface DashboardContribution extends DashboardFurtherScreen {
   settingsPanels?: readonly DashboardSettingsPanel[];
   calendarViews?: readonly DashboardCalendarView[];
   searchDestinations?: readonly DashboardSearchDestination[];
+}
+
+/** One module's dashboard contribution: its identity, its own screen's placement and factory if it
+ * brings one, any further screens, and its localised strings. */
+export type DashboardContribution = DashboardContributionBase &
+  (DashboardFurtherScreen | { screen?: undefined; create?: undefined });
+
+/** The contribution's own screen, if it brings one, then its further screens. */
+export function contributedScreens(c: DashboardContribution): readonly DashboardFurtherScreen[] {
+  const own: DashboardFurtherScreen[] = c.screen === undefined ? [] : [c];
+  return [...own, ...(c.moreScreens ?? [])];
 }

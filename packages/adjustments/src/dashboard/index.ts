@@ -1,11 +1,11 @@
 import { html } from "lit";
-import type { DashboardContribution } from "@waitron/dashboard-kit";
+import type { DashboardContribution, DashboardFurtherScreen } from "@waitron/dashboard-kit";
 import { AdjustmentsApi } from "./client.js";
 import { ADJUSTMENTS_STRINGS } from "./strings.js";
 import "./reasons-screen.js";
 import "./adjustment-report-screen.js";
 
-export const ADJUSTMENTS_DASHBOARD: DashboardContribution = {
+export const ADJUSTMENTS_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
   module: "adjustments",
   screen: {
     id: "adjustment-report",
