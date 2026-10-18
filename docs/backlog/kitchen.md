@@ -16,7 +16,8 @@ list does not exist.
 
 - **Task 5 (#750, kitchen, pass and table screen by group; printing problems).** Left open:
   - A party finished while its food is still on the pass keeps its cards there with no group
-    button that works (each is refused `party.not_open`); a question for the owner.
+    button that works (each is refused `party.not_open`): the owner's answer (2026-10-17, the
+    waiter clears them with Void, choosing refund or no refund) is part of A758.
   - "Ready" and "Fired N min ago" on the table screen are the plan's default, not an owner
     decision.
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
@@ -59,10 +60,8 @@ list does not exist.
   - The pass's Ready and Away record no `order_group_events` row, so who pressed them is
     recorded nowhere readable; a new kind changes that append-only table's check, which is a
     core migration.
-  - Questions for the owner: the kitchen and pass screens offer Fire on every held group, where
-    the plan's text said "the first held group"; and the table screen reads its printing
-    problems in a second request beside the groups read on every table load (folding them in
-    would change the exact-body assertion in `apps/server/src/till-api.groups.test.ts`).
+  - The table screen's second request for printing problems is A809; which held groups the
+    kitchen and pass screens offer Fire on is A773's (owner, 2026-10-17).
 
 ## Task 6 (#761, HOLD tickets in advance)
 
@@ -74,14 +73,6 @@ list does not exist.
   - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
     correction, and a Reprint's REPRINT and HOLD section, can print at a station whose printer
     never printed that group's HOLD ticket.
-
-## Is a `+` sub-line enough for a doneness answer on the kitchen ticket?
-
-- **Is a `+` sub-line enough for a doneness answer on the kitchen ticket?** Doneness is a modifier
-  the venue adds itself (Task 10); an options answer prints on the kitchen ticket as an indented
-  `+ <list kitchen name>: <label kitchen name>` line. **Open, and worth a cook's eye before a real
-  service:** whether that is enough for something a cook must not miss, or whether an options answer
-  deserves its own prominent form on the ticket. Nobody has watched a real kitchen read one.
 
 ## KDS corrections deferred from #191
 
@@ -140,18 +131,6 @@ list does not exist.
   stays, counting, until the screen is opened again; long outages are counted in minutes, never
   hours.
 
-## Whole-order note correction volume
-
-A743 retains the existing per-dish correction path and the plan's explicit per-item station
-acknowledgement. A three-dish note edit produced three slips and three notices in the review probe;
-`apps/server/src/order-kitchen-note.corrections.test.ts` now exercises that case. The paper's heading
-names the kitchen-note change or removal, rather than a generic dish change.
-
-Before changing that delivery, decide whether you want one paper summary per printer, and whether
-cooks should still acknowledge each dish. The current implementation is the default from A743's
-[plan](../superpowers/plans/2026-10-15-a743-whole-order-kitchen-note.md), not a separate owner decision
-about grouping these corrections.
-
 ## A756. The Kitchen tab split up: a Courses page, a department Service tab and an Every station card
 
 **Changed by A773 (owner, 2026-10-16, the same day).** These replace parts of the mock-ups below:
@@ -205,6 +184,10 @@ Wording: in the mock-ups a station's inherited choice reads "Same as every stati
 confirm the new wording when A756 is picked up.
 
 ## Left by C80: a dish whose course the till does not list
+
+**Owner, 2026-10-17:** a dish whose course is switched off is treated as a dish with no course
+(Fire now, listed first, as A773's design says), whether sent or moved. Relayed to A773; delete
+this section once A773 covers it. The reading below is what A773 has to change.
 
 - Left by C80 (read from `draftSections` and `groupArrivingDishes`, not compared with a running
   till): the till files a dish whose course it does not list (an inactive course) under the earliest
@@ -412,3 +395,17 @@ native column drop and compares every recorded table value except the retired co
   (2026-09-28):** the till's ticket view (`apps/till/src/screens/till-ticket-view.ts`) still shows
   the Each unit. The printed receipt prints an Each count bare since A663 Part 2 (owner,
   2026-10-15).
+
+- **A whole-order kitchen-note change prints one slip per printer and raises one notice per
+  station (owner, 2026-10-17).** The slip lists the affected dishes, and the cook acknowledges the
+  notice once per station, replacing A743's default of a slip and a notice per dish. Built as A807.
+
+- **Dishes that arrive in a party get a kitchen group at the receiving party (P16, owner,
+  2026-10-17: kept).** Spec §15's "leaves with them outside any group" is read as the side the bill
+  leaves; the receiving party groups the dishes (the table actions plan's Task 9, #874).
+
+- **A dish whose course is switched off is treated as a dish with no course (C80, owner,
+  2026-10-17)**: Fire now, listed first, whether it was sent or moved. A773 carries it.
+
+- **A doneness answer prints as an indented `+` sub-line on the kitchen ticket (owner,
+  2026-10-17: fine as built).**

@@ -1702,10 +1702,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   get a page under Products and menus, with A773's "Held until fired" column. After A725. Check the
   order against A773's plan. [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
 
-- **Consider consolidating paper for a whole-order kitchen-note change.** The current correction
-  path produces one slip and one acknowledged notice for each affected dish at its station.
-  Decide whether paper should instead summarise the affected work once per printer, and whether
-  acknowledgement should remain per dish. [Detail](backlog/kitchen.md#whole-order-note-correction-volume).
+- **A807. One slip per printer and one notice per station for a whole-order kitchen-note change
+  (owner, 2026-10-17).** Today a change or removal of the order's kitchen note prints one slip and
+  raises one acknowledged notice for each affected dish (A743's default). Print one slip per printer
+  listing the affected dishes, and raise ONE notice the cook acknowledges once per station. Done
+  when `apps/server/src/order-kitchen-note.corrections.test.ts`'s three-dish edit shows one slip per
+  printer and one notice per station.
 
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
   show in the Calendar's Show picker, offered only to someone with `venue_service.manage`: a
@@ -1724,7 +1726,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   an unrelated save of that cell removes it silently. Reachable only by a hand-made database insert.
   Fix: show the line and make removing it an explicit choice.
 
-- KDS-4 follow-ups: device-mode reprint behind `requireDevice`; the reprint timestamp.
+- KDS-4 follow-up: device-mode reprint behind `requireDevice`.
+
+- **A808. A reprinted kitchen ticket shows when it was reprinted (owner, 2026-10-17).** The heading
+  reads `*** REPRINT HH:MM ***`, the local time of the reprint, where today it reads
+  `*** REPRINT ***` (`apps/server/src/kitchen-ticket.ts`); the original send time stays on the
+  ticket. Done when a ticket test pins both times on one reprint.
 
 - **KDS operations — low priority (A9)** — Gaps: a routing audit view (a routing cell keeps no
   record of who changed it or when — the most useful to close); no station `type`/`kind`;
@@ -1733,7 +1740,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group; printing
   problems).** [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
   - A party finished while its food is still on the pass keeps its cards there with no group
-    button that works (each is refused `party.not_open`); a question for the owner.
+    button that works (each is refused `party.not_open`): the owner's answer (2026-10-17, the
+    waiter clears them with Void, choosing refund or no refund) is part of A758.
   - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
     `*** HOLD CANCELLED ***` print in English.
   - A switched-off printer's printing problem keeps showing until the printer is switched on and a
@@ -1762,11 +1770,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   - The pass's Ready and Away record no `order_group_events` row, so who pressed them is recorded
     nowhere readable; a new kind changes that append-only table's check, which is a core migration.
 
-- Questions for the owner: the kitchen and pass screens offer Fire on every held group, where the
-  plan's text said "the first held group"; and the table screen reads its printing problems in a
-  second request beside the groups read on every table load (folding them in would change the
-  exact-body assertion in `apps/server/src/till-api.groups.test.ts`). Left open by service Task 5
-  (#750).
+- **A809. The table screen reads its printing problems in the groups read (owner, 2026-10-17).**
+  Today every table load makes a second request, `GET /api/parties/:id/print-problems`, beside
+  `GET /api/parties/:id/groups` (`apps/server/src/till-api.ts`). Fold the printing problems into the
+  groups read and drop the second request; the exact-body assertion in
+  `apps/server/src/till-api.groups.test.ts` changes with it. Done when a table load makes one
+  request. Which held groups the kitchen and pass screens offer Fire on is A773's.
 
 - **Loose ends left by service Task 6 (#761, HOLD tickets in advance).**
   [Detail](backlog/kitchen.md#task-6-761-hold-tickets-in-advance)
@@ -1778,25 +1787,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
     correction, and a Reprint's REPRINT and HOLD section, can print at a station whose printer
     never printed that group's HOLD ticket.
 
-- **A plan default the owner may overturn (P16):** spec §15's "leaves with them outside any group"
-  is read as the side the bill leaves; the receiving party groups the dishes. Left open by the table
-  actions plan's Task 9 (#874, dishes arriving in a party get a kitchen group).
-
 - Left by C78's review: the earliest fire time is picked by comparing the stored times as text,
   right only while every writer stores the same `toISOString()` form (every writer found uses
   `nowIso()`; not proven for all); and a dish recalled and fired again carries its new fire time but
   its old group's firer. Left open by the table actions plan's Task 9 (#874, dishes arriving in a
   party get a kitchen group).
 
-- Left by C80: with a switched-off course the send path and the move path can file a dish with no
-  course under different courses (owner, 2026-09-29: not queued); its move/send comparison remains
-  unverified. Left open by the table actions plan's Task 9 (#874, dishes arriving in a party get a
-  kitchen group). [Detail](backlog/kitchen.md#left-by-c80-a-dish-whose-course-the-till-does-not-list)
-
-- **Is a `+` sub-line enough for a doneness answer on the kitchen ticket?** **Open, and worth a
-  cook's eye before a real service:** whether that is enough for something a cook must not miss, or
-  whether an options answer deserves its own prominent form on the ticket.
-  [Detail](backlog/kitchen.md#is-a--sub-line-enough-for-a-doneness-answer-on-the-kitchen-ticket)
+- **C80: a dish whose course is switched off is a dish with no course (owner, 2026-10-17)** — Fire
+  now, listed first, whether sent or moved; relayed to A773. Delete this entry once A773 covers it.
+  [Detail](backlog/kitchen.md#left-by-c80-a-dish-whose-course-the-till-does-not-list)
 
 - **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no
   caller** — found while removing the Stations tab's health read (A366 slice 4 decision 34): the
