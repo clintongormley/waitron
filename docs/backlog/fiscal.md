@@ -221,7 +221,8 @@ gets the invoice and pays later, for instance by bank transfer — or, as the ow
 gets a proforma and the invoice only once the money arrives. [Q42](../compliance/asesor-questions.md#q42-a-bill-paid-later-by-bank-transfer--invoice-now-or-a-proforma-and-the-invoice-on-payment-added-2026-10-06)
 asks the asesor whether both are lawful and which is recommended, for full invoices (F1, A231) and
 simplified invoices (F2) alike, with non-payment and deposits. The research recorded in
-`docs/compliance/asesor-questions.md` (section 1.10) answers it: invoicing now and being paid later
+the Q42 row (the Word copy's §1.10) of `docs/compliance/asesor-questions.md` → "What happened to
+each question sent on 6 October" answers it: invoicing now and being paid later
 is lawful; a proforma first and the invoice on payment is not, for a consumer. **Owner, 2026-10-17:
 start the design now** from that answer — the invoice is issued at the meal, and the bill stays open
 as "awaiting transfer" until it is marked paid. The design returns to the owner with one short

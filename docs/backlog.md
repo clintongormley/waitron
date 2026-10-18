@@ -578,11 +578,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A833. Setup, and the demo, start only for a country that has a country pack** (owner decision,
   2026-10-17). The country choice offers only countries with a pack (Spain today); a country without
-  one is not offered at all, so the venue screen's "Demo's invoice settings have not loaded" case
-  cannot arise. The venue screen's list already reads `VENUE_SETUP_COUNTRY_PACKS`
-  (`apps/setup/src/screens/venue-screen.ts`, read, not run), but a draft can still carry a country
-  with no pack, which is how C47s (#840) reached that sentence. Done when no draft or request can
-  bring a country without a pack into setup, and a test that tries one fails before the change.
+  one is not offered at all. The venue screen offers only `VENUE_SETUP_COUNTRY_PACKS`, marks a
+  country with no pack invalid, and no longer shows "Invoice settings have not loaded yet." for one
+  (`apps/setup/src/screens/venue-screen.ts`); the server refuses one in every mode (`parseVenue`,
+  `apps/server/src/setup-api.ts`). Read, not run. One browser test seeding a draft with a country
+  that has no pack, plus one request test: if both refuse, delete this entry; if either does not,
+  fix it.
 
 - **A834. Point the certificate export help's macOS link at FNMT's English page.** In
   `apps/setup/src/certificate-export-help.ts` the macOS guide's link opens FNMT's Basque `/eu/`
@@ -3422,9 +3423,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **A846. An orphaned card payment whose settled amount differs from ours is held, and never
   forgotten** (owner decision, 2026-10-17). Never refund it automatically while the amounts
   disagree, but keep its alert up and remind daily until a person resolves it, and have the sweep
-  re-check closed periods for orphans still unresolved. Today the daily reconcile duty asks for one
-  more pass a day later when it finds one (`resweepAfter`, `apps/server/src/reconcile-duty.ts`;
-  read, not run). Done when tests show the alert still raised and reminded on a later day, and a
+  re-check closed periods for orphans still unresolved. Today every reconcile pass that still finds
+  such an orphan asks for the same period to be swept again a day later, so its period is re-swept
+  daily for as long as the amounts disagree (`resweepAfter`, `apps/server/src/reconcile-duty.ts`;
+  the chain is pinned in `packages/scheduler/src/resweep.test.ts`). First check whether that already
+  covers the "closed periods" half; if it does, the job is the daily reminder alone. Done when tests show the alert still raised and reminded on a later day, and a
   closed period's unresolved orphan found again by the sweep.
 
 - **The reconciler's card reversal records only after the provider call, with a fresh key each time.** **Next
@@ -5082,6 +5085,7 @@ the tree. What remains, largest first:
   standby whose own held membership list omits it takes the fallback in `nextStandings`
   (`packages/membership/src/standings.ts`), which appends it with an empty `contactUrl`, and
   `routableServers` (`packages/membership/src/fence.ts`) then drops it. Found by reading, not run.
+  [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
 
 ### CI, tests and developer tooling
 
@@ -5805,9 +5809,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A806. Throw `sale.number_reused` when a sale would reuse an invoice number.** The code is
   declared in `packages/core/src/errors.ts` (with the series and the number) and nothing throws it.
-  Where a sale is written, catch the refusal of the `sales_series_invoice_number_key` unique
-  constraint, recognised by what the refusal names (`packages/db/src/constraint-target.ts`), never by
-  its result code alone, and throw `sale.number_reused` with the series and the number. Done when a
+  Where a sale is written, catch that index's refusal with `refusalOn(error, UNIQUE_VIOLATION,
+  { table: "sales", columns: ["series_id", "invoice_number"] })`
+  (`packages/db/src/constraint-target.ts`). The refusal names the table and columns, never the
+  index (`sales_series_invoice_number_key`), so `indexViolated` cannot match it. Then throw `sale.number_reused` with the series and the number. Done when a
   test forces a duplicate number and asserts that code. FULL review (fiscal invariant).
 
 - **Loose ends left by the tenant-column removal (#378, 2026-09-16).**
