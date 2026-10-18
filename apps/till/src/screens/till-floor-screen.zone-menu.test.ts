@@ -173,7 +173,7 @@ describe("till-floor-screen: the zone menu", () => {
     expect(menuOf(el)).toBeNull();
   });
 
-  it("offers a zone with no tables a reset, which brings in the tables its saved plan has gained", async () => {
+  it("offers a zone with no tables a reset, which brings in the tables its layout has gained", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
       zones: [...zones, zone("z4", "Garden")],
@@ -189,7 +189,7 @@ describe("till-floor-screen: the zone menu", () => {
     expect(refreshes.count).toBe(1);
   });
 
-  it("is not offered to a zone with no tables and no saved plan", async () => {
+  it("is not offered to a zone with no tables and no layout", async () => {
     const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
       zones: [...zones, zone("z4", "Counter", false)],
       tables: [...terraceTables, ...barTables, ...patioTables],

@@ -920,7 +920,7 @@ async function fourAndFive() {
 }
 
 describe("the reset waiting rules", () => {
-  it("a free table needing clearing stays where it is at Reset to saved plan", async () => {
+  it("a free table needing clearing stays where it is at Reset to {set} plan", async () => {
     const { zoneId, tableId } = await plannedTable(fresh("Wiped"));
     await reset(zoneId);
     await moveToday(tableId, 30);
@@ -933,7 +933,7 @@ describe("the reset waiting rules", () => {
     expect((await tableRow(v, tableId)).needsClearingSince).toBe(MARKED);
   });
 
-  it("a table needing clearing with no today's row gets one at Reset to saved plan, as a held one does", async () => {
+  it("a table needing clearing with no today's row gets one at Reset to {set} plan, as a held one does", async () => {
     const { zoneId, tableId } = await plannedTable(fresh("Unrowed"));
     await reset(zoneId);
     await inTx(v, (tx) => tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)));

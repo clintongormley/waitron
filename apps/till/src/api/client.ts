@@ -1831,7 +1831,7 @@ export interface FloorZone {
   name: string;
   displayOrder: number;
   active: boolean;
-  /** The zone has a saved plan, which may have no tables. */
+  /** The zone's department has a floor plan set. */
   hasPlan: boolean;
   /** The name of the set today's plan was last reset from; null before the day's first reset. */
   layoutSetName: string | null;
@@ -4248,7 +4248,7 @@ export class TillApi {
     );
   }
 
-  /** Reset a zone to its saved plan → `POST /api/zones/:id/today/reset`. `zoneRevision` is null when
+  /** Reset a zone onto the set today's plan was last made from → `POST /api/zones/:id/today/reset`. `zoneRevision` is null when
    * the floor read held no table of the zone with a today's row. */
   resetZoneToday(zoneId: string, zoneRevision: number | null): Promise<FloorAnswer> {
     return this.#request<FloorAnswer>(`/api/zones/${zoneId}/today/reset`, "POST", {

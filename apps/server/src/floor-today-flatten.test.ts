@@ -439,7 +439,7 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     expect(await splitRowsOf(table.long!)).toEqual(sorted([table.c3!, table.c4!, table.c5!]));
   });
 
-  it("Reset to saved plan ends a flattened group nobody sits at and puts Long table back whole", async () => {
+  it("Reset to {set} plan ends a flattened group nobody sits at and puts Long table back whole", async () => {
     const { table, zoneId } = await LONG_TABLE();
     await push(table.bar!, table.long!, "left");
 

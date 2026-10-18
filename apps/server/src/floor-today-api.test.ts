@@ -516,7 +516,7 @@ describe("today's routes", () => {
     });
   });
 
-  it("resets a zone to the saved plan", async () => {
+  it("resets a zone to the layout", async () => {
     const { zoneId, table } = await plannedZone(v, [
       { key: "free", place: { x: 0, y: 0 } },
       { key: "seated", place: { x: 20, y: 0 } },
@@ -704,7 +704,7 @@ describe("today's routes", () => {
     }
   });
 
-  it("leaves a zone with no master plan alone on a reset", async () => {
+  it("leaves a zone with no layout alone on a reset", async () => {
     const zoneId = await tableServiceZone(v);
     await v.table(`Unplanned ${randomUUID().slice(0, 6)}`, zoneId);
 

@@ -168,7 +168,7 @@ export const floorPlanPlacements = table(
   ],
 );
 
-/** What a joined table on the saved plan is made of: one row per part. */
+/** What a zone's joined table is made of, in every layout: one row per part. */
 export const floorPlanTableParts = table(
   "floor_plan_table_parts",
   {

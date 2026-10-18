@@ -308,7 +308,7 @@ async function resave(
   return ids;
 }
 
-describe("building today's plan from a zone's master plan", () => {
+describe("building today's plan from a zone's layout", () => {
   it("builds today's plan from the master on the first reset", async () => {
     const z = await zone();
     const t1 = await v.table("First 1", z);
@@ -524,7 +524,7 @@ describe("building today's plan from a zone's master plan", () => {
     expect(await pendingRows(z)).toEqual([]);
   });
 
-  it("does not reset a zone with no master plan", async () => {
+  it("does not reset a zone with no layout", async () => {
     const z = await zone();
     await v.table("Bare 1", z);
 
@@ -1187,7 +1187,7 @@ describe("the parts of joined tables in the till's copy", () => {
     );
   });
 
-  it("takes out a part the saved plan dropped, at the next reset", async () => {
+  it("takes out a part the layout dropped, at the next reset", async () => {
     const { zoneId, master } = await plannedZone(v, LONG_AND_COUNTERS, NOW);
     await resave(zoneId, (tables) =>
       tables.map((table) =>
@@ -1741,7 +1741,7 @@ describe("a reset over a joined table split today", () => {
     expect(await flags(table.c5!)).toEqual({ joined: false, apart: false });
   });
 
-  it("a delayed reset marks a split part's group from its copied plan after a new saved plan stands it apart, once its mark is cleared", async () => {
+  it("a delayed reset marks a split part's group from its copied plan after a new layout stands it apart, once its mark is cleared", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c4!, table.c5!], 2);
     await markNeedsClearing(table.c5!);
@@ -1795,7 +1795,7 @@ describe("a reset over a joined table split today", () => {
     );
   });
 
-  it("a reset leaves Counter 5 split off and its mark when the saved plan stands it apart from Long table, and marks it needing moving once cleared", async () => {
+  it("a reset leaves Counter 5 split off and its mark when the layout stands it apart from Long table, and marks it needing moving once cleared", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);
@@ -1826,7 +1826,7 @@ describe("a reset over a joined table split today", () => {
     );
   });
 
-  it("a reset leaves Counter 5 split off and its mark when the saved plan drops it, and once cleared an unpaid order to it keeps it while Long table needs moving", async () => {
+  it("a reset leaves Counter 5 split off and its mark when the layout drops it, and once cleared an unpaid order to it keeps it while Long table needs moving", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);
@@ -1958,7 +1958,7 @@ describe("a reset over a joined table split today", () => {
     expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
   });
 
-  it("Mark moved is refused with a module's refusal to let go of Counter 5, which the saved plan drops", async () => {
+  it("Mark moved is refused with a module's refusal to let go of Counter 5, which the layout drops", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);
@@ -2006,7 +2006,7 @@ describe("a reset over a joined table split today", () => {
     expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
   });
 
-  it("Mark moved on Long table, marked while the saved plan drops Counter 5, puts Long table back and keeps Counter 5 off the map for its unpaid order", async () => {
+  it("Mark moved on Long table, marked while the layout drops Counter 5, puts Long table back and keeps Counter 5 off the map for its unpaid order", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);

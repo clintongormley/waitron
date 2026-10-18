@@ -1700,8 +1700,8 @@ export class TillFloorScreen extends LitElement {
 
   /**
    * Every action is a write through a `take-orders` route, so the menu needs `canChangeToday`. A zone
-   * with a saved plan and no tables is offered it too, since only a reset brings in tables its plan
-   * has gained. `planned` covers a zone list read before the plan was saved: a floor refresh re-reads
+   * whose department has a set and no tables is offered it too, since only a reset brings in tables its
+   * plan has gained. `planned` covers a zone list read before its department had a set: a floor refresh re-reads
    * the tables, not the zones. On a phone the menu also holds List or Map, so it shows whenever the floor
    * does.
    */

@@ -15,7 +15,7 @@ const en = {
   "venue.delete_counter_empty": "The Counter default is cleared; no surviving zone replaces it.",
   "venue.delete_default_empty": "The default department is cleared.",
   "venue.delete_item_tables": "Deletes {count} tables.",
-  "venue.delete_item_saved_tables": "Removes {count} tables from the saved plan.",
+  "venue.delete_item_saved_tables": "Removes {count} tables from the floor plans.",
   "venue.delete_item_zones": "Deletes {count} zones.",
   "venue.delete_item_today_joins": "Removes {count} joins from today’s plan.",
   "venue.delete_item_reset_targets": "Removes {count} saved reset targets.",
@@ -889,7 +889,7 @@ const en = {
 
 const es: Record<keyof typeof en, string> = {
   "venue.delete_item_tables": "Elimina {count} mesas.",
-  "venue.delete_item_saved_tables": "Quita {count} mesas del plano guardado.",
+  "venue.delete_item_saved_tables": "Quita {count} mesas de los planos.",
   "venue.delete_item_zones": "Elimina {count} zonas.",
   "venue.delete_item_today_joins": "Quita {count} uniones del plano de hoy.",
   "venue.delete_item_reset_targets": "Quita {count} destinos de restablecimiento guardados.",

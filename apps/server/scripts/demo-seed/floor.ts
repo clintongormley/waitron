@@ -19,7 +19,7 @@ export interface SeedTable {
   posY: number;
   shape: "round" | "square" | "rect";
   rotation: number;
-  /** The master plan's place, on a 120 × 80 grid. */
+  /** The place in the default set's layout, on a 120 × 80 grid. */
   placement: Placement;
   fixed: boolean;
 }

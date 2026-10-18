@@ -114,8 +114,8 @@ export function needsMoving(tableId: SQLWrapper): SQL {
 }
 
 /**
- * A table is a part of a joined table on its zone's saved plan, whatever the layout, and its zone
- * has no set recorded for `businessDay` (any zone, when `businessDay` is null).
+ * A table is a part of a joined table in any of its zone's layouts, and its zone has no set
+ * recorded for `businessDay` (any zone, when `businessDay` is null).
  */
 function anySavedPart(tableId: SQLWrapper, businessDay: string | null): SQL {
   const unrecorded =

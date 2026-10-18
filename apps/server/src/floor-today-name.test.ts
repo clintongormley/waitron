@@ -791,7 +791,7 @@ describe("a reset clears today's name", () => {
   const joinRow = (joinId: string) =>
     inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, joinId)));
 
-  it("Reset to saved plan clears a free table's name and moves the revision (reset clears)", async () => {
+  it("Reset to {set} plan clears a free table's name and moves the revision (reset clears)", async () => {
     const { table, zoneId } = await LONG_TABLE();
     await rename(table.bar!, suffixed("Window"));
     const before = (await zoneRevisionOf(v, zoneId))!;
