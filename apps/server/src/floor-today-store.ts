@@ -1,4 +1,4 @@
-import { layoutTables, placedAsRead, requireZone } from "./floor-plan.js";
+import { layoutTables, placedAsRead, planOf, requireZone } from "./floor-plan.js";
 import {
   and,
   eq,
@@ -149,7 +149,7 @@ export async function resetZoneOn(
   now: Date,
   onto: ResetOnto,
 ): Promise<number> {
-  const layout = await layoutRowOf(tx, onto.setId, zoneId);
+  const layout = await planOf(tx, { setId: onto.setId, zoneId });
   return resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout, { keepTakenOff: false });
 }
 
@@ -192,18 +192,6 @@ export async function updateLayout(
 
 function dueOnto(state: ZoneLayoutState): ResetOnto | null {
   return state.due === null ? null : { setId: state.due.setId, occurrence: state.due.occurrence };
-}
-
-async function layoutRowOf(
-  tx: Transaction,
-  setId: string,
-  zoneId: string,
-): Promise<LayoutRow | undefined> {
-  const [row] = await tx
-    .select({ id: floorPlans.id, revision: floorPlans.revision })
-    .from(floorPlans)
-    .where(and(eq(floorPlans.zoneId, zoneId), eq(floorPlans.setId, setId)));
-  return row;
 }
 
 interface ResetOptions {

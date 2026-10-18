@@ -79,7 +79,7 @@ export async function requireZone(tx: Transaction, cfg: TillConfig, zoneId: stri
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
 }
 
-async function planOf(tx: Transaction, at: LayoutRef) {
+export async function planOf(tx: Transaction, at: LayoutRef) {
   const [plan] = await tx
     .select({ id: floorPlans.id, revision: floorPlans.revision, savedAt: floorPlans.savedAt })
     .from(floorPlans)
