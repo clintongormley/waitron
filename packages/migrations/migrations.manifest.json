@@ -86,7 +86,8 @@
       "filing_cases",
       "filing_case_events",
       "fiscal_allocations",
-      "fiscal_reservations"
+      "fiscal_reservations",
+      "fiscal_certificate_installs"
     ]
   },
   {
