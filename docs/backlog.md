@@ -5462,9 +5462,10 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   behind by the Stryker upgrade (#447, 2026-09-19). Stryker 10.0.0's release notes mention neither
   issue, and nothing here was run under Vitest 5, so the question is untouched rather than resolved.
   The retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779; the Vitest 5 PR #1179
-  is closed). Closing #766 stored an ignore of `@vitest/browser-playwright` 5.x, and whether the
-  group's Vitest 5 PR obeys it is untested (how to check and clear it: workflow-guide → Dependabot
-  pull requests) — left open by Dependabot's switch-on (#760, 2026-09-27).
+  is closed). Whether Dependabot obeys that ignore stays open until its next Vitest-family pull
+  request shows it (owner, 2026-10-17: #1179 moved only `vitest`, so it does not answer this); then
+  close the question (workflow-guide → Dependabot pull requests) — left open by Dependabot's
+  switch-on (#760, 2026-09-27).
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
 - **Bundled npm notices stop at a module-type-only package manifest.** Running
@@ -5494,10 +5495,12 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   packages are deprecated.
   Left behind by the esbuild upgrade (#439, 2026-09-19).
 
+- **A844. Resolve one copy of `@types/node` (owner, 2026-10-17; left by #441).** `@types/qrcode`
+  sits on 26.6.2, everything else on 26.6.5, so `apps/dashboard` reports a duplicate `NonSharedBuffer`
+  under `--skipLibCheck false`. Make the workspace resolve one copy, show those errors are gone with
+  library checking on, then delete this entry.
+
 - **Loose ends left by the Node types upgrade (#441, 2026-09-19).**
-  - **`apps/dashboard` type-checks against two `@types/node` majors at once.** The fix is a pnpm
-    resolution override, which is a policy decision, so it was left for the owner.
-    [Detail](backlog/dependencies.md#appsdashboard-type-checks-against-two-typesnode-majors-at-once)
   - **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** One
     line either way; it needs an owner call on whether Node 24 is still supported.
 

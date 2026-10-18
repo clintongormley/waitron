@@ -47,7 +47,9 @@ installed code, and only their number is stale.
   retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779, added when the Vitest 5
   PR #1179 was closed), and must also check whether #766's stored Dependabot ignore of
   `@vitest/browser-playwright` 5.x holds that package back, and clear it if so
-  (`docs/developers/workflow-guide.md` → Dependabot pull requests).
+  (`docs/developers/workflow-guide.md` → Dependabot pull requests). Whether Dependabot obeys
+  A779's ignore stays open until its next Vitest-family pull request shows it (owner, 2026-10-17:
+  #1179 moved only `vitest`, not the `@vitest/*` packages, so it does not answer this).
 
 ## Whether a declared floor follows the installed version is undecided — one decision for every manifest
 
@@ -63,18 +65,6 @@ installed code, and only their number is stale.
   exact pin stayed exact), so it did not restore #432's one-range shape where that had lapsed:
   `@aws-sdk/client-s3` is exact in `apps/server` and a caret range in `packages/stream` and
   `bench/sqlite-failover`. The answer goes in `versioning-strategy` in `.github/dependabot.yml`.
-
-## `apps/dashboard` type-checks against two `@types/node` majors at once
-
-**Left behind by the Node types upgrade (#441, 2026-09-19).**
-
-- **`apps/dashboard` type-checks against two `@types/node` majors at once.** `@types/qrcode`
-  (declared in `apps/dashboard` and `apps/server`) references the Node types with its own range
-  `"*"`, and the lockfile leaves it on 24.x while everything else is on 26. Nothing complains
-  because `skipLibCheck` is on (`tsconfig.base.json`); with `--skipLibCheck false` that program
-  reports a duplicate `NonSharedBuffer` identifier. The fix is a pnpm resolution override, which is
-  a policy decision, so it was left for the owner. (`@types/ssh2` also holds 18.x, but it asks for
-  `"^18.11.18"` and no 26 release satisfies it.)
 
 ## Only the request side of that adapter was compared between the two versions
 
