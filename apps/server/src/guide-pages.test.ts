@@ -127,6 +127,9 @@ describe("guide pages", () => {
     "/help/en",
     "/help/en/products/",
     "/help/en/a/b",
+    "/help/fr",
+    "/help/fr/a/b",
+    "/help/esp/a/b",
   ])("answers the English 404 page for %s", async (path) => {
     const res = await appFor(root).request(path);
     expect(res.status).toBe(404);
@@ -141,14 +144,18 @@ describe("guide pages", () => {
     expect(html).not.toContain("Productos");
   });
 
-  it("answers the 404 page in Spanish when the language is Spanish", async () => {
-    const res = await appFor(root).request("/help/es/nada");
-    expect(res.status).toBe(404);
-    const html = await res.text();
-    expect(html).toContain('<html lang="es">');
-    expect(html).toContain("Página no encontrada");
-    expect(html).toContain('href="/help/es/products"');
-  });
+  it.each(["/help/es/nada", "/help/es", "/help/es/", "/help/es/x/y", "/help/es/products/"])(
+    "answers the 404 page in Spanish for %s",
+    async (path) => {
+      const res = await appFor(root).request(path);
+      expect(res.status).toBe(404);
+      expect(res.headers.get("content-security-policy")).toContain("default-src 'none'");
+      const html = await res.text();
+      expect(html).toContain('<html lang="es">');
+      expect(html).toContain("Página no encontrada");
+      expect(html).toContain('href="/help/es/products"');
+    },
+  );
 
   it("never builds a path from the request", async () => {
     const res = await appFor(root).request("/help/en/secret");
@@ -193,6 +200,40 @@ describe("guide pages", () => {
       "guide.render_failed",
       { lang: "en", page: "products" },
     ]);
+  });
+
+  it("answers its own 500 page and logs when a guide file cannot be read", async () => {
+    const unreadable = newRoot("unreadable");
+    // A directory where the file should be: reading it fails with EISDIR, not ENOENT.
+    mkdirSync(join(unreadable, "en", "products.md"), { recursive: true });
+    const log = vi.fn();
+    const res = await appFor(unreadable, log).request("/help/en/products");
+    expect(res.status).toBe(500);
+    expect(res.headers.get("cache-control")).toBe("no-cache");
+    expect(res.headers.get("content-security-policy")).toContain("default-src 'none'");
+    const html = await res.text();
+    expect(html).toContain('<html lang="en">');
+    expect(html).toContain("This guide page could not be shown.");
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("error", "guide.read_failed", {
+      lang: "en",
+      page: "products",
+      code: "EISDIR",
+    });
+  });
+
+  it("answers the Spanish 500 page, naming the file it tried, when the twin is missing and the English file cannot be read", async () => {
+    const unreadable = newRoot("unreadable-fallback");
+    mkdirSync(join(unreadable, "en", "products.md"), { recursive: true });
+    const log = vi.fn();
+    const res = await appFor(unreadable, log).request("/help/es/products");
+    expect(res.status).toBe(500);
+    expect(await res.text()).toContain("No se ha podido mostrar esta página de la guía.");
+    expect(log).toHaveBeenCalledWith("error", "guide.read_failed", {
+      lang: "en",
+      page: "products",
+      code: "EISDIR",
+    });
   });
 
   it("sends no-cache and a policy that allows only the page's own script", async () => {

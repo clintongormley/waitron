@@ -194,16 +194,23 @@ export function mountGuidePages(app: Hono, deps: GuidePagesDeps, log: Logger): v
     const lang = GUIDE_LANGUAGES.find((candidate) => candidate === requestedLang);
     const name = GUIDE_PAGES.find((candidate) => candidate === requestedPage);
     if (lang === undefined || name === undefined) {
-      return notFound(c, requestedLang === "es" ? "es" : "en");
+      return notFound(c, lang ?? "en");
     }
 
     let shownLang: GuideLanguage = lang;
     let notice = "";
-    let markdown = readGuide(root, lang, name);
-    if (markdown === undefined && lang !== "en") {
-      shownLang = "en";
-      notice = `<p class="notice" lang="${lang}">${escapeHtml(GUIDE_TEXT[lang].missingTwin)}</p>\n`;
-      markdown = readGuide(root, "en", name);
+    let markdown;
+    try {
+      markdown = readGuide(root, lang, name);
+      if (markdown === undefined && lang !== "en") {
+        shownLang = "en";
+        notice = `<p class="notice" lang="${lang}">${escapeHtml(GUIDE_TEXT[lang].missingTwin)}</p>\n`;
+        markdown = readGuide(root, "en", name);
+      }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      log("error", "guide.read_failed", { lang: shownLang, page: name, code });
+      return broken(c, lang);
     }
     if (markdown === undefined) {
       log("error", "guide.page_missing", { lang, page: name });
@@ -224,5 +231,8 @@ ${notice}${rendered.html}`;
     return answer(c, page(shownLang, rendered.title, body), 200);
   });
 
-  app.get("/help/*", (c) => notFound(c, "en"));
+  app.get("/help/*", (c) => {
+    const first = c.req.path.split("/")[2];
+    return notFound(c, GUIDE_LANGUAGES.find((candidate) => candidate === first) ?? "en");
+  });
 }

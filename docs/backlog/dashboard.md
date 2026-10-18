@@ -1144,9 +1144,6 @@ help about anything you want very quickly."
   - Products' VAT and Availability badges have no guide link.
   - The failed-start recovery page (started from `apps/server/src/node-entry.ts`, outside
     `bootServer`) does not serve the guides.
-  - A guide file that exists but cannot be read (any error other than "not found") reaches Hono's
-    default error answer, not the guide's own 500 page: `readGuide` is called outside the route's
-    `try` in `apps/server/src/guide-pages.ts`.
   - The first half of the Languages and photos guide, before "Add a photograph once", has not been
     checked against the code, because A682 rewrites it. A682 updates
     `apps/server/src/guide/en/content-and-images.md` and `es/content-and-images.md`, and the lines

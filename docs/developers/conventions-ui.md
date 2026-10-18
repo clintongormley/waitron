@@ -138,9 +138,8 @@ language.
 
 `apps/server/src/guide-content.test.ts` renders every page, so a guide edit that uses a refused
 shape fails `apps/server`'s tests in CI. The renderer lets other shapes through. In the same
-measurement, a table written without a leading `|` was joined into one paragraph, `~~strike~~` and
-`<img src=x>` were shown as written, and `__bold__` came out as emphasis around `_bold_`, so no test
-catches those: someone has to read the page. If a refused shape reached a box anyway, the route answers its own 500 page and logs `guide.render_failed`, without
+measurement, a table written without a leading `|` was joined into one paragraph, and `~~strike~~`
+and `<img src=x>` were shown as written, so no test catches those: someone has to read the page. If a refused shape reached a box anyway, the route answers its own 500 page and logs `guide.render_failed`, without
 the guide's words.
 
 ### Section ids and twins
@@ -158,33 +157,31 @@ A page with no Spanish twin is shown in English to a Spanish reader, under one l
 (`missingTwin` in `guide-pages.ts`; the "serves the English page with one line saying so" case in
 `guide-pages.test.ts`). All three pages have twins today, so a box never shows that line yet. A page
 in the list with no English file is a broken build: the route answers its 500 page and logs
-`guide.page_missing`.
+`guide.page_missing`. A read that fails for any reason other than a missing file gets the same 500
+page and logs `guide.read_failed` with the language of the file it tried, the page and the error's
+code (the "cannot be read" cases in `guide-pages.test.ts` put a directory where the file should be).
 
 ### Which addresses answer
 
 The route compares both parts of the address with fixed lists, `GUIDE_LANGUAGES` and `GUIDE_PAGES`
 (`apps/server/src/guide-catalogue.ts`), exactly and case-sensitively, and reads the file named by the
-list's own string, never the request's (`guide-pages.ts:188-197`). That matters because Hono hands
-the route a decoded parameter: measured 2026-10-18 on Hono 4.13.13 with a throwaway script holding
-only `app.get("/help/:lang/:page", …)`, `/help/en/..%2F..%2Fetc%2Fpasswd` reached the handler as
-`page: "../../etc/passwd"`. Anything else under `/help`, including `/help`, `/help/en` and a
-trailing slash, answers the guide's own 404 page (`app.get("/help/*", …)`, `guide-pages.ts:222`);
-an address `/help/es/<page>` with one part after `es` and no trailing slash gets it in Spanish,
-and every other one, `/help/es` and `/help/es/products/` among them, gets it in English
-(`guide-pages.ts:192` and `:222`).
+list's own string, never the request's (`mountGuidePages`'s `/help/:lang/:page` route). That
+matters because Hono hands the route a decoded parameter: measured 2026-10-18 on Hono 4.13.13
+with a throwaway script holding only `app.get("/help/:lang/:page", …)`,
+`/help/en/..%2F..%2Fetc%2Fpasswd` reached the handler as `page: "../../etc/passwd"`. Anything else under `/help`, including `/help`, `/help/en` and a
+trailing slash, answers the guide's own 404 page (`mountGuidePages`'s `/help/*` catch-all). An
+address whose first part after `/help/` is exactly a language in `GUIDE_LANGUAGES` gets the 404
+page in that language, so `/help/es`, `/help/es/x/y` and `/help/es/products/` answer in Spanish;
+every other address gets it in English.
 Without that catch-all those addresses would fall through to whatever is mounted later: a setup box
 with no built setup app answers every other GET with its 200 placeholder
 (`apps/server/src/setup-api.ts:1412`).
-
-One gap: `readGuide` turns only "not found" into a missing page. Any other read error, such as a
-file the process may not read, is thrown outside the route's `try` (`guide-pages.ts:197`), so it
-reaches Hono's default error answer rather than the guide's 500 page.
 
 ### The page's look, its token copies and its theme
 
 Each answer is one self-contained HTML page with no external file, sent with
 `Cache-Control: no-cache`. The page cannot load the apps' token files (`apps/server` does not
-depend on `@waitron/ui-core`), so `GUIDE_PAGE_TOKENS` (`guide-pages.ts:17`) declares its own copies
+depend on `@waitron/ui-core`), so `GUIDE_PAGE_TOKENS` (in `guide-pages.ts`) declares its own copies
 of the `--wt-*` tokens it reads, each colour as `light-dark(<light>, <dark>)`, and every rule reads
 `var(--wt-…)`. Sizes are in px. Guard: `scripts/guide-page-tokens.test.ts`, weaker than its name: it
 reads `packages/ui-core/src/tokens/colors.css` and `structure.css` as text, finds a declaration by
