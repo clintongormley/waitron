@@ -96,25 +96,17 @@ their full text.
   replaced…", which holds the copy of `/--.*$/` in `scripts/module-graph-honesty.test.ts`: a fix to
   one touches the other's code.
 
-## A805. Check the frozen grants record against today's protections, then delete it
+## Remaining table restrictions after the grants-record audit
 
-- **A805. Check the frozen grants record against today's protections, then delete it.**
-  `packages/fiscal-verifactu/src/privileges.expected.ts` records what the old database's grants
-  allowed on each table before the storage switch; its own header calls it a frozen record that
-  nothing checks. `scripts/write-path-tables.test.ts` (#430) is its one live reader and covers only
-  the tables request code may read and never write — those `scripts/write-path-tables.json` lists.
-  **The job:** for every table the frozen record restricted (any letter missing from `SIUD`),
-  confirm the table is declared `appendOnly()` in its module's classification list, is listed in
-  `scripts/write-path-tables.json`, or is fine to write freely. Each leftover becomes its own short
-  backlog entry. Then delete the frozen file, and the cross-check `write-path-tables.test.ts` makes
-  against it. Done when the file is gone and every restricted table is accounted for.
+Each unresolved table has its own entry in [the backlog](../backlog.md). The
+[2026-10-19 audit](../developers/grants-retirement-audit.md) accounts for every restricted name
+before the record was removed. Decide retention and the permitted mutations per table before
+adding enforcement. These entries do not authorise fiscal or working-time chain changes.
 
-  **What #430's review left behind, none of it taken there.** The allowance list is a JSON file
-  rather than the annotated TypeScript constant every sibling guard uses, because the plan named a
-  file that outlives the grants; the justification for each entry is a doc comment beside the
-  `JSON.parse` instead, which no test reads. The detector only reads a builder call whose receiver
-  looks like a database handle, so a write through a handle named something else is invisible; that
-  was the price of not reporting `cache.delete(nodes)` on an ordinary `Set`.
+The write-path detector still reads only builder calls whose receiver looks like a database
+handle. A differently named handle can escape it; expanding that detector needs both a real-write
+control and the ordinary `Set.delete` control. The allowance list remains JSON, with the reasons
+beside its reader in `scripts/write-path-tables.test.ts`.
 
 ## Small renames and dead exports the sweep found and could not make
 

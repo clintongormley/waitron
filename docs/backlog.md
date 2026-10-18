@@ -438,10 +438,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   exactly one. **Remaining:** contain repeated F2 requests per sale, with the invoice number on the
   slip. [Detail](backlog/fiscal.md#one-original-per-invoice-structurally)
 
-- **`packages/fiscal-verifactu/src/privileges.expected.ts` still lists `department_hours`** — left
-  open by the reviews of A261 step 5 (Hours, #1298); the file is a frozen record of the old grants
-  and was not edited.
-
 - **A795 — installing or renewing the AEAT certificate after setup: DESIGNED, waiting on three owner
   questions.** Only the setup wizard can set it (`apps/server/src/setup-api.ts`), and nothing watches
   when it expires. Against a test server that refuses an expired certificate during the connection,
@@ -5909,12 +5905,181 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   from A95).** Read, not run; whether any file they scan has a `/*` inside a `--` comment or a string
   is not measured. [Detail](backlog/architecture.md#the-two-sql-scanners-named-stripsql-blank-block-comments-before----comments)
 
-- **A805. Check the frozen grants record against today's protections, then delete it.**
-  `packages/fiscal-verifactu/src/privileges.expected.ts` is a frozen record of what the old
-  database's grants allowed on each table. For every table it restricted, confirm the table is
-  declared `appendOnly()`, is listed in `scripts/write-path-tables.json`, or is fine to write freely.
-  Each leftover becomes its own short entry; then delete the frozen file. Done when the file is gone
-  and every restricted table is accounted for. [Detail](backlog/architecture.md#a805-check-the-frozen-grants-record-against-todays-protections-then-delete-it)
+- **`bookings`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`card_readers`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`catalogues`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`change_log`: decide the remaining UPDATE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`content_languages`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`convenio_config`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`departments`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`devices`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`employments`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`envio_flujo`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`envios`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`floor_zones`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`incidents`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`ingredients`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`invoice_series`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`join_requests`: decide the remaining UPDATE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`kitchen_stations`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`location_catalogues`: decide the remaining UPDATE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`locations`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`management_sessions`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`menu_items`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`media_image_data`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`node_membership`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`payment_policy`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`payment_refunds`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`payments`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`persons`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`print_agents`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`print_jobs`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`printers`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`products`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`registro_sif`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`scheduled_runs`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`sessions`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`station_printers`: decide the remaining UPDATE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`table_service_statuses`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`tenant_receipts`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`tenant_themes`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`ticket_items`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`workforce_chains`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
+
+- **`working_order_counters`: decide the remaining DELETE restriction (A805 follow-up).**
+  Check the intended retention and mutation paths before adding enforcement.
+  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
 
 - **`apps/server` route-suite test titles still say "not a 500" or that an unscreened malformed id
   becomes an opaque 500, although ids are text columns now.** The titles name no engine; none has
