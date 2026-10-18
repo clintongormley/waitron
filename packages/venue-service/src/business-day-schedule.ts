@@ -552,14 +552,7 @@ export async function readBusinessDayScheduleStatus(
     (row) => businessDayBoundaryAt(clock, row.effectiveBusinessDay) > at.toISOString(),
   );
   let pending: BusinessDayScheduleStatus["pending"] = null;
-  if (change !== undefined) {
-    const locksAt = businessDayBoundaryAt(clock, addDays(change.effectiveBusinessDay, -1));
-    pending = {
-      ...change,
-      startsAt: businessDayBoundaryAt(clock, change.effectiveBusinessDay),
-      locksAt,
-      editable: at.toISOString() < locksAt,
-    };
-  }
+  if (change !== undefined)
+    pending = { ...change, startsAt: businessDayBoundaryAt(clock, change.effectiveBusinessDay) };
   return { businessDayClock: clock, clockRevision, currentBusinessDay, pending };
 }

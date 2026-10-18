@@ -176,7 +176,9 @@ describe("dated route protection", () => {
       "/business-day-start/preview?effectiveBusinessDay=2026-11-04&dayCutover=03%3A00&expectedClockRevision=0",
     );
     expect(preview.status).toBe(200);
-    expect(await preview.json()).toMatchObject({
+    const previewBody = await preview.json();
+    expect(previewBody).not.toHaveProperty("locksAt");
+    expect(previewBody).toMatchObject({
       revision: 0,
       previousDay: {
         businessDay: "2026-11-03",
@@ -190,23 +192,24 @@ describe("dated route protection", () => {
         startAt: "2026-11-04T02:00:00.000Z",
         endAt: "2026-11-05T02:00:00.000Z",
       },
-      locksAt: "2026-11-03T04:00:00.000Z",
       conflicts: [],
       conflictCount: 0,
     });
     expect(await clockRows()).toEqual({ changes: [], settings: [] });
     const save = await request("PUT", "/business-day-start", proposal());
     expect(save.status).toBe(200);
-    expect(await save.json()).toMatchObject({
+    const saved = await save.json();
+    expect(saved).toMatchObject({
       changed: true,
       model: {
         details: before.details,
-        businessDayClock: {
-          revision: 1,
-          currentBusinessDay: "2026-11-02",
-          pending: { effectiveBusinessDay: "2026-11-04", dayCutover: "03:00", editable: true },
-        },
+        businessDayClock: { revision: 1, currentBusinessDay: "2026-11-02" },
       },
+    });
+    expect(saved.model.businessDayClock.pending).toEqual({
+      effectiveBusinessDay: "2026-11-04",
+      dayCutover: "03:00",
+      startsAt: "2026-11-04T02:00:00.000Z",
     });
     expect((await suite.db.select().from(locations))[0]!.dayCutover).toBe("05:00:00");
     expect(await clockRows()).toEqual({
@@ -548,7 +551,11 @@ it("reads pending and activated boundaries from a reopened complete database cop
       expect(before.businessDayClock).toMatchObject({
         currentBusinessDay: "2026-11-03",
         revision: 1,
-        pending: { editable: false },
+      });
+      expect(before.businessDayClock.pending).toEqual({
+        effectiveBusinessDay: "2026-11-04",
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
       });
       const activated = await withTransaction(reopened.venue, (tx) =>
         readVenueDetails(tx, venue.cfg, new Date("2026-11-04T02:00:00.000Z")),

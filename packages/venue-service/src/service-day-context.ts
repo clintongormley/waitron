@@ -32,8 +32,6 @@ export interface BusinessDayScheduleStatus {
     effectiveBusinessDay: string;
     dayCutover: string;
     startsAt: string;
-    locksAt: string;
-    editable: boolean;
   };
 }
 

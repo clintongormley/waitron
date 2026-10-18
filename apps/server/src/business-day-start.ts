@@ -88,19 +88,19 @@ export async function readBusinessDayClockModel(
   );
   if (pending === undefined) return { ...base, currentBusinessDay, pending: null };
   const startsAt = businessDayBoundaryAt(clock, pending.effectiveBusinessDay);
-  const locksAt = businessDayBoundaryAt(clock, addDays(pending.effectiveBusinessDay, -1));
-  return {
-    ...base,
-    currentBusinessDay,
-    pending: { ...pending, startsAt, locksAt, editable: at.toISOString() < locksAt },
-  };
+  return { ...base, currentBusinessDay, pending: { ...pending, startsAt } };
 }
 function assertRevision(model: BusinessDayClockModel, revision: number): void {
   if (revision !== model.revision) throw new AppError("venue.business_day_changed", {});
   if (model.currentBusinessDay === null) invalid("dayCutover", "clock_unreadable");
 }
-function assertEditable(model: BusinessDayClockModel): void {
-  if (model.pending !== null && !model.pending.editable)
+function assertEditable(model: BusinessDayClockModel, at: Date): void {
+  if (model.pending === null) return;
+  const locksAt = businessDayBoundaryAt(
+    model.clock,
+    addDays(model.pending.effectiveBusinessDay, -1),
+  );
+  if (at.toISOString() >= locksAt)
     throw new AppError("venue.business_day_locked", { reason: "transition_started" });
 }
 function assertFutureDate(model: BusinessDayClockModel, proposal: BusinessDayStartInput): void {
@@ -184,7 +184,7 @@ export async function previewBusinessDayStart(
   const proposal = proposalOf(input);
   const model = await readBusinessDayClockModel(tx, cfg, at);
   assertRevision(model, proposal.expectedClockRevision);
-  assertEditable(model);
+  assertEditable(model, at);
   const candidate = candidateFor(model, proposal);
   await protectHistory(tx, cfg, model.clock, candidate, proposal.effectiveBusinessDay);
   let conflicts: BusinessDayStartPreview["conflicts"] = [];
@@ -206,7 +206,6 @@ export async function previewBusinessDayStart(
     revision: model.revision,
     previousDay: view(candidate, addDays(proposal.effectiveBusinessDay, -1)),
     effectiveDay: view(candidate, proposal.effectiveBusinessDay),
-    locksAt: businessDayBoundaryAt(candidate, addDays(proposal.effectiveBusinessDay, -1)),
     conflicts,
     conflictCount,
     backupDeadlines: { archive: null, cloud: null },
@@ -236,7 +235,7 @@ export async function writeBusinessDayStart(
   const proposal = proposalOf(input);
   const model = await readBusinessDayClockModel(tx, cfg, at);
   assertRevision(model, proposal.expectedClockRevision);
-  assertEditable(model);
+  assertEditable(model, at);
   assertFutureDate(model, proposal);
   const activeCutover = cutoverForBusinessDay(model.clock, model.currentBusinessDay!);
   if (proposal.dayCutover === activeCutover) {
@@ -282,7 +281,7 @@ export async function cancelBusinessDayStart(
   const model = await readBusinessDayClockModel(tx, cfg, at);
   assertRevision(model, revision);
   if (model.pending === null) return { changed: false, model: await readVenueDetails(tx, cfg, at) };
-  assertEditable(model);
+  assertEditable(model, at);
   const candidate = {
     ...model.clock,
     cutoverChanges: model.clock.cutoverChanges.filter(

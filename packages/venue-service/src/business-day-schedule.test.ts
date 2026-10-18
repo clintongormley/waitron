@@ -572,11 +572,16 @@ it("hours models carry the baseline timeline, revision and pending status across
   });
   const read = (time: string) =>
     withTransaction(suite.db, (tx) => readOpeningHoursModel(tx, v.cfg, new Date(time)));
-  expect(await read("2026-11-03T12:00:00Z")).toMatchObject({
+  const waiting = await read("2026-11-03T12:00:00Z");
+  expect(waiting).toMatchObject({
     businessDayClock: candidate("07:00"),
     clockRevision: 2,
     currentBusinessDay: "2026-11-03",
-    pending: { effectiveBusinessDay: E, editable: false },
+  });
+  expect(waiting.pending).toEqual({
+    effectiveBusinessDay: E,
+    dayCutover: "07:00",
+    startsAt: "2026-11-04T06:00:00.000Z",
   });
   expect(await read("2026-11-04T06:00:00Z")).toMatchObject({
     businessDayClock: candidate("07:00"),
