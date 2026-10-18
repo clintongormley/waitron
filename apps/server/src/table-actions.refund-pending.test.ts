@@ -14,7 +14,7 @@ import {
 import "./errors.js";
 import { createTable } from "./testing/live-table.js";
 
-// Joining and unjoining tables while a card refund of a bill is pending (campaign item A847):
+// Joining and unjoining tables while a card refund of a bill is pending (bill payments design §5.2):
 // neither is refused, and neither changes what the bill charges.
 let venue: BillVenue;
 
@@ -154,6 +154,12 @@ async function refundParty() {
   return { ...party, refund };
 }
 
+/** What a join of another party's table asks of the two bills. */
+const asking = [
+  ["asking to merge the bills", "merge"],
+  ["keeping the bills separate", "separate"],
+] as const;
+
 describe("a pending card refund and the table actions", () => {
   it("joins a free table: the bill charges the same and stays locked", async () => {
     const ana = await refundParty();
@@ -172,36 +178,72 @@ describe("a pending card refund and the table actions", () => {
     await expectLocked(ana.tabId);
   });
 
-  it("joins another party's table with bills merged: neither bill changes, and they stay apart", async () => {
-    const ana = await refundParty();
-    const luis = await seatedWith(venue, "Caña");
-    const before = await charges(ana.tabId);
-    const luisBefore = await charges(luis.tabId);
+  it.each(asking)(
+    "joins another party's table %s: neither bill changes, and they stay apart",
+    async (_asking, bills) => {
+      const ana = await refundParty();
+      const luis = await seatedWith(venue, "Caña");
+      const before = await charges(ana.tabId);
+      const luisBefore = await charges(luis.tabId);
 
-    const joined = await post(`/api/parties/${ana.partyId}/join`, {
-      tableId: luis.tableId,
-      bills: "merge",
+      const joined = await post(`/api/parties/${ana.partyId}/join`, {
+        tableId: luis.tableId,
+        bills,
+        expectedPartyRevision: revisionOf(ana.partyId),
+        otherPartyId: luis.partyId,
+        expectedOtherPartyRevision: revisionOf(luis.partyId),
+      });
+
+      expect(joined.status).toBe(200);
+      expect(joined.json).toEqual({ partyId: ana.partyId, mainBillId: ana.tabId, merged: false });
+      const after = await charges(ana.tabId);
+      expect(after).toEqual(before);
+      expectPendingFigures(after);
+      expect(partyOfBill(luis.tabId)).toBe(ana.partyId);
+      const luisAfter = await charges(luis.tabId);
+      expect(luisAfter).toEqual(luisBefore);
+      expect(luisAfter.bill).toMatchObject({ status: "open", total: "3.00", outstanding: "3.00" });
+      await expectLocked(ana.tabId);
+    },
+  );
+
+  it.each(asking)(
+    "has its table joined by another party %s: the bill moves across whole and stays locked",
+    async (_asking, bills) => {
+      const ana = await refundParty();
+      const luis = await seatedWith(venue, "Caña");
+      const before = await charges(ana.tabId);
+
+      const joined = await post(`/api/parties/${luis.partyId}/join`, {
+        tableId: ana.tableId,
+        bills,
+        expectedPartyRevision: revisionOf(luis.partyId),
+        otherPartyId: ana.partyId,
+        expectedOtherPartyRevision: revisionOf(ana.partyId),
+      });
+
+      expect(joined.status).toBe(200);
+      expect(joined.json).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: false });
+      expect(partyOfBill(ana.tabId)).toBe(luis.partyId);
+      const after = await charges(ana.tabId);
+      expect(after).toEqual(before);
+      expectPendingFigures(after);
+      await expectLocked(ana.tabId);
+    },
+  );
+
+  it("has its table joined while another bill holds the refund: the main bills merge, the refund's bill does not change", async () => {
+    const ana = await seatedWith(venue, "Caña", "Pulpo", "Croquetas", "Croquetas");
+    const splitBill = await post(`/api/bills/${ana.tabId}/split`, {
+      transfers: [{ lineNo: 2 }, { lineNo: 3 }, { lineNo: 4 }],
       expectedPartyRevision: revisionOf(ana.partyId),
-      otherPartyId: luis.partyId,
-      expectedOtherPartyRevision: revisionOf(luis.partyId),
     });
-
-    expect(joined.status).toBe(200);
-    expect(joined.json).toEqual({ partyId: ana.partyId, mainBillId: ana.tabId, merged: false });
-    const after = await charges(ana.tabId);
-    expect(after).toEqual(before);
-    expectPendingFigures(after);
-    expect(partyOfBill(luis.tabId)).toBe(ana.partyId);
-    const luisAfter = await charges(luis.tabId);
-    expect(luisAfter).toEqual(luisBefore);
-    expect(luisAfter.bill).toMatchObject({ status: "open", total: "3.00", outstanding: "3.00" });
-    await expectLocked(ana.tabId);
-  });
-
-  it("has its table joined by another party: the bill moves across whole and stays locked", async () => {
-    const ana = await refundParty();
+    expect(splitBill.status).toBe(200);
+    const billId = splitBill.json.billId as string;
+    await pendingRefundOn(billId);
     const luis = await seatedWith(venue, "Caña");
-    const before = await charges(ana.tabId);
+    const before = await charges(billId);
+    expectPendingFigures(before);
 
     const joined = await post(`/api/parties/${luis.partyId}/join`, {
       tableId: ana.tableId,
@@ -212,12 +254,15 @@ describe("a pending card refund and the table actions", () => {
     });
 
     expect(joined.status).toBe(200);
-    expect(joined.json).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: false });
-    expect(partyOfBill(ana.tabId)).toBe(luis.partyId);
-    const after = await charges(ana.tabId);
-    expect(after).toEqual(before);
-    expectPendingFigures(after);
-    await expectLocked(ana.tabId);
+    expect(joined.json).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: true });
+    expect((await charges(luis.tabId)).bill).toMatchObject({
+      status: "open",
+      total: "6.00",
+      outstanding: "6.00",
+    });
+    expect(partyOfBill(billId)).toBe(luis.partyId);
+    expect(await charges(billId)).toEqual(before);
+    await expectLocked(billId);
   });
 
   it("unjoins a table taking no bill: the bill charges the same and stays locked", async () => {
