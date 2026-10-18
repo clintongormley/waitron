@@ -55,6 +55,7 @@ export class ContentLanguagesScreen extends LitElement {
         display: block;
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
+        white-space: normal;
       }
       .note {
         font-size: var(--wt-font-size-sm);
@@ -245,6 +246,7 @@ export class ContentLanguagesScreen extends LitElement {
       <wt-card>
         <wt-data-table
           data-test="languages"
+          wrap-to-fit
           aria-label=${t("content_languages.enabled")}
           .rows=${[config.defaultLanguage, ...others.map(({ code }) => code)]}
           .columns=${this.#languageColumns(config, rules)}

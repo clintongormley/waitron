@@ -1160,8 +1160,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   refreshes retained cells in requests of at most one hundred, retains hidden edits and focused
   fields, and rejects closed, superseded or configuration-mismatched answers. Show staged pages
   distinct items, and refreshed field placeholders share the model's current facts. The legacy
-  dialog does not yet consume this coordinator; its replacement, final client contracts and Save
-  integration remain open. No intermediate feature is ready to publish. Boot's configured-origin
+  dialog does not yet consume this coordinator. The client now accepts projected multilingual
+  queries and one whole cell batch on the language-free routes; its legacy call signatures and
+  public DTOs remain to be retired with the dialog replacement and Save integration. Regional
+  completeness notes wrap in full, with the row actions reachable at phone and desktop widths.
+  No intermediate feature is ready to publish. Boot's configured-origin
   forwarding and obsolete callback cleanup wait for lane E. Automatic-translation review, future
   presentation and the remaining validation are unfinished.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)

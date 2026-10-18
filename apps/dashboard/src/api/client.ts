@@ -217,6 +217,10 @@ import type {
   TranslationBatch,
   TranslationCellRef,
   TranslationCellPage,
+  TranslationCell,
+  TranslationCellEdit,
+  TranslationItemPage,
+  TranslationQuery as TranslationItemQuery,
   TranslationPage,
   TranslationRef,
   TranslationTarget,
@@ -2444,13 +2448,31 @@ export class DashboardApi {
     return this.#request(`/management-api/content-translations/cells?${params}`, "GET");
   }
 
+  getContentTranslationTargets(query: TranslationItemQuery): Promise<TranslationItemPage>;
+  getContentTranslationTargets(language: string, query: TranslationQuery): Promise<TranslationPage>;
   getContentTranslationTargets(
-    language: string,
-    query: TranslationQuery,
-  ): Promise<TranslationPage> {
+    language: string | TranslationItemQuery,
+    query?: TranslationQuery,
+  ): Promise<TranslationPage | TranslationItemPage> {
+    if (typeof language !== "string") {
+      const params = new URLSearchParams();
+      for (const code of language.languages) params.append("language", code);
+      if ("targets" in language) {
+        for (const ref of language.targets) params.append("target", `${ref.kind}:${ref.id}`);
+      } else {
+        params.append("missing", language.missing.mode);
+        if (language.missing.mode === "language")
+          params.append("missingLanguage", language.missing.language);
+        if (language.kind !== undefined) params.append("kind", language.kind);
+        if (language.search !== undefined) params.append("search", language.search);
+        if (language.after !== undefined) params.append("after", language.after);
+        if (language.waitingFixes) params.append("waitingFixes", "1");
+      }
+      return this.#request(`/management-api/content-translations?${params}`, "GET");
+    }
     const params = new URLSearchParams();
-    if (query.after !== undefined) params.append("after", query.after);
-    for (const ref of query.targets ?? []) params.append("target", `${ref.kind}:${ref.id}`);
+    if (query?.after !== undefined) params.append("after", query.after);
+    for (const ref of query?.targets ?? []) params.append("target", `${ref.kind}:${ref.id}`);
     const suffix = params.size ? `?${params}` : "";
     return this.#request(
       `/management-api/content-translations/${encodeURIComponent(language)}${suffix}`,
@@ -2475,10 +2497,19 @@ export class DashboardApi {
     return this.#request(`/management-api/content-suggestions/${encodeURIComponent(id)}`, "DELETE");
   }
 
+  saveContentTranslations(batch: {
+    edits: TranslationCellEdit[];
+  }): Promise<{ saved: TranslationCell[] }>;
   saveContentTranslations(
     language: string,
     batch: TranslationBatch,
-  ): Promise<{ saved: TranslationTarget[] }> {
+  ): Promise<{ saved: TranslationTarget[] }>;
+  saveContentTranslations(
+    language: string | { edits: TranslationCellEdit[] },
+    batch?: TranslationBatch,
+  ): Promise<{ saved: TranslationTarget[] } | { saved: TranslationCell[] }> {
+    if (typeof language !== "string")
+      return this.#request("/management-api/content-translations", "PUT", language);
     return this.#request(
       `/management-api/content-translations/${encodeURIComponent(language)}`,
       "PUT",
