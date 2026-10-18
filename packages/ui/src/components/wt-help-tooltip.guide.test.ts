@@ -152,3 +152,47 @@ describe.each(["always", "help-mode"] as const)("a %s badge", (mode) => {
     await expect.element(button).toHaveAccessibleDescription(TEXT);
   });
 });
+
+describe.each([
+  ["a link is added", "", WITH_GUIDE, true],
+  ["the link is cleared", WITH_GUIDE, "", false],
+] as const)("while the box is open and %s", (_name, before, _after, linked) => {
+  async function openThenSwitch() {
+    const badge = await mountBadge("always", before);
+    const found = await open(badge);
+    badge.guideHref = linked ? HREF : "";
+    badge.guideLabel = linked ? LABEL : "";
+    await badge.updateComplete;
+    return { badge, ...found };
+  }
+
+  test("the box stays the same element and stays open", async () => {
+    const { badge, popup, button } = await openThenSwitch();
+    expect(parts(badge).popup).toBe(popup);
+    expect(popup.isConnected).toBe(true);
+    expect(popup.matches(":popover-open")).toBe(true);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(parts(badge).link === null).toBe(!linked);
+    await expect.element(button).toHaveAccessibleDescription(TEXT);
+  });
+
+  test("Escape still closes it and puts focus back on the badge", async () => {
+    const { badge, popup, button } = await openThenSwitch();
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
+    await badge.updateComplete;
+    expect(badge.shadowRoot!.activeElement).toBe(button);
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("a click outside still closes it", async () => {
+    const { badge, popup, button } = await openThenSwitch();
+    const outside = document.createElement("button");
+    outside.textContent = "Elsewhere";
+    host.prepend(outside);
+    await userEvent.click(outside);
+    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
+    await badge.updateComplete;
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+  });
+});

@@ -190,7 +190,8 @@ export class WtHelpTooltip extends LitElement {
 
   override render() {
     // A link inside a role="tooltip" box would be read as part of the description, so with a link
-    // only the text is the tooltip.
+    // only the text is the tooltip. The box stays one element in both shapes: a removed popover
+    // closes without a toggle event, which would leave `open` and the document listeners behind.
     const guide = this.guideHref !== "" && this.guideLabel !== "";
     const describedBy = guide ? this.textId : this.tooltipId;
     return html`
@@ -204,23 +205,26 @@ export class WtHelpTooltip extends LitElement {
       >
         <span class="icon" aria-hidden="true">?</span>
       </button>
-      ${
-        guide
-          ? html`<div id=${this.tooltipId} popover @toggle=${this.onToggle}>
-              <div id=${this.textId} role="tooltip"><slot></slot></div>
-              <a
-                part="guide"
-                href=${this.guideHref}
-                target="_blank"
-                rel="noopener"
-                @click=${this.onGuideClick}
-                >${this.guideLabel}</a
-              >
-            </div>`
-          : html`<div id=${this.tooltipId} popover role="tooltip" @toggle=${this.onToggle}>
-              <slot></slot>
-            </div>`
-      }
+      <div
+        id=${this.tooltipId}
+        popover
+        role=${guide ? nothing : "tooltip"}
+        @toggle=${this.onToggle}
+      >
+        ${
+          guide
+            ? html`<div id=${this.textId} role="tooltip"><slot></slot></div>
+                <a
+                  part="guide"
+                  href=${this.guideHref}
+                  target="_blank"
+                  rel="noopener"
+                  @click=${this.onGuideClick}
+                  >${this.guideLabel}</a
+                >`
+            : html`<slot></slot>`
+        }
+      </div>
     `;
   }
 }
