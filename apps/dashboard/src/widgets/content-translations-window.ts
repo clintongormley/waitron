@@ -150,6 +150,18 @@ export class ContentTranslationWindow extends LitElement {
       held.node.setSelectionRange(held.start, held.end, held.direction ?? undefined);
     }
   }
+  async focusCell(cell: TranslationCellRef): Promise<boolean> {
+    await this.updateComplete;
+    const name = `translation-${cell.kind}-${cell.id}-${cell.language}-${cell.field}`;
+    const control = [...this.shadowRoot!.querySelectorAll("wt-input")].find(
+      (input) => input.name === name,
+    );
+    if (!control) return false;
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector("input")!;
+    native.focus();
+    return control.shadowRoot!.activeElement === native;
+  }
   #focus(row: TranslationItem, cell: TranslationCell): void {
     this.#focusedRow = row;
     if (!this.focused || translationCellKey(this.focused) !== translationCellKey(cell)) {

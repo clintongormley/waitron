@@ -64,6 +64,20 @@ export class TranslationDrafts {
     const current = this.#current.get(translationCellKey(cell));
     return current && structuredClone(current);
   }
+  baseline(cell: TranslationCellRef): TranslationCell | undefined {
+    const draft = this.#drafts.get(translationCellKey(cell));
+    return draft && structuredClone(draft.base);
+  }
+  canKeep(cell: TranslationCellRef): boolean {
+    const draft = this.#drafts.get(translationCellKey(cell)),
+      latest = this.#current.get(translationCellKey(cell));
+    return (
+      !!draft &&
+      !!latest?.eligible &&
+      this.#config.languages.includes(cell.language) &&
+      sameValue(draft.base.owners, latest.owners)
+    );
+  }
   value(cell: TranslationCellRef): string {
     const key = translationCellKey(cell);
     return (
@@ -258,14 +272,7 @@ export class TranslationDrafts {
         this.unstage(cell);
         continue;
       }
-      if (
-        choice !== "keep" ||
-        !draft ||
-        !cell.eligible ||
-        !this.#config.languages.includes(cell.language) ||
-        !sameValue(draft.base.owners, cell.owners)
-      )
-        continue;
+      if (choice !== "keep" || !draft || !this.canKeep(cell)) continue;
       draft.base = structuredClone(cell);
       draft.config = structuredClone(this.#config);
       const input = this.#inputs.get(key);

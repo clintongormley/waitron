@@ -29,7 +29,7 @@ import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { sameValue } from "./product-editor-model.js";
-import { TranslationDrafts } from "./content-translations-model.js";
+import { TranslationDrafts, type ReviewChoice } from "./content-translations-model.js";
 import { TranslationPages, type TranslationSelection } from "./content-translations-pages.js";
 import {
   ContentTranslationWindow,
@@ -65,6 +65,21 @@ export class ContentTranslationsDialog extends LitElement {
       .filters > * {
         flex: 1;
         min-inline-size: min(100%, 16ch);
+      }
+      .review {
+        overflow-wrap: anywhere;
+        margin-block: var(--wt-space-3);
+        padding-block: var(--wt-space-3);
+        border-block-end: var(--wt-field-line-width) solid var(--wt-color-border);
+      }
+      .review dd {
+        margin-inline: 0;
+        margin-block-end: var(--wt-space-3);
+      }
+      .review-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
       }
       .help {
         color: var(--wt-color-text-muted);
@@ -361,7 +376,11 @@ export class ContentTranslationsDialog extends LitElement {
     )
       return;
     this.attempted = true;
-    if (!this.uncertain && reader.drafts.validate().length) return;
+    const invalid = !this.uncertain && reader.drafts.validate()[0];
+    if (invalid) {
+      await this.#reveal(invalid.cell);
+      return;
+    }
     const submitted = this.uncertain ?? reader.drafts.submission();
     if (!submitted.edits.length) return;
     const generation = this.#generation;
@@ -402,11 +421,82 @@ export class ContentTranslationsDialog extends LitElement {
           edit.language === params.language &&
           edit.field === params.field,
       );
-      if (cell) this.refused = [{ cell, message }];
-      else this.actionError = message;
+      if (cell) {
+        this.refused = [{ cell, message }];
+        this.busy = false;
+        await this.#reveal(cell);
+      } else this.actionError = message;
     } finally {
       if (generation === this.#generation) this.busy = false;
     }
+  }
+  async #reveal(cell: TranslationCellRef): Promise<void> {
+    const generation = this.#generation,
+      reader = this.reader;
+    if (!reader) return;
+    this.staged = true;
+    this.anchor = cell.language;
+    await this.#read(() => reader.reveal(cell));
+    if (generation !== this.#generation || !this.open || !this.isConnected) return;
+    await this.updateComplete;
+    if (await this.#window()?.focusCell(cell)) return;
+    const panel = [...this.shadowRoot!.querySelectorAll<HTMLElement>("[data-review]")].find(
+      (element) => element.dataset.review === translationCellKey(cell),
+    );
+    panel?.focus();
+  }
+  #reviewCell(cell: TranslationCellRef, choice: ReviewChoice): void {
+    if (this.busy || this.reading || this.uncertain || !this.reader) return;
+    const current = this.reader.drafts.current(cell);
+    if (!current || (choice === "keep" && !this.reader.drafts.canKeep(cell))) return;
+    this.reader.drafts.review([current], new Map([[translationCellKey(cell), choice]]));
+    this.refused = this.refused.filter(
+      (fault) => translationCellKey(fault.cell) !== translationCellKey(cell),
+    );
+    this.#notifyDraft();
+    this.requestUpdate();
+  }
+  #reviews() {
+    const draft = this.reader?.drafts;
+    if (!draft) return nothing;
+    return draft
+      .staged()
+      .filter((cell) => draft.changed(cell))
+      .map((cell) => {
+        const old = draft.baseline(cell)!,
+          current = draft.current(cell);
+        const name = `${old.staffText ?? cell.id} · ${this.#name(cell.language)} · ${t(cell.field === "name" ? "units.name" : "units.abbreviation")}`;
+        return html`<section
+          class="review"
+          data-review=${translationCellKey(cell)}
+          role="group"
+          aria-label=${name}
+          tabindex="-1"
+        >
+          <p>${name}</p>
+          <p>${t("translations.changed")}</p>
+          <dl>
+            <dt>${t("translations.old")}</dt>
+            <dd lang=${cell.language}>${old.effectiveText ?? ""}</dd>
+            <dt>${t("translations.current")}</dt>
+            <dd lang=${cell.language}>${current?.effectiveText ?? ""}</dd>
+            <dt>${t("translations.draft")}</dt>
+            <dd lang=${cell.language}>${draft.value(cell)}</dd>
+          </dl>
+          <div class="review-actions">
+            ${(["keep", "replace", "discard"] as const).map(
+              (choice) =>
+                html`<wt-button
+                  data-choice=${choice}
+                  variant=${choice === "keep" && draft.canKeep(cell) ? "primary" : "secondary"}
+                  ?disabled=${this.busy || this.reading || this.uncertain !== null || (choice === "keep" && !draft.canKeep(cell))}
+                  @click=${() => this.#reviewCell(cell, choice)}
+                  >${t(`translations.${choice}`)}</wt-button
+                >`,
+            )}
+          </div>
+        </section>`;
+      });
   }
   async #startRun(): Promise<void> {
     if (this.suggestionBusy || this.service !== "on" || runActive(this.suggestionRun)) return;
@@ -631,6 +721,7 @@ export class ContentTranslationsDialog extends LitElement {
                   reader.focus(event.detail.cell);
                 }}
               ></dashboard-content-translation-window>
+              ${this.#reviews()}
               ${reader.page?.rows.length === 0 ? html`<p data-test="complete">${fill("content_gaps.complete", { language: languageDisplayName(this.language, currentLocale(), false) })}</p>` : nothing}
               <div class="pages">
                 <wt-button

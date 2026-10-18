@@ -1161,7 +1161,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   distinct items, and refreshed field placeholders share the model's current facts. Filters,
   explicit page navigation, optional unit fields, deliberate field unstaging and uncertain-batch
   retry are wired through the editor. Its migrated leave and Translate all checks retain their
-  existing behavior. The client accepts projected multilingual
+  existing behavior. Changed retained fields now have separate original/current/draft review,
+  with Keep restricted to an enabled language and an eligible target under the same owner.
+  Replace and Discard remove only the chosen field. Local validation and exact field refusals
+  reveal the staged page and language, then focus that native field. Explicit conflict review of
+  an uncertain batch, suggestion notes/Discard/Use fix and the remaining legacy-suite migration
+  are still open. The client accepts projected multilingual
   queries and one whole cell batch on the language-free routes; its legacy call signatures and
   public DTOs remain to be retired with the remaining editor tests and consumers. Regional
   completeness notes wrap in full, with the row actions reachable at phone and desktop widths.

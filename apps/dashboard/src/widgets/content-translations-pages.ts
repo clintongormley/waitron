@@ -207,6 +207,14 @@ export class TranslationPages {
     this.#cursors = [undefined];
     await this.#readItems(0);
   }
+  async reveal(cell: TranslationCellRef): Promise<void> {
+    if (!this.#active) return;
+    const index = this.#stagedItems().findIndex((ref) => itemKey(ref) === itemKey(cell));
+    if (index < 0) return;
+    this.#selection = { ...this.#selection, staged: true, anchor: cell.language, focused: null };
+    this.#cursors = [undefined];
+    await this.#readItems(Math.floor(index / 50));
+  }
   async next(): Promise<void> {
     if (!this.#active || !this.#ready || !this.page) return;
     if (this.#selection.staged) {
