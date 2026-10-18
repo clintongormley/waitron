@@ -2331,6 +2331,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   and themes at phone and desktop widths. Payment-retry checks now open Review before their
   native phone clicks, retaining the original requests, amounts and assertions. A739's payment
   redesign remains separate.
+  The remaining drawer now keeps another bill's held dishes read-only. You switch to that bill
+  before using its old controls; Move retains the edit version read when its picker opened.
+  The primary progress and clock checks now use Sent, including ready age, the pass's recorded
+  en-route fact in the dish window and stopping the age clocks when Sent folds.
   A physical till trial, the old drawer's retirement and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and

@@ -4806,7 +4806,7 @@ export class TillTableOrderScreen extends LitElement {
                   })
                 : nothing
             }`
-          : !this.#billOpen(row.workingOrderId)
+          : row.workingOrderId !== this.orderId || !this.#billOpen(row.workingOrderId)
             ? nothing
             : this.#heldRowActions(
                 {

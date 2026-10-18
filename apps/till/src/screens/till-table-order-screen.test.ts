@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtCombobox, WtRowActions } from "@waitron/ui";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
-import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
+import { openSentDish, sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { formatMoney, grossOf } from "@waitron/shared";
 import {
@@ -28,6 +28,7 @@ import {
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
+  CurrentOrderRow,
   FloorZone,
   OfferedModifier,
   OrderGroup,
@@ -1594,8 +1595,6 @@ describe("till-table-order-screen", () => {
       return menu;
     }
 
-    const groupRow = (el: TillTableOrderScreen, id: string) =>
-      el.shadowRoot!.querySelector<HTMLElement>(`[data-group="${id}"]`)!;
     const text = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
     const control = (el: TillTableOrderScreen, selector: string) =>
       el.shadowRoot!.querySelector<HTMLElement & { disabled?: boolean }>(selector);
@@ -2094,62 +2093,121 @@ describe("till-table-order-screen", () => {
         },
       ]);
     });
-    describe("the kitchen's progress on a fired group", () => {
+    describe("the kitchen's progress in Sent", () => {
       const firedAt = "2026-09-27T10:00:00.000Z";
       const minutesLater = (n: number) => Date.parse(firedAt) + n * 60_000;
-      const state = (el: TillTableOrderScreen, id: string) =>
-        text(groupRow(el, id).querySelector("[data-group-kitchen]")!);
-      const withG1 = (over: Partial<OrderGroup>) =>
-        groups.map((row) => (row.id === "g1" ? { ...row, firedAt, ...over } : row));
+      const state = (panel: TillSentOrders, lineId: string) =>
+        text(
+          panel.shadowRoot!.querySelector(
+            `[data-${lineId === "l-croq" ? "held" : "fired"}-line="${lineId}"] .status`,
+          )!,
+        );
 
-      it("reads how long ago a fired group went, from when it was fired", async () => {
-        const { el } = await mountGroups({ groups: withG1({}), now: minutesLater(20) });
-        expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "20"));
-        expect(state(el, "g3")).toBe(t("table.group_held"));
+      async function mountProgress(
+        over: Partial<CurrentOrderRow> = {},
+        screen: Partial<TillTableOrderScreen> = {},
+      ) {
+        return mountSentGroups({
+          currentOrders: current({
+            reminder: null,
+            ungrouped: [],
+            groups: [
+              currentGroup("g1", 1, "fired", [
+                currentRow("l-beer", "Beer", "1.000", {
+                  firedAt,
+                  netAmount: "10.00",
+                  kitchen: {
+                    stationId: null,
+                    movable: false,
+                    state: "queued",
+                    firedAt,
+                    awayAt: null,
+                  },
+                  ...over,
+                }),
+              ]),
+              currentGroup("g3", 3, "held", [
+                currentRow("l-croq", "Croquetas", "1.000", { released: false, netAmount: "10.00" }),
+              ]),
+            ],
+          }),
+          ...screen,
+        });
+      }
+
+      it("reads how long ago a fired dish went, from when it was fired", async () => {
+        const { panel } = await mountProgress({}, { now: minutesLater(20) });
+        expect(state(panel, "l-beer")).toBe(t("table.group_fired_ago").replace("{n}", "20"));
+        expect(state(panel, "l-croq")).toBe(t("table.group_held"));
       });
 
       it("never reads Ready while nobody marked it ready, however long ago it was fired (a station on paper)", async () => {
-        const { el } = await mountGroups({ groups: withG1({}), now: minutesLater(180) });
-        expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "180"));
-        expect(text(groupRow(el, "g1"))).not.toContain(t("table.group_ready"));
+        const { panel } = await mountProgress({}, { now: minutesLater(180) });
+        expect(state(panel, "l-beer")).toBe(t("table.group_fired_ago").replace("{n}", "180"));
+        expect(text(panel.shadowRoot!.querySelector('[data-fired-line="l-beer"]')!)).not.toContain(
+          t("table.group_ready"),
+        );
       });
 
-      it("reads Ready once the kitchen marked it ready", async () => {
-        const { el } = await mountGroups({
-          groups: withG1({ ready: true }),
-          now: minutesLater(20),
+      it("reads how long ago the kitchen marked the dish ready", async () => {
+        const { panel } = await mountProgress(
+          { readyAt: "2026-09-27T10:14:00.000Z" },
+          { now: minutesLater(20) },
+        );
+        expect(state(panel, "l-beer")).toBe(t("table.row_ready_ago").replace("{n}", "6"));
+      });
+
+      it("retains the pass's en-route fact in the dish window while Sent keeps its ready age", async () => {
+        const { el, panel } = await mountProgress(
+          {
+            readyAt: "2026-09-27T10:14:00.000Z",
+            kitchen: {
+              stationId: null,
+              movable: false,
+              state: "ready",
+              firedAt,
+              awayAt: "2026-09-27T10:16:00.000Z",
+            },
+          },
+          { now: minutesLater(20) },
+        );
+        expect(state(panel, "l-beer")).toBe(t("table.row_ready_ago").replace("{n}", "6"));
+        await openSentDish(el, "l-beer");
+        expect(text(el.shadowRoot!.querySelector("[data-sent-line-status]")!)).toBe(
+          t("table.group_away"),
+        );
+      });
+
+      it("a fired dish with no fired time reads Fired", async () => {
+        const { panel } = await mountProgress({ firedAt: null });
+        expect(state(panel, "l-beer")).toBe(t("table.group_fired"));
+      });
+
+      it("never counts a dish fired after the clock's reading as fired in the future", async () => {
+        const { panel } = await mountProgress({}, { now: minutesLater(-2) });
+        expect(state(panel, "l-beer")).toBe(t("table.group_fired_ago").replace("{n}", "0"));
+      });
+
+      it("runs its clocks only while a fired dish's age is on screen", async () => {
+        vi.useFakeTimers({
+          toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"],
         });
-        expect(state(el, "g1")).toBe(t("table.group_ready"));
-      });
-
-      it("reads en route once the pass sent it away, and no longer Ready", async () => {
-        const { el } = await mountGroups({
-          groups: withG1({ ready: true, away: true }),
-          now: minutesLater(20),
-        });
-        expect(state(el, "g1")).toBe(t("table.group_away"));
-      });
-
-      it("a fired group with no fired time reads Fired", async () => {
-        const { el } = await mountGroups({ groups: withG1({ firedAt: null }) });
-        expect(state(el, "g1")).toBe(t("table.group_fired"));
-      });
-
-      it("never counts a group fired after the clock's reading as fired in the future", async () => {
-        const { el } = await mountGroups({ groups: withG1({}), now: minutesLater(-2) });
-        expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "0"));
-      });
-
-      it("runs a clock only while a fired group's age is on screen", async () => {
-        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
         try {
-          const { el } = await mount({ lines: tabLines, groups: withG1({}), orderId: "wo-4" });
+          const { panel } = await mountProgress();
+          const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
+          await userEvent.click(toggle);
+          await panel.updateComplete;
+          await vi.advanceTimersByTimeAsync(300);
           expect(vi.getTimerCount()).toBe(0);
-          await openDrawer(el);
-          const ages = el.shadowRoot!.querySelectorAll("till-fired-ago").length;
+          await userEvent.click(toggle);
+          await panel.updateComplete;
+          await vi.advanceTimersByTimeAsync(300);
+          const ages = panel.shadowRoot!.querySelectorAll("till-fired-ago").length;
           expect(ages).toBeGreaterThan(0);
-          expect(vi.getTimerCount()).toBe(ages);
-          await openDrawer(el);
+          expect(vi.getTimerCount()).toBe(ages + 1);
+          await userEvent.click(toggle);
+          await panel.updateComplete;
+          await vi.advanceTimersByTimeAsync(300);
           expect(vi.getTimerCount()).toBe(0);
         } finally {
           vi.useRealTimers();
@@ -2157,14 +2215,17 @@ describe("till-table-order-screen", () => {
       });
 
       it("the age on screen moves on with the clock", async () => {
-        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+        vi.useFakeTimers({
+          toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"],
+        });
         try {
           vi.setSystemTime(minutesLater(20));
-          const { el } = await mountGroups({ groups: withG1({}) });
-          expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "20"));
-          vi.advanceTimersByTime(60_000);
-          await groupRow(el, "g1").querySelector("till-fired-ago")!.updateComplete;
-          expect(state(el, "g1")).toBe(t("table.group_fired_ago").replace("{n}", "21"));
+          const { panel } = await mountProgress();
+          expect(state(panel, "l-beer")).toBe(t("table.group_fired_ago").replace("{n}", "20"));
+          await vi.advanceTimersByTimeAsync(60_000);
+          await panel.updateComplete;
+          await panel.shadowRoot!.querySelector("till-fired-ago")!.updateComplete;
+          expect(state(panel, "l-beer")).toBe(t("table.group_fired_ago").replace("{n}", "21"));
         } finally {
           vi.useRealTimers();
         }

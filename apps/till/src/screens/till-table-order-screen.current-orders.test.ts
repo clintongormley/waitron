@@ -468,7 +468,7 @@ describe("Current orders and Sent service", () => {
     expect(q(el, "[data-sent-line-dialog]")!.hasAttribute("open")).toBe(true);
   });
 
-  it("moves a held row on any open bill of the party, and splits one sold by the unit with no extras", async () => {
+  it("keeps another bill's held dish read-only rather than moving or splitting its charge", async () => {
     const steaks = row("l-steak", "Steak", "2.000", {
       workingOrderId: "wo-check",
       released: false,
@@ -480,23 +480,19 @@ describe("Current orders and Sent service", () => {
     });
     const moves = capture(el, "move-group-line");
     const splits = capture(el, "split-group-line");
-    expect(all(el, "[data-split-group-line]").map((b) => b.dataset.splitGroupLine)).toEqual([
-      "l-steak",
-    ]);
-    q(el, '[data-split-group-line="l-steak"]')!.click();
-    expect(splits.map((event) => event.detail)).toEqual([
-      { lineId: "l-steak", groupId: "g3", quantity: "2.000" },
-    ]);
-    q(el, '[data-move-line="l-steak"]')!.click();
-    await el.updateComplete;
-    expect(text(q(el, "[data-move-dialog] .move-dish")!)).toBe("Steak ×2");
-    q(el, '[data-move-target="g4"]')!.click();
-    expect(moves.map((event) => event.detail)).toEqual([
-      { lineId: "l-steak", quantity: "2.000", target: { groupId: "g4" }, expectedEdits: null },
-    ]);
+    expect(text(rowOf(el, "l-steak"))).toBe("Steak ×2");
+    expect(all(el, "[data-split-group-line]").map((b) => b.dataset.splitGroupLine)).toEqual([]);
+    expect(q(el, '[data-move-line="l-steak"]')).toBeNull();
+    expect(q(el, "[data-move-dialog]")!.hasAttribute("open")).toBe(false);
+    expect(moves).toEqual([]);
+    expect(splits).toEqual([]);
+    const panel = await unfoldSent(el);
+    const companion = panel.shadowRoot!.querySelector('[data-companion="l-steak"]')!;
+    expect(text(companion.querySelector(".what")!)).toBe("Steak ×2");
+    expect(companion.querySelector("button, wt-button, wt-row-actions, input")).toBeNull();
   });
 
-  it("offers Move and Split only on a held row whose bill is open, as the server moves nothing off a paid bill", async () => {
+  it("the transitional drawer offers held-line controls only for its own open bill", async () => {
     const held = { released: false, kitchen: null };
     const onCheck = row("l-check", "Steak", "2.000", { ...held, workingOrderId: "wo-check" });
     const onPaid = row("l-paid", "Steak", "2.000", { ...held, workingOrderId: "wo-paid" });
@@ -511,11 +507,8 @@ describe("Current orders and Sent service", () => {
     const offered = (selector: string, attribute: string) =>
       all(el, selector).map((button) => button.getAttribute(attribute));
     // The bill on screen is open even when the party's bills have not been read.
-    expect(offered("[data-move-line]", "data-move-line")).toEqual(["l-check", "l-shown"]);
-    expect(offered("[data-split-group-line]", "data-split-group-line")).toEqual([
-      "l-check",
-      "l-shown",
-    ]);
+    expect(offered("[data-move-line]", "data-move-line")).toEqual(["l-shown"]);
+    expect(offered("[data-split-group-line]", "data-split-group-line")).toEqual(["l-shown"]);
     expect(text(rowOf(el, "l-paid"))).toBe("Steak ×2");
   });
 
@@ -794,7 +787,7 @@ describe("the release reminder in Sent", () => {
 });
 
 describe("held-line move editing observation", () => {
-  it("retains the source bill observation from opening when another bill is on screen", async () => {
+  it("requires switching to the source bill and retains its observation from opening", async () => {
     const own = { billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null };
     const source = {
       billId: "wo-check",
@@ -819,7 +812,13 @@ describe("held-line move editing observation", () => {
       }),
     });
     const events = capture(el, "move-group-line");
-    q(el, '[data-move-line="other-line"]')!.click();
+    expect(q(el, '[data-move-line="other-line"]')).toBeNull();
+    el.orderId = "wo-check";
+    el.billEdit = source;
+    await el.updateComplete;
+    const ownMove = q(el, '[data-move-line="other-line"]');
+    expect(ownMove, "switching to its open bill keeps the dish editable").not.toBeNull();
+    await userEvent.click(ownMove!);
     await el.updateComplete;
     el.billEdits = [own, { ...source, editorVersion: 9, draftRevision: 5 }];
     await el.updateComplete;

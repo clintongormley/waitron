@@ -7787,7 +7787,7 @@ describe("till-app: Current orders", () => {
     });
   });
 
-  it("moves a held row on another open bill of the party from Current orders", async () => {
+  it("switches to a held dish's bill before moving it from Current orders", async () => {
     const heldOnCheck: CurrentOrders = {
       hasGroups: true,
       nextDisplayNumber: 2,
@@ -7852,12 +7852,21 @@ describe("till-app: Current orders", () => {
       }),
       moveLinesToGroup,
     });
-    const order = await openMesa(el);
-    const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
+    let order = await openMesa(el);
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
 
-    order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="line-9"]')!.click();
+    expect(order.shadowRoot!.querySelector('[data-move-line="line-9"]')).toBeNull();
+    await userEvent.click(
+      order.shadowRoot!.querySelector<HTMLElement>('[data-bill="wo-check"] [data-take-payment]')!,
+    );
+    await flush(el);
+    order = tableOrder(el)!;
+    expect(order.orderId).toBe("wo-check");
+    const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
+    const move = order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="line-9"]');
+    expect(move).not.toBeNull();
+    await userEvent.click(move!);
     await flush(el);
     order.shadowRoot!.querySelector<HTMLElement>('[data-move-target="new"]')!.click();
     await flush(el);
