@@ -1183,7 +1183,7 @@ describe("the joined table's reset route", () => {
 });
 
 describe("the till's zone list", () => {
-  it("says whether each zone has a saved plan, tables or none", async () => {
+  it("says a zone of a department with a set has a plan, with tables, a saved layout or neither", async () => {
     const { zoneId: withTables } = await plannedZone(v, [{ key: "a" }]);
     const { zoneId: emptyPlan } = await plannedZone(v, []);
     const unplanned = await tableServiceZone(v);
@@ -1195,7 +1195,7 @@ describe("the till's zone list", () => {
     expect([hasPlan(withTables), hasPlan(emptyPlan), hasPlan(unplanned)]).toEqual([
       true,
       true,
-      false,
+      true,
     ]);
   });
 
