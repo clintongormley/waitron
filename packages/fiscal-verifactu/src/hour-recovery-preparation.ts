@@ -4,7 +4,7 @@ import {
   type ModuleOperationInput,
   type OperationAuthority,
   type OperationBinding,
-  type RecoveryKeyOperator,
+  type OperationOperator,
 } from "@waitron/module";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -30,11 +30,18 @@ type Request = Parameters<Selector["select"]>[0];
 function refuse(reason: string): never {
   throw new AppError("sif.allocation_invalid", { reason });
 }
-export function recoveryHourOperator(
+function hourOperator(
   binding: OperationBinding,
   authority: OperationAuthority,
-): RecoveryKeyOperator {
+  promotion: boolean,
+): OperationOperator {
   const operator = readOperationAuthority(authority, binding)?.operatorId;
+  if (
+    binding.module !== "fiscal-verifactu" ||
+    !(promotion ? ["promote"] : ["restore", "re-register"]).includes(binding.action)
+  )
+    return refuse("event_mismatch");
+  if (promotion && typeof operator === "string") return operator;
   if (
     typeof operator !== "object" ||
     operator.kind !== "recovery-key" ||
@@ -42,11 +49,22 @@ export function recoveryHourOperator(
     operator.eventId !== binding.eventId
   )
     return refuse("reauthentication_required");
-  if (binding.module !== "fiscal-verifactu" || !["restore", "re-register"].includes(binding.action))
-    return refuse("event_mismatch");
   return operator;
 }
-function inputFor(selected: Selection, operatorId: RecoveryKeyOperator) {
+export function recoveryHourOperator(
+  binding: OperationBinding,
+  authority: OperationAuthority,
+): OperationOperator {
+  return hourOperator(binding, authority, false);
+}
+export function promotionHourOperator(
+  binding: OperationBinding,
+  authority: OperationAuthority,
+): OperationOperator {
+  return hourOperator(binding, authority, true);
+}
+
+function inputFor(selected: Selection, operatorId: OperationOperator) {
   return {
     allocation: {
       version: 1,
@@ -77,12 +95,19 @@ function inputFor(selected: Selection, operatorId: RecoveryKeyOperator) {
     },
   };
 }
-export function createHourRecoveryPreparation(options: {
+interface PreparationOptions {
   withState: HourSelectionStore;
   read(binding: ModuleOperationInput["binding"]): Promise<HourRecoveryFacts>;
   readContext?(binding: ModuleOperationInput["binding"]): Promise<RecoveryContext>;
   monotonicNow(): number;
-}) {
+}
+export function createHourRecoveryPreparation(options: PreparationOptions) {
+  return createPreparation(options, recoveryHourOperator);
+}
+export function createHourPromotionPreparation(options: PreparationOptions) {
+  return createPreparation(options, promotionHourOperator);
+}
+function createPreparation(options: PreparationOptions, operatorFor: typeof recoveryHourOperator) {
   const checked = <T extends RecoveryContext>(current: T): T => {
     if (current.oldMachineAbsent !== false) return refuse("old_machine_absence_unconfirmed");
     if (current.oldMachineOffline !== true) return refuse("old_machine_active");
@@ -94,16 +119,16 @@ export function createHourRecoveryPreparation(options: {
   const engine = createHourSelection({ ...options, read });
   const within = async <T>(
     request: Pick<Request, "binding" | "authority">,
-    run: (selector: Selector, facts: RecoveryContext, operator: RecoveryKeyOperator) => Promise<T>,
+    run: (selector: Selector, facts: RecoveryContext, operator: OperationOperator) => Promise<T>,
   ): Promise<T> => {
     const binding = Object.freeze({ ...request.binding });
     const authority = request.authority;
-    recoveryHourOperator(binding, authority);
+    operatorFor(binding, authority);
     return options.withState(binding, async (state) => {
       const context =
         options.readContext === undefined ? undefined : checked(await options.readContext(binding));
       const current = context?.priorActivation === "committed" ? context : await read(binding);
-      const operator = recoveryHourOperator(binding, authority);
+      const operator = operatorFor(binding, authority);
       const selector = createHourSelection({
         ...options,
         withState: async (_binding, body) => body(state),
@@ -116,18 +141,18 @@ export function createHourRecoveryPreparation(options: {
   return {
     async select(supplied: Request) {
       const request = { ...supplied, binding: { ...supplied.binding } };
-      recoveryHourOperator(request.binding, request.authority);
+      operatorFor(request.binding, request.authority);
       const selected = await engine.select(request);
-      const operator = recoveryHourOperator(request.binding, request.authority);
+      const operator = operatorFor(request.binding, request.authority);
       return selected.status === "selected"
         ? { ...selected, input: inputFor(selected, operator) }
         : selected;
     },
     async preview(supplied: Omit<Request, "answer">) {
       const request = { ...supplied, binding: { ...supplied.binding } };
-      recoveryHourOperator(request.binding, request.authority);
+      operatorFor(request.binding, request.authority);
       const result = await engine.preview(request);
-      recoveryHourOperator(request.binding, request.authority);
+      operatorFor(request.binding, request.authority);
       return result;
     },
     async prepare<T>(

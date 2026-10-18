@@ -334,7 +334,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   checks refuse the original box's same-hour code and accept the next hour without an advance
   reservation. The branch prints the selected code in first setup and accepts reported codes
   during recovery, retaining them with the operation and refusing the same or an earlier hour.
-  Dormant admission and full host promotion preparation, including reported-code entry, remain open.
+  Dormant configuration and authenticated promotion preparation now have module, real-node and
+  verified-HTTPS boot checks on the branch. The promotion API accepts the sheet's codes and
+  selects its hour at promotion. The existing trading reader refuses several standard or full
+  bases; the choice of a trading series remains an owner question. Complete entry journeys,
+  including admission and promotion screens, remain open.
   Owner acceptance is viewing real generated EN/ES PDFs through Drive; automated
   recovery-field entry checks remain the driver’s work. Preserve existing branch work.
   The selected module now supplies PDF/manual key fields. Local Chromium checks enter rendered

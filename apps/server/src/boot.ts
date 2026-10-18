@@ -1,4 +1,5 @@
 import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
+import { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import type { WaitronModule } from "@waitron/module";
 import { createHash } from "node:crypto";
 import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
@@ -1508,7 +1509,10 @@ async function bootServer(
           (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire") ||
           // Exempt on a fenced node too, so it answers the precise `promotion.node_fenced` rather
           // than a generic gate 403.
-          (c.req.method === "POST" && c.req.path === "/management-api/promote"),
+          (c.req.method === "POST" &&
+            ["/management-api/promote", "/management-api/promote/preparation"].includes(
+              c.req.path,
+            )),
       ),
     );
   }
@@ -2409,6 +2413,16 @@ async function bootServer(
       credentialKeyRing: totpKeyRing,
       modules: setsToMigrate,
       run: promoteRun,
+      nodePreparation: createNodeOperationPreparation({
+        db,
+        node: { nodeId: till.nodeId, locationId: till.locationId },
+        modules: enabledModules(ALL_MODULES, moduleConfig),
+        credentialKeyRing: totpKeyRing,
+        stateDir: config.stateDir,
+        venueDir: config.venueDir,
+        coordinator: firstSetupHost.coordinator,
+        environment: env,
+      }),
     },
     log,
   );

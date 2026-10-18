@@ -83,6 +83,7 @@ export interface ModuleOperationPreparation {
     db: Database,
     node: ProvisionedNode,
     binding: OperationBinding,
+    preparationHistory?: readonly unknown[],
   ): Promise<
     Pick<
       ModuleRecoveryFacts,

@@ -1531,3 +1531,27 @@ Changed matcher locations (relative to this checkpoint; the JSON also retains ol
 - `packages/provisioning/src/first-setup-command-document.test.ts:108`: only the authorised public field is added to the input, expected statement or canonical binding.
 
 AST qualification retains every former matcher after removing only the authorised `installationCodes` property or its canonical JSON spelling. This checks syntax, not behavioral equivalence.
+
+## Dormant configuration and authenticated promotion (2026-10-18)
+
+No existing test file changes relative to `cc5903a340106dde98dcfa2b39d59120a5e256d6`.
+The byte comparison covers all 3,003 test files in that commit. Preserve every earlier inventory
+above when preparing the eventual pull request.
+
+The new `hour-dormant-standby.test.ts` checks complete configuration, unchanged fiscal rows,
+retained state, invalid inputs, replay, authority lifetime and already-active refusal.
+The new server `hour-promotion.test.ts` checks the real reserved-node writer, manager and matching-key
+authentication, fresh comparisons, reported installation codes, restart, exact input binding,
+re-registration and a real mirror boot over certificate-verified HTTPS. Source clocks and internet
+responses are synthetic. These checks do not qualify the complete adoption or browser journey.
+
+The earlier restore-preparation refusal for promotion remains unchanged. Promotion uses a separate
+preparation factory. The existing single-standard/full trading reader also remains unchanged;
+its multiple-standard refusal and transaction rollback have a new case. Choosing the trading
+series when several bases share those purposes remains an owner question.
+
+Six protected source/test files remain byte-identical to this checkpoint's base. The earlier
+approved standby-wrapper change remains part of the branch; this delta adds no protected edit.
+Receipts, coverage reports and omission/restoration checks are under the lane's local
+`receipts/a679-dormant-host-20261018/`. Whole-package coverage, the earlier legacy failures,
+reissue screens, PDF viewing acceptance and final review/CI gates remain open.

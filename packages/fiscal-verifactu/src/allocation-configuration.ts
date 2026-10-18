@@ -1,4 +1,5 @@
 import { hostedHourPreparation } from "./hour-preparation.js";
+import { createHourDormantPreparation, isHourDormantInput } from "./hour-dormant-standby.js";
 import { hostedHourRecovery } from "./hosted-hour-recovery.js";
 import { readHourRecoveryHistory, readHourRecoveryState } from "./hour-recovery-state.js";
 import "./errors.js";
@@ -69,6 +70,8 @@ function configuredOperations(
         binding: Object.freeze({ ...supplied.binding }),
         input: snapshotOperationInput(supplied.input),
       };
+      if (isHourDormantInput(operation.input))
+        return createHourDormantPreparation(host).prepare(operation, run);
       if (operation.binding.action === "setup") {
         if (host === undefined)
           throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });
@@ -76,7 +79,7 @@ function configuredOperations(
       }
       if (
         host?.readRecoveryFacts !== undefined &&
-        ["restore", "re-register"].includes(operation.binding.action)
+        ["restore", "re-register", "promote"].includes(operation.binding.action)
       )
         return hostedHourRecovery(host).prepare(operation, run);
       const retired = (await host?.readRetiredSetup?.("fiscal-verifactu")) ?? [];
