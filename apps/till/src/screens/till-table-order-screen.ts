@@ -4159,16 +4159,13 @@ export class TillTableOrderScreen extends LitElement {
     this.#dispatch("take-payment", { workingOrderId: bill.workingOrderId });
   }
 
-  #pendingSection(pending: TabLine[]): TemplateResult {
+  #pendingSection(pending: TabLine[]): TemplateResult | typeof nothing {
+    if (pending.length === 0) return nothing;
     return html`<section class="pending">
       <h2>${t("table.pending_title")}</h2>
-      ${
-        pending.length === 0
-          ? html`<p class="empty">${t("table.none_pending")}</p>`
-          : html`<ul>
-              ${pending.map((line) => this.#pendingLine(line))}
-            </ul>`
-      }
+      <ul>
+        ${pending.map((line) => this.#pendingLine(line))}
+      </ul>
     </section>`;
   }
 

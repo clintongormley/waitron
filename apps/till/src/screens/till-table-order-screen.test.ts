@@ -529,9 +529,16 @@ describe("till-table-order-screen", () => {
       .toHaveAccessibleName(`${t("table.open_drawer")} 1`);
   });
 
-  it("hides the badge when nothing is pending", async () => {
-    const { el } = await mount({ lines: [servedLine] });
+  it("hides the badge and duplicate To serve card after the last pending dish is served", async () => {
+    const { el } = await mount({ lines: [pendingLine, servedLine] });
+    await openDrawer(el);
+    expect(el.shadowRoot!.querySelector(".pending-line")).not.toBeNull();
+    el.lines = [{ ...pendingLine, servedAt: servedLine.servedAt }, servedLine];
+    await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-drawer] .pending")).toBeNull();
+    const fallback = await sentFallbackFor(el);
+    expect(fallback.querySelectorAll("[data-sent-fallback-line]")).toHaveLength(2);
   });
 
   it("keeps serving in Sent and removes the duplicate Served drawer list", async () => {
@@ -720,12 +727,14 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-back]")).not.toBeNull();
   });
 
-  it("handles an empty tab: no badge, empty-state copy, zero total", async () => {
+  it("handles an empty tab: no badge or duplicate To serve card, zero total", async () => {
     const { el } = await mount({ lines: [] });
     await openDrawer(el);
     expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
     const text = el.shadowRoot!.querySelector("[data-drawer]")!.textContent ?? "";
-    expect(text).toContain(t("table.none_pending"));
+    expect(text).not.toContain(t("table.none_pending"));
+    expect(text).not.toContain(t("table.pending_title"));
+    expect(el.shadowRoot!.querySelector("[data-drawer] .pending")).toBeNull();
     expect(el.shadowRoot!.querySelector(".served")).toBeNull();
     const panel = await sentPanelFor(el);
     expect(panel.shadowRoot!.querySelector("[data-sent-panel]")).toBeNull();

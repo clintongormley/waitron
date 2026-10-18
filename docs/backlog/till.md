@@ -2109,7 +2109,7 @@ build after A757's board if it has been decided, else name the table alone.
 [plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md), preserving earlier behavioral checks.
 The remaining work includes:
 
-- Retire the duplicate To serve list, its empty state and direct Cancel strip after moving their
+- Retire the populated duplicate To serve list and direct Cancel strip after moving their
   remaining checks to Sent and its native actions. Keep recorded names, notes, prices, extras,
   paid markers, allergy information, refusals and leave protection.
 - Integrate the owner's Q43 cancellation changes after lane C publishes A758's revised design,

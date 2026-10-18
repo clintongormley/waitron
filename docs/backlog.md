@@ -2218,7 +2218,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
 - **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
-  A773-1 remains unlanded: retire the remaining To serve list and Cancel strip, integrate A758's
+  A773-1 remains unlanded: retire the populated To serve list and Cancel strip, integrate A758's
   revised cancellation and Finish-table design, and complete delivery checks. A773-2's firing/pass plan
   follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
