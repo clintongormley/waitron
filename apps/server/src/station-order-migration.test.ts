@@ -24,7 +24,6 @@ import {
 } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { seasons } from "@waitron/venue-service";
 import { shifts } from "@waitron/workforce";
 import { ALL_MODULES } from "./modules.js";
 import { createStation, listStations } from "./kitchen.js";
@@ -124,15 +123,14 @@ async function populate(db: Database) {
       .insert(persons)
       .values({ displayName: "Ana", role: "staff" })
       .returning({ id: persons.id });
-    const [season] = await tx
-      .insert(seasons)
-      .values({ locationId, name: "Retained season", startsOn: "01-01" })
-      .returning();
+    await tx.execute(
+      sql`insert into seasons (id, location_id, name, starts_on) values ('retained-season', ${locationId}, 'Retained season', '01-01')`,
+    );
     await tx.execute(
       sql`insert into staff_roles (id, location_id, name) values ('retained-role', ${locationId}, 'Retained cook')`,
     );
     await tx.execute(
-      sql`insert into staffing_days (id, station_id, season_id, weekday) values ('retained-day', ${stationId}, ${season!.id}, 1)`,
+      sql`insert into staffing_days (id, station_id, season_id, weekday) values ('retained-day', ${stationId}, 'retained-season', 1)`,
     );
     const [shift] = await tx
       .insert(shifts)
