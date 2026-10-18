@@ -41,6 +41,10 @@ export class WtRowActions extends LitElement {
         box-shadow: var(--wt-shadow-2);
         /* Chromium maps the host's align="end" attribute to text-align, which the popup would inherit. */
         text-align: start;
+        /* A fixed box with an automatic width shrinks with the room beside it, so placing it would
+           resize it and the size observer would never settle. */
+        width: max-content;
+        max-width: calc(100vw - 2 * var(--wt-space-2));
       }
       .actions {
         display: flex;
@@ -91,13 +95,18 @@ export class WtRowActions extends LitElement {
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
 
+  // Observes the popup only while it is open.
+  readonly #resize = new ResizeObserver(() => this.positionPopup());
+
   override disconnectedCallback(): void {
     this.expanded = false;
+    this.#resize.disconnect();
     super.disconnectedCallback();
   }
 
   private onToggle(): void {
     this.expanded = this.popup.matches(":popover-open");
+    if (!this.expanded) this.#resize.unobserve(this.popup);
   }
 
   private onTriggerClick(event: MouseEvent): void {
@@ -113,6 +122,7 @@ export class WtRowActions extends LitElement {
     if (popup === null || !this.isConnected || popup.matches(":popover-open")) return;
     popup.showPopover();
     this.positionPopup();
+    this.#resize.observe(popup);
   }
 
   hide(): void {
@@ -145,15 +155,12 @@ export class WtRowActions extends LitElement {
   private readonly closingClicks = new WeakSet<Event>();
 
   private closesMenu(event: MouseEvent): boolean {
+    const path = event.composedPath();
+    // Everything before the host is inside the menu, including a slotted element's shadow root.
     if (
-      event
-        .composedPath()
-        .some(
-          (node) =>
-            node instanceof HTMLElement &&
-            this.contains(node) &&
-            node.hasAttribute("data-keep-open"),
-        )
+      path
+        .slice(0, path.indexOf(this))
+        .some((node) => node instanceof HTMLElement && node.hasAttribute("data-keep-open"))
     )
       return false;
     const action = this.actionOf(event);
