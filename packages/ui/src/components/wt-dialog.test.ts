@@ -75,6 +75,43 @@ test("renders the heading", async () => {
   expect(el.shadowRoot!.querySelector("h2")?.textContent?.trim()).toBe("Void sale");
 });
 
+// The heading's --wt-space-3 below it collapses with the next block's top margin, as two touching
+// vertical margins do, so the gap is the larger of the two.
+test.each([
+  ["a paragraph", "<p>This will create a corrective record.</p>"],
+  ["a div", "<div>This will create a corrective record.</div>"],
+])(
+  "leaves the larger of --wt-space-3 and its top margin between the heading and a body starting with %s",
+  async (_, body) => {
+    const el = (await mount(`<wt-dialog heading="Void sale">${body}</wt-dialog>`)) as Openable;
+    el.open = true;
+    await el.updateComplete;
+    const first = el.firstElementChild!;
+    const expected = Math.max(
+      parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-3")),
+      parseFloat(getComputedStyle(first).marginTop),
+    );
+    const heading = el.shadowRoot!.querySelector("h2")!.getBoundingClientRect();
+    expect(first.getBoundingClientRect().top - heading.bottom).toBe(expected);
+  },
+);
+
+test("leaves --wt-space-3 between the heading and its description, and the larger margin after it", async () => {
+  const el = (await mount(
+    '<wt-dialog heading="Leave" description="Your changes are unsaved."><p>Leave anyway?</p></wt-dialog>',
+  )) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const space3 = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-3"));
+  const heading = el.shadowRoot!.querySelector("h2")!.getBoundingClientRect();
+  const description = el.shadowRoot!.querySelector(".description")!.getBoundingClientRect();
+  const first = el.firstElementChild!;
+  expect(description.top - heading.bottom).toBe(space3);
+  expect(first.getBoundingClientRect().top - description.bottom).toBe(
+    Math.max(space3, parseFloat(getComputedStyle(first).marginTop)),
+  );
+});
+
 test("wraps a long unbroken heading inside the dialog at phone width", async () => {
   await page.viewport(390, 844);
   try {

@@ -83,15 +83,18 @@ export class WtDialog extends LitElement {
         margin: var(--wt-space-4) 0 0;
       }
 
+      /* The space below the heading is the row's, not the h2's: a margin inside a flex row does not
+         collapse with the next block's, so a body starting with a <p> would get both. */
       .heading-row {
         position: relative;
         display: flex;
         width: fit-content;
         max-width: 100%;
+        margin: 0 0 var(--wt-space-3);
       }
 
       h2 {
-        margin: 0 0 var(--wt-space-3);
+        margin: 0;
         font-size: var(--wt-font-size-lg);
         overflow-wrap: anywhere;
       }
