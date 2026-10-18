@@ -326,10 +326,13 @@ it("closing from the Service tab returns focus to that row's menu", async () => 
     .poll(() => menu.shadowRoot!.activeElement)
     .toBe(menu.shadowRoot!.querySelector("button"));
 });
-it("/view/receipt still opens Edit receipt", async () => {
+it("/view/receipt opens the department dialog on its Receipts tab", async () => {
   const shell = await mount("/manage/venue-operations/department/d1/view/receipt");
-  expect(shell.shadowRoot!.querySelector("[data-test=receipt-panel]")!.textContent).toBe("d1");
-  expect(shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
+  const form = await departmentSettings(shell);
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d1");
+  expect(form.tab).toBe("receipt");
+  expect(form.shadowRoot!.querySelector("[data-test=receipt-panel]")!.textContent).toBe("d1");
+  expect(shell.shadowRoot!.querySelector(":scope > div > [data-test=receipt-panel]")).toBeNull();
   expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/receipt");
 });
 it("navigationScopes is [] for another offered tab of the open department and undefined for another department, a zone or receipt", async () => {
