@@ -90,11 +90,11 @@ describe("renderGuide", () => {
 
   it("renders emphasis only between word boundaries", () => {
     const guide = render(
-      "# T\n\nThis is _rare_, (_quite_) and **_bold too_** but snake_case_name and a_b stay text. _A snake_case here_ and a _dangling one.\n",
+      "# T\n\nThis is _rare_, (_quite_) and **_bold too_** but snake_case_name and a_b stay text. _A snake_case here_.\n",
     );
 
     expect(guide.html).toBe(
-      "<h1>T</h1>\n<p>This is <em>rare</em>, (<em>quite</em>) and <strong><em>bold too</em></strong> but snake_case_name and a_b stay text. <em>A snake_case here</em> and a _dangling one.</p>",
+      "<h1>T</h1>\n<p>This is <em>rare</em>, (<em>quite</em>) and <strong><em>bold too</em></strong> but snake_case_name and a_b stay text. <em>A snake_case here</em>.</p>",
     );
   });
 
@@ -149,6 +149,20 @@ describe("renderGuide", () => {
     ]);
   });
 
+  it("keeps a word's underscores, a spaced ampersand and an angle-bracket placeholder as text", () => {
+    const guide = render(
+      "# The snake_case guide\n\n## The <department> logo {#logo}\n\nA & B, a<b: c. 1 <\n",
+    );
+
+    expect(guide.title).toBe("The snake_case guide");
+    expect(guide.sections).toEqual([{ id: "logo", heading: "The <department> logo" }]);
+    expect(guide.html).toBe(
+      "<h1>The snake_case guide</h1>\n" +
+        '<section id="logo" aria-labelledby="logo-heading"><h2 id="logo-heading">The &lt;department&gt; logo</h2>\n' +
+        "<p>A &amp; B, a&lt;b: c. 1 &lt;</p>\n</section>",
+    );
+  });
+
   it("shortens a long refused line in the message", () => {
     const row = `| ${"a".repeat(100)} |`;
 
@@ -192,10 +206,90 @@ describe("renderGuide", () => {
     ["an unclosed bracket", "# T\n\n[x\n", 3, "an unclosed ["],
     ["an unclosed bold", "# T\n\nfirst line\nsecond **line\n", 4, "an unclosed **"],
     ["an unclosed code span", "# T\n\na `b\n", 3, "an unclosed `"],
+    ["a lone star on the first of two lines", "# T\n\na *lone\nsecond line\n", 3, "a single *"],
     ["a lone star", "# T\n\na *lone* star\n", 3, "a single *"],
     ["a section id ending -heading", "# T\n\n## Units {#units-heading}\n", 3, 'ends "-heading"'],
     ["an empty heading", "# T\n\n## {#a}\n", 3, "no text"],
     ["an empty guide", "\n\n", 1, "an empty guide"],
+    [
+      "a table row straight after prose",
+      "# T\n\nIntro:\n| a | b |\n",
+      4,
+      "outside the guide subset",
+    ],
+    [
+      "a quotation in a list item's continuation",
+      "# T\n\n- item\n  > q\n",
+      4,
+      "outside the guide subset",
+    ],
+    ["a quotation as a list item's text", "# T\n\n- > q\n", 3, "outside the guide subset"],
+    [
+      "a continuation indented by three spaces",
+      "# T\n\n- item\n   three\n",
+      4,
+      "not indented by two spaces",
+    ],
+    [
+      "an emphasis whose closing _ follows a space",
+      "# T\n\nx _a _ b\n",
+      3,
+      "an _ that is neither inside a word nor emphasis",
+    ],
+    ["a backslash", "# T\n\nan \\_escaped\\_ word\n", 3, "a backslash"],
+    ["a rule of dashes", "# T\n\nabove\n\n---\n", 5, "outside the guide subset"],
+    ["a setext underline", "# T\n\nTitle\n===\n", 4, "outside the guide subset"],
+    ["a rule of stars", "# T\n\n***\n", 3, "outside the guide subset"],
+    ["a rule of underscores", "# T\n\n___\n", 3, "outside the guide subset"],
+    ["an HTML comment", "# T\n\ntext <!-- note -->\n", 3, "an HTML comment"],
+    [
+      "an address in angle brackets",
+      "# T\n\nsee <https://example.com>\n",
+      3,
+      "an address in angle brackets",
+    ],
+    [
+      "a mail address in angle brackets",
+      "# T\n\nwrite to <mailto:a@b.es>\n",
+      3,
+      "an address in angle brackets",
+    ],
+    ["a numbered item with a parenthesis", "# T\n\n1) first\n", 3, "outside the guide subset"],
+    ["a leading tab", "# T\n\n\tindented\n", 3, "outside the guide subset"],
+    ["a named HTML entity", "# T\n\nA &amp; B\n", 3, "an HTML entity"],
+    ["a numeric HTML entity", "# T\n\nA &#38; B\n", 3, "an HTML entity"],
+    ["a hexadecimal HTML entity", "# T\n\nA &#x26; B\n", 3, "an HTML entity"],
+    [
+      "an _ after a quote mark",
+      '# T\n\nsay "_now_"\n',
+      3,
+      "an _ that is neither inside a word nor emphasis",
+    ],
+    [
+      "an _ after a dash",
+      "# T\n\nwait—_this_—here\n",
+      3,
+      "an _ that is neither inside a word nor emphasis",
+    ],
+    [
+      "an _ after a slash",
+      "# T\n\neither/_or_\n",
+      3,
+      "an _ that is neither inside a word nor emphasis",
+    ],
+    [
+      "an _ that never closes",
+      "# T\n\na _dangling one\n",
+      3,
+      "an _ that is neither inside a word nor emphasis",
+    ],
+    ["bold in a heading", "# T\n\n## The **bold** one {#b}\n", 3, "formatting in a heading"],
+    ["code in a heading", "# T\n\n## A `code` one {#c}\n", 3, "formatting in a heading"],
+    ["a link in a heading", "# T\n\n## A [link](products.md) {#l}\n", 3, "formatting in a heading"],
+    ["emphasis in a heading", "# T\n\n## An _em_ one {#e}\n", 3, "formatting in a heading"],
+    ["bold in the title", "# The **T**\n", 1, "formatting in a heading"],
+    ["an id on the title", "# T {#x}\n", 1, "an id on the title"],
+    ["a link with no text", "# T\n\n[](products.md)\n", 3, "a link with no text"],
   ])("refuses %s", (_name, markdown, line, found) => {
     expect(() => render(markdown)).toThrow(`line ${line}: `);
     expect(() => render(markdown)).toThrow(found);
