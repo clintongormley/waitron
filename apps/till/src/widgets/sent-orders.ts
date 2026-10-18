@@ -12,6 +12,7 @@ import { sentPanel, type SentPanel, type SentSlice } from "../state/sent-panel.j
 import { reminderDueAt } from "../state/release-reminder.js";
 import { trimQuantity } from "./dish-format.js";
 import { groupName } from "./group-name.js";
+import { nutritionDietLabels, nutritionIcons, nutritionIconStyles } from "./nutrition-icons.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "./fired-ago.js";
@@ -41,6 +42,7 @@ export interface SentReorderDetail {
 export class TillSentOrders extends LitElement {
   static override styles = [
     baseStyles,
+    nutritionIconStyles,
     css`
       :host {
         display: block;
@@ -170,7 +172,10 @@ export class TillSentOrders extends LitElement {
       }
       .companion {
         background: var(--wt-color-surface-sunken);
-        color: var(--wt-color-text-muted);
+        color: var(--wt-color-text);
+      }
+      .companion .bill {
+        color: inherit;
       }
       .group {
         padding-block: var(--wt-space-2);
@@ -449,7 +454,8 @@ export class TillSentOrders extends LitElement {
   }
   #what(row: CurrentOrderRow, quantity: string): TemplateResult {
     return html`<span class="what"
-      >${row.name} ×${quantity}
+      >${row.name}${nutritionIcons(row.nutrition?.allergens, nutritionDietLabels(undefined, row.nutrition?.dietaryDeclarations))}
+      ×${quantity}
       ${row.extras.map((extra) => html`<span class="extra">${extra.name} ×${extra.quantity}</span>`)}
       ${row.note === null ? nothing : html`<span class="note">${t("line.note.label")}: ${row.note}</span>`}
     </span>`;

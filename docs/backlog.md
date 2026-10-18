@@ -2276,6 +2276,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   retaining that command's exact line ids and quantities. Another accepted serve replaces the receipt;
   leaving the bill, changing server or signing out removes its authority. A failed refresh keeps
   the accepted receipt, while a refused serve shows no success notice.
+  Sent rows now show the stored dish's allergen and diet icons, including a held companion on
+  another bill. Focused checks cover the recorded allergen kind in both languages, implied diets,
+  unreviewed dishes and replacing a snapshot. The companion's text uses the normal text token
+  against its sunken background; the unfolded panel has phone/desktop accessibility checks in both
+  themes. The serving dialog's leave checks now enter through Sent, except the immediate clean-Back
+  reopen check, which keeps its legacy trigger until its replacement exercises the same timing.
   The old Current orders, To serve and Served drawer lists still need their remaining checks moved
   to Sent before removal. Sent's Comp now opens one reason-first window on the feature branch.
   You choose the whole dish with its extras or one priced extra, then Free, % or € from the
