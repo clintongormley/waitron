@@ -1,7 +1,4 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
-import { LitElement, html } from "lit";
-import { draftScopeFor, type DraftScope } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import {
   cleanupDepartmentEditors,
@@ -9,96 +6,10 @@ import {
   editDepartmentField,
   departmentSave,
   selectDepartmentTab,
+  supplyReceiptEditor,
+  editReceipt,
 } from "../testing/department-edit-fixture.js";
 
-class ReceiptEditorStub extends LitElement {
-  departmentId = "d1";
-  value = "";
-  hold = false;
-  busy = false;
-  finish?: () => void;
-  #scope?: DraftScope<string>;
-  override connectedCallback() {
-    super.connectedCallback();
-    this.#scope = draftScopeFor(this, {
-      id: this,
-      current: () => this.value,
-      snapshot: (value) => value,
-      equal: (a, b) => a === b,
-      restore: (value) => {
-        this.value = value;
-        this.requestUpdate();
-      },
-    }).scope;
-  }
-  override disconnectedCallback() {
-    this.#scope?.dispose();
-    this.#scope = undefined;
-    super.disconnectedCallback();
-  }
-  get leaveScope(): object | undefined {
-    return this.#scope?.id;
-  }
-  get hasUnsavedChanges(): boolean {
-    return this.#scope?.isDirty() ?? false;
-  }
-  get saving(): boolean {
-    return this.busy;
-  }
-  async save() {
-    this.busy = true;
-    if (this.hold)
-      await new Promise<void>((resolve) => {
-        this.finish = resolve;
-      });
-    this.#scope!.commit(this.value);
-    this.busy = false;
-    this.notify("department-receipt-saved");
-  }
-  notify(type: string) {
-    this.dispatchEvent(
-      new CustomEvent(type, {
-        detail: { departmentId: this.departmentId },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-  override render() {
-    return html`<input
-        type="text"
-        name="receiptSubtitle"
-        .value=${this.value}
-        @input=${(event: Event) => {
-          this.value = (event.target as HTMLInputElement).value;
-          this.#scope?.changed();
-        }}
-      /><button data-test="save-receipt" @click=${() => void this.save()}>Save</button
-      ><button data-test="cancel-receipt" @click=${() => this.notify("department-receipt-cancel")}>
-        Cancel
-      </button>`;
-  }
-}
-customElements.define("dashboard-department-receipt-editor", ReceiptEditorStub);
-async function supplyReceiptEditor(
-  el: HTMLElementTagNameMap["department-edit-dialog"],
-  form: HTMLElementTagNameMap["department-settings"],
-) {
-  const editor = document.createElement("dashboard-department-receipt-editor") as ReceiptEditorStub;
-  el.receiptEditor = editor;
-  await el.updateComplete;
-  await form.updateComplete;
-  await editor.updateComplete;
-  return editor;
-}
-async function editReceipt(editor: ReceiptEditorStub, value: string) {
-  await userEvent.fill(page.elementLocator(editor.shadowRoot!.querySelector("input")!), value);
-}
-beforeEach(() => setLocale("en"));
-afterEach(() => {
-  cleanupDepartmentEditors();
-  setLocale("en");
-});
 beforeEach(() => setLocale("en"));
 afterEach(() => {
   cleanupDepartmentEditors();
