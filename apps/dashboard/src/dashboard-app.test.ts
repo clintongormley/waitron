@@ -7974,7 +7974,10 @@ describe("mounted public department dialogs", () => {
           destinationDepartmentIds: [],
         } as never;
       if (url === "/management-api/zones") return model.floorZones as never;
-      if (url === "/management-api/venue-service/floor-plan-sets")
+      if (
+        url === "/management-api/venue-service/floor-plan-sets" ||
+        url === "/management-api/venue-service/floor-plan-sets/period-choices"
+      )
         return { departments: [] } as never;
       return [] as never;
     };
