@@ -18,8 +18,6 @@ list does not exist.
   - A party finished while its food is still on the pass keeps its cards there with no group
     button that works (each is refused `party.not_open`): the owner's answer (2026-10-17, the
     waiter clears them with Void, choosing refund or no refund) is part of A758.
-  - "Ready" and "Fired N min ago" on the table screen are the plan's default, not an owner
-    decision.
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
   - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
     `*** HOLD CANCELLED ***` print in English. Since B11g the extra-cancel slip's header word and

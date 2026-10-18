@@ -149,25 +149,18 @@ may make one or both of those branches reachable, or show they can go.
 
 <a id="five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen"></a>
 
-## Five till handlers still leave a failed list refresh unhandled
+## Two till handlers still leave a failed list refresh unhandled
 
-**Five till handlers still leave a failed list refresh unhandled — OPEN (found 2026-09-25, review of PR #641).**
+**Two till handlers still leave a failed list refresh unhandled — OPEN (found 2026-09-25, review of PR #641).**
 
-- `#onLoggedIn` awaits `#refreshHeldOrders()` and then `#refreshStationQueue()` outside any `try`,
-  and the `logged-in` listener in `render` calls it with `void`, so a failed held-list read at login
-  is an unhandled promise rejection that also skips the queue, roster and floor loads.
-- `#onRetrieveOrder` and `#onDiscardOrder` await `#refreshHeldOrders()`, and `#onAdvanceTicketItem`
-  and `#onMarkCollected` await `#refreshStationQueue()`, in `apps/till/src/till-app.ts`, each after
-  its `try`/`catch` and outside it. A failed refresh there is an unhandled promise rejection and the
-  operator sees nothing: the test "a plain list refresh that fails starts no retry, leaves a
-  countdown alone, and takes over a retry in flight" in `till-app.test.ts` suppresses the rejection
-  the discard handler leaves uncaught. All four refresh on both paths, after a success and after a
-  failure. Retrieve differs in that it writes nothing, so an "X succeeded, but…" message does not
-  fit it.
+- `#onRetrieveOrder` awaits `#refreshHeldOrders()`, and `#onAdvanceTicketItem` awaits
+  `#refreshStationQueue()`, in `apps/till/src/till-app.ts`, each after its `try`/`catch` and
+  outside it, on both paths, after a success and after a failure. A failed refresh there is an
+  unhandled promise rejection and the operator sees nothing. Retrieve writes nothing, so an "X
+  succeeded, but…" message does not fit it.
 
-**Next action:** decide whether discard, advance and mark-collected go through `#refreshAfterWrite`
-with their own "X succeeded, but…" strings, and what login and retrieve show when their refresh
-fails.
+**Next action:** decide whether advance goes through `#refreshAfterWrite` with its own "X
+succeeded, but…" string, and what retrieve shows when its refresh fails.
 
 ## Cash handed back for a voided cash sale is recorded nowhere
 
@@ -182,14 +175,13 @@ screen is designed.
 **Product decisions to take before production:**
 
 - **A re-sent "place" on an already-placed order answers 409 rather than replaying the original
-  result — leave it, or build the replay?** In `invoice_first` the place path files a deferred
-  invoice through `recordSale`, so replaying would mean reading back the immutable
-  `registros_facturacion` row and rebuilding the invoice number, date and QR. That is fiscal core,
-  and not work to do unattended. Leaving it is a real option — the 409 is a defensible state
-  conflict and the till keeps the basket and shows `place.error`. The gain if built is that a re-tap
-  after a lost response returns the invoice already issued instead of an error. Two claims an earlier
-  campaign note made are FALSE and must not be reused: that placing files nothing fiscally, and that
-  the current answer is an opaque 500. The place-path comment in
+  result — leave it, or build the replay?** Since invoicing at placement was retired (A261-2c,
+  #1285), placing files no invoice: `placeOrder` (`apps/server/src/working-order.ts`) marks the
+  order placed, sends its dishes to the kitchen and, in a `ticket_then_pay` zone, queues its
+  collection ticket. A second place on a placed order is refused `working_order.not_open` (409).
+  Leaving it is a real option — the 409 is a defensible state conflict and the till keeps the
+  basket and shows `place.error`. The gain if built is that a re-tap after a lost response moves
+  the till on as placed instead of showing an error. The place-path comment in
   `apps/till/src/till-app.ts` calling an idempotent `placeOrder` "a recorded backlog follow-up"
   refers to this entry.
 
@@ -683,20 +675,6 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     - The Spanish "has taken over this order" wording has no test.
   - The floor:
     - The map tag says "Unsent" but not whose.
-    - At 390 px the map overlaps and clips crowded tables, so a table's tag can hide under a
-      neighbour.
-    - A token near the plan's top edge is cut off by that edge: each token is centred on its
-      position (`translate(-50%, -50%)`, `packages/ui/src/components/wt-floor-canvas.ts`), so a
-      chip that grows it ("Time to fire", A117) pushes its label above the map's clipping edge
-      on a 390 px map; the Spanish chip also runs past the token's right edge, and a round
-      token's "Reservada 22:30" chip was seen doing the same. The owner chose on 2026-09-29 to
-      land #891 with the chip inside the token and fix this later. Since service Task 10 the
-      token also carries the table's signal chips, one row each; seen in screenshots, not
-      measured: at 390 px a floor of six tables with two or three chips each overlapped so much
-      that tokens covered each other's chips, and at 1280 px they did not. **Next action:**
-      decide whether the map keeps a token inside the plan, or the chip hangs off the token's
-      edge like "Unsent".
-    - The map gives its "forgotten table" corner marker no spoken name.
   - The table screen:
     - Seating a table whose answer arrives while a newer table is still opening shows the seated
       table briefly before the newer one replaces it.
@@ -755,10 +733,9 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
   - **The adjustment history records who approved, but not whether the bill's discount limit,
     rather than the reason, is why.** Recording it would need a column. **Next action:** decide
     whether to record it.
-  - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) cannot be
-    adjusted:** the placed-order trigger freezes its prices, and an `invoice_first` order has
-    already filed its invoice. B16 lets such an order be handed over before it is paid but did
-    not decide this. **Next action:** decide whether a placed order can be adjusted before it is
+  - **A placed pay-later counter order (a `ticket_then_pay` zone's, sent to the kitchen before
+    it is paid) cannot be adjusted:** the placed-order trigger freezes its prices. B16 lets such
+    an order be handed over before it is paid but did not decide this. **Next action:** decide whether a placed order can be adjusted before it is
     collected.
   - **The server's held-order edit (`PUT /api/working-orders/:id`) still voids a sent dish's
     dropped quantity without a reason** when a client sends it that way, the venue allows changes
@@ -820,9 +797,8 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     the case "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure
     does not bring the notice back" (`apps/till/src/till-app.test.ts`) proving what its title
     says, so B16 left it.
-  - Lane B item B31 (owner, 2026-10-02; #1018): at login each counter list shows its own failure
-    with a retry notice, so one list that fails no longer stops the others loading (they are still
-    read one after another, so a read that hangs still delays the rest); this changed for tills too.
+  - At login the counter's three lists are read one after another, so a read that hangs delays
+    the rest (left open by B31, #1018). Load them side by side.
   - **Done (C130, #1056) — a device shows the screens its profile assigns, and the person's permissions
     decide the rest.**
     Left open: a till profile saved before C130, and one newly created on the Device profiles
@@ -1324,31 +1300,6 @@ Left open by W100 (#1332), the [equipment plan](../superpowers/plans/2026-10-04-
   reads the till's setup (`readTillSetup`, `apps/server/src/till-setup.ts`) to name `setupRevision`; the token's scrypt check (21.1 ms, measured once on a Mac)
   runs off the lock, once per device until its token changes, the server restarts or the device
   falls out of the 256 the server remembers.
-
-## The till says "Not found" (menus spec §9) only when a newly read version drops the section it has open
-
-**The till says "Not found" (menus spec §9) only when a newly read version drops the section it has
-open.** §9 asks that a tap on a home tile whose target is no longer in the version the device should
-be showing say the item was not found and reload the home screen. As built, the till puts a newly
-read version on screen as soon as it has read it (pinned by "a device behind the live version (§9)"
-in `apps/till/src/till-app-menu-refresh.test.ts`). Before then — up to one 15-second poll, longer on
-the counter while a sale, hold or place is in flight or the review dialog is open, and longer again
-when a reload fails — a tap acts on the version it holds, and the basket refresh lists the product
-as "no longer on this menu". A shortcut whose target a newly read version lacks simply disappears,
-with no notice. **Next action:** the owner confirms this meets §9, or asks for a notice when a
-shortcut disappears.
-
-## The owner decided a split check gets no Void; the server now allows one
-
-**The owner decided a split check gets no Void; the server now allows one.** Since table-actions
-Task 2 (#825) the cancel path checks `assertPartyBillOpen` (today in `applyAdjustment`,
-`apps/server/src/adjustments-apply.ts`, which replaced `voidTabLine` in B11a), which lets through
-an open bill that belongs to a party whether or not a table points at it, and a split check carries
-its party. **Decided (owner, 2026-09-26):** a check
-gets no Void; a change of mind between "Add bill" and paying was covered by the till merging the
-check back. Since table actions Task 10 the till no longer merges it back on its own; a change of
-mind is undone by Merge bills on the party's table screen, by hand. **Next action:** the owner
-decides whether that still covers the no-Void decision.
 
 ## A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English abbreviation
 
@@ -1886,6 +1837,26 @@ The move moves the bill's revision on, open or presented, without `bumpRevision`
 money in flight, since a move changes no amount (plan P19). Stated at its site in
 `apps/server/src/move-bill.ts`. From the table actions plan's Task 7 (#864, move a whole bill).
 
+### Owner answers of 2026-10-17 (A774)
+
+- **Where the till cannot know whether an area seats guests, the server's refusal is the backstop
+  (owner, 2026-10-17; A691).** The floor offers every two-party join, though the server can refuse
+  one whose party stands in an area whose service mode changed after it sat (`refuseUnseatable`,
+  `apps/server/src/move-bill.ts`). While a counter-only till's first floor-area read waits or has
+  failed, Move to table keeps free tables offered and leaves an unknown area to the server, as the
+  order screen does.
+- **A counter till is "Caja registradora" in Spanish, on the till and the dashboard alike (owner,
+  2026-10-17).** The till's change is A837.
+- **"Ready" and "Fired N min ago" on the table screen stay as built (owner, 2026-10-17).** They
+  were the service plan's default (Task 5, #750).
+- **A child extras row in the Tab drawer stays on its own indented, muted, smaller line (owner,
+  2026-10-17)**, matching A738's approved order layout.
+- **Void works on every bill, split or not (owner, 2026-10-17, withdrawing the 2026-09-26 decision
+  that a split check gets no Void).** It follows A758's reason rules; the server already allows it.
+- **A home-page shortcut whose target a newly read menu version lacks disappears with no notice
+  (owner, 2026-10-17: accepted).** The till says "Not found" (menus spec §9) only when a newly read
+  version drops the section it has open.
+
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 
 2026-10-17: A740 implements device zones and period-scoped menu memory. The remaining Counter
@@ -2121,7 +2092,7 @@ build after A757's board if it has been decided, else name the table alone.
 ## A666. A floor join that moves tables together is sent once without seats
 
 - **A666 — A floor join that moves tables together is sent once without seats and refused before
-  the Seats prompt opens (2026-10-14; owner to decide).** Found by A659's probe (#1699): a floor Join with…
+  the Seats prompt opens (2026-10-14; owner decided 2026-10-17).** Found by A659's probe (#1699): a floor Join with…
   where neither side is a fixed table (two free tables, or a join involving a party) first sends
   `POST /api/tables/:id/today/merge` or `/api/parties/:id/join` with no seat count, gets
   `400 merge.seats_required` (`writeMerge`, `apps/server/src/floor-today-merges.ts`), then opens
@@ -2129,18 +2100,9 @@ build after A757's board if it has been decided, else name the table alone.
   Since #1598 removed saved joins this happens on every such join (a fixed table sends no merge;
   `dropAction`, `apps/till/src/state/floor-today.ts`): one wasted round trip (for a party, a
   join done and undone in one transaction) and a red 400 in the console; nothing the waiter sees goes
-  wrong. Option: ask for seats before sending, at the cost of showing the other refusals (table not
-  free, already grouped, zone mismatch) only after the seats are typed.
+  wrong. Owner, 2026-10-17: ask for the seat count first and send once; the other refusals (table
+  not free, already grouped, zone mismatch) then show only after the seats are typed.
   The request log is in #1699.
-
-## Held-order destination policies while the first area read waits or fails
-
-- **Held-order destination policies while the first area read waits or fails (2026-10-15;
-  open).** On a counter-only till, opening Move to table starts the first floor-area read.
-  Before it answers, `seatsGuests(undefined)` keeps free tables offered; a failed read retains
-  that unknown state. A698's Chromium review probe held the area read pending and observed a
-  free table still offered. Decide whether the picker waits for known policies or leaves unknown
-  areas to the server, as the order screen does. No server refusal was exercised by that probe.
 
 ## Move this bill still offers a closed counter area
 
@@ -2162,15 +2124,6 @@ build after A757's board if it has been decided, else name the table alone.
   an open bill (`adoptZone`, `apps/server/src/move-bill.ts`). Include that context in the read
   contract, then filter closed destinations while preserving same-area moves. A697's till-only
   change covers the order screen; the held-order picker still leaves this decision to the server.
-
-## A691. The floor still offers joining two seated parties where the server can refuse it
-
-- **A691 — the floor still offers joining two seated parties where the server can refuse it
-  (2026-10-15; open, rare).** A party stands in an area that does not seat guests only if the area's
-  service mode changed after it sat. Joining such a party to one whose table is merged with a free
-  table reaches `refuseUnseatable` on the server (`joinMergeMembers`,
-  `apps/server/src/floor-today-merges.ts`). A667 (#1719) left the floor offering every two-party join;
-  the server's refusal is the backstop.
 
 ## A730. The floor's Rename window may keep comparing against the name it opened with
 
@@ -2304,9 +2257,9 @@ reach them.
 
 ## In dark, the till's Cash and Card turn dim blue while a payment is being sent
 
-- **In dark, the till's Cash and Card turn dim blue while a payment is being sent** (owner
-  decision needed, left open by A535, #1617). They are switched off with `disabled` while sending,
-  not `loading`, so they now take the dark disabled colours (`--wt-color-primary-disabled`) instead of
-  a half-faded full blue; A417 asked for them to keep blue while sending. Keep the dim look, or move
-  them to `loading` so they keep their full colour with a spinner. Question in the lane C questions
-  file, "A535 (#1617)".
+- **A842. While a payment is being sent, the pressed Cash or Card keeps its colour with a spinner**
+  (owner, 2026-10-17; left open by A535, #1617). They are switched off with `disabled` while
+  sending, not `loading`, so they now take the dark disabled colours (`--wt-color-primary-disabled`)
+  instead of a half-faded full blue; A417 asked for them to keep blue while sending. Follow the
+  owner's 2026-10-08 rule: the pressed button keeps its own colour with a spinner while its request
+  is sent, and the other goes quiet.
