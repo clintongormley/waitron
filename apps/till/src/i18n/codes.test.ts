@@ -751,7 +751,7 @@ it("says a table needs moving, and that another table is in its new place, in bo
 
 it("says a booking holds a table back, in both languages", () => {
   expect([codeMessage("table.booked", "en"), codeMessage("table.booked", "es")]).toEqual([
-    "That table has a booking coming up. Move the booking first",
-    "Esa mesa tiene una reserva próxima. Mueve primero la reserva",
+    "That table has a booking. Move or cancel it first",
+    "Esa mesa tiene una reserva. Muévela o cancélala primero",
   ]);
 });

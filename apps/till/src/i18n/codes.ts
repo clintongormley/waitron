@@ -162,8 +162,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Otra mesa ocupa su nuevo sitio. Muévela primero",
   },
   "table.booked": {
-    en: "That table has a booking coming up. Move the booking first",
-    es: "Esa mesa tiene una reserva próxima. Mueve primero la reserva",
+    en: "That table has a booking. Move or cancel it first",
+    es: "Esa mesa tiene una reserva. Muévela o cancélala primero",
   },
   "table.fixed": {
     en: "That table is fixed in place",

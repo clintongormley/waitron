@@ -360,7 +360,7 @@ describe("till-floor-screen: a table that needs moving", () => {
     await tap(el, "t3");
     moveDialog(el)!.querySelector<HTMLElement>("[data-mark-moved]")!.click();
     await settle(el);
-    expect(refusal(el)).toBe("Table 4 has a booking coming up. Move the booking first.");
+    expect(refusal(el)).toBe("Table 4 has a booking. Move or cancel it first.");
 
     setLocale("es");
     el.tables = [moving("t3", 12), planned("t4", 30, { name: "Ventana" })];
@@ -368,7 +368,7 @@ describe("till-floor-screen: a table that needs moving", () => {
     await tap(el, "t3");
     moveDialog(el)!.querySelector<HTMLElement>("[data-mark-moved]")!.click();
     await settle(el);
-    expect(refusal(el)).toBe("Ventana tiene una reserva próxima. Mueve primero la reserva.");
+    expect(refusal(el)).toBe("Ventana tiene una reserva. Muévela o cancélala primero.");
   });
 
   it("says a booking holds a table back in the code's own words when the read lacks that table", async () => {
@@ -379,7 +379,7 @@ describe("till-floor-screen: a table that needs moving", () => {
     moveDialog(el)!.querySelector<HTMLElement>("[data-mark-moved]")!.click();
     await settle(el);
 
-    expect(refusal(el)).toBe("That table has a booking coming up. Move the booking first");
+    expect(refusal(el)).toBe("That table has a booking. Move or cancel it first");
     expect(refusal(el)).not.toBe(codeMessage("server.internal"));
   });
 
