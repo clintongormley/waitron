@@ -115,7 +115,7 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
         el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-colour-chooser"]>(
           "wt-colour-chooser[name=colour]",
         )!.choices,
-      ).toHaveLength(13);
+      ).toHaveLength(16);
     }
     if (state === "colour-invalid") {
       name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Dinner" } }));

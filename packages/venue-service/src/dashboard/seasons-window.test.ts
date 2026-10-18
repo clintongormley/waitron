@@ -158,7 +158,7 @@ it("+ Season adds an empty row at the end, offered the first calendar colour no 
   expect(bins(el)[4]!.getAttribute("aria-label")).toBe("Delete this new season");
   await press(el, button(el, "add-season")!);
   expect(rowKeys(el)).toEqual(["winter", "spring", "summer", "autumn", "new-1", "new-2"]);
-  expect(field(el, "season-5-colour").value).toBe("lime");
+  expect(field(el, "season-5-colour").value).toBe("yellow");
   await change(el, "season-4-name", "Carnival");
   expect(bins(el)[4]!.getAttribute("aria-label")).toBe("Delete Carnival");
 });
@@ -401,8 +401,8 @@ it.each(["en", "es"] as const)(
       expect(window.innerWidth).toBe(390);
       const el = await mount();
       await change(el, "season-1-day", "31");
-      // The longest colour name: Turquesa in Spanish; in English, Orange is already on row 3.
-      await change(el, "season-0-colour", "teal");
+      // The longest colour name in each language: Turquesa in Spanish, Magenta in English.
+      await change(el, "season-0-colour", locale === "es" ? "teal" : "magenta");
       await frames();
       expect(document.documentElement.scrollWidth).toBe(window.innerWidth);
       const day = field(el, "season-1-day").shadowRoot!.querySelector<HTMLElement>(".value")!;
