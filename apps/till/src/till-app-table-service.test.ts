@@ -620,6 +620,7 @@ it("moves a table dish with one submission id and reloads its current orders", a
       submissionId: expect.any(String),
       lineIds: ["line-1"],
       stationId: "kitchen",
+      expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
     },
     expect.any(Object),
   );
@@ -735,6 +736,174 @@ describe("opening a table station move while its station list is pending", () =>
     });
     await flush(el);
     expect(moveDishStation).toHaveBeenCalledOnce();
+  });
+});
+
+describe("A773 table station moves retain their bill observation", () => {
+  const stations: Station[] = ["bar", "kitchen"].map((id, displayOrder) => ({
+    id,
+    name: id,
+    displayOrder,
+    isDefault: displayOrder === 0,
+    active: true,
+    open: true,
+    byHand: null,
+    sendsTo: null,
+    why: "open",
+  }));
+  const move = { workingOrderId: "wo-7", lineId: "line-1", name: "Café", stationId: "bar" };
+  const observation = (editorVersion: number) => ({
+    billId: "wo-7",
+    editorVersion,
+    draftId: null,
+    draftRevision: null,
+  });
+  async function fixture(overrides: Record<string, unknown> = {}) {
+    let version = 7;
+    const listDrafts = vi.fn(async () => ({
+      drafts: [],
+      billEdits: [{ ...observation(version), editorId: null, editorName: null }],
+    }));
+    const moveDishStation = vi.fn().mockResolvedValue({ revision: 1, moved: [] });
+    const listStations = vi.fn().mockResolvedValue(stations);
+    const { el } = await mountApp({
+      ...seatedFloor(),
+      listDrafts,
+      listStations,
+      moveDishStation,
+      ...overrides,
+    });
+    const screen = await toTableOrder(el);
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(0);
+    const refresh = async () => {
+      const reads = listDrafts.mock.calls.length;
+      version++;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      await flush(el);
+    };
+    const open = async () => {
+      emit(screen, "move-station", move);
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("till-station-choice-dialog"))
+        .not.toBeNull();
+      return el.shadowRoot!.querySelector("till-station-choice-dialog")!;
+    };
+    return { el, screen, listDrafts, listStations, moveDishStation, refresh, open };
+  }
+
+  it("keeps the original request after an unanswered move and a newer ownership read", async () => {
+    const { el, open, moveDishStation, refresh } = await fixture();
+    moveDishStation.mockImplementationOnce(async () => {
+      await refresh();
+      throw new TypeError("No answer");
+    });
+    emit(await open(), "station-chosen", { stationId: "kitchen" });
+    await expect.poll(() => moveDishStation.mock.calls.length, { timeout: 10000 }).toBe(2);
+    const first = moveDishStation.mock.calls[0]![1];
+    expect(first.expectedEdit).toEqual(observation(7));
+    expect(moveDishStation.mock.calls[1]![1]).toEqual(first);
+    await flush(el);
+  });
+
+  it("does not send an old dialog through a replacement API", async () => {
+    const { el, open, moveDishStation } = await fixture();
+    const target = await open();
+    const replacement = vi.fn();
+    el.api = stubApi({ moveDishStation: replacement });
+    await flush(el);
+    emit(target, "station-chosen", { stationId: "kitchen" });
+    await flush(el);
+    expect(moveDishStation).not.toHaveBeenCalled();
+    expect(replacement).not.toHaveBeenCalled();
+  });
+
+  it("does not reload another table after an earlier move is answered", async () => {
+    const { el, screen, open, moveDishStation } = await fixture();
+    let answer!: (value: unknown) => void;
+    moveDishStation.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    emit(await open(), "station-chosen", { stationId: "kitchen" });
+    await expect.poll(() => moveDishStation.mock.calls.length).toBe(1);
+    emit(screen, "back-to-floor");
+    await flush(el);
+    const read = vi.mocked(api.getTabLines);
+    const reads = read.mock.calls.length;
+    answer({ revision: 1, moved: [] });
+    await flush(el);
+    expect(read.mock.calls.length).toBe(reads);
+  });
+
+  it.each(["success", "refusal"])(
+    "refreshes the bill after a station move %s before another choice",
+    async (outcome) => {
+      const { el, open, moveDishStation, listDrafts } = await fixture();
+      const first = await open();
+      listDrafts.mockResolvedValueOnce({
+        drafts: [],
+        billEdits: [{ ...observation(8), editorId: null, editorName: null }],
+      });
+      if (outcome === "refusal")
+        moveDishStation.mockRejectedValueOnce({ code: "draft.out_of_date" });
+      emit(first, "station-chosen", { stationId: "kitchen" });
+      await flush(el);
+      const remaining = el.shadowRoot!.querySelector("till-station-choice-dialog");
+      if (remaining !== null) emit(remaining, "close");
+      await flush(el);
+      emit(await open(), "station-chosen", { stationId: "kitchen" });
+      await expect.poll(() => moveDishStation.mock.calls.length).toBe(2);
+      expect(moveDishStation.mock.calls[1]![1].expectedEdit).toEqual(observation(8));
+    },
+  );
+
+  it("sends the bill version that was shown when choosing a destination", async () => {
+    const { el, open, moveDishStation } = await fixture();
+    emit(await open(), "station-chosen", { stationId: "kitchen" });
+    await expect.poll(() => moveDishStation.mock.calls.length).toBe(1);
+    expect(moveDishStation.mock.calls[0]![1]).toEqual({
+      submissionId: expect.any(String),
+      lineIds: ["line-1"],
+      stationId: "kitchen",
+      expectedEdit: observation(7),
+    });
+    await flush(el);
+  });
+
+  it("does not open a destination choice after the bill version changes during the station read", async () => {
+    const { el, screen, listStations, refresh } = await fixture();
+    let answer!: (rows: Station[]) => void;
+    listStations.mockImplementationOnce(
+      () =>
+        new Promise<Station[]>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    emit(screen, "move-station", move);
+    await expect.poll(() => answer).toBeDefined();
+    await refresh();
+    answer(stations);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();
+  });
+
+  it("refuses an already-open destination choice after its bill version changes", async () => {
+    const { el, open, moveDishStation, refresh } = await fixture();
+    const dialog = await open();
+    await refresh();
+    emit(dialog, "station-chosen", { stationId: "kitchen" });
+    await flush(el);
+    expect(moveDishStation).not.toHaveBeenCalled();
+    expect(
+      (
+        el.shadowRoot!.querySelector("till-station-choice-dialog") as HTMLElement & {
+          refusal: string;
+        }
+      ).refusal,
+    ).toBe("draft.out_of_date");
   });
 });
 

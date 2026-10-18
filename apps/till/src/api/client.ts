@@ -3213,7 +3213,7 @@ export class TillApi {
 
   moveDishStation(
     orderId: string,
-    body: StationMoveBody,
+    body: StationMoveBody & { expectedEdit: BillEditExpected | null },
     options: ReadOptions = {},
   ): Promise<StationMoveAnswer> {
     return this.#request(

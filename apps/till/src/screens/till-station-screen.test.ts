@@ -99,6 +99,11 @@ const barraQueue: StationQueueGroup[] = [
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
     listStations: vi.fn().mockResolvedValue(stations),
+    getFindBill: vi.fn(async (workingOrderId: string) => ({
+      workingOrderId,
+      partyId: null,
+      edit: null,
+    })),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "dev-1",
       formFactor: "till",
@@ -4472,11 +4477,85 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     await expect.poll(() => dialog(el)).toBeUndefined();
     expect(moveDishStation).toHaveBeenCalledWith(
       "wo-1",
-      { submissionId: expect.any(String), lineIds: ["wol-1"], stationId: "st-2" },
+      {
+        submissionId: expect.any(String),
+        lineIds: ["wol-1"],
+        stationId: "st-2",
+        expectedEdit: null,
+      },
       { signal: expect.any(AbortSignal) },
     );
     expect(api.deviceMoveDishStation).not.toHaveBeenCalled();
     await expect.poll(() => vi.mocked(api.getStationQueue).mock.calls.length).toBe(2);
+  });
+
+  describe("A773 signed-in station move observations", () => {
+    const expectedEdit = { billId: "wo-1", editorVersion: 6, draftId: null, draftRevision: null };
+    it("reads the table bill before opening and carries that observation to the signed-in route", async () => {
+      const getFindBill = vi.fn().mockResolvedValue({
+        workingOrderId: "wo-1",
+        partyId: "party-1",
+        edit: { ...expectedEdit, editorId: null, editorName: null },
+      });
+      const moveDishStation = vi.fn().mockResolvedValue({ revision: 2, moved: [] });
+      const { el } = await mountMove({ deviceMode: false }, { getFindBill, moveDishStation });
+      choose(await open(el), "st-2");
+      await expect.poll(() => moveDishStation.mock.calls.length).toBe(1);
+      expect(getFindBill).toHaveBeenCalledExactlyOnceWith("wo-1", {
+        signal: expect.any(AbortSignal),
+      });
+      expect(moveDishStation.mock.calls[0]![1]).toEqual({
+        submissionId: expect.any(String),
+        lineIds: ["wol-1"],
+        stationId: "st-2",
+        expectedEdit,
+      });
+    });
+    it("keeps a failed ownership read out of the destination dialog", async () => {
+      const getFindBill = vi.fn().mockRejectedValue({ code: "draft.out_of_date" });
+      const { el } = await mountMove({ deviceMode: false }, { getFindBill });
+      moveButton(el)!.click();
+      await flush(el);
+      expect(dialog(el)).toBeUndefined();
+      expect(el.shadowRoot!.textContent).toContain(codeMessage("draft.out_of_date"));
+    });
+    it("does not open on an API replacement while the bill read is unanswered", async () => {
+      let answer!: (value: unknown) => void;
+      const getFindBill = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const { el } = await mountMove({ deviceMode: false }, { getFindBill });
+      moveButton(el)!.click();
+      await flush(el);
+      expect(getFindBill).toHaveBeenCalledOnce();
+      el.api = stubApi();
+      await flush(el);
+      answer({
+        workingOrderId: "wo-1",
+        partyId: "party-1",
+        edit: { ...expectedEdit, editorId: null, editorName: null },
+      });
+      await flush(el);
+      expect(dialog(el)).toBeUndefined();
+    });
+    it("does not change a signed-in choice into a kitchen-device write when mode changes", async () => {
+      const moveDishStation = vi.fn();
+      const deviceMoveDishStation = vi.fn();
+      const { el } = await mountMove(
+        { deviceMode: false },
+        { moveDishStation, deviceMoveDishStation },
+      );
+      const target = await open(el);
+      el.deviceMode = true;
+      await flush(el);
+      choose(target, "st-2");
+      await flush(el);
+      expect(moveDishStation).not.toHaveBeenCalled();
+      expect(deviceMoveDishStation).not.toHaveBeenCalled();
+    });
   });
 
   it("the till's own Station screen without Take orders draws no Move", async () => {

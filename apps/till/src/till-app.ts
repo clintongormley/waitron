@@ -1012,6 +1012,14 @@ interface DishMove {
   counter?: boolean;
   basketRevision?: number;
   basketGeneration?: number;
+  bill?: {
+    expectedEdit: BillEditExpected;
+    api: TillApi;
+    session: number;
+    visit: number;
+    partyId: string;
+    viewBillId: string | undefined;
+  };
 }
 
 /** Every dish of a paid order in the counter's waiting list that can still move. `stationId` is
@@ -1024,6 +1032,8 @@ interface WaitingOrderMove {
   refusal: string | null;
   busy: boolean;
   session: number;
+  api: TillApi;
+  expectedEdit: BillEditExpected | null;
 }
 
 /** A banner's string key, a refusal shown through its code's own message, a save refused because
@@ -10713,6 +10723,23 @@ export class TillApp extends LitElement {
     const orderId = detail.counter === true ? this.#store.id : this.activeTabId;
     const revision = this.#store.revision;
     const generation = this.#store.loadGeneration;
+    const expectedEdit =
+      detail.counter === true ? null : this.#billChoiceEdit(detail.workingOrderId);
+    if (detail.counter !== true && expectedEdit === null) {
+      this.#moveStationOpening = null;
+      return;
+    }
+    const bill =
+      expectedEdit === null
+        ? undefined
+        : {
+            expectedEdit,
+            api: this.api,
+            session,
+            visit,
+            partyId: this.orderParty!.id,
+            viewBillId: orderId,
+          };
     const counterEligible = () =>
       detail.counter !== true ||
       (detail.workingOrderId === orderId &&
@@ -10728,6 +10755,8 @@ export class TillApp extends LitElement {
         session !== this.#operatorSession ||
         visit !== this.#orderVisit ||
         orderId !== (detail.counter === true ? this.#store.id : this.activeTabId) ||
+        (bill !== undefined &&
+          (!this.#stationBillCurrent(bill) || !this.#billChoiceCurrent(bill.expectedEdit))) ||
         !counterEligible()
       )
         return;
@@ -10735,6 +10764,7 @@ export class TillApp extends LitElement {
         ...detail,
         refusal: null,
         busy: false,
+        ...(bill === undefined ? {} : { bill }),
         ...(detail.counter === true
           ? { basketRevision: revision, basketGeneration: generation }
           : {}),
@@ -10790,10 +10820,31 @@ export class TillApp extends LitElement {
       this.#store.setLineMakeAt(open.index, stationId ?? undefined);
   }
 
+  #stationBillCurrent(bill: NonNullable<DishMove["bill"]>): boolean {
+    return (
+      this.isConnected &&
+      bill.api === this.api &&
+      bill.session === this.#operatorSession &&
+      bill.visit === this.#orderVisit &&
+      bill.partyId === this.orderParty?.id &&
+      bill.viewBillId === this.activeTabId
+    );
+  }
+
   async #onStationChosen(event: Event, open: DishMove): Promise<void> {
     if (this.movingStation !== open) return;
     const stationId = (event as CustomEvent<{ stationId: string | null }>).detail.stationId;
     if (open.busy || stationId === null || stationId === open.stationId) return;
+    if (open.bill !== undefined) {
+      if (!this.#stationBillCurrent(open.bill)) {
+        this.movingStation = null;
+        return;
+      }
+      if (!this.#billChoiceCurrent(open.bill.expectedEdit)) {
+        this.movingStation = { ...open, refusal: "draft.out_of_date" };
+        return;
+      }
+    }
     if (
       open.counter === true &&
       (open.basketGeneration !== this.#store.loadGeneration ||
@@ -10806,7 +10857,12 @@ export class TillApp extends LitElement {
       this.movingStation = null;
       return;
     }
-    const body = { submissionId: crypto.randomUUID(), lineIds: [open.lineId], stationId };
+    const body = {
+      submissionId: crypto.randomUUID(),
+      lineIds: [open.lineId],
+      stationId,
+      expectedEdit: open.bill?.expectedEdit ?? null,
+    };
     const busy = { ...open, busy: true, refusal: null };
     this.movingStation = busy;
     const session = this.#operatorSession;
@@ -10816,12 +10872,18 @@ export class TillApp extends LitElement {
     if (counterSubmission !== null) this.#counterMoveSubmitting = counterSubmission;
     const unlock = counterSubmission === null ? () => {} : this.#store.lockEdits();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    const api = open.bill?.api ?? this.api;
+    const live = () =>
+      session === this.#operatorSession &&
+      api === this.api &&
+      (open.bill === undefined || this.#stationBillCurrent(open.bill));
     try {
       await this.#resend(
-        (signal) => this.api.moveDishStation(open.workingOrderId, body, { signal }),
+        (signal) => api.moveDishStation(open.workingOrderId, body, { signal }),
         limit.signal,
-        () => session === this.#operatorSession,
+        live,
       );
+      if (!live()) return;
       if (this.movingStation === busy) this.movingStation = null;
       if (open.counter === true) {
         if (
@@ -10832,6 +10894,7 @@ export class TillApp extends LitElement {
           await this.#reloadCounterOrder(open.workingOrderId, session, counterSubmission);
       } else await this.#loadTabLines();
     } catch (error) {
+      if (!live()) return;
       const refusal = lineWriteError(error);
       if (this.movingStation === busy)
         this.movingStation = {
@@ -10854,6 +10917,7 @@ export class TillApp extends LitElement {
       limit.done();
       unlock();
       if (this.#counterMoveSubmitting === counterSubmission) this.#counterMoveSubmitting = null;
+      if (open.bill !== undefined && live()) await this.#refreshBillDraft();
     }
   }
 
@@ -10877,12 +10941,16 @@ export class TillApp extends LitElement {
     const opening = {};
     this.#moveStationOpening = opening;
     const session = this.#operatorSession;
+    const api = this.api;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      await this.#loadStations();
+      await this.#loadStations(true, { signal: limit.signal });
+      const bill = await api.getFindBill(id, { signal: limit.signal });
       const row = this.#movableWaitingRow(id);
       if (
         this.#moveStationOpening !== opening ||
         session !== this.#operatorSession ||
+        api !== this.api ||
         row === undefined
       )
         return;
@@ -10895,8 +10963,26 @@ export class TillApp extends LitElement {
         refusal: null,
         busy: false,
         session,
+        api,
+        expectedEdit:
+          bill.partyId === null
+            ? null
+            : {
+                billId: bill.edit!.billId,
+                editorVersion: bill.edit!.editorVersion,
+                draftId: bill.edit!.draftId,
+                draftRevision: bill.edit!.draftRevision,
+              },
       };
+    } catch (error) {
+      if (
+        this.#moveStationOpening === opening &&
+        session === this.#operatorSession &&
+        api === this.api
+      )
+        this.errorKey = lineWriteError(error);
     } finally {
+      limit.done();
       if (this.#moveStationOpening === opening) this.#moveStationOpening = null;
     }
   }
@@ -10920,16 +11006,23 @@ export class TillApp extends LitElement {
       this.movingStation = null;
       return;
     }
-    const body = { submissionId: crypto.randomUUID(), lineIds, stationId };
+    const body = {
+      submissionId: crypto.randomUUID(),
+      lineIds,
+      stationId,
+      expectedEdit: open.expectedEdit,
+    };
     const busy = { ...open, busy: true, refusal: null };
     this.movingStation = busy;
     this.errorKey = undefined;
-    const live = () => open.session === this.#operatorSession;
+    const live = () =>
+      this.isConnected && open.session === this.#operatorSession && open.api === this.api;
+    if (!live()) return;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let refusal: string | null = null;
     try {
       await this.#resend(
-        (signal) => this.api.moveDishStation(open.workingOrderId, body, { signal }),
+        (signal) => open.api.moveDishStation(open.workingOrderId, body, { signal }),
         limit.signal,
         live,
       );

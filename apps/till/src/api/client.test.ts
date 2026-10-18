@@ -1100,7 +1100,12 @@ describe("TillApi", () => {
   });
 
   it("posts a dish station move and returns the moved lines", async () => {
-    const body = { submissionId: "sub-1", lineIds: ["line-1"], stationId: "station-2" };
+    const body = {
+      submissionId: "sub-1",
+      lineIds: ["line-1"],
+      stationId: "station-2",
+      expectedEdit: null,
+    };
     const result = {
       revision: 4,
       stationId: "station-2",

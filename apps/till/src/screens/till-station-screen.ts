@@ -31,6 +31,7 @@ import type {
   MergedQueueGroup,
 } from "../widgets/station-queue.js";
 import type {
+  BillEditExpected,
   DeviceStationScreen,
   KitchenNotice,
   ResolvedKitchenScreen,
@@ -74,6 +75,10 @@ interface DishMove {
   stations: Station[];
   busy: boolean;
   refusal: string | null;
+  api: TillApi;
+  deviceMode: boolean;
+  generation: number;
+  expectedEdit: BillEditExpected | null;
 }
 
 const worked = (station: DeviceStation): station is WorkedStation =>
@@ -255,6 +260,7 @@ export class TillStationScreen extends LitElement {
   /** Why the last Move could not read the stations; its own field, so a queue read never clears it. */
   @state() private moveErrorCode?: string;
   #moveOpening = false;
+  #moveGeneration = 0;
   #collectGeneration = 0;
   readonly #collecting = new Set<string>();
   #tableChangedNext: string | null = null;
@@ -306,6 +312,15 @@ export class TillStationScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("deviceId")) this.merged = this.#rememberedMerged();
+    if (
+      (["api", "deviceMode", "deviceId"] as const).some(
+        (key) => changed.has(key) && changed.get(key) !== undefined,
+      )
+    ) {
+      this.#moveGeneration++;
+      this.#moveOpening = false;
+      this.moving = null;
+    }
   }
 
   /** The read is wrapped because localStorage can throw in a private window. */
@@ -341,6 +356,9 @@ export class TillStationScreen extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#collectGeneration++;
+    this.#moveGeneration++;
+    this.#moveOpening = false;
+    this.moving = null;
     this.#collecting.clear();
     clearInterval(this.#refreshTimer);
     for (const read of this.#refreshReads) read.abort();
@@ -754,23 +772,60 @@ export class TillStationScreen extends LitElement {
     this.#moveOpening = true;
     this.moveErrorCode = undefined;
     const limit = limited(READ_LIMIT_MS);
+    const api = this.api;
+    const deviceMode = this.deviceMode;
+    const generation = this.#moveGeneration;
+    const live = () =>
+      this.isConnected &&
+      api === this.api &&
+      deviceMode === this.deviceMode &&
+      generation === this.#moveGeneration;
     try {
-      const stations = await (this.deviceMode
-        ? this.api.deviceStations({ signal: limit.signal })
-        : this.api.listStations({ signal: limit.signal }));
-      this.moving = { ...detail, stations, busy: false, refusal: null };
+      const stations = await (deviceMode
+        ? api.deviceStations({ signal: limit.signal })
+        : api.listStations({ signal: limit.signal }));
+      if (!live()) return;
+      const bill = deviceMode
+        ? null
+        : await api.getFindBill(detail.workingOrderId, { signal: limit.signal });
+      if (!live()) return;
+      const expectedEdit =
+        bill?.edit == null
+          ? null
+          : {
+              billId: bill.edit.billId,
+              editorVersion: bill.edit.editorVersion,
+              draftId: bill.edit.draftId,
+              draftRevision: bill.edit.draftRevision,
+            };
+      this.moving = {
+        ...detail,
+        stations,
+        busy: false,
+        refusal: null,
+        api,
+        deviceMode,
+        generation,
+        expectedEdit,
+      };
     } catch (error) {
-      if (!this.#switched(error)) {
+      if (live() && !this.#switched(error)) {
         const code = (error as { code?: unknown }).code;
         this.moveErrorCode = typeof code === "string" ? code : "server.internal";
       }
     } finally {
       limit.done();
-      this.#moveOpening = false;
+      if (live()) this.#moveOpening = false;
     }
   }
 
   async #onStationChosen(event: Event, open: DishMove): Promise<void> {
+    const live = () =>
+      this.isConnected &&
+      open.api === this.api &&
+      open.deviceMode === this.deviceMode &&
+      open.generation === this.#moveGeneration;
+    if (this.moving !== open || !live()) return;
     const { stationId } = (event as CustomEvent<{ stationId: string | null }>).detail;
     if (open.busy || stationId === null || stationId === open.stationId) return;
     const body = { submissionId: crypto.randomUUID(), lineIds: [open.lineId], stationId };
@@ -780,11 +835,15 @@ export class TillStationScreen extends LitElement {
     try {
       const sent = resendUnanswered(
         (signal) =>
-          this.deviceMode
-            ? this.api.deviceMoveDishStation(open.workingOrderId, body, { signal })
-            : this.api.moveDishStation(open.workingOrderId, body, { signal }),
+          open.deviceMode
+            ? open.api.deviceMoveDishStation(open.workingOrderId, body, { signal })
+            : open.api.moveDishStation(
+                open.workingOrderId,
+                { ...body, expectedEdit: open.expectedEdit },
+                { signal },
+              ),
         limit.signal,
-        () => this.isConnected,
+        live,
       );
       // The till app counts it, so a box update does not reload the page while it is out.
       this.dispatchEvent(
@@ -795,8 +854,10 @@ export class TillStationScreen extends LitElement {
         }),
       );
       await sent;
+      if (!live()) return;
       if (this.moving === busy) this.moving = null;
     } catch (error) {
+      if (!live()) return;
       if (this.#switched(error)) {
         if (this.moving === busy) this.moving = null;
         return;
@@ -807,7 +868,7 @@ export class TillStationScreen extends LitElement {
     } finally {
       limit.done();
     }
-    await this.#reload();
+    if (live()) await this.#reload();
   }
 
   #renderMoveDialog(open: DishMove): TemplateResult {

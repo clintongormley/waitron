@@ -475,12 +475,37 @@ describe("till-app: counter station choice", () => {
     const el = await retrieved({
       listStations: vi.fn().mockResolvedValue(stations),
       seatTable: vi.fn(() => seating.promise),
+      listDrafts: vi.fn().mockResolvedValue({
+        drafts: [],
+        billEdits: [
+          {
+            billId: "table-order",
+            editorId: null,
+            editorName: null,
+            editorVersion: 0,
+            draftId: null,
+            draftRevision: null,
+          },
+        ],
+      }),
+      readCurrentOrders: vi.fn().mockResolvedValue({
+        revision: 1,
+        hasGroups: false,
+        nextDisplayNumber: 1,
+        retainedCourses: [],
+        reminder: null,
+        groups: [],
+        ungrouped: [],
+      }),
+      getPartyBills: vi.fn().mockResolvedValue([]),
     });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
     inBasket(el, '[data-make-at="1"]')!.click();
     await flush(el);
     emit(counter(el), "open-table", { tableId: "t-1", seated: false, guestCount: 2 });
-    emit(counter(el), "move-station", {
+    seating.resolve({ tabId: "table-order", partyId: "party-1", revision: 1 });
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-table-order-screen")!, "move-station", {
       workingOrderId: "table-order",
       lineId: "table-line",
       name: "Bravas",
