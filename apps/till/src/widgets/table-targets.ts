@@ -2,7 +2,7 @@ import { css, html, nothing, type TemplateResult } from "lit";
 import { partyTablesName } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { shownName, shownUnder } from "../state/floor-today.js";
+import { needsMovingToday, shownName, shownUnder } from "../state/floor-today.js";
 import type { TableActionRevisions, TableParty, TableState } from "../api/client.js";
 
 /** The styles {@link tableTarget} needs. */
@@ -89,39 +89,46 @@ export function moveBillScope(bill: string, into: string): string {
     .replace("{into}", () => into);
 }
 
-/** One table a person may name, with its condition. A table that needs clearing is listed but
- * cannot be chosen, and says why. `ownPartyId` names the acting party, whose tables read as theirs. */
+/** One table a person may name, with its condition. A table that needs clearing or moving is
+ * listed but cannot be chosen, and says why. `ownPartyId` names the acting party, whose tables read
+ * as theirs. */
 export function tableTarget(
   table: TableState,
   ownPartyId: string | undefined,
   pick: (table: TableState) => void,
 ): TemplateResult {
-  const clearing = table.condition === "needs_clearing";
+  const blocked =
+    table.condition === "needs_clearing"
+      ? ("needs_clearing" as const)
+      : needsMovingToday(table)
+        ? ("needs_moving" as const)
+        : null;
   const held = table.party;
-  const state = clearing
-    ? t("floor.needs_clearing")
-    : held === null
-      ? t("floor.free")
-      : held.id === ownPartyId
-        ? t("table.this_party")
-        : t("table.held_by").replace("{party}", () => held.displayName);
+  const state =
+    blocked !== null
+      ? t(`floor.${blocked}`)
+      : held === null
+        ? t("floor.free")
+        : held.id === ownPartyId
+          ? t("table.this_party")
+          : t("table.held_by").replace("{party}", () => held.displayName);
   return html`<div class="table-target">
     <wt-button
       class="target"
       data-target=${table.id}
       variant="secondary"
-      ?disabled=${clearing}
+      ?disabled=${blocked !== null}
       @click=${() => {
-        if (!clearing) pick(table);
+        if (blocked === null) pick(table);
       }}
     >
       <span class="target-label">${shownName(table)}</span>
       <span class="target-state">${state}</span>
     </wt-button>
     ${
-      clearing
+      blocked !== null
         ? html`<p class="target-reason" data-target-reason=${table.id}>
-            ${codeMessage("table.needs_clearing")}
+            ${codeMessage(`table.${blocked}`)}
           </p>`
         : nothing
     }

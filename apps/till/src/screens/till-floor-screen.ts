@@ -1114,7 +1114,7 @@ export class TillFloorScreen extends LitElement {
     const seen = new Set<string>();
     const targets: TableState[] = [];
     for (const each of [...zoneTables].sort((a, b) => inNumberOrder(a.label, b.label))) {
-      if (!onTodaysPlan(each) || needsMovingToday(each)) continue;
+      if (!onTodaysPlan(each)) continue;
       const linkId = this.#linkOf(each);
       const group = drawnGroupKey(each, linkId);
       if (seen.has(group)) continue;

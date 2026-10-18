@@ -142,7 +142,6 @@ import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuests } from "../state/receipt-guests.js";
 import {
-  needsMovingToday,
   outOfServiceJoined,
   seatsGuests,
   shownName as tableShownName,
@@ -4503,7 +4502,7 @@ export class TillTableOrderScreen extends LitElement {
       (this.actionVerb === "move-bill" &&
         (this.#shownBill === undefined || this.#shownBill.status === "open"));
     const tables = this.tables
-      .filter((table) => !outOfServiceJoined(table) && !needsMovingToday(table))
+      .filter((table) => !outOfServiceJoined(table))
       .filter((table) => zoneId === null || table.zoneId === zoneId)
       .filter(
         (table) =>
