@@ -16,7 +16,10 @@ import {
 import { TillApp } from "./till-app.js";
 import { DraftStore } from "./state/draft-sync.js";
 import { lineAdjustTarget } from "./state/adjust-target.js";
-import { openSentMore } from "./screens/till-table-order-screen.sent.test-helpers.js";
+import {
+  openSentMore,
+  sentFallbackFor,
+} from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { current, row } from "./screens/till-table-order-screen.current-orders.test-helpers.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
@@ -425,7 +428,8 @@ describe("till-app: giving away a dish", () => {
     ]);
     expect(dialog(el)).toBeNull();
     expect(order.revision).toBe(7);
-    expect(order.shadowRoot!.querySelector(".pending-line s")!.textContent).toBe(
+    const fallback = await sentFallbackFor(order);
+    expect(fallback.querySelector('[data-sent-fallback-line="line-1"] s')!.textContent).toBe(
       formatMoney("30.00", currentLocale()),
     );
     expect(banner(el)).toBeNull();
@@ -1294,14 +1298,23 @@ describe("till-app: cancelling a dish", () => {
           command: { ...ask, quantity: "1", submissionId: expect.any(String) },
         },
       ]);
-      const rows = [...order.shadowRoot!.querySelectorAll(".pending-line")];
-      expect(rows.map((row) => row.classList.contains("child-line"))).toEqual([
-        false,
-        true,
-        false,
-        true,
+      const fallback = await sentFallbackFor(order);
+      const rows = [...fallback.querySelectorAll(".sent-fallback-row")];
+      expect(
+        [...fallback.querySelectorAll<HTMLElement>("[data-sent-fallback-line]")].map((dish) => [
+          dish.dataset.sentFallbackLine,
+          [...dish.querySelectorAll<HTMLElement>("[data-sent-fallback-extra]")].map(
+            (extra) => extra.dataset.sentFallbackExtra,
+          ),
+        ]),
+      ).toEqual([
+        ["line-1", ["line-2"]],
+        ["line-3", ["line-4"]],
       ]);
-      expect(rows[3]!.querySelector(".name")!.textContent).toContain("Cheese");
+      expect(
+        rows.map((row) => row.parentElement!.hasAttribute("data-sent-fallback-extra")),
+      ).toEqual([false, true, false, true]);
+      expect(rows[3]!.querySelector(".sent-fallback-name")!.textContent).toContain("Cheese");
       expect(rows[3]!.querySelector(".line-total s")!.textContent).toBe(
         formatMoney("1.00", currentLocale()),
       );

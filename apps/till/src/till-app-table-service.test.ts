@@ -13,6 +13,7 @@ import {
 } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
+import { sentFallbackFor } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { formatMoney } from "@waitron/shared";
@@ -1462,7 +1463,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       draftId: null,
       draftRevision: null,
     });
-    const row = tableOrder(el)!.shadowRoot!.querySelector(".pending-line")!;
+    const fallback = await sentFallbackFor(tableOrder(el)!);
+    const row = fallback.querySelector('[data-sent-fallback-line="line-5"]')!;
+    expect(
+      row.querySelector(".line-note"),
+      "the refreshed saved note is shown in Sent",
+    ).not.toBeNull();
     expect(row.querySelector(".line-note")!.textContent).toContain("no onions");
     expect(row.querySelector(".line-total")!.textContent).toBe(
       formatMoney("9.50", currentLocale()),

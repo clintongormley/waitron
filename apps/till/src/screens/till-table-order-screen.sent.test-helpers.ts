@@ -63,3 +63,22 @@ export async function chooseSentServing(
   );
   await screen.updateComplete;
 }
+
+export async function sentFallbackFor(screen: TillTableOrderScreen): Promise<HTMLElement> {
+  if (screen.shadowRoot!.querySelector("[data-drawer]") !== null) {
+    await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await screen.updateComplete;
+  }
+  const pane = screen.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]")!;
+  if (pane.hidden) {
+    await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
+    await screen.updateComplete;
+  }
+  const fallback = screen.shadowRoot!.querySelector<HTMLElement>("[data-sent-fallback]");
+  expect(
+    fallback,
+    "stored bill details remain in Sent while the service read is unavailable",
+  ).not.toBeNull();
+  expect(fallback!.checkVisibility()).toBe(true);
+  return fallback!;
+}

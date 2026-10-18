@@ -2105,29 +2105,32 @@ build after A757's board if it has been decided, else name the table alone.
 
 ## A773. Courses, groups and the pass
 
-- **A773. Courses, groups and the pass (owner, 2026-10-16).** Two parts. **A773-1**, the table
-  screen's unsent list, has a [plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md). **A773-2**,
-  firing and the pass, is planned from the spec once A773-1 lands. Each
-  course gets "Held until fired". A table's unsent list is laid out as Fire now plus held groups:
-  it is arranged by ticking, Move to… and drag, and sent with Send all or Fire. The four draft
-  buttons and the check window go. Each bill keeps its own unsent list. Only the waiter fires. Each
-  station gets "Waits for the pass": fired food there becomes Requested until the pass fires it.
-  Station Fire and the venue's fire control go. Counter orders have no courses. Changes A756.
-  **Revised 2026-10-17** (owner): the right-hand panel becomes a Sent box (Served; Fired, ready
-  first; Held, folded, flashing when due) above a New order that empties on send; sent dishes have
-  no tick boxes and are acted on through A738's line window (Fire now, Recall, Move to station,
-  one Discount…, Cancel item with charge or no-charge by the dish's state); Recall returns a dish
-  to the New order; Pay waits for unsent dishes; Away and the pass's Done go; each pass fires only
-  what it sees. [Panel mockups](mockups/a773-order-panel/).
-  The unlanded Task 20 foundation retains cancelled charges separately from active food through
-  bill splits. Fire, serving, Recall and reminder reads now consume that state; the cancellation
-  command and public refund handoff exist on that branch; the sent-line menu and final panels
-  remain to be connected. Direct group submission and placement now require that bill's observed
-  editor state on the unlanded branch; independent editors can add their bills to one held group.
-  Remaining direct writer and till ownership integration stays open. Single-dish Fire now has its server/API and till command path, including
-  the owner-approved paid-line group-only exception; its visible menu follows in Task 16.
-  Migration. [Spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md),
-  [mockups](mockups/a773-courses-and-groups/)
+**A773-1 is unlanded on `feat/a773-1-unsent-list`.** Finish the table screen from its
+[plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md), preserving earlier behavioral checks.
+The remaining work includes:
+
+- Retire the duplicate To serve list, its empty state and direct Cancel strip after moving their
+  remaining checks to Sent and its native actions. Keep recorded names, notes, prices, extras,
+  paid markers, allergy information, refusals and leave protection. Retire the unused standalone
+  Send helper only after moving its behavioral checks.
+- Integrate the owner's Q43 cancellation changes after lane C publishes A758's revised design,
+  as the watcher's 2026-10-18 instruction requires. Finish the held-dish resolution before Finish
+  table (plan T20/T22); the earlier picture-03 implementation is not that revised design.
+- Reconcile the full branch with current main, including migration collisions and prose describing
+  changed behavior. Complete the remaining ownership/copy/native-screen acceptance, the physical
+  till trial and final whole-branch validation and review before publication. Read the campaign's
+  local checkpoint ledger for exact remaining checks and receipts; do not treat earlier focused
+  checks as whole-item acceptance.
+
+The approved [courses/groups spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md)
+and [one-editor-per-bill amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
+remain the design authority. Their owner-approved wording and the six answers in spec §14 remain
+in force. [Course mockups](mockups/a773-courses-and-groups/),
+[panel mockups](mockups/a773-order-panel/), [ownership pictures](mockups/a773-one-editor/).
+
+**A773-2**, firing and the pass, is planned from the spec after A773-1 lands. It covers Requested
+and pass release, retiring Away/Done, station settings and counter changes. Coordinate the A756
+settings, A803 station/pass additions and A797 pass/kitchen design before building that part.
 
 ## A678. Two readers answer "where is this order"
 
