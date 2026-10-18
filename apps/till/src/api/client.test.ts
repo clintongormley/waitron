@@ -2753,6 +2753,21 @@ describe("TillApi", () => {
     ]);
   });
 
+  it("sends Leave it here to its route with the room's revision, and returns the answer", async () => {
+    const answer = { zoneId: "z1", revision: 8 };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.leaveHereToday("t1", 7)).resolves.toEqual(answer);
+
+    const [path, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+    expect([path, init.method, JSON.parse(String(init.body))]).toEqual([
+      "/api/tables/t1/today/leave-here",
+      "POST",
+      { zoneRevision: 7 },
+    ]);
+  });
+
   it("sends each of today's changes to its route, with the room's revision, and returns the answer", async () => {
     const answer = { zoneId: "z1", revision: 8 };
     const fetchStub = vi.fn(async () => jsonResponse(answer));

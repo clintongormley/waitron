@@ -58,6 +58,9 @@ const moving = (id: string, x: number, over: Partial<TableToday> = {}) =>
 
 function stubApi() {
   return {
+    leaveHereToday: vi.fn<TillApi["leaveHereToday"]>(() =>
+      Promise.resolve({ zoneId: "z1", revision: 7 }),
+    ),
     markMovedToday: vi.fn<TillApi["markMovedToday"]>(() =>
       Promise.resolve({ zoneId: "z1", revision: 7 }),
     ),
@@ -83,6 +86,10 @@ const moveDialog = (el: TillFloorScreen) =>
   el.shadowRoot!.querySelector<WtDialog>("[data-move-dialog]");
 const refusal = (el: TillFloorScreen) =>
   el.shadowRoot!.querySelector("[data-floor-refusal]")?.textContent?.trim() ?? null;
+const footer = (el: TillFloorScreen) =>
+  [...moveDialog(el)!.querySelectorAll('wt-button[slot="footer"]')].map((button) =>
+    button.textContent!.trim(),
+  );
 const card = (el: TillFloorScreen, id: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-table="${id}"]`)!;
 
@@ -324,12 +331,14 @@ describe("till-floor-screen: a table that needs moving", () => {
     await tap(el, "t3");
     expect(moveDialog(el)!.querySelector("[data-move-cancel]")).not.toBeNull();
     expect(moveDialog(el)!.querySelector("[data-mark-moved]")).toBeNull();
+    expect(moveDialog(el)!.querySelector("[data-leave-here]")).toBeNull();
     moveDialog(el)!.querySelector<HTMLElement>("[data-move-cancel]")!.click();
     await el.updateComplete;
 
     await toList(el);
     expect(card(el, "t3").querySelector("[data-needs-moving]")).not.toBeNull();
     expect(card(el, "t3").querySelector("[data-mark-moved]")).toBeNull();
+    expect(card(el, "t3").querySelector("[data-leave-here]")).toBeNull();
   });
 
   it("closes the question once a read no longer has the table needing moving", async () => {
@@ -399,5 +408,77 @@ describe("till-floor-screen: a table that needs moving", () => {
     await settle(el);
 
     expect(refusal(el)).toBe(codeMessage("tab.already_open"));
+  });
+
+  it("asks Cancel, Leave it here or Mark moved, in that order, and Leave it here sends the room's revision", async () => {
+    const api = stubApi();
+    const el = await mount([moving("t3", 12)], api);
+    await tap(el, "t3");
+
+    expect(footer(el)).toEqual(["Cancel", "Leave it here", "Mark moved"]);
+    moveDialog(el)!.querySelector<HTMLElement>("[data-leave-here]")!.click();
+    await settle(el);
+
+    expect(api.leaveHereToday).toHaveBeenCalledWith("t3", 6);
+    expect(api.markMovedToday).not.toHaveBeenCalled();
+    expect(moveDialog(el)).toBeNull();
+  });
+
+  it("asks the three in Spanish", async () => {
+    setLocale("es");
+    const el = await mount([moving("t3", 12)]);
+    await tap(el, "t3");
+
+    expect(footer(el)).toEqual(["Cancelar", "Dejar aquí", "Marcar movida"]);
+  });
+
+  it("on the list the card offers Leave it here before Mark moved", async () => {
+    const api = stubApi();
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await toList(el);
+
+    const plain = card(el, "t3");
+    expect(
+      [...plain.querySelectorAll("wt-button")].map((each) => each.textContent!.trim()),
+    ).toEqual(["Leave it here", "Mark moved"]);
+    plain.querySelector<HTMLElement>("[data-leave-here]")!.click();
+    await settle(el);
+
+    expect(api.leaveHereToday).toHaveBeenCalledWith("t3", 6);
+  });
+
+  it("asks the floor to read again once Leave it here is answered", async () => {
+    const el = await mount([moving("t3", 12)]);
+    const refreshes: unknown[] = [];
+    el.addEventListener("floor-refresh", (event) => refreshes.push((event as CustomEvent).detail));
+    await tap(el, "t3");
+    moveDialog(el)!.querySelector<HTMLElement>("[data-leave-here]")!.click();
+    await settle(el);
+
+    expect(refreshes).toHaveLength(1);
+    expect(refusal(el)).toBeNull();
+  });
+
+  it("says the room has moved on when Leave it here is refused", async () => {
+    const api = stubApi();
+    api.leaveHereToday.mockRejectedValue({ code: "floor_today.out_of_date" });
+    const el = await mount([moving("t3", 12)], api);
+    await tap(el, "t3");
+    moveDialog(el)!.querySelector<HTMLElement>("[data-leave-here]")!.click();
+    await settle(el);
+
+    expect(refusal(el)).toBe(codeMessage("floor_today.out_of_date"));
+  });
+
+  it("offers Join with… once the floor read no longer shows the table needing moving", async () => {
+    const el = await mount([moving("t3", 12), planned("t4", 30)]);
+    el.tables = [planned("t3", 12), planned("t4", 30)];
+    await el.updateComplete;
+
+    send(mapOf(el), "wt-table-details", { tableId: "t3" });
+    await el.updateComplete;
+    const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
+    await sheet.updateComplete;
+    expect(sheet.shadowRoot!.querySelector('[data-today-action="join-with"]')).not.toBeNull();
   });
 });

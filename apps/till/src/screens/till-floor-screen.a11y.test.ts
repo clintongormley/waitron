@@ -423,6 +423,29 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     },
   );
 
+  it("has no violations with the needs-moving question open", async () => {
+    const needing: TableState[] = [{ ...tables[2]!, today: { ...todayRow(6), needsMoving: true } }];
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: needing, canChangeToday: true },
+      theme,
+    );
+    el.shadowRoot!.querySelector("wt-floor-map")!.dispatchEvent(
+      new CustomEvent("wt-table-tap", {
+        detail: { tableId: needing[0]!.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-move-dialog]",
+    )!;
+    await dialog.updateComplete;
+    expect(dialog.querySelector("[data-leave-here]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with the seat dialog open", async () => {
     const { el, host } = await mountWidget<TillFloorScreen>(
       "till-floor-screen",

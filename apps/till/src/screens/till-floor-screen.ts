@@ -938,6 +938,16 @@ export class TillFloorScreen extends LitElement {
     );
   }
 
+  #leaveHere(table: TableState): void {
+    this.moving = null;
+    const api = this.api;
+    if (api === undefined || !this.tables.some((current) => current.id === table.id)) return;
+    this.refusal = null;
+    void this.#settle(
+      this.#send(this.#revision(table.zoneId), (sent) => api.leaveHereToday(table.id, sent)),
+    );
+  }
+
   #emit(type: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
@@ -2081,11 +2091,23 @@ export class TillFloorScreen extends LitElement {
         slot="footer"
         ?data-clear-cancel=${clear}
         ?data-move-cancel=${!clear}
-        variant="secondary"
+        variant=${clear ? "secondary" : "ghost"}
         @click=${close}
       >
         ${t("action.cancel")}
       </wt-button>
+      ${
+        !clear && this.#actsOn(kind)
+          ? html`<wt-button
+              slot="footer"
+              data-leave-here
+              variant="secondary"
+              @click=${() => this.#leaveHere(table)}
+            >
+              ${t("floor.leave_here")}
+            </wt-button>`
+          : nothing
+      }
       ${
         this.#actsOn(kind)
           ? html`<wt-button
@@ -2112,6 +2134,18 @@ export class TillFloorScreen extends LitElement {
       <span class="occupancy" ?data-needs-clearing=${clear} ?data-needs-moving=${!clear}
         >${t(words.state)}</span
       >
+      ${
+        !clear && this.#actsOn(kind)
+          ? html`<wt-button
+              size="sm"
+              variant="secondary"
+              data-leave-here
+              @click=${() => this.#leaveHere(table)}
+            >
+              ${t("floor.leave_here")}
+            </wt-button>`
+          : nothing
+      }
       ${
         this.#actsOn(kind)
           ? html`<wt-button
