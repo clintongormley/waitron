@@ -90,22 +90,28 @@ export class DepartmentReceiptEditor extends LitElement {
   ];
   @property({ attribute: false }) api!: DepartmentReceiptClient;
   @property({ attribute: false }) subject?: { id: string; name: string };
+  /** The host builds a fresh subject on every render; the open department's again changes nothing. */
+  protected override shouldUpdate(changed: PropertyValues<this>): boolean {
+    return !(
+      changed.size === 1 &&
+      changed.has("subject") &&
+      this.department !== null &&
+      this.subject?.id === this.department.id
+    );
+  }
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (!changed.has("subject")) return;
     if (!this.subject) {
       this.#close();
       return;
     }
-    if (this.department?.id === this.subject.id) {
-      this.department = { ...this.department, name: this.subject.name };
-      return;
-    }
+    if (this.department?.id === this.subject.id) return;
     this.#close();
-    this.#open(this.subject);
+    this.#open(this.subject.id);
   }
   @property({ type: Boolean }) canManagePolicy = true;
   @property({ type: Boolean }) requiresDescription = true;
-  @state() private department: { id: string; name: string } | null = null;
+  @state() private department: { id: string } | null = null;
   @state() private model?: DepartmentReceiptModel;
   @state() private draft: DepartmentReceiptWrite = {
     receipt: {},
@@ -163,9 +169,9 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#announcedMarked = this.#marked;
     this.#notify("department-receipt-invalid", this.department?.id, { invalid: this.#marked });
   }
-  #open(department: { id: string; name: string }): void {
+  #open(id: string): void {
     this.#opening++;
-    this.department = { ...department };
+    this.department = { id };
     this.model = undefined;
     this.#baseline = undefined;
     this.busy = false;

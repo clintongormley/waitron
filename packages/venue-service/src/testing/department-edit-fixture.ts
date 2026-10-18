@@ -183,7 +183,7 @@ export async function supplyReceiptEditor(
   form: HTMLElementTagNameMap["department-settings"],
 ) {
   const editor = document.createElement("dashboard-department-receipt-editor") as ReceiptEditorStub;
-  el.receiptEditor = editor;
+  el.receiptEditor = html`${editor}`;
   await el.updateComplete;
   await form.updateComplete;
   await editor.updateComplete;

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
@@ -327,6 +327,21 @@ it("refreshes the selected subject name without replacing its dirty receipt or r
   await editReceipt(el, "email", "draft@example.com");
   el.subject = { id: "bar", name: "Renamed counter" };
   await el.updateComplete;
+  expect(receiptField(el, "email").value).toBe("draft@example.com");
+  expect(api.getDepartmentReceipt).toHaveBeenCalledTimes(1);
+});
+it("a host refresh handing the same department again, renamed or not, draws nothing again", async () => {
+  const { el, api } = await mountReceiptEditor();
+  await editReceipt(el, "email", "draft@example.com");
+  await el.updateComplete;
+  const render = vi.spyOn(el, "render");
+  const updated = vi.spyOn(el as unknown as { updated(): void }, "updated");
+  el.subject = { id: "bar", name: "Bar" };
+  await el.updateComplete;
+  el.subject = { id: "bar", name: "Renamed counter" };
+  await el.updateComplete;
+  expect(render).not.toHaveBeenCalled();
+  expect(updated).not.toHaveBeenCalled();
   expect(receiptField(el, "email").value).toBe("draft@example.com");
   expect(api.getDepartmentReceipt).toHaveBeenCalledTimes(1);
 });

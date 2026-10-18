@@ -1,3 +1,4 @@
+import type { DashboardPanelRenderer } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -37,8 +38,8 @@ export function offeredDepartmentTabs(model?: VenueServiceView, receipts = false
     ...(transfers ? (["transfers"] as const) : []),
   ];
 }
-export const offersReceiptEditor = (editor: unknown) =>
-  editor !== undefined && editor !== null && editor !== nothing;
+export type ReceiptEditorPanel = ReturnType<DashboardPanelRenderer> | undefined;
+export const offersReceiptEditor = (editor: ReceiptEditorPanel) => editor != null;
 interface ReceiptEditor {
   leaveScope?: object;
   hasUnsavedChanges?: boolean;
@@ -157,7 +158,7 @@ export class DepartmentSettings extends LitElement {
   @property() departmentId = "";
   @property({ type: Boolean }) refreshing = false;
   @property() tab: DepartmentTab = "details";
-  @property({ attribute: false }) receiptEditor: unknown;
+  @property({ attribute: false }) receiptEditor: ReceiptEditorPanel;
   @state() private draft?: DepartmentSettingsInput;
   @state() private busy = false;
   @state() private attempted = false;
@@ -595,12 +596,13 @@ export class DepartmentSettings extends LitElement {
       if (errors[field]) serviceErrors[field] = errors[field];
     const marked = new Set(Object.keys(errors).map((field) => fieldTab[field as Field]));
     if (this.receipt?.invalid) marked.add("receipt");
-    const tabs: TabItem[] = this.offeredTabs.map((key) => ({
+    const offered = this.offeredTabs;
+    const tabs: TabItem[] = offered.map((key) => ({
       key,
       label: t(`venue.department_tab.${key}`),
       ...(marked.has(key) ? { marked: t("venue.tab_needs_fixing") } : {}),
     }));
-    return html`<div class=${this.offeredTabs.includes("receipt") ? "form wide" : "form"}>
+    return html`<div class=${offered.includes("receipt") ? "form wide" : "form"}>
       ${
         !row.active
           ? html`<p class="readonly">${t("venue.enable_department_settings")}</p> `
@@ -683,7 +685,7 @@ export class DepartmentSettings extends LitElement {
           </section>
         </div>
         ${
-          this.offeredTabs.includes("receipt")
+          offered.includes("receipt")
             ? html`<div
                 class="panel receipt"
                 slot="receipt"

@@ -418,9 +418,8 @@ it("navigationScopes is [] for receipt when the dialog offers it", async () => {
   await departmentSettings(shell);
   const receipt = "/manage/venue-operations/department/d1/view/receipt?source=saved";
   expect(shell.navigationScopes(at(receipt))).toBe(undefined);
-  const dialog = shell.shadowRoot!.querySelector("department-edit-dialog")!;
-  dialog.receiptEditor = document.createElement("p");
-  await dialog.updateComplete;
+  shell.renderPanel = (_panel, subject) => html`<p data-test="receipt-panel">${subject?.id}</p>`;
+  await shell.updateComplete;
   expect(shell.navigationScopes(at(receipt))).toEqual([]);
   expect(
     shell.navigationScopes(at("/manage/venue-operations/department/d2/view/receipt?source=saved")),

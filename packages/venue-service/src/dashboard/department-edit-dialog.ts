@@ -6,9 +6,9 @@ import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import { t } from "./strings.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import {
-  offeredDepartmentTabs,
   offersReceiptEditor,
   type DepartmentTab,
+  type ReceiptEditorPanel,
 } from "./department-settings.js";
 
 @customElement("department-edit-dialog")
@@ -19,7 +19,7 @@ export class DepartmentEditDialog extends LitElement {
   @property() departmentId = "";
   @property({ type: Boolean }) refreshing = false;
   @property() tab: DepartmentTab = "details";
-  @property({ attribute: false }) receiptEditor: unknown;
+  @property({ attribute: false }) receiptEditor: ReceiptEditorPanel;
   @state() private dismissed = false;
   private shownDepartment = "";
   override connectedCallback() {
@@ -52,9 +52,6 @@ export class DepartmentEditDialog extends LitElement {
       this.dismissed = true;
       this.emit("gone", this.departmentId);
     }
-  }
-  get offeredTabs(): DepartmentTab[] {
-    return offeredDepartmentTabs(this.model, offersReceiptEditor(this.receiptEditor));
   }
   private readonly beforeClose = async (reason: LeaveReason) =>
     this.shadowRoot!.querySelector("department-settings")?.requestLeave(reason) ?? true;
