@@ -39,8 +39,8 @@ type Row =
     };
 
 type Deletion = {
-  department: Department;
-  set: { id: string; name: string };
+  departmentId: string;
+  setId: string;
   /** The latest impact read; an answer to an earlier one is ignored. */
   generation: number;
   impact?: FloorPlanSetDeleteImpact;
@@ -168,6 +168,7 @@ export class FloorPlansScreen extends LitElement {
     this.detach = this.api.watchFloorPlanSets(
       (model) => {
         this.model = model;
+        if (this.deleting && !this.liveDeletion(model, this.deleting)) this.deleting = undefined;
       },
       () => {
         this.readError = t("floor_plans.load_error");
@@ -283,7 +284,7 @@ export class FloorPlansScreen extends LitElement {
               ><wt-button
                 variant="secondary"
                 data-test="delete-set"
-                @click=${() => this.askDelete(row.department, set)}
+                @click=${() => this.askDelete(row.department.id, set.id)}
                 >${t("floor_plans.delete")}</wt-button
               >`
       }
@@ -308,9 +309,17 @@ export class FloorPlansScreen extends LitElement {
     this.api.rereadFloorPlanSets();
   }
 
-  private askDelete(department: Department, set: { id: string; name: string }) {
+  /** The deletion's department and set as the latest read has them, or undefined once either is gone. */
+  private liveDeletion(model: FloorPlanSetsModel, deletion: Deletion) {
+    const department = model.departments.find(({ id }) => id === deletion.departmentId);
+    const set = department?.sets.find(({ id }) => id === deletion.setId);
+    return department && set ? { department, set } : undefined;
+  }
+
+  private askDelete(departmentId: string, setId: string) {
     if (this.readOnly || !this.isConnected || this.editing || this.deleting) return;
-    const deletion: Deletion = { department, set, generation: 0, readError: "", busy: false };
+    this.actionError = "";
+    const deletion: Deletion = { departmentId, setId, generation: 0, readError: "", busy: false };
     this.deleting = deletion;
     void this.readImpact(deletion);
   }
@@ -320,7 +329,7 @@ export class FloorPlansScreen extends LitElement {
     const current = () => this.deleting === deletion && deletion.generation === generation;
     let impact: FloorPlanSetDeleteImpact;
     try {
-      impact = await this.api.readFloorPlanSetDeleteImpact(deletion.set.id);
+      impact = await this.api.readFloorPlanSetDeleteImpact(deletion.setId);
     } catch {
       if (current()) {
         deletion.readError = t("period.delete_read_error");
@@ -339,12 +348,12 @@ export class FloorPlansScreen extends LitElement {
     const deletion = this.deleting;
     const dialog = event.currentTarget as FloorPlanSetDeleteDialog;
     if (!deletion?.impact || deletion.busy || this.readOnly || !this.isConnected) return;
-    if (event.detail.setId !== deletion.set.id) return;
+    if (event.detail.setId !== deletion.setId) return;
     deletion.busy = true;
     dialog.refusal = undefined;
     this.requestUpdate();
     try {
-      await this.api.deleteFloorPlanSet(deletion.set.id, event.detail.replaceWith);
+      await this.api.deleteFloorPlanSet(deletion.setId, event.detail.replaceWith);
     } catch (error) {
       if (this.deleting === deletion) dialog.refusal = refusalOf(error);
       return;
@@ -358,17 +367,18 @@ export class FloorPlansScreen extends LitElement {
 
   private renderDeletion() {
     const deletion = this.deleting;
-    if (!deletion) return nothing;
-    const sets = deletion.department.sets;
+    const live = deletion && this.model && this.liveDeletion(this.model, deletion);
+    if (!deletion || !live) return nothing;
+    const sets = live.department.sets;
     const defaultSet = sets.find(({ isDefault }) => isDefault);
     return keyed(
       deletion,
       html`<dashboard-floor-plan-set-delete-dialog
         .open=${true}
-        .set=${deletion.set}
+        .set=${{ id: live.set.id, name: live.set.name }}
         .defaultSet=${defaultSet && { id: defaultSet.id, name: defaultSet.name }}
         .replacements=${sets
-          .filter(({ id, isDefault }) => !isDefault && id !== deletion.set.id)
+          .filter(({ id, isDefault }) => !isDefault && id !== deletion.setId)
           .map(({ id, name }) => ({ id, name }))}
         .impact=${deletion.impact}
         .readError=${deletion.readError}
@@ -389,6 +399,7 @@ export class FloorPlansScreen extends LitElement {
 
   private edit(mode: FloorPlanSetMode, set?: { id: string; name: string }) {
     if (this.readOnly || !this.model || this.editing || this.deleting) return;
+    this.actionError = "";
     this.editing = { mode, set };
   }
 

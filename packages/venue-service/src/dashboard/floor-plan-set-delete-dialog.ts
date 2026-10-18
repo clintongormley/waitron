@@ -1,5 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { currentLocale } from "@waitron/dashboard-kit";
+import { conjunctionList } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -14,6 +16,12 @@ import { t } from "./strings.js";
 export type { FloorPlanSetDeleteImpact };
 export type FloorPlanSetDeleteConfirm = { setId: string; replaceWith: string | null };
 type NamedSet = { id: string; name: string };
+
+const listOf = (items: { name: string }[]) =>
+  conjunctionList(
+    items.map(({ name }) => name),
+    currentLocale().startsWith("es") ? "es-ES" : "en-GB",
+  );
 
 /** Asks before deleting a set that is not its department's default. The empty Replace with
  *  choice is the default, which sends `replaceWith: null`. */
@@ -79,13 +87,13 @@ export class FloorPlanSetDeleteDialog extends LitElement {
     return [
       impact.periods.length
         ? format("floor_plans.delete_used_by", {
-            periods: impact.periods.map(({ name }) => name).join(", "),
+            periods: listOf(impact.periods),
           })
         : t("floor_plans.delete_unused"),
       t("floor_plans.delete_tables_stay"),
       impact.zonesShowing.length
         ? format("floor_plans.delete_on_floor", {
-            zones: impact.zonesShowing.map(({ name }) => name).join(", "),
+            zones: listOf(impact.zonesShowing),
           })
         : "",
     ].filter(Boolean);

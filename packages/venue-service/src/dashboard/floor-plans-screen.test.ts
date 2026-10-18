@@ -506,3 +506,51 @@ it("speaks Spanish in the set menu", async () => {
     "Eliminar…",
   ]);
 });
+
+it("follows the live read while Delete… is open, and closes once the set is gone", async () => {
+  let model = casaMarina();
+  const { screen, table } = await mountScreen({ read: () => dinnerImpact, page: () => model });
+  menuItems(table, "set:dinner")
+    .find((item) => text(item) === "Delete…")!
+    .click();
+  await screen.updateComplete;
+  const dialog = deleteDialogOf(screen)!;
+  await expect.poll(() => dialog.impact).toEqual(dinnerImpact);
+  model = casaMarina();
+  const sets = model.departments[0]!.sets;
+  sets[0]!.isDefault = false;
+  sets[2]!.isDefault = true;
+  sets[2]!.name = "House";
+  sets[1]!.name = "Supper";
+  screen.api.rereadFloorPlanSets();
+  await expect.poll(() => dialog.set?.name).toBe("Supper");
+  await dialog.updateComplete;
+  const field =
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=replaceWith]")!;
+  expect(field.options).toEqual([
+    { value: "", label: "House (default)", muted: true },
+    { value: "standard", label: "Standard" },
+  ]);
+  model = casaMarina();
+  model.departments[0]!.sets.splice(1, 1);
+  screen.api.rereadFloorPlanSets();
+  await expect.poll(() => deleteDialogOf(screen)).toBeNull();
+});
+
+it("clears a refused Make default once another action begins", async () => {
+  const { screen, table } = await mountScreen({
+    write: () => {
+      throw Object.assign(new Error("gone"), { code: "floor_plan_set.not_found", params: {} });
+    },
+  });
+  menuItems(table, "set:dinner")
+    .find((item) => text(item) === "Make default")!
+    .click();
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=action-error]"))
+    .not.toBeNull();
+  menuItems(table, "set:dinner")[0]!.click();
+  await screen.updateComplete;
+  expect(dialogOf(screen)!.mode).toBe("rename");
+  expect(screen.shadowRoot!.querySelector("[data-test=action-error]")).toBeNull();
+});

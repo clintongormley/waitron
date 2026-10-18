@@ -22,7 +22,7 @@ const impactOf = (overrides: Partial<FloorPlanSetDeleteImpact> = {}): FloorPlanS
 async function mount(impact?: FloorPlanSetDeleteImpact) {
   const el = document.createElement("dashboard-floor-plan-set-delete-dialog");
   el.set = { id: "dinner", name: "Dinner" };
-  el.defaultSet = { id: "standard", name: "Standard" };
+  el.defaultSet = { id: "standard", name: "House" };
   el.replacements = [{ id: "private", name: "Private party" }];
   el.impact = impact;
   el.open = true;
@@ -62,7 +62,7 @@ it("asks to delete the set, lists its periods, says the tables stay and offers t
   expect(field.value).toBe("");
   expect(field.showEmptyOption).toBe(true);
   expect(field.options).toEqual([
-    { value: "", label: "Standard (default)", muted: true },
+    { value: "", label: "House (default)", muted: true },
     { value: "private", label: "Private party" },
   ]);
   expect(confirm(el).textContent!.trim()).toBe("Delete Dinner");
@@ -83,7 +83,7 @@ it("adds the floor line only while a zone shows the set today", async () => {
   });
   await el.updateComplete;
   expect(lines(el)).toContain(
-    "On the floor, Inside, Terrace keep today's layout until someone presses Update layout.",
+    "On the floor, Inside and Terrace keep today's layout until someone presses Update layout.",
   );
   el.impact = impactOf();
   await el.updateComplete;
@@ -179,7 +179,7 @@ it("speaks Spanish", async () => {
   expect(picker(el)!.label).toBe("Sustituir por");
   expect(picker(el)!.options[0]).toEqual({
     value: "",
-    label: "Standard (predeterminado)",
+    label: "House (predeterminado)",
     muted: true,
   });
   expect(confirm(el).textContent!.trim()).toBe("Eliminar Dinner");
@@ -192,4 +192,20 @@ it("speaks Spanish", async () => {
   el.impact = impactOf({ periods: [] });
   await el.updateComplete;
   expect(lines(el)[0]).toBe("Ningún periodo lo usa.");
+  el.impact = impactOf({
+    periods: [
+      { id: "a", name: "Cena" },
+      { id: "b", name: "Brunch" },
+    ],
+    zonesShowing: [
+      { id: "inside", name: "Dentro" },
+      { id: "terrace", name: "Terraza" },
+    ],
+  });
+  await el.updateComplete;
+  expect(lines(el)).toEqual([
+    "Usado por Cena y Brunch.",
+    "Las mesas se quedan: son comunes a todos los conjuntos.",
+    "En sala, Dentro y Terraza mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
+  ]);
 });
