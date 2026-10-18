@@ -299,7 +299,7 @@ describe("a joined table come apart", () => {
     expect(written).toEqual([]);
   });
 
-  it("Long table is out of service while two of its parts still hold parties from before the reset", async () => {
+  it("Long table waits, not yet made, while two of its parts still hold parties from before the reset", async () => {
     const { zoneId, table, master, revision } = await plannedZone(
       v,
       [
@@ -345,10 +345,9 @@ describe("a joined table come apart", () => {
     const after = await inTx(v, async (tx) =>
       readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
     );
-    const long = after.tables.find((entry) => entry.id === ids.long)!.liveTableId!;
-
-    await expect(seat(v, long)).rejects.toMatchObject(inJoinedTable(long));
-    expect(await partyAt(v, long)).toBeNull();
+    expect(after.tables.find((entry) => entry.id === ids.long)!.liveTableId).toBeNull();
+    const { partyId } = await seat(v, table.c5!);
+    expect(await partyAt(v, table.c5!)).toBe(partyId);
   });
 });
 
