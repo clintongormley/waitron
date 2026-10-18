@@ -264,7 +264,7 @@ describe("which floor layout is due", () => {
     expect(layouts.size).toBe(2);
   });
 
-  it("reads each department's day once", async () => {
+  it("reads every department's keep open in one statement", async () => {
     const f = await fixture();
     await run(async (tx) => {
       await newSet(tx, f.cfg, f.bar, "Standard");
@@ -282,7 +282,7 @@ describe("which floor layout is due", () => {
         );
         expect(layouts.size).toBe(4);
         const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
-        expect(sql.filter((q) => q.includes('from "period_extensions"'))).toHaveLength(2);
+        expect(sql.filter((q) => q.includes('from "period_extensions"'))).toHaveLength(1);
       } finally {
         spy.mockRestore();
       }
