@@ -1371,25 +1371,16 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Left open by A759.
 
 - **Loose ends left by A755 (#1809).**
-  - For the owner: the Business day card's actions with a scheduled change. The mock-up draws only
-    "Change start". As built, a change that can still be altered shows "Replace change" and "Cancel
-    scheduled change"; one past its lock shows no action and the locked note.
-  - For the owner: the Venue card's lock wording. The mock-up's foot names the field ("The time
-    zone is locked because the venue has recorded sales."); as built it says one sentence per
-    reason ("Locked: the venue has recorded sales."), and the "· locked" marker beside a field
-    names it.
+  - The Business day card's actions with a scheduled change: queued as A788 (owner, 2026-10-17: no
+    scheduling; a change applies at the next changeover).
   - The Venue card says nothing about a time zone locked by a past business-day change. The server
     gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
     `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
-  - For the owner: who sees the Defaults card. As built, only a session holding `venue.configure`;
-    a supervisor (who holds `venue.view` alone) sees the other three cards read-only and no
-    Defaults card.
-  - For the owner: the legal paragraph beside setup's fixed receipt language, which A755 took out of
-    Venue settings. The setup wizard still shows it (`fixedReceiptLocale.reason`,
-    `apps/setup/src/screens/venue-screen.ts`). Should it go there too?
-  - For the owner: Province on the Venue card. The mock-up draws it editable; the server refuses
-    every province change, so it shows as a locked row until _Province edits in Venue details_
-    below is decided. Is that right?
+  - A824. Show Venue settings' Defaults card read-only to supervisors (owner, 2026-10-17). As
+    built, only a session holding `venue.configure` sees it
+    (`apps/dashboard/src/screens/venue-defaults-panel.ts`); a supervisor, who holds `venue.view`
+    alone, sees the other three cards read-only and no Defaults card. Done when a dashboard test
+    signed in with `venue.view` alone finds the Defaults card's values shown and nothing editable.
 
   [Mockups](backlog/mockups/a755-venue-settings/)
 
@@ -1422,10 +1413,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
     editor, and the long press then drag that picks a run (`day-picking.ts`), were checked only
     under headless Chromium's touch emulation. Check on an Android and an iOS phone that the page
     stops scrolling, no number is selected, and no click or menu follows the lift.
-  - Add `to` and `week` to Opening hours' address words. `apps/dashboard/src/navigation.ts` does not
-    list the special-day address's new `to` or the Week's `week`. Nothing breaks, because that list
-    keeps words it does not name, but adding them changes an exact-match check in
-    `navigation.test.ts`.
   - Move the pointer-gesture commands' type declarations into `packages/ui`. They live in
     `packages/venue-service/src/dashboard/pointer-gestures.d.ts`, beside their one user; the commands
     themselves are in `packages/ui/src/vitest-pointer-gestures.ts`. Move them when a second package
@@ -1448,9 +1435,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   - The Business day start dialog repeats the server's conflict-counting rule (`rangeKey`,
     `business-day-start-editor.ts`), so a server change would make it miscount unnoticed.
     [Detail](backlog/service-periods.md#the-business-day-start-dialog-repeats-the-servers-conflict-counting-rule)
-  - A venue with no seasons cannot edit a week from the dashboard. Believed unreachable, read in the
-    code, not run.
-    [Detail](backlog/service-periods.md#a-venue-with-no-seasons-cannot-edit-a-week-from-the-dashboard)
 
 - **Loose ends left by A506-4 (#1597).**
   - A business-day changeover conflict reports "Invalid or overlapping range" before "Range crosses
@@ -1492,9 +1476,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **The "Add to" offer reads every special day with every date** (`GET …/special-days`) to show a
   name and a latest date — left open by A506-5, #1603.
 
-- **The period dialog keeps the End offset field although mockup 7 leaves it out**, because nothing
-  else edits a period's end offset. Owner to confirm; removing it is one field — left open by
-  A506-11, #1694.
+- **The period dialog's End offset field: queued as A789** (owner, 2026-10-17: no offset at all; a
+  period is when its menu can be ordered).
 
 - **A painter opened from a Painted in chip in the Periods window does not return to the window
   when it closes**, so a manager loses their place — left open by A506-11, #1694.
@@ -1613,10 +1596,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Re-check that each Departments screen recovery case fails when its recovery step is deleted.**
   An unresolved assertion finding from A366 slice 6 Part C (#1510); A493 relocated its owner.
 
-- **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
+- **A825. Check the six Departments and menus (#297) leftovers against today's code, then trim
+  (owner, 2026-10-17).** The leftovers: remove the legacy price and fixed-station compatibility
   fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
-  reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
-  working assumption, to confirm before go-live. Hours moved to A254.
+  reporting; batched readiness and offer queries; a replication smoke test. Drop each one today's
+  code has overtaken, keep any real gap as its own short entry in this area, then delete this one.
+  Same legal seller is the working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Refresh service settings on an open till** — decide how changed department/zone policy
   reaches an empty till and preserves an existing basket's facts, then carry it through polling.
@@ -1636,10 +1621,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   the tab. Slice 6 keeps the three-value order record and its behaviour.
   [Detail](backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts)
 
-- **Prep station drag-scroll test failure (A366-4B).** Investigate the full-screen
-  `edge scroll carries a held station past the visible summary and persists on release`
-  failure. The isolated case, earlier checkpoint's full file and final candidate's full file
-  passed; the cause is unverified. Keep its scroll-distance and saved-order assertions.
+- **A826. Run the prep station drag-scroll test once (A366-4B; owner, 2026-10-17).** The full-screen
+  `edge scroll carries a held station past the visible summary and persists on release` failure's
+  cause was never found, and A725 removed the station drag handles since. Run it once: if the test is
+  gone or passes, delete this entry; if it fails, fix it, keeping its scroll-distance and
+  saved-order assertions.
 
 - **Compare computed station weeks with live routing on a painted special-day date without zone paint.**
   The slice 4 review read the planning and zone-week paths but did not compare the real sale
@@ -1673,11 +1659,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **Canary islands** — left open by A261 step 6 (Public holidays, #1305). The island choice is built
   from the data, but setup refuses the Canary provinces, so no venue reaches it.
-
-- **Province edits in Venue details** — left open by A261 step 6 (Public holidays, #1305).
-  `apps/server/src/venue-details.ts` still refuses every province change (`geography_context` before
-  sales). Allowing it is a separate decision; nothing in step 6 changes it.
-  [Detail](backlog/service-periods.md#province-edits-in-venue-details)
 
 - **Smaller notes from the public holidays reviews** — left open by A261 step 6 (Public holidays,
   #1305): there is no control to clear a chosen area back to "not chosen" (the route accepts it);

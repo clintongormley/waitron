@@ -61,14 +61,6 @@ and hours proposals; the historical spec keeps its dated pointers.
 - Smaller notes: nothing pins which of two repeated midnights a clock change picks. The separate Hours client's
   read-window and lifecycle notes and station-cell checks are retired with that page (slice 4 Part B).
 
-## Province edits in Venue details
-
-- **Province edits in Venue details.** `apps/server/src/venue-details.ts` still refuses every
-  province change (`geography_context` before sales). The step 7 plan allowed a change keeping
-  the same derived context, holiday region included, once a sourced province-to-region map
-  existed; step 6 ships that map (`packages/country-es/src/data/regions.ts`). Allowing it is a
-  separate decision; nothing in step 6 changes it.
-
 ## Smaller notes from the public holidays reviews
 
 - **Smaller notes from the reviews:** there is no control to clear a chosen area back to "not
@@ -84,16 +76,6 @@ counting a conflict once whatever its season (`rangeKey`,
 `apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
 would make the dialog miscount without any test noticing. The server could return how many conflicts
 it left off its list instead, which adds a field to the shared preview type.
-
-## A venue with no seasons cannot edit a week from the dashboard
-
-Left open by A506-3, #1591.
-
-A venue with no seasons cannot edit a week from the dashboard: since A506-8 the season painter
-draws nothing without a season (read in `season-painter.ts`'s render, not run). Provisioning gives
-every venue four seasons, and deleting the last one is refused (`season.invalid`, reason `last`,
-`saveSeasons` in `packages/venue-service/src/seasons.ts`), so this is believed unreachable — read in
-the code, not run.
 
 ## The special-day-then-season rule is written out in several places
 
@@ -409,6 +391,18 @@ Re-check when a new year's list is added.
 - **The "VAT class for new products" default is a venue setting (owner, 2026-10-16, A755).** It sits
   on Venue settings' Defaults card beside the default receipt language, and both are saved together
   under `venue.configure`, not `catalogue.manage`.
+
+- **Venue settings' Venue card says why a field is locked in one sentence per reason at its foot
+  (owner, 2026-10-17: accepted as built, A755)**, such as "Locked: the venue has recorded sales.",
+  and the "· locked" marker beside the field names which field it is, where the mock-up's foot
+  named the field in the sentence.
+
+- **A venue's province never changes (owner, 2026-10-17).** The Venue card shows Province as a
+  locked row, and `apps/server/src/venue-details.ts` refuses every province change.
+
+- **The legal paragraph beside the fixed receipt language stays in the setup wizard (owner,
+  2026-10-17)** (`fixedReceiptLocale.reason`, `apps/setup/src/screens/venue-screen.ts`), though
+  A755 took it out of Venue settings.
 
 - **Venue settings' Venue card has no "?" buttons (owner, 2026-10-16, A755)**, though its fields start
   filled in: what a change does shows in its review box once the field changes
