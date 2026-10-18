@@ -170,7 +170,7 @@ Per-task reviewer: **yes** for Tasks 1–5.
 
 - [ ] **Step 1: failing tests** in `business-day-changeover.test.ts`, Madrid clock
   `{ timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] }`. Values were computed with
-  the shared resolver on 2026-10-18 (scratch `/tmp/a788-plan/check.ts`, `dst.ts`):
+  the shared resolver on 2026-10-18 (`plan-check.ts`, `plan-dst.ts` in the probe folder, run with the workspace `tsx`):
   - Save at `2026-10-20T20:00:00Z` (Tue 22:00): `"03:00"` → `"2026-10-21"`; `"21:00"` → `"2026-10-21"`.
   - Save at `2026-10-20T23:00:00Z` (Wed 01:00, still Tue's day): `"00:30"` → `"2026-10-22"` (rule 2);
     `"03:00"` → `"2026-10-21"`.
