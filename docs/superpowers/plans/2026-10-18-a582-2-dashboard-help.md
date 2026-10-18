@@ -835,6 +835,99 @@ Task 7a set it.
 
 ---
 
+### Task 7b (as built): the owner's answer B — language choices in the account menu
+
+**This replaces the Task 7b above.** The owner answered Q41 on 2026-10-18 (~09:12, through the
+watcher): "**B** — signed in, the language choices move into the account menu beside Theme; the
+sign-in screen keeps its chooser." The second-row arrangement (decision 2, M8) is NOT built.
+
+**Files:** `packages/ui/src/components/wt-language-chooser.ts` (a second layout), its `.test.ts`
+and a sibling `wt-language-chooser.a11y.test.ts` (create it if absent, or extend it);
+`apps/dashboard/src/dashboard-app.ts` (`#banner`); `apps/dashboard/src/dashboard-app.help.test.ts`;
+the changed checks below.
+
+What changes:
+- **`wt-language-chooser` gains `layout="group"`** (default `"menu"`, today's trigger and pop-up,
+  unchanged). In `group` layout it draws, in the shape of `themeChoices` (`packages/ui/src/theme-choices.ts`,
+  which the account menu already holds): a `role="group"` named by a new `label` property (the
+  visible label at the start, muted and small, as Theme's is), then one native
+  `<button type="button" aria-pressed=…>` per language, its text the language's full name,
+  `data-test="lang-<code>"`, at least `--wt-tap-min` square, pressed = `active`. No trigger, no
+  pop-up. A pick dispatches the SAME `wt-locale-selected` event (`bubbles`, `composed`, detail
+  `{ code }`) — the chooser still never changes the language itself. The group loads its languages
+  through `loadLocales` when it is first connected (there is no press to wait for); until they
+  arrive, and if the load fails, it draws only the active language, pressed, and a failed load is
+  tried again the next time the element is connected. Every colour, space and size reads a
+  `--wt-*` token. Tests in `packages/ui` (coverage 98/98/98/95 holds): the group's name and
+  options from `loadLocales`; `aria-pressed` follows `active`; a pick dispatches the event with the
+  code and the event crosses a shadow root; the active-only fallback before and after a failed
+  load, and the retry on reconnect; `menu` layout unchanged (existing tests pass unedited); a
+  token-painting case for the pressed option; axe on the group in both themes.
+- **Dashboard banner:** signed OUT, the banner's `.banner-actions` keeps today's
+  `wt-language-chooser` (menu layout) exactly as now, at every width. Signed IN, there is no chooser
+  in `.banner-actions`; the account menu holds
+  `<wt-language-chooser layout="group" data-test="language-chooser" label=${t("profile.language")} .active=… .loadLocales=${this.#loadLocalesPassively}>`
+  straight after the Theme choices and before Log out. `#onLocaleSelected` is unchanged (the event
+  bubbles out of the menu to the shell's listener, as it does from the banner today). A pick closes
+  the menu, as a Theme pick does (`wt-row-actions` closes on a click on a `button` in its path).
+  The `::part(name)`/`::part(code)` phone rules stay: they now serve the signed-out banner only.
+- **The automatic load:** a signed-in boot now reads `getLocales` once without a press (the client
+  caches it, `apps/dashboard/src/api/client.ts` `#localesPromise`). CLAUDE.md §3 says automatic
+  dashboard reads are passive: follow how this client marks a passive GET and make this one
+  passive if it is not already; if the client offers no way, say so in the report rather than
+  inventing one.
+
+- [ ] **Step 1: Write the failing tests** in `dashboard-app.help.test.ts` (and the `packages/ui`
+  ones above):
+  - `it.each` over `live`/`demo` × `en-GB`/`es-ES` × 320/360/390/480:
+    `"signed in at %ipx the switch, bell and account menu share the lockup's row, and the banner keeps its height"` —
+    at 360, 390 and 480 the lockup is at least 60 px; at 320 at least 31 px; the switch, bell and
+    account menu share the lockup's row; nothing overlaps; the banner does not scroll sideways;
+    and the banner's height is today's, pinned as a number: before writing it, measure today's
+    signed-in banner height at each width on the base (`git worktree add --detach` a throwaway at
+    `a68cc3661`, never by swapping files here; remove it after) and pin those numbers.
+    (2026-10-18: CI drew the banner 1 px shorter than the pinned numbers, so the case no longer pins
+    them; see `docs/developers/design-system.md`, "add no height to the banner".)
+    **What the failing case shows:** without the change the lockup reads about 23 px at 360 and
+    53 px at 390 (M6).
+  - `"signed in, the banner has no language chooser and the account menu holds the language choices after Theme"`.
+  - `"there is one language chooser at every width"` — at 1280 and 390, signed in and signed out.
+  - `"a language picked in the account menu changes the language"` — at 390, open the menu, click
+    `lang-es-ES` for real (`userEvent.click`), `putLocale` called with it, the page then in Spanish,
+    the menu closed.
+  - `"the account menu's language choices have no accessibility violations, in both themes"`.
+- [ ] **Step 2: See them fail.**
+- [ ] **Step 3: Implement**, and make the changed checks below.
+- [ ] **Step 4: Run again; all pass**, with every suite that reads the signed-in chooser:
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-language-chooser` and
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.help.test.ts src/dashboard-app.test.ts src/dashboard-app.theme.test.ts src/dashboard-app.a11y.test.ts src/dashboard-app.unsaved-changes.test.ts src/dashboard-app.schedule-unsaved.test.ts src/dashboard-app.venue-settings-unsaved.test.ts src/dashboard-app.backup-unsaved.test.ts src/dashboard-app.login-unsaved.test.ts`
+  (check free memory first), then both packages' `typecheck`.
+- [ ] **Step 5: Deletion proof:** put the signed-in chooser back in `.banner-actions` → the
+  360/390 cases fail on the lockup; remove the group's `aria-pressed` → its case fails.
+- [ ] **Step 6: Commit**, e.g. `Signed in, the language choices move into the account menu beside Theme, making room for the help switch (A582)`.
+
+**Changed checks for answer B** (they replace checks 2 and 3's second-row form; record every one,
+with its old and new assertion and the reason, in `~/waitron-campaign-c/item-a582-2b-changed-tests.md`):
+1. Check 1 (`"puts the language chooser, then the bell, before the account menu in the banner"`):
+   signed in, the banner's actions are `["alerts-bell", "help-switch", "account-menu"]`; the title
+   says so.
+2. Check 2 (`"fits every banner item without overlap at %ipx …"`, 360/400/480): the chooser leaves
+   the measured items and its "shares the lockup's row" line goes; the switch joins them and shares
+   the lockup's row.
+3. Check 3 (`"when the intent is %s, in %s, fits banner items and the shared bar at %ipx"`): the
+   same; the 60 px floor is NOT changed.
+4. Check 4 (`dashboard-app.theme.test.ts`, account menu children): `["profile-row", "theme-choices", "language-chooser", "logout"]`.
+5. Any other case that opens the SIGNED-IN chooser's trigger (`lang-trigger`) or measures it in the
+   banner — known: `dashboard-app.test.ts` "names the shell's language on the chooser…" (reads the
+   trigger's name: now the pressed option names the language), "offers the server's languages in
+   the signed-in shell's chooser" (opens the trigger: now the group's options are the server's
+   languages), and the helper `shellChooser` (its selector still finds the element inside the
+   account menu, which sits in the banner). Cases that only `emit` `wt-locale-selected` on the
+   signed-in chooser keep passing unedited. A case about the SIGNED-OUT chooser is not changed; if
+   one fails, stop and report.
+
+---
+
 ### Task 8: the five "?" become badges, SumUp's gets a box, and a guard keeps new ones in help mode
 
 **Files:** `apps/dashboard/src/screens/device-profiles-screen.ts:2136`, `:2197`;

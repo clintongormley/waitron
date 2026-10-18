@@ -3751,6 +3751,13 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         modules: [],
       }),
       getLocales,
+      background: {
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [],
+          venueDefault: "es-ES",
+          loginDefault: "es-ES",
+        }),
+      },
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -3879,15 +3886,13 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   it("names the shell's language on the chooser, and the new one once a pick is saved", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
     await flush(el);
-    const trigger = () =>
-      shellChooser(el)!
-        .shadowRoot!.querySelector("[data-test=lang-trigger] [part=name]")!
-        .textContent!.trim();
-    expect(trigger()).toBe("Español");
+    const pressed = () =>
+      shellChooser(el)!.shadowRoot!.querySelector('[aria-pressed="true"]')!.textContent!.trim();
+    await vi.waitFor(() => expect(pressed()).toBe("Español"));
 
     emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
-    expect(trigger()).toBe("English");
+    expect(pressed()).toBe("English");
   });
 
   it("a rejected putLocale leaves the language unchanged (the switch is gated behind the durable write)", async () => {
@@ -4010,6 +4015,13 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         modules: [],
       }),
       logout,
+      background: {
+        getLocales: vi.fn().mockResolvedValue({
+          locales: [],
+          venueDefault: "es-ES",
+          loginDefault: "es-ES",
+        }),
+      },
     });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -4529,7 +4541,7 @@ it.each([
   [1280, 844],
   [390, 844],
 ])(
-  "fits the signed-in page in a %ix%i window, language chooser and all, and scrolls long content inside the column",
+  "fits the signed-in page in a %ix%i window, account menu and all, and scrolls long content inside the column",
   async (width, height) => {
     const { el, unmount } = await mountInRealPage(
       stubApi({
@@ -4554,7 +4566,9 @@ it.each([
       const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
       main.scrollTo(0, main.scrollHeight);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      expect(bannerTrigger(el).bottom).toBeLessThanOrEqual(window.innerHeight);
+      expect(
+        el.shadowRoot!.querySelector("[data-test=account-menu]")!.getBoundingClientRect().bottom,
+      ).toBeLessThanOrEqual(window.innerHeight);
       expect(main.scrollHeight).toBeGreaterThan(main.clientHeight);
       expect(document.scrollingElement!.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
     } finally {
@@ -5042,41 +5056,43 @@ it("offers the server's languages on the signed-out banner's chooser", async () 
   expect(getLocales).toHaveBeenCalledTimes(calls + 1);
 });
 
-describe.each([
-  ["signed in", stubApi],
-  ["signed out", signedOut],
-] as const)("the banner's language chooser, %s", (_state, api) => {
-  it.each([
-    [1280, "Español", "name", "Español"],
-    [390, "ES", "code", "ES Español"],
-  ] as const)(
-    "at %ipx shows %s, names its trigger in full for a screen reader, and fits the window",
-    async (width, shown, part, accessibleName) => {
-      const { el, unmount } = await mountInRealPage(api(), width, 844);
-      try {
-        const chooser = el.shadowRoot!.querySelector(
-          "[data-test=brand-banner] wt-language-chooser",
-        )!;
-        const trigger = chooser.shadowRoot!.querySelector<HTMLElement>("[data-test=lang-trigger]")!;
-        const name = trigger.querySelector<HTMLElement>("[part=name]")!;
-        const code = trigger.querySelector<HTMLElement>("[part=code]")!;
-        const [visible, hidden] = part === "name" ? [name, code] : [code, name];
-        expect(getComputedStyle(visible).display).not.toBe("none");
-        expect(getComputedStyle(hidden).display).toBe("none");
-        const drawn = part === "name" ? name : code.querySelector<HTMLElement>(".code-text")!;
-        expect(drawn.textContent!.trim()).toBe(shown);
-        await expect
-          .element(page.elementLocator(trigger.shadowRoot!.querySelector("button")!))
-          .toHaveAccessibleName(accessibleName);
-        const banner = brandBanner(el)!;
-        expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
-        expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
-      } finally {
-        await unmount();
-      }
-    },
-  );
-});
+describe.each([["signed out", signedOut]] as const)(
+  "the banner's language chooser, %s",
+  (_state, api) => {
+    it.each([
+      [1280, "Español", "name", "Español"],
+      [390, "ES", "code", "ES Español"],
+    ] as const)(
+      "at %ipx shows %s, names its trigger in full for a screen reader, and fits the window",
+      async (width, shown, part, accessibleName) => {
+        const { el, unmount } = await mountInRealPage(api(), width, 844);
+        try {
+          const chooser = el.shadowRoot!.querySelector(
+            "[data-test=brand-banner] wt-language-chooser",
+          )!;
+          const trigger = chooser.shadowRoot!.querySelector<HTMLElement>(
+            "[data-test=lang-trigger]",
+          )!;
+          const name = trigger.querySelector<HTMLElement>("[part=name]")!;
+          const code = trigger.querySelector<HTMLElement>("[part=code]")!;
+          const [visible, hidden] = part === "name" ? [name, code] : [code, name];
+          expect(getComputedStyle(visible).display).not.toBe("none");
+          expect(getComputedStyle(hidden).display).toBe("none");
+          const drawn = part === "name" ? name : code.querySelector<HTMLElement>(".code-text")!;
+          expect(drawn.textContent!.trim()).toBe(shown);
+          await expect
+            .element(page.elementLocator(trigger.shadowRoot!.querySelector("button")!))
+            .toHaveAccessibleName(accessibleName);
+          const banner = brandBanner(el)!;
+          expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
+          expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+        } finally {
+          await unmount();
+        }
+      },
+    );
+  },
+);
 
 describe("the banner's email inbox link", () => {
   it("shows Demo navigation above the public login page", async () => {
@@ -5422,7 +5438,7 @@ describe("alerts in the shell", () => {
     expect(toast(el).open).toBe(false);
   });
 
-  it("puts the language chooser, then the bell, before the account menu in the banner", async () => {
+  it("puts the bell, then the help switch, before the account menu in the banner", async () => {
     const api = alertsApi({
       listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
     });
@@ -5430,14 +5446,14 @@ describe("alerts in the shell", () => {
     await flush(el);
     const actions = el.shadowRoot!.querySelector(".banner-actions")!;
     expect([...actions.children].map((child) => child.getAttribute("data-test"))).toEqual([
-      "language-chooser",
       "alerts-bell",
+      "help-switch",
       "account-menu",
     ]);
   });
 
   it.each([360, 400, 480])(
-    "fits every banner item without overlap at %ipx, with the language chooser, the bell and the account menu",
+    "fits every banner item without overlap at %ipx, with the bell, the help switch and the account menu",
     async (width) => {
       const api = alertsApi({
         listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1", "error")] }),
@@ -5455,7 +5471,7 @@ describe("alerts in the shell", () => {
           "[data-test=venue-name]",
           "[data-test=alerts-bell]",
           "[data-test=account-menu]",
-          "[data-test=language-chooser]",
+          "[data-test=help-switch]",
         ].map((selector) => {
           const box = el.shadowRoot!.querySelector(selector)!.getBoundingClientRect();
           return { selector, box };
@@ -5478,11 +5494,11 @@ describe("alerts in the shell", () => {
           }
         }
         expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
-        const [, logo, , , menu, chooser] = items;
+        const [, logo, , , menu, helpSwitch] = items;
         expect(menu!.box.top, "the account menu shares the lockup's row").toBeLessThan(
           logo!.box.bottom,
         );
-        expect(chooser!.box.top, "the language chooser shares the lockup's row").toBeLessThan(
+        expect(helpSwitch!.box.top, "the help switch shares the lockup's row").toBeLessThan(
           logo!.box.bottom,
         );
       });
@@ -5551,7 +5567,7 @@ describe("alerts in the shell", () => {
           "[data-test=nav-toggle]",
           ".brand-logo",
           "[data-test=venue-name]",
-          "[data-test=language-chooser]",
+          "[data-test=help-switch]",
           "[data-test=alerts-bell]",
           "[data-test=account-menu]",
         ].map((selector) => ({
@@ -5594,12 +5610,10 @@ describe("alerts in the shell", () => {
           tapMin(el),
         );
         expect(bar.scrollWidth).toBeLessThanOrEqual(bar.clientWidth);
-        const chooser = items[3]!.box;
+        const helpSwitch = items[3]!.box;
         const menu = items[5]!.box;
         expect(menu.top, "the account menu shares the lockup's row").toBeLessThan(logo.bottom);
-        expect(chooser.top, "the language chooser shares the lockup's row").toBeLessThan(
-          logo.bottom,
-        );
+        expect(helpSwitch.top, "the help switch shares the lockup's row").toBeLessThan(logo.bottom);
       });
     },
   );
@@ -6560,9 +6574,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       api: stubApi({ getLocales }),
     });
     await flush(el);
-    expect(getLocales).not.toHaveBeenCalled();
     const chooser = shellChooser(el)!;
-    chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
     await vi.waitFor(() =>
       expect(
         chooser.shadowRoot!.querySelector('[data-test="lang-en-GB"]')?.textContent?.trim(),

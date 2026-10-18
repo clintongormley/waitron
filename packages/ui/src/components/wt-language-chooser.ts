@@ -21,6 +21,10 @@ export interface WtLocaleOption {
  * The options are NATIVE `<button role="menuitemradio">` elements as direct children of the
  * `role="menu"` container, so the role and `aria-checked` land on the element a screen reader
  * reaches (a `wt-button` does not forward a role or `aria-checked` to its inner button).
+ *
+ * `layout="group"` draws the languages as a labelled row of pressed-state buttons instead, for a
+ * menu that already holds it; it loads them as soon as it joins the page, and shows only the
+ * active language until they arrive.
  */
 @customElement("wt-language-chooser")
 export class WtLanguageChooser extends LitElement {
@@ -43,11 +47,64 @@ export class WtLanguageChooser extends LitElement {
       .visually-hidden {
         ${visuallyHiddenStyles}
       }
+
+      :host([layout="group"]) {
+        display: block;
+      }
+
+      .group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1);
+        padding-inline-start: var(--wt-space-4);
+      }
+
+      .group-label {
+        flex: 1;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .choice {
+        box-sizing: border-box;
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2);
+        border: 1px solid transparent;
+        border-radius: var(--wt-radius-md);
+        background: transparent;
+        color: var(--wt-color-text);
+        font: inherit;
+        cursor: pointer;
+      }
+      .choice:hover {
+        border-color: var(--wt-color-primary-text);
+      }
+      .choice[aria-pressed="true"] {
+        border-color: var(--wt-color-primary);
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+      }
+      .choice:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
     `,
   ];
 
   /** The code of the language the page is shown in. */
   @property() active = "";
+
+  /** `menu`: a trigger and a pop-up. `group`: the choices in a row, for inside another menu. */
+  @property({ reflect: true }) layout: "menu" | "group" = "menu";
+
+  /** The group's visible name, in `group` layout. */
+  @property() label = "";
 
   @property({ attribute: false }) loadLocales: () => Promise<WtLocaleOption[]> = async () => [
     ...SUPPORTED_LOCALES,
@@ -59,6 +116,8 @@ export class WtLanguageChooser extends LitElement {
 
   #loading?: Promise<void>;
 
+  #groupLoading = false;
+
   /**
    * Set by a press while a load is pending; any close clears it, so an outside press or focus, or
    * Escape, stops the menu opening (and taking focus) when the load arrives.
@@ -69,6 +128,34 @@ export class WtLanguageChooser extends LitElement {
     trigger: () => this.#trigger(),
     close: () => this.#close(),
   });
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#loadGroup();
+  }
+
+  override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    if (changed.has("layout")) this.#loadGroup();
+  }
+
+  #loadGroup(): void {
+    if (this.layout !== "group") return;
+    if (this.locales !== undefined || this.#groupLoading) return;
+    this.#groupLoading = true;
+    void this.#load().then(() => {
+      this.#groupLoading = false;
+    });
+  }
+
+  #choose(code: string): void {
+    this.dispatchEvent(
+      new CustomEvent<{ code: string }>("wt-locale-selected", {
+        detail: { code },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
@@ -129,13 +216,7 @@ export class WtLanguageChooser extends LitElement {
     event.stopPropagation();
     this.#close();
     this.#trigger().focus();
-    this.dispatchEvent(
-      new CustomEvent<{ code: string }>("wt-locale-selected", {
-        detail: { code },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    this.#choose(code);
   }
 
   #shortCode(code: string): string {
@@ -150,7 +231,28 @@ export class WtLanguageChooser extends LitElement {
     );
   }
 
+  #renderGroup() {
+    const choices = this.locales ?? [{ code: this.active, label: this.#label(this.active) }];
+    return html`<div class="group" role="group" aria-labelledby="group-label">
+      <span id="group-label" class="group-label">${this.label}</span>
+      ${choices.map(
+        // The click is left to bubble: an enclosing wt-row-actions closes its menu on it.
+        (l) =>
+          html`<button
+            type="button"
+            class="choice"
+            aria-pressed=${String(l.code === this.active)}
+            data-test=${`lang-${l.code}`}
+            @click=${() => this.#choose(l.code)}
+          >
+            ${l.label}
+          </button>`,
+      )}
+    </div>`;
+  }
+
   override render() {
+    if (this.layout === "group") return this.#renderGroup();
     const label = this.#label(this.active);
     // The full name sits inside the code part as visually hidden text, so it is read only while the
     // code is drawn and the drawn code stays in the name (WCAG 2.5.3).

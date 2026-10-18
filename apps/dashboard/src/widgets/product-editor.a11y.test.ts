@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { registerIcons } from "@waitron/ui";
+import { registerIcons, setHelpMode } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { ProductEditor } from "./product-editor.js";
@@ -417,3 +417,40 @@ describe.each(["light", "dark"] as const)(
     });
   },
 );
+
+describe.each(["light", "dark"] as const)("product editor with help on (%s)", (theme) => {
+  afterEach(() => setHelpMode(false));
+
+  it("renders its help badges accessibly", async () => {
+    setHelpMode(true);
+    const { el, host } = await mountWidget<ProductEditor>(
+      "dashboard-product-editor",
+      {
+        open: true,
+        locales: ["en", "es"],
+        units: [{ id: "each", name: { en: "Each" }, abbreviation: { en: "ea" } }],
+        taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
+        courses: [{ id: "starters", name: "Starters" }],
+        value: variants,
+      },
+      theme,
+    );
+    for (const section of ["price", "kitchen"]) {
+      const fold = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+        `wt-disclosure[data-section="${section}"]`,
+      )!;
+      await fold.updateComplete;
+      if (!fold.open) fold.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+      await fold.updateComplete;
+    }
+    await el.updateComplete;
+    const badges = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-help-tooltip"]>(
+        "wt-help-tooltip",
+      ),
+    ];
+    await Promise.all(badges.map((badge) => badge.updateComplete));
+    expect(badges.filter((badge) => badge.checkVisibility())).toHaveLength(4);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
+  });
+});

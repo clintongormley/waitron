@@ -1,4 +1,4 @@
-import { reorder } from "@waitron/ui";
+import { reorder, setHelpMode, type WtHelpTooltip, type WtRowActions } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { page, userEvent } from "vitest/browser";
@@ -505,6 +505,40 @@ it("offers Keep instead of Remove on a variant archived in this draft", async ()
   await click(el, "restore-1");
   expect(restore.mock.calls[0]![0].detail).toEqual({ index: 1 });
   expect(restore.mock.calls[0]![0].composed).toBe(true);
+});
+
+it("with help on, Keep has a badge that explains it, and Keep still works", async () => {
+  setLocale("en-GB");
+  setHelpMode(true);
+  try {
+    const el = await mountTable({ variants: withRemoved() });
+    const menu = el.shadowRoot!.querySelector<WtRowActions>('[data-test="actions-1"]')!;
+    const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    menu.show();
+    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+    const keep = el.shadowRoot!.querySelector<HTMLElement>('[data-test="restore-1"]')!;
+    const row = keep.closest("wt-menu-row")!;
+    expect(row).not.toBeNull();
+    const badge = row.shadowRoot!.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
+    await badge.updateComplete;
+    const badgeButton = badge.shadowRoot!.querySelector("button")!;
+    await expect.element(badgeButton).toHaveAccessibleName("Help: Keep");
+    expect(badge.textContent!.trim()).toBe(t("help.products.keep_variant"));
+    expect(el.shadowRoot!.querySelectorAll("wt-menu-row")).toHaveLength(1);
+
+    const restore = listen(el, "wt-restore");
+    await userEvent.click(badgeButton);
+    const box = badge.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await vi.waitFor(() => expect(box.matches(":popover-open")).toBe(true));
+    expect(restore).not.toHaveBeenCalled();
+
+    await userEvent.click(keep.shadowRoot!.querySelector("button")!);
+    expect(restore).toHaveBeenCalledOnce();
+    expect(restore.mock.calls[0]![0].detail).toEqual({ index: 1 });
+  } finally {
+    setHelpMode(false);
+    setLocale("es-ES");
+  }
 });
 
 it("opens a saved variant's own page, and offers nothing to open for one never saved", async () => {

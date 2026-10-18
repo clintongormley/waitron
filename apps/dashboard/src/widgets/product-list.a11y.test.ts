@@ -1,4 +1,4 @@
-import { registerIcons } from "@waitron/ui";
+import { registerIcons, setHelpMode } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -276,6 +276,25 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
   it("renders accessibly", async () => {
     const { host } = await mountWidget<ProductList>("dashboard-product-list", { products }, theme);
     await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with help on", async () => {
+    setHelpMode(true);
+    try {
+      const { el, host } = await mountWidget<ProductList>(
+        "dashboard-product-list",
+        { products },
+        theme,
+      );
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      const badge = table.shadowRoot!.querySelector("thead wt-help-tooltip")!;
+      await (badge as HTMLElementTagNameMap["wt-help-tooltip"]).updateComplete;
+      expect(badge.checkVisibility()).toBe(true);
+      await expectNoA11yViolations(host, { enable: ["target-size"] });
+    } finally {
+      setHelpMode(false);
+    }
   });
 
   it("renders accessibly with every status shown", async () => {

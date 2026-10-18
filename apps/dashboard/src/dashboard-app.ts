@@ -16,6 +16,7 @@ import {
   themeLabelsPerLocale,
   trackIconTooltip,
   UrlStateController,
+  setHelpMode,
   type ThemeChoice,
   type WtInput,
   type WtToast,
@@ -29,8 +30,10 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
+import "@waitron/ui/src/components/wt-help-switch.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { currentLocale, setLocale, t, fill } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
@@ -925,6 +928,9 @@ export class DashboardApp extends LitElement {
   );
   /** A stable field, so the chooser's `loadLocales` property does not change on every render. */
   readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
+  /** The account menu's choices load with no press, so the read must not count as activity. */
+  readonly #loadLocalesPassively = () =>
+    (this.api.background ?? this.api).getLocales().then((r) => r.locales);
   @state() private alerts: AlertView[] = [];
   @state() private alertsVisible = false;
   @state() private alertError: string | null = null;
@@ -1330,6 +1336,7 @@ export class DashboardApp extends LitElement {
   }
 
   #returnToLogin(code: string | null): void {
+    setHelpMode(false);
     this.leave.forceReset();
     navigationGuardFor(window)?.reset();
     this.#languageQueries.release("getContentLanguages");
@@ -1748,11 +1755,15 @@ export class DashboardApp extends LitElement {
                 .labels=${this.#themeLabelsFor(currentLocale())}
               ></wt-theme-chooser>`
         }
-        <wt-language-chooser
-          data-test="language-chooser"
-          .active=${currentLocale()}
-          .loadLocales=${this.#loadLocales}
-        ></wt-language-chooser>
+        ${
+          authenticated
+            ? nothing
+            : html`<wt-language-chooser
+                data-test="language-chooser"
+                .active=${currentLocale()}
+                .loadLocales=${this.#loadLocales}
+              ></wt-language-chooser>`
+        }
         ${
           authenticated
             ? html`${
@@ -1776,6 +1787,7 @@ export class DashboardApp extends LitElement {
                       ></dashboard-alerts-bell>`
                     : nothing
                 }
+                <wt-help-switch data-test="help-switch" label=${t("help.label")}></wt-help-switch>
                 <wt-row-actions
                   icon="person"
                   align="end"
@@ -1783,18 +1795,30 @@ export class DashboardApp extends LitElement {
                   label=${t("nav.account_menu")}
                   data-test="account-menu"
                 >
-                  <wt-button
-                    variant="ghost"
-                    align="start"
-                    data-test="profile"
-                    @click=${() => this.#openProfile()}
-                    >${t("action.account_settings")}</wt-button
+                  <wt-menu-row
+                    data-test="profile-row"
+                    help=${t("help.account.settings")}
+                    help-label=${fill("help.badge_label", { part: t("action.account_settings") })}
+                    ><wt-button
+                      variant="ghost"
+                      align="start"
+                      data-test="profile"
+                      @click=${() => this.#openProfile()}
+                      >${t("action.account_settings")}</wt-button
+                    ></wt-menu-row
                   >
                   ${themeChoices({
                     active: this.#theme.choice,
                     labels: this.#themeLabelsFor(currentLocale()),
                     onPick: chooseTheme,
                   })}
+                  <wt-language-chooser
+                    layout="group"
+                    data-test="language-chooser"
+                    label=${t("profile.language")}
+                    .active=${currentLocale()}
+                    .loadLocales=${this.#loadLocalesPassively}
+                  ></wt-language-chooser>
                   <wt-button
                     variant="ghost"
                     align="start"

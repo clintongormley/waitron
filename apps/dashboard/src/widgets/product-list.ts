@@ -1231,6 +1231,10 @@ export class ProductList extends LitElement {
         key: "availability",
         choosable: "shown",
         label: t("product.availability"),
+        help: {
+          text: t("help.products.availability"),
+          label: fill("help.badge_label", { part: t("product.availability") }),
+        },
         cell: (row) => {
           const { product, variant } = row;
           if (!rowActive(row))
@@ -1398,6 +1402,7 @@ export class ProductList extends LitElement {
     return this.#productColumns().map((column) => ({
       key: column.key,
       label: column.label,
+      help: column.help,
       align: column.align,
       choosable: column.choosable,
       pinned: column.pinned,

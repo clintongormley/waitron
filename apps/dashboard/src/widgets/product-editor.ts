@@ -25,6 +25,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-segmented-control.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -82,6 +83,7 @@ import {
 } from "./product-editor-model.js";
 import type { ProductChildKind } from "../state/product-child-create.js";
 import { fill, t, currentLocale } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 import { allergenLabel, vatClassName } from "../i18n/domain.js";
 
 const SUMMARY_SEPARATOR = " · ";
@@ -1148,6 +1150,15 @@ export class ProductEditor extends LitElement {
     return choices.find(({ id }) => id === parentId)?.name ?? t("editor.missing_choice");
   }
 
+  private help(part: string, key: StringKey) {
+    return html`<wt-help-tooltip
+      slot="help"
+      mode="help-mode"
+      aria-label=${fill("help.badge_label", { part })}
+      >${t(key)}</wt-help-tooltip
+    >`;
+  }
+
   private renderCourse() {
     const noneLabel = this.blankChoice(
       t("product.no_course"),
@@ -1174,7 +1185,8 @@ export class ProductEditor extends LitElement {
         this.change("courseId", event.detail.value || null);
       }}
       @wt-combobox-action=${(event: Event) => this.related(event, "courses")}
-    ></wt-combobox>`;
+      >${this.help(t("product.course"), "help.products.course")}</wt-combobox
+    >`;
   }
 
   private languagesLine(value: LocalizedText | null): string {
@@ -1438,7 +1450,8 @@ export class ProductEditor extends LitElement {
           parent && value === "" ? null : (value as NonNullable<ProductEditorDraft["vatClass"]>),
         );
       }}
-    ></wt-combobox>`;
+      >${this.help(t("product.vat"), "help.products.vat")}</wt-combobox
+    >`;
   }
 
   /** The unit dropdown and Add unit, drawn only while the chooser is open. */
@@ -1539,15 +1552,14 @@ export class ProductEditor extends LitElement {
     const parent = this.inherited;
     const base = this.hasActiveVariant;
     const amount = this.draft.unitPrice ?? "";
+    const label = !base
+      ? priceLabel(unitLabel)
+      : unitLabel
+        ? fill("editor.base_price_unit", { unit: unitLabel })
+        : t("editor.base_price");
     const fields = html`<wt-price-input
         name="unit-price"
-        label=${
-          !base
-            ? priceLabel(unitLabel)
-            : unitLabel
-              ? fill("editor.base_price_unit", { unit: unitLabel })
-              : t("editor.base_price")
-        }
+        label=${label}
         unit=${unitLabel ? fill("editor.per_unit", { unit: unitLabel }) : t("editor.unit_each")}
         ?fixed-unit=${parent !== null}
         locale=${currentLocale()}
@@ -1566,7 +1578,8 @@ export class ProductEditor extends LitElement {
           event.stopPropagation();
           this.openUnits("price");
         }}
-      ></wt-price-input>
+        >${this.help(label, "help.products.price")}</wt-price-input
+      >
       ${
         this.unitUsage.length
           ? html`<p data-test="unit-usage-warning">
@@ -1630,6 +1643,7 @@ export class ProductEditor extends LitElement {
             .join(", ") || t("editor.none")
         }
       >
+        ${this.help(t("editor.variants"), "help.products.variants")}
         <div class="group">
           ${
             variants.length

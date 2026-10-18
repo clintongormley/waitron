@@ -2133,7 +2133,10 @@ export class DeviceProfilesScreen extends LitElement {
         .invalid=${Boolean(errors.department)}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDepartment(e)}
       >
-        <wt-help-tooltip slot="help" aria-label=${t("device_profiles.department_help_label")}
+        <wt-help-tooltip
+          slot="help"
+          mode="help-mode"
+          aria-label=${t("device_profiles.department_help_label")}
           >${t("device_profiles.department_hint")}</wt-help-tooltip
         >
       </wt-combobox>
@@ -2194,7 +2197,10 @@ export class DeviceProfilesScreen extends LitElement {
         .invalid=${Boolean(errors.startingZone)}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onStartingZone(e)}
       >
-        <wt-help-tooltip slot="help" aria-label=${t("device_profiles.starting_zone_help_label")}
+        <wt-help-tooltip
+          slot="help"
+          mode="help-mode"
+          aria-label=${t("device_profiles.starting_zone_help_label")}
           >${t("device_profiles.starting_zone_hint")}</wt-help-tooltip
         >
       </wt-combobox>

@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanup, mount } from "../test-helpers.js";
+import { cleanup, host, mount } from "../test-helpers.js";
 import { setHelpMode } from "../help-mode.js";
 import type { WtHelpTooltip } from "./wt-help-tooltip.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
@@ -182,4 +182,17 @@ test("in a right-to-left page it hangs over the label's top left corner", async 
   const centre = centreOf(badgeButton(el));
   expect(Math.abs(centre.x - label.left)).toBeLessThanOrEqual(1);
   expect(Math.abs(centre.y - label.top)).toBeLessThanOrEqual(1);
+});
+
+test("an open column help box sets its own plain weight rather than the heading's bold", async () => {
+  const el = await table([nameColumn, availability()]);
+  host.style.setProperty("--wt-font-weight-normal", "300");
+  host.style.setProperty("--wt-font-weight-bold", "800");
+  await turnHelp(true, el);
+  const badge = badgeOf(el);
+  await userEvent.click(page.elementLocator(badgeButton(el)));
+  const popup = badge.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+  expect(getComputedStyle(headerOf(el, "Availability")).fontWeight).toBe("800");
+  expect(getComputedStyle(popup).fontWeight).toBe("300");
 });

@@ -255,6 +255,9 @@ called weaker than its name, the topic file lists what it does not see.
   a native dropdown cannot take the approved look (A178). Guard: `scripts/native-form-fields.test.ts`,
   weaker than its name — it reads string literals, and holds the files it allows by name only to a
   line count.
+- **A `wt-help-tooltip` outside the setup wizard carries `mode="help-mode"`**, so it shows only while
+  help is on (owner, 2026-10-18, A582 design §7). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads
+  literals as text; what it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Before treating a numeric field as whole numbers, follow its checks and wire conversion and
   try a fraction.** Cost: A284 almost skipped a logout timer because its comment said whole minutes;
   receipt: [conventions-ui.md](docs/developers/conventions-ui.md).
@@ -307,7 +310,7 @@ called weaker than its name, the topic file lists what it does not see.
   [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
   legal name (not a location). The account menu (a person-icon `wt-row-actions` popover holding
-  Account settings, Theme and Log out) sits at the trailing edge only when a session exists.
+  Account settings, Theme, Language and Log out) sits at the trailing edge only when a session exists.
 - **The dashboard matches the browser's `Accept-Language` when no language is saved.** Guard against
   a late locale response overwriting an authenticated person's language or an explicit choice.
 - **Dashboard login offers methods without revealing account enrolment.** Never query account status

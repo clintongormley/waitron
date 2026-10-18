@@ -1,5 +1,6 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
+import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 // Two projects share one coverage report: the server suites run in Node, and the dashboard panel's
 // Lit widgets run in real headless Chromium. The `groupOrder`s below run the Node project first.
@@ -50,6 +51,7 @@ export default defineConfig({
             provider: playwright({}),
             headless: true,
             instances: [{ browser: "chromium" }],
+            commands: { ...parkPointerCommands },
           },
         },
       },

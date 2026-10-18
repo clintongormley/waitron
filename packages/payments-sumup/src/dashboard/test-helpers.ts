@@ -3,7 +3,7 @@ import { applyTokens } from "@waitron/ui";
 // Test support for the SumUp panel's Lit widgets. Mirrors the dashboard's own widget test-helper
 // (mount by ASSIGNING PROPERTIES, not markup — every widget takes its data as
 // `@property({ attribute: false })` objects that cannot travel through an attribute), trimmed to the
-// mount/cleanup this package's two suites use (no axe pass — the a11y coverage stays with the app).
+// mount/cleanup this package's suites use. Its axe suite mounts through `@waitron/ui`'s helpers.
 
 const mounted: HTMLElement[] = [];
 

@@ -258,10 +258,15 @@ function undecidedColourReadings(incomplete: axe.Result[]): string[] {
 /**
  * Runs the full default axe ruleset against `context` and fails the test on any violation, or on a
  * colour-contrast check axe left undecided for a reason about the colours themselves (`equalRatio`,
- * `fgAlpha`, `colorParse`).
+ * `fgAlpha`, `colorParse`). `enable` switches on rules axe ships off, such as `target-size`; it can
+ * only add to the default set.
  */
-export async function expectNoA11yViolations(context: Element): Promise<void> {
-  const results = await axe.run(context);
+export async function expectNoA11yViolations(
+  context: Element,
+  options: { enable?: readonly string[] } = {},
+): Promise<void> {
+  const rules = Object.fromEntries((options.enable ?? []).map((id) => [id, { enabled: true }]));
+  const results = await axe.run(context, { rules });
   expect(results.violations, formatViolations(results.violations)).toEqual([]);
   const colourReadings = undecidedColourReadings(results.incomplete);
   expect(colourReadings, colourReadings.join("\n\n")).toEqual([]);

@@ -1,4 +1,5 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { setHelpMode } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./staff-screen.js";
 import type { StaffScreen } from "./staff-screen.js";
@@ -38,6 +39,15 @@ async function flush(el: StaffScreen): Promise<void> {
 }
 
 afterEach(cleanupWidgets);
+afterEach(() => setHelpMode(false));
+
+async function visibleHelp(root: ShadowRoot): Promise<number> {
+  const badges = [
+    ...root.querySelectorAll<HTMLElementTagNameMap["wt-help-tooltip"]>("wt-help-tooltip"),
+  ];
+  await Promise.all(badges.map((badge) => badge.updateComplete));
+  return badges.filter((badge) => badge.checkVisibility()).length;
+}
 
 describe.each(["light", "dark"] as const)("staff-screen a11y (%s theme)", (theme) => {
   it("renders accessibly", async () => {
@@ -48,5 +58,17 @@ describe.each(["light", "dark"] as const)("staff-screen a11y (%s theme)", (theme
     );
     await flush(el);
     await expectNoA11yViolations(host);
+  });
+
+  it("renders accessibly with help on", async () => {
+    setHelpMode(true);
+    const { el, host } = await mountWidget<StaffScreen>(
+      "dashboard-staff-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    expect(await visibleHelp(el.shadowRoot!)).toBe(1);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });

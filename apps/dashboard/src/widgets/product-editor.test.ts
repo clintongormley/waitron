@@ -1,7 +1,7 @@
 import { allergensFromChoices } from "./allergen-choices.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { registerIcons, type ComboboxOption } from "@waitron/ui";
+import { registerIcons, setHelpMode, type ComboboxOption, type WtHelpTooltip } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import {
@@ -6290,4 +6290,98 @@ it("opens Nutrition for a refused allergen kind, marks the picker and allows ret
       .shadowRoot!.querySelector("dashboard-product-nutrition-picker")!
       .shadowRoot!.querySelector("#allergens-error"),
   ).toBeNull();
+});
+
+describe("help mode", () => {
+  const HELPED = [
+    { name: "unit-price", key: "help.products.price" },
+    { name: "tax", key: "help.products.vat" },
+    { name: "product-course", key: "help.products.course" },
+  ] as const;
+
+  afterEach(() => setHelpMode(false));
+
+  async function badgeOf(host: Element): Promise<WtHelpTooltip> {
+    const badge = host.querySelector<WtHelpTooltip>(':scope > wt-help-tooltip[slot="help"]');
+    expect(badge, `${host.localName} has a help badge`).not.toBeNull();
+    await badge!.updateComplete;
+    return badge!;
+  }
+  function field(el: ProductEditor, name: string) {
+    return el.shadowRoot!.querySelector<HTMLElement & { label: string }>(`[name="${name}"]`)!;
+  }
+  async function mountOpen(value: ProductEditorDraft = saved) {
+    const el = await mountPricing(value, { courses: [{ id: "course-1", name: "Starters" }] });
+    await openSection(el, "price");
+    await openSection(el, "kitchen");
+    return el;
+  }
+
+  it.each([
+    { variants: [], label: "Price" },
+    { variants: [small], label: "Base price" },
+  ])(
+    "with help on, the price, VAT, course and Variants show a badge with their help text ($label)",
+    async ({ variants, label }) => {
+      const before = currentLocale();
+      setLocale("en-GB");
+      try {
+        const el = await mountOpen({ ...saved, variants });
+        expect(field(el, "unit-price").label.startsWith(label)).toBe(true);
+        const hosts = [
+          ...HELPED.map(({ name, key }) => ({ host: field(el, name), key })),
+          { host: folded(el, "variants"), key: "help.products.variants" as const },
+        ];
+        for (const { host } of hosts) expect((await badgeOf(host)).checkVisibility()).toBe(false);
+        setHelpMode(true);
+        for (const { host, key } of hosts) {
+          const badge = await badgeOf(host);
+          const part =
+            host.localName === "wt-disclosure"
+              ? t("editor.variants")
+              : (host as HTMLElement & { label: string }).label;
+          expect(badge.checkVisibility()).toBe(true);
+          await expect
+            .element(badge.shadowRoot!.querySelector("button")!)
+            .toHaveAccessibleName(`Help: ${part}`);
+          expect(badge.textContent!.trim()).toBe(t(key));
+        }
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("in Spanish the badges read the Spanish help", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const el = await mountOpen();
+      setHelpMode(true);
+      const badge = await badgeOf(field(el, "tax"));
+      await expect
+        .element(badge.shadowRoot!.querySelector("button")!)
+        .toHaveAccessibleName("Ayuda: IVA");
+      expect(badge.textContent!.trim()).toBe(t("help.products.vat"));
+      expect(badge.textContent!.trim()).toMatch(/^La clase de IVA/);
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("turning help on moves nothing in the editor", async () => {
+    const el = await mountOpen();
+    const boxes = () => [
+      ...HELPED.map(({ name }) =>
+        field(el, name).shadowRoot!.querySelector("[part=field]")!.getBoundingClientRect().toJSON(),
+      ),
+      folded(el, "variants").shadowRoot!.querySelector(".head")!.getBoundingClientRect().toJSON(),
+    ];
+    const off = boxes();
+    setHelpMode(true);
+    for (const { name } of HELPED) await badgeOf(field(el, name));
+    await badgeOf(folded(el, "variants"));
+    await new Promise(requestAnimationFrame);
+    expect(boxes()).toEqual(off);
+  });
 });
