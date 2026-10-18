@@ -162,6 +162,34 @@ describe("a set's layout of a zone", () => {
     expect(await revisionOf(d.dinner, d.zoneId)).toBe(2);
   });
 
+  it.each<[string, (t: SaveEntry) => SaveEntry]>([
+    ["seats", (t) => (t.key === "a" ? { ...t, seats: 6 } : t)],
+    ["Moveable", (t) => (t.key === "a" ? { ...t, fixed: true } : t)],
+    ["parts", (t) => (t.key === "joined" ? { ...t, partKeys: ["a", "c"] } : t)],
+  ])("moves every layout of the department for a change of %s", async (_, change) => {
+    const d = await department();
+    const { ids } = await save(d.standard, d.zoneId, {
+      revision: 0,
+      tables: [
+        entry("a", fresh("1"), { placement: null }),
+        entry("b", fresh("2"), { placement: null }),
+        entry("c", fresh("3"), { placement: null }),
+        entry("joined", fresh("1+2"), { seats: 8, partKeys: ["a", "b"] }),
+      ],
+    });
+    const keyOf = new Map(Object.entries(ids).map(([key, id]) => [id, key]));
+    const dinner = await read(d.dinner, d.zoneId);
+    const draft = asSaved(dinner).map((t) => ({
+      ...t,
+      key: keyOf.get(t.id!)!,
+      partKeys: t.partKeys.map((id) => keyOf.get(id)!),
+    }));
+
+    await save(d.dinner, d.zoneId, { revision: dinner.revision, tables: draft.map(change) });
+
+    expect(await revisionOf(d.standard, d.zoneId)).toBe(2);
+  });
+
   it("refuses a stale save from another set's editor", async () => {
     const d = await department();
     await save(d.standard, d.zoneId, { revision: 0, tables: [entry("one", fresh("1"))] });

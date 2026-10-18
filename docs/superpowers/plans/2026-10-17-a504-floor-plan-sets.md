@@ -681,8 +681,9 @@ export async function saveLayout(
   Inside, sets Standard and Dinner linked with Task 3's `linkFloorPlanSet` after inserting
   `floorPlanSets` rows):
   - "shares tables and keeps places per set": save tables 1–3 placed in Standard; read Dinner:
-    the same three ids, every `placement` null, revision 0.
-  - "moves only its own layout for a move": move table 1 in Dinner → Dinner revision 1, Standard
+    the same three ids, every `placement` null, revision 1 (Standard's first save added tables,
+    a shared change, so decision 2 writes Dinner's row at revision 1).
+  - "moves only its own layout for a move": move table 1 in Dinner → Dinner revision 2, Standard
     revision still 1.
   - "moves every layout of the department for a shared change": add table 4 in Dinner → Standard's
     revision moves too, and a Standard row for a set that had none is written (decision 2).

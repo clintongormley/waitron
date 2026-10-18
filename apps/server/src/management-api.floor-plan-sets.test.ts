@@ -175,6 +175,15 @@ describe("/management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan", () =
     });
   });
 
+  it("refuses a set id that is not a UUID as an unknown set", async () => {
+    const at = await setAndZone();
+    const res = await layout({ ...at, setId: "not-a-uuid" }, { method: "GET" }, managerCookie);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({
+      error: { code: "floor_plan_set.not_found", params: { setId: "not-a-uuid" } },
+    });
+  });
+
   it("refuses a person without venue.configure on both routes, as the zone route does", async () => {
     const at = await setAndZone();
     const body = JSON.stringify({ revision: 0, tables: [] });
