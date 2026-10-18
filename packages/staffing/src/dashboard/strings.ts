@@ -108,9 +108,9 @@ const en = {
   "staffing.rota.empty": "No active areas.",
   "staffing.rota.unpainted_title": "No staffing is painted for {area} this week",
   "staffing.rota.unpainted_season":
-    "Slots come from the staffing you paint: who {area} needs, and when. Paint {season}'s standard week once and every week of the season gets its slots. You can still add shifts by person.",
+    "Slots come from the staffing you paint: who {area} needs, and when. Paint {season}'s standard week once and every week of the season gets its slots. You can still add shifts in Everyone.",
   "staffing.rota.unpainted_plain":
-    "Slots come from the staffing you paint: who {area} needs, and when. You can still add shifts by person.",
+    "Slots come from the staffing you paint: who {area} needs, and when. You can still add shifts in Everyone.",
   "staffing.rota.paint_week": "Paint {season}'s standard week",
   "staffing.rota.no_shifts_hint":
     "No shifts this week yet. Click a day in someone's row to fill a slot or add a shift.",
@@ -327,9 +327,9 @@ const es: Record<keyof typeof en, string> = {
   "staffing.rota.empty": "No hay áreas activas.",
   "staffing.rota.unpainted_title": "No hay personal pintado para {area} esta semana",
   "staffing.rota.unpainted_season":
-    "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Pinta una vez la semana habitual de {season} y cada semana de la temporada tendrá sus puestos. Puedes seguir añadiendo turnos por persona.",
+    "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Pinta una vez la semana habitual de {season} y cada semana de la temporada tendrá sus puestos. Puedes seguir añadiendo turnos en Todo el equipo.",
   "staffing.rota.unpainted_plain":
-    "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Puedes seguir añadiendo turnos por persona.",
+    "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Puedes seguir añadiendo turnos en Todo el equipo.",
   "staffing.rota.paint_week": "Pintar la semana habitual de {season}",
   "staffing.rota.no_shifts_hint":
     "Aún no hay turnos esta semana. Haz clic en un día de la fila de alguien para cubrir un puesto o añadir un turno.",
