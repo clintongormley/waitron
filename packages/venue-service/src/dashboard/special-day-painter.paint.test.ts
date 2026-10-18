@@ -1053,6 +1053,45 @@ describe("a zone's Closed inside its department's hours", () => {
     }
   });
 
+  it("a zone's Copy whose Closed paint falls wholly outside the target date's hours lands its Open paint there, and says why beside Save", async () => {
+    const { painter } = await mount({
+      season: (date) => ({
+        ranges: [date === DEC_14 ? dinner("08:00", "23:30") : dinner("20:00", "23:30")],
+      }),
+    });
+    await pick(painter, "zone:z2");
+    await drag(painter, DEC_14, at("09:00"), at("10:00"));
+    chip(painter, "paint-open").click();
+    await settle(painter);
+    await drag(painter, DEC_14, at("17:00"), at("19:00"));
+    const open = { periodId: "open", startsAt: "17:00", endsAt: "19:00" };
+    expect(grid(painter).days.get(DEC_14)).toEqual([closed("09:00", "10:00"), open]);
+    const g = grid(painter);
+    const menu = g.shadowRoot!.querySelector<HTMLElement>(
+      `.heading[data-column="${DEC_14}"] wt-row-actions`,
+    )!;
+    await userEvent.click(menu);
+    await userEvent.click(
+      [...menu.querySelectorAll<HTMLElement>("wt-button")].find(
+        (button) => button.textContent!.trim() === "Copy to…",
+      )!,
+    );
+    await g.updateComplete;
+    const chooser = g.shadowRoot!.querySelector<HTMLElement>(".chooser")!;
+    await userEvent.click(
+      chooser.querySelector<HTMLInputElement>(`input[name="copyTo-${DEC_15}"]`)!,
+    );
+    await g.updateComplete;
+    await userEvent.click(
+      [...chooser.querySelectorAll<HTMLElement>("wt-button")].find(
+        (button) => button.textContent!.trim() === "Copy",
+      )!,
+    );
+    await settle(painter);
+    expect(grid(painter).days.get(DEC_15)).toEqual([open]);
+    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+  });
+
   it("a zone's Open block changed to Closed wholly outside its department's hours is kept, and says why beside Save", async () => {
     const { painter } = await mount({ season: restaurantOnly });
     await pick(painter, "zone:z2");

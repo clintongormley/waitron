@@ -200,10 +200,10 @@ export class PaintGrid extends LitElement {
       this.renderRoot.querySelector<HTMLElement>(`.heading[data-column="${key}"] wt-row-actions`),
     copy: (from, to) => {
       const copied = copyDay(this.days, from, to);
-      for (const key of to) {
-        const day = copied.get(key)!;
-        if (!samePaint(day, this.#day(key)) && !this.#outside(key, day)) this.#emit(key, day);
-      }
+      const changed = to.filter((key) => !samePaint(copied.get(key)!, this.#day(key)));
+      for (const key of changed) this.#emit(key, copied.get(key)!);
+      // After every change: a painter clears its notice on each change.
+      for (const key of changed) this.#outside(key, copied.get(key)!);
     },
   });
 
@@ -237,7 +237,7 @@ export class PaintGrid extends LitElement {
     ).map((range) => ({ periodId: null, ...range }));
   }
   /** Sends `paint-outside` for the column when `day` holds Closed blocks and its hours cut them
-   *  all away, so the caller leaves the day as it was. */
+   *  all away. */
   #outside(key: string, day: readonly Paint[]): boolean {
     if (!day.some(({ periodId }) => periodId === null) || this.#cut(key, day).length > 0)
       return false;

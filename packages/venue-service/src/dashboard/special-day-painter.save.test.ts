@@ -78,7 +78,8 @@ async function mount({ refusals = [], ...answers }: Options = {}) {
   document.body.append(painter);
   await settle(painter);
   await expect.poll(() => part(painter!, "loading")).toBeNull();
-  await expect.poll(() => grid(painter!).underlay.size).toBeGreaterThan(0);
+  if (answers.failingSeason) await expect.poll(() => part(painter!, "season-error")).not.toBeNull();
+  else await expect.poll(() => grid(painter!).underlay.size).toBeGreaterThan(0);
   await settle(painter);
   return { painter, writes, saved };
 }
@@ -212,6 +213,96 @@ describe("Save sends only the paint the draft changed", () => {
         departmentId: "d1",
         date: DEC_15,
         ranges: [{ periodId: null, startsAt: "23:00", endsAt: "23:30" }],
+      },
+    ]);
+    expect(Object.keys(body(writes[0]!))).not.toContain("zonePaint");
+  });
+
+  it("a department change sends no zone whose stored closures, read back in clock order, it leaves whole", async () => {
+    const { painter, writes } = await mount({
+      season: () => ({ ranges: [dinner("20:00", "03:00")] }),
+      days: {
+        sd1: terraceClosed([
+          { kind: "closed", startsAt: "01:00", endsAt: "02:00" },
+          { kind: "closed", startsAt: "23:00", endsAt: "00:30" },
+        ]),
+      },
+    });
+    chip(painter, "paint-closed").click();
+    await settle(painter);
+    await drag(painter, DEC_15, at("02:30"), at("03:00"));
+    await save(painter, writes);
+    expect(body(writes[0]!).paint).toEqual([
+      {
+        departmentId: "d1",
+        date: DEC_15,
+        ranges: [{ periodId: null, startsAt: "02:30", endsAt: "03:00" }],
+      },
+    ]);
+    expect(Object.keys(body(writes[0]!))).not.toContain("zonePaint");
+  });
+
+  it("a department change on a date ticked closed all day leaves its zones' paint that date", async () => {
+    const { painter, writes } = await mount({
+      days: {
+        sd1: storedDay({
+          zonePaint: [
+            {
+              zoneId: "z2",
+              date: DEC_25,
+              ranges: [{ kind: "closed", startsAt: "21:00", endsAt: "23:00" }],
+            },
+          ],
+        }),
+      },
+    });
+    await setPaint(painter, DEC_25, [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }]);
+    await save(painter, writes);
+    expect(body(writes[0]!).paint).toEqual([
+      {
+        departmentId: "d1",
+        date: DEC_25,
+        ranges: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }],
+      },
+    ]);
+    expect(Object.keys(body(writes[0]!))).not.toContain("zonePaint");
+  });
+
+  it("only Terrace's Closed paint is cut: its Open paint past the new hours is kept, in time order", async () => {
+    const { painter, writes } = await mount({
+      days: {
+        sd1: terraceClosed([
+          { kind: "closed", startsAt: "21:00", endsAt: "22:30" },
+          { kind: "open", startsAt: "22:30", endsAt: "23:30" },
+        ]),
+      },
+    });
+    await shrinkRestaurant(painter, "22:00");
+    await save(painter, writes);
+    expect(body(writes[0]!).zonePaint).toEqual([
+      {
+        zoneId: "z2",
+        date: DEC_15,
+        ranges: [
+          { kind: "closed", startsAt: "21:00", endsAt: "22:00" },
+          { kind: "open", startsAt: "22:30", endsAt: "23:30" },
+        ],
+      },
+    ]);
+  });
+
+  it("a department change on a date with no season day leaves its zones' paint that date", async () => {
+    const { painter, writes } = await mount({
+      failingSeason: () => true,
+      days: { sd1: terraceClosed([{ kind: "closed", startsAt: "21:00", endsAt: "23:00" }]) },
+    });
+    await shrinkRestaurant(painter, "22:00");
+    await save(painter, writes);
+    expect(body(writes[0]!).paint).toEqual([
+      {
+        departmentId: "d1",
+        date: DEC_15,
+        ranges: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }],
       },
     ]);
     expect(Object.keys(body(writes[0]!))).not.toContain("zonePaint");

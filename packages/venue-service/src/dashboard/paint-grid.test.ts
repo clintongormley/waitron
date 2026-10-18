@@ -1627,7 +1627,7 @@ test("a block changed to Closed wholly outside the column's hours sends paint-ou
   expect(seen).toEqual([]);
 });
 
-test("Copy whose Closed paint lies wholly outside a bounded column's hours sends paint-outside for it and leaves its day", async () => {
+test("Copy whose Closed paint lies wholly outside a bounded column's hours lands what survives the cut there and sends paint-outside for it", async () => {
   const kept = shut("20:00", "21:00");
   const el = await zoneGrid(
     { mon: [shut("08:00", "10:00")], tue: [kept] },
@@ -1642,7 +1642,33 @@ test("Copy whose Closed paint lies wholly outside a bounded column's hours sends
   await userEvent.click(chooserButton(el, "Copy"));
   await el.updateComplete;
   expect(outside).toEqual([{ key: "tue" }]);
-  expect(seen).toEqual([]);
+  expect(seen).toEqual([{ key: "tue", day: [] }]);
+});
+
+test("Copy of Open paint beside Closed paint wholly outside a column's hours lands the Open there and sends paint-outside for that column alone, after every change", async () => {
+  const open: Paint = { periodId: "open", startsAt: "17:00", endsAt: "19:00" };
+  const el = await zoneGrid(
+    { mon: [shut("08:00", "10:00"), open], tue: [], wed: [] },
+    {
+      tue: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }],
+      wed: [{ periodId: "lunch", startsAt: "07:00", endsAt: "11:00" }],
+    },
+  );
+  const log: string[] = [];
+  el.addEventListener("paint-outside", (event) => log.push(`outside ${event.detail.key}`));
+  el.addEventListener("paint-change", (event) => log.push(`change ${event.detail.key}`));
+  const seen = changes(el);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "tue"));
+  await userEvent.click(choice(el, "wed"));
+  await el.updateComplete;
+  await userEvent.click(chooserButton(el, "Copy"));
+  await el.updateComplete;
+  expect(seen).toEqual([
+    { key: "tue", day: [open] },
+    { key: "wed", day: [shut("08:00", "10:00"), open] },
+  ]);
+  expect(log).toEqual(["change tue", "change wed", "outside tue"]);
 });
 
 test("closedBehind draws its label across the whole day behind the column's paint, which stays drawn and clickable, and a stroke there still runs", async () => {

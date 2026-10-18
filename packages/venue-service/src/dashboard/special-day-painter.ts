@@ -1195,11 +1195,12 @@ export class SpecialDayPainter extends LitElement {
         const zoneDay = paint.get(zoneKey(zone.id))?.get(date);
         if (!zoneDay) continue;
         const kept = zoneDay.filter(({ periodId }) => periodId === ZONE_OPEN);
-        const cut = closuresInHours(
-          open,
-          zoneDay.filter(({ periodId }) => periodId === null),
-          { dayCutover: cutover, endMinute: 1440 },
-        ).map(({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }));
+        const closed = zoneDay.filter(({ periodId }) => periodId === null);
+        const cut = closuresInHours(open, closed, { dayCutover: cutover, endMinute: 1440 }).map(
+          ({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }),
+        );
+        // The stored day comes back in clock-text order, which `samePaint` would read as a change.
+        if (samePaint(cut, closed.sort(byStart(cutover)))) continue;
         paint.set(
           zoneKey(zone.id),
           new Map(paint.get(zoneKey(zone.id))).set(date, [...kept, ...cut].sort(byStart(cutover))),
