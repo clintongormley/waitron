@@ -132,6 +132,8 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
     `"name"`, `"departmentId"`, `"fromSetId"` and `"replaceWith"`.
 16. **The zones read works the due layout out at `deps.clock.now().instant`**, so tests can fix
     the moment; its closing states keep their `new Date()` (`apps/server/src/till-api.ts:2614`).
+    (2026-10-18, finish review: the closing states now read the same `deps.clock.now().instant`,
+    once per request, sharing one clock and day plan with the due layout.)
 17. **The grey default is a new `muted` flag on `wt-combobox` options** (`ComboboxOption`,
     `packages/ui/src/components/wt-combobox.ts:11-34`): a muted option is drawn in
     `--wt-color-text-muted` in the list and, when chosen, on the closed field. Its value is `""`.

@@ -39,6 +39,8 @@ export type {
   ServiceMode,
   VenueServiceContribution,
   DueFloorLayout,
+  ZoneFloorLayout,
+  PreparedServiceDay,
   FloorPlanSetSummary,
   DepartmentTransfer,
   DepartmentTransferActor,

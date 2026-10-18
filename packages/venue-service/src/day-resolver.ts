@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
+import type { PreparedServiceDay } from "@waitron/module";
 import { readLocationClock, type LocationPlace } from "@waitron/reporting";
 import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { layerPaint, layerZonePaint } from "./day-paint.js";
@@ -10,7 +11,13 @@ import { zoneServicePolicies } from "./schema/service.js";
 import { seasonOn, type Season } from "./season-rules.js";
 import { readDepartmentSeasonWeeks, readZoneSeasonWeeks, type SeasonDays } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
-import { rangeSpan, serviceMomentAt, type ClosedRange, type ServiceRange } from "./service-day.js";
+import {
+  rangeSpan,
+  serviceMomentAt,
+  type ClosedRange,
+  type ServiceMoment,
+  type ServiceRange,
+} from "./service-day.js";
 import { specialDayOccurrences, specialDaysOn, type SpecialDayOccurrence } from "./special-days.js";
 
 export interface ResolvedDepartmentDay {
@@ -70,19 +77,65 @@ export async function readSpecialDayPlan(
   };
 }
 
+/** A clock and day plan read once for several reads; `moment` is `at`'s place on the clock. */
+export interface ServiceDay {
+  clock: BusinessDayClock;
+  at?: Date;
+  moment?: ServiceMoment | null;
+  plan?: DayPlan;
+}
+
 /** The clock, and the plan for the business day `at` falls in and the one before, read once for
  *  a department and its zones; no plan when the clock cannot place `at`. */
 export async function readServiceDayPlan(
   tx: Transaction,
   cfg: VenueScope,
   at: Date,
-): Promise<{ clock: BusinessDayClock; plan?: DayPlan }> {
+): Promise<ServiceDay> {
+  return serviceDayAt(tx, cfg, at, -1);
+}
+
+/** The clock and the plan of the business day `at` falls in, for the reads at `at` that take it. */
+export async function readServiceDay(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+): Promise<PreparedServiceDay> {
+  const day = await serviceDayAt(tx, cfg, at, 0);
+  return { ...day, businessDay: day.moment?.businessDay ?? null } as ServiceDay &
+    PreparedServiceDay;
+}
+
+export function serviceDayOf(prepared: PreparedServiceDay | undefined): ServiceDay | undefined {
+  return prepared as (ServiceDay & PreparedServiceDay) | undefined;
+}
+
+/** `at`'s moment, reusing the one `prepared` worked out when it was read at the same instant. */
+export function momentAt(
+  at: Date,
+  clock: BusinessDayClock,
+  prepared: ServiceDay | undefined,
+): ServiceMoment | null {
+  return prepared?.moment !== undefined && prepared.at?.getTime() === at.getTime()
+    ? prepared.moment
+    : serviceMomentAt(at, clock);
+}
+
+async function serviceDayAt(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+  firstDay: 0 | -1,
+): Promise<ServiceDay> {
   const clock = await readLocationClock(tx, cfg.locationId);
   const moment = serviceMomentAt(at, clock);
-  if (moment === null) return { clock };
+  if (moment === null) return { clock, at, moment };
+  const days = firstDay === 0 ? [] : [addDays(moment.businessDay, firstDay)];
   return {
     clock,
-    plan: await readDayPlan(tx, cfg, [addDays(moment.businessDay, -1), moment.businessDay]),
+    at,
+    moment,
+    plan: await readDayPlan(tx, cfg, [...days, moment.businessDay]),
   };
 }
 

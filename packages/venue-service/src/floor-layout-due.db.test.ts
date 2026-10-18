@@ -10,6 +10,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { ZoneFloorLayout } from "@waitron/module";
 import { locationId, type LocationId } from "@waitron/shared";
 import { linkFloorPlanSet } from "./floor-plan-set-store.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
@@ -122,18 +123,23 @@ async function fixture() {
   });
 }
 
-const due = (
+const dueOnly = (layouts: ReadonlyMap<string, ZoneFloorLayout>) =>
+  new Map([...layouts].map(([zoneId, layout]) => [zoneId, layout.due]));
+
+const due = async (
   f: Awaited<ReturnType<typeof fixture>>,
   zoneIds: readonly string[],
   moment: Date,
   recordedOccurrence: string | null = null,
 ) =>
-  run((tx) =>
-    VENUE_SERVICE.dueFloorLayouts(
-      tx,
-      f.cfg,
-      zoneIds.map((zoneId) => ({ zoneId, recordedOccurrence })),
-      moment,
+  dueOnly(
+    await run((tx) =>
+      VENUE_SERVICE.dueFloorLayouts(
+        tx,
+        f.cfg,
+        zoneIds.map((zoneId) => ({ zoneId, recordedOccurrence })),
+        moment,
+      ),
     ),
   );
 
@@ -286,11 +292,13 @@ describe("which floor layout is due", () => {
       ).session;
       const spy = vi.spyOn(session, "prepareQuery");
       try {
-        const layouts = await VENUE_SERVICE.dueFloorLayouts(
-          tx,
-          f.cfg,
-          [{ zoneId: f.zones.dining, recordedOccurrence: null }],
-          new Date(Number.NaN),
+        const layouts = dueOnly(
+          await VENUE_SERVICE.dueFloorLayouts(
+            tx,
+            f.cfg,
+            [{ zoneId: f.zones.dining, recordedOccurrence: null }],
+            new Date(Number.NaN),
+          ),
         );
         expect(layouts.get(f.zones.dining)).toEqual({
           setId: f.standard,
@@ -338,5 +346,120 @@ describe("which floor layout is due", () => {
         spy.mockRestore();
       }
     });
+  });
+
+  it("says whether each zone's department has a set and names the recorded set", async () => {
+    const f = await fixture();
+    const [barSet, gone] = await run(async (tx) => {
+      const barSet = await newSet(tx, f.cfg, f.bar, "Bar standard");
+      const [row] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: f.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      return [barSet, row!.id];
+    });
+    const layouts = await run((tx) =>
+      VENUE_SERVICE.dueFloorLayouts(
+        tx,
+        f.cfg,
+        [
+          { zoneId: f.zones.dining, recordedOccurrence: null, recordedSetId: f.dinnerSet },
+          { zoneId: f.zones.terrace, recordedOccurrence: null, recordedSetId: barSet },
+          { zoneId: f.zones.garden, recordedOccurrence: null, recordedSetId: gone },
+          { zoneId: f.zones.loose, recordedOccurrence: null, recordedSetId: f.standard },
+          { zoneId: f.zones.counter, recordedOccurrence: null },
+        ],
+        at("14:00"),
+      ),
+    );
+    const facts = (zoneId: string) => {
+      const { planned, recordedSetName } = layouts.get(zoneId)!;
+      return { planned, recordedSetName };
+    };
+    expect(facts(f.zones.dining)).toEqual({ planned: true, recordedSetName: "Dinner" });
+    expect(facts(f.zones.terrace)).toEqual({ planned: true, recordedSetName: "Bar standard" });
+    expect(facts(f.zones.garden)).toEqual({ planned: true, recordedSetName: null });
+    expect(facts(f.zones.loose)).toEqual({ planned: false, recordedSetName: "Standard" });
+    expect(facts(f.zones.counter)).toEqual({ planned: true, recordedSetName: null });
+  });
+
+  it("is not planned, and reads no set, for zones in no department with nothing recorded", async () => {
+    const f = await fixture();
+    await run(async (tx) => {
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        const layouts = await VENUE_SERVICE.dueFloorLayouts(
+          tx,
+          f.cfg,
+          [{ zoneId: f.zones.loose, recordedOccurrence: null }],
+          at("14:00"),
+        );
+        expect(layouts.get(f.zones.loose)).toEqual({
+          due: { setId: null, setName: null, occurrence: null, periodName: null },
+          planned: false,
+          recordedSetName: null,
+        });
+        const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
+        expect(sql.filter((q) => q.includes("department_floor_plan_sets"))).toEqual([]);
+        expect(spy).toHaveBeenCalledTimes(1);
+        spy.mockClear();
+        expect((await VENUE_SERVICE.dueFloorLayouts(tx, f.cfg, [], at("14:00"))).size).toBe(0);
+        expect(spy).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
+  it("reads neither the clock nor the day's plan again when handed the day read at that instant", async () => {
+    const f = await fixture();
+    await run(async (tx) => {
+      const prepared = await VENUE_SERVICE.readServiceDay(tx, f.cfg, at("16:00"));
+      expect(prepared.businessDay).toBe(FRIDAY);
+      const session = (
+        tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+      ).session;
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        const layouts = dueOnly(
+          await VENUE_SERVICE.dueFloorLayouts(
+            tx,
+            f.cfg,
+            [{ zoneId: f.zones.dining, recordedOccurrence: null }],
+            at("16:00"),
+            prepared,
+          ),
+        );
+        expect(layouts.get(f.zones.dining)).toEqual({
+          setId: f.dinnerSet,
+          setName: "Dinner",
+          occurrence: key(f.restaurant, FRIDAY, f.dinner, "20:00"),
+          periodName: "Dinner",
+        });
+        const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
+        expect(sql.filter((q) => /from "(locations|seasons)"/.test(q))).toEqual([]);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
+  it("works the moment out afresh when handed a day read at another instant", async () => {
+    const f = await fixture();
+    const layouts = await run(async (tx) =>
+      dueOnly(
+        await VENUE_SERVICE.dueFloorLayouts(
+          tx,
+          f.cfg,
+          [{ zoneId: f.zones.dining, recordedOccurrence: null }],
+          at("14:00"),
+          await VENUE_SERVICE.readServiceDay(tx, f.cfg, at("16:00")),
+        ),
+      ),
+    );
+    expect(layouts.get(f.zones.dining)).toMatchObject({ setId: f.standard, periodName: "Lunch" });
   });
 });

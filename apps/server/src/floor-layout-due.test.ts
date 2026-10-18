@@ -8,7 +8,7 @@ function state(
   recorded: ZoneLayoutState["recorded"],
   due: ZoneLayoutState["due"],
 ): ZoneLayoutState {
-  return { zoneId: "zone", recorded, due };
+  return { zoneId: "zone", recorded, planned: due !== null, recordedSetName: null, due };
 }
 
 const standard = (revision: number, occurrence: string | null = LUNCH) => ({

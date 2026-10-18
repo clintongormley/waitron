@@ -1,9 +1,9 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { DueFloorLayout } from "@waitron/module";
+import type { DueFloorLayout, PreparedServiceDay, ZoneFloorLayout } from "@waitron/module";
 import type { BusinessDayClock, LocationId } from "@waitron/shared";
 import { readLocationClock } from "@waitron/reporting";
-import { readDayPlan, resolveDepartmentsDays } from "./day-resolver.js";
+import { momentAt, resolveDepartmentsDays, serviceDayOf, type DayPlan } from "./day-resolver.js";
 import { serviceRuns } from "./menu-timetable.js";
 import { wireTime } from "./operations.js";
 import { periodExtensions } from "./schema/period-extensions.js";
@@ -12,7 +12,6 @@ import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import {
   rangeSpanInDay,
-  serviceMomentAt,
   withExtension,
   type ServiceMoment,
   type ServiceRange,
@@ -119,40 +118,79 @@ const NO_LAYOUT: DueFloorLayout = {
 };
 
 /** The due run's period's set, else the department's default; a zone's own closed times and
- *  keep open play no part (plan decision 7). */
+ *  keep open play no part. */
 export async function dueFloorLayouts(
   tx: Transaction,
   cfg: { locationId: LocationId },
-  zones: readonly { zoneId: string; recordedOccurrence: string | null }[],
+  zones: readonly {
+    zoneId: string;
+    recordedOccurrence: string | null;
+    recordedSetId?: string | null;
+  }[],
   at: Date,
-): Promise<ReadonlyMap<string, DueFloorLayout>> {
-  const result = new Map<string, DueFloorLayout>(zones.map(({ zoneId }) => [zoneId, NO_LAYOUT]));
-  const placed = await tx
-    .select({ zoneId: zoneServicePolicies.zoneId, departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.active, true),
-        inArray(
-          zoneServicePolicies.zoneId,
-          zones.map(({ zoneId }) => zoneId),
-        ),
-      ),
-    );
+  prepared?: PreparedServiceDay,
+): Promise<ReadonlyMap<string, ZoneFloorLayout>> {
+  const placed =
+    zones.length === 0
+      ? []
+      : await tx
+          .select({
+            zoneId: zoneServicePolicies.zoneId,
+            departmentId: zoneServicePolicies.departmentId,
+          })
+          .from(zoneServicePolicies)
+          .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+          .where(
+            and(
+              eq(zoneServicePolicies.locationId, cfg.locationId),
+              eq(departments.locationId, cfg.locationId),
+              eq(departments.active, true),
+              inArray(
+                zoneServicePolicies.zoneId,
+                zones.map(({ zoneId }) => zoneId),
+              ),
+            ),
+          );
   const departmentOf = new Map(placed.map((row) => [row.zoneId, row.departmentId]));
   const departmentIds = [...new Set(placed.map((row) => row.departmentId))];
-  const sets = await tx
-    .select({
-      setId: departmentFloorPlanSets.setId,
-      departmentId: departmentFloorPlanSets.departmentId,
-      name: departmentFloorPlanSets.name,
-      isDefault: departmentFloorPlanSets.isDefault,
-    })
-    .from(departmentFloorPlanSets)
-    .where(inArray(departmentFloorPlanSets.departmentId, departmentIds));
+  const recordedSetIds = [
+    ...new Set(
+      zones.flatMap(({ recordedSetId }) => (recordedSetId == null ? [] : [recordedSetId])),
+    ),
+  ];
+  const sets =
+    departmentIds.length === 0 && recordedSetIds.length === 0
+      ? []
+      : await tx
+          .select({
+            setId: departmentFloorPlanSets.setId,
+            departmentId: departmentFloorPlanSets.departmentId,
+            name: departmentFloorPlanSets.name,
+            isDefault: departmentFloorPlanSets.isDefault,
+          })
+          .from(departmentFloorPlanSets)
+          .innerJoin(departments, eq(departments.id, departmentFloorPlanSets.departmentId))
+          .where(
+            and(
+              eq(departments.locationId, cfg.locationId),
+              eq(departments.active, true),
+              or(
+                inArray(departmentFloorPlanSets.departmentId, departmentIds),
+                inArray(departmentFloorPlanSets.setId, recordedSetIds),
+              ),
+            ),
+          );
+  const setName = new Map(sets.map((set) => [set.setId, set.name]));
+  const result = new Map<string, ZoneFloorLayout>(
+    zones.map(({ zoneId, recordedSetId }) => [
+      zoneId,
+      {
+        due: NO_LAYOUT,
+        planned: false,
+        recordedSetName: recordedSetId == null ? null : (setName.get(recordedSetId) ?? null),
+      },
+    ]),
+  );
   const withSets = departmentIds.filter((id) => sets.some((set) => set.departmentId === id));
   if (withSets.length === 0) return result;
   const periods = await tx
@@ -160,9 +198,10 @@ export async function dueFloorLayouts(
     .from(menuPeriods)
     .where(inArray(menuPeriods.departmentId, withSets));
   const periodOf = new Map(periods.map((row) => [row.id, row]));
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const moment = serviceMomentAt(at, clock);
-  const today = moment === null ? null : await dueDays(tx, cfg, withSets, moment, clock);
+  const day = serviceDayOf(prepared);
+  const clock = day?.clock ?? (await readLocationClock(tx, cfg.locationId));
+  const moment = momentAt(at, clock, day);
+  const today = moment === null ? null : await dueDays(tx, cfg, withSets, moment, clock, day?.plan);
   for (const departmentId of withSets) {
     const own = sets.filter((set) => set.departmentId === departmentId);
     const fallback = own.find((set) => set.isDefault);
@@ -180,11 +219,15 @@ export async function dueFloorLayouts(
       const period = run === null ? undefined : periodOf.get(run.periodId);
       const set = own.find((entry) => entry.setId === period?.setId) ?? fallback;
       result.set(zoneId, {
-        setId: set?.setId ?? null,
-        setName: set?.name ?? null,
-        occurrence:
-          run === null ? null : occurrenceKey(departmentId, today!.moment.businessDay, run),
-        periodName: period?.name ?? null,
+        ...result.get(zoneId)!,
+        planned: true,
+        due: {
+          setId: set?.setId ?? null,
+          setName: set?.name ?? null,
+          occurrence:
+            run === null ? null : occurrenceKey(departmentId, today!.moment.businessDay, run),
+          periodName: period?.name ?? null,
+        },
       });
     }
   }
@@ -199,17 +242,11 @@ async function dueDays(
   departmentIds: readonly string[],
   moment: ServiceMoment,
   clock: BusinessDayClock,
+  plan: DayPlan | undefined,
 ): Promise<{ moment: ServiceMoment; context: ServiceDayContext; days: Map<string, DueDay> }> {
   const { businessDay } = moment;
   const context = serviceDayContext(clock, businessDay);
-  const resolved = await resolveDepartmentsDays(
-    tx,
-    cfg,
-    departmentIds,
-    [businessDay],
-    clock,
-    await readDayPlan(tx, cfg, [businessDay]),
-  );
+  const resolved = await resolveDepartmentsDays(tx, cfg, departmentIds, [businessDay], clock, plan);
   const extensions = await tx
     .select({
       departmentId: periodExtensions.departmentId,

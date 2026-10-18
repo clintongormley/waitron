@@ -657,15 +657,42 @@ export interface DueFloorLayout {
   periodName: string | null;
 }
 
+export interface ZoneFloorLayout {
+  due: DueFloorLayout;
+  /** Whether the zone's department has a set. */
+  planned: boolean;
+  /** The name of the set `recordedSetId` names; null with none, or when that set is gone. */
+  recordedSetName: string | null;
+}
+
+declare const preparedServiceDay: unique symbol;
+/** The venue clock and day plan at one instant, read once by `readServiceDay` for the reads at
+ *  that instant that take it; only venue-service reads what it holds. */
+export interface PreparedServiceDay {
+  /** Null when the clock names no business day at that instant. */
+  readonly businessDay: string | null;
+  readonly [preparedServiceDay]: true;
+}
+
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
+  readServiceDay(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    at: Date,
+  ): Promise<PreparedServiceDay>;
   /** One entry per zone named; each department's day is read once. */
   dueFloorLayouts(
     tx: Transaction,
     cfg: { locationId: LocationId },
-    zones: readonly { zoneId: string; recordedOccurrence: string | null }[],
+    zones: readonly {
+      zoneId: string;
+      recordedOccurrence: string | null;
+      recordedSetId?: string | null;
+    }[],
     at: Date,
-  ): Promise<ReadonlyMap<string, DueFloorLayout>>;
+    prepared?: PreparedServiceDay,
+  ): Promise<ReadonlyMap<string, ZoneFloorLayout>>;
   readFloorPlanSets(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -798,6 +825,7 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneIds: readonly string[],
     at: Date,
+    prepared?: PreparedServiceDay,
   ): Promise<
     ReadonlyMap<
       string,

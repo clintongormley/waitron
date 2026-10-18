@@ -5,14 +5,8 @@ import { floorZones, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
 import { resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
-import {
-  parseClosedRanges,
-  type ClosedRange,
-  rangeSpan,
-  rangeSpanInDay,
-  serviceMomentAt,
-} from "./service-day.js";
-import { resolveZoneClosedDays, type DayPlan } from "./day-resolver.js";
+import { parseClosedRanges, type ClosedRange, rangeSpan, rangeSpanInDay } from "./service-day.js";
+import { momentAt, resolveZoneClosedDays, type ServiceDay } from "./day-resolver.js";
 import {
   joinTouching,
   readZoneSeasonWeeks,
@@ -212,10 +206,10 @@ export async function zoneClosureDays(
   cfg: VenueScope,
   zoneIds: readonly string[] | undefined,
   at: Date,
-  prepared?: { clock: BusinessDayClock; plan?: DayPlan },
+  prepared?: ServiceDay,
 ) {
   const clock = prepared?.clock ?? (await readLocationClock(tx, cfg.locationId));
-  const moment = serviceMomentAt(at, clock);
+  const moment = momentAt(at, clock, prepared);
   const zones = new Map<string, ZoneClosure>();
   if (moment === null) return { clock, moment, dayContext: null, cutover: clock.dayCutover, zones };
   const dayContext = serviceDayContext(clock, moment.businessDay);
@@ -265,7 +259,7 @@ export async function zoneClosureDay(
   cfg: VenueScope,
   zoneId: string,
   at: Date,
-  prepared?: { clock: BusinessDayClock; plan?: DayPlan },
+  prepared?: ServiceDay,
 ) {
   const { zones, ...day } = await zoneClosureDays(tx, cfg, [zoneId], at, prepared);
   return {

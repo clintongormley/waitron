@@ -1,6 +1,6 @@
 import { and, inArray } from "drizzle-orm";
 import { floorPlans, floorTodayZones, type Transaction } from "@waitron/db";
-import type { FloorPlanSetSummary } from "@waitron/module";
+import type { FloorPlanSetSummary, PreparedServiceDay } from "@waitron/module";
 import { VENUE_SERVICE } from "./modules.js";
 import { todayBusinessDay } from "./floor-today-store.js";
 import type { TillConfig } from "./till-config.js";
@@ -20,6 +20,10 @@ export interface ZoneLayoutState {
   zoneId: string;
   /** Null when today's record is missing or from an earlier business day. */
   recorded: LayoutRecord | null;
+  /** Whether the zone's department has a set. */
+  planned: boolean;
+  /** The recorded set's name; null with no record, or when that set is gone. */
+  recordedSetName: string | null;
   /** Null when the zone's department has no set (or it is in none). */
   due: {
     setId: string;
@@ -36,10 +40,11 @@ export async function zoneLayouts(
   cfg: TillConfig,
   zoneIds: readonly string[],
   now: Date,
+  prepared?: PreparedServiceDay,
 ): Promise<Map<string, ZoneLayoutState>> {
   if (zoneIds.length === 0) return new Map();
-  const day = await todayBusinessDay(tx, cfg, now);
-  return (await zoneLayoutsOn(tx, cfg, zoneIds, now, day)).states;
+  const day = prepared === undefined ? await todayBusinessDay(tx, cfg, now) : prepared.businessDay;
+  return (await zoneLayoutsOn(tx, cfg, zoneIds, now, day, prepared)).states;
 }
 
 export type LayoutRow = { id: string; revision: number };
@@ -54,6 +59,7 @@ export async function zoneLayoutsOn(
   zoneIds: readonly string[],
   now: Date,
   day: string | null,
+  prepared?: PreparedServiceDay,
 ): Promise<{ states: Map<string, ZoneLayoutState>; rows: Map<string, LayoutRow> }> {
   const states = new Map<string, ZoneLayoutState>();
   const rows = new Map<string, LayoutRow>();
@@ -83,32 +89,40 @@ export async function zoneLayoutsOn(
     zoneIds.map((zoneId) => ({
       zoneId,
       recordedOccurrence: recordOf.get(zoneId)?.occurrence ?? null,
+      recordedSetId: recordOf.get(zoneId)?.setId ?? null,
     })),
     now,
+    prepared,
   );
   const dueSets = [
     ...new Set(
-      [...due.values()].flatMap((layout) => (layout.setId === null ? [] : [layout.setId])),
+      [...due.values()].flatMap(({ due: layout }) => (layout.setId === null ? [] : [layout.setId])),
     ),
   ];
-  const plans = await tx
-    .select({
-      id: floorPlans.id,
-      setId: floorPlans.setId,
-      zoneId: floorPlans.zoneId,
-      revision: floorPlans.revision,
-    })
-    .from(floorPlans)
-    .where(and(inArray(floorPlans.zoneId, [...zoneIds]), inArray(floorPlans.setId, dueSets)));
+  const plans =
+    dueSets.length === 0
+      ? []
+      : await tx
+          .select({
+            id: floorPlans.id,
+            setId: floorPlans.setId,
+            zoneId: floorPlans.zoneId,
+            revision: floorPlans.revision,
+          })
+          .from(floorPlans)
+          .where(and(inArray(floorPlans.zoneId, [...zoneIds]), inArray(floorPlans.setId, dueSets)));
   const planOf = new Map(plans.map((row) => [`${row.setId}/${row.zoneId}`, row]));
   for (const zoneId of zoneIds) {
-    const layout = due.get(zoneId);
+    const zone = due.get(zoneId);
+    const layout = zone?.due;
     const setId = layout?.setId ?? null;
     const plan = setId === null ? undefined : planOf.get(`${setId}/${zoneId}`);
     if (plan !== undefined) rows.set(zoneId, { id: plan.id, revision: plan.revision });
     states.set(zoneId, {
       zoneId,
       recorded: recordOf.get(zoneId) ?? null,
+      planned: zone?.planned ?? false,
+      recordedSetName: zone?.recordedSetName ?? null,
       due:
         layout === undefined || setId === null
           ? null

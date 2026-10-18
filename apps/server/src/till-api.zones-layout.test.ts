@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorPlans, floorPlanSets, floorTodayZones, floorZones } from "@waitron/db";
@@ -13,6 +13,7 @@ import {
   linkFloorPlanSet,
   menuPeriods,
   periodExtensions,
+  replaceZoneClosedWeek,
 } from "@waitron/venue-service";
 import { readLayout, saveLayout } from "./floor-plan.js";
 import { floorDeletionFor } from "./floor-delete.js";
@@ -311,5 +312,41 @@ describe("hasPlan says the department has a set", () => {
     await unlinkedPlanRow(zoneId);
 
     expect((await zoneAt(LUNCH, zoneId)).hasPlan).toBe(false);
+  });
+});
+
+describe("GET /api/zones reads one moment", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("works a zone's closed state out at the server clock's moment, as it does its layout", async () => {
+    const zoneId = await inTx(v, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      const zone = await createServiceZone(tx, v.cfg, {
+        name: `Shut ${randomUUID().slice(0, 8)}`,
+        departmentId: department.id,
+      });
+      await replaceZoneClosedWeek(
+        tx,
+        v.cfg,
+        zone.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          ranges: [{ startsAt: "15:00", endsAt: "17:00" }],
+        })),
+        0,
+        new Date("2026-10-09T06:00:00Z"),
+      );
+      return zone.id;
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T10:00:00+02:00"));
+
+    expect(await zoneAt(AFTER_LUNCH, zoneId)).toMatchObject({ closed: true });
+    expect(await zoneAt(new Date("2026-10-12T18:00:00+02:00"), zoneId)).toMatchObject({
+      closed: false,
+    });
   });
 });
