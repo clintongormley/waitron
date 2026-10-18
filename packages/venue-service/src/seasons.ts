@@ -1,12 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
-import {
-  AppError,
-  CALENDAR_COLOURS,
-  type CalendarColour,
-  type ErrorParams,
-} from "@waitron/shared";
+import { AppError, CALENDAR_COLOURS, type CalendarColour, type ErrorParams } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
   assertWaitingChangeFits,
