@@ -1836,7 +1836,7 @@ the business day asked about (`savedPart`, `packages/db/src/joined-parts.ts`): a
 part when that copy places its joined table, or none of its parts; a joined table is one when the
 copy leaves it off while placing one of its parts. A layout saved after the reset therefore
 changes nothing here until a reset applies it. With no such record, or one naming no set, every
-part on the saved plan is a saved part and no joined table is. `GET /api/tables` leaves saved parts out
+part of a joined table in any of the zone's layouts is a saved part and no joined table is. `GET /api/tables` leaves saved parts out
 (`apps/server/src/tables.ts`); bookings refuse one `table.in_joined_table`, judged on the booking's
 date (`requireActiveTable`, `packages/bookings/src/bookings.ts`).
 

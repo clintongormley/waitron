@@ -1208,7 +1208,7 @@ describe("saveLayout", () => {
 });
 
 describe("floor plans without adoption", () => {
-  it("reads a zone with live tables and no master plan as an empty draft", async () => {
+  it("reads a zone with live tables and no layout as an empty draft", async () => {
     const z = await zone();
     await liveTable(z, fresh("Unplanned"));
     const { setId } = await layoutOf(z);

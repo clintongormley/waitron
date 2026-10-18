@@ -2541,8 +2541,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `@waitron/ui`, an owner design decision. Left open by A504.
 
 - **A857. A booking can take a table the evening's layout puts away (2026-10-18).** Bookings refuse
-  only a joined table's parts: on the business day a zone has recorded, as its last reset copied
-  them; on any other date, every part (`requireActiveTable`, `packages/bookings/src/bookings.ts`).
+  a part of a joined table, and on the business day a zone has recorded a set for, also a joined
+  table the last reset's copy leaves off while placing a part; on any other date, or under a record
+  naming no set, every part and no joined table (`requireActiveTable`,
+  `packages/bookings/src/bookings.ts`).
   Nothing compares the table with the layout due at the booking's time. Spec §11: the editor could warn, or the booking screen refuse. Left open by A504.
 
 - **A858. No history of a zone's past layouts (2026-10-18).** A layout holds one place per table
@@ -2550,7 +2552,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   it as a gap. Left open by A504.
 
 - **A859. Floor plans and the till's layout banner: looks left to the owner (2026-10-18).** A504's
-  look passes kept five things as built, as judgement calls, each differing from the mock-ups.
+  look passes kept five things as built, as judgement calls.
   Left open by A504.
   [Detail](backlog/till.md#a859-floor-plans-and-the-tills-layout-banner-looks-left-to-the-owner)
 

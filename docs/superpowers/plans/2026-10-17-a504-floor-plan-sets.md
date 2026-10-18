@@ -109,6 +109,9 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
    part too, so under Standard 4+5 is neither listed nor bookable, as the till cannot seat it.
    With no usable record the pre-A504 reading holds. A part's place in a layout that places its joined table
    reads as off, so a change of parts saved in one set never makes another set's layout invalid.
+   (2026-10-18, finish review: `savedPart` now reads what the zone's last reset copied
+   (`floor_reset_tables` and their copied parts), so a layout saved after the reset changes nothing
+   until a reset applies it.)
 10. **A table off today's map never shows "Needs moving".** A table in store, or taken off for
     today, is not drawn, so there is nothing to carry. Such a table whose new place is taken waits
     for that place, and a later read puts it on the map once nothing stands there that does not
@@ -183,7 +186,8 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
     its time: one for tonight made while Lunch's layout is recorded is judged by Lunch's. A
     booking for another day, or for today before the day's first till read, gets the pre-A504
     reading (every part refused, a joined table bookable). Spec §11 leaves bookings across layouts
-    to the bookings work.
+    to the bookings work. (2026-10-18, finish review: "the recorded layout" now means what the
+    zone's last reset copied; see decision 9's note.)
 
 ## Global constraints
 
@@ -1681,7 +1685,8 @@ place. Move it first" / "Otra mesa ocupa su nuevo sitio. Muévela primero";
   clearing" even when it also needs moving; tapping it opens the Mark moved question (title,
   body, Cancel, Mark moved) and Mark moved sends `mark-moved` with the room's revision; on the list
   it is the plain card with "Needs moving" and a Mark moved button; Join with… and the seat
-  pickers leave it out; `table.new_place_taken` names both tables.
+  pickers leave it out (2026-10-18, finish review: pickers now list such a table disabled, reading
+  "Needs moving", as they list one that needs clearing); `table.new_place_taken` names both tables.
 - [ ] **Step 2:** Run — FAIL.
 - [ ] **Step 3:** Implement beside the needs-clearing code paths.
 - [ ] **Step 4:** Run the file, `till-floor-screen.signals.test.ts`, `till-floor-screen.sheet.test.ts`, `codes.test.ts`.

@@ -757,8 +757,8 @@ it("refuses booking a table with no today's row", async () => {
   ).rejects.toMatchObject({ code: "table.not_found", params: { tableId } });
 });
 
-describe("a part of a joined table on the saved plan", () => {
-  /** Long table (10 seats) made of Counter 3 (2), 4 (6) and 5 (4) on a saved plan, each with a live table on today's plan. */
+describe("a part of a joined table on a layout", () => {
+  /** Long table (10 seats) made of Counter 3 (2), 4 (6) and 5 (4) on a layout, each with a live table on today's plan. */
   async function longTable(
     locationId: string,
   ): Promise<Record<"long" | "c3" | "c4" | "c5", string>> {

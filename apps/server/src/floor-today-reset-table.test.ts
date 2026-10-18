@@ -1268,7 +1268,7 @@ describe("Reset table refused when the tables sent are not the ones free, nothin
 });
 
 describe("Reset table and the room's reset", () => {
-  it("after a reset to the saved plan, the tables taken back are joined and Long table in service", async () => {
+  it("after a Reset to {set} plan, the tables taken back are joined and Long table in service", async () => {
     const { table, zoneId } = await LONG_TABLE();
     await seat(v, table.long!);
     await ok(splitOff(table.long!, [table.c4!, table.c5!]));

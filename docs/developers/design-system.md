@@ -5086,8 +5086,9 @@ period painted nowhere keeps its filled swatch and plain name), Customer menu, S
 ("—" when none), Floor plan, Painted in, and a bin pinned to the end. The Floor plan column shows
 only while some department has an active zone with tables
 (`readPeriodFloorPlans`, `packages/venue-service/src/floor-plan-set-store.ts`): a period that names
-another set shows that set's name, and any other period shows its department's default set's name
-followed by a muted "(default)". Painted in shows a chip per season,
+another set shows that set's name, a period of a department with no zone holding tables shows
+nothing, and any other period shows its department's default set's name followed by a muted
+"(default)". Painted in shows a chip per season,
 opening that season's painter on the period's department, and a chip per special day, opening its
 painter, or "Not painted anywhere". The chips wrap onto further lines within one and a quarter
 times `--wt-cell-name-max-width`, each chip on one line, and the table is `wrapToFit`, so its

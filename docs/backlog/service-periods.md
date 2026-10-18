@@ -338,7 +338,9 @@ Re-check when a new year's list is added.
 **A855 (2026-10-18).** About 0.75 ms of each `GET /api/zones` goes on `new Intl.DateTimeFormat`
 inside `serviceMomentAt` and `serviceDayContext` (`packages/venue-service`), through the
 business-day helpers in `@waitron/reporting` and `@waitron/shared`. A504 took the read's median from
-1.436 to 3.004 ms on one bench. Next: keep one formatter per time zone. Left open by A504.
+1.436 to 3.004 ms on one bench. Both figures were measured before the finish review made the
+read take the clock and the day once (median about 3.1 to 2.0 ms on another bench); re-measure
+before acting. Next: keep one formatter per time zone. Left open by A504.
 
 ## Decisions and deliberate limits
 

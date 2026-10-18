@@ -140,7 +140,7 @@ function anySavedPart(tableId: SQLWrapper, businessDay: string | null): SQL {
  * Reads the zone's record only when its business day is `businessDay`; else,
  * and with no recorded set, every part of a joined table is a saved part and no joined table is.
  * Under a usable record it reads what the zone's last reset copied, so a layout saved since then
- * changes nothing until Update layout: a part is a saved part when the copy places its joined
+ * changes nothing until a reset applies it: a part is a saved part when the copy places its joined
  * table or none of its parts, and a joined table is one when the copy leaves it off while placing
  * a part.
  */

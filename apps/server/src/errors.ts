@@ -716,7 +716,7 @@ declare module "@waitron/shared" {
     "zone.not_found": { zoneId: string };
     /**
      * This set's layout of the zone was saved since the editor's copy was read. `revision` is the
-     * plan's current one; the caller reloads the plan and saves again.
+     * layout's current one; the caller reloads the layout and saves again.
      */
     "floor_plan.out_of_date": { zoneId: string; revision: number };
     /** A layout save's entry is out of range; `field` is its path, such as `tables.0.seats`. */

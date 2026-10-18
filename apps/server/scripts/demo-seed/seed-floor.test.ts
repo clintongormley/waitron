@@ -197,7 +197,7 @@ describe("seedFloor", () => {
     expect(new Set(res.statuses.map((s) => s.color)).size).toBe(3);
   });
 
-  it("gives every zone with tables a saved master plan and today's plan, every table placed and none overlapping", async () => {
+  it("gives every zone with tables a default set layout and today's plan, every table placed and none overlapping", async () => {
     const { locationId } = await provisionVenue();
     const cfg = {
       nodeId: "unused",

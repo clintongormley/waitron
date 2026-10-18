@@ -516,7 +516,7 @@ describe("floor hierarchy deletion", () => {
     ).toEqual([]);
   });
 
-  it("clears a zone whose saved plan keeps a table's size", async () => {
+  it("clears a zone whose layout keeps a table's size", async () => {
     const { zoneId, master } = await plannedZone(
       v,
       [
@@ -580,7 +580,7 @@ describe("floor hierarchy deletion", () => {
     expect(await placementsOf()).toEqual([]);
   });
 
-  it("clears a zone whose saved plan holds Long table made of three tables", async () => {
+  it("clears a zone whose layout holds Long table made of three tables", async () => {
     const { zoneId, master } = await plannedZone(
       v,
       [

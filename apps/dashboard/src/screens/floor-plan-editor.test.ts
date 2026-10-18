@@ -1441,7 +1441,7 @@ it("a panel's typed name goes into the draft and Undo takes the whole typing bac
   expect(button(el, "undo").disabled).toBe(true);
 });
 
-it("does not reserve an unfollowed live name backed by this zone's master plan", async () => {
+it("does not reserve an unfollowed live name backed by this zone's layout", async () => {
   const el = await open(
     stubApi({
       listTables: vi.fn().mockResolvedValue([
