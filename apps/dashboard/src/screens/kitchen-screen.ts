@@ -45,8 +45,10 @@ export class KitchenScreen extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
-        margin-top: var(--wt-space-6);
         color: var(--wt-color-text);
+      }
+      .bump + .bump {
+        margin-top: var(--wt-space-6);
       }
       .bump-options {
         display: flex;

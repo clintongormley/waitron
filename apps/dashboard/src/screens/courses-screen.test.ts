@@ -92,6 +92,21 @@ describe("dashboard-courses-screen", () => {
     expect(api.listCourses).toHaveBeenCalledTimes(1);
   });
 
+  it("sits the course rows in a bordered card that draws no second line under the last row", async () => {
+    const { el } = await mount();
+    const card = list(el).parentElement!;
+    expect(card.classList.contains("card")).toBe(true);
+    const style = getComputedStyle(card);
+    expect(style.borderTopWidth).toBe("1px");
+    expect(style.borderBottomStyle).toBe("solid");
+    expect(parseFloat(style.borderTopLeftRadius)).toBeGreaterThan(0);
+    const rows = list(el).shadowRoot!.querySelectorAll("tbody tr[data-course]");
+    const lastRowBottom = rows[rows.length - 1]!.getBoundingClientRect().bottom;
+    const cardInnerBottom =
+      card.getBoundingClientRect().bottom - parseFloat(style.borderBottomWidth);
+    expect(lastRowBottom).toBeGreaterThan(cardInnerBottom);
+  });
+
   it("Add course in the header opens the new course row with its name field focused", async () => {
     const { el } = await mount();
     const add = q(el, ".heading [data-test=add-course]")!;

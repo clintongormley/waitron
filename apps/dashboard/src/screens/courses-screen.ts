@@ -35,6 +35,22 @@ export class CoursesScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
         color: var(--wt-color-text-muted);
       }
+      /* Centres the one-line empty message; rows are taller than this. */
+      .card {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: calc(var(--wt-tap-min) + 2 * var(--wt-space-2));
+        padding-inline: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        overflow: hidden;
+      }
+      /* Tucks the last row's divider under the card's own border. */
+      .card > dashboard-course-list {
+        margin-block-end: -1px;
+      }
     `,
   ];
 
@@ -62,13 +78,15 @@ export class CoursesScreen extends LitElement {
       <p class="description">
         ${t(this.readOnly ? "courses.description_read_only" : "courses.description")}
       </p>
-      <dashboard-course-list
-        .api=${this.api}
-        .readOnly=${this.readOnly}
-        .showAddButton=${false}
-        @focus-add-course=${() =>
-          this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-course]")?.focus()}
-      ></dashboard-course-list>
+      <div class="card">
+        <dashboard-course-list
+          .api=${this.api}
+          .readOnly=${this.readOnly}
+          .showAddButton=${false}
+          @focus-add-course=${() =>
+            this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-course]")?.focus()}
+        ></dashboard-course-list>
+      </div>
     `;
   }
 }

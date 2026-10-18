@@ -145,6 +145,19 @@ describe("kitchen-screen", () => {
     expect(api.listCourses).not.toHaveBeenCalled();
   });
 
+  it("starts its first section at its own top inside a grid, as Venue settings lays out a tab", async () => {
+    const api = stubApi();
+    const { el, host } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    host.style.display = "grid";
+    await flush(el);
+    const first = el.shadowRoot!.querySelector("section")!;
+    expect(first.getBoundingClientRect().top).toBe(el.getBoundingClientRect().top);
+    const second = first.nextElementSibling!;
+    expect(second.getBoundingClientRect().top).toBeGreaterThan(
+      first.getBoundingClientRect().bottom,
+    );
+  });
+
   it("seeds the fire-control toggle from the PERSISTED setting (getFireControl) and reflects it", async () => {
     const api = stubApi({}, STATIONS, COURSES, "kitchen");
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
