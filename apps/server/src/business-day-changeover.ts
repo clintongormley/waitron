@@ -6,7 +6,7 @@ import {
   type BusinessDayClock,
   type CutoverChange,
 } from "@waitron/shared";
-import { localTimeOccurrences } from "@waitron/venue-service";
+import { localTimeOccurrences, offsetMinutes } from "@waitron/venue-service";
 
 export type BusinessDayStartPlan = {
   today: string;
@@ -86,14 +86,39 @@ function firstTransitionDay(plan: BusinessDayStartPlan, dayCutover: string): str
   return null;
 }
 
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+
+/** The calendar date `timeZone`'s clocks show just after they change near business day `day`
+ *  (Havana jumping to 01:00 on 14 March gives the 14th; Santiago falling back from 23:59 to
+ *  23:00 on 3 April gives the 3rd); `day` itself when the clocks do not change near it. */
+export function clocksChangeDate(day: string, timeZone: string): string {
+  const from = Date.parse(`${addDays(day, -1)}T00:00:00.000Z`) - 14 * HOUR_MS;
+  const to = Date.parse(`${addDays(day, 2)}T00:00:00.000Z`) + 14 * HOUR_MS;
+  for (let at = from; at < to; at += HOUR_MS) {
+    const before = offsetMinutes(at, timeZone);
+    if (offsetMinutes(at + HOUR_MS, timeZone) === before) continue;
+    let low = at;
+    let high = at + HOUR_MS;
+    while (high - low > MINUTE_MS) {
+      const mid = low + Math.floor((high - low) / 2 / MINUTE_MS) * MINUTE_MS;
+      if (offsetMinutes(mid, timeZone) === before) low = mid;
+      else high = mid;
+    }
+    return new Date(high + offsetMinutes(high, timeZone) * MINUTE_MS).toISOString().slice(0, 10);
+  }
+  return day;
+}
+
 export function clockTransitionAt(
   clock: BusinessDayClock,
   dayCutover: string,
   at: Date,
 ): null | { clocksChangeOn: string; saveFrom: string | null } {
   const plan = planBusinessDayStart(clock, dayCutover, at);
-  const clocksChangeOn = firstTransitionDay(plan, dayCutover);
-  if (clocksChangeOn === null) return null;
+  const failing = firstTransitionDay(plan, dayCutover);
+  if (failing === null) return null;
+  const clocksChangeOn = clocksChangeDate(failing, clock.timeZone);
   // The effective date only moves at one of these boundaries, so no other moment needs trying.
   const plain = { ...clock, dayCutover, cutoverChanges: [] };
   const moments = new Set<string>();

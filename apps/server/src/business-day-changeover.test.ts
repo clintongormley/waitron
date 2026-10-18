@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { businessDayBounds, type BusinessDayClock } from "@waitron/shared";
-import { clockTransitionAt, planBusinessDayStart } from "./business-day-changeover.js";
+import {
+  clockTransitionAt,
+  clocksChangeDate,
+  planBusinessDayStart,
+} from "./business-day-changeover.js";
 
 const MADRID: BusinessDayClock = {
   timeZone: "Europe/Madrid",
@@ -209,7 +213,7 @@ describe("clockTransitionAt", () => {
         "00:00",
         new Date("2027-03-13T11:00:00Z"),
       ),
-    ).toEqual({ clocksChangeOn: "2027-03-13", saveFrom: "2027-03-15T04:00:00.000Z" });
+    ).toEqual({ clocksChangeOn: "2027-03-14", saveFrom: "2027-03-15T04:00:00.000Z" });
   });
 
   it("a 01:00 start saving 02:30 may save again once the 01:00 changeover passes", () => {
@@ -231,5 +235,21 @@ describe("clockTransitionAt", () => {
     "2027-03-29T01:00:00Z",
   ])("03:00 saved at %s meets no clocks change", (at) => {
     expect(clockTransitionAt(MADRID, "03:00", new Date(at))).toBeNull();
+  });
+});
+
+describe("clocksChangeDate", () => {
+  it.each([
+    ["America/Havana", "2027-03-13", "2027-03-14"],
+    ["America/Havana", "2027-03-14", "2027-03-14"],
+    ["America/Santiago", "2027-04-03", "2027-04-03"],
+    ["America/Santiago", "2027-04-04", "2027-04-03"],
+    ["Europe/Madrid", "2026-10-24", "2026-10-25"],
+    ["Europe/Madrid", "2027-03-28", "2027-03-28"],
+  ])("in %s near business day %s is the date shown after the change, %s", (zone, day, date) => {
+    expect(clocksChangeDate(day, zone)).toBe(date);
+  });
+  it("is the business day itself when the clocks do not change near it", () => {
+    expect(clocksChangeDate("2026-07-01", "Europe/Madrid")).toBe("2026-07-01");
   });
 });
