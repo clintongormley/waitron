@@ -97,10 +97,10 @@ products before you confirm. Deleting cannot be undone.
 changes nothing on an open order by itself: an extras pick is its own order line, and an options
 answer is stored as the wording that was chosen. Each published menu keeps the list until you
 publish that menu again. For an options list this matters, because its options are gone: until you
-publish, the till cannot add a dish that carried the list, or change an open order with that dish on
-it. So publish your menus again straight after deleting an options list. After that, the next change
-made to an open order takes off any extra picked from a deleted list, and its charge with it, and
-drops any answer to a deleted options list.
+publish, the till cannot add a dish that carried the list, or change that dish on an open order. So
+publish your menus again straight after deleting an options list. After that, the next change made
+to an open order takes off any extra picked from a deleted list, and its charge with it, and drops
+any answer to a deleted options list.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from
 that one product's Modifiers section.
@@ -141,10 +141,11 @@ order can be sent.
 
 Changing only a customer-facing or kitchen name still matches, so nobody is stopped at the till, but
 it is not free. The order remembers all three names, and Waitron cannot tell a renamed answer from a
-different one. So the next change made to that parked order, even to another line, saves the new
-wording onto every line carrying the renamed answer. Those lines keep the prices they were sold at.
-But a line the kitchen already has is recalled and sent to it again as a new ticket, and if the
-kitchen has started such a line, the till refuses the change. Do your renaming between services
-rather than while orders are parked.
+different one. So once the menu is published again, the next change made to that parked order, even
+to another line, saves the new wording onto every line carrying the renamed answer. Those lines keep
+the prices they were sold at. A line the kitchen already has is recalled and sent to it again as a
+new ticket. The till refuses the change instead if the kitchen has started such a line, or if
+**Allow changes to items already sent to the kitchen** is switched off. Do your renaming between
+services rather than while orders are parked.
 An extras list is the exception, because an extra is matched by its product: renaming an extras
 list, or the product on it, leaves a parked order alone.
