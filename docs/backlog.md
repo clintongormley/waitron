@@ -1205,8 +1205,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   publications now retain the raw parent and relative-variant names separately, and publication
   review includes source changes even when their composed display text is unchanged. The stored
   publication remains unchanged until explicit publish. Consumer integration, parent/newly-added-extra
-  preparation and retained/recalled handling still reach lane G's reserved functions. Whole-feature validation
-  and the final explanation audit remain open.
+  preparation and retained/recalled handling still reach lane G's reserved functions. The operator
+  guide and current editor/option-answer explanations now describe optional fields, deliberate
+  batches and waiting fixes. Whole-feature validation and the final snapshot/prose audit after
+  those handoffs remain open.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**

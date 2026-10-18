@@ -2,18 +2,17 @@
 
 You can add French text to a Spanish menu without changing the language of the dashboard
 or your receipts. Start by choosing the languages your content supports, then add translations as
-you need them. The image library uses the same choices as your products, sections and
-[modifiers](modifiers.md). An options list, each of its options, and an extras list all participate
-in the default-language translation check. An entry on an extras list does not: it has no name of
-its own, and takes the product's.
+you need them. Customer-facing translations are optional, including in your default language.
+Your products, sections, [modifiers](modifiers.md) and units share these language choices.
+The image library uses them too, but a photo still needs a name in your default language when
+you upload or edit it.
 
 ## Choose your content languages {#languages}
 
 A new venue starts with its content languages already chosen: the languages Waitron keeps enabled
-for its region, plus English. In Spain Waitron keeps Spanish enabled in every region where a venue
-can be set up today, and Catalan as well in Catalonia, the Valencian Community and the Balearic
-Islands, and Galician in Galicia; there that regional language is the default. Elsewhere in Spain
-Spanish is the default. A venue in another country starts with its country's language and English.
+for its region, plus English. Spanish stays enabled throughout Spain; your region can add other
+required languages and choose a regional language as the default. For example, a new venue in
+the Valencian Community starts with Valencian as its default, plus Spanish and English.
 To add another, open **Settings**, then **Content languages**, which shows your languages and
 their missing-name counts in a table, with the default first. Select **Add language**, then choose
 the language to add it. The choices show your country's official languages first, under
@@ -30,45 +29,56 @@ Where English content is requested, it displays **Pan de verano** until you ente
 This fallback uses the Spanish text without copying it into the English field, so later Spanish edits
 remain visible where the translation is still missing.
 
-Required fields need text in the default language. Other translations can wait. To change the
-default to English, first complete the required English translations and image names.
-If the change is refused, select **Edit translations** in English's ⋮ menu to open the report: the
-names marked **Partly translated** under English hold it up, and each has an **Open** link to the
-screen where it is edited. Image names are checked too but are not listed there, so check them in
-the **Image library**. Something you have deleted or switched off can also hold the change up
-without appearing in the list.
+You can change the default while translations or photo names are missing. **Required** means
+the language stays enabled; it does not require you to enter every customer-facing name. With
+staff name **Patatas**, for example, you can save English **Potatoes** while leaving Spanish
+blank. Spanish still has a missing translation, even when a fallback makes the name readable.
 
-A product's and a variant's customer-facing name is the exception, because it is optional: leave it
-empty in every language and Waitron falls back to the staff name, so it never blocks the change.
-Fill it in for Spanish and leave English blank, though, and that _is_ a missing translation — you
-clearly meant to translate it — so it does hold the change up until you finish it or clear it. A
-section's customer-facing names work the same way: none at all never blocks the change, but a
-section with some names and none in the new default language does. Edit a section's customer-facing
-names on its menu's **Structure** tab, in **Products and menus**, **Menus**. A menu's own
-customer-facing names are edited through **Rename** on the menu's row in that list, not on its
-**Structure** tab, although the **Missing translations** link for a menu's own name opens that tab.
-A menu included in another menu can give its folder customer-facing names of its own: choose
-**Edit** in that include's ⋮ on the including menu's **Structure** tab. When such a folder's names,
-its own together with the ones it takes from the included menu, are filled in for some languages but
-not the new default, it holds the change up too, and **Missing translations** lists it as
-**Included menu folder**. This holds while the include shows its sections directly too; turn
-**Show as a folder** on to see the names.
+Give each unit a staff name and abbreviation, such as **Kilogram** and **kg**. Its translated
+names and abbreviations are optional and independent. The missing-name count includes a unit
+when either field is blank in that language, counting it once when both are blank.
 
-**Edit translations** opens a dialog listing the missing translations for your content
-languages. The language you chose opens; languages marked **Required** come first and have a note
-saying how many names still need translating into them. It has Kind and Why filters
-and links to each existing editor. A name
-filled in for some languages but not this one is marked **Partly translated**. Something with no customer-facing
-name at all is listed under your other languages as **No customer-facing name**, because there its
-staff name is shown instead; an extras list is the exception, because its own name never reaches a
-receipt. Archived products, disabled lists and switched-off menus are not listed.
+**Edit translations** opens the same editor from every language row. **Missing in** starts with
+the language you chose; select **All names** to include items that already have text. Use **Kind**
+and search to narrow the rows. The report includes missing default-language names and names
+with no translations at all. Archived products and disabled lists are excluded. An extras
+list's own name is included even though it does not print on a receipt; an entry on that list
+takes its product's name.
+
+Edit the languages you need beside each item. **Jump to language** brings a language into view
+on a small screen. Each field is independent: entering Spanish does not require an English
+companion, and a fallback shown as a hint does not become saved text. Clearing a saved field
+removes that translation. **Next** and **Previous** change pages while retaining your edits;
+**Show edited** reveals edited items hidden by your current filters.
+
+Saved translations update the working menus that use those definitions. Check the menu preview
+and publish separately when you want its new text on the till. Saving translations keeps the
+existing publication and recorded order names unchanged.
+
+**Save changes** saves your staged fields together, including edits on other pages, up to 100
+fields per batch. A unit's name and abbreviation are separate fields. If you exceed the limit,
+use **Unstage field** to remove an edit from this batch before saving. Closing a dialog with
+your own unsaved edits asks what to do with them.
+
+If a saved name changes while you work, compare **When opened**, **Current** and **Your draft**.
+Choose **Keep draft**, **Use current name** or **Discard edit** for that field. If a Save gets no
+confirmed answer, **Retry these changes** sends the same batch again. **Review latest** lets
+you read the current names and decide each submitted field before preparing a different batch.
 
 If your venue is connected to Waitron Cloud and Translate all is switched on for it there,
-**Translate all** at the top of the dialog asks Cloud to suggest every missing customer-facing
-name, in every language. Suggestions fill empty fields as drafts marked **Suggested**, up to 100
-at a time, and nothing reaches your diners until you save them; **Discard suggestion** removes one you do not
-want. When Translate all stops, even part-way through, the alerts bell tells you how many are
-waiting for review.
+**Translate all** at the top of the dialog requests suggestions for missing customer-facing
+names. Suggestions fill empty fields as drafts marked **Suggested**, within the same 100-field
+batch limit, and do not replace text you typed. Units receive name suggestions; you enter their
+abbreviations yourself. Nothing is saved until you choose **Save changes**. **Discard suggestion**
+removes one you do not want; closing the dialog leaves unaccepted suggestions available for later.
+
+A spelling correction waits for **Use fix**. Selecting it checks the latest saved name before
+staging the correction in this editor. An out-of-date fix cannot replace your own edit, and a
+correction to a staff name takes you to its existing editor. Use **All names** to find corrections
+on items that have no missing translations. When Translate all stops, even part-way through,
+the alerts bell tells you how many suggestions are waiting for review. The
+[documented Cloud request limit](backlog.md) remains 20 languages; this editor does not split a
+larger language set into smaller requests.
 
 Selecting **Delete** in an additional language's ⋮ menu hides its ordinary translation fields
 but keeps the saved text.
@@ -82,11 +92,10 @@ The till offers the location's receipt language and, in Spain, whichever of Span
 Galician and Basque are among your content languages, so adding English content does not add an
 English receipt.
 
-Product names, units and option answers print in your default content language, or another of your
-content languages where a name is blank in it, whatever language the receipt is in. They are stored
-in that language when a dish is added to an order, so changing the content default does not rewrite
-issued receipts. If the receipt language is not one of your content languages, this page and the
-Defaults card in Venue settings show a note saying so.
+The receipt's language chooses its headings. Dish names, units and option answers come from the
+names stored with the order, so editing translations or changing the content default does not
+rename the lines on an issued receipt. If the receipt language is not one of your content languages,
+this page and the Defaults card in Venue settings show a note saying so.
 
 Kitchen displays,
 orders you retrieve and sales reports keep their recorded names, even if you later remove that
