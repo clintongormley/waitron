@@ -2086,11 +2086,7 @@ export class TillFloorScreen extends LitElement {
       ${trackDialog()}
       data-move-dialog
       .open=${true}
-      .heading=${
-        table.today?.name == null
-          ? t("floor.move_title").replace("{table}", () => table.label)
-          : t("floor.move_title_named").replace("{table}", () => table.today!.name!)
-      }
+      .heading=${tableSentence(table, "floor.move_title", "floor.move_title_named")}
       @wt-close=${() => (this.moving = null)}
     >
       <p>${t("floor.move_body")}</p>
