@@ -412,7 +412,13 @@ can have been recorded after 03:00 yet.)
 
 - `businessDayClockConflicts` marks `range` only on the ranges that fail. When a day's ranges do
   not parse together, each range is parsed on its own under the old and new start; a range that
-  fails alone gets `range` ("Crosses the new start"). The other ranges of that day are not marked
+  parses alone under the old start and fails alone under the new one gets `range` ("Crosses the new
+  start"). A range that already fails alone under the old start gets `overlap` ("Invalid or
+  overlapping range"), because the new start is not what is wrong with it (test "marks a stored
+  range already invalid under the old start as overlap, not as crossing the new one": 04:00–06:00
+  under 05:00 → 03:00). An off-step range was tried first and could not be stored: inserting
+  17:10–20:00 into `department_day_ranges` failed `department_day_ranges_step_ck`
+  (`zone_day_ranges` declares `zone_day_ranges_step_ck`; read, not run). The other ranges of that day are not marked
   `range`; each still goes through every other check (`all_day`, `endpoint_day`, `sending_cutoff`,
   `transition_strip`) exactly as if the day had parsed, so each is listed with its own reason, or
   not at all if it has none. For `sending_cutoff`'s "a later range on the same day" comparison

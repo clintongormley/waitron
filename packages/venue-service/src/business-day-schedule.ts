@@ -384,24 +384,27 @@ export async function businessDayClockConflicts(
         a.startsAt.localeCompare(b.startsAt) ||
         a.endsAt.localeCompare(b.endsAt),
     );
+    const parsesUnder = (group: Placement[], cutover: string) => {
+      try {
+        parseClosedRanges(
+          group.map((p) => ({ startsAt: p.startsAt.slice(0, 5), endsAt: p.endsAt.slice(0, 5) })),
+          "ranges",
+          cutover,
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    };
     const parses = (group: Placement[]) =>
-      [oldCutover, newCutover].every((cutover) => {
-        try {
-          parseClosedRanges(
-            group.map((p) => ({ startsAt: p.startsAt.slice(0, 5), endsAt: p.endsAt.slice(0, 5) })),
-            "ranges",
-            cutover,
-          );
-          return true;
-        } catch {
-          return false;
-        }
-      });
+      parsesUnder(group, oldCutover) && parsesUnder(group, newCutover);
     const together = parses(placements);
-    const crossing = together
+    const failing = together
       ? new Set<Placement>()
       : new Set(placements.filter((p) => !parses([p])));
-    const overlapping = !together && crossing.size === 0;
+    const invalidBefore = new Set([...failing].filter((p) => !parsesUnder([p], oldCutover)));
+    const crossing = new Set([...failing].filter((p) => !invalidBefore.has(p)));
+    const overlapping = !together && failing.size === 0;
     for (const [rangeIndex, p] of placements.entries()) {
       const startsAt = p.startsAt.slice(0, 5),
         endsAt = p.endsAt.slice(0, 5);
@@ -421,7 +424,7 @@ export async function businessDayClockConflicts(
           const span = rangeSpan({ startsAt, endsAt }, cutover);
           const later = placements
             .slice(rangeIndex + 1)
-            .filter((next) => !crossing.has(next))
+            .filter((next) => !failing.has(next))
             .map((next) => rangeSpan(next, cutover).start);
           return [...later, earliestTomorrow(p, cutover)].some(
             (next) => span.end + p.offset >= next,
@@ -429,7 +432,7 @@ export async function businessDayClockConflicts(
         });
       let reason: BusinessDayClockConflict["reason"] | null = null;
       if (startsAt === endsAt) reason = "all_day";
-      else if (overlapping) reason = "overlap";
+      else if (overlapping || invalidBefore.has(p)) reason = "overlap";
       else if (crossing.has(p)) reason = "range";
       else if (
         ownership(startsAt, oldCutover, false) !== ownership(startsAt, newCutover, false) ||

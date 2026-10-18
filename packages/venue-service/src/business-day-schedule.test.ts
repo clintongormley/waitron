@@ -427,6 +427,16 @@ describe("business-day schedule compatibility", () => {
       },
     });
   });
+  it("marks a stored range already invalid under the old start as overlap, not as crossing the new one", async () => {
+    const v = await fixture([range("13:00", "16:00"), range("04:00", "06:00")]);
+    await expect(check(v, "03:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: {
+        conflictCount: 1,
+        conflicts: [{ startsAt: "04:00", endsAt: "06:00", reason: "overlap" }],
+      },
+    });
+  });
   it("checks the other ranges of a day with a crossing range for their own clashes", async () => {
     const v = await fixture([range("13:00", "16:00"), range("20:00", "23:30")]);
     await expect(check(v, "21:00")).rejects.toMatchObject({
