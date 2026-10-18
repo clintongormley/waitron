@@ -51,6 +51,7 @@ it.each(["detailed", "fallback"] as const)(
     await el.updateComplete;
     const drawer = el.shadowRoot!.querySelector("[data-drawer]")!;
     expect(drawer.querySelector("[data-move-line], [data-split-group-line]")).toBeNull();
+    expect(drawer.querySelector("[data-recall-line]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-move-dialog]")).toBeNull();
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
     await el.updateComplete;

@@ -2298,29 +2298,6 @@ export class TillTableOrderScreen extends LitElement {
           ${t("table.change_line")}
         </wt-button>`,
       );
-    if (this.#canRecall(line))
-      actions.push(
-        html`<wt-button
-          class="line-recall"
-          size="sm"
-          variant="secondary"
-          data-recall-line=${line.lineNo}
-          .disabled=${this.busy || this.groupCommandBusy || this.#draftStore?.sending || this.#draftStore?.editsLocked}
-          aria-label=${label("table.recall_line")}
-          @click=${() => this.#recallLine(line.lineNo)}
-        >
-          ${t("table.recall_line")}
-        </wt-button>`,
-      );
-    if (line.movable && this.orderId !== undefined)
-      actions.push(
-        this.#moveStationButton(line.lineNo, {
-          workingOrderId: this.orderId,
-          lineId: line.id,
-          name,
-          stationId: line.stationId,
-        }),
-      );
     if (this.#canCancel(line))
       actions.push(
         html`<wt-button
@@ -2434,20 +2411,6 @@ export class TillTableOrderScreen extends LitElement {
         composed: true,
       }),
     );
-  }
-
-  #moveStationButton(
-    lineNo: number,
-    detail: { workingOrderId: string; lineId: string; name: string; stationId: string | null },
-  ): TemplateResult {
-    return html`<wt-button
-      size="sm"
-      variant="secondary"
-      data-move-station=${lineNo}
-      aria-label=${`${t("table.move_station")} · ${detail.name}`}
-      @click=${() => this.dispatchEvent(new CustomEvent("move-station", { detail, bubbles: true, composed: true }))}
-      >${t("table.move_station")}</wt-button
-    >`;
   }
 
   #openChange(line: TabLine): void {
@@ -4678,20 +4641,6 @@ export class TillTableOrderScreen extends LitElement {
               </span>`
         }
       </span>
-      ${
-        held === null
-          ? html`${
-              row.kitchen?.movable && !this.#pending().some((line) => line.id === row.lineId)
-                ? this.#moveStationButton(row.lineNo, {
-                    workingOrderId: row.workingOrderId,
-                    lineId: row.lineId,
-                    name: row.name,
-                    stationId: row.kitchen.stationId,
-                  })
-                : nothing
-            }`
-          : nothing
-      }
     </li>`;
   }
 

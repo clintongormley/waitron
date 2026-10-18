@@ -73,6 +73,7 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
       expect(drawer.querySelector('[data-group-line="stored-dish"]')!.textContent).toContain(
         "Recorded dish",
       );
+      expect(drawer.querySelector("[data-recall-line], [data-move-station]")).toBeNull();
       expect(q("[data-move-dialog]")).toBeNull();
       await expectNoA11yViolations(host);
       await page.screenshot({

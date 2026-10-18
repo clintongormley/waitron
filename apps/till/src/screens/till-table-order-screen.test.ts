@@ -9,9 +9,13 @@ import { toDraftLineInput } from "../state/draft-lines.js";
 import { heldViews, placeFor } from "../state/draft-place.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { WtCombobox, WtRowActions } from "@waitron/ui";
+import type { WtCombobox, WtDialog, WtRowActions } from "@waitron/ui";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
-import { openSentDish, sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
+import {
+  openSentDish,
+  openSentMore,
+  sentPanelFor,
+} from "./till-table-order-screen.sent.test-helpers.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { formatMoney, grossOf } from "@waitron/shared";
 import {
@@ -174,6 +178,73 @@ const tender = (el: TillTableOrderScreen) =>
 async function openDrawer(el: TillTableOrderScreen): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
   await el.updateComplete;
+}
+
+const recallFixtures = new WeakSet<TillTableOrderScreen>();
+
+async function recallControl(el: TillTableOrderScreen, lineNo: number) {
+  const line = el.lines.find((line) => line.lineNo === lineNo)!;
+  if (line.parentLineNo != null) {
+    expect(el.shadowRoot!.querySelector(`[data-recall-line="${lineNo}"]`)).toBeNull();
+    return null;
+  }
+  const previous = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]");
+  if (previous?.open) {
+    const closed = new Promise<void>((resolve) =>
+      previous.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    previous.closeAfter("saved");
+    await closed;
+  }
+  el.orderId ??= "wo-4";
+  if (el.currentOrders === null || recallFixtures.has(el)) {
+    recallFixtures.add(el);
+    const group = el.groups.find((group) => group.id === line.groupId);
+    const held = group?.state === "held";
+    const row = currentRow(line.id, line.name ?? "Café", line.quantity, {
+      lineNo,
+      workingOrderId: el.orderId,
+      billStatus: el.bills.find((bill) => bill.workingOrderId === el.orderId)?.status ?? "open",
+      courseId: line.courseId,
+      unitPrecision: line.unitPrecision ?? null,
+      netAmount: grossOf(line.unitPriceGross, line.quantity),
+      firedAt: line.firedAt,
+      released: !held,
+      servedAt: line.servedAt,
+      servedQuantity: line.servedAt === null ? "0.000" : line.quantity,
+      kitchen:
+        line.state === null
+          ? null
+          : {
+              stationId: line.stationId,
+              movable: line.movable,
+              state: line.state,
+              firedAt: line.firedAt,
+              awayAt: null,
+            },
+      note: line.note,
+    });
+    el.currentOrders = current({
+      groups:
+        group === undefined ? [] : [currentGroup(group.id, group.position, group.state, [row])],
+      ungrouped: group === undefined ? [row] : [],
+      reminder: null,
+    });
+  }
+  await el.updateComplete;
+  const held = el.currentOrders.groups.find((group) =>
+    group.rows.some((row) => row.lineId === line.id),
+  );
+  await openSentDish(
+    el,
+    line.id,
+    line.servedAt !== null ? "served" : held?.state === "held" ? "held" : "fired",
+  );
+  if (el.shadowRoot!.querySelector("[data-sent-line-dialog] wt-row-actions") !== null)
+    await openSentMore(el);
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-sent-line-recall]",
+  );
 }
 
 afterEach(cleanupWidgets);
@@ -2553,7 +2624,7 @@ describe("till-table-order-screen", () => {
         const held = { ...pendingLine, firedAt: null, sentAt: null, state, groupId: "g-held" };
         const { el } = await mount({ lines: [held], groups: [orderGroup("g-held", "held")] });
         await openDrawer(el);
-        const recall = el.shadowRoot!.querySelector<HTMLElement>('[data-recall-line="1"]');
+        const recall = await recallControl(el, 1);
         expect(recall).not.toBeNull();
         let captured: CustomEvent | undefined;
         el.addEventListener("recall-lines", (event) => {
@@ -2567,7 +2638,7 @@ describe("till-table-order-screen", () => {
     it("offers Recall for a sent dish that needs no kitchen preparation", async () => {
       const { el } = await mount({ lines: [{ ...pendingLine, firedAt: null, state: null }] });
       await openDrawer(el);
-      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).not.toBeNull();
+      expect(await recallControl(el, 1)).not.toBeNull();
     });
 
     it.each(["queued", null] as const)(
@@ -2579,7 +2650,7 @@ describe("till-table-order-screen", () => {
           groups: [orderGroup("g-held", "held")],
         });
         await openDrawer(el);
-        expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+        expect(await recallControl(el, 1)).toBeNull();
       },
     );
 
@@ -2590,7 +2661,7 @@ describe("till-table-order-screen", () => {
         lines: [pendingLine],
       });
       await openDrawer(el);
-      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+      expect(await recallControl(el, 1)).toBeNull();
     });
 
     it.each(["preparing", "ready"] as const)(
@@ -2600,8 +2671,8 @@ describe("till-table-order-screen", () => {
           lines: [pendingLine, { ...childLine, firedAt: pendingLine.firedAt, state }],
         });
         await openDrawer(el);
-        expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
-        expect(el.shadowRoot!.querySelector('[data-recall-line="2"]')).toBeNull();
+        expect(await recallControl(el, 1)).toBeNull();
+        expect(await recallControl(el, 2)).toBeNull();
       },
     );
 
@@ -2618,7 +2689,7 @@ describe("till-table-order-screen", () => {
           }),
         });
         await openDrawer(el);
-        expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+        expect(await recallControl(el, 1)).toBeNull();
       },
     );
 
@@ -2639,26 +2710,30 @@ describe("till-table-order-screen", () => {
         }),
       });
       await openDrawer(el);
-      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).not.toBeNull();
+      expect(await recallControl(el, 1)).not.toBeNull();
     });
 
     it("disables Recall while another party command is in flight", async () => {
-      const { el } = await mount({ lines: [pendingLine], groupCommandBusy: true });
+      const { el } = await mount({ lines: [pendingLine] });
       await openDrawer(el);
-      expect(
-        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-recall-line="1"]')
-          ?.disabled,
-      ).toBe(true);
+      const recall = (await recallControl(el, 1))!;
+      const captured: CustomEvent[] = [];
+      el.addEventListener("recall-lines", (event) => captured.push(event as CustomEvent));
+      el.groupCommandBusy = true;
+      await el.updateComplete;
+      expect(recall.disabled).toBe(true);
+      recall.click();
+      expect(captured).toEqual([]);
     });
 
     it("renders no Send, Recall or course picker on a child extras line, only its dish's Cancel", async () => {
       // Parent (fired + queued) is recallable and shows its read-only course; the child shows neither.
       const { el } = await mount({ lines: [pendingLine, childLine], courses });
       await openDrawer(el);
-      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).not.toBeNull();
+      expect(await recallControl(el, 1)).not.toBeNull();
       // The child row: no Send or Recall action, and Cancel because its dish offers it…
       expect(el.shadowRoot!.querySelector('[data-send-line="2"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-recall-line="2"]')).toBeNull();
+      expect(await recallControl(el, 2)).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).not.toBeNull();
       // …and no course control at all (neither the editable held picker nor the fired static span).
@@ -2708,7 +2783,7 @@ describe("till-table-order-screen", () => {
       const send = el.shadowRoot!.querySelector<HTMLElement>('[data-send-line="3"]');
       expect(send).not.toBeNull();
       // A held line is neither recallable nor cancellable — it is not fired yet.
-      expect(el.shadowRoot!.querySelector('[data-recall-line="3"]')).toBeNull();
+      expect(await recallControl(el, 3)).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-cancel-line="3"]')).toBeNull();
 
       let captured: CustomEvent | undefined;
@@ -2730,7 +2805,7 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({ lines: [ticketlessParent], courses });
       await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-send-line="4"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-recall-line="4"]')).toBeNull();
+      expect(await recallControl(el, 4)).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-cancel-line="4"]')).toBeNull();
     });
 
@@ -2799,7 +2874,7 @@ describe("till-table-order-screen", () => {
       // pendingLine: firedAt set + state queued ⇒ recallable (not yet started).
       const { el } = await mount({ lines: [pendingLine], courses });
       await openDrawer(el);
-      const recall = el.shadowRoot!.querySelector<HTMLElement>('[data-recall-line="1"]');
+      const recall = await recallControl(el, 1);
       expect(recall).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-send-line="1"]')).toBeNull();
       // Owner decision (menus plan Task 7c): a queued line is cancellable too, beside Recall.
@@ -2820,7 +2895,7 @@ describe("till-table-order-screen", () => {
       expect(cancel).not.toBeNull();
       // A started line is cancel-only — no Send, no Recall.
       expect(el.shadowRoot!.querySelector('[data-send-line="1"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+      expect(await recallControl(el, 1)).toBeNull();
 
       let captured: CustomEvent | undefined;
       el.addEventListener("adjust", (e) => (captured = e as CustomEvent));
@@ -2838,7 +2913,7 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({ lines: [readyLine], courses });
       await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).not.toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
+      expect(await recallControl(el, 1)).toBeNull();
     });
   });
 
@@ -2979,11 +3054,11 @@ describe("till-table-order-screen", () => {
       return seen;
     }
 
-    it("offers Change beside Recall and Cancel on a queued line the kitchen has not started", async () => {
+    it("offers queued Recall in Sent while Change and Cancel remain in the drawer", async () => {
       const { el } = await mountLines([burgerLine]);
       await openDrawer(el);
       expect(lineAction(el, "change", 5)).not.toBeNull();
-      expect(lineAction(el, "recall", 5)).not.toBeNull();
+      expect(await recallControl(el, 5)).not.toBeNull();
       expect(lineAction(el, "cancel", 5)).not.toBeNull();
       expect(lineAction(el, "change", 5)!.getAttribute("aria-label")).toBe(
         `${t("table.change_line")} · Burger`,
@@ -3023,7 +3098,7 @@ describe("till-table-order-screen", () => {
       for (const lineNo of [9, 10]) {
         expect(lineAction(el, "cancel", lineNo)).not.toBeNull();
         expect(lineAction(el, "change", lineNo)).toBeNull();
-        expect(lineAction(el, "recall", lineNo)).toBeNull();
+        expect(await recallControl(el, lineNo)).toBeNull();
       }
     });
 
@@ -3041,7 +3116,7 @@ describe("till-table-order-screen", () => {
       const { el } = await mountLines([gone, unnamed]);
       await openDrawer(el);
       expect(lineAction(el, "change", 5)).toBeNull();
-      expect(lineAction(el, "recall", 5)).not.toBeNull();
+      expect(await recallControl(el, 5)).not.toBeNull();
       expect(lineAction(el, "change", 6)).toBeNull();
     });
 
@@ -3052,7 +3127,7 @@ describe("till-table-order-screen", () => {
       await openDrawer(el);
       for (const lineNo of [5, 6, 9]) {
         expect(lineAction(el, "change", lineNo)).toBeNull();
-        expect(lineAction(el, "recall", lineNo)).toBeNull();
+        expect(await recallControl(el, lineNo)).toBeNull();
         expect(lineAction(el, "cancel", lineNo)).not.toBeNull();
       }
       // The server changes a no-route line whatever the setting, so it keeps Change.

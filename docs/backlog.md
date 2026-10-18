@@ -2221,7 +2221,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   **A773-1**, the table screen's Sent/New order panel, remains unlanded. The branch's drawer
   no longer repeats the group Fire or serving controls: those commands use Sent and its line window.
   The drawer's held-line Move/Split controls are also gone on that branch: recall a sent dish
-  into New order before moving or splitting it. The duplicate lists and old row strips remain to
+  into New order before moving or splitting it. Recall and station moves now use Sent’s More menu
+  without duplicate drawer buttons. The duplicate lists and other old row strips remain to
   be retired. On its feature branch,
   you can select an unsent group and use Move to to keep its saved placement or choose another
   group. Fire now, new groups and joins have separate headings; only mixed groups repeat course

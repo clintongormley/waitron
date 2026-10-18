@@ -39,6 +39,7 @@ import type {
   TillMenuOffer,
   ZoneOfferCatalogue,
 } from "./api/client.js";
+import { openSentDish, openSentMore } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 // Mesa 4 holds party v1, on tab wo-4, in zone z1, whose Lunch menu offers Beer, Steak and Flan.
@@ -7594,6 +7595,39 @@ describe("recalled draft source splitting", () => {
           revision: 7,
           editSentLines: true,
         }),
+        readCurrentOrders: vi.fn().mockResolvedValue(
+          current({
+            revision: 3,
+            groups: [],
+            reminder: null,
+            ungrouped: [
+              row(source.id, source.name!, source.quantity, {
+                lineNo: source.lineNo,
+                workingOrderId: "wo-4",
+                courseId: source.courseId,
+                unitPrecision: source.unitPrecision ?? null,
+                netAmount: reference().source.netAmount,
+                firedAt: "2026-10-17T08:00:00Z",
+                note: source.note,
+                kitchen: {
+                  stationId: null,
+                  movable: true,
+                  state: "queued",
+                  firedAt: "2026-10-17T08:00:00Z",
+                  awayAt: null,
+                },
+                extras: reference().source.extras.map((extra) => ({
+                  lineId: extra.id,
+                  name: extra.name!,
+                  quantity: extra.quantity,
+                  unitPriceGross: extra.unitPriceGross,
+                  priceQuantity: extra.priceQuantity ?? "1",
+                  netAmount: "3.00",
+                })),
+              }),
+            ],
+          }),
+        ),
         recallLines: vi.fn().mockResolvedValue(undefined),
         recallToDraft: vi.fn(async () => ({ revision: 4, draft: recordRecall() })),
         ...overrides,
@@ -7605,9 +7639,9 @@ describe("recalled draft source splitting", () => {
     it("recalls the recorded family into its bill's draft and reads it before allowing edits", async () => {
       const { el, order } = await recallOpening();
       const reads = api.listDrafts.mock.calls.length;
-      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-      await order.updateComplete;
-      const button = order.shadowRoot!.querySelector<HTMLElement>("[data-recall-line='7']");
+      await openSentDish(order, "source-7");
+      await openSentMore(order);
+      const button = order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-recall]");
       expect(button).not.toBeNull();
       await userEvent.click(button!);
       await flush(el, 6);
