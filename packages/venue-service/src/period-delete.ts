@@ -25,7 +25,7 @@ import {
 import { departments } from "./schema/service.js";
 import { joinTouching } from "./season-weeks.js";
 import { rangeSpan, serviceMomentAt } from "./service-day.js";
-import { settledClock } from "./service-day-context.js";
+import { inForceClock } from "./service-day-context.js";
 import "./errors.js";
 
 export interface PaintedIn {
@@ -244,7 +244,7 @@ export async function deletePeriod(
       .update(departmentDayRanges)
       .set({ periodId: replacementId })
       .where(eq(departmentDayRanges.periodId, periodId));
-    await joinTouchingRanges(tx, dayIds, clock);
+    await joinTouchingRanges(tx, dayIds, clock, at);
     await fitExtensionsToReplacement(tx, cfg, period.departmentId, periodId, replacementId, clock);
     await tx
       .update(periodExtensions)
@@ -256,7 +256,7 @@ export async function deletePeriod(
     tx,
     cfg,
     period.departmentId,
-    settledClock(clock, at),
+    inForceClock(clock, at),
   );
   if (clash !== null)
     invalidTimetable(replacementId === null ? "periodId" : "replacementPeriodId", {
@@ -323,6 +323,7 @@ async function joinTouchingRanges(
   tx: Transaction,
   dayIds: readonly string[],
   clock: BusinessDayClock,
+  at: Date,
 ): Promise<void> {
   if (dayIds.length === 0) return;
   const rows = await tx
@@ -338,6 +339,7 @@ async function joinTouchingRanges(
     .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
     .leftJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
     .where(inArray(departmentDayRanges.dayId, [...dayIds]));
+  const undated = inForceClock(clock, at).dayCutover;
   const byDay = new Map<string, typeof rows>();
   for (const row of rows) {
     const day = byDay.get(row.dayId);
@@ -346,7 +348,7 @@ async function joinTouchingRanges(
   }
   for (const ranges of byDay.values()) {
     const date = ranges[0]!.date;
-    const cutover = date === null ? clock.dayCutover : cutoverForBusinessDay(clock, date);
+    const cutover = date === null ? undated : cutoverForBusinessDay(clock, date);
     ranges.sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
     const joined = joinTouching(ranges, (a, b) => a.periodId === b.periodId);
     if (joined.length === ranges.length) continue;

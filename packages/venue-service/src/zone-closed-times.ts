@@ -1,4 +1,4 @@
-import { scheduleCutovers, serviceDayContext, settledClock } from "./service-day-context.js";
+import { inForceClock, scheduleCutovers, serviceDayContext } from "./service-day-context.js";
 import {
   assertBusinessDayScheduleWrite,
   assertWaitingChangeFits,
@@ -44,7 +44,7 @@ export async function replaceZoneClosedWeek(
     cfg,
     zoneId,
     days,
-    settledClock(clock, at),
+    inForceClock(clock, at),
     options.seasonId,
   );
   await assertBusinessDayScheduleWrite(

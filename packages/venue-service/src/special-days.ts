@@ -26,7 +26,7 @@ import { departments, zoneServicePolicies } from "./schema/service.js";
 import { readHolidayDates } from "./holidays.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
 import { joinTouching, type ServingRead } from "./season-weeks.js";
-import { scheduleCutovers, settledClock } from "./service-day-context.js";
+import { inForceClock, scheduleCutovers, settledClock } from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
 import "./errors.js";
 
@@ -586,9 +586,12 @@ interface ParsedEntry<T> {
 type CutoversOf = (date: LocalDate) => string[];
 
 const cutoversFor =
-  (clock: BusinessDayClock, repeats: boolean): CutoversOf =>
+  (
+    clocks: { settled: BusinessDayClock; inForce: BusinessDayClock },
+    repeats: boolean,
+  ): CutoversOf =>
   (date) =>
-    scheduleCutovers(clock, repeats ? undefined : date);
+    repeats ? scheduleCutovers(clocks.inForce) : scheduleCutovers(clocks.settled, date);
 
 function readPaintRange(
   entry: Record<string, unknown>,
@@ -688,7 +691,10 @@ function retainedEntries<T extends ClosedRange>(
     });
 }
 
-function parseInput(value: unknown, clock: BusinessDayClock) {
+function parseInput(
+  value: unknown,
+  clocks: { settled: BusinessDayClock; inForce: BusinessDayClock },
+) {
   const input = record(value, "input");
   const { name, repeatsYearly } = input;
   if (typeof name !== "string" || name.trim() === "") invalid("name");
@@ -707,7 +713,7 @@ function parseInput(value: unknown, clock: BusinessDayClock) {
       invalid(`dates.${index}.date`, { reason: "overlap" });
   });
   const held = new Set(dates.map((entry) => entry.date));
-  const cutoversOf = cutoversFor(clock, repeatsYearly);
+  const cutoversOf = cutoversFor(clocks, repeatsYearly);
   const paint = parseEntries(
     input.paint,
     "paint",
@@ -1047,8 +1053,8 @@ export async function saveSpecialDay(
   await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
   const stored = id === null ? null : await readSpecialDay(tx, cfg, id);
   const clock = await readLocationClock(tx, cfg.locationId);
-  const settled = settledClock(clock, at);
-  const parsed = parseInput(input, settled);
+  const inForce = inForceClock(clock, at);
+  const parsed = parseInput(input, { settled: settledClock(clock, at), inForce });
   const zoneDepartments = await assertPaintOwners(
     tx,
     cfg,
@@ -1191,7 +1197,7 @@ export async function saveSpecialDay(
       })),
     );
   }
-  await checkScheduleAfterWrite(tx, cfg, settled);
+  await checkScheduleAfterWrite(tx, cfg, inForce);
   await afterWrite?.({ clock, departmentOf: zoneDepartments });
   await assertWaitingChangeFits(tx, cfg, at, clock);
   return readSpecialDay(tx, cfg, specialDayId);
@@ -1209,6 +1215,6 @@ export async function deleteSpecialDay(
   await requireSpecialDay(tx, cfg, id);
   await tx.delete(specialDays).where(eq(specialDays.id, id));
   const clock = await readLocationClock(tx, cfg.locationId);
-  await checkScheduleAfterWrite(tx, cfg, settledClock(clock, at));
+  await checkScheduleAfterWrite(tx, cfg, inForceClock(clock, at));
   await assertWaitingChangeFits(tx, cfg, at, clock);
 }

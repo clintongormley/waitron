@@ -5,6 +5,8 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   kitchenStations,
+  locationBusinessDaySettings,
+  locationDayCutoverChanges,
   locations,
   withTransaction,
   type Database,
@@ -12,6 +14,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { eq } from "drizzle-orm";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
@@ -79,7 +82,7 @@ async function venue() {
         { seasonId },
       );
     }
-    return { cfg, seasonId, barra, deli };
+    return { cfg, seasonId, barra, deli, restaurant, menuId };
   });
 }
 
@@ -202,6 +205,56 @@ describe("assertSeasonClosuresInHours", () => {
     ).toEqual({
       code: "zone_closed_time.invalid",
       params: { field: "days.5.ranges.0", reason: "outside_hours", zoneId: v.barra, weekday: 1 },
+    });
+  });
+
+  it("reads the department's hours from the start in force, not the venue's first start", async () => {
+    const v = await venue();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ dayCutover: "05:00:00" })
+        .where(eq(locations.id, v.cfg.locationId));
+      await tx
+        .insert(locationBusinessDaySettings)
+        .values({ locationId: v.cfg.locationId, revision: 1 });
+      await tx.insert(locationDayCutoverChanges).values({
+        locationId: v.cfg.locationId,
+        effectiveBusinessDay: "2026-01-07",
+        dayCutover: "03:00:00",
+      });
+      const periodId = (
+        await saveMenuPeriod(
+          tx,
+          v.cfg,
+          v.restaurant,
+          { name: "Madrugada", menuId: v.menuId, staffMenuIds: [] },
+          1,
+        )
+      ).id;
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: weekday === 1 ? [{ periodId, startsAt: "04:00", endsAt: "06:00" }] : [],
+        })),
+        new Date(),
+        1,
+        { seasonId: v.seasonId },
+      );
+    });
+    const closure = (startsAt: string, endsAt: string) =>
+      withTransaction(db, (tx) =>
+        assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
+          { zoneId: v.barra, field: "", days: closedMonday([{ startsAt, endsAt }]) },
+        ]),
+      );
+    await closure("05:30", "06:00");
+    expect(await refusal(() => closure("06:00", "07:00"))).toEqual({
+      code: "zone_closed_time.invalid",
+      params: { field: "days.1.ranges.0", reason: "outside_hours", zoneId: v.barra, weekday: 1 },
     });
   });
 

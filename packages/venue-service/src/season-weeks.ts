@@ -20,7 +20,7 @@ import {
 import type { Season } from "./season-rules.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { rangeSpan, type ClosedRange, type ServiceRange } from "./service-day.js";
-import { settledClock } from "./service-day-context.js";
+import { inForceClock } from "./service-day-context.js";
 import { readServiceZones, stageZoneClosedWeek } from "./zone-closed-times.js";
 import "./errors.js";
 
@@ -333,7 +333,7 @@ export async function saveSeasonWeeks(
 ): Promise<void> {
   const season = (await seasonsNaming(tx, cfg, seasonId)).own;
   const clock = await readLocationClock(tx, cfg.locationId);
-  const settled = settledClock(clock, at);
+  const inForce = inForceClock(clock, at);
   const departmentEntries = input.departments ?? [];
   const departmentReads = await readDepartmentWeekReads(
     tx,
@@ -345,7 +345,7 @@ export async function saveSeasonWeeks(
   for (const [index, entry] of departmentEntries.entries()) {
     const prefix = `departments.${index}.`;
     const staged = await within(prefix, () =>
-      stageMenuWeek(tx, cfg, entry.departmentId, entry.days, settled, season, departmentReads),
+      stageMenuWeek(tx, cfg, entry.departmentId, entry.days, inForce, season, departmentReads),
     );
     departmentWeeks.push({
       ...staged,
@@ -372,7 +372,7 @@ export async function saveSeasonWeeks(
       throw new AppError("service_zone.not_found", { zoneId: entry.zoneId });
     zoneWeeks.push(
       await within(`zones.${index}.`, () =>
-        stageZoneClosedWeek(tx, cfg, entry.zoneId, entry.days, settled, season, zoneSeasonWeeks),
+        stageZoneClosedWeek(tx, cfg, entry.zoneId, entry.days, inForce, season, zoneSeasonWeeks),
       ),
     );
   }
@@ -385,7 +385,7 @@ export async function saveSeasonWeeks(
     expectedClockRevision,
   );
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
-  await assertWeekEndOffsets(tx, cfg, settled, departmentWeeks);
+  await assertWeekEndOffsets(tx, cfg, inForce, departmentWeeks);
   await afterWrite?.({ clock, departmentOf: serving });
   if (changed) await assertWaitingChangeFits(tx, cfg, at, clock);
 }

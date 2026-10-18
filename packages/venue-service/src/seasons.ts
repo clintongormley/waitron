@@ -13,7 +13,7 @@ import {
   assertWaitingChangeFits,
 } from "./business-day-schedule.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
-import { settledClock } from "./service-day-context.js";
+import { inForceClock } from "./service-day-context.js";
 import type { VenueScope } from "./operations.js";
 import {
   byStart,
@@ -201,7 +201,7 @@ export async function saveSeasons(
     }
   }
   if (timed) {
-    await checkScheduleAfterSeasonWrite(tx, cfg, settledClock(clock, at));
+    await checkScheduleAfterSeasonWrite(tx, cfg, inForceClock(clock, at));
     await assertWaitingChangeFits(tx, cfg, at, clock);
   }
   return readSeasons(tx, cfg);

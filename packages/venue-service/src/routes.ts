@@ -1321,6 +1321,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             zoneId: id,
             days: days as readonly ClosedWeekDay[],
           }));
+          const at = new Date();
           await saveSeasonWeeks(
             tx,
             ctx.cfg,
@@ -1332,7 +1333,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               })),
               zones: zoneWeeks,
             },
-            new Date(),
+            at,
             revision,
             (read) =>
               assertSeasonClosuresInHours(
@@ -1341,6 +1342,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
                 seasonId,
                 (zoneWeeks ?? []).map((zone, i) => ({ ...zone, field: `zones.${i}.` })),
                 read,
+                at,
               ),
           );
         });
@@ -1356,13 +1358,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         onlyKeys(body, ["days", "seasonId", "expectedClockRevision"]);
         await gated(sessionId, async (tx) => {
           const seasonId = requireBodyUuid(body.seasonId, "seasonId");
+          const at = new Date();
           await replaceZoneClosedWeek(
             tx,
             ctx.cfg,
             zoneId,
             body.days,
             body.expectedClockRevision as number,
-            new Date(),
+            at,
             {
               seasonId,
               afterWrite: (read) =>
@@ -1372,6 +1375,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
                   seasonId,
                   [{ zoneId, field: "", days: body.days as readonly ClosedWeekDay[] }],
                   read,
+                  at,
                 ),
             },
           );

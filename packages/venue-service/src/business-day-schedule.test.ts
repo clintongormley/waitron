@@ -45,7 +45,7 @@ import {
   assertBusinessDayScheduleWrite,
   keptOpenConflicts,
 } from "./business-day-schedule.js";
-import { settledClock } from "./service-day-context.js";
+import { inForceClock, settledClock } from "./service-day-context.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 
@@ -1438,6 +1438,259 @@ describe("settledClock", () => {
   });
 });
 
+describe("inForceClock", () => {
+  const clock: BusinessDayClock = {
+    ...before,
+    cutoverChanges: [
+      { effectiveBusinessDay: "2026-11-01", dayCutover: "04:00" },
+      { effectiveBusinessDay: E, dayCutover: "03:00" },
+    ],
+  };
+  it("is the start in force at the moment, with no changes", () => {
+    expect(inForceClock(clock, new Date("2026-10-31T12:00:00Z"))).toEqual(before);
+    expect(inForceClock(clock, at)).toEqual({ ...before, dayCutover: "04:00" });
+    expect(inForceClock(clock, new Date("2026-11-04T01:59:59.999Z")).dayCutover).toBe("04:00");
+    expect(inForceClock(clock, new Date("2026-11-04T02:00:00.000Z")).dayCutover).toBe("03:00");
+  });
+});
+
+describe("undated hours are checked against the start in force", () => {
+  /** 05:00, then 03:00 from 2026-10-21, then 05:00 again from 2026-10-28. */
+  async function hoursBack(v: { cfg: { locationId: ReturnType<typeof locationId> } }) {
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .insert(locationBusinessDaySettings)
+        .values({ locationId: v.cfg.locationId, revision: 1 });
+      await tx.insert(locationDayCutoverChanges).values([
+        {
+          locationId: v.cfg.locationId,
+          effectiveBusinessDay: "2026-10-21",
+          dayCutover: "03:00:00",
+        },
+        {
+          locationId: v.cfg.locationId,
+          effectiveBusinessDay: "2026-10-28",
+          dayCutover: "05:00:00",
+        },
+      ]);
+    });
+  }
+  /** 05:00, then 03:00 from 2026-10-21. */
+  async function startMovedBack(v: { cfg: { locationId: ReturnType<typeof locationId> } }) {
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .insert(locationBusinessDaySettings)
+        .values({ locationId: v.cfg.locationId, revision: 1 });
+      await tx.insert(locationDayCutoverChanges).values({
+        locationId: v.cfg.locationId,
+        effectiveBusinessDay: "2026-10-21",
+        dayCutover: "03:00:00",
+      });
+    });
+  }
+  const whileThreeInForce = new Date("2026-10-25T12:00:00Z");
+  const wednesday = <T>(entries: T[]) =>
+    Array.from({ length: 7 }, (_, weekday) => (weekday === 3 ? entries : []));
+  const menuWeek = (v: Awaited<ReturnType<typeof fixture>>, ranges: ReturnType<typeof range>[]) =>
+    wednesday(ranges.map((r) => ({ periodId: v.periodId, ...r }))).map((slots, weekday) => ({
+      weekday,
+      slots,
+    }));
+  const zoneWeek = (ranges: ReturnType<typeof range>[]) =>
+    wednesday(ranges).map((entries, weekday) => ({ weekday, ranges: entries }));
+  const writeWeek = (
+    v: Awaited<ReturnType<typeof fixture>>,
+    ranges: ReturnType<typeof range>[],
+    when = at,
+  ) =>
+    withTransaction(suite.db, (tx) =>
+      replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek(v, ranges), when, 1),
+    );
+  const saveSeasonWeek = (
+    v: Awaited<ReturnType<typeof fixture>>,
+    week: Parameters<typeof saveSeasonWeeks>[3],
+  ) => withTransaction(suite.db, (tx) => saveSeasonWeeks(tx, v.cfg, v.seasonId, week, at, 1));
+  /** A Wednesday night to 04:30 with last orders 30 minutes later: it meets 05:00 exactly, and
+   *  ran into 03:00 while that start was in force. */
+  async function lateLastOrders() {
+    const v = await fixture([range("22:00", "04:30")], { offset: 30 });
+    await hoursBack(v);
+    return v;
+  }
+
+  it("accepts a menu week fitting the start in force though it crossed an earlier start", async () => {
+    const v = await fixture([]);
+    await hoursBack(v);
+    await expect(writeWeek(v, [range("22:00", "04:30")])).resolves.toBeUndefined();
+  });
+  it("accepts a whole day from the start in force", async () => {
+    const v = await fixture([]);
+    await hoursBack(v);
+    await expect(writeWeek(v, [range("05:00", "05:00")])).resolves.toBeUndefined();
+  });
+  it("accepts a night fitting every start", async () => {
+    const v = await fixture([]);
+    await hoursBack(v);
+    await expect(writeWeek(v, [range("22:00", "02:30")])).resolves.toBeUndefined();
+  });
+  it("accepts last orders that fit the start in force though they ran into an earlier start", async () => {
+    const v = await fixture([], { offset: 30 });
+    await hoursBack(v);
+    await expect(writeWeek(v, [range("22:00", "04:30")])).resolves.toBeUndefined();
+  });
+  it("refuses a menu week crossing the start in force while the earlier start is in force", async () => {
+    const v = await fixture([]);
+    await hoursBack(v);
+    await expect(writeWeek(v, [range("22:00", "04:30")], whileThreeInForce)).rejects.toMatchObject({
+      code: "menu_timetable.invalid",
+      params: { reason: "order" },
+    });
+  });
+  it("accepts a zone week fitting the start in force though it crossed an earlier start", async () => {
+    const v = await fixture([], { zone: true });
+    await hoursBack(v);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        replaceZoneClosedWeek(tx, v.cfg, v.zoneId!, zoneWeek([range("22:00", "04:30")]), 1, at),
+      ),
+    ).resolves.toBeUndefined();
+  });
+  it("accepts season weeks fitting the start in force though they crossed an earlier start", async () => {
+    const v = await fixture([], { zone: true });
+    await hoursBack(v);
+    await expect(
+      saveSeasonWeek(v, {
+        departments: [
+          { departmentId: v.departmentId, days: menuWeek(v, [range("22:00", "04:30")]) },
+        ],
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      saveSeasonWeek(v, {
+        zones: [{ zoneId: v.zoneId!, days: zoneWeek([range("22:00", "04:30")]) }],
+      }),
+    ).resolves.toBeUndefined();
+  });
+  it("accepts a season week whose last orders fit the start in force", async () => {
+    const v = await fixture([], { offset: 30 });
+    await hoursBack(v);
+    await expect(
+      saveSeasonWeek(v, {
+        departments: [
+          { departmentId: v.departmentId, days: menuWeek(v, [range("22:00", "04:30")]) },
+        ],
+      }),
+    ).resolves.toBeUndefined();
+  });
+  it("accepts an offset whose last orders fit the start in force", async () => {
+    const v = await fixture([range("22:00", "04:30")]);
+    await hoursBack(v);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        updateMenuPeriod(tx, v.cfg, v.periodId, { endOffsetMinutes: 30 }, 1, at),
+      ),
+    ).resolves.toBeUndefined();
+  });
+  it("checks last orders against the start in force after a special-day save and delete", async () => {
+    const v = await lateLastOrders();
+    await expect(
+      paintDate(v, "menu", "2026-12-25", [range("09:00", "17:00")], at, 1),
+    ).resolves.toBeUndefined();
+    const [day] = await withTransaction(suite.db, (tx) =>
+      tx
+        .select({ id: specialDays.id })
+        .from(specialDays)
+        .where(eq(specialDays.locationId, v.cfg.locationId)),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) => deleteSpecialDay(tx, v.cfg, day!.id, at, 1)),
+    ).resolves.toBeUndefined();
+  });
+  it("checks last orders against the start in force after a season save", async () => {
+    const v = await lateLastOrders();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        saveSeasons(
+          tx,
+          v.cfg,
+          {
+            save: [{ id: v.seasonId, name: "Winter", startsOn: "01-01", colour: "blue" }],
+            delete: [],
+          },
+          at,
+          1,
+        ),
+      ),
+    ).resolves.toBeDefined();
+  });
+  it("checks last orders against the start in force after a period delete", async () => {
+    const v = await lateLastOrders();
+    const other = randomUUID();
+    await withTransaction(suite.db, async (tx) => {
+      const [period] = await tx
+        .select({ menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, v.periodId));
+      await tx.insert(menuPeriods).values({
+        id: other,
+        departmentId: v.departmentId,
+        menuId: period!.menuId,
+        name: "Other",
+        endOffsetMinutes: 0,
+      });
+    });
+    await expect(
+      withTransaction(suite.db, (tx) => deletePeriod(tx, v.cfg, other, null, at, 1)),
+    ).resolves.toBeUndefined();
+  });
+  it("joins a replaced period's touching ranges in order from the start in force", async () => {
+    const v = await fixture([]);
+    const other = randomUUID();
+    await withTransaction(suite.db, async (tx) => {
+      const [period] = await tx
+        .select({ menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, v.periodId));
+      await tx.insert(menuPeriods).values({
+        id: other,
+        departmentId: v.departmentId,
+        menuId: period!.menuId,
+        name: "Other",
+        endOffsetMinutes: 0,
+      });
+      const dayId = randomUUID();
+      await tx
+        .insert(departmentDays)
+        .values({ id: dayId, departmentId: v.departmentId, seasonId: v.seasonId, weekday: 4 });
+      await tx.insert(departmentDayRanges).values([
+        {
+          dayId,
+          departmentId: v.departmentId,
+          periodId: v.periodId,
+          startsAt: "04:30:00",
+          endsAt: "05:00:00",
+        },
+        {
+          dayId,
+          departmentId: v.departmentId,
+          periodId: other,
+          startsAt: "05:00:00",
+          endsAt: "06:00:00",
+        },
+      ]);
+    });
+    await startMovedBack(v);
+    await withTransaction(suite.db, (tx) => deletePeriod(tx, v.cfg, other, v.periodId, at, 1));
+    const rows = await withTransaction(suite.db, (tx) =>
+      tx
+        .select({ startsAt: departmentDayRanges.startsAt, endsAt: departmentDayRanges.endsAt })
+        .from(departmentDayRanges)
+        .where(eq(departmentDayRanges.departmentId, v.departmentId)),
+    );
+    expect(rows).toEqual([{ startsAt: "04:30:00", endsAt: "06:00:00" }]);
+  });
+});
+
 it("hours models carry the baseline timeline, revision and pending status across activation", async () => {
   const v = await fixture([]);
   await withTransaction(suite.db, async (tx) => {
@@ -1482,7 +1735,7 @@ describe("schedule authoring retains date-specific starts", () => {
     });
   }
   const after = new Date("2026-11-05T12:00:00Z");
-  it("checks a normal menu week against the retained 07:00 start", async () => {
+  it("checks a normal menu week against the 07:00 start in force", async () => {
     const v = await fixture([]);
     await activated(v);
     const week = Array.from({ length: 7 }, (_, weekday) => ({
@@ -1493,7 +1746,7 @@ describe("schedule authoring retains date-specific starts", () => {
       withTransaction(suite.db, (tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, week, after, 1)),
     ).rejects.toMatchObject({ code: "menu_timetable.invalid" });
   });
-  it("checks a normal zone week against the retained 07:00 start", async () => {
+  it("checks a normal zone week against the 07:00 start in force", async () => {
     const v = await fixture([], { zone: true });
     await activated(v);
     const week = Array.from({ length: 7 }, (_, weekday) => ({
@@ -1520,18 +1773,24 @@ describe("schedule authoring retains date-specific starts", () => {
       paintDate(v, "zone", "2026-12-25", [range("07:00", "07:00")], after, 1),
     ).resolves.toBeUndefined();
   });
-  it("checks annual menu ranges against every retained start", async () => {
+  it("checks annual menu ranges against the start in force", async () => {
     const v = await fixture([]);
     await activated(v);
     await expect(
       paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 1, true),
+    ).resolves.toBeUndefined();
+    await expect(
+      paintDate(v, "menu", "2026-12-26", [range("06:00", "08:00")], after, 1, true),
     ).rejects.toMatchObject({ code: "special_day.invalid", params: { field: "paint.0.ranges" } });
   });
-  it("checks annual zone ranges against every retained start", async () => {
+  it("checks annual zone ranges against the start in force", async () => {
     const v = await fixture([], { zone: true });
     await activated(v);
     await expect(
       paintDate(v, "zone", "2026-12-25", [range("07:00", "07:00")], after, 1, true),
+    ).resolves.toBeUndefined();
+    await expect(
+      paintDate(v, "zone", "2026-12-26", [range("06:00", "08:00")], after, 1, true),
     ).rejects.toMatchObject({
       code: "special_day.invalid",
       params: { field: "zonePaint.0.ranges" },

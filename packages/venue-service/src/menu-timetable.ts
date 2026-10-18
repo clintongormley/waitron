@@ -60,7 +60,7 @@ import { readSeasons } from "./seasons.js";
 import {
   scheduleCutovers,
   serviceDayContext,
-  settledClock,
+  inForceClock,
   type ServiceDayContext,
 } from "./service-day-context.js";
 import "./errors.js";
@@ -608,7 +608,7 @@ async function writeMenuPeriod(
       })),
     );
   const clock = await readLocationClock(tx, cfg.locationId);
-  const clash = await endOffsetClash(tx, cfg, [departmentId], false, settledClock(clock, at));
+  const clash = await endOffsetClash(tx, cfg, [departmentId], false, inForceClock(clock, at));
   if (clash !== null)
     throw new AppError("menu_period.invalid", {
       field: "endOffsetMinutes",
@@ -673,8 +673,8 @@ export async function replaceMenuWeek(
   options: { seasonId?: string } = {},
 ): Promise<void> {
   const clock = await readLocationClock(tx, cfg.locationId);
-  const settled = settledClock(clock, at);
-  const staged = await stageMenuWeek(tx, cfg, departmentId, days, settled, options.seasonId);
+  const inForce = inForceClock(clock, at);
+  const staged = await stageMenuWeek(tx, cfg, departmentId, days, inForce, options.seasonId);
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,
@@ -683,7 +683,7 @@ export async function replaceMenuWeek(
     expectedClockRevision,
   );
   await staged.write();
-  await assertWeekEndOffsets(tx, cfg, settled, [{ departmentId, ...staged }]);
+  await assertWeekEndOffsets(tx, cfg, inForce, [{ departmentId, ...staged }]);
   if (staged.changed) await assertWaitingChangeFits(tx, cfg, at, clock);
 }
 

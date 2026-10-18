@@ -1,4 +1,5 @@
 import {
+  businessDayAt,
   businessDayBounds,
   businessDayBoundaryAt,
   cutoverForBusinessDay,
@@ -54,5 +55,17 @@ export function settledClock(clock: BusinessDayClock, at: Date): BusinessDayCloc
     cutoverChanges: clock.cutoverChanges.filter(
       (change) => businessDayBoundaryAt(clock, change.effectiveBusinessDay) <= now,
     ),
+  };
+}
+
+/** The start in force at `at` as the clock's only start: what an undated weekly check fits. */
+export function inForceClock(clock: BusinessDayClock, at: Date): BusinessDayClock {
+  // Without changes the first start is in force at every moment, and the time zone, which a
+  // writer may hold unreadable, is not consulted.
+  if (clock.cutoverChanges.length === 0) return clock;
+  return {
+    ...clock,
+    dayCutover: cutoverForBusinessDay(clock, businessDayAt(clock, at)),
+    cutoverChanges: [],
   };
 }
