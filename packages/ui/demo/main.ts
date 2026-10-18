@@ -239,7 +239,7 @@ const panel = (theme: "light" | "dark") => `
             <wt-button align="start" class="create-member">Add team member</wt-button>
           </wt-row-actions>
           <wt-help-switch></wt-help-switch>
-          <span style="position: relative">
+          <span style="position: relative; padding-inline-end: var(--wt-help-badge-target)">
             Selling unit
             <wt-help-tooltip
               mode="help-mode"
