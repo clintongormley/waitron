@@ -202,13 +202,14 @@ folder** on to see the photo field.
 A published menu also holds every photograph its last publish included, even after you remove the
 photograph from a product or section. The library lists that menu by name, followed by
 **(Published menu)**, and its link opens the menu. Publish the menu again without the photograph
-to release it.
+to release it. If the menu also has a version scheduled to go live later, publishing now is
+refused while that version waits, so cancel it first, as described below.
 
 A menu with a version scheduled to go live later also holds every photograph that version includes.
 The library lists that menu by name, followed by **(Scheduled menu)**, and its link opens the menu.
-To release the photograph, open the menu's **Preview** tab and choose **Cancel this version** in that
-version's ⋮ under **Scheduled versions**. Once the version goes live, it holds the photograph as the
-published menu instead.
+To release the photograph, open the menu's **Preview** tab, choose **Cancel this version** in that
+version's ⋮ under **Scheduled versions**, and confirm. Once the version goes live, it holds the
+photograph as the published menu instead.
 
 A saved receipt logo also keeps a photograph in use. The library lists that use as
 **<department> receipt logo**, and its link opens the department's **Receipts** tab:
