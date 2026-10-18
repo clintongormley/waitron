@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { setHelpMode } from "@waitron/ui";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
@@ -139,6 +140,15 @@ async function saveState(el: DeviceProfilesScreen) {
 }
 
 afterEach(cleanupWidgets);
+afterEach(() => setHelpMode(false));
+
+async function visibleHelp(root: ShadowRoot): Promise<number> {
+  const badges = [
+    ...root.querySelectorAll<HTMLElementTagNameMap["wt-help-tooltip"]>("wt-help-tooltip"),
+  ];
+  await Promise.all(badges.map((badge) => badge.updateComplete));
+  return badges.filter((badge) => badge.checkVisibility()).length;
+}
 
 describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme)", (theme) => {
   it("renders the profile gallery with its controls accessibly", async () => {
@@ -228,6 +238,23 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       }
     },
   );
+
+  it("renders the editor form accessibly with help on", async () => {
+    setHelpMode(true);
+    const { el, host } = await mountWidget<DeviceProfilesScreen>(
+      "dashboard-device-profiles-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=profile-save]")).not.toBeNull(),
+    );
+    await flush(el);
+    expect(await visibleHelp(el.shadowRoot!)).toBe(2);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
+  });
 
   it("renders the editor with Save quiet, and then with a change, accessibly", async () => {
     const { el, host } = await mountWidget<DeviceProfilesScreen>(

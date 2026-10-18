@@ -400,6 +400,7 @@ export class StaffScreen extends LitElement {
         >
           <wt-help-tooltip
             slot="help"
+            mode="help-mode"
             data-test="status-filter-help"
             aria-label=${t("staff.filter_current_help_label")}
             >${t("staff.filter_current_help")}</wt-help-tooltip

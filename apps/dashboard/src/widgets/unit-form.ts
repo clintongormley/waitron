@@ -369,7 +369,10 @@ export class UnitForm extends LitElement {
           ?disabled=${this.busy}
           @wt-change=${this.#changePrecision}
         >
-          <wt-help-tooltip slot="help" aria-label=${t("units.precision_help_label")}
+          <wt-help-tooltip
+            slot="help"
+            mode="help-mode"
+            aria-label=${t("units.precision_help_label")}
             >${t("units.precision_help")}</wt-help-tooltip
           >
         </wt-combobox>

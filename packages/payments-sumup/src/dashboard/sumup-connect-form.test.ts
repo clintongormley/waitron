@@ -6,12 +6,14 @@ import {
   setLocale,
   type DashboardRequest,
 } from "@waitron/dashboard-kit";
+import { setHelpMode } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "./strings.js";
 import { SumUpConnectForm } from "./sumup-connect-form.js";
 
 afterEach(() => {
+  setHelpMode(false);
   cleanupWidgets();
   vi.restoreAllMocks();
 });
@@ -193,6 +195,25 @@ describe("sumup-connect-form", () => {
       affiliateAppId: "app-1",
       affiliateKey: "aff-key",
     });
+  });
+
+  it("the affiliate help is hidden until help is on, then hangs over the heading's top trailing corner", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+    const help = q(el, "[data-test=affiliate-help]") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    const heading = help.previousElementSibling as HTMLElement;
+
+    expect(help.checkVisibility()).toBe(false);
+
+    setHelpMode(true);
+    await help.updateComplete;
+    expect(help.checkVisibility()).toBe(true);
+    const button = help.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+    const box = heading.getBoundingClientRect();
+    expect(Math.abs(button.left + button.width / 2 - box.right)).toBeLessThanOrEqual(1);
+    expect(Math.abs(button.top + button.height / 2 - box.top)).toBeLessThanOrEqual(1);
   });
 
   it("refuses to re-submit an ambiguous key until a merchant is picked", async () => {

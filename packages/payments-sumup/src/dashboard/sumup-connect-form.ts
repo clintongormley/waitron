@@ -46,6 +46,11 @@ export class SumUpConnectForm extends LitElement {
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
       }
+      /* The help badge hangs over this box's top trailing corner. */
+      .affiliate-heading {
+        position: relative;
+        display: inline-block;
+      }
       .confirm {
         color: var(--wt-color-success, var(--wt-color-text));
       }
@@ -243,13 +248,18 @@ export class SumUpConnectForm extends LitElement {
       ></wt-input>
 
       <div class="affiliate-label">
-        <span>${t("payments.sumup.affiliate_app_id")} / ${t("payments.sumup.affiliate_key")}</span>
-        <wt-help-tooltip
-          aria-label=${t("payments.sumup.affiliate_help_label")}
-          data-test="affiliate-help"
-        >
-          ${t("payments.sumup.affiliate_help")}
-        </wt-help-tooltip>
+        <span class="affiliate-heading">
+          <span
+            >${t("payments.sumup.affiliate_app_id")} / ${t("payments.sumup.affiliate_key")}</span
+          >
+          <wt-help-tooltip
+            mode="help-mode"
+            aria-label=${t("payments.sumup.affiliate_help_label")}
+            data-test="affiliate-help"
+          >
+            ${t("payments.sumup.affiliate_help")}
+          </wt-help-tooltip>
+        </span>
       </div>
       <wt-input
         class="field"

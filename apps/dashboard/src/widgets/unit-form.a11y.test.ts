@@ -1,9 +1,19 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { setHelpMode } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { UnitForm } from "./unit-form.js";
 import "./unit-form.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setHelpMode(false));
+
+async function visibleHelp(root: ShadowRoot): Promise<number> {
+  const badges = [
+    ...root.querySelectorAll<HTMLElementTagNameMap["wt-help-tooltip"]>("wt-help-tooltip"),
+  ];
+  await Promise.all(badges.map((badge) => badge.updateComplete));
+  return badges.filter((badge) => badge.checkVisibility()).length;
+}
 
 const KILOGRAM = {
   id: "u1",
@@ -45,5 +55,17 @@ describe.each(["light", "dark"] as const)("unit-form a11y (%s theme)", (theme) =
     expect(saveOf(el).variant).toBe("primary");
     expect(saveOf(el).disabled).toBe(false);
     await expectNoA11yViolations(host);
+  });
+
+  it("renders the form accessibly with help on", async () => {
+    setHelpMode(true);
+    const { el, host } = await mountWidget<UnitForm>(
+      "dashboard-unit-form",
+      { open: true, locales: ["es", "en"], value: KILOGRAM },
+      theme,
+    );
+    await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+    expect(await visibleHelp(el.shadowRoot!)).toBe(1);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });

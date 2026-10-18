@@ -1,4 +1,5 @@
 import { userEvent } from "vitest/browser";
+import { setHelpMode } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -7,6 +8,7 @@ import { t } from "../i18n/t.js";
 import { unitRefusalErrors, type UnitForm } from "./unit-form.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setHelpMode(false));
 
 function change(el: UnitForm, testId: string, value: string): void {
   const field = el.shadowRoot!.querySelector(`[data-test=${testId}]`)!;
@@ -128,6 +130,9 @@ describe("unit-form", () => {
     expect(tip).not.toBeNull();
     expect(tip.getAttribute("slot")).toBe("help");
     expect(tip.getAttribute("aria-label")).toBe(t("units.precision_help_label"));
+    await tip.updateComplete;
+    expect(tip.checkVisibility()).toBe(false);
+    setHelpMode(true);
     await tip.updateComplete;
     const button = tip.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
     expect(button.getBoundingClientRect().width).toBeGreaterThan(0);
