@@ -5,8 +5,11 @@ import { baseStyles, type LeaveReason } from "@waitron/ui";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import { t } from "./strings.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import "./department-settings.js";
-import type { DepartmentTab } from "./department-settings.js";
+import {
+  offeredDepartmentTabs,
+  offersReceiptEditor,
+  type DepartmentTab,
+} from "./department-settings.js";
 
 @customElement("department-edit-dialog")
 export class DepartmentEditDialog extends LitElement {
@@ -16,6 +19,7 @@ export class DepartmentEditDialog extends LitElement {
   @property() departmentId = "";
   @property({ type: Boolean }) refreshing = false;
   @property() tab: DepartmentTab = "details";
+  @property({ attribute: false }) receiptEditor: unknown;
   @state() private dismissed = false;
   private shownDepartment = "";
   override connectedCallback() {
@@ -49,6 +53,9 @@ export class DepartmentEditDialog extends LitElement {
       this.emit("gone", this.departmentId);
     }
   }
+  get offeredTabs(): DepartmentTab[] {
+    return offeredDepartmentTabs(this.model, offersReceiptEditor(this.receiptEditor));
+  }
   private readonly beforeClose = async (reason: LeaveReason) =>
     this.shadowRoot!.querySelector("department-settings")?.requestLeave(reason) ?? true;
 
@@ -60,10 +67,11 @@ export class DepartmentEditDialog extends LitElement {
   private async saved(event: Event) {
     event.stopPropagation();
     const id = this.departmentId;
-    const form = event.target as HTMLElementTagNameMap["department-settings"];
+    const form = event.currentTarget as HTMLElementTagNameMap["department-settings"];
+    if (event.type === "department-receipt-saved" && !this.isCurrent(event)) return;
     await form.updateComplete;
     if (!this.isConnected || this.departmentId !== id || !form.isConnected) return;
-    if (form.hasUnsavedChanges) {
+    if (form.hasUnsavedChanges || form.receiptHasUnsavedChanges) {
       this.emit("written", id);
       return;
     }
@@ -74,6 +82,11 @@ export class DepartmentEditDialog extends LitElement {
     this.emit("saved", id);
   }
 
+  private isCurrent(event: Event) {
+    return (
+      (event as CustomEvent<{ departmentId?: string }>).detail?.departmentId === this.departmentId
+    );
+  }
   override render(): unknown {
     const department = this.model?.departments.find(
       (row) => row.id === this.departmentId && row.active,
@@ -83,7 +96,7 @@ export class DepartmentEditDialog extends LitElement {
       department.id,
       html`<wt-modal
         .open=${this.isConnected && !this.dismissed}
-        size="standard"
+        size=${offersReceiptEditor(this.receiptEditor) ? "wide" : "standard"}
         heading=${`${t("venue.edit_department")}: ${department.name}`}
         .beforeClose=${this.beforeClose}
         @wt-close=${(event: Event) => {
@@ -104,7 +117,21 @@ export class DepartmentEditDialog extends LitElement {
           .departmentId=${department.id}
           .refreshing=${this.refreshing}
           .tab=${this.tab}
+          .receiptEditor=${this.receiptEditor}
           @saved=${this.saved}
+          @department-receipt-saved=${this.saved}
+          @department-receipt-cancel=${(event: Event) => {
+            event.stopPropagation();
+            if (this.isCurrent(event))
+              void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+          }}
+          @department-receipt-closed=${(event: Event) => {
+            event.stopPropagation();
+            if (this.isCurrent(event) && !this.dismissed) {
+              this.dismissed = true;
+              this.emit("gone", department.id);
+            }
+          }}
           @cancelled=${(event: Event) => {
             event.stopPropagation();
             void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");

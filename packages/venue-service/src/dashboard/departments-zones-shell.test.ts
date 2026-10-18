@@ -373,3 +373,17 @@ it("navigationScopes is [] for another offered tab of the open department and un
     ),
   ).toBe(undefined);
 });
+it("navigationScopes is [] for receipt when the dialog offers it", async () => {
+  const at = (path: string) => new URL(path, location.origin);
+  const shell = await mount("/manage/venue-operations/department/d1/view/service");
+  await departmentSettings(shell);
+  const receipt = "/manage/venue-operations/department/d1/view/receipt?source=saved";
+  expect(shell.navigationScopes(at(receipt))).toBe(undefined);
+  const dialog = shell.shadowRoot!.querySelector("department-edit-dialog")!;
+  dialog.receiptEditor = document.createElement("p");
+  await dialog.updateComplete;
+  expect(shell.navigationScopes(at(receipt))).toEqual([]);
+  expect(
+    shell.navigationScopes(at("/manage/venue-operations/department/d2/view/receipt?source=saved")),
+  ).toBe(undefined);
+});

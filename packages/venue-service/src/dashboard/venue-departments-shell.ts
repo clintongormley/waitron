@@ -134,11 +134,14 @@ export class VenueDepartmentsShell extends LitElement {
     }
     const view = pairs.get("view") ?? null;
     pairs.delete("view");
-    const next = tabOf(view as View | null);
+    const next = view === "receipt" ? "receipt" : tabOf(view as View | null);
+    const offered =
+      this.shadowRoot?.querySelector("department-edit-dialog")?.offeredTabs ??
+      offeredDepartmentTabs(this.model);
     return pairs.size === 1 &&
       pairs.get("department") === this.departmentId &&
       next &&
-      offeredDepartmentTabs(this.model).includes(next)
+      offered.includes(next)
       ? []
       : undefined;
   }

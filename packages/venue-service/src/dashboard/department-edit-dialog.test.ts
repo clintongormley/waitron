@@ -1,11 +1,99 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { LitElement, html } from "lit";
+import { draftScopeFor, type DraftScope } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import {
   cleanupDepartmentEditors,
   mountDepartmentEditor as mount,
   editDepartmentField,
   departmentSave,
+  selectDepartmentTab,
 } from "../testing/department-edit-fixture.js";
+
+class ReceiptEditorStub extends LitElement {
+  departmentId = "d1";
+  value = "";
+  hold = false;
+  busy = false;
+  finish?: () => void;
+  #scope?: DraftScope<string>;
+  override connectedCallback() {
+    super.connectedCallback();
+    this.#scope = draftScopeFor(this, {
+      id: this,
+      current: () => this.value,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        this.value = value;
+        this.requestUpdate();
+      },
+    }).scope;
+  }
+  override disconnectedCallback() {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    super.disconnectedCallback();
+  }
+  get leaveScope(): object | undefined {
+    return this.#scope?.id;
+  }
+  get hasUnsavedChanges(): boolean {
+    return this.#scope?.isDirty() ?? false;
+  }
+  get saving(): boolean {
+    return this.busy;
+  }
+  async save() {
+    this.busy = true;
+    if (this.hold)
+      await new Promise<void>((resolve) => {
+        this.finish = resolve;
+      });
+    this.#scope!.commit(this.value);
+    this.busy = false;
+    this.notify("department-receipt-saved");
+  }
+  notify(type: string) {
+    this.dispatchEvent(
+      new CustomEvent(type, {
+        detail: { departmentId: this.departmentId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+  override render() {
+    return html`<input
+        type="text"
+        name="receiptSubtitle"
+        .value=${this.value}
+        @input=${(event: Event) => {
+          this.value = (event.target as HTMLInputElement).value;
+          this.#scope?.changed();
+        }}
+      /><button data-test="save-receipt" @click=${() => void this.save()}>Save</button
+      ><button data-test="cancel-receipt" @click=${() => this.notify("department-receipt-cancel")}>
+        Cancel
+      </button>`;
+  }
+}
+customElements.define("dashboard-department-receipt-editor", ReceiptEditorStub);
+async function supplyReceiptEditor(
+  el: HTMLElementTagNameMap["department-edit-dialog"],
+  form: HTMLElementTagNameMap["department-settings"],
+) {
+  const editor = document.createElement("dashboard-department-receipt-editor") as ReceiptEditorStub;
+  el.receiptEditor = editor;
+  await el.updateComplete;
+  await form.updateComplete;
+  await editor.updateComplete;
+  return editor;
+}
+async function editReceipt(editor: ReceiptEditorStub, value: string) {
+  await userEvent.fill(page.elementLocator(editor.shadowRoot!.querySelector("input")!), value);
+}
 beforeEach(() => setLocale("en"));
 afterEach(() => {
   cleanupDepartmentEditors();
@@ -199,4 +287,112 @@ it("passes its tab to the form, and a later tab moves the form there", async () 
   await el.updateComplete;
   await form.updateComplete;
   expect(form.tab).toBe("details");
+});
+
+it("offers Receipts between Service and Transfers when an editor is supplied, and is wide", async () => {
+  const { el, form, modal } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  await modal.updateComplete;
+  expect(modal.size).toBe("wide");
+  const strip = form.shadowRoot!.querySelector("wt-tabs")!;
+  await strip.updateComplete;
+  expect(
+    [...strip.shadowRoot!.querySelectorAll("[role=tab]")].map((tab) => [
+      tab.getAttribute("data-key"),
+      tab.textContent!.trim(),
+    ]),
+  ).toEqual([
+    ["details", "Details"],
+    ["service", "Service"],
+    ["receipt", "Receipts"],
+    ["transfers", "Transfers"],
+  ]);
+  expect(form.shadowRoot!.querySelector("[slot=receipt]")!.contains(editor)).toBe(true);
+  expect(form.shadowRoot!.querySelector("wt-form-actions")).not.toBeNull();
+  await selectDepartmentTab(form, "receipt");
+  expect(form.tab).toBe("receipt");
+  expect(form.shadowRoot!.querySelector("wt-form-actions")).toBeNull();
+  expect(modal.size).toBe("wide");
+});
+it("no editor, no Receipts tab, standard width", async () => {
+  const { form, modal } = await mount();
+  const strip = form.shadowRoot!.querySelector("wt-tabs")!;
+  await strip.updateComplete;
+  expect(
+    [...strip.shadowRoot!.querySelectorAll("[role=tab]")].map((tab) =>
+      tab.getAttribute("data-key"),
+    ),
+  ).toEqual(["details", "service", "transfers"]);
+  expect(form.shadowRoot!.querySelector("[slot=receipt]")).toBeNull();
+  expect(modal.size).toBe("standard");
+});
+it("a receipt Save closes the dialog when the department form is clean", async () => {
+  const { el, form, modal, writes } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  const saved = vi.fn();
+  const written = vi.fn();
+  el.addEventListener("saved", saved);
+  el.addEventListener("written", written);
+  await selectDepartmentTab(form, "receipt");
+  await editReceipt(editor, "Thanks");
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-receipt]")!.click();
+  await expect.poll(() => modal.open).toBe(false);
+  await expect.poll(() => saved.mock.calls.length).toBe(1);
+  expect(saved.mock.calls[0]![0].detail).toEqual({ departmentId: "d1" });
+  expect(written).not.toHaveBeenCalled();
+  expect(writes).toEqual([]);
+});
+it("a receipt Save keeps the dialog open on Receipts when Details is dirty, and the Details edit survives", async () => {
+  const { el, form, modal, writes } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  const saved = vi.fn();
+  const written = vi.fn();
+  el.addEventListener("saved", saved);
+  el.addEventListener("written", written);
+  await editDepartmentField(form, "name", "Restaurant draft");
+  await selectDepartmentTab(form, "receipt");
+  await editReceipt(editor, "Thanks");
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-receipt]")!.click();
+  await expect.poll(() => written.mock.calls.length).toBe(1);
+  expect(written.mock.calls[0]![0].detail).toEqual({ departmentId: "d1" });
+  await form.updateComplete;
+  expect(saved).not.toHaveBeenCalled();
+  expect(modal.open).toBe(true);
+  expect(form.tab).toBe("receipt");
+  expect(editor.hasUnsavedChanges).toBe(false);
+  expect(form.hasUnsavedChanges).toBe(true);
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
+  ).toBe("Restaurant draft");
+  expect(writes).toEqual([]);
+});
+it("Enter in a receipt field, receipt unchanged and Details dirty, writes nothing", async () => {
+  const { el, form, modal, writes } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  await editDepartmentField(form, "name", "Restaurant draft");
+  await selectDepartmentTab(form, "receipt");
+  await userEvent.click(page.elementLocator(editor.shadowRoot!.querySelector("input")!));
+  await userEvent.keyboard("{Enter}");
+  await form.updateComplete;
+  expect(writes).toEqual([]);
+  expect(modal.open).toBe(true);
+  expect(form.hasUnsavedChanges).toBe(true);
+});
+it("a department Save keeps the dialog open while the receipt draft is dirty", async () => {
+  const { el, form, modal, writes } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  const saved = vi.fn();
+  const written = vi.fn();
+  el.addEventListener("saved", saved);
+  el.addEventListener("written", written);
+  await selectDepartmentTab(form, "receipt");
+  await editReceipt(editor, "Thanks");
+  await selectDepartmentTab(form, "details");
+  await editDepartmentField(form, "name", "Restaurant revised");
+  departmentSave(form).click();
+  await expect.poll(() => written.mock.calls.length).toBe(1);
+  expect(writes).toHaveLength(1);
+  expect(saved).not.toHaveBeenCalled();
+  expect(modal.open).toBe(true);
+  expect(editor.hasUnsavedChanges).toBe(true);
 });
