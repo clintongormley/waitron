@@ -6,6 +6,7 @@ import type { FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { certificateAlerts } from "./certificate-alerts.js";
+import { claimReminder, reportReminder } from "./certificate-reminders.js";
 import { readCertificateCard } from "./certificate-card.js";
 import { installCertificate } from "./certificate-install.js";
 import { drain as runDrain, resetInFlightClaims } from "./drain.js";
@@ -104,5 +105,6 @@ export const FISCAL_SLOT: FiscalContribution = {
     read: async (deps, now) => ({ ...(await readCertificateCard(deps, now)) }),
     install: installCertificate,
     alerts: certificateAlerts,
+    reminders: { claim: claimReminder, report: reportReminder },
   },
 };

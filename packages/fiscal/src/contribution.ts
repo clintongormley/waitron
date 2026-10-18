@@ -82,6 +82,22 @@ export interface FiscalCertificateSeat {
       screen?: string;
     }[]
   >;
+  /** Expiry emails for the certificate `nodeId` installed last: at most one per person per stage. */
+  reminders: {
+    /** Claims the next email due, or `null`; the caller sends it, then reports how it ended. */
+    claim(
+      tx: Transaction,
+      deps: { nodeId: string; locationId: string },
+      recipients: readonly { personId: string; email: string; language: "en" | "es" }[],
+      now: Date,
+    ): Promise<{ id: string; recipient: string; subject: string; text: string } | null>;
+    report(
+      tx: Transaction,
+      id: string,
+      outcome: "sent" | "rejected" | "unknown",
+      now: Date,
+    ): Promise<void>;
+  };
 }
 
 /**
