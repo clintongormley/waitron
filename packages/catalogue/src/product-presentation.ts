@@ -1,4 +1,5 @@
 import { resolveSnapshotText } from "@waitron/shared";
+import { newCustomerText } from "./new-customer-text.js";
 
 export interface ProductPresentation {
   name: string;
@@ -50,13 +51,21 @@ export function nonBlankTranslations<T extends Record<string, string>>(
 export function customerPresentationText(
   p: ProductPresentation,
   defaultLanguage: string,
+  languages: readonly string[] = [defaultLanguage],
 ): { product: Record<string, string>; variant: Record<string, string> | null } {
+  const config = { defaultLanguage, languages: [...languages] };
+  const project = (map: Record<string, string> | null, staff: string) => ({
+    ...map,
+    ...Object.fromEntries(
+      [...new Set([defaultLanguage, ...languages])].map((language) => [
+        language,
+        newCustomerText(map, staff, language, config),
+      ]),
+    ),
+  });
   return {
-    product: nonBlankTranslations(p.customerName) ?? { [defaultLanguage]: p.name },
-    variant:
-      p.variantName === null
-        ? null
-        : (nonBlankTranslations(p.variantCustomerName) ?? { [defaultLanguage]: p.variantName }),
+    product: project(p.customerName, p.name),
+    variant: p.variantName === null ? null : project(p.variantCustomerName, p.variantName),
   };
 }
 

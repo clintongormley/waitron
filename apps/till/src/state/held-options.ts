@@ -1,24 +1,23 @@
 import { currentContentLanguages } from "@waitron/ui";
+import { newCustomerText } from "@waitron/catalogue/src/new-customer-text.js";
 import type { OfferedModifier, OfferedOptionsList } from "../api/client.js";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 
 type Names = Pick<OfferedOptionsList, "name" | "customerName" | "kitchenName">;
 
-/**
- * An answer in the shape the order path freezes (`buildLineExtras`,
- * `apps/server/src/modifier-selection.ts`): the list's three names and the chosen label's three, and
- * no ids at all. The two plain staff names widen under the venue's default content language, as the
- * server's do. The two customer maps stay whole here, where the server narrows its own copy to the
- * default language; no request sends this copy.
- */
 export function optionSnapshotOf(list: Names, label: Names): OptionSnapshot {
-  const language = currentContentLanguages().defaultLanguage;
+  const config = currentContentLanguages();
+  const language = config.defaultLanguage;
   return {
     listName: { [language]: list.name },
-    listCustomerName: list.customerName,
+    listCustomerName: {
+      [language]: newCustomerText(list.customerName, list.name, language, config),
+    },
     listKitchenName: list.kitchenName,
     labelName: { [language]: label.name },
-    labelCustomerName: label.customerName,
+    labelCustomerName: {
+      [language]: newCustomerText(label.customerName, label.name, language, config),
+    },
     labelKitchenName: label.kitchenName,
   };
 }

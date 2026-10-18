@@ -144,6 +144,67 @@ const products = new Map<string, ExtraProductFacts>([
 ]);
 
 describe("buildLineExtras", () => {
+  it("freezes a new option's list and label from their own default or staff text", () => {
+    const list = {
+      ...cooked,
+      customerName: { fr: "French cooking" },
+      labels: [{ ...mediumRare, customerName: { en: "English rare", fr: "French rare" } }],
+    };
+    const source = structuredClone(list);
+    const answer = buildLineExtras(
+      { extras: [], options: [list] },
+      products,
+      { options: [{ listId: list.id, labelId: mediumRare.id }] },
+      "en",
+    ).optionSnapshots;
+    expect(answer).toEqual([
+      {
+        listName: { en: "Cooked staff" },
+        listCustomerName: { en: "Cooked staff" },
+        listKitchenName: "Cook kitchen",
+        labelName: { en: "Medium rare staff" },
+        labelCustomerName: { en: "English rare" },
+        labelKitchenName: "MR kitchen",
+      },
+    ]);
+    expect(list).toEqual(source);
+  });
+
+  it("prepares new extra receipt abbreviations and full context names separately", () => {
+    const unit = {
+      id: "staff-unit",
+      staffName: "Staff kilogram",
+      staffAbbreviation: "staff-kg",
+      name: { fr: "French kilogram" },
+      abbreviation: { fr: "fr-kg" },
+      precision: 3,
+      hardwareUnit: "kg" as const,
+    };
+    const offered = { ...drinks, items: [{ ...drinks.items[0]!, unit }] };
+    const before = structuredClone(offered);
+    const result = buildLineExtras(
+      { extras: [offered], options: [] },
+      products,
+      {
+        extras: [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 2 }] }],
+      },
+      "en",
+    );
+    expect(result.extraChildren[0]).toMatchObject({
+      quantity: 2,
+      price: "4.50",
+      vatClass: "general",
+      unitName: { en: "staff-kg" },
+      unitContext: {
+        id: "staff-unit",
+        name: { en: "Staff kilogram" },
+        precision: 3,
+        hardwareUnit: "kg",
+      },
+    });
+    expect(offered).toEqual(before);
+  });
+
   it("carries the physical amount, priced portion and unit of a weighed pick", () => {
     const weighted = {
       ...drinks,
@@ -177,7 +238,7 @@ describe("buildLineExtras", () => {
         quantity: 3,
         physicalQuantity: "0.150",
         priceQuantity: "0.050",
-        unitName: { en: "kg", es: "kg" },
+        unitName: { en: "kg" },
         unitPrecision: 3,
         unitContext: {
           id: "unit-kg",
@@ -254,7 +315,7 @@ describe("buildLineExtras", () => {
     ]);
   });
 
-  it("keeps a missing customer map missing", () => {
+  it("prepares each missing customer map from its own staff name", () => {
     const unnamed: OptionList = {
       ...cooked,
       customerName: null,
@@ -266,8 +327,8 @@ describe("buildLineExtras", () => {
       { options: [{ listId: "list-cooked", labelId: "label-medium-rare" }] },
       "es",
     );
-    expect(optionSnapshots[0]!.listCustomerName).toBeNull();
-    expect(optionSnapshots[0]!.labelCustomerName).toBeNull();
+    expect(optionSnapshots[0]!.listCustomerName).toEqual({ es: "Cooked staff" });
+    expect(optionSnapshots[0]!.labelCustomerName).toEqual({ es: "Medium rare staff" });
   });
 
   it("turns a pick into a child carrying the product's own three names, VAT class and the resolved price", () => {
@@ -292,11 +353,11 @@ describe("buildLineExtras", () => {
         quantity: 2,
         physicalQuantity: "2",
         priceQuantity: "1",
-        unitName: EACH_UNIT.abbreviation,
+        unitName: { en: "ea" },
         unitPrecision: 0,
         unitContext: {
           id: EACH_UNIT.id,
-          name: EACH_UNIT.name,
+          name: { en: "Each" },
           precision: 0,
           hardwareUnit: null,
         },
@@ -421,6 +482,32 @@ const freeze = (
   );
 
 describe("editLineOptions", () => {
+  it.each([null, { es: "Recorded French list" }])(
+    "keeps an unchanged answer's recorded optional fallback %j after a default change",
+    (recordedList) => {
+      const list = {
+        ...cooked,
+        customerName: recordedList === null ? null : { fr: "Recorded French list" },
+        labels: [{ ...mediumRare, customerName: null }],
+      };
+      const stored = [
+        {
+          listName: { es: "Cooked staff" },
+          listCustomerName: recordedList,
+          listKitchenName: "Cook kitchen",
+          labelName: { es: "Medium rare staff" },
+          labelCustomerName: null,
+          labelKitchenName: "MR kitchen",
+        },
+      ];
+      const before = structuredClone(stored);
+      expect(
+        editLineOptions([list], [{ listId: cooked.id, labelId: mediumRare.id }], stored, "en"),
+      ).toBeNull();
+      expect(stored).toEqual(before);
+    },
+  );
+
   it("keeps the line's two answers whichever order each side lists them in", () => {
     const requested = [
       { listId: cooked.id, labelId: mediumRare.id },

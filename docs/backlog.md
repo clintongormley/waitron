@@ -1148,8 +1148,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   evidence, and pruning keeps fixes and notes on complete live items. Suggestion pages now examine
   at most one hundred stored candidates across languages, advance past filtered rows, reject a
   changed configuration and return current name-cell tokens. A separate count includes waiting
-  fixes and notes on complete live items. The dashboard suggestion reader uses that query; the
-  multilingual page/save contract and editor remain unfinished. A separate cell draft model now
+  fixes and notes on complete live items. The dashboard suggestion reader uses that query. The
+  multilingual page/save contract and editor are implemented on the feature branch. A cell draft model
   retains personal text, explicit clears and fixes by item, language and field, blocks over-capacity
   saves and commits the exact submitted snapshot while preserving newer input. The field view projects
   bounded language windows, keeps a focused native field and cursor through row moves, exposes
@@ -1195,9 +1195,16 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   Receipt-preservation acceptance uses that same route while retaining its recorded-row and
   reprint assertions. Discard also removes an overflow suggestion from the waiting count. Regional
   completeness notes wrap in full, with the row actions reachable at phone and desktop widths.
-  No intermediate feature is ready to publish. Boot's configured-origin
-  forwarding and obsolete callback cleanup wait for lane E. Automatic-translation review, future
-  presentation and the remaining validation are unfinished.
+  Future customer-text preparation now resolves product and variant maps independently and
+  prepares new option answers on the server and till from default or staff text. New extras
+  prepare the receipt abbreviation separately from the full unit name used by line contexts.
+  Recorded option comparisons retain unchanged answers under their original language maps.
+  Unit changes also appear in publication review for extras-only products, while previously
+  published rows remain unchanged. No intermediate feature is ready to publish. Boot's
+  configured-origin forwarding and obsolete callback cleanup wait for lane E. Frozen extras
+  source pairs and their consumers still need integration; parent/newly-added-extra preparation
+  and retained/recalled integration reach lane G's reserved functions. Whole-feature validation
+  and the final explanation audit remain open.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**

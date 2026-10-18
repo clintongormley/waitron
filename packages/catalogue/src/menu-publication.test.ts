@@ -73,6 +73,69 @@ import { sectionMembers, sections } from "./schema/sections.js";
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
+describe("future unit presentation publication", () => {
+  it.each([
+    { staffName: "Renamed staff kilogram" },
+    { staffAbbreviation: "new-staff-kg" },
+    { name: {} },
+    { abbreviation: {} },
+  ])("reports an extras-only unit change %j while preserving its live document", async (patch) => {
+    const f = await menusFixture(fx.db);
+    const unit = await app(async (tx) => {
+      const created = await createUnit(
+        tx,
+        {
+          staffName: "Staff kilogram",
+          staffAbbreviation: "staff-kg",
+          name: { en: "Guest kilogram" },
+          abbreviation: { en: "guest-kg" },
+          precision: 3,
+        },
+        "en",
+      );
+      await assignProductUnit(tx, f.extraLemon, created.id);
+      return created;
+    });
+    await publish(f.lunch);
+    const rows = await versionRows();
+    const liveBefore = await app((tx) => readLiveDocuments(tx, [f.lunch]));
+    const liveJson = JSON.stringify(liveBefore.get(f.lunch)!.document);
+
+    await app((tx) => updateUnit(tx, unit.id, patch, "en"));
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.changes).toContainEqual(
+      expect.objectContaining({
+        kind: "extra_unit_changed",
+        productId: f.extraLemon,
+        listId: f.extrasList,
+      }),
+    );
+    expect((await app((tx) => menuStatus(tx, [f.lunch]))).get(f.lunch)!.state).toBe("changed");
+    expect(await versionRows()).toEqual(rows);
+    expect(
+      JSON.stringify((await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document),
+    ).toBe(liveJson);
+
+    await publish(f.lunch);
+    const liveAfter = (await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document;
+    const extra = Object.values(liveAfter.offers)
+      .flatMap((offer) => offer.offeredModifiers)
+      .flatMap((entry) => (entry.kind === "extras" ? entry.items : []))
+      .find((item) => item.productId === f.extraLemon)!;
+    expect(extra.unit).toEqual({
+      id: unit.id,
+      staffName: "Staff kilogram",
+      staffAbbreviation: "staff-kg",
+      name: { en: "Guest kilogram" },
+      abbreviation: { en: "guest-kg" },
+      precision: 3,
+      hardwareUnit: null,
+      ...patch,
+    });
+    expect((await versionRows()).slice(0, 1)).toEqual(rows);
+  });
+});
+
 afterEach(() => vi.restoreAllMocks());
 
 /** Previews and publishes, as the dashboard does: the hash the preview showed goes back. */

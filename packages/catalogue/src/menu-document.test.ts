@@ -1388,7 +1388,7 @@ describe("diffMenuDocuments", () => {
     }
   });
 
-  it("does not claim an extra's unit changed when only the unit name changed", async () => {
+  it("reports an extra's changed unit name for future line contexts", async () => {
     const f = await menusFixture(fx.db);
     const unitId = await app(async (tx) => {
       const unit = await createUnit(
@@ -1408,7 +1408,7 @@ describe("diffMenuDocuments", () => {
     const live = await build(f.dinner);
     await app((tx) => updateUnit(tx, unitId, { name: { en: "Kilo" } }, "en"));
 
-    expect(diffMenuDocuments(live, await build(f.dinner))).not.toContainEqual(
+    expect(diffMenuDocuments(live, await build(f.dinner))).toContainEqual(
       expect.objectContaining({ kind: "extra_unit_changed", productId: f.extraLemon }),
     );
   });

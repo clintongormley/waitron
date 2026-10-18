@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { deriveOptionSelections, sameOptionSelections } from "./held-options.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { deriveOptionSelections, optionSnapshotOf, sameOptionSelections } from "./held-options.js";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import type { OfferedModifier } from "../api/client.js";
 import type { OptionSnapshot } from "@waitron/shared";
 
@@ -50,6 +51,42 @@ const toppings: OfferedModifier = {
   maxPicks: null,
   items: [],
 };
+
+describe("a newly prepared option answer", () => {
+  const original = currentContentLanguages();
+  afterEach(() => setContentLanguages(original));
+
+  it.each([
+    [null, { fr: "French label" }, "Staff list", "Staff label"],
+    [{ fr: "French list" }, { en: "English label" }, "Staff list", "English label"],
+    [{ en: "English list", es: "Spanish list" }, {}, "English list", "Staff label"],
+  ] as const)(
+    "freezes independent default or staff values (%j, %j)",
+    (listText, labelText, wantList, wantLabel) => {
+      setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+      const selectedList = {
+        name: "Staff list",
+        customerName: listText,
+        kitchenName: "LIST KITCHEN",
+      };
+      const selectedLabel = {
+        name: "Staff label",
+        customerName: labelText,
+        kitchenName: "LABEL KITCHEN",
+      };
+      const before = structuredClone([selectedList, selectedLabel]);
+      expect(optionSnapshotOf(selectedList, selectedLabel)).toEqual({
+        listName: { en: "Staff list" },
+        listCustomerName: { en: wantList },
+        listKitchenName: "LIST KITCHEN",
+        labelName: { en: "Staff label" },
+        labelCustomerName: { en: wantLabel },
+        labelKitchenName: "LABEL KITCHEN",
+      });
+      expect([selectedList, selectedLabel]).toEqual(before);
+    },
+  );
+});
 
 describe("deriveOptionSelections", () => {
   it("names the list and the label whose staff names the answer froze", () => {

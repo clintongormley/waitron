@@ -487,7 +487,7 @@ async function seedVariantOffer(
     [
       {
         name: "Large",
-        customerName: { [LOCALE]: "Large cup" },
+        customerName: { [CONTENT_LANGUAGE]: "Large cup" },
         kitchenName: "LG",
         image: null,
         unitPrice: "3.00",
@@ -627,7 +627,7 @@ describe("parkOrder", () => {
         [
           {
             name: "Large",
-            customerName: { [LOCALE]: "Large cup" },
+            customerName: { [CONTENT_LANGUAGE]: "Large cup" },
             kitchenName: "LG",
             image: null,
             unitPrice: "3.00",
@@ -1550,7 +1550,7 @@ describe("getHeldOrder", () => {
       {
         quantity: 300,
         price_quantity: 50,
-        unit_name: JSON.stringify({ [CONTENT_LANGUAGE]: "kg" }),
+        unit_name: JSON.stringify({ [CONTENT_LANGUAGE]: "su" }),
         unit_precision: 3,
         unit_price_gross: 1,
         line_total: 6,
@@ -6383,7 +6383,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       )
         .filter((job) => !beforeJobs.some((before) => before.id === job.id))
         .map((job) => decodeTicket(job.payload));
-      expect(changedJobs.join("\n")).toContain("+0.150 kg x Jamón");
+      expect(changedJobs.join("\n")).toContain("+0.150 su x Jamón");
       const rows = await tx.execute<{
         quantity: number;
         price_quantity: number;
@@ -6408,7 +6408,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       )
         .filter((job) => !beforeNoteJobs.some((before) => before.id === job.id))
         .map((job) => decodeTicket(job.payload));
-      expect(noteJobs.join("\n")).toContain("+0.450 kg x Jamón");
+      expect(noteJobs.join("\n")).toContain("+0.450 su x Jamón");
     });
   });
 
@@ -8813,7 +8813,7 @@ async function seedWine(tx: Transaction, cfg: DeviceRequestConfig, catalogueId: 
       },
       {
         name: "175 ml",
-        customerName: { [LOCALE]: "Copa grande" },
+        customerName: { [CONTENT_LANGUAGE]: "Copa grande" },
         kitchenName: "V175",
         image: null,
         unitPrice: "5.50",
@@ -9383,8 +9383,8 @@ describe("a variant is sold as the product it is", () => {
     {
       staffName: "125 ml",
       customerName: { [LOCALE]: "  ", "fr-FR": "Petit verre" },
-      frozen: "Petit verre",
-      printed: "Petit verre",
+      frozen: "125 ml",
+      printed: "125 ml",
     },
   ])(
     "freezes resolved variant text $frozen and retains the receipt name after a live rename",
@@ -9438,7 +9438,7 @@ describe("a variant is sold as the product it is", () => {
     },
   );
 
-  it("stores a variant's text in another language in each invoice locale when the default content language has none", async () => {
+  it("stores a variant's own staff name in every invoice locale when only an unrelated language has text", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const locales = [LOCALE, "en-GB"];
     await db
@@ -9449,8 +9449,6 @@ describe("a variant is sold as the product it is", () => {
     const id = randomUUID();
     const wine = await withTransaction(db, async (tx) => {
       const seeded = await seedWine(tx, twoLocales, catalogueId);
-      // Text only in a language that is neither an invoice locale nor the default: each locale
-      // takes it rather than the variant's staff name or the parent's "Vino de la casa".
       await tx
         .update(products)
         .set({ customerName: { "fr-FR": "Grand verre" } })
@@ -9468,8 +9466,8 @@ describe("a variant is sold as the product it is", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(stored!.variantDescriptions).toEqual({
-      [LOCALE]: "Grand verre",
-      "en-GB": "Grand verre",
+      [LOCALE]: "175 ml",
+      "en-GB": "175 ml",
     });
   });
 

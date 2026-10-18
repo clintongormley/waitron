@@ -1,12 +1,15 @@
 import { isDeepStrictEqual } from "node:util";
-import {
-  EACH_UNIT,
-  defaultLanguageText,
-  validateExtraSelections,
-  validateOptionSelections,
-} from "@waitron/catalogue";
+import { EACH_UNIT, validateExtraSelections, validateOptionSelections } from "@waitron/catalogue";
+import { newCustomerText } from "@waitron/catalogue/src/new-customer-text.js";
+import { prepareUnitSnapshot } from "@waitron/catalogue/src/unit-presentation.js";
 import type { OptionList, ResolvedExtraList, VatClass } from "@waitron/catalogue";
-import { AppError, compareDecimal, decimal, multiplyDecimal } from "@waitron/shared";
+import {
+  AppError,
+  compareDecimal,
+  decimal,
+  multiplyDecimal,
+  resolveSnapshotText,
+} from "@waitron/shared";
 import type { OptionSnapshot } from "@waitron/shared";
 
 /** A product offered as an extra, as the published offer serves it. */
@@ -59,19 +62,32 @@ export interface ExtraChild {
 function answerFreezers(
   offered: readonly OptionList[],
   requested: unknown,
-): ((language: string) => OptionSnapshot)[] {
+): ((language: string, mode?: "new" | "recorded") => OptionSnapshot)[] {
   // The validator answers with ids drawn from the lists it was handed, so both lookups resolve.
   return validateOptionSelections(offered, requested ?? []).map((selection) => {
     const list = offered.find((candidate) => candidate.id === selection.listId)!;
     const label = list.labels.find((candidate) => candidate.id === selection.labelId)!;
-    return (language) => ({
-      listName: { [language]: list.name },
-      listCustomerName: defaultLanguageText(list.customerName, language),
-      listKitchenName: list.kitchenName,
-      labelName: { [language]: label.name },
-      labelCustomerName: defaultLanguageText(label.customerName, language),
-      labelKitchenName: label.kitchenName,
-    });
+    return (language, mode = "new") => {
+      const customer = (text: Record<string, string> | null, staff: string) =>
+        mode === "recorded"
+          ? text === null
+            ? null
+            : { [language]: resolveSnapshotText(text, language, language) }
+          : {
+              [language]: newCustomerText(text, staff, language, {
+                defaultLanguage: language,
+                languages: [language],
+              }),
+            };
+      return {
+        listName: { [language]: list.name },
+        listCustomerName: customer(list.customerName, list.name),
+        listKitchenName: list.kitchenName,
+        labelName: { [language]: label.name },
+        labelCustomerName: customer(label.customerName, label.name),
+        labelKitchenName: label.kitchenName,
+      };
+    };
   });
 }
 
@@ -119,11 +135,24 @@ export function buildLineExtras(
           quantity: pick.quantity,
           physicalQuantity: multiplyDecimal(decimal(item.portion), decimal(String(pick.quantity))),
           priceQuantity: item.portion,
-          unitName: item.unit.abbreviation,
+          unitName: prepareUnitSnapshot(item.unit, {
+            defaultLanguage,
+            languages: [defaultLanguage],
+          }).abbreviation,
           unitPrecision: item.unit.precision,
           unitContext: {
             id: item.unit.id,
-            name: item.unit.name,
+            name: {
+              [defaultLanguage]: newCustomerText(
+                item.unit.name,
+                item.unit.staffName,
+                defaultLanguage,
+                {
+                  defaultLanguage,
+                  languages: [defaultLanguage],
+                },
+              ),
+            },
             precision: item.unit.precision,
             hardwareUnit: item.unit.hardwareUnit,
           },
@@ -182,7 +211,12 @@ export function editLineOptions(
   const answers = answerFreezers(offered, requested);
   const kept = pairEach(answers, stored, (freeze, answer) => {
     const [language] = Object.keys(answer.listName);
-    return language !== undefined && isDeepStrictEqual(freeze(language), answer);
+    // An unchanged answer keeps its recorded maps even when new fallback would produce different text.
+    return (
+      language !== undefined &&
+      (isDeepStrictEqual(freeze(language), answer) ||
+        isDeepStrictEqual(freeze(language, "recorded"), answer))
+    );
   });
   if (answers.length === stored.length && kept.every((answer) => answer !== undefined)) return null;
   return answers.map((freeze, index) => kept[index] ?? freeze(defaultLanguage));

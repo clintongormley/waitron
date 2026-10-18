@@ -26,6 +26,47 @@ describe("staffPresentationName", () => {
 });
 
 describe("customerPresentationText", () => {
+  test("resolves each enabled language before losing the independent staff names", () => {
+    const presentation = {
+      ...full,
+      customerName: { fr: "French coffee", es: "Café" },
+      variantCustomerName: { fr: "French size", en: "English size" },
+    };
+    const before = structuredClone(presentation);
+    expect(customerPresentationText(presentation, "en", ["en", "es", "ca"])).toEqual({
+      product: { fr: "French coffee", en: "Coffee", es: "Café", ca: "Coffee" },
+      variant: {
+        fr: "French size",
+        en: "English size",
+        es: "English size",
+        ca: "English size",
+      },
+    });
+    expect(presentation).toEqual(before);
+  });
+
+  test("does not choose an unrelated stored language for a missing default", () => {
+    expect(
+      customerPresentationText(
+        { ...full, customerName: { fr: "Café FR" }, variantName: null },
+        "en",
+      ),
+    ).toEqual({ product: { fr: "Café FR", en: "Coffee" }, variant: null });
+  });
+
+  test("resolves locale matching without copying parent fallback into a variant", () => {
+    expect(
+      customerPresentationText(
+        { ...full, customerName: { "es-ES": "Café español" }, variantCustomerName: { en: " " } },
+        "en",
+        ["es", "en"],
+      ),
+    ).toEqual({
+      product: { "es-ES": "Café español", es: "Café español", en: "Coffee" },
+      variant: { en: "Large", es: "Large" },
+    });
+  });
+
   test("uses the customer name maps as-is", () => {
     expect(customerPresentationText(full, "en")).toEqual({
       product: { en: "Fresh Coffee", es: "Café recién hecho" },

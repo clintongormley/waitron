@@ -1108,13 +1108,7 @@ export function diffEntries(
         to: { portion: item.portion, abbreviation: item.unit?.abbreviation ?? {} },
         source: "shared_product",
       });
-    if (
-      same(
-        [was.unit?.id, was.unit?.abbreviation, was.unit?.precision],
-        [item.unit?.id, item.unit?.abbreviation, item.unit?.precision],
-      )
-    )
-      continue;
+    if (same(was.unit, item.unit)) continue;
     const unitFacts = (unit: FrozenExtraItemFacts["unit"]) => ({
       abbreviation: unit?.abbreviation ?? {},
       precision: unit?.precision ?? 0,
