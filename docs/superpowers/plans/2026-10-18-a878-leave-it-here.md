@@ -20,13 +20,16 @@
 staff can seat it, without changing the saved layout.
 
 **Architecture:** one new till write, `POST /api/tables/:id/today/leave-here`, built exactly like
-Mark moved (`take-orders`, the room's revision, the zone check). It moves nothing. It marks every
-waiting reset row of the table's joined group "placed", the existing state that means "today's map
-already has this table; only its name may still change", and clears their Needs moving marks. A
-row for a joined table that does not exist yet is ended. The floor's catch-up already leaves placed
-rows alone, so nothing re-marks the table until the next reset rewrites the zone's rows. The till
-asks "Cancel · Leave it here · Mark moved" on a tapped table, shows Leave it here on the list card,
-and offers it beside the "another table is in its new place" refusal.
+Mark moved (`take-orders`, the room's revision, the zone check). It moves nothing. It ends every
+waiting reset row of the table's joined group as already placed, and clears their Needs moving
+marks. "Placed" is the existing state that means "today's map already has this table; only its
+name may still change". A row still waiting to give its table a new name stays waiting, placed,
+until the name is applied. A row for a joined table that does not exist yet is ended. The floor's
+catch-up never moves or marks a placed row, so nothing re-marks the table until the next reset
+rewrites the zone's rows. Back to its saved place gains the place check Reset table already has, so
+a table left here cannot be sent back on top of the table that blocked it. The till asks "Cancel ·
+Leave it here · Mark moved" on a tapped table, shows Leave it here on the list card, and offers it
+beside the "another table is in its new place" refusal.
 
 **Tech stack:** TypeScript, drizzle on SQLite (`node:sqlite`), Hono, Lit, Vitest (node project
 for `apps/server`, real-Chromium browser mode for `apps/till`).
@@ -38,9 +41,9 @@ moving is, the joined-group rows, the place check). No backlog entry exists for 
 
 **Migration: none.** The state needed already exists as columns: `floor_reset_tables.placed`,
 `pending` and `ready_to_move` (`packages/db/src/schema/floor-plans.ts:236-243`). A probe run while
-writing this plan (below) showed the existing columns are enough.
+writing this plan, and the plan review's experiments, showed the existing columns are enough.
 
-**Risk path: FULL ceremony** (a new till write route). Per-task reviews run; `/finish-branch` runs
+**Risk path: FULL ceremony** (a new till write route, and a new refusal on an existing one). Per-task reviews run; `/finish-branch` runs
 the full wave with two Codex run-it seats.
 
 ## Global constraints
@@ -50,13 +53,14 @@ the full wave with two Codex run-it seats.
 - The saved layout is never written. The next Update layout, Reset to … plan or day's first reset
   tries to move the table again and may mark it Needs moving again.
 - No new error code. Leave it here answers only what every `tableRoute` already answers
-  (`table.not_found`, `floor_today.out_of_date`, the device-action and zone refusals). So
-  `scripts/alert-codes.test.ts` and `scripts/errors-reachable.test.ts` need no change; Task 1
-  confirms by running both.
+  (`table.not_found`, `floor_today.out_of_date`, the device-action and zone refusals). Back's new
+  refusal reuses `table.place_taken` { tableId, standingId }, which Reset table already throws
+  (`floor-today-reset-table.ts:213-215`). So `scripts/alert-codes.test.ts` and
+  `scripts/errors-reachable.test.ts` need no change; Tasks 1 and 3 confirm by running both.
 - English words: "Leave it here" (button, refusal offer). Spanish: **"Dejar aquí", proposed, NOT
   owner-approved.** It follows "Marcar movida" (`apps/till/src/i18n/strings.ts:2447`), a verb in
   the infinitive. The other choice is "Dejarla aquí". The runner asks the owner in lane B's
-  `questions.md` with the Task 5 screenshots before landing, and changes the string if the owner
+  `questions.md` with the Task 6 screenshots before landing, and changes the string if the owner
   picks other words.
 - The question's title and body stay as A504 worded them (`floor.move_title`,
   `floor.move_title_named`, `floor.move_body`, `strings.ts:895-898`, `2448-2451`). The
@@ -79,15 +83,30 @@ rows:
 | Free 4 and 5, which the new layout joins as 4+5; 4 had guests, so 4 and 5 show Needs moving | 4 and 5 stay where they stand, apart, both seatable. 4+5 stays off the map. If 4+5 does not exist yet (a joined table still to be made), it is not made. |
 | 4+5 standing joined with guests gone, under a layout that stands 4 and 5 apart | 4+5 stays on the map, joined and seatable. 4 and 5 stay out of service as parts of it, as they were (`stillJoinedPart`'s first branch: the joined table is drawn, `packages/db/src/joined-parts.ts:28-32`). |
 | A table taken off for today | It never shows Needs moving: `needsMoving` requires the table drawn and not taken off (`resetRowMoves`, `joined-parts.ts:92-104`, which needs today's row not taken off and drawn). So Leave it here cannot be pressed on it. A taken-off member of a group that needs moving stays where it is, still off. Mark moved would put it at its new place, still off (`floor-today-mark-moved.ts:107-109`; `floor-today-store.ts:704-707`). |
-| A group member with guests and no place on today's map (the `c9` case in `floor-today-mark-moved.test.ts`) | Its row is marked placed too, so only its name can still change once it is free. Leave it here is never refused because a table of the group is busy: it moves nothing. |
+| A group member with guests and no place on today's map (the `c9` case in `floor-today-mark-moved.test.ts`) | Its row is ended as placed, like the others, so nothing about it changes. Leave it here is never refused because a table of the group is busy: it moves nothing. |
 
-**How, in rows** (`leaveHere`, Task 1): every waiting row of the group that has a table gets
-`placed = true, ready_to_move = false`. Every waiting row with no table yet (`table_id` null: a
-joined table still to be made) gets `pending = false, ready_to_move = false`. It has to be ended
-rather than marked placed, because the catch-up makes a table for a waiting row with no table
-without looking at `placed` (the `plan.create` loop, `floor-today-store.ts:681-693`). The probe
-showed such a row, marked placed, stays waiting. From reading the create loop, it would then make
-the joined table once its place cleared; Task 1 Step 5(b) runs that.
+**How, in rows** (`leaveHere`, Task 1), for every waiting row of the group:
+
+- **The row has a table, and the table already has the row's name:** ended as placed,
+  `pending = false, ready_to_move = false, placed = true`. That is the state the catch-up itself
+  leaves once it has applied a placed row (`floor-today-store.ts:743-757`).
+- **The row has a table and gives it a new name** (a rename from the dashboard):
+  `placed = true, ready_to_move = false`, still waiting. The route's own catch-up applies the name
+  and ends it, unless another table still holds the name or the table has guests.
+- **The row has no table** (`table_id` null: a joined table still to be made): ended,
+  `pending = false, ready_to_move = false`. Marking it placed would not do: the catch-up makes a
+  table for a waiting row with no table without looking at `placed` (the `plan.create` loop,
+  `floor-today-store.ts:681-693`). The plan review ran it (experiment P4): with the row ended, the
+  zone kept its 3 dining tables and c4 could be seated (200); with the row marked placed instead,
+  the zone went from 3 to 4 tables once the place cleared, and seating c4 was refused 409
+  `table.in_joined_table`.
+
+Why a row that already has its name is ended rather than left waiting: a waiting placed row whose
+table has guests keeps `catchUpDue` true, and `ensureToday` (`floor-today-store.ts:969-977`) then
+runs a full catch-up on every floor read while those guests stay. The plan review saw this happen
+(experiment P5, the `c9` setup). Ending the row is safe: `stillJoinedPart` reads `placed = 1` and
+`pending = 0` alike (`packages/db/src/joined-parts.ts:34`), and the catch-up reads only waiting
+rows (`floor-today-store.ts:380-383`).
 
 ### 2. Does a later floor read re-mark it the same day? No. The next reset does.
 
@@ -95,13 +114,13 @@ the joined table once its place cleared; Task 1 Step 5(b) runs that.
   as moving, never applies its place, and is never marked: the moving lists skip placed rows
   (568-574), the apply step skips them (699-701), `stillToMove` skips them (785), and
   `readyToMove()` skips them (806, 811). A placed waiting row applies only its name and then stops
-  waiting (743-757). This state is not new. The catch-up writes it itself (754), and splitting a
-  joined table writes it for a part that is in use, "so the catch-up does not take it off the map
+  waiting (743-757), and the catch-up never reads a row that has stopped waiting. This state is
+  not new. The catch-up writes it itself (754), and splitting a joined table writes it for a part
+  that is in use, "so the catch-up does not take it off the map
   when it frees" (`splitInUse`, `floor-today-merges.ts:283-302`).
 - Every reset deletes the zone's rows and writes new waiting ones with `placed` false
   (`floor-today-store.ts:244-273`, the delete at 255), then runs the catch-up inside the reset
-  (274). A drawn table
-  whose new place is taken is marked again whether or not a reset is running (626-642). The day's
+  (274). A drawn table whose new place is taken is marked again whether or not a reset is running (626-642). The day's
   first reset and Update layout go through the same `resetZoneFor` (990, 180).
 - **Probe run while writing this plan** (a throwaway test built on
   `floor-today-mark-moved.test.ts`'s setup, deleted afterwards; `pnpm exec vitest run` in
@@ -120,6 +139,8 @@ the joined table once its place cleared; Task 1 Step 5(b) runs that.
   - The same probe covered both joined-group rows of question 1, the to-be-made joined table
     (ended: no table made; marked placed instead: the row stayed waiting), and a table the
     dashboard renamed and moved (the new name was applied and the place kept).
+  - The probe's code was throwaway and is gone. **Task 1's cases are the record:** cases 1–4 and
+    6–9 rerun every result above through the real route, and Step 5 reruns the control.
 
 ### 3. Spanish
 
@@ -147,11 +168,33 @@ The owner confirms or overrides these when reviewing the plan; each names the de
    way.
 4. **The question draws Cancel quiet** (`variant="ghost"`), Leave it here `secondary` and Mark
    moved `primary`, in that order. This copies the till's other three-button question
-   (`apps/till/src/widgets/bill-choice-dialog.ts:59-76`: ghost Cancel, secondary, primary).
-   Needs clearing's two-button question keeps its secondary Cancel.
+   (`apps/till/src/widgets/bill-choice-dialog.ts:59-76`: ghost Cancel, secondary, primary). This
+   restyles Cancel, which the owner did not ask for. Needs clearing's two-button question keeps
+   its secondary Cancel.
 5. **The list card carries both buttons**, Leave it here then Mark moved, both `size="sm"
    variant="secondary"` as Mark moved is today (`till-floor-screen.ts`, `#waitingCard`). If they do
-   not fit one line at 390 px they wrap; Task 5 looks.
+   not fit one line at 390 px they wrap; Task 6 looks.
+6. **The question's body still explains only Mark moved** ("Mark it moved once it stands, is put
+   away or is taken apart as the new layout has it."). Nothing in the question says what Leave it
+   here does or that it lasts only today. Saying so would need new words in two languages, which
+   the owner has not given.
+7. **Back to its saved place checks what stands there, on every table** (runner's decision on the
+   plan review, 2026-10-18). Back refuses `table.place_taken` while a table drawn on today's map,
+   other than the table itself and its merge partners, stands in its saved place. A table standing
+   exactly at its own saved place blocks nothing. This reuses Reset table's check,
+   `refusePlaceTaken` (`floor-today-reset-table.ts:170-216`), with `fromSaved` true. Without it, a
+   table left here could be sent back on top of the table that blocked it. The plan review ran
+   this on main's code (experiment P1). It also showed Back never checked at all (experiment P2:
+   with no Leave it here, Mark moved t3 to x 40, drag t3 to x 0, drag t8 to x 36, Back → 200,
+   overlapping). So the check also changes Back after an ordinary drag. A504 §7.5 says no table is
+   put down on another.
+8. **On the till, Back's `table.place_taken` refusal shows the code's own words**, "Another table
+   is in its place. Move it, then try again" / "Otra mesa ocupa su sitio. Muévela y vuelve a
+   intentarlo" (`apps/till/src/i18n/codes.ts:232-235`). Today the floor screen names the tables for
+   that code with Reset table's sentence, "{table} is standing in {joined}'s place. Move {table},
+   then Reset table again." (`till-floor-screen.ts:1284-1291`; `strings.ts:857-858`), which would
+   tell staff to press the wrong button. The code's words need no new wording from the owner. A
+   sentence naming both tables would need new words in two languages.
 
 ## Every reader of the Needs moving mark and the placed flag
 
@@ -167,11 +210,12 @@ says "no":
 | → the till's tables read, `today.needsMoving` (`working-order.ts:7854`, `7934`) | false: normal chip and card, and Join with… is offered (`apps/till/src/state/floor-today.ts:406`). |
 | → Mark moved's exemption (`floor-today-mark-moved.ts:99`) and the catch-up's `placeTaken` (`floor-today-store.ts:1123`) | It now blocks other tables' new places, like any table that stays. A table that needs moving and whose new place it stands in is refused Mark moved (`table.new_place_taken`) and can be left too. |
 | The room's revision print, which includes `readyToMove` (`floor-revision.ts:90`) | It changes, so the room's revision moves by one. |
-| `catchUpDue` (`floor-today-store.ts:1068-1081`) | True while a placed row still waits for its name, so the next read runs the catch-up, which applies the name. The route runs the catch-up itself (Task 1), so this lasts only while the name is taken. |
+| `catchUpDue` (`floor-today-store.ts:1068-1081`) → `ensureToday` (969-977) | Unchanged for every row Leave it here ends, because it reads only waiting rows. A row still waiting for a rename keeps it true, so each read runs the catch-up until the name is applied. The route's own catch-up applies it at once unless another table holds the name or the table has guests, as main does for any row waiting for its name. Rows whose table already has the row's name are ended so that a group member with guests does not keep it true (plan review, experiment P5). |
 | `stillJoinedPart` (`joined-parts.ts:33-47`: `placed = 1 or pending = 0`, and no sibling part drawn) | Applies only when no part of the group stands on the map. At Leave it here at least one does (the pressed table, or the joined table through the first branch), so nothing changes then. The probe seated 4 and 5. If staff later take every part off the map, the parts count as still joined. That is what main does today for any applied row whose joined table is not drawn. |
 | `layoutPlacesIn` (`floor-today-store.ts:1006-1024`) | Unchanged: it still gives the table's place in the new layout. The table stands elsewhere, so the "stands at its own place, blocks nothing" exception (`blocksPlace`) does not apply to it. |
 | Reset table's saved place (`floor-today-reset-table.ts:47-50`) | Unchanged: reads the row's place whatever `placed` says. |
-| `backToSaved` (`floor-today-store.ts:1280-1316`) | No longer passed to Mark moved (the table does not need moving). It puts the table at its reset row's place, and that path does not check what stands there. See Review Focus 2. |
+| `backToSaved` (`floor-today-store.ts:1280-1316`) | No longer passed to Mark moved (the table does not need moving). On main it then puts the table at its reset row's place without checking what stands there. Task 3 adds the check (decision 7). |
+| `savedPart` (`packages/db/src/joined-parts.ts:139-179`) → the dashboard's table list (`apps/server/src/tables.ts:54`) and bookings' table check (`packages/bookings/src/bookings.ts:50-73`) | **No change, by decision.** These read the last reset's copy, not today's map. In the "new layout joins 4 and 5" case, after Leave it here the dashboard list still leaves out 4 and 5 and lists the off-map 4+5, and a booking today at 4 is refused `table.in_joined_table` (plan review, experiments P3 and P4). That was already so while 4 and 5 needed moving, so it is not a regression. Task 7 files a backlog entry. |
 
 ## Review Focus
 
@@ -179,19 +223,18 @@ says "no":
    Both need moving and either may be marked first (A504 decision 20). After Leave it here on 2,
    Mark moved on 3 is refused `table.new_place_taken` naming 2, and Leave it here on 3 then
    succeeds. Pinned in Task 1.
-2. **Back to its saved place on a table left here** puts it at its new place without checking
-   what stands there, possibly on the very table that blocked it. That is main's Back for any
-   table not needing moving (`backToSaved`, read at `floor-today-store.ts:1280-1316`: no place
-   check after the needs-moving branch at 1288). Before this change the table needed moving, so
-   Back was Mark moved and was refused. Task 1 Step 7 runs a throwaway probe to confirm it. Task 6
-   files a backlog entry with that receipt. It is not fixed here: the owner decided what Leave it
-   here does, and Back's behaviour was not part of that decision.
+2. **Back to its saved place on a table left here**, with the table that blocked it still
+   standing there, is refused `table.place_taken` naming that table, and writes nothing. Before
+   this change, Back on a table that needed moving was Mark moved and was refused; on main, Back on
+   a table that does not need moving checks nothing (decision 7). Pinned in Task 3, with the
+   ordinary-drag case and the cases Back must still serve. The till says the code's own words
+   (Task 5).
 3. **Another device got there first.** A Leave it here sent with an old room revision is refused
    `floor_today.out_of_date` and writes nothing. One sent after the table was already left or
    marked moved answers 200 and keeps the revision. Pinned in Task 1.
 4. **A device without `take-orders`** sees no Leave it here: not in the question, not on the card,
    not in the refusal offer. The server refuses the route with `device.forbidden_action`. Pinned
-   in Tasks 2, 3 and 4.
+   in Tasks 2, 4 and 5.
 5. **A joined table still to be made is never made later the same day**, even once its place
    clears. Pinned in Task 1.
 
@@ -203,13 +246,14 @@ says "no":
 | --- | --- | --- |
 | 1 | Server: `leaveHere` and its route, with the domain cases | M |
 | 2 | Server: the two route maps and their refusing cases | S |
-| 3 | Till: client method, the three-button question, the list card, the words | M |
-| 4 | Till: the `table.new_place_taken` refusal offers Leave it here | S |
-| 5 | LOOK (scripted screenshots) | M |
-| 6 | Docs and backlog | S |
+| 3 | Server: Back to its saved place checks what stands there | S |
+| 4 | Till: client method, the three-button question, the list card, the words | M |
+| 5 | Till: the refusals: Leave it here offered; Back's `table.place_taken` in the code's words | M |
+| 6 | LOOK (scripted screenshots) | M |
+| 7 | Docs and backlog | S |
 
-Tasks 1 → 2 in order. Tasks 3 → 4 in order. The till tasks use stubs and do not wait for the
-server ones. Task 5 needs 1–4. Task 6 comes last.
+Tasks 1 → 2 → 3 in order (3 uses Task 1's route in its first case). Tasks 4 → 5 in order. The till
+tasks use stubs and do not wait for the server ones. Task 6 needs 1–5. Task 7 comes last.
 
 ### Task 1: Server — `leaveHere` and its route
 
@@ -275,7 +319,9 @@ and the route `POST /api/tables/:id/today/leave-here`, body `{ zoneRevision }`, 
      once the place clears, and the count goes up by one.
   9. **"keeps a rename the dashboard gave it, and its place".** The Mark moved "applies a marked
      table's new name with its move" setup up to `needsMoving` true; `leaveHere(table.a)`. Expect
-     `tableRow(v, table.a).label` to be the new name, and `todayRow(table.a)` `{ x: 0 }`.
+     `tableRow(v, table.a).label` to be the new name, `todayRow(table.a)` `{ x: 0 }`, and
+     `rowStateOf(table.a)` `{ pending: false, readyToMove: false, placed: true }` (the route's
+     catch-up applied the name and ended the row).
   10. **"after Leave it here on 2 of a swap, Mark moved on 3 is refused naming 2, and 3 can be
       left too".** The "is not blocked by a table that itself needs moving" setup up to both
       needing moving. `leaveHere(t2)`; expect `refusal(markMoved(t3))` toEqual
@@ -287,38 +333,47 @@ and the route `POST /api/tables/:id/today/leave-here`, body `{ zoneRevision }`, 
       `{ zoneRevision: before - 1 }` explicitly (`withFloorRevision` keeps a body that names one).
       Expect status 409, code `floor_today.out_of_date`; `everything()` unchanged;
       `needsMoving(t3)` still true.
+  13. **"ends the row of a group member that has guests, so floor reads do not keep running the
+      catch-up".** The Mark moved "is refused, writing nothing, while guests sit at a part of the
+      group with no place today" setup, up to `seatAt(c9)`. `leaveHere(c4)`. Expect
+      `rowStateOf(c9)` `{ pending: false, readyToMove: false, placed: true }`, and c3's and c4's
+      the same. *Failing case:* marking every row placed without ending it leaves c9's row
+      `pending: true`. Check the row, not `catchUpDue` itself: the plan review found that a drizzle
+      select of `catchUpDue` over one table with no join printed `where "zone_id" = "id"`
+      unqualified, which is always false. Test it only through a joined select like
+      `ensureToday`'s, or through what a reader can see.
 - [ ] **Step 2: Run them; they fail.**
   `pnpm --filter @waitron/server exec vitest run src/floor-today-mark-moved.test.ts`.
   Expected: the new cases fail with status 404 (no route). The existing cases pass. Read the
   `Tests` count; a run that shows none is no evidence.
 - [ ] **Step 3: Write `leaveHere`.** `zoneOfTable` first (it refuses an unknown table). Return
   doing nothing unless `tableNeedsMoving`. Take the table's waiting row and `pendingGroupRows(tx,
-  [own.id])`, deduplicated by id. Update the rows with a `tableId` to `{ placed: true,
-  readyToMove: false }`, and those with none to `{ pending: false, readyToMove: false }`. Then
-  `catchUpZone(tx, cfg, removals, zoneId, now, { inReset: false })`, so a rename lands in the same
-  revision. Its doc comment states the invariant in two lines: the group is left as today's map
-  has it until the next reset rewrites the rows; a row with no table is ended because the
-  catch-up makes such a table without reading `placed`. Add `tableRoute("leave-here", () => ({
+  [own.id])`, deduplicated by id, with each row's `label` and its table's current
+  `dining_tables.label`. Write the three row states of question 1: a row whose table already has
+  the row's name → `{ pending: false, readyToMove: false, placed: true }`; a row that renames its
+  table → `{ placed: true, readyToMove: false }`; a row with no table → `{ pending: false,
+  readyToMove: false }`. Then `catchUpZone(tx, cfg, removals, zoneId, now, { inReset: false })`,
+  so a rename lands in the same revision. Its doc comment states the invariant in two lines: the
+  group is left as today's map has it until the next reset rewrites the rows; a row with no table
+  is ended because the catch-up makes such a table without reading `placed`. Add `tableRoute("leave-here", () => ({
   write: (tx, tableId) => leaveHere(tx, deps.cfg, removals, tableId, deps.clock.now().instant)
   }))`.
 - [ ] **Step 4: Run the file; every case passes.** Same command. Also run
   `pnpm --filter @waitron/server exec vitest run src/floor-today-store.test.ts src/floor-catch-up.test.ts src/floor-today-state.test.ts`
   (the catch-up's own suites, untouched, still green).
-- [ ] **Step 5: Prove the two failing cases by deletion.** (a) Change the update so it sets only
-  `readyToMove: false` on the rows with a table (no `placed`). Case 2 must fail with `expected true
-  to be false`. (b) Mark the null-table row placed instead of ending it. Case 8 should fail on the
-  count; if it does not, STOP and report, because the reason this plan gives for ending that row
-  is then wrong. Restore both and record both outputs for the PR description.
+- [ ] **Step 5: Prove the failing cases by deletion**, recording each output for the PR
+  description and restoring the code after each. (a) Write only `readyToMove: false` to the rows
+  with a table (no `placed`, no ending). Expect cases 1 and 2 to fail: `leaveHere`'s own catch-up
+  marks the table again inside the route, so case 1's `needsMoving` already prints `expected true
+  to be false`. (b) Mark the null-table row placed instead of ending it. Expect case 8 to fail on
+  the count. The plan review already saw this (experiment P4), so a pass here means the case does
+  not reach the create loop: fix the case, not the code. (c) Mark every row with a table placed
+  without ending any. Expect case 13 to fail on c9's `pending`.
 - [ ] **Step 6: Run the code guards.**
   `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/write-path-tables.test.ts`
   (no new code, so all should stay green); `pnpm --filter @waitron/server typecheck`;
   `pnpm format:check`.
-- [ ] **Step 7: Probe Back on a table left here (throwaway, not committed).** In a scratch test
-  file, take case 1 up to Leave it here, then `back(t3)`. Record what `todayRow(t3)` and the
-  answer's status are. The expected result, from reading `backToSaved`, is 200 with t3 at `x: 40`,
-  overlapping t8 at 36. If it is refused instead, say so: Review Focus 2 is then wrong. Delete the
-  file and put the outcome in the task's report for Task 6.
-- [ ] **Step 8: Commit** (`git commit -s`), message in plain English, e.g. "Leave it here: a table
+- [ ] **Step 7: Commit** (`git commit -s`), message in plain English, e.g. "Leave it here: a table
   that needs moving stays where it stands for today (A878)".
 
 ### Task 2: Server — the route maps and refusing cases
@@ -337,19 +392,79 @@ and the route `POST /api/tables/:id/today/leave-here`, body `{ zoneRevision }`, 
   refuses POST /api/tables/:id/today/leave-here |`, and add a case shaped like the `mark-moved`
   one (path `/api/tables/${x.deliTable}/today/leave-here`, body `{ zoneRevision: 0 }`,
   `deliTableZone`).
-- [ ] **Step 2: Prove they bite.** Temporarily change Task 1's route to `requireSession(deps, c)`
-  with no action. Run
+- [ ] **Step 2: Prove they bite.** Both checks live in the shared `tableRoute`
+  (`floor-today-api.ts:162-187`), so switch them off for this route only, one at a time.
+  (a) Temporarily change the session line to
+  `requireSession(deps, c, change === "leave-here" ? {} : { action: "take-orders" })`. Run
   `pnpm --filter @waitron/server exec vitest run src/till-api.profile-actions.test.ts -t leave-here`
-  and see the new case fail. Restore it, and see it pass. The zone case is checked by
-  `checkZones` inside `tableRoute`: run
+  and see the new case fail; restore it and see it pass. (b) Temporarily skip the zone check for
+  this route only, wrapping the `checkZones` call in `if (change !== "leave-here")`. Run
   `pnpm --filter @waitron/server exec vitest run src/till-api.profile-zones.test.ts -t leave-here`
-  and see it pass. Then temporarily remove `{ tableId }` from that route's `checkZones` list and
-  see it fail. Restore it.
+  and see it fail; restore it and see it pass.
 - [ ] **Step 3: Run both whole files** with the same commands without `-t`. Read the `Tests`
   counts.
 - [ ] **Step 4: Commit** (`git commit -s`).
 
-### Task 3: Till — client method, the three-button question, the list card, the words
+### Task 3: Server — Back to its saved place checks what stands there
+
+**Files:**
+- Modify: `apps/server/src/floor-today-reset-table.ts` (export `refusePlaceTaken`, 170-216)
+- Modify: `apps/server/src/floor-today-store.ts` (`backToSaved`, 1280-1316)
+- Test: `apps/server/src/floor-today-mark-moved.test.ts` (Back's cases already live there, with
+  the `back` helper), `apps/server/src/floor-today-api.test.ts` (case 4),
+  `apps/server/src/floor-today-changes.test.ts` (the existing Back cases)
+
+**Interfaces — Consumes:** Task 1's route; `refusePlaceTaken(tx, zoneId, tableId, place, own,
+fromSaved)`, which throws `table.place_taken` { tableId, standingId } naming the first table in
+number order. **Produces:** `backToSaved` refuses `table.place_taken` before writing anything.
+
+- [ ] **Step 1: Write the failing tests** (in `floor-today-mark-moved.test.ts`, a new
+  `describe("Back to its saved place checks what stands there")`; add a helper
+  `placeTaken(tableId, standingId)` shaped like `newPlaceTaken` with code `table.place_taken`):
+  1. **"after Leave it here, Back is refused while the table that blocked it stands there".** As
+     Task 1 case 1 up to Leave it here. Take `everything()`. Expect `refusal(back(t3))` toEqual
+     `placeTaken(t3, t8)`, and `everything()` unchanged. *Failing case on main:* 200, with t3 at
+     `x: 40` overlapping t8 at 36 (plan review, experiment P1).
+  2. **"Back after an ordinary drag is refused while another table stands in the saved place".**
+     `threeNeedsMoving([{ key: "t8", standard: 120, dinner: 120 }])`; `markMoved(t3)` (t3 to
+     x 40); move t3 to `{ x: 0, y: 0 }` and t8 to `{ x: 36, y: 0 }` through the `move` route
+     (`send("POST", `/api/tables/${id}/today/move`, { x, y })`). Expect `refusal(back(t3))` toEqual
+     `placeTaken(t3, t8)`, writing nothing. *Failing case on main:* 200 and an overlap (plan
+     review, experiment P2).
+  3. **"Back is still served when nothing stands in the saved place".** As case 2 but leave t8
+     at 120. Expect 200 and `todayRow(t3)` `{ x: 40 }`. (A proof by deletion says nothing about
+     what a check wrongly refuses, so the allowed path gets a case of its own.)
+  4. **"a table standing exactly at its own saved place blocks nothing; one square off it, it
+     does".** In `apps/server/src/floor-today-api.test.ts`, beside the Mark moved cases that use
+     `overlappingDinner` (1936 onward), whose Dinner layout puts "two" at 40 and "four" at 44,
+     overlapping. `overlappingDinner(44)`, `updateToDinner`, then drag "two" to `{ x: 0, y: 0 }`
+     with `today(two, "move", …)`, then `today(two, "back")`. Expect 200 and "two" at `x: 40`:
+     "four" stands exactly at its own saved place, which `fromSaved` true exempts (`blocksPlace`).
+     Then a second case: as before, but move "four" to `{ x: 45, y: 0 }` before Back. Expect 409
+     `table.place_taken` naming "four", as "still refuses Mark moved while the overlapping table
+     stands one square off its own place" does for Mark moved.
+- [ ] **Step 2: Run; cases 1, 2 and the second half of 4 fail** with status 200 instead of 409.
+  `pnpm --filter @waitron/server exec vitest run src/floor-today-mark-moved.test.ts src/floor-today-api.test.ts`.
+- [ ] **Step 3: Implement.** Export `refusePlaceTaken`. In `backToSaved`, after the `saved` checks
+  and before `withMovedSlips`: when `placementOf(saved)` is not null, call
+  `refusePlaceTaken(tx, zoneId, tableId, placementOf(saved)!, new Set([tableId, ...members]), true)`,
+  with `zoneId` from `todayOf` and `members` the merge's table ids already worked out there. The
+  store importing from `floor-today-reset-table.ts`, which imports the store, is the same import
+  loop the store already has with `floor-today-mark-moved.ts` (`floor-today-store.ts:50`;
+  `floor-today-mark-moved.ts:17-22`). If `pnpm lint` objects, move `refusePlaceTaken` to a new
+  file both import, and say so.
+- [ ] **Step 4: Run every Back suite.**
+  `pnpm --filter @waitron/server exec vitest run src/floor-today-mark-moved.test.ts src/floor-today-api.test.ts src/floor-today-changes.test.ts src/floor-today-reset-table.test.ts src/floor-today-name.test.ts src/floor-today-split.test.ts src/today-names.test.ts`.
+  All existing cases pass: "takes a table out of its merge when it goes back, and puts its partner
+  back too" (`floor-today-changes.test.ts:308`) is the merge-partner case Back must still serve.
+  An existing case that now fails because something stands in a saved place is a STOP: report it.
+- [ ] **Step 5: Prove case 1 by deletion:** take the call out, see cases 1 and 2 fail, put it back.
+  Run `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`,
+  `pnpm --filter @waitron/server typecheck`, `pnpm format:check`.
+- [ ] **Step 6: Commit** (`git commit -s`), e.g. "Back to its saved place refuses while another
+  table stands there (A878)".
+
+### Task 4: Till — client method, the three-button question, the list card, the words
 
 **Files:**
 - Modify: `apps/till/src/api/client.ts` (after `markMovedToday`, 4190-4194)
@@ -386,13 +501,19 @@ string key `floor.leave_here`: EN "Leave it here", ES "Dejar aquí" (pending own
     6. "says the room has moved on when Leave it here is refused": a rejected
        `{ code: "floor_today.out_of_date" }` shows `codeMessage("floor_today.out_of_date")` in
        `[data-floor-refusal]`.
+    7. "offers Join with… once the floor read no longer shows the table needing moving": mount
+       with `moving("t3", 12)` and `planned("t4", 30)`, then set `el.tables` to `planned("t3",
+       12)` and `planned("t4", 30)` (what the read after Leave it here brings). Open the details
+       sheet on t3 (`wt-table-details`) and expect `[data-today-action="join-with"]`. This passes
+       before the change too: it pins that the till needs no change of its own for "joinable
+       again".
   - a11y file: one case inside the `describe.each(["light", "dark"])`, "has no violations with
     the needs-moving question open", mounting a planned zone with a table `needsMoving: true`,
     tapping it, then `expectNoA11yViolations` as the file's other dialog cases do.
 - [ ] **Step 2: Run them; they fail.**
   `pnpm --filter @waitron/till exec vitest run src/api/client.test.ts src/screens/till-floor-screen.needs-moving.test.ts src/screens/till-floor-screen.a11y.test.ts`.
   Check free memory first (`memory_pressure | grep free`); this is a real-Chromium run. Expected:
-  the new cases fail (`leaveHereToday` is not a function; no `[data-leave-here]`).
+  the new cases fail (`leaveHereToday` is not a function; no `[data-leave-here]`), except case 7.
 - [ ] **Step 3: Implement.** Add the client method. Add the strings. In `#waitingDialog`, for
   `kind === "move"` draw Cancel `variant="ghost"`, then Leave it here (`variant="secondary"`,
   `data-leave-here`), then Mark moved `primary`, all `slot="footer"`. Leave it here and Mark moved
@@ -409,17 +530,21 @@ string key `floor.leave_here`: EN "Leave it here", ES "Dejar aquí" (pending own
 - [ ] **Step 5: Commit** (`git commit -s`), saying in the message that "Dejar aquí" awaits the
   owner's approval.
 
-### Task 4: Till — the `table.new_place_taken` refusal offers Leave it here
+### Task 5: Till — the refusals: Leave it here offered; Back's `table.place_taken` in the code's words
 
 **Files:**
 - Modify: `apps/till/src/screens/till-floor-screen.ts` (a new `@state() leaveOffer`, beside
-  `refusal` at 638; `#settle` at 1254-1268; the refusal line at 1944; `#markMoved`; the sheet's
-  `"back"` case at 1101-1103)
-- Test: `apps/till/src/screens/till-floor-screen.needs-moving.test.ts`
+  `refusal` at 638; `#settle` at 1254-1268; `#refusalText` and `#namedRefusal` at 1270-1291; the
+  refusal line at 1944; `#markMoved`; the sheet's `"back"` case at 1101-1103)
+- Test: `apps/till/src/screens/till-floor-screen.needs-moving.test.ts`,
+  `apps/till/src/screens/till-floor-screen.reset-table.test.ts` (its Back cases at 673-686 and
+  856-870 show how to press Back in the details sheet)
 
-**Interfaces — Consumes:** Task 3's `#leaveHere` and `floor.leave_here`. **Produces:**
+**Interfaces — Consumes:** Task 4's `#leaveHere` and `floor.leave_here`. **Produces:**
 `[data-leave-here-offer]`, a `wt-button` drawn just after (not inside) `<p data-floor-refusal>`, so
-the refusal's text, which existing cases compare whole, is unchanged.
+the refusal's text, which existing cases compare whole, is unchanged. `#settle`'s new optional
+fourth parameter, `{ tableId: string; back?: true }`: the table the write was for, and whether
+the write was Back.
 
 - [ ] **Step 1: Write the failing tests** (in the needs-moving file):
   1. Extend "names both tables when Mark moved is refused because another stands in the new
@@ -441,21 +566,34 @@ the refusal's text, which existing cases compare whole, is unchanged.
   8. "drops the offer once a read no longer has the table needing moving, or the device can no
      longer change today's plan": set `el.tables` to t3 not needing moving → offer gone; on a
      fresh mount, set `el.canChangeToday = false` → offer gone.
+  9. **"says Back's place-taken refusal in the code's own words, offering nothing"** (in
+     `till-floor-screen.reset-table.test.ts`, beside its Back cases): t3 not needing moving, t4
+     on the read; `backToSavedToday` rejects `{ code: "table.place_taken", tableId: "t3",
+     standingId: "t4" }`. Expect `[data-floor-refusal]` to read exactly
+     `codeMessage("table.place_taken")`, and no `[data-leave-here-offer]`. In Spanish,
+     `codeMessage("table.place_taken", "es")`. *Failing case today:* the screen names the tables
+     with Reset table's sentence, "4 is standing in 3's place. Move 4, then Reset table again."
+  10. **"Reset table's place-taken refusal still names the tables"**: the existing Reset table
+      cases that check `floor.place_taken`'s sentence ("in %s, a table standing in the joined
+      table's place is named", `till-floor-screen.reset-table.test.ts:606-620`, and the case at
+      699-711) keep passing untouched. They are not rewritten; they are run in Step 4.
 - [ ] **Step 2: Run; they fail.**
   `pnpm --filter @waitron/till exec vitest run src/screens/till-floor-screen.needs-moving.test.ts`.
 - [ ] **Step 3: Implement.** Add `leaveOffer: { tableId: string; message: string } | null`.
-  `#settle` takes an optional fourth parameter, the pressed table's id. In its catch, after
-  setting `refusal`, it sets `leaveOffer` to `{ tableId, message: this.refusal }` when that id is
-  given and the code is `table.new_place_taken`, and to null otherwise. `#markMoved` and the
-  sheet's `"back"` case pass it. Draw the button only while `leaveOffer.message === this.refusal`,
+  `#settle` takes the optional fourth parameter. In its catch: when it says `back` and the code is
+  `table.place_taken`, set `refusal` to `codeMessage("table.place_taken")` instead of
+  `#refusalText` (decision 8). Otherwise set `refusal` as today. Then set `leaveOffer` to
+  `{ tableId, message: this.refusal }` when a table id is given and the code is
+  `table.new_place_taken`, and to null otherwise. `#markMoved` passes `{ tableId: table.id }`; the
+  sheet's `"back"` case passes `{ tableId: table.id, back: true }`. Draw the button only while `leaveOffer.message === this.refusal`,
   `canChangeToday` holds, and `this.tables` has that table with `needsMovingToday`. Any other
   refusal then hides it without anyone resetting the offer. Its click runs `#leaveHere`, which
   also sets `leaveOffer` to null.
-- [ ] **Step 4: Run the floor screen's files and typecheck** as in Task 3 Step 4, and
+- [ ] **Step 4: Run the floor screen's files and typecheck** as in Task 4 Step 4, and
   `pnpm format:check`.
 - [ ] **Step 5: Commit** (`git commit -s`).
 
-### Task 5: LOOK (scripted screenshots)
+### Task 6: LOOK (scripted screenshots)
 
 Open the real thing and look. No product code unless a defect is found; a defect is then fixed
 test-first in the owning task's files, and the report says so.
@@ -473,7 +611,8 @@ test-first in the owning task's files, and the report says so.
   `till-<surface>-<lang>-<theme>-<width>.png`: `question` (the three-button question on the map);
   `card` (the list card with both buttons); `offer` (the `table.new_place_taken` refusal with
   Leave it here beside it); `left` (the map after Leave it here: the table at its old place in its
-  free colour).
+  free colour); `back-refused` (Back to its saved place pressed on the table left here, refused in
+  the code's own words).
 - [ ] **Step 3:** Run it with `node`; list each file written in
   `~/waitron-campaign-b/a878-shots/`.
 - [ ] **Step 4:** Look at each one. Check that the footer's three buttons fit or wrap cleanly at
@@ -481,7 +620,7 @@ test-first in the owning task's files, and the report says so.
   refusal line in both themes. List every finding in the ledger, each fixed or stated. Hand the
   Spanish `question`, `card` and `offer` shots to the runner for the owner's wording question.
 
-### Task 6: Docs and backlog
+### Task 7: Docs and backlog
 
 **Files:** `docs/superpowers/specs/2026-10-17-a504-floor-plans-design.md` (§7.4, 528-571),
 `docs/developers/conventions-data.md` (1817-1829, and Back at 1934-1936),
@@ -497,36 +636,49 @@ test-first in the owning task's files, and the report says so.
 - [ ] **Step 2:** In conventions-data, after the Mark moved sentence (1822-1824), add what Leave
   it here does (`POST /api/tables/:id/today/leave-here`, `leaveHere`): the group's rows with a
   table become placed and unmarked, a row with no table is ended, and nothing re-marks them until
-  the next reset rewrites the rows. In the Back paragraph (1934-1936), say that a table left here
-  no longer needs moving, so Back puts it at its reset row's place. Write that only as Task 1
-  Step 7 observed it. Read the whole floor section for other claims this change makes stale
-  (CLAUDE.md §1, "A behaviour change retires every receipt").
+  the next reset rewrites the rows. Say which rows are ended at once and which wait for a rename,
+  and why (question 1). Reword the Back paragraph (1934-1936): Back puts a table at its reset row's
+  place, refusing `table.place_taken` while a table drawn on today's map, other than the table and
+  its merge partners, stands there, with a table at its own saved place blocking nothing
+  (`backToSaved`, `refusePlaceTaken`); on a table that needs moving it is Mark moved. In the "No
+  reset puts a table down on another" paragraph (1831-1842), add Back to the paths that check.
+  Read the whole floor section for other claims this change makes stale (CLAUDE.md §1, "A
+  behaviour change retires every receipt").
 - [ ] **Step 3:** In design-system (873-875), the list card carries Leave it here and Mark moved;
-  the question's three buttons and their variants (plan decision 4).
+  the question's three buttons and their variants (plan decision 4); the Leave it here button
+  beside a `table.new_place_taken` refusal.
 - [ ] **Step 4:** Backlog. There is no A878 entry to delete. Add new entries to the till area of
   `docs/backlog.md`, each numbered from `~/waitron-campaign-shared/next-item-number` (read it, use
-  it, write back the next): (a) "Back to its saved place does not look at what stands there", with
-  Task 1 Step 7's observation as its receipt, if the probe confirmed it; (b) any Task 5 finding
-  left open. The Spanish wording is not a backlog entry: the runner settles it before landing.
+  it, write back the next): (a) "After Leave it here, bookings and the dashboard's table list
+  still follow the last reset's copy, not today's map": in the case where the new layout joins 4
+  and 5, the dashboard list leaves out 4 and 5 and lists the off-map 4+5, and a booking today at 4
+  is refused `table.in_joined_table` (`savedPart`, `packages/db/src/joined-parts.ts:139-179`;
+  `apps/server/src/tables.ts:54`; `packages/bookings/src/bookings.ts:50-73`; plan review
+  experiments P3 and P4, 2026-10-18). It was already so while they needed moving. Next: decide
+  whether those reads should follow today's map once a group is left. (b) Any Task 6 finding left
+  open. The Spanish wording is not a backlog entry: the runner settles it before landing.
 - [ ] **Step 5:** `pnpm exec vitest run scripts/claude-md-pointers.test.ts`;
   `pnpm exec prettier --file-info docs/developers/conventions-data.md` (it says whether the file
   is ignored; `docs/` is). Commit with the code (`git commit -s`): this branch is not docs-only.
   Update the ledger: what is done, the decisions above, and the next step (`/finish-branch` with
-  this worktree, then the owner's Spanish answer).
+  this worktree, then the owner's Spanish answer). The owner-facing notes (ledger and PR
+  description) list decisions 1–8 for the owner to confirm, and backlog entry (a).
 
 ---
 
 ## Self-review against the brief
 
-- Three buttons, Cancel · Leave it here · Mark moved → Task 3. The refusal offers it → Task 4.
-  Clears the mark, keeps the place, seatable and joinable → Task 1 cases 1 and 5. Saved layout
-  unchanged → case 1. The next reset tries again and may mark again → cases 3 and 4.
+- Three buttons, Cancel · Leave it here · Mark moved → Task 4. The refusal offers it → Task 5.
+  Clears the mark, keeps the place, seatable and joinable → Task 1 cases 1 and 5, Task 4 case 7.
+  Saved layout unchanged → case 1. The next reset tries again and may mark again → cases 3 and 4.
   `take-orders` and the room's revision → Task 1 route, Task 2, case 12. Map and list card →
-  Task 3.
-- Settle (1) → question 1 and cases 6–8. Settle (2) → question 2 and cases 2–3 with the deletion
-  proof. Settle (3) → "Dejar aquí", flagged in Global constraints and in Tasks 3 and 5.
+  Task 4.
+- Settle (1) → question 1 and cases 6–8 and 13. Settle (2) → question 2 and cases 2–3 with the
+  deletion proof. Settle (3) → "Dejar aquí", flagged in Global constraints and in Tasks 4 and 6.
 - Tests the brief lists: refused Mark moved then Leave it here (case 1); a later read does not
   re-mark (case 2); the next reset does (case 3); the profile-action refusal (Task 2); the three
-  buttons in EN and ES (Task 3) and light and dark at 390 and 1280 (Task 5).
-- Docs: the A504 spec pointer and backlog → Task 6.
-- Migration: none, with the reason and the probe.
+  buttons in EN and ES (Task 4) and light and dark at 390 and 1280 (Task 6).
+- Plan review: Back's place check → decision 7, Task 3, Task 5 case 9; rows ended at once →
+  question 1, case 13; `savedPart` → reader table, Task 7 entry (a).
+- Docs: the A504 spec pointer and backlog → Task 7.
+- Migration: none, with the reason, the probe and the plan review's experiments.
