@@ -54,18 +54,19 @@ the Service tab: [A757 spec §3.1 and §11](../specs/2026-10-17-a757-table-state
 
 ## Review Focus
 
-1. **A draft on one tab while saving another.** Details edited, then Save on the Receipts tab: the
-   receipt saves, the dialog stays open and the Details edit is still there (Task 7).
-2. **An invalid or refused field on a tab that is not showing.** Save with a blank name from the
-   Service tab, or a server refusal naming a Transfers field: the dialog shows that tab, marks it,
-   and focuses the field (Task 1).
-3. **An address naming a tab the dialog does not offer** (Transfers with one department, Receipts
+1. **A tab change while a draft is dirty.** Type a name, choose Service: no "leave unsaved
+   changes?" question, the address records the tab, the name is kept; Back returns to Details the
+   same way (Task 2; Task 8 for Receipts).
+2. **A draft on one tab while saving another.** Details edited, then Save on the Receipts tab: the
+   receipt saves, the dialog stays open and the Details edit is still there (Task 8).
+3. **Enter in a receipt field** with the receipt unchanged and Details dirty: nothing is written
+   (Task 8).
+4. **An invalid or refused field on a tab that is not showing.** Save with a blank name from the
+   Service tab, or a server refusal naming a Transfers field: the dialog shows that tab (replacing
+   the address), marks it, and focuses the field (Task 1).
+5. **An address naming a tab the dialog does not offer** (Transfers with one department, Receipts
    without `layout.configure`): the dialog opens on Details and the address is replaced, not
-   pushed (Tasks 2, 7).
-4. **The tab disappears while selected** (the second department is deleted elsewhere while
-   Transfers is showing): Details shows and the draft is kept (Task 1).
-5. **A read-only visitor of the Courses page** (`venue.view` without `venue.configure`): names only,
-   no Add course, no drag sentence (Task 4).
+   pushed (Tasks 2, 9).
 
 ---
 
@@ -98,7 +99,7 @@ A773-1 receipts below are hunk headers of
 | The department dialog's tabs; Receipt editing in it | One-form dialog (`packages/venue-service/src/dashboard/department-edit-dialog.ts`, `department-settings.ts`); separate Edit receipt modal (`apps/dashboard/src/screens/department-receipt-dialog.ts`) opened from the list's Receipt link (`packages/venue-service/src/dashboard/departments-list.ts:214-231`) | Details · Service · Receipts · Transfers; the link goes | No | **Now** (PRs 1 and 3) |
 
 "Buildable now" here means: no edit inside, or beside, an A773-1 hunk, and no change to a function
-A773-1 rewrites. PR 2 still touches two A773-1 files outside their hunks (stated in its section).
+A773-1 rewrites. PR 2 still touches three A773-1 files outside their hunks (stated in its section).
 
 **The Kitchen tab itself goes** in whichever PR removes its last control. After PRs 4–8 only fire
 control is left, which A773-2 removes; if A773-2 lands first, PR 7 or PR 5 (whichever is last)
@@ -124,8 +125,9 @@ Branch `feat/a756-kitchen-tab-split`. No migration. Unblocks A757 slices 1 and 2
 "Tables" section to the Service tab (A757 spec §11). Receipts joins in PR 3.
 
 Files (all outside A773-1): `packages/venue-service/src/dashboard/department-settings.ts`,
-`department-edit-dialog.ts`, `venue-departments-shell.ts`, `strings.ts`, their tests,
-`packages/venue-service/src/testing/department-edit-fixture.ts`, `docs/developers/design-system.md`,
+`department-edit-dialog.ts`, `venue-departments-shell.ts`, `venue-operations-loader.ts`,
+`index.ts`, `strings.ts`, their tests, `packages/venue-service/src/testing/department-edit-fixture.ts`,
+`apps/dashboard/src/dashboard-app.test.ts` (department block), `docs/developers/design-system.md`,
 `docs/backlog.md`, `docs/backlog/kitchen.md`.
 
 **Decisions.**
@@ -138,9 +140,20 @@ Files (all outside A773-1): `packages/venue-service/src/dashboard/department-set
 - The Service panel is a list of `<section>`s, each with an `<h3>`, so A757 adds "Tables" after
   "Orders and payment" and PR 4 adds "Courses and the kitchen" between them.
 - The selected tab lives in the address: `view` = `service` / `transfers` (Details is no `view`);
-  `zones` and `receipt` keep their meanings. A tab choice pushes history, as Venue settings does
-  (`apps/dashboard/src/screens/venue-settings-screen.ts:96`). An address naming a tab not offered
-  opens Details and replaces the address.
+  `zones` and `receipt` keep their meanings. A tab the person picks pushes history, as Venue
+  settings does (`apps/dashboard/src/screens/venue-settings-screen.ts:96`). An address naming a tab
+  not offered opens Details and replaces the address. The switch to a marked tab after a refused or
+  invalid Save also REPLACES the address.
+- **A tab change never asks "leave unsaved changes?".** Every address write goes through the
+  navigation guard (`packages/ui/src/url-state.ts:118`), which asks whenever any draft is dirty
+  (`navigation-guard.ts:173-177`), and `dashboard-app.ts:1947-1957` asks about every draft unless the
+  screen supplies `navigationScopes`; the venue-operations screen supplies none
+  (`packages/venue-service/src/dashboard/index.ts:62-69`). `dashboard-app.test.ts:7981-7996` shows a
+  same-department write asking today. So the screen gains `navigationScopes(destination)`, built
+  like the Calendar's (`opening-hours-screen.ts:389-399`, wired at `index.ts:103`): `[]` when the
+  destination names the same department, the same query and hash, and a `view` the open dialog
+  offers; `undefined` (ask about everything) otherwise. In PR 1 `receipt` is not an offered view, so
+  the 7981 case still asks.
 - An invalid Save, or a refusal naming a field, shows the first tab (Details → Service →
   Transfers) holding a marked field, then focuses it; every tab holding a marked field carries
   `marked` (`TabItem.marked`, `packages/ui/src/components/wt-tabs.ts:15`).
@@ -168,9 +181,10 @@ else reads it then. `venue.tab_transfers` stays as the Transfers panel's heading
 **Interfaces:**
 - Produces: `export type DepartmentTab = "details" | "service" | "transfers";` (PR 3 adds
   `"receipt"`); `@property() tab: DepartmentTab = "details"`; `get offeredTabs(): DepartmentTab[]`;
-  event `department-tab-change` with `detail: { tab: DepartmentTab }`, `bubbles: true,
-  composed: true`, sent when the strip changes and when Save moves to a tab with a marked field.
-  Test helper `selectDepartmentTab(form, tab): Promise<void>` clicks the tab in the strip.
+  event `department-tab-change` with `detail: { tab: DepartmentTab; replace: boolean }`,
+  `bubbles: true, composed: true` — `replace: false` when the person picks a tab, `true` when Save
+  moves to a tab with a marked field. Test helper `selectDepartmentTab(form, tab): Promise<void>`
+  clicks the tab in the strip.
 
 - [ ] **Step 1: Write the failing tests** in `department-settings.test.ts`:
   - `"draws Details, Service and Transfers tabs with Details first and the name fields on it"` —
@@ -183,8 +197,8 @@ else reads it then. `venue.tab_transfers` stays as the Transfers panel's heading
   - `"a draft typed on two tabs is sent by one Save"` — edit name, switch to Service, change how
     orders start, Save: exactly one `saveDepartmentSettings` write whose body carries both.
   - `"Save with a blank name from the Service tab shows Details, marks it and focuses the name"` —
-    the Details item's `marked` is "needs fixing", `department-tab-change` fired with `details`,
-    focus on `[name=name]`'s input, no write.
+    the Details item's `marked` is "needs fixing", `department-tab-change` fired with
+    `{ tab: "details", replace: true }`, focus on `[name=name]`'s input, no write.
   - `"a refusal naming a Transfers field shows the Transfers tab and marks it"` — request answers
     `department_transfer.settings_invalid` `{ field: "receivingProfileId" }`.
   - `"losing the second department while Transfers shows returns to Details and keeps the draft"`.
@@ -194,63 +208,94 @@ else reads it then. `venue.tab_transfers` stays as the Transfers panel's heading
   `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/department-settings.test.ts src/dashboard/department-settings.a11y.test.ts src/dashboard/department-settings.unsaved.test.ts`
   — expected: the new cases fail (no `wt-tabs`), the old ones pass.
 - [ ] **Step 3: Implement** the strip and panels in `department-settings.ts` (decisions above).
-  Existing cases that now fail only because a Transfers field is on a hidden tab get
-  `selectDepartmentTab` in their setup — setup changes, listed in the ledger.
+  Existing cases in these three files that now fail only because a Transfers field is on a hidden
+  tab get `selectDepartmentTab` in their setup — setup changes, listed in the ledger.
 - [ ] **Step 4: Run the three files again** — all pass; read the `Tests` count.
 - [ ] **Step 5: Commit** `git commit -s -m "Department settings draw Details, Service and Transfers as tabs (A756)"`.
 
-### Task 2: The dialog and its address follow the tab
+### Task 2: The address follows the tab, and a tab change asks nothing
 
 **Files:**
-- Modify: `packages/venue-service/src/dashboard/department-edit-dialog.ts` (pass `.tab`, nothing else)
+- Modify: `packages/venue-service/src/dashboard/department-edit-dialog.ts` (pass `.tab`)
 - Modify: `packages/venue-service/src/dashboard/venue-departments-shell.ts` (`view` state,
-  `#restore`, `#open`, `#editorOrigin` checks that compare `this.view !== "settings"`)
+  `#restore`, `#open`, the `#editorOrigin` checks that compare `this.view !== "settings"`, a
+  `department-tab-change` handler writing `view` with the event's `replace`, and
+  `navigationScopes(destination: URL): readonly object[] | undefined`)
+- Modify: `packages/venue-service/src/dashboard/venue-operations-loader.ts` (forward
+  `navigationScopes` to its shell) and `packages/venue-service/src/dashboard/index.ts:62-69`
+  (the venue-operations `create` returns `navigationScopes` through a `ref`, as `:98-104` does)
 - Test: `packages/venue-service/src/dashboard/departments-zones-shell.test.ts`,
-  `department-edit-dialog.test.ts`
+  `department-edit-dialog.test.ts`, `apps/dashboard/src/dashboard-app.test.ts` (beside the
+  department cases that use `mountDepartments`, `:7804`)
 
 **Interfaces:**
 - Consumes: `DepartmentTab`, `department-tab-change`, `offeredTabs` from Task 1.
-- Produces: `department-edit-dialog` gains `@property() tab: DepartmentTab = "details"`.
+- Produces: `department-edit-dialog` gains `@property() tab: DepartmentTab = "details"`;
+  `VenueDepartmentsShell.navigationScopes(destination)` as above.
 
-- [ ] **Step 1: Write the failing tests** in `departments-zones-shell.test.ts`:
+- [ ] **Step 1: Write the failing tests.** In `departments-zones-shell.test.ts`:
   - `"choosing the Service tab records /view/service and Back returns to Details"`.
   - `"/manage/venue-operations/department/d1/view/service opens the dialog on Service"`.
   - `"an address naming Transfers with one department opens Details and replaces the address"` —
     `history.replaceState` spied, `pushState` not called (CLAUDE.md §4: spy, never `history.length`).
   - `"closing from the Service tab returns focus to that row's menu"`.
   - `"/view/receipt still opens Edit receipt"` (unchanged until PR 3).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/departments-zones-shell.test.ts src/dashboard/department-edit-dialog.test.ts` — new cases fail.
-- [ ] **Step 3: Implement** the shell mapping and the dialog pass-through.
-- [ ] **Step 4: Run the same files** — all pass.
-- [ ] **Step 5: Commit** `git commit -s -m "The department dialog's tab is kept in the address (A756)"`.
+  - `"navigationScopes is [] for another offered tab of the open department and undefined for another department, a zone or receipt"`.
+  In `dashboard-app.test.ts` (via `mountDepartments` and the file's `draft(app)` helper):
+  - `"typing a name then choosing Service asks nothing, records /view/service and keeps \"Draft restaurant\""`.
+  - `"Back from Service returns to Details with no question and the draft kept"`.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/departments-zones-shell.test.ts src/dashboard/department-edit-dialog.test.ts` and `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t "Draft restaurant|Back from Service"` — new cases fail (the dashboard ones on the leave question).
+- [ ] **Step 3: Implement** the shell mapping, the scopes, the loader and module wiring.
+- [ ] **Step 4: Run the same commands** — pass; then the whole `src/dashboard-app.test.ts` once
+  (the 7981 case must still ask, unchanged).
+- [ ] **Step 5: Commit** `git commit -s -m "The department dialog's tab is kept in the address and a tab change asks nothing (A756)"`.
 
-### Task 3: Phone width, docs, backlog and a look
+### Task 3: Phone width, accessibility, docs and a look
 
 **Files:**
-- Modify: `packages/venue-service/src/dashboard/department-layout.test.ts`
-  (the department phone-width case selects Service before checking the service fields — setup
-  change; add the same check for the Transfers tab)
+- Modify: `packages/venue-service/src/dashboard/department-layout.test.ts:45-49` — today one pass
+  checks every `wt-input` and the service fields; split it: check the inputs with Details showing,
+  then `selectDepartmentTab(form, "service")` and check the service fields (setup change); add the
+  same check for the Transfers tab
 - Modify: `packages/venue-service/src/dashboard/department-edit-dialog.a11y.test.ts`,
   `department-edit-dialog-transfers.a11y.test.ts` (axe per tab)
 - Modify: `docs/developers/design-system.md` → "Departments and zones" ("Edit department holds
-  name, trading name, service settings and transfers" becomes the three tabs and their contents)
-- Modify: `docs/backlog/kitchen.md` (A756 point 2: say the tabs landed in this PR and what is left —
-  Receipts, the reminder) and `docs/backlog.md` A756 line if its wording goes stale
+  name, trading name, service settings and transfers" becomes the three tabs, their contents, and
+  that a tab change keeps drafts and asks nothing)
+- Modify: `docs/backlog/kitchen.md` (A756 point 2: the tabs landed in this PR; left: Receipts, the
+  reminder) and `docs/backlog.md` A756 line if its wording goes stale
 
 - [ ] **Step 1:** Add the Transfers phone-width case; run
   `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/department-layout.test.ts src/dashboard/department-edit-dialog.a11y.test.ts src/dashboard/department-edit-dialog-transfers.a11y.test.ts`
-  and watch the old phone-width case fail on the hidden service fields before its setup change.
-- [ ] **Step 2:** Make the setup change; run again — pass.
+  and watch the old phone-width case fail on the hidden service fields before it is split.
+- [ ] **Step 2:** Split the case; run again — pass.
 - [ ] **Step 3: Look.** A throwaway browser test (not committed) mounting the dialog through
   `mountDepartmentEditor`, at `page.viewport(1280, 900)` and `page.viewport(390, 900)`, light and
   dark, each tab selected, saving `page.screenshot({ path: "__screenshots__/look/<name>.png" })`.
   Record `window.innerWidth` read inside the test (testing-guide: the width you asked for is not
-  evidence). Open every PNG with the Read tool; check the strip scrolls rather than wraps the
-  dialog wider than 390, the Save row stays in view, and the Service headings match mock-up 03
-  (without its Courses and Tables sections). Delete the throwaway test.
-- [ ] **Step 4:** Run the root guards that read these files:
-  `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/english-only.test.ts scripts/module-seams.test.ts`.
-- [ ] **Step 5: Commit** `git commit -s -m "Department dialog tabs: phone width, accessibility and docs (A756)"`, then `/finish-branch`.
+  evidence). Open every PNG with the Read tool; check the strip scrolls rather than widens the
+  dialog past 390, the Save row stays in view, and the Service headings match mock-up 03 (without
+  its Courses and Tables sections). Delete the throwaway test.
+- [ ] **Step 4:** `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/english-only.test.ts scripts/module-seams.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "Department dialog tabs: phone width, accessibility and docs (A756)"`.
+
+### Task 4: Sweep every suite that opens the department dialog
+
+**Files:** whichever of these fail — `packages/venue-service/src/dashboard/department*.test.ts`,
+`departments-*.test.ts`, `service-delete-editors.test.ts` (its department cases near `:226-240`
+among them), `department-edit-dialog.unsaved.test.ts`, `apps/dashboard/src/dashboard-app.receipt-dialog.test.ts`
+and the department block of `apps/dashboard/src/dashboard-app.test.ts` (`mountDepartments` cases).
+
+- [ ] **Step 1: Run** `pnpm --filter @waitron/venue-service exec vitest run` with every
+  `src/dashboard/department*`, `src/dashboard/departments-*` and
+  `src/dashboard/service-delete-editors.test.ts` file named, and
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.receipt-dialog.test.ts src/dashboard-app.test.ts -t "department|Department"`.
+- [ ] **Step 2:** Classify each failure in the ledger: a **setup change** (select a tab first; a
+  field reached through the strip) is made; a **changed check** is made only with its spec sentence
+  (A756 point 2, "The department dialog becomes tabbed — Details, Service, Receipts, Transfers") and
+  listed in the PR description; anything else is a defect in Tasks 1–3 — fix the code, not the test.
+- [ ] **Step 3: Re-run** both commands — pass; read the `Tests` counts.
+- [ ] **Step 4: Commit** `git commit -s -m "Department suites select the tab their fields are on (A756)"`, then `/finish-branch`.
 
 ---
 
@@ -258,12 +303,17 @@ else reads it then. `venue.tab_transfers` stays as the Transfers panel's heading
 
 Branch `feat/a756-courses-page`, from `main` after PR 1. No migration.
 
-Touches two A773-1 files outside their hunks: `apps/dashboard/src/i18n/strings.ts` (new keys and
-the value of `kitchen.no_courses`, away from A773-1's added lines after `kitchen.courses_title`)
-and `apps/dashboard/src/widgets/course-list.ts` (a property and a method placed after `render()`,
-past A773-1's last hunk `@@ -569`). It moves `kitchen-screen.a11y.test.ts`, whose `COURSES`
-fixture A773-1 edits: whichever lands second carries `heldUntilFired` into the moved file. If
-A773-1 has landed at pick-up, the Courses page shows its "Held until fired" column with no work here.
+**A773-1 overlap.** Three A773-1 files are touched, each outside A773-1's hunks:
+`apps/dashboard/src/i18n/strings.ts` (new keys and the value of `kitchen.no_courses`, away from
+A773-1's two lines added after `kitchen.courses_title`); `apps/dashboard/src/widgets/course-list.ts`
+(a property and a method declared after `render()`, and one condition in `render()`'s add block
+`:594-601`; A773-1's nearest hunk `@@ -569,6` ends about line 575); and
+`apps/dashboard/src/screens/kitchen-screen.test.ts`, whose fixtures A773-1 edits in hunk
+`@@ -23,12 +23,26` — so this PR leaves `COURSES` and `TWO_COURSES` where they are and keeps both
+used. `kitchen-screen.a11y.test.ts` (also A773-1-edited) is NOT renamed or changed. A773-1 also makes
+`heldUntilFired` required on `Course` (`apps/dashboard/src/api/client.ts`): whichever of PR 2 and
+A773-1 lands second adds `heldUntilFired` to the new test fixtures. If A773-1 has landed at
+pick-up, the Courses page shows its "Held until fired" column with no work here.
 
 **Decisions.** Nav item `{ screen: "courses", labelKey: "nav.courses", requiresPermission:
 "venue.view" }` in the `menu` group (`apps/dashboard/src/dashboard-app.ts:234-243`) between
@@ -271,70 +321,86 @@ Modifiers and Units, matching the routes' read rule (`withVenueReadAuth`, `manag
 `readOnly` when the session lacks `venue.configure` (the write rule, `management-api.ts:454-466`).
 The page holds no staged input: a course name is saved on Enter or on leaving the field
 (`course-list.ts` `#commit(edit, via: "enter" | "leave")`), so the A331 rule's trigger is absent and
-no `*.unsaved.test.ts` is added; the course list's existing suites carry over unchanged.
+no `*.unsaved.test.ts` is added; the course list's existing suites carry over unchanged. The
+product editor's Courses window (`apps/dashboard/src/screens/catalogue-screen.ts:843-869`) stays: after
+this PR courses are edited in two places, both under design-system's recorded A212 exception.
 
-New strings (dashboard catalogue, EN / ES): `nav.courses` "Courses" / "Cursos";
-`courses.title` "Courses" / "Cursos"; `courses.description` "The order dishes are served in. A
-product names its course; drag to change the order." / "El orden en que se sirven los platos. Cada
-producto indica su curso; arrastra para cambiar el orden."; `courses.description_read_only` "The
-order dishes are served in." / "El orden en que se sirven los platos.". Change the value of
-`kitchen.no_courses` to "No courses yet. Add one to let products say when they are served." /
-"Aún no hay cursos. Añade uno para que los productos indiquen cuándo se sirven." (the product
-editor's Courses window reads the same key; the longer sentence fits it too).
+Strings (dashboard catalogue, EN / ES): the page title reuses `kitchen.courses_title`
+("Courses" / "Cursos", `strings.ts:1243`, `:4224`); new `nav.courses` "Courses" / "Cursos";
+`courses.description` "The order dishes are served in. A product names its course; drag to change
+the order." / "El orden en que se sirven los platos. Cada producto indica su curso; arrastra para
+cambiar el orden."; `courses.description_read_only` "The order dishes are served in." / "El orden en
+que se sirven los platos.". Change the value of `kitchen.no_courses` to "No courses yet. Add one to
+let products say when they are served." / "Aún no hay cursos. Añade uno para que los productos
+indiquen cuándo se sirven." (the Courses window reads the same key; the sentence fits it too).
 
-### Task 4: A Courses page under Products and menus
+### Task 5: A Courses page under Products and menus
 
 **Files:**
-- Create: `apps/dashboard/src/screens/courses-screen.ts`, `courses-screen.test.ts`
+- Create: `apps/dashboard/src/screens/courses-screen.ts`, `courses-screen.test.ts`,
+  `courses-screen.a11y.test.ts`
 - Modify: `apps/dashboard/src/dashboard-app.ts` (`CORE_SCREENS` :116-145, `NAV_GROUPS` menu
   :234-243, `#renderScreen` beside `case "units"`)
-- Modify: `apps/dashboard/src/widgets/course-list.ts` (after `render()` only)
+- Modify: `apps/dashboard/src/widgets/course-list.ts` (members declared after `render()`; the
+  add block's condition)
 - Modify: `apps/dashboard/src/i18n/strings.ts`
 - Test: `apps/dashboard/src/dashboard-app.test.ts`
 
 **Interfaces:**
 - Produces: element `dashboard-courses-screen` with `api: DashboardApi`, `readOnly: boolean`.
-  `dashboard-course-list` gains `@property({ type: Boolean }) showAddButton = true` and
-  `startAdding(): void` (opens the new-course row, as its own button does today).
+  `dashboard-course-list` gains `@property({ type: Boolean }) showAddButton = true` (read in the add
+  block) and `startAdding(): void` (opens the new-course row, as its own button does today).
 
-- [ ] **Step 1: Write the failing tests** in `courses-screen.test.ts`:
-  - `"shows the Courses heading, its description and the shared course list"` — `h1` "Courses",
-    the description sentence, one `dashboard-course-list` whose `showAddButton` is false.
+- [ ] **Step 1: Write the failing tests.** In `courses-screen.test.ts`:
+  - `"shows the Courses heading, its description and the shared course list"` — `h1` reads
+    `t("kitchen.courses_title")`, the description sentence, one `dashboard-course-list` whose
+    `showAddButton` is false.
   - `"Add course in the header opens the new course row with its name field focused"`.
   - `"read-only: names only, no Add course, and the description without the drag sentence"`.
+  In `courses-screen.a11y.test.ts`: axe on a populated and an empty list, light and dark (the
+  Kitchen screen stays checked by `kitchen-screen.timing.a11y.test.ts` and the untouched
+  `kitchen-screen.a11y.test.ts` until Task 6).
   In `dashboard-app.test.ts`:
-  - `"Products and menus lists Courses after Modifiers to someone with venue.view"` and
-    `"hides Courses without venue.view"`.
+  - `"Products and menus lists Courses after Modifiers to someone with venue.view"` (this case
+    pins the order) and `"hides Courses without venue.view"`.
   - `"/manage/courses opens the Courses page"`.
-  - Change the group-match case at `dashboard-app.test.ts:6765` to expect
-    `["nav-menus","nav-catalogue","nav-modifiers","nav-courses","nav-units"]` — authorised by A756
-    point 1, "Courses get their own page under Products and menus". The "units last" case at
-    `:2998` stays as it is.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/courses-screen.test.ts src/dashboard-app.test.ts` — new cases fail.
+  - `"a supervisor sees Courses read-only"` — `/manage/courses` as role supervisor with
+    `["venue.view"]`: names shown (`"Starters"`), no `[data-test=add-course]`, no `[data-test=name-c1]`
+    (the course assertions Task 6 removes from `:2816`).
+  The nav search cases stay as they are: `:6765` and `:6805` run with `meResponse`'s permissions
+  `["booking.manage"]` (`:98`) or none, so Courses (needing `venue.view`) is not shown there.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/courses-screen.test.ts src/screens/courses-screen.a11y.test.ts src/dashboard-app.test.ts` — new cases fail.
 - [ ] **Step 3: Implement** the screen (heading row with the Add course button, as
   `units-screen.ts:531-534` lays out its heading), the nav item, the render case, the two
   course-list members and the strings.
 - [ ] **Step 4: Run the same files plus** `src/widgets/course-list.test.ts src/screens/catalogue-screen.test.ts` — all pass.
 - [ ] **Step 5: Commit** `git commit -s -m "Courses get their own page under Products and menus (A756)"`.
 
-### Task 5: The Kitchen tab stops listing courses
+### Task 6: The Kitchen tab stops listing courses
 
 **Files:**
 - Modify: `apps/dashboard/src/screens/kitchen-screen.ts` (delete the courses section :421-424 and
   the `course-list` import :18)
-- Modify: `apps/dashboard/src/screens/kitchen-screen.test.ts` (move the case
-  `"shows the courses heading over the shared course list, which loads the courses itself"` to
-  `courses-screen.test.ts` — authorised by A756 point 1; add `"the Kitchen tab lists no courses"`)
-- Rename: `apps/dashboard/src/screens/kitchen-screen.a11y.test.ts` →
-  `apps/dashboard/src/screens/courses-screen.a11y.test.ts`, mounting the Courses page; both cases
-  (populated, empty) keep their axe checks, now in light and dark
-- Modify: `docs/developers/design-system.md:3537` ("on Venue settings' Kitchen tab" → "on the
-  Courses page"), `docs/backlog/kitchen.md` (point 1 done in this PR), `docs/backlog.md` A756 line
+- Modify: `apps/dashboard/src/screens/kitchen-screen.test.ts` — move the case `"shows the courses
+  heading over the shared course list, which loads the courses itself"` (`:137`) to
+  `courses-screen.test.ts` (changed check, authorised by A756 point 1, "Courses get their own page
+  under Products and menus"); add `"the Kitchen tab lists no courses"`, built with
+  `stubApi({}, STATIONS, TWO_COURSES)` so `TWO_COURSES` stays used and A773-1's fixture hunk is untouched
+- Modify: `apps/dashboard/src/screens/kitchen-screen.a11y.test.ts` only if its two cases fail once
+  the list is gone; if they do, they keep their axe checks on the Kitchen screen and drop the
+  waiting on course rows (changed check, A756 point 1)
+- Modify: `apps/dashboard/src/dashboard-app.test.ts:2816` `"shows a supervisor Tables and Kitchen
+  settings without edit controls"` — its course assertions (`:2862-2872`: the list appears, names
+  shown, no add-course, no `name-c1`) are removed, being covered by Task 5's supervisor Courses case;
+  the bump and fire checks stay (changed check, A756 point 1)
+- Modify: `docs/developers/design-system.md:3537` (the A212 exception names "the Courses page and
+  the product editor's Courses window" instead of "Venue settings' Kitchen tab"),
+  `docs/backlog/kitchen.md` (point 1 done in this PR), `docs/backlog.md` A756 line
 
 - [ ] **Step 1:** Add `"the Kitchen tab lists no courses"`; run
   `pnpm --filter @waitron/dashboard exec vitest run src/screens/kitchen-screen.test.ts` — it fails.
-- [ ] **Step 2:** Remove the section; move the case and the a11y file.
-- [ ] **Step 3: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/kitchen-screen.test.ts src/screens/kitchen-screen.timing.test.ts src/screens/kitchen-screen.unsaved.test.ts src/screens/courses-screen.test.ts src/screens/courses-screen.a11y.test.ts` — pass.
+- [ ] **Step 2:** Remove the section; move the case; change `:2816`.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/kitchen-screen.test.ts src/screens/kitchen-screen.a11y.test.ts src/screens/kitchen-screen.timing.test.ts src/screens/kitchen-screen.unsaved.test.ts src/screens/courses-screen.test.ts src/dashboard-app.test.ts src/dashboard-app.venue-settings-unsaved.test.ts` — pass.
 - [ ] **Step 4: Look** at the Courses page as in Task 3 Step 3 (1280 and 390, light and dark,
   with courses, empty, read-only) against mock-up 02; then
   `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/live-subscriptions.test.ts scripts/dashboard-browser-purity.test.ts`.
@@ -354,6 +420,7 @@ Branch `feat/a756-department-receipts`, from `main` after PR 1. No migration. In
 - The department dialog offers a Receipts tab (key `receipt`, label "Receipts" / "Recibos") between
   Service and Transfers when `renderPanel` returns an editor. The dialog is `size="wide"` whenever it
   offers Receipts, so switching tabs never changes its width; otherwise `standard` as today.
+  `receipt` becomes a view the dialog offers, so Task 2's `navigationScopes` returns `[]` for it.
 - Two drafts, two Save buttons: Details/Service/Transfers share the department form's Save; the
   Receipts tab shows the editor's own Save and Cancel, and the form's action row hides while
   Receipts is selected. A Save closes the dialog only when the other draft is clean; otherwise the
@@ -361,21 +428,30 @@ Branch `feat/a756-department-receipts`, from `main` after PR 1. No migration. In
   newer edit). Cancel on either asks the dialog to close. Escape, Cancel and the close button ask
   ONE leave question covering both drafts (`LeaveRequest.scopes` takes a list,
   `packages/ui-core/src/unsaved-changes.ts:23`).
+- **Enter in a receipt field never reaches the department form's Save.** The form's
+  `submitOnEnter` listener sits on its `.form` wrapper (`department-settings.ts:514-517`) and clicks
+  the department Save for any Enter from a single-line input (`packages/ui-core/src/submit-on-enter.ts:20-38`);
+  the receipt editor stops an Enter only when its own Save is enabled. So the wrapper's listener
+  returns early when the event's `composedPath()` holds the Receipts panel.
 - The departments list's Receipt link goes (A756 point 2). The "Set up the tax-agency description"
   button (`departments-list.ts:171-184`) still sends `edit-receipt`, which now opens the department
   dialog on Receipts. `/view/receipt` opens that tab; without `layout.configure` it opens Details and
-  replaces the address.
+  replaces the address. The image library's "in use" link
+  (`packages/media/src/dashboard/image-library.ts:39`, `/view/receipt`) must keep landing on the
+  Receipts tab (`dashboard-app.unsaved-changes.test.ts:824-828` keeps passing unchanged).
 
-### Task 6: Split the receipt editor out of its modal
+### Task 7: Split the receipt editor out of its modal
 
 **Files:**
 - Create: `apps/dashboard/src/screens/department-receipt-editor.ts` (fields, preview, draft
   scope, save — moved from `department-receipt-dialog.ts`), `department-receipt-editor.test.ts`
 - Modify: `apps/dashboard/src/screens/department-receipt-dialog.ts` (a thin `wt-modal` around the
-  editor that keeps today's contract: heading, `size="wide"`, close on save, close events), and
-  `apps/dashboard/src/testing/department-receipt-dialog-fixture.ts` (helpers reach through the
-  editor's shadow root)
-- Test: the seven `department-receipt-dialog*.test.ts` files must pass unchanged in their checks
+  editor that keeps today's contract: heading, description, `size="wide"`, close on save, close
+  events), and `apps/dashboard/src/testing/department-receipt-dialog-fixture.ts` (helpers reach
+  through the editor's shadow root)
+- Test: every suite importing the dialog or its fixture must pass with no check edited — the seven
+  `department-receipt-dialog*.test.ts`, `receipt-editor-boundaries.test.ts`,
+  `dashboard-app.receipt-dialog.test.ts`, `dashboard-app.venue-settings-unsaved.test.ts`
 
 **Interfaces:**
 - Produces: element `dashboard-department-receipt-editor` with `api`, `subject?: {id,name}`,
@@ -391,72 +467,142 @@ Branch `feat/a756-department-receipts`, from `main` after PR 1. No migration. In
   `"Cancel reports cancel and changes nothing"`; `"leaveScope is dirty after an edit and clean after Save"`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/department-receipt-editor.test.ts` — fails (no element).
 - [ ] **Step 3: Implement** the editor and the thin dialog.
-- [ ] **Step 4: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/department-receipt-editor.test.ts src/screens/department-receipt-dialog.test.ts src/screens/department-receipt-dialog.unsaved.test.ts src/screens/department-receipt-dialog.retained.test.ts src/screens/department-receipt-dialog.preview.test.ts src/screens/department-receipt-dialog.client.test.ts src/screens/department-receipt-dialog.width.test.ts src/screens/department-receipt-dialog.a11y.test.ts src/dashboard-app.receipt-dialog.test.ts` — all pass with no check edited.
+- [ ] **Step 4: Run** `pnpm --filter @waitron/dashboard exec vitest run src/screens/department-receipt-editor.test.ts src/screens/department-receipt-dialog.test.ts src/screens/department-receipt-dialog.unsaved.test.ts src/screens/department-receipt-dialog.retained.test.ts src/screens/department-receipt-dialog.preview.test.ts src/screens/department-receipt-dialog.client.test.ts src/screens/department-receipt-dialog.width.test.ts src/screens/department-receipt-dialog.a11y.test.ts src/screens/receipt-editor-boundaries.test.ts src/dashboard-app.receipt-dialog.test.ts src/dashboard-app.venue-settings-unsaved.test.ts` — all pass with no check edited.
 - [ ] **Step 5: Commit** `git commit -s -m "The receipt editor stands on its own inside the Edit receipt dialog (A756)"`.
 
-### Task 7: The Receipts tab hosts the editor
+### Task 8: The Receipts tab in the department dialog (venue-service only)
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/department-settings.ts` (`DepartmentTab` gains
-  `"receipt"`; a `receipt` panel slotting `receiptEditor`; action row hidden on Receipts),
-  `department-edit-dialog.ts` (`receiptEditor` property, `size`, one leave question, close rule),
-  `venue-departments-shell.ts` (pass `renderPanel(...)` to the dialog; drop its own receipt branch
-  and `#receiptClosed`/`#receiptSaved` as separate closes), `strings.ts`
+  `"receipt"`; a `receipt` panel slotting `receiptEditor`; action row hidden on Receipts; the
+  `.form` Enter listener ignores the Receipts panel), `department-edit-dialog.ts` (`receiptEditor:
+  unknown` property, `size`, one leave question, the close rule), `venue-departments-shell.ts`
+  (`receipt` joins the offered views and `navigationScopes`), `strings.ts`
   (`venue.department_tab.receipt` "Receipts" / "Recibos")
-- Modify: `apps/dashboard/src/dashboard-app.ts:1403-1410` (render the editor, not the dialog)
-- Delete: `apps/dashboard/src/screens/department-receipt-dialog.ts`; rename its suites and fixture
-  to `department-receipt-editor*` (mechanical: fixture mounts the editor)
 - Test: `packages/venue-service/src/dashboard/department-edit-dialog.test.ts`,
-  `department-edit-dialog.unsaved.test.ts` (a stub `dashboard-department-receipt-editor` element
-  defined in the test, exposing `leaveScope`/`hasUnsavedChanges` and sending the three events),
-  `apps/dashboard/src/dashboard-app.receipt-dialog.test.ts`, `dashboard-app.test.ts:7981-8035`
+  `department-edit-dialog.unsaved.test.ts`, `departments-zones-shell.test.ts` — with a stub
+  `dashboard-department-receipt-editor` element defined in the test file, holding one single-line
+  input in its shadow root, exposing `leaveScope`/`hasUnsavedChanges`/`saving` and sending the
+  three events
 
-**Changed checks (each authorised by A756 point 2, "Receipt editing … moves into the Receipts
-tab"):** in `department-receipt-dialog.unsaved.test.ts` the cases `"untouched Escape closes without
-a leave question"`, `"dirty Escape and Cancel protect the draft with Keep and Discard"`, `"pending Save
-blocks Escape, Cancel and a duplicate request"`, `"a removed receipt closes the native modal and
-releases its mounted draft"` and `"reconnecting the same receipt preserves its native draft and original
-Save baseline"` move to the department dialog's suites with the same assertions about the receipt
-draft; every case asserting "closes" after a receipt Save (`department-receipt-dialog.test.ts`
-`"saves exact independent receipt and policy, keeps hidden translations and closes before any
-refresh"`, `.client.test.ts` `"… writes the exact model envelope through the real client and closes"`,
-`dashboard-app.receipt-dialog.test.ts` `"successful receipt save closes the hosted dialog and updates
-the department host"`) now asserts the department dialog closes because the department form is
-clean; `dashboard-app.receipt-dialog.test.ts` `"a deep link cannot open the receipt without layout
-permission"` now asserts Details opens with no Receipts tab; `dashboard-app.test.ts:7981` `"the real
-receipt link keeps its department and asks before leaving a Settings draft"` reaches Receipts
-through the description button or `/view/receipt` instead of the removed link, keeping its
-leave-question assertions; `.width.test.ts`'s first-frame width
-case measures the department dialog with Receipts offered.
+The shell still renders its own Edit receipt branch for `view=receipt` until Task 9 passes it the
+editor; in this task the dialog's Receipts tab is exercised only with the stub.
 
 - [ ] **Step 1: Write the failing tests** in `department-edit-dialog.test.ts`:
   `"offers Receipts between Service and Transfers when an editor is supplied, and is wide"`;
   `"no editor, no Receipts tab, standard width"`;
   `"a receipt Save closes the dialog when the department form is clean"`;
   `"a receipt Save keeps the dialog open on Receipts when Details is dirty, and the Details edit survives"`;
+  `"Enter in a receipt field, receipt unchanged and Details dirty, writes nothing"`;
+  in `department-edit-dialog.unsaved.test.ts`:
   `"Escape with both drafts dirty asks one question; Discard closes without writing either"`;
-  in `departments-zones-shell.test.ts`: `"/view/receipt opens the dialog on Receipts"`.
+  `"a pending receipt Save blocks Escape and Cancel"`;
+  in `departments-zones-shell.test.ts`:
+  `"navigationScopes is [] for receipt when the dialog offers it"`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/department-edit-dialog.test.ts src/dashboard/department-edit-dialog.unsaved.test.ts src/dashboard/departments-zones-shell.test.ts` — new cases fail.
-- [ ] **Step 3: Implement**; make the changed checks listed above.
-- [ ] **Step 4: Run** the three venue-service files, then
-  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.receipt-dialog.test.ts src/dashboard-app.test.ts src/screens/department-receipt-editor*.test.ts` (expand the glob into file names) — all pass.
-- [ ] **Step 5: Commit** `git commit -s -m "Receipt editing moves into the department dialog's Receipts tab (A756)"`.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the same command plus `src/dashboard/department-settings.test.ts` — pass.
+- [ ] **Step 5: Commit** `git commit -s -m "The department dialog can hold a Receipts tab (A756)"`.
 
-### Task 8: The Receipt link goes; docs, backlog and a look
+### Task 9: The dashboard hands the editor to the Receipts tab
+
+**Files:**
+- Modify: `apps/dashboard/src/dashboard-app.ts:1403-1410` (`renderPanel("department-receipt")`
+  renders `dashboard-department-receipt-editor`)
+- Modify: `packages/venue-service/src/dashboard/venue-departments-shell.ts` (pass the rendered
+  editor to `department-edit-dialog`; drop its own receipt branch and the separate
+  `#receiptClosed`/`#receiptSaved` closes)
+- Test: the integration cases in the table below (`dashboard-app.receipt-dialog.test.ts`,
+  `dashboard-app.test.ts:7981-8120`, `dashboard-app.venue-settings-unsaved.test.ts:766-800`,
+  `dashboard-app.unsaved-changes.test.ts:824-828`, venue-service `service-delete-editors.test.ts:289`)
+
+Each case's fate (authority for every "rewritten": A756 point 2, "Receipt editing … moves into the
+Receipts tab"; for every link case: "the departments table's Receipt link … goes"):
+
+| Case | Fate |
+|---|---|
+| `dashboard-app.test.ts:7981` "the real receipt link keeps its department and asks before leaving a Settings draft" | **Rewritten, check reversed**: opening Receipts with a Settings draft asks nothing, the address becomes `/view/receipt` and the draft is kept |
+| `:8002` "a department deep link still requires its own permission: %j" | Unchanged |
+| `:8011` "Receipt opens the authoritative live department %s" | Rewritten: the department dialog opens on Receipts for that department |
+| `:8036` "hosted Receipt %s Keeps then Discards one draft and returns to the list" | Rewritten: Cancel/Escape from the Receipts tab, one question, then the list |
+| `:8066` "a missing department Receipt URL does not borrow another department" | Unchanged check; it looks for `dashboard-department-receipt-editor` instead of the dialog element |
+| `:8077` "the department's Receipt link navigates to its department without a picker" | Kept until Task 11, which deletes it with the link |
+| `:8097` "Settings hides Edit the receipt when the host cannot offer Receipt" | Rewritten: no Receipts tab |
+| `:8106` "a Receipt deep link cannot bypass either permission: %j" | Unchanged check (it looks for the editor element instead of the dialog); without `layout.configure` it lands on Details |
+| `dashboard-app.receipt-dialog.test.ts:160` "mounts the selected protected receipt dialog with installed description visibility (%s)" | Rewritten: the Receipts tab's editor, same visibility checks |
+| `:178` "successful receipt save closes the hosted dialog and updates the department host" | Rewritten: closes because the department form is clean |
+| `:222` "Venue settings no longer hosts a global receipt tab or global receipt reads" | Unchanged |
+| `:238` "a deep link cannot open the receipt without layout permission" | Rewritten: Details opens, no Receipts tab |
+| `dashboard-app.venue-settings-unsaved.test.ts:766` "the receipt dialog's Cancel protects the appearance before closing" | Rewritten: the Receipts tab's Cancel |
+| `:787` "an obsolete receipt department query cannot bypass a venue draft leave decision" | Unchanged check |
+| `dashboard-app.unsaved-changes.test.ts:824-828` (image library's receipt link) | Unchanged check: `/view/receipt` lands on Receipts |
+| `service-delete-editors.test.ts:289` "department deletion removes its contributed receipt panel while another department draft survives" | Rewritten: deletion closes the department dialog with its Receipts tab; the other department's draft survives |
+
+- [ ] **Step 1:** Rewrite the "Rewritten" cases first; run
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.receipt-dialog.test.ts src/dashboard-app.test.ts src/dashboard-app.venue-settings-unsaved.test.ts src/dashboard-app.unsaved-changes.test.ts`
+  and `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/service-delete-editors.test.ts` — the rewritten cases fail.
+- [ ] **Step 2: Implement** the wiring.
+- [ ] **Step 3: Run** both commands — pass.
+- [ ] **Step 4: Commit** `git commit -s -m "Receipt editing moves into the department dialog's Receipts tab (A756)"`.
+
+### Task 10: The Edit receipt dialog goes
+
+**Files:**
+- Delete: `apps/dashboard/src/screens/department-receipt-dialog.ts`
+- Rename: the fixture to `apps/dashboard/src/testing/department-receipt-editor-fixture.ts`
+  (mounts the editor alone); its importers `receipt-editor-boundaries.test.ts`,
+  `dashboard-app.venue-settings-unsaved.test.ts` and the receipt suites follow
+- Rename: `department-receipt-dialog.{test,unsaved.test,retained.test,preview.test,client.test,width.test,a11y.test}.ts`
+  → `department-receipt-editor.*`
+
+Fate of each dialog-dependent case (authority as in Task 9). Every other case in these suites
+keeps its check; only its mount goes through the editor fixture (setup change).
+
+| Case | Fate |
+|---|---|
+| `.test.ts:36` "saves exact independent receipt and policy, keeps hidden translations and closes before any refresh" | Rewritten: "… and stays with Save quiet before any refresh" |
+| `.test.ts:292` "a departed %s cannot close or mark a reopened dialog" | Rewritten: "a departed %s cannot mark a reopened editor" |
+| `.test.ts:317` "opens a host-selected subject once and returns to its host on close" | Rewritten: opens a subject once; the return-on-close half is Task 8's dialog case |
+| `.test.ts:344` "refreshes the selected subject name without replacing its dirty receipt or rereading" | Rewritten: the modal `description` assertion (`:349`) is deleted — the department dialog's heading names the department; the draft and no-reread checks stay |
+| `.test.ts:353` "can reopen the same subject after its host clears a closed selection" | Rewritten: a cleared then re-set subject loads afresh |
+| `.test.ts:369` "a selected department removed during its live read returns its identity to the host once" | Rewritten: the `department-receipt-closed` check stays; the wait for the modal to close goes |
+| `.test.ts:384` "an ignored replacement subject does not overwrite a dirty receipt or consume its later opening" | Rewritten: the subject and draft checks stay; the modal `description` (`:390`) and `open` checks go |
+| `.test.ts:442` "a native receipt trading-name choice stays authored through %s at its new owner" | Rewritten: the authored-choice checks stay; the modal `open` checks (`:470-485`) go |
+| `.test.ts:406`, `:493` | Unchanged checks |
+| `.test.ts:423` "a live receipt response delivered after Cancel begins cannot reopen the closing dialog" | Rewritten at the department dialog in `dashboard-app.receipt-dialog.test.ts`: a live receipt read after Cancel begins cannot keep the dialog open |
+| `.client.test.ts:94` "… writes the exact model envelope through the real client and closes" | Rewritten: "… and stays with Save quiet" |
+| `.client.test.ts:113` "a declarative selection can reopen the same department after its closed subject is cleared" | Rewritten as `.test.ts:353` |
+| `.client.test.ts:133` "host-selected receipt client fits $locale/$theme/$width" | Rewritten: fits inside the department dialog's Receipts tab |
+| `.unsaved.test.ts:27` "untouched Escape closes without a leave question", `:36` "dirty Escape and Cancel protect the draft with Keep and Discard", `:76` "pending Save blocks Escape, Cancel and a duplicate request" | Moved to Task 8's dialog suite (with the stub) and Task 9's integration cases; here only the duplicate-request check stays |
+| `.unsaved.test.ts:95` "reconnecting the same receipt preserves its native draft and original Save baseline", `:111` "a removed receipt closes the native modal and releases its mounted draft" | Rewritten: reconnecting keeps the draft and baseline; a removed department releases the draft and sends `department-receipt-closed` |
+| `.unsaved.test.ts:64`, `:120` | Unchanged checks |
+| `.width.test.ts:22`, `:99` (each at 1280 and 390) | Rewritten: measured inside the department dialog offering Receipts |
+| `.a11y.test.ts` cases that open the modal | Rewritten: axe on the editor inside the Receipts tab, both themes |
+
+- [ ] **Step 1:** Make the renames and fixture change; rewrite the cases above.
+- [ ] **Step 2: Run** every `src/screens/department-receipt-editor*.test.ts` file named, plus
+  `src/screens/receipt-editor-boundaries.test.ts src/dashboard-app.venue-settings-unsaved.test.ts src/dashboard-app.receipt-dialog.test.ts` — pass; no file still imports the dialog (`git grep department-receipt-dialog` is empty outside docs).
+- [ ] **Step 3: Commit** `git commit -s -m "The Edit receipt dialog is retired; its suites test the editor (A756)"`.
+
+If Tasks 9 and 10 look like they will pass ~100 implementer calls between them, stop at Task 9's
+commit and hand over; Task 10 is separate on purpose.
+
+### Task 11: The Receipt link goes; docs, backlog and a look
 
 **Files:**
 - Modify: `packages/venue-service/src/dashboard/departments-list.ts:214-231` (a department row's
   Also edit cell is empty; zones keep Floor plan); `departments-list.test.ts`,
   `departments-list.a11y.test.ts`, `departments-zones-list.test.ts` (cases asserting the link —
-  authorised by A756 point 2, "the departments table's Receipt link … goes"; a new case
-  `"a department row has no Receipt link and the description button opens Receipts"`)
+  changed checks, authorised by A756 point 2, "the departments table's Receipt link … goes"; a new
+  case `"a department row has no Receipt link and the description button opens Receipts"`);
+  `apps/dashboard/src/dashboard-app.test.ts:8077` deleted with the link
 - Modify: `docs/developers/design-system.md` → "Departments and zones" (Also edit; "Edit receipt …
   is a wide `wt-modal`" becomes the Receipts tab), `docs/backlog.md` and `docs/backlog/kitchen.md`
-  (below)
 
 - [ ] **Step 1:** Write the new list case; run
   `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/departments-list.test.ts src/dashboard/departments-zones-list.test.ts src/dashboard/departments-list.a11y.test.ts` — it fails.
-- [ ] **Step 2:** Remove the link; adjust the authorised checks; run again — pass.
+- [ ] **Step 2:** Remove the link; adjust the authorised checks; run again, plus
+  `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/dashboard-app.unsaved-changes.test.ts` — pass.
 - [ ] **Step 3: Look** (as Task 3 Step 3) at the dialog on every tab, Receipts with its preview, at
   1280 and 390, light and dark; and at the departments list.
 - [ ] **Step 4: Backlog.** Rewrite the A756 entry in `docs/backlog.md` and its detail in
@@ -540,4 +686,5 @@ warning) and removing `locations.fire_control` with the Kitchen tab's Fire contr
 - Spec coverage: A756 point 1 → PR 2; point 2 → PRs 1, 3 (reminder → PR 4); point 3 → PRs 5–8 and
   A773-2; point 4 → whichever of PR 5/7/A773-2 is last. A773 §7.1 → PRs 5–7 and A773-2; §7.2 →
   A773-2 (PR 1 never draws Who fires); §7.3 → PR 2 hosts the column A773-1 builds; §7.4 → PR 8.
-- No task changes a function A773-1 rewrites; PR 2's two A773-1 files are touched outside their hunks.
+- No task changes a function A773-1 rewrites; PR 2's three A773-1 files are touched outside their hunks.
+- Task sizes: Tasks 9 and 10 were split from one task so each stays well under ~100 implementer calls.
