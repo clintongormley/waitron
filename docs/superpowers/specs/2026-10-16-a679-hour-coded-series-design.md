@@ -317,3 +317,26 @@ Include a plain-English `question.txt` explaining the document, its labels, what
 
 1. **Approve this design — recommended:** permits the driver to replace the implementation plan and build within existing permissions; exact protected-code/assertion exceptions and the later generated-PDF viewing check remain separate.
 2. **Revise before building:** identify what should change; Tasks9–12 remain waiting while the proposal is revised.
+
+## Owner addition, 2026-10-18 at 10:15: keep the prior installation codes
+
+Your recovery sheet also identifies the installation codes the box used. This public context
+helps when your backup predates a later setup. First setup prints its selected code beside the
+node and key name, as **Installation codes** / **Códigos de instalación**. It is also part of the
+PDF attachment and the public document confirmation. Key reissue keeps the selected code; it
+does not allocate another one. A later completed-box export must include that box's known codes.
+
+When you recover or promote a box, enter the codes from the sheet under **Installation codes** /
+**Códigos de instalación**. Separate multiple codes with commas. The operation retains these
+codes alongside its selected hour or pending wait and carries them into its backup evidence.
+They can raise the known-hour floor; they never replace the existing backup and surviving-history
+checks. The box requires a UTC hour strictly later than every reported code.
+
+For example, your backup predates a setup that used `06RC`. Entering `06RC` at 12:40 UTC on
+16 October refuses `sif.allocation_invalid` with reason `hour_not_later`, before any new identity
+is saved or fiscal activation starts. At 13:00, a fresh comparison allows `06RD`. An omitted or
+malformed list does not provide recovery selection authority. This does not discover an unreported
+code or stop an old seller; the existing isolation and taxpayer-wide coordination requirements stay.
+
+The source and focused checks for the first-setup PDF and recovery entry are on the A679 branch.
+Dormant promotion's host preparation and completed-manager reissue remain implementation tasks.

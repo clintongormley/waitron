@@ -1,3 +1,4 @@
+import { reportedHourCodes } from "./reported-hour-codes.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import {
   readOperationAuthority,
@@ -33,6 +34,7 @@ interface SelectionRequest {
   authority: OperationAuthority;
   answer: Answer;
   confirmation?: object;
+  reportedIdentities?: readonly string[];
 }
 interface EntryBase {
   softwareId: string;
@@ -43,6 +45,7 @@ interface EntryBase {
   contextKey: string;
   continuationKey?: string;
   answer: Answer;
+  reportedIdentities?: readonly string[];
 }
 interface Intent extends EntryBase {
   references: readonly string[];
@@ -128,6 +131,12 @@ function parseState(value: unknown): Entry[] {
       !validBases(entry.bases) ||
       !text(entry.contextKey) ||
       (entry.continuationKey !== undefined && !text(entry.continuationKey)) ||
+      (entry.reportedIdentities !== undefined &&
+        (!Array.isArray(entry.reportedIdentities) ||
+          entry.reportedIdentities.length === 0 ||
+          entry.reportedIdentities.length > 256 ||
+          !entry.reportedIdentities.every(isHourIdentity) ||
+          new Set(entry.reportedIdentities).size !== entry.reportedIdentities.length)) ||
       !text(entry.softwareId) ||
       !["no", "yes", "unknown"].includes(entry.answer as string)
     )
@@ -177,24 +186,40 @@ function entryKey(entry: Entry) {
     ...(entry.kind === "resume" ? [entry.contextKey] : []),
   ]);
 }
+function reportedHistory(entries: readonly EntryBase[]) {
+  return entries.flatMap((entry) =>
+    (entry.reportedIdentities ?? []).map((identity) => ({
+      ...entry.scope,
+      reference: `reported/${entry.binding.module}/${entry.binding.eventId}/${identity}`,
+      kind: "backup",
+      softwareId: entry.softwareId,
+      nodeId: entry.binding.targetNodeId,
+      identity,
+      recordedAtMs: null,
+    })),
+  );
+}
 export function publicHourSelectionHistory(values: readonly unknown[]): HourHistorySource {
   return {
     reference: "prepared-hours",
     complete: true,
-    records: values.flatMap((value) =>
-      parseState(value)
-        .filter((entry): entry is Intent => entry.kind === "intent")
-        .map((entry) => ({
-          taxpayerNif: entry.scope.taxpayerNif,
-          environment: entry.scope.environment,
-          reference: `intent/${entry.binding.module}/${entry.binding.eventId}`,
-          kind: "intent",
-          softwareId: entry.softwareId,
-          nodeId: entry.binding.targetNodeId,
-          identity: entry.identity,
-          recordedAtMs: Date.parse(entry.issuedAt),
-        })),
-    ),
+    records: [
+      ...reportedHistory(values.flatMap(parseState)),
+      ...values.flatMap((value) =>
+        parseState(value)
+          .filter((entry): entry is Intent => entry.kind === "intent")
+          .map((entry) => ({
+            taxpayerNif: entry.scope.taxpayerNif,
+            environment: entry.scope.environment,
+            reference: `intent/${entry.binding.module}/${entry.binding.eventId}`,
+            kind: "intent",
+            softwareId: entry.softwareId,
+            nodeId: entry.binding.targetNodeId,
+            identity: entry.identity,
+            recordedAtMs: Date.parse(entry.issuedAt),
+          })),
+      ),
+    ],
   };
 }
 function fingerprint(entry: EntryBase): string {
@@ -214,6 +239,7 @@ function fingerprint(entry: EntryBase): string {
       ? entry.operatorId
       : [entry.operatorId.kind, entry.operatorId.nodeId, entry.operatorId.eventId],
     entry.answer,
+    entry.reportedIdentities ?? [],
   ]);
 }
 function material(intent: Intent) {
@@ -256,7 +282,13 @@ export function createHourSelection(options: {
     mode: "select" | "preview" | "selected" | "resume" | "committed",
   ) => {
     const persist = mode === "select";
-    const request = { ...supplied, binding: { ...supplied.binding } };
+    const request = {
+      ...supplied,
+      binding: { ...supplied.binding },
+      ...(Object.hasOwn(supplied, "reportedIdentities")
+        ? { reportedIdentities: reportedHourCodes(supplied.reportedIdentities) }
+        : {}),
+    };
     const authorize = () => {
       const operator = readOperationAuthority(request.authority, request.binding);
       if (
@@ -348,6 +380,10 @@ export function createHourSelection(options: {
           : mode === "preview" && sameEvent.length > 0
             ? sameEvent[0]!.answer
             : request.answer!;
+      const reportedIdentities =
+        request.reportedIdentities ??
+        intent?.reportedIdentities ??
+        sameEvent[0]?.reportedIdentities;
       const base: EntryBase = {
         softwareId: WAITRON_ID_SISTEMA,
         operatorId,
@@ -357,6 +393,7 @@ export function createHourSelection(options: {
         contextKey: facts.contextKey,
         ...(facts.waitKey === undefined ? {} : { continuationKey: facts.waitKey }),
         answer,
+        ...(reportedIdentities === undefined ? {} : { reportedIdentities }),
       };
       if (
         sameEvent
@@ -406,17 +443,20 @@ export function createHourSelection(options: {
           {
             reference: "retained-intents",
             complete: true,
-            records: entries
-              .filter((entry): entry is Intent => entry.kind === "intent" && entry !== original)
-              .map((entry) => ({
-                ...entry.scope,
-                reference: `intent/${entry.binding.module}/${entry.binding.eventId}`,
-                kind: "intent",
-                softwareId: entry.softwareId,
-                nodeId: entry.binding.targetNodeId,
-                identity: entry.identity,
-                recordedAtMs: Date.parse(entry.issuedAt),
-              })),
+            records: [
+              ...reportedHistory([...entries, base]),
+              ...entries
+                .filter((entry): entry is Intent => entry.kind === "intent" && entry !== original)
+                .map((entry) => ({
+                  ...entry.scope,
+                  reference: `intent/${entry.binding.module}/${entry.binding.eventId}`,
+                  kind: "intent",
+                  softwareId: entry.softwareId,
+                  nodeId: entry.binding.targetNodeId,
+                  identity: entry.identity,
+                  recordedAtMs: Date.parse(entry.issuedAt),
+                })),
+            ],
           },
         ],
       });

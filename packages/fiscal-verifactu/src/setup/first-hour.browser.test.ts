@@ -339,6 +339,7 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
       documentDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
       statement: {
         kind: "waitron-recovery-document",
+        installationCodes: ["06TH"],
         version: 1,
         scope: { taxpayerNif: "B12345674", environment: "production", softwareId: "W1" },
         taxpayerName: "Olivo SL",

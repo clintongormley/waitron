@@ -1483,3 +1483,51 @@ These are module-boundary checks with synthetic clock readings. Dormant admissio
 host's promotion preparation and its complete browser/HTTP journey remain open in Task 8.
 Unseen activity on a separate venue is still subject to the approved design's taxpayer-wide
 coordination assumptions; this patch supplies no shared global reservation.
+
+## Reported installation codes on the recovery sheet (2026-10-18)
+
+Authority: the owner's 10:15 addition to the hour-code design, recorded in its dated addendum.
+The PDF gains public `installationCodes`, and a recovery selection gains `installationCodes`
+on its module-owned proposal. No fiscal expectation changes.
+
+- `recovery-document.browser.test.ts` and `recovery-delivery.browser.test.ts`: the exact canonical
+  document and public binding now include `installationCodes:["06RB"]`. Every former field,
+  digest assertion, secret refusal and delivery-lifetime assertion remains.
+- `initial-hour-setup.test.ts` and `setup/first-hour.browser.test.ts`: exact document statements
+  gain their selected code (`06RB` and `06TH`, respectively); existing values remain unchanged.
+- `setup/recovery-hour.browser.test.ts`: exact select proposals gain the entered public list.
+  All prior clock confirmation, Yes/unknown waits, selected answer, isolation, secret, refusal
+  and stale-response assertions remain. The shared ready fixture enters `06RB`. The accessibility
+  suite enters the same code before driving each existing nonempty state.
+- Document fixtures in recovery PDF/reader/key/delivery suites, the server's recovery-delivery
+  and fiscal-setup suites, `test/hour-recovery-delivery.ts`, `test/owned-hour-setup.ts`, and the
+  provisioning command suites gain the required public field. The two shared server helpers
+  read the selected input's code rather than assuming a fixed hour.
+- Existing `hour-recovery-host.test.ts` select fixtures gain `06RB`; existing expected outcomes
+  remain unchanged. The new case supplies a later `06RC` absent from the backup and checks both
+  refused rows and successful `06RD` activation.
+
+New checks cover printed/attached codes, frozen-document binding, normalization and malformed
+lists, retained waits, restart, backup projection, changed-code refusal, UI field validation,
+late results after editing and an explicit hour-clash explanation. The initial edit check observed
+the request call before its completion; it now waits for actual readable credentials before
+checking that an edit invalidates them, and a separate gated case covers editing during a request.
+No prior assertion was removed to resolve that test timing mistake.
+
+The focused server suite completed 153 cases in 236.19 seconds. Its retained worker sample shows
+scrypt work while the reporter was quiet; the run was not cancelled or labelled stalled.
+Node/browser source checks and an independently installed copy qualify this delta, not the
+whole A679 branch. Promotion host integration, manager reissue, earlier package-coverage and
+legacy-server failures, complete entry journeys and final review/CI gates remain open.
+
+Changed matcher locations (relative to this checkpoint; the JSON also retains old bodies):
+
+- `apps/server/src/hour-recovery-host.test.ts:296, 304, 362, 389, 463, 614, 754, 772, 779, 803, 815, 824, 938, 3457, 3464, 3484, 3502, 3516, 3770, 3817`: only the authorised public field is added to the input, expected statement or canonical binding.
+- `packages/fiscal-verifactu/src/initial-hour-setup.test.ts:83`: only the authorised public field is added to the input, expected statement or canonical binding.
+- `packages/fiscal-verifactu/src/recovery-delivery.browser.test.ts:36`: only the authorised public field is added to the input, expected statement or canonical binding.
+- `packages/fiscal-verifactu/src/recovery-document.browser.test.ts:32`: only the authorised public field is added to the input, expected statement or canonical binding.
+- `packages/fiscal-verifactu/src/setup/first-hour.browser.test.ts:334`: only the authorised public field is added to the input, expected statement or canonical binding.
+- `packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts:157, 208, 247, 335, 415`: only the authorised public field is added to the input, expected statement or canonical binding.
+- `packages/provisioning/src/first-setup-command-document.test.ts:108`: only the authorised public field is added to the input, expected statement or canonical binding.
+
+AST qualification retains every former matcher after removing only the authorised `installationCodes` property or its canonical JSON spelling. This checks syntax, not behavioral equivalence.

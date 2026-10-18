@@ -76,6 +76,9 @@ export async function renderRecoveryPdfWithFont(
   write(`${en ? "Software ID" : "ID del software"}: ${document.scope.softwareId}`);
   write(`${en ? "Node ID" : "ID del nodo"}: ${document.nodeKey.nodeId}`);
   write(`${en ? "Key name" : "Nombre de la clave"}: ${document.nodeKey.name}`);
+  write(
+    `${en ? "Installation codes" : "Códigos de instalación"}: ${document.installationCodes.join(", ")}`,
+  );
   write(`${en ? "Created (UTC)" : "Creado (UTC)"}: ${document.createdAt}`);
   pdf.moveDown();
   if (pdf.y > pdf.page.height - pdf.page.margins.bottom - 120) pdf.addPage();

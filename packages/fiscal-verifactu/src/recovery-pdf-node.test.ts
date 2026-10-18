@@ -11,6 +11,7 @@ import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-documen
 
 const document: RecoveryDocument = {
   kind: "waitron-recovery-document",
+  installationCodes: ["06RB"],
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
   taxpayerName: "Olivo Restauración SL",
@@ -130,3 +131,32 @@ it("carries its font and attachment in a relocated real Node bundle", async () =
     await inspect(new Uint8Array(run.stdout), locale);
   }
 });
+
+it.each(["en", "es"] as const)(
+  "prints the prior installation codes beside public identity in %s",
+  async (locale) => {
+    const input = { ...document, installationCodes: ["06RB", "06RC"] };
+    const task = getDocument({
+      data: await renderRecoveryPdf(input, locale),
+      useSystemFonts: false,
+      disableFontFace: true,
+      useWorkerFetch: false,
+      useWasm: false,
+    });
+    try {
+      const pdf = await task.promise;
+      const text = (await (await pdf.getPage(1)).getTextContent()).items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ");
+      expect(text).toContain(
+        locale === "en" ? "Installation codes: 06RB, 06RC" : "Códigos de instalación: 06RB, 06RC",
+      );
+      const attached = JSON.parse(
+        new TextDecoder().decode((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!),
+      );
+      expect(attached.installationCodes).toEqual(["06RB", "06RC"]);
+    } finally {
+      await task.destroy();
+    }
+  },
+);

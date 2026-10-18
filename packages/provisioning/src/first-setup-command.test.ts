@@ -484,6 +484,7 @@ async function recoveryDeliveryFixture() {
   );
   const statement = {
     kind: "waitron-recovery-document",
+    installationCodes: ["06RB"],
     version: 1,
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
     taxpayerName: request.legalName,

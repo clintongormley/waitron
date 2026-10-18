@@ -36,7 +36,12 @@ export async function ownedHourSetup(
       preparation: { id: string };
       modules: {
         module: string;
-        request: { input: { approval: { eventId: string; sourceId: string } } };
+        request: {
+          input: {
+            approval: { eventId: string; sourceId: string };
+            allocation: { installationIdentity: string };
+          };
+        };
       }[];
     };
     expect(response.status, JSON.stringify(value)).toBe(200);
@@ -88,6 +93,7 @@ export async function ownedHourSetup(
   const request = venue as VenueRequest;
   const statement = {
     kind: "waitron-recovery-document",
+    installationCodes: [prepared.allocation.installationIdentity],
     version: 1,
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: owner!.state.environment },
     taxpayerName: request.legalName,

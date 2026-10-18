@@ -1,3 +1,4 @@
+import { reportedHourCodes } from "./reported-hour-codes.js";
 import { AppError } from "@waitron/shared";
 import type {
   ModuleOperationHost,
@@ -64,13 +65,14 @@ function createHostedHourRecovery(host: ModuleOperationHost) {
     const check = () => recoveryHourOperator(operation.binding, operation.authority);
     check();
     if (
-      exact(proposal, ["action", "answer"]) &&
+      exact(proposal, ["action", "answer", "installationCodes"]) &&
       proposal.action === "select" &&
       ["no", "yes", "unknown"].includes(proposal.answer as string)
     )
       return preparation.select({
         ...operation,
         answer: proposal.answer as "no" | "yes" | "unknown",
+        reportedIdentities: reportedHourCodes(proposal.installationCodes),
       });
     if (exact(proposal, ["action"]) && proposal.action === "preview")
       return preparation.preview(operation);

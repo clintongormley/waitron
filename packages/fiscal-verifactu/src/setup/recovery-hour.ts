@@ -6,19 +6,27 @@ import type {
   SetupContribution,
 } from "@waitron/module/src/setup-contract.js";
 import type { HourClockDecision } from "../hour-clock.js";
+import { reportedHourCodes } from "../reported-hour-codes.js";
 import "./recovery-key.js";
+import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 
 type Context = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
 type Answer = "no" | "yes" | "unknown";
 interface Draft {
+  installationCodes: string;
   answer?: Answer;
   oldBoxGone: boolean;
   soleRecovery: boolean;
   confirmed: boolean;
 }
-const empty = (): Draft => ({ oldBoxGone: false, soleRecovery: false, confirmed: false });
+const empty = (): Draft => ({
+  installationCodes: "",
+  oldBoxGone: false,
+  soleRecovery: false,
+  confirmed: false,
+});
 interface Comparison {
   id: string;
   clock: HourClockDecision;
@@ -87,6 +95,7 @@ export class RecoveryHourEntry extends LitElement {
   @state() private result?: Result;
   @state() private error = false;
   @state() private keyError = false;
+  @state() private hourUsed = false;
   @state() private attempted = false;
   @state() private refusalDismissed = false;
   #secret?: string;
@@ -108,6 +117,7 @@ export class RecoveryHourEntry extends LitElement {
         current: () => this.draft,
         snapshot: (value) => ({ ...value }),
         equal: (a, b) =>
+          a.installationCodes === b.installationCodes &&
           a.answer === b.answer &&
           a.oldBoxGone === b.oldBoxGone &&
           a.soleRecovery === b.soleRecovery &&
@@ -139,6 +149,7 @@ export class RecoveryHourEntry extends LitElement {
     this.result = undefined;
     this.error = false;
     this.keyError = false;
+    this.hourUsed = false;
   }
   #edit(change: Partial<Draft>): void {
     this.#edited("recoveryOperation");
@@ -167,10 +178,18 @@ export class RecoveryHourEntry extends LitElement {
       }),
     );
   }
+  #codes(): string[] | undefined {
+    try {
+      return reportedHourCodes(this.draft.installationCodes.trim().split(/[\s,;]+/));
+    } catch {
+      return undefined;
+    }
+  }
   #credentials(): ModuleRecoveryCredentials | null {
     if (
       this.busy ||
       !this.#secret ||
+      !this.#codes() ||
       !this.draft.oldBoxGone ||
       !this.draft.soleRecovery ||
       this.result?.status !== "selected"
@@ -197,7 +216,9 @@ export class RecoveryHourEntry extends LitElement {
     return credentials;
   }
   get #canCompare(): boolean {
-    return Boolean(this.#secret && this.draft.oldBoxGone && this.draft.soleRecovery);
+    return Boolean(
+      this.#secret && this.#codes() && this.draft.oldBoxGone && this.draft.soleRecovery,
+    );
   }
   get #canSelect(): boolean {
     const clock = this.comparison?.clock;
@@ -240,6 +261,7 @@ export class RecoveryHourEntry extends LitElement {
     this.busy = true;
     this.error = false;
     this.keyError = false;
+    this.hourUsed = false;
     this.result = undefined;
     this.#notify();
     try {
@@ -265,7 +287,11 @@ export class RecoveryHourEntry extends LitElement {
       } else {
         if (this.comparison!.clock.requiresConfirmation)
           await call({ action: "confirm-clock", comparisonId: this.comparison!.id });
-        const selected = await call({ action: "select", answer: this.draft.answer });
+        const selected = await call({
+          action: "select",
+          answer: this.draft.answer,
+          installationCodes: this.#codes(),
+        });
         if (!record(selected)) throw new Error("invalid selection");
         if (selected.status === "selected") {
           const selectedBinding = selected.binding;
@@ -286,6 +312,11 @@ export class RecoveryHourEntry extends LitElement {
     } catch (cause) {
       if (current()) {
         this.error = true;
+        this.hourUsed =
+          record(cause) &&
+          cause.code === "sif.allocation_invalid" &&
+          record(cause.params) &&
+          cause.params.reason === "hour_not_later";
         this.keyError =
           record(cause) &&
           (cause.code === "promotion.break_glass_invalid" ||
@@ -303,6 +334,9 @@ export class RecoveryHourEntry extends LitElement {
     const words = en
       ? {
           heading: "Recover this box",
+          codes: "Installation codes",
+          codesHint: "Codes on your recovery sheet, separated by commas",
+          codesInvalid: "Enter the four-character codes from your recovery sheet.",
           stopped: "The old box is stopped and will stay offline.",
           sole: "I am the only person recovering this taxpayer, across all venues.",
           question: "Has this taxpayer started setup or recovery during this UTC hour? *",
@@ -322,6 +356,7 @@ export class RecoveryHourEntry extends LitElement {
           warning:
             "The clocks disagree, or no independent comparison is available. A wrong time can reuse names or date invoices incorrectly.",
           failed: "Check the fields and compare clocks again.",
+          used: "Wait for a UTC hour later than the known installation codes.",
           missing: "Complete recovery before continuing.",
           key: "Check the key for this backup.",
           chosen: "Selected hour code",
@@ -333,6 +368,9 @@ export class RecoveryHourEntry extends LitElement {
         }
       : {
           heading: "Recuperar esta caja",
+          codes: "Códigos de instalación",
+          codesHint: "Códigos de tu hoja de recuperación, separados por comas",
+          codesInvalid: "Introduce los códigos de cuatro caracteres de tu hoja de recuperación.",
           stopped: "La caja anterior está apagada y seguirá desconectada.",
           sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
           question:
@@ -353,6 +391,7 @@ export class RecoveryHourEntry extends LitElement {
           warning:
             "Los relojes no coinciden o no hay una comparación independiente. Una hora incorrecta puede repetir nombres o fechar mal las facturas.",
           failed: "Revisa los campos y vuelve a comparar los relojes.",
+          used: "Espera a una hora UTC posterior a los códigos de instalación conocidos.",
           missing: "Completa la recuperación antes de continuar.",
           key: "Revisa la clave de esta copia.",
           chosen: "Código de hora seleccionado",
@@ -384,6 +423,18 @@ export class RecoveryHourEntry extends LitElement {
           this.#notify();
         }}
       ></vf-recovery-key>
+      <wt-input
+        name="recovery-installation-codes"
+        required
+        label=${words.codes}
+        placeholder=${words.codesHint}
+        .value=${this.draft.installationCodes}
+        .error=${this.attempted && !this.#codes() ? words.codesInvalid : ""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.#edit({ installationCodes: event.detail.value });
+        }}
+      ></wt-input>
       <label
         ><input
           type="checkbox"
@@ -474,7 +525,7 @@ export class RecoveryHourEntry extends LitElement {
       }
       ${this.result?.status === "selected" ? html`<p role="status">${words.chosen}: <strong>${this.result.identity}</strong></p>` : this.result?.status === "waiting" ? html`<p role="status">${words.waiting} ${format(this.result.targetMs)} (${utc(this.result.targetMs)})</p>` : nothing}
       <wt-form-actions
-        .error=${this.error ? words.failed : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : this.attempted && !this.#credentials() ? words.missing : ""}
+        .error=${this.error ? (this.hourUsed ? words.used : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : this.attempted && !this.#credentials() ? words.missing : ""}
       >
         <wt-button
           data-test="compare"

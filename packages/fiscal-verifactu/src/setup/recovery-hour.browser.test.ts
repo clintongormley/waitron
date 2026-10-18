@@ -100,6 +100,11 @@ async function ready(el: Entry, answer = "no") {
     input.value = value!;
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   }
+  const codes = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
+  await codes.updateComplete;
+  const codeInput = codes.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  codeInput.value = "06RB";
+  codeInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   check(el, "recovery-old-box-stopped");
   check(el, "recovery-sole-operation");
   check(el, `taxpayer-hour-${answer}`);
@@ -149,7 +154,11 @@ it("decodes the printed key and sends independent recovery declarations before s
       },
     }),
   );
-  expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({ action: "select", answer: "no" });
+  expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
+    action: "select",
+    answer: "no",
+    installationCodes: ["06RB"],
+  });
   expect(el.shadowRoot!.textContent).toContain("06TH");
   expect(el.shadowRoot!.textContent).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
 });
@@ -198,7 +207,7 @@ it("requires a fresh explicit confirmation for disagreeing readings", async () =
   await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
   expect(prepare.mock.calls.slice(-2).map(([r]) => r.proposal)).toEqual([
     { action: "confirm-clock", comparisonId: "different-reading" },
-    { action: "select", answer: "no" },
+    { action: "select", answer: "no", installationCodes: ["06RB"] },
   ]);
   button(el, "compare").click();
   await vi.waitFor(() =>
@@ -235,7 +244,11 @@ it.each(["yes", "unknown"])(
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).toContain("2026-10-18T13:00:00.000Z"),
     );
-    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({ action: "select", answer });
+    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
+      action: "select",
+      answer,
+      installationCodes: ["06RB"],
+    });
     expect(el.readCredentials()).toBeNull();
     expect(button(el, "compare").disabled).toBe(false);
   },
@@ -319,7 +332,11 @@ it("ignores a selected response after the sole-recovery declaration changes", as
   await compare(el);
   button(el, "select").click();
   await vi.waitFor(() =>
-    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({ action: "select", answer: "no" }),
+    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
+      action: "select",
+      answer: "no",
+      installationCodes: ["06RB"],
+    }),
   );
   check(el, "recovery-sole-operation", false);
   release(selected);
@@ -395,7 +412,11 @@ it("drops a late selected answer after the matching printed key changes", async 
   await compare(el);
   button(el, "select").click();
   await vi.waitFor(() =>
-    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({ action: "select", answer: "no" }),
+    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
+      action: "select",
+      answer: "no",
+      installationCodes: ["06RB"],
+    }),
   );
   const key = el.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
   const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-check"]')!;
@@ -573,4 +594,106 @@ it("manual confirmation never enables an ambiguous box-hour interval", async () 
   check(el, "recovery-clock-confirmed");
   await el.updateComplete;
   expect(button(el, "select").disabled).toBe(true);
+});
+
+it("requires codes from the recovery sheet and sends normalised codes to the hour selector", async () => {
+  const { el, prepare } = await mount();
+  await ready(el);
+  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]');
+  expect(field, "public code field from the recovery sheet").not.toBeNull();
+  await field!.updateComplete;
+  const input = field!.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  input.value = "06rb, 06rc";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  await compare(el);
+  button(el, "select").click();
+  await vi.waitFor(() =>
+    expect(prepare.mock.calls.at(-1)?.[0].proposal).toEqual({
+      action: "select",
+      answer: "no",
+      installationCodes: ["06RB", "06RC"],
+    }),
+  );
+  expect(input.isConnected, "the edited control stays mounted").toBe(true);
+  expect(
+    field!.shadowRoot!.querySelector("input"),
+    "the native control survives the selection render",
+  ).toBe(input);
+  await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+  input.value = "06RD";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(el.readCredentials()).toBeNull();
+  expect(button(el, "select").disabled).toBe(true);
+});
+
+it("does not expose a selected result after its reported code was edited during the request", async () => {
+  let release!: (value: unknown) => void;
+  const prepare = vi.fn(async (request: { proposal: unknown }) => {
+    const action = (request.proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    return new Promise((resolve) => {
+      release = resolve;
+    });
+  });
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  button(el, "select").click();
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  input.value = "06RC";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  release(selected);
+  await el.updateComplete;
+  await Promise.resolve();
+  expect(el.readCredentials()).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("06TH");
+});
+it("marks a missing code beside its native field and keeps selection disabled", async () => {
+  const { el } = await mount();
+  await ready(el);
+  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  input.value = "";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  expect(el.readCredentials()).toBeNull();
+  await el.updateComplete;
+  await field.updateComplete;
+  expect(input.getAttribute("aria-invalid")).toBe("true");
+  expect(field.shadowRoot!.textContent).toContain("four-character codes");
+  expect(button(el, "select").disabled).toBe(true);
+});
+
+it("explains a reported-hour clash and allows another comparison", async () => {
+  const prepare = vi.fn(async (request: { proposal: unknown }) => {
+    const action = (request.proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    throw { code: "sif.allocation_invalid", params: { reason: "hour_not_later" } };
+  });
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  button(el, "select").click();
+  await vi.waitFor(() =>
+    expect(
+      (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+    ).toContain("later than the known installation codes"),
+  );
+  expect(el.readCredentials()).toBeNull();
+  expect(button(el, "compare").disabled).toBe(false);
+});
+
+it("opens the installation code field without a validation refusal", async () => {
+  const { el } = await mount();
+  const field = el.shadowRoot!.querySelector<LitElement>('[name="recovery-installation-codes"]')!;
+  await field.updateComplete;
+  expect(field.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("false");
+  expect(field.shadowRoot!.querySelector("[data-error]")).toBeNull();
 });

@@ -343,6 +343,7 @@ export class FirstSetupHour extends LitElement {
       delivery = createRecoveryDelivery(
         {
           kind: "waitron-recovery-document",
+          installationCodes: [this.result.identity],
           version: 1,
           scope: {
             taxpayerNif: context.venue.taxId,

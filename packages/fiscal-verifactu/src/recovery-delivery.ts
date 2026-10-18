@@ -17,6 +17,7 @@ async function digest(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
 }
 function publicBytes(value: RecoveryDocumentPublic): Uint8Array<ArrayBuffer> {
   function canonical(v: unknown): string {
+    if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
     if (typeof v !== "object" || v === null) return JSON.stringify(v);
     const object = v as Record<string, unknown>;
     return `{${Object.keys(object)

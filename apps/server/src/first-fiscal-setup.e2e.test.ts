@@ -335,6 +335,7 @@ it.each([
       expect(keyStage.status).toBe(200);
       const statement = {
         kind: "waitron-recovery-document",
+        installationCodes: ["06RB"],
         version: 1,
         scope: { taxpayerNif: venue.taxId, softwareId: "W1", environment: "production" },
         taxpayerName: venue.legalName,

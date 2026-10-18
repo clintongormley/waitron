@@ -4,6 +4,7 @@ import { readRecoveryPdf } from "./recovery-reader.js";
 import { recoveryDocumentPublic, type RecoveryDocument } from "./recovery-document.js";
 const document: RecoveryDocument = {
   kind: "waitron-recovery-document",
+  installationCodes: ["06RB"],
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
   taxpayerName: "Olivo Restauración SL",
@@ -35,7 +36,7 @@ describe("transient recovery delivery session", () => {
       expect(binding.bindingDigest).toBe(
         await digest(
           new TextEncoder().encode(
-            '{"createdAt":"2026-10-17T12:30:00.000Z","kind":"waitron-recovery-document","nodeKey":{"name":"Caja principal","nodeId":"node-1"},"scope":{"environment":"production","softwareId":"W1","taxpayerNif":"B12345674"},"taxpayerName":"Olivo Restauración SL","venueName":"Olivo Centro","version":1}',
+            '{"createdAt":"2026-10-17T12:30:00.000Z","installationCodes":["06RB"],"kind":"waitron-recovery-document","nodeKey":{"name":"Caja principal","nodeId":"node-1"},"scope":{"environment":"production","softwareId":"W1","taxpayerNif":"B12345674"},"taxpayerName":"Olivo Restauración SL","venueName":"Olivo Centro","version":1}',
           ),
         ),
       );

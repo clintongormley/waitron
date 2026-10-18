@@ -6,6 +6,7 @@ import { decodeNodeKey } from "./paper-register-compact.js";
 
 const document: RecoveryDocument = {
   kind: "waitron-recovery-document",
+  installationCodes: ["06RB"],
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
   taxpayerName: "Olivo Restauración SL",

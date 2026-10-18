@@ -110,6 +110,13 @@ for (const theme of ["light", "dark"] as const)
                 input.value = value!;
                 input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
               }
+              const codes = el.shadowRoot!.querySelector<LitElement>(
+                '[name="recovery-installation-codes"]',
+              )!;
+              await codes.updateComplete;
+              const codeInput = codes.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+              codeInput.value = "06RB";
+              codeInput.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
               for (const name of ["recovery-old-box-stopped", "recovery-sole-operation"]) {
                 const input = el.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
                 input.checked = true;

@@ -118,10 +118,11 @@ export function createHourInitialSetup(
     configure: undefined,
     resolutionEvidence: () => ({ files: [], directories: [] }),
     async commandRecoveryDocument(context, imported, document) {
-      readHourSetupInput(context, imported.input);
+      const selected = readHourSetupInput(context, imported.input);
       if (document.key.nodeId !== context.binding.targetNodeId) refuse();
       const recovery: RecoveryDocument = {
         kind: "waitron-recovery-document",
+        installationCodes: [selected.allocation.installationIdentity],
         version: 1,
         scope: {
           taxpayerNif: context.taxId,
@@ -279,7 +280,7 @@ export function createHourInitialSetup(
     },
     documentConfirmation: undefined,
     recoveryDocument(context, imported, document) {
-      readHourSetupInput(context, imported.input);
+      const selected = readHourSetupInput(context, imported.input);
       let statement: ReturnType<typeof parseRecoveryDocumentPublic>;
       try {
         statement = parseRecoveryDocumentPublic(document.statement);
@@ -287,6 +288,8 @@ export function createHourInitialSetup(
         return refuse("outside_confirmation_missing");
       }
       if (
+        statement.installationCodes.length !== 1 ||
+        statement.installationCodes[0] !== selected.allocation.installationIdentity ||
         statement.scope.taxpayerNif !== context.taxId ||
         statement.scope.softwareId !== WAITRON_ID_SISTEMA ||
         statement.scope.environment !== context.environment ||

@@ -15,6 +15,10 @@ export async function keepHourRecoveryDocument(
   );
   const statement = {
     kind: "waitron-recovery-document",
+    installationCodes: [
+      (state.inputs[module] as { allocation: { installationIdentity: string } }).allocation
+        .installationIdentity,
+    ],
     version: 1,
     scope: {
       taxpayerNif: state.frozen.request.taxId,

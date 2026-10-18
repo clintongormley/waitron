@@ -326,12 +326,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   branch through the [hour-code implementation plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
   The owner approved the [design](superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
   on 2026-10-16 at 14:50: four UTC-hour characters replace paper/Cloud name allocation;
-  the PDF keeps only the recovery key. Protected-code and fiscal-assertion restrictions remain.
+  the PDF keeps the recovery key and public installation codes (owner, 2026-10-18 at 10:15).
+  Protected-code and fiscal-assertion restrictions remain.
   Reissue controls, completed-manager reissue, interrupted-page ordering and full installed
   journeys remain open; the unfinished-key HTTPS service is implemented on the branch.
   The exact approved standby wrapper and hour-admission dispatch are implemented. Real-database
   checks refuse the original box's same-hour code and accept the next hour without an advance
-  reservation. Dormant admission and full host promotion preparation remain open.
+  reservation. The branch prints the selected code in first setup and accepts reported codes
+  during recovery, retaining them with the operation and refusing the same or an earlier hour.
+  Dormant admission and full host promotion preparation, including reported-code entry, remain open.
   Owner acceptance is viewing real generated EN/ES PDFs through Drive; automated
   recovery-field entry checks remain the driver’s work. Preserve existing branch work.
   The selected module now supplies PDF/manual key fields. Local Chromium checks enter rendered

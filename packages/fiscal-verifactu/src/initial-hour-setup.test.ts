@@ -82,6 +82,7 @@ it.each(["en", "es"] as const)(
     });
     expect(document.statement).toEqual({
       kind: "waitron-recovery-document",
+      installationCodes: ["06RB"],
       version: 1,
       scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
       taxpayerName: "Olivo Restauración SL",
@@ -542,4 +543,31 @@ it("the terminal retains the original unknown answer when its monotonic wait has
   } finally {
     clock.mockRestore();
   }
+});
+
+it("refuses a delivered sheet whose installation code differs from its frozen activation", () => {
+  const f = configured();
+  const saved = fixture();
+  const statement = {
+    kind: "waitron-recovery-document",
+    version: 1,
+    installationCodes: ["06RC"],
+    scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
+    taxpayerName: "Olivo",
+    venueName: "Centro",
+    createdAt: "2026-10-16T11:40:00.000Z",
+    nodeKey: { nodeId: "node", name: "key" },
+  };
+  expect(() =>
+    f.seat.recoveryDocument!(saved, f.seat.inspect(saved, input), {
+      statement,
+      stage: { nodeId: "node", name: "key" },
+      identity: { taxpayerName: "Olivo", venueName: "Centro" },
+    } as Parameters<NonNullable<typeof f.seat.recoveryDocument>>[2]),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    }),
+  );
 });
