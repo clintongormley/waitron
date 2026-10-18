@@ -1074,6 +1074,7 @@ describe("edges", () => {
     expect(outside).toEqual([]);
     await addDates(painter, ["2026-12-14", "2026-12-25"]);
     expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-25"]);
+    expect(grid(painter).days.get("2026-12-14") ?? []).toEqual([]);
     expect(saveButton(painter).disabled).toBe(false);
   });
 

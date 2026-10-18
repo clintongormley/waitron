@@ -931,7 +931,6 @@ export class SpecialDayPainter extends LitElement {
     this.seeded = this.seedKey();
     this.attempted = false;
     this.adopt(detail, [], "", this.paintedSince(sent));
-    // A drop leaves the draft clean, but its notice must stay on screen.
     const dropped = this.dropUnpaintable(model);
     this.dispatchEvent(
       new CustomEvent<{ detail: SpecialDayDetail; clean: boolean }>("special-day-saved", {
