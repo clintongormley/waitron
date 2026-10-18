@@ -9,7 +9,7 @@ import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import type { VenueScope } from "./operations.js";
 import { zoneServicePolicies } from "./schema/service.js";
-import { serviceDayWallContext } from "./service-day-context.js";
+import { serviceDayWallContext, type ServiceDayContext } from "./service-day-context.js";
 import { seasonOn, type Season } from "./season-rules.js";
 import { readDepartmentSeasonWeeks, readZoneSeasonWeeks, type SeasonDays } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
@@ -41,18 +41,34 @@ export interface CalendarCut {
   anchor: string;
 }
 
+type WallDay = Pick<ServiceDayContext, "dayCutover" | "endMinute">;
+
+/** Each day's own start and length for {@link cutSeason}; undefined when nothing is cut. */
+function cutDays(
+  clock: BusinessDayClock,
+  businessDays: readonly LocalDate[],
+  cut: CalendarCut | undefined,
+): { anchor: string; days: ReadonlyMap<LocalDate, WallDay> } | undefined {
+  // Without start changes every day lasts 1440 minutes from the clock's one start, which is
+  // also the start in force, so no range is cut.
+  if (cut === undefined || clock.cutoverChanges.length === 0) return undefined;
+  return {
+    anchor: cut.anchor,
+    days: new Map(businessDays.map((day) => [day, serviceDayWallContext(clock, day)])),
+  };
+}
+
 function cutSeason<T extends ClosedRange>(
   ranges: readonly T[],
-  clock: BusinessDayClock,
+  cut: ReturnType<typeof cutDays>,
   day: LocalDate,
-  cut: CalendarCut | undefined,
   painted: boolean,
 ): readonly T[] {
-  if (cut === undefined) return ranges;
-  const own = serviceDayWallContext(clock, day);
+  if (cut === undefined || ranges.length === 0) return ranges;
+  const own = cut.days.get(day)!;
   // The paint layer works on one 1440-minute day and skips a range crossing its changeover.
-  if (painted) own.endMinute = Math.min(own.endMinute, 1440);
-  return ranges.flatMap((range) => cutToOwnDay(range, own, cut.anchor) ?? []);
+  const drawn = painted ? { ...own, endMinute: Math.min(own.endMinute, 1440) } : own;
+  return ranges.flatMap((range) => cutToOwnDay(range, drawn, cut.anchor) ?? []);
 }
 
 /** Each day's season, and the special day standing on it, for the days it was read for. */
@@ -226,6 +242,7 @@ export async function resolveDepartmentsDays(
     seasonDays(plan, businessDays),
   );
   const cutovers = new Map(businessDays.map((day) => [day, cutoverForBusinessDay(clock, day)]));
+  const wall = cutDays(clock, businessDays, cut);
   for (const departmentId of departmentIds) {
     const weeks = allWeeks.get(departmentId) ?? new Map<string, ServiceRange[][]>();
     const days = new Map<LocalDate, ResolvedDepartmentDay>();
@@ -235,9 +252,8 @@ export async function resolveDepartmentsDays(
       const cutover = cutovers.get(day)!;
       const season = cutSeason(
         (seasonId === null ? undefined : weeks.get(seasonId)?.[weekdayOf(day)]) ?? [],
-        clock,
+        wall,
         day,
-        cut,
         special != null,
       );
       const ranges = special
@@ -282,6 +298,7 @@ export async function resolveZoneClosedDays(
     seasonDays(plan, businessDays),
   );
   const cutovers = new Map(businessDays.map((day) => [day, cutoverForBusinessDay(clock, day)]));
+  const wall = cutDays(clock, businessDays, cut);
   for (const zoneId of zones) {
     const days = new Map<LocalDate, ClosedRange[]>();
     for (const day of businessDays) {
@@ -289,9 +306,8 @@ export async function resolveZoneClosedDays(
       const seasonId = plan.seasonIdOn.get(day) ?? null;
       const season = cutSeason(
         (seasonId === null ? undefined : weeks.get(zoneId)?.get(seasonId)?.[weekdayOf(day)]) ?? [],
-        clock,
+        wall,
         day,
-        cut,
         special != null,
       );
       const ranges = special
