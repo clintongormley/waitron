@@ -1779,7 +1779,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   department dialog's Receipts tab, then the parts that wait for A773-1, among them the Courses
   page's "Held until fired" column (plan `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md`).
   Open point from #1852: the Transfers panel's heading is an `h2`, the dialog title's level, beside
-  Service's `h3` sections — an existing accessibility check selects `h2`. [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
+  Service's `h3` sections — an existing accessibility check selects `h2`. Open points from #1854:
+  once A773-1 lands, rename the two `kitchen-screen.a11y.test.ts` cases that still name a course
+  list; on the Courses page the row dividers stop short of the card's sides (mock-up 02 runs them to
+  the edge; needs `course-list.ts` styles), and an error under the list would sit on the card's
+  bottom border (read from the code, not seen). [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
 
 - **A807. One slip per printer and one notice per station for a whole-order kitchen-note change
   (owner, 2026-10-17).** Today a change or removal of the order's kitchen note prints one slip and
