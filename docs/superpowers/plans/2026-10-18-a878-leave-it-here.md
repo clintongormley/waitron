@@ -188,6 +188,11 @@ The owner confirms or overrides these when reviewing the plan; each names the de
    with no Leave it here, Mark moved t3 to x 40, drag t3 to x 0, drag t8 to x 36, Back → 200,
    overlapping). So the check also changes Back after an ordinary drag. A504 §7.5 says no table is
    put down on another.
+
+   > Built differently (2026-10-18, Task 3's fix round): Back takes the table out of its merge
+   > first and exempts only the table itself, so it also refuses landing on a partner of the merge
+   > it left (conventions-data.md, Back to its saved place). This supersedes the merge-partner
+   > exemption here, in Task 3 Step 3 and in Task 7 Step 2.
 8. **On the till, Back's `table.place_taken` refusal shows the code's own words**, "Another table
    is in its place. Move it, then try again" / "Otra mesa ocupa su sitio. Muévela y vuelve a
    intentarlo" (`apps/till/src/i18n/codes.ts:232-235`). Today the floor screen names the tables for

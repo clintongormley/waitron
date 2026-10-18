@@ -4193,7 +4193,7 @@ export class TillApi {
     return this.#todayChange(tableId, "mark-moved", {}, zoneRevision);
   }
 
-  /** Keep a table that needs moving where it stands for today →
+  /** Keep a table that needs moving where it stands until the next reset →
    * `POST /api/tables/:id/today/leave-here`. */
   leaveHereToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
     return this.#todayChange(tableId, "leave-here", {}, zoneRevision);

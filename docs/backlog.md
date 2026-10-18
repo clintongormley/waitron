@@ -2615,12 +2615,19 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   date (2026-10-18).** Leave it here or Mark moved on one table, then on another before the first
   is answered, sends the same room revision twice, so the second can come back
   `floor_today.out_of_date`. Found by reading `#sendTodayAction`
-  (`apps/till/src/screens/till-floor-screen.ts`), not run. Left open by A878.
+  (`apps/till/src/screens/till-floor-screen.ts`); A878's finish-branch review reproduced it (a
+  browser probe sent `t3` and `t4` with revision 6, and the server answered 200, then 409
+  `floor_today.out_of_date`). Left open by A878.
 
 - **A881. A till's refusal line vanished after the person's language was changed on another till
   (2026-10-18).** Seen in A878's scripted screenshot runs; whether the language change or something
   else in the same 20 seconds cleared it was not isolated. Next: reproduce, then decide whether a
   refusal should outlive it. Left open by A878.
+
+- **A883. Back to its saved place's `table.place_taken` refusal does not name the tables
+  (2026-10-18).** The till shows the code's own words ("Another table is in its place. Move it,
+  then try again"), while its other floor refusals that carry table ids name them. A sentence naming
+  both tables needs new words in English and Spanish from the owner. Left open by A878.
 
 - **A859. Floor plans and the till's layout banner: looks left to the owner (2026-10-18).** A504's
   look passes kept five things as built, as judgement calls.
