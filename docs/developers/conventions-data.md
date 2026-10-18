@@ -613,7 +613,8 @@ possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks prof
 Pricing still reads static offer membership; zone closures do not change recorded prices.
 `working-order.ts` performs the zone check when adding lines, separately from its offer read.
 
-**2026-10-18, A723.** A zone may be closed only while its department is open. The routes refuse a
+**2026-10-18, A723.** A route refuses a zone closure written outside its department's hours; stored
+closures can still lie outside them (backlog, Service periods). The routes refuse a
 closed range the request writes outside its department's hours, read in the same transaction
 after the write (`packages/venue-service/src/zone-closure-hours.ts`): `PUT …/seasons/:seasonId/weeks`
 and `PUT …/zones/:zoneId/closed-week` with `zone_closed_time.invalid`, reason `outside_hours`,

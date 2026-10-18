@@ -241,7 +241,9 @@ The season-week route (`PUT …/seasons/:seasonId/weeks`) and the closed-week ro
 (`PUT …/zones/:zoneId/closed-week`) take a zone or season id as sent (`requireUuidParam`,
 `requireBodyUuid`, `requireWeekList`, `routes.ts`), so an upper-case id finds no row and is
 answered as not found (404); the special-day route lower-cases a zone or department id before
-storing it (`special-days.ts`). Read in the code, not run. It predates A723. Decide whether the two routes lower-case ids too.
+storing it (`special-days.ts`). Measured during A723 with a temporary test: an upper-case zone id,
+and then an upper-case season id, sent to each of the two routes was answered 404
+(`service_zone.not_found`, `season.not_found`). It predates A723. Decide whether the two routes lower-case ids too.
 
 ## A cut-away zone stroke hides another day's refusal marker until the next Save
 
@@ -252,6 +254,18 @@ replaces the whole refusal beside Save with "A zone can only close while its dep
 (the `paint-outside` handlers in `season-painter.ts` and `special-day-painter.ts`), so the marker
 a refused Save put on another day's heading disappears too. The next Save marks it again; the newest
 message wins.
+
+## A season closure on a special date is not cut or checked against that date's shorter hours
+
+Found during A723.
+
+On a special date, a zone's closures from its season week still apply, with the date's zone paint
+laid over them (`layerZonePaint` in `resolveZoneClosedDays`, `day-resolver.ts`). When the
+department's paint for that date shortens its hours, nothing cuts or checks those season closures:
+the special-day painter cuts only a zone's paint on that date and skips a zone with none (`paint`,
+`special-day-painter.ts`), and the special-day routes check only the closed ranges in the zone
+paint the request sends (`assertDatedClosuresInHours`, `zone-closure-hours.ts`). So a season
+closure can lie outside that date's department hours. Found by reading the code, not run.
 
 ## A723's plan defaults sent to the owner as an FYI
 

@@ -1486,6 +1486,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A cut-away zone stroke hides another day's refusal marker until the next Save** — left open by
   A723. [Detail](backlog/service-periods.md#a-cut-away-zone-stroke-hides-another-days-refusal-marker-until-the-next-save)
 
+- **A season closure on a special date is not cut or checked against that date's shorter hours** —
+  found during A723, by reading. [Detail](backlog/service-periods.md#a-season-closure-on-a-special-date-is-not-cut-or-checked-against-that-dates-shorter-hours)
+
 - **A723's plan defaults sent to the owner as an FYI** (Decisions 1, 3, 6, 7 and 9) — the owner may
   overrule any. [Detail](backlog/service-periods.md#a723s-plan-defaults-sent-to-the-owner-as-an-fyi)
 
