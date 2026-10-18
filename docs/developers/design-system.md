@@ -3769,10 +3769,11 @@ exact time shown, and as a deadline already gone — verified 2026-10-06 by runn
 verified 2026-09-30 by running `packages/ui/src/components/wt-notice.a11y.test.ts`; `wt-banner` with a message only, with an action, and with its action focused — verified
 2026-10-12 by running `packages/ui/src/components/wt-banner.a11y.test.ts`, both themes; a help-mode
 `wt-help-tooltip` with help off, with help on, and with help on and its box open, and
-`wt-price-input`, `wt-number-stepper`, `wt-file-input`, `wt-disclosure` and `wt-dialog` each
-holding a help-mode badge with help off and with help on — verified 2026-10-18 by running
-`packages/ui/src/components/wt-help-tooltip.a11y.test.ts` and each of those five primitives'
-`*.a11y.test.ts` beside it, both themes, every help-on case with axe's `target-size` rule switched
+`wt-input`, `wt-textarea`, `wt-combobox`, `wt-price-input`, `wt-number-stepper`, `wt-file-input`,
+`wt-disclosure` and `wt-dialog` each holding a help-mode badge with help off and with help on —
+verified 2026-10-18 by running `packages/ui/src/components/wt-help-tooltip.a11y.test.ts` (which
+holds the `wt-input` and `wt-textarea` cases, as `packages/ui-core` cannot load the badge) and the
+other six primitives' `*.a11y.test.ts` beside it, both themes, every help-on case with axe's `target-size` rule switched
 on through `expectNoA11yViolations`'s `enable` option; `wt-language-chooser` closed, open
 with the active language checked, and closed with a page's `::part` rules showing the short code
 instead of the name — verified 2026-10-02 by running

@@ -1,9 +1,11 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import { setHelpMode } from "../help-mode.js";
 import type { WtHelpTooltip } from "./wt-help-tooltip.js";
 import "./wt-help-tooltip.js";
+import "./wt-input.js";
+import "./wt-textarea.js";
 
 afterEach(cleanup);
 afterEach(() => setHelpMode(false));
@@ -46,6 +48,32 @@ describe.each(["light", "dark"] as const)("wt-help-tooltip a11y (%s theme)", (th
     const badge = await mountHelpModeBadge(theme, true);
     badge.shadowRoot!.querySelector("button")!.click();
     await badge.updateComplete;
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
+  });
+});
+
+// wt-input and wt-textarea live in packages/ui-core, which cannot load wt-help-tooltip.
+describe.each([
+  ["wt-input", "light"],
+  ["wt-input", "dark"],
+  ["wt-textarea", "light"],
+  ["wt-textarea", "dark"],
+] as const)("%s holding a help-mode badge, a11y (%s theme)", (tag, theme) => {
+  const markup =
+    `<${tag} label="Name" name="name"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Name">` +
+    `What it is called.</wt-help-tooltip></${tag}>`;
+
+  test("with a help-mode badge, help off", async () => {
+    await mountThemed(markup, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help on", async () => {
+    await mountThemed(markup, theme);
+    const badge = host.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
+    setHelpMode(true);
+    await badge.updateComplete;
+    expect(badge.checkVisibility()).toBe(true);
     await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });
