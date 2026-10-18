@@ -40,6 +40,32 @@ export interface CoreServices {
     req: { tableId: string; guestCount: number | null; operatorId: string },
   ): Promise<{ tabId: string; partyId: string }>;
   floorDeletion: FloorDeletion;
+  floorPlanSets: FloorPlanSets;
+}
+
+/** Core's floor plan sets: the layout rows a set holds, made and read for the module that names it. */
+export interface FloorPlanSets {
+  /** A new empty set of the location (no layout rows); answers its id. */
+  create(tx: Transaction): Promise<string>;
+  /** Copies every layout row, placement and kept size of `fromSetId` into `toSetId`, each layout at revision 1. */
+  copyLayouts(tx: Transaction, fromSetId: string, toSetId: string): Promise<void>;
+  /** Each zone's table count, and each (set, zone) layout's revision and counts, a missing row as 0/0/all spare. */
+  readLayouts(
+    tx: Transaction,
+    setIds: readonly string[],
+    zoneIds: readonly string[],
+  ): Promise<{
+    tableCounts: ReadonlyMap<string, number>;
+    layouts: readonly {
+      setId: string;
+      zoneId: string;
+      revision: number;
+      onPlan: number;
+      spare: number;
+    }[];
+  }>;
+  /** The zones whose today's record names the set, for the delete dialog's line. */
+  zonesShowing(tx: Transaction, setId: string): Promise<string[]>;
 }
 
 /**
@@ -98,6 +124,11 @@ export interface FloorDeletion {
     now: Date,
   ): Promise<{ refusals: DeleteImpactRefusal[]; removes: DeleteImpactItem[] }>;
   clear(tx: Transaction, zoneIds: readonly string[], now: Date): Promise<void>;
+  /**
+   * Deletes the sets' placements, sizes, layouts and rows; a today's record naming one keeps its
+   * today's rows and loses its set.
+   */
+  removeSets(tx: Transaction, setIds: readonly string[]): Promise<void>;
 }
 
 /** A module's part in removing a live table. */

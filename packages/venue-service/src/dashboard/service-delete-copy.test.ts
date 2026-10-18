@@ -256,3 +256,11 @@ it.each([
     expect(serviceDeleteError("zone", new Error("private diagnostic"))).toBe(fallback);
   },
 );
+it.each([
+  ["en", "Removes 2 floor plan sets."],
+  ["es", "Quita 2 conjuntos de planos de sala."],
+] as const)("counts a department's floor plan sets in %s", async (locale, line) => {
+  setLocale(locale);
+  const c = await copy("department");
+  expect(c.item({ key: "floor_plan_sets", count: 2, targets: [] })).toBe(line);
+});

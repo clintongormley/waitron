@@ -27,6 +27,7 @@ import {
   type ErrorParams,
 } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
+import { removeSets } from "./floor-plan-sets.js";
 import { removeLiveTables, tableDeleteRefusals } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -149,6 +150,7 @@ export function floorDeletionFor(
   removals: readonly TableRemoval[],
 ): FloorDeletion {
   return {
+    removeSets: (tx, setIds) => removeSets(tx, cfg, setIds),
     async readImpact(tx, zoneIds, now) {
       const floor = await inventory(tx, cfg, zoneIds);
       return {

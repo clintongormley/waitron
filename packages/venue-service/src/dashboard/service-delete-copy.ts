@@ -17,6 +17,7 @@ const itemKeys = {
   zone_policies: "venue.delete_item_zone_policies",
   zone_extensions: "venue.delete_item_zone_extensions",
   department_periods: "venue.delete_item_department_periods",
+  floor_plan_sets: "venue.delete_item_floor_plan_sets",
   staff_menus: "venue.delete_item_staff_menus",
   seasons: "venue.delete_item_seasons",
   period_extensions: "venue.delete_item_period_extensions",

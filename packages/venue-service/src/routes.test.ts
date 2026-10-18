@@ -150,7 +150,14 @@ async function fixture(
       ),
       core: {
         seatTable: () => Promise.reject(new Error("route fixture: seating needs the server seat")),
+        floorPlanSets: {
+          create: () => Promise.reject(new Error("unused floor plan sets")),
+          copyLayouts: () => Promise.reject(new Error("unused floor plan sets")),
+          readLayouts: () => Promise.reject(new Error("unused floor plan sets")),
+          zonesShowing: () => Promise.reject(new Error("unused floor plan sets")),
+        },
         floorDeletion: {
+          removeSets: async () => {},
           readImpact: async (tx, zoneIds) => {
             const tables =
               zoneIds.length === 0

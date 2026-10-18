@@ -32,7 +32,14 @@ async function fixture() {
       db: suite.db,
       cfg: { locationId: locationId("00000000-0000-4000-8000-000000000001") },
       core: {
+        floorPlanSets: {
+          create: () => Promise.reject(new Error("unused floor plan sets")),
+          copyLayouts: () => Promise.reject(new Error("unused floor plan sets")),
+          readLayouts: () => Promise.reject(new Error("unused floor plan sets")),
+          zonesShowing: () => Promise.reject(new Error("unused floor plan sets")),
+        },
         floorDeletion: {
+          removeSets: async () => {},
           readImpact: async () => {
             throw new Error("unused");
           },

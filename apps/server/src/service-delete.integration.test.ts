@@ -4,12 +4,14 @@ import { startManagementSession, persons, registerModulePermissions } from "@wai
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountManagementApi } from "./management-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bookings, BOOKINGS_ROUTES, BOOKINGS_PERMISSIONS } from "@waitron/bookings";
 import {
+  catalogues,
   deviceProfiles,
   diningTables,
+  floorPlanSets,
   floorPlanTables,
   floorResetTables,
   floorTodayTables,
@@ -31,7 +33,10 @@ import {
   createServiceZone,
   configureZone,
   departments,
+  departmentFloorPlanSets,
   departmentReceipts,
+  linkFloorPlanSet,
+  menuPeriods,
   departmentTransferRequests,
   requestDepartmentTransfer,
   readDepartmentDeleteImpact,
@@ -152,6 +157,63 @@ describe("real module floor deletion", () => {
         await run((tx) => tx.select().from(departments).where(eq(departments.id, f.departmentId)))
       )[0]?.active,
     ).toBe(true);
+  });
+
+  it("deleting a department removes its sets", async () => {
+    const f = await target();
+    const service = core().floorDeletion;
+    const { standard, dinner } = await run(async (tx) => {
+      const standard = (await defaultLayout(tx, venue.cfg, f.zoneId)).setId;
+      const dinner = await core().floorPlanSets.create(tx);
+      await linkFloorPlanSet(tx, venue.cfg, {
+        setId: dinner,
+        departmentId: f.departmentId,
+        name: "Dinner",
+      });
+      const [menu] = await tx.insert(catalogues).values({ name: "Menu" }).returning();
+      await tx.insert(menuPeriods).values([
+        { departmentId: f.departmentId, name: "Lunch", menuId: menu!.id, floorPlanSetId: standard },
+        { departmentId: f.departmentId, name: "Dinner", menuId: menu!.id, floorPlanSetId: dinner },
+      ]);
+      return { standard, dinner };
+    });
+    await run((tx) =>
+      saveLayout(
+        tx,
+        venue.cfg,
+        enabledTableRemovals(ALL_MODULES),
+        { setId: dinner, zoneId: f.zoneId },
+        { revision: 0, tables: [] },
+        NOW,
+      ),
+    );
+    const setIds = [standard, dinner];
+    expect(
+      await run((tx) => tx.select().from(floorPlans).where(inArray(floorPlans.setId, setIds))),
+    ).not.toEqual([]);
+
+    const impact = await run((tx) =>
+      readDepartmentDeleteImpact(tx, venue.cfg, service, f.departmentId, NOW),
+    );
+    expect(impact.removes).toContainEqual(
+      expect.objectContaining({ key: "floor_plan_sets", count: 2 }),
+    );
+
+    await run((tx) => deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW));
+
+    const after = await run(async (tx) => ({
+      periods: await tx
+        .select()
+        .from(menuPeriods)
+        .where(inArray(menuPeriods.floorPlanSetId, setIds)),
+      links: await tx
+        .select()
+        .from(departmentFloorPlanSets)
+        .where(eq(departmentFloorPlanSets.departmentId, f.departmentId)),
+      sets: await tx.select().from(floorPlanSets).where(inArray(floorPlanSets.id, setIds)),
+      plans: await tx.select().from(floorPlans).where(inArray(floorPlans.setId, setIds)),
+    }));
+    expect(after).toEqual({ periods: [], links: [], sets: [], plans: [] });
   });
 
   it("rechecks a booking committed after preview when deletion reaches the write queue", async () => {

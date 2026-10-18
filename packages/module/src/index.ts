@@ -9,6 +9,7 @@ export type {
   FloorAnnotator,
   TableRemoval,
   FloorDeletion,
+  FloorPlanSets,
   CoreServices,
   ConfigurationTransferTable,
   ModuleConfigurationTransfer,
