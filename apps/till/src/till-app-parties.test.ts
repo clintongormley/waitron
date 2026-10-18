@@ -416,6 +416,11 @@ async function openMesa(el: TillApp, tableId = "t4"): Promise<TillTableOrderScre
   return tableOrder(el)!;
 }
 
+const closingEdits = [
+  { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+  { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+];
+
 beforeEach(() => {
   setLocale("en");
   drafts = draftServer();
@@ -476,7 +481,7 @@ describe("till-app: seating a party", () => {
 
     emit(order, "finish-table", {});
     await flush(el);
-    expect(api.finishTable).toHaveBeenCalledWith("v-new", 0);
+    expect(api.finishTable).toHaveBeenCalledWith("v-new", 0, []);
 
     emit(tableOrder(el)!, "join-tables", { tableId: "t4", bills: "merge" });
     await flush(el);
@@ -714,7 +719,7 @@ describe("till-app: the party's bills and Finish table", () => {
     emit(order, "finish-table", {});
     await flush(el);
 
-    expect(api.finishTable).toHaveBeenCalledWith("v1", 3);
+    expect(api.finishTable).toHaveBeenCalledWith("v1", 3, closingEdits);
     expect(tableOrder(el)).toBeNull();
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
   });
@@ -1488,7 +1493,7 @@ describe("till-app: the party on a handheld", () => {
     emit(card, "finish-table", {});
     await flush(el);
 
-    expect(api.finishTable).toHaveBeenCalledWith("v1", 3);
+    expect(api.finishTable).toHaveBeenCalledWith("v1", 3, closingEdits);
     expect((shell(el) as HTMLElement & { activeScreen?: string }).activeScreen).toBe("floor");
   });
 
@@ -1589,7 +1594,7 @@ describe("till-app: the party on a handheld", () => {
       await flush(el);
       await selectTab(el, "order");
 
-      expect(call).toHaveBeenCalledWith("v1", 3);
+      expect(call).toHaveBeenCalledWith("v1", 3, closingEdits);
       expect(orderCard(el)!.party).toBeNull();
       expect(orderCard(el)!.orderId).toBeUndefined();
     });
@@ -3653,7 +3658,7 @@ describe("till-app: paying a bill by its state", () => {
     expect(reopened.bills.map((bill) => bill.status)).toEqual(["settled", "settled"]);
     emit(reopened, "finish-table", {});
     await flush(el);
-    expect(api.finishTable).toHaveBeenLastCalledWith("v1", 3);
+    expect(api.finishTable).toHaveBeenLastCalledWith("v1", 3, closingEdits);
     expect(tableOrder(el)).toBeNull();
   });
 
@@ -7467,6 +7472,7 @@ describe("till-app: recording an unpaid departure", () => {
       .trim();
 
   it("leaves out a presented bill whose credit notes cancel its invoice, and its amount from the total", async () => {
+    drafts.bills.add("wo-credited");
     const { el } = await openDeparture({
       getPartyBills: vi.fn().mockResolvedValue([tabBill, creditedBill("wo-credited", "0.00")]),
     });
@@ -7480,6 +7486,7 @@ describe("till-app: recording an unpaid departure", () => {
   });
 
   it("shows a partly credited presented bill at what its invoice still owes", async () => {
+    drafts.bills.add("wo-part");
     const { el } = await openDeparture({
       getPartyBills: vi.fn().mockResolvedValue([tabBill, creditedBill("wo-part", "15.58")]),
     });
@@ -7512,7 +7519,7 @@ describe("till-app: recording an unpaid departure", () => {
     expect(api.recordUnpaidDeparture).toHaveBeenCalledOnce();
     expect(vi.mocked(api.recordUnpaidDeparture).mock.calls[0]!.slice(0, 2)).toEqual([
       "v1",
-      { expectedPartyRevision: 3, reason: "Ran off" },
+      { expectedPartyRevision: 3, expectedEdits: closingEdits, reason: "Ran off" },
     ]);
     expect(dialog(el)).toBeNull();
     expect(tableOrder(el)).toBeNull();
@@ -7537,7 +7544,12 @@ describe("till-app: recording an unpaid departure", () => {
     expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
     expect(recordUnpaidDeparture.mock.calls[1]!.slice(0, 2)).toEqual([
       "v1",
-      { expectedPartyRevision: 3, reason: "Ran off", override: { personId: "sup-1", pin: "4321" } },
+      {
+        expectedPartyRevision: 3,
+        expectedEdits: closingEdits,
+        reason: "Ran off",
+        override: { personId: "sup-1", pin: "4321" },
+      },
     ]);
     expect(approval(el)).toBeNull();
     expect(dialog(el)).toBeNull();
@@ -7619,6 +7631,7 @@ describe("till-app: recording an unpaid departure", () => {
     expect(recordUnpaidDeparture).toHaveBeenCalledTimes(2);
     expect(recordUnpaidDeparture.mock.calls[1]![1]).toEqual({
       expectedPartyRevision: 3,
+      expectedEdits: closingEdits,
       reason: "Ran off after the dessert was cancelled",
     });
     expect(tableOrder(el)).toBeNull();
@@ -7670,7 +7683,7 @@ describe("till-app: recording an unpaid departure", () => {
     await confirmDeparture(el);
     expect(recordUnpaidDeparture).toHaveBeenLastCalledWith(
       "v1",
-      { expectedPartyRevision: 5, reason: "Ran off" },
+      { expectedPartyRevision: 5, expectedEdits: closingEdits, reason: "Ran off" },
       expect.anything(),
     );
   });
@@ -7757,6 +7770,7 @@ describe("till-app: recording an unpaid departure", () => {
   });
 
   it("leaves out of the dialog a bill with nothing left to pay", async () => {
+    drafts.bills.add("wo-empty");
     const empty: PartyBill = {
       ...checkBill,
       workingOrderId: "wo-empty",
@@ -7835,7 +7849,7 @@ describe("till-app: recording an unpaid departure", () => {
     await confirmDeparture(el);
     expect(recordUnpaidDeparture.mock.calls[1]!.slice(0, 2)).toEqual([
       "v1",
-      { expectedPartyRevision: 3, reason: "Ran off" },
+      { expectedPartyRevision: 3, expectedEdits: closingEdits, reason: "Ran off" },
     ]);
     expect(question.open).toBe(false);
     expect(dialog(el)).toBeNull();
@@ -9154,6 +9168,265 @@ describe("till-app: table relocation editing observations", () => {
         await flush(el, 6);
         expect(api[command.method]).toHaveBeenCalledOnce();
         expect(banner(el)?.textContent).toContain(t("table.error"));
+      },
+    );
+  }
+});
+
+describe("till-app: closing editing observations", () => {
+  const edits: import("./api/client.js").BillEditExpected[] = [
+    { billId: "wo-4", editorVersion: 7, draftId: null, draftRevision: null },
+    { billId: "wo-check", editorVersion: 3, draftId: null, draftRevision: null },
+  ];
+  function observations(missing?: string) {
+    return vi.fn(async () => ({
+      drafts: [],
+      billEdits: [...edits, { ...edits[0]!, billId: "unrelated", editorVersion: 99 }]
+        .filter((edit) => edit.billId !== missing)
+        .reverse()
+        .map((edit) => ({ ...edit, editorId: null, editorName: null })),
+    }));
+  }
+  async function mountClosing(overrides: Record<string, unknown> = {}) {
+    return mountApp({
+      recordUnpaidDeparture: vi.fn().mockResolvedValue({ state: "closed", departures: [] }),
+      ...overrides,
+    });
+  }
+  async function openDeparture(el: TillApp) {
+    emit(tableOrder(el)!, "record-unpaid-departure", {});
+    await flush(el);
+    return el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>("till-unpaid-departure-dialog");
+  }
+  async function confirmDeparture(el: TillApp) {
+    const dialog = el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>(
+      "till-unpaid-departure-dialog",
+    )!;
+    emit(dialog, "unpaid-departure-continue", { reason: "Guests left" });
+    await flush(el, 5);
+  }
+
+  it("Finish sends every family bill observation in bill-ID order, including settled bills", async () => {
+    const { el } = await mountClosing({
+      listDrafts: observations(),
+      getPartyBills: vi.fn().mockResolvedValue([checkBill, { ...tabBill, status: "settled" }]),
+    });
+    const order = await openMesa(el);
+    emit(order, "finish-table", {});
+    await flush(el);
+    expect(api.finishTable).toHaveBeenCalledExactlyOnceWith("v1", 3, edits);
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it("unpaid departure sends the shown family's observations without saving or taking over", async () => {
+    const { el } = await mountClosing({
+      listDrafts: observations(),
+      recordUnpaidDeparture: vi.fn().mockResolvedValue({ state: "closed", departures: [] }),
+    });
+    await openMesa(el);
+    expect(await openDeparture(el)).not.toBeNull();
+    await confirmDeparture(el);
+    expect(api.recordUnpaidDeparture).toHaveBeenCalledWith(
+      "v1",
+      {
+        expectedPartyRevision: 3,
+        expectedEdits: edits,
+        reason: "Guests left",
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it.each(["finish-table", "record-unpaid-departure"])(
+    "%s refuses missing metadata for another bill",
+    async (event) => {
+      const { el } = await mountClosing({ listDrafts: observations("wo-check") });
+      const order = await openMesa(el);
+      emit(order, event, {});
+      await flush(el);
+      expect(api.finishTable).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-unpaid-departure-dialog")).toBeNull();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+
+  it.each(["editorVersion", "draftRevision"] as const)(
+    "unpaid departure retains its opening %s after a focus refresh",
+    async (field) => {
+      let changed = false;
+      const read = observations();
+      const listDrafts = vi.fn(async () => {
+        const snapshot = await read();
+        if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-check")![field] = 9;
+        return snapshot;
+      });
+      const { el } = await mountClosing({ listDrafts });
+      await openMesa(el);
+      await openDeparture(el);
+      changed = true;
+      const reads = listDrafts.mock.calls.length;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      await flush(el);
+      await confirmDeparture(el);
+      expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+
+  it("unpaid departure retains its opening party revision after a guest-count update", async () => {
+    let changed = false;
+    const { el } = await mountClosing({
+      listDrafts: observations(),
+      getTablesState: vi.fn(async () => [
+        changed ? seated({}, { revision: 4 }) : mesa4,
+        mesa7,
+        mesa9,
+      ]),
+      recordUnpaidDeparture: vi.fn().mockResolvedValue({ state: "closed", departures: [] }),
+    });
+    await openMesa(el);
+    await openDeparture(el);
+    changed = true;
+    emit(tableOrder(el)!, "guests-party", { guestCount: 4 });
+    await flush(el);
+    expect(tableOrder(el)!.party!.revision).toBe(4);
+    await confirmDeparture(el);
+    expect(api.recordUnpaidDeparture).toHaveBeenCalledWith(
+      "v1",
+      {
+        expectedPartyRevision: 3,
+        expectedEdits: edits,
+        reason: "Guests left",
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it.each(["success", "refusal"] as const)(
+    "Finish ignores a late %s after API replacement",
+    async (outcome) => {
+      const pending = held();
+      const { el } = await mountClosing({ listDrafts: observations(), finishTable: pending.call });
+      emit(await openMesa(el), "finish-table", {});
+      await flush(el);
+      const replacement = stubApi({ listDrafts: observations(), recordUnpaidDeparture: vi.fn() });
+      el.api = replacement;
+      await flush(el);
+      const reads = vi.mocked(replacement.getTablesState).mock.calls.length;
+      if (outcome === "success") pending.answer.settle({ state: "closed" });
+      else pending.answer.refuse({ code: "draft.taken_over" });
+      await flush(el);
+      expect(tableOrder(el)?.party?.id).toBe("v1");
+      expect(replacement.getTablesState).toHaveBeenCalledTimes(reads);
+      expect(banner(el)).toBeNull();
+    },
+  );
+
+  it("unpaid departure refuses a confirmation after API replacement", async () => {
+    const { el } = await mountClosing({ listDrafts: observations() });
+    await openMesa(el);
+    await openDeparture(el);
+    const replacement = stubApi({ listDrafts: observations(), recordUnpaidDeparture: vi.fn() });
+    el.api = replacement;
+    await flush(el);
+    await confirmDeparture(el);
+    expect(api.recordUnpaidDeparture).not.toHaveBeenCalled();
+    expect(replacement.recordUnpaidDeparture).not.toHaveBeenCalled();
+  });
+
+  it.each(["success", "refusal"] as const)(
+    "unpaid departure ignores a late %s after API replacement",
+    async (outcome) => {
+      const pending = held();
+      const { el } = await mountClosing({
+        listDrafts: observations(),
+        recordUnpaidDeparture: pending.call,
+      });
+      await openMesa(el);
+      await openDeparture(el);
+      await confirmDeparture(el);
+      expect(pending.call).toHaveBeenCalledOnce();
+      const replacement = stubApi({ listDrafts: observations(), recordUnpaidDeparture: vi.fn() });
+      el.api = replacement;
+      await flush(el);
+      const reads = vi.mocked(replacement.getTablesState).mock.calls.length;
+      if (outcome === "success") pending.answer.settle({ state: "closed", departures: [] });
+      else pending.answer.refuse({ code: "draft.taken_over" });
+      await flush(el);
+      expect(tableOrder(el)?.party?.id).toBe("v1");
+      expect(replacement.getTablesState).toHaveBeenCalledTimes(reads);
+      expect(banner(el)).toBeNull();
+      const dialog = el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>(
+        "till-unpaid-departure-dialog",
+      )!;
+      expect(dialog.busy).toBe(true);
+      expect(dialog.refusal).toBeNull();
+    },
+  );
+  it.each(["success", "refusal"] as const)(
+    "unpaid departure ignores a late approver-read %s after API replacement",
+    async (outcome) => {
+      const authorizers = held();
+      const { el } = await mountClosing({
+        listDrafts: observations(),
+        recordUnpaidDeparture: vi
+          .fn()
+          .mockRejectedValue({ code: "authorization.not_permitted", status: 403 }),
+        listUnpaidDepartureAuthorizers: authorizers.call,
+      });
+      await openMesa(el);
+      await openDeparture(el);
+      await confirmDeparture(el);
+      expect(authorizers.call).toHaveBeenCalledOnce();
+      el.api = stubApi({ listDrafts: observations(), recordUnpaidDeparture: vi.fn() });
+      await flush(el);
+      if (outcome === "success")
+        authorizers.answer.settle([{ personId: "sup-1", displayName: "Luis" }]);
+      else authorizers.answer.refuse(new Error("Read failed"));
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-departure-approval]")).toBeNull();
+      const dialog = el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>(
+        "till-unpaid-departure-dialog",
+      )!;
+      expect(dialog.busy).toBe(true);
+      expect(dialog.refusal).toBeNull();
+    },
+  );
+  for (const code of ["draft.out_of_date", "draft.taken_over"] as const) {
+    it.each(["finish", "departure"] as const)(
+      "%s retains the " + code + " refusal while refreshing bill metadata",
+      async (command) => {
+        const listDrafts = observations();
+        const sending = vi.fn().mockRejectedValue({ code, status: 409 });
+        const { el } = await mountClosing({
+          listDrafts,
+          [command === "finish" ? "finishTable" : "recordUnpaidDeparture"]: sending,
+        });
+        const order = await openMesa(el);
+        if (command === "departure") await openDeparture(el);
+        const reads = listDrafts.mock.calls.length;
+        if (command === "finish") emit(order, "finish-table", {});
+        else await confirmDeparture(el);
+        await flush(el, 5);
+        expect(sending).toHaveBeenCalledOnce();
+        expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
+        if (command === "finish") expect(banner(el)?.textContent).toContain(codeMessage(code));
+        else {
+          const dialog = el.shadowRoot!.querySelector<TillUnpaidDepartureDialog>(
+            "till-unpaid-departure-dialog",
+          )!;
+          expect(dialog.refusal?.code).toBe(code);
+          expect(
+            dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+              .error,
+          ).toBe(codeMessage(code));
+        }
+        expect(drafts.saveDraft).not.toHaveBeenCalled();
+        expect(drafts.takeOverDraft).not.toHaveBeenCalled();
       },
     );
   }

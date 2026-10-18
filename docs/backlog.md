@@ -2238,7 +2238,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   visible. List cards, compact map labels and expanded details carry these bill labels and
   retain dish counts; long editor names wrap at phone width. Focused server and browser checks
   cover the pairs alongside the existing ready and due signals. Whole-item work listed above
-  remains open.
+  remains open. Finish and unpaid departure now send sorted editing observations for every
+  shown family bill, including settled and empty bills. The draft metadata read includes retained
+  bills under merged-away parties. An unpaid-departure prompt retains its opening observations
+  and party revision through refresh and approval; unanswered retries retain the same request.
+  Focused browser checks cover missing metadata, changed observations and late command/approver
+  answers after API replacement. The existing server closing checks remain unchanged; held-dish
+  resolution before Finish is still T22 work.
   **A773-2**, firing and the pass, is planned after A773-1 lands: Requested/pass release, Away/Done
   removal, station settings and counter changes. The [six choices](backlog/mockups/a773-1-open-points/README.md)
   are answered in spec §14. Physical trials and the remaining panel/actions/finish/delivery work

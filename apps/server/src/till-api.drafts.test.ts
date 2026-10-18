@@ -176,6 +176,59 @@ function refusal(code: string, params?: Record<string, unknown>) {
   return params === undefined ? expect.objectContaining({ code }) : { code, params };
 }
 
+describe("draft metadata for closing a joined party", () => {
+  it("includes retained bill versions from its closed family without acquiring an editor", async () => {
+    const current = await seated();
+    const historical = await seated();
+    const unrelated = await seated();
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({ status: "abandoned" })
+        .where(eq(workingOrders.id, historical.tabId));
+      await tx
+        .update(parties)
+        .set({
+          state: "closed",
+          closedAt: "2026-10-18T00:00:00.000Z",
+          mergedIntoPartyId: current.partyId,
+        })
+        .where(eq(parties.id, historical.partyId));
+      await tx
+        .insert(billEditStates)
+        .values({ billId: historical.tabId, editorId: null, editorVersion: 6 });
+    });
+    const before = await snapshot();
+    const read = await ana("GET", `/api/parties/${current.partyId}/drafts`);
+    expect(read.status).toBe(200);
+    expect(read.json).toEqual({
+      drafts: [],
+      billEdits: expect.arrayContaining([
+        {
+          billId: current.tabId,
+          editorId: null,
+          editorName: null,
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        },
+        {
+          billId: historical.tabId,
+          editorId: null,
+          editorName: null,
+          editorVersion: 6,
+          draftId: null,
+          draftRevision: null,
+        },
+      ]),
+    });
+    const edits = read.json.billEdits as unknown as { billId: string }[];
+    expect(edits).toHaveLength(2);
+    expect(edits.map((edit) => edit.billId)).not.toContain(unrelated.tabId);
+    expect(await snapshot()).toEqual(before);
+  });
+});
+
 describe("GET /api/parties/:id/drafts", () => {
   it("returns the empty bill's editing state without acquiring it or recording activity", async () => {
     const party = await seated();

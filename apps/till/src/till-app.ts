@@ -948,6 +948,7 @@ interface BillRefunding extends PayingOrder {
 
 /** The unpaid departure dialog, opened from the refusal of Finish table on party `partyId`. */
 interface Departing {
+  composition: BillComposition;
   id: number;
   partyId: string;
   /** The reason last pressed, which an approver's PIN is sent with. */
@@ -12874,41 +12875,37 @@ export class TillApp extends LitElement {
     await this.#reloadOrder();
   }
 
-  /** Finish frees the party's tables, or leaves them to clear. Unless the order's party has changed
-   * or the operator session has ended (a logout or a server switch) since, the finished party is
-   * closed: the floor comes next, except when the waiter has left the order and either has not come
-   * back to it or a table open is under way ({@link #leftSince}); then the screen stays where it is
-   * and only the floor is read again. A bill still unpaid (with the offer to take its payment), or
-   * one still holding money, is said on the screen and the party's bills read again, unless the
-   * waiter has left the party since ({@link #hasLeftParty}). At finish, `bill.payments_received`
-   * means an open bill with no items left still holds money (`finishTable`,
-   * apps/server/src/parties.ts), so it gets its own words rather than the merge and transfer ones. */
   async #onFinishTable(): Promise<void> {
     const party = this.orderParty;
     if (party === null) return;
+    const asked = this.#billComposition(this.partyBills.map((bill) => bill.workingOrderId));
+    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
     const visit = this.#orderVisit;
     const sent = this.#sentNow();
+    const live = () => this.api === asked.api && this.#operatorSession === asked.session;
     this.errorKey = undefined;
     this.finishRefused = false;
     try {
-      await this.api.finishTable(party.id, party.revision);
+      await asked.api.finishTable(party.id, party.revision, asked.expectedEdits);
     } catch (error) {
+      if (!live() || this.#hasLeftParty(party.id, sent)) return;
       if ((error as { code?: string } | undefined)?.code === "party.bill_outstanding") {
-        if (this.#hasLeftParty(party.id, sent)) return;
         this.finishRefused = true;
         await this.#loadPartyBills();
         return;
       }
       if (isPaymentsReceived(error)) {
-        if (this.#hasLeftParty(party.id, sent)) return;
         this.errorKey = "table.finish_bill_holds_money";
         await this.#loadPartyBills();
         return;
       }
-      await this.#onTableRefusal(error);
+      const code = (error as { code?: string } | undefined)?.code;
+      if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
+      else await this.#onTableRefusal(error, live);
+      if (live() && !this.#hasLeftParty(party.id, sent)) await this.#refreshBillDraft();
       return;
     }
-    await this.#onTableClosed(party.id, visit, sent);
+    if (live()) await this.#onTableClosed(party.id, visit, sent);
   }
 
   /** The party closed by Finish table or an unpaid departure leaves the screen as Finish leaves it. */
@@ -12930,7 +12927,10 @@ export class TillApp extends LitElement {
   #onRecordUnpaidDeparture(): void {
     const party = this.orderParty;
     if (party === null || this.departing !== null) return;
+    const composition = this.#billComposition(this.partyBills.map((bill) => bill.workingOrderId));
+    if (composition === null || !this.#billCompositionUnchanged(composition)) return;
     this.departing = {
+      composition,
       id: ++this.#departings,
       partyId: party.id,
       reason: "",
@@ -12970,8 +12970,8 @@ export class TillApp extends LitElement {
   async #onDepartureContinue(event: Event): Promise<void> {
     const { reason } = (event as CustomEvent<{ reason: string }>).detail;
     // The dialog's events come only while it is open. A press while a request is out is dropped.
-    const open = this.departing!;
-    if (open.busy) return;
+    const open = this.departing;
+    if (open === null || open.busy) return;
     await this.#sendDeparture({ ...open, reason });
   }
 
@@ -12980,17 +12980,12 @@ export class TillApp extends LitElement {
     event.stopPropagation();
     const override = (event as CustomEvent<{ personId: string; pin: string }>).detail;
     // The PIN prompt is drawn only over an open departure dialog.
-    const open = this.departing!;
-    if (open.busy) return;
+    const open = this.departing;
+    if (open === null || open.busy) return;
     this.departureApproverError = null;
     await this.#sendDeparture(open, { personId: override.personId, pin: override.pin });
   }
 
-  /**
-   * Each press builds its request from the party as read now; one that gets no answer is sent
-   * again unchanged. On success the table leaves the screen as a finished one does, and the bills
-   * left unpaid are read again.
-   */
   async #sendDeparture(
     open: Departing,
     override?: { personId: string; pin: string },
@@ -13000,10 +12995,14 @@ export class TillApp extends LitElement {
       this.#closeDeparting();
       return;
     }
+    const asked = open.composition;
+    if (!this.#billCompositionUnchanged(asked)) return;
+    const live = () => this.api === asked.api && this.#operatorSession === asked.session;
     const sending: Departing = { ...open, refusal: null, busy: true };
     this.departing = sending;
     const request: UnpaidDepartureRequest = {
-      expectedPartyRevision: party.revision,
+      expectedPartyRevision: asked.revisions.expectedPartyRevision!,
+      expectedEdits: asked.expectedEdits,
       reason: open.reason,
       ...(override === undefined ? {} : { override }),
     };
@@ -13015,12 +13014,13 @@ export class TillApp extends LitElement {
       await this.#resend(
         (signal) => {
           sends++;
-          return this.api.recordUnpaidDeparture(party.id, request, { signal });
+          return asked.api.recordUnpaidDeparture(party.id, request, { signal });
         },
         limit.signal,
-        () => sent.session === this.#operatorSession,
+        live,
       );
     } catch (error) {
+      if (!live()) return;
       // The server closes the party in the departure's own transaction, so a resend that finds it
       // closed most likely follows a first send that was recorded but whose answer was lost.
       if (sends > 1 && refusalOf(error).code === "party.not_open") {
@@ -13033,7 +13033,7 @@ export class TillApp extends LitElement {
     } finally {
       limit.done();
     }
-    await this.#onDepartureRecorded(open.id, party.id, visit, sent);
+    if (live()) await this.#onDepartureRecorded(open.id, party.id, visit, sent);
   }
 
   /** The dialog closes and the table leaves the screen as a finished one does. */
@@ -13049,16 +13049,21 @@ export class TillApp extends LitElement {
 
   /** The people who can approve the departure in dialog `id` are read, and their PIN prompt opens. */
   async #askDepartureApprover(id: number): Promise<void> {
+    const open = this.#departingNow(id);
+    if (open === null) return;
+    const current = () =>
+      this.#departingNow(id) !== null && this.#billCompositionCurrent(open.composition);
     try {
-      const approvers = await this.api.listUnpaidDepartureAuthorizers();
+      const approvers = await open.composition.api.listUnpaidDepartureAuthorizers();
       const now = this.#departingNow(id);
-      if (now === null) return;
+      if (now === null || !current()) return;
       this.departing = { ...now, busy: false };
       this.departureApproverError = null;
       this.departureApprovers = approvers;
     } catch {
       const now = this.#departingNow(id);
-      if (now !== null) this.departing = { ...now, refusal: { code: "approvers" }, busy: false };
+      if (now !== null && current())
+        this.departing = { ...now, refusal: { code: "approvers" }, busy: false };
     }
   }
 
@@ -13092,7 +13097,10 @@ export class TillApp extends LitElement {
     }
     this.#closeDepartureApprovers();
     this.departing = { ...now, refusal, busy: false };
-    if (!this.#hasLeftParty(open.partyId, sent)) await this.#loadPartyBills();
+    if (!this.#hasLeftParty(open.partyId, sent)) {
+      await this.#loadPartyBills();
+      if (this.#billCompositionCurrent(open.composition)) await this.#refreshBillDraft();
+    }
   }
 
   /** Cancel and credit, offered on an invoiced bill nothing is paid on: its dialog opens. */

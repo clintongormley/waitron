@@ -1212,6 +1212,7 @@ export interface BillRefundResult {
 
 /** `POST /api/parties/:id/unpaid-departure`: the party's guests left without paying. */
 export interface UnpaidDepartureRequest {
+  expectedEdits: BillEditExpected[];
   expectedPartyRevision: number;
   reason: string;
   override?: { personId: string; pin: string };
@@ -3653,8 +3654,15 @@ export class TillApi {
    * holds money, `party.not_open`, or `party.out_of_date` when the party changed since
    * `expectedPartyRevision` was read.
    */
-  finishTable(partyId: string, expectedPartyRevision: number): Promise<{ state: "closed" }> {
-    return this.#request(`/api/parties/${partyId}/finish`, "POST", { expectedPartyRevision });
+  finishTable(
+    partyId: string,
+    expectedPartyRevision: number,
+    expectedEdits: BillEditExpected[],
+  ): Promise<{ state: "closed" }> {
+    return this.#request(`/api/parties/${partyId}/finish`, "POST", {
+      expectedPartyRevision,
+      expectedEdits,
+    });
   }
 
   /**

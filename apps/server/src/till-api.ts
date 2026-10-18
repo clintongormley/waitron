@@ -135,6 +135,7 @@ import {
 import type { LineExtras, OrderLinePatch, TicketState, OrderAttendance } from "./working-order.js";
 import { listStationsToday } from "./kitchen.js";
 import {
+  partyFamily,
   finishTable,
   holderOf,
   markTableCleared,
@@ -3394,10 +3395,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         const drafts = await readDrafts(tx, deps.cfg, partyId);
+        const family = await partyFamily(tx, partyId);
         const bills = await tx
           .select({ id: workingOrders.id })
           .from(workingOrders)
-          .where(eq(workingOrders.partyId, partyId))
+          .where(inArray(workingOrders.partyId, family))
           .orderBy(
             asc(workingOrders.openedAt),
             asc(workingOrders.orderNumber),

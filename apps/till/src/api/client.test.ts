@@ -3626,16 +3626,29 @@ describe("TillApi: a seated party", () => {
     );
   });
 
+  it("finishTable sends the complete closing edit observations", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ state: "closed" }));
+    const expectedEdits = [
+      { billId: "wo-1", editorVersion: 3, draftId: null, draftRevision: null },
+      { billId: "wo-2", editorVersion: 8, draftId: null, draftRevision: null },
+    ];
+    await new TillApi("", fetchStub).finishTable("v1", 4, expectedEdits);
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/v1/finish",
+      post({ expectedPartyRevision: 4, expectedEdits }),
+    );
+  });
+
   it("finishTable POSTs the revision it read to the party's /finish route", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ state: "closed" }));
 
-    await expect(new TillApi("", fetchStub).finishTable("v1", 4)).resolves.toEqual({
+    await expect(new TillApi("", fetchStub).finishTable("v1", 4, [])).resolves.toEqual({
       state: "closed",
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/finish",
-      post({ expectedPartyRevision: 4 }),
+      post({ expectedPartyRevision: 4, expectedEdits: [] }),
     );
   });
 
@@ -3644,7 +3657,7 @@ describe("TillApi: a seated party", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "party.bill_outstanding" } }, 409));
 
-    await expect(new TillApi("", fetchStub).finishTable("v1", 4)).rejects.toMatchObject({
+    await expect(new TillApi("", fetchStub).finishTable("v1", 4, [])).rejects.toMatchObject({
       code: "party.bill_outstanding",
       status: 409,
     });
@@ -3652,6 +3665,7 @@ describe("TillApi: a seated party", () => {
 
   it("recordUnpaidDeparture POSTs the revision, reason and override to the party's /unpaid-departure route", async () => {
     const request: UnpaidDepartureRequest = {
+      expectedEdits: [],
       expectedPartyRevision: 4,
       reason: "Left without paying",
       override: { personId: "sup-1", pin: "1234" },
@@ -3693,6 +3707,7 @@ describe("TillApi: a seated party", () => {
 
     await expect(
       new TillApi("", fetchStub).recordUnpaidDeparture("v1", {
+        expectedEdits: [],
         expectedPartyRevision: 4,
         reason: "Gone",
       }),
