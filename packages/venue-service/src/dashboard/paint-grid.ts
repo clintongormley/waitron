@@ -188,9 +188,17 @@ export class PaintGrid extends LitElement {
         endsAt: clockAt(stretch.end, this.cutover),
       };
       if (this.#outside(stretch.key, [paint])) return;
+      // Only the kept pieces of a Closed stroke paint, so the parts cut away leave the day alone.
+      const pieces =
+        paint.periodId === null && this.closedWithin?.has(stretch.key)
+          ? this.#cut(stretch.key, [paint])
+          : [paint];
       this.#emit(
         stretch.key,
-        paintStretch(this.#day(stretch.key), paint, this.cutover, this.closedErases),
+        pieces.reduce<Paint[]>(
+          (day, piece) => paintStretch(day, piece, this.cutover, this.closedErases),
+          [...this.#day(stretch.key)],
+        ),
       );
     },
   });
@@ -200,7 +208,11 @@ export class PaintGrid extends LitElement {
       this.renderRoot.querySelector<HTMLElement>(`.heading[data-column="${key}"] wt-row-actions`),
     copy: (from, to) => {
       const copied = copyDay(this.days, from, to);
-      const changed = to.filter((key) => !samePaint(copied.get(key)!, this.#day(key)));
+      // A bounded target is cut even when it already holds the copied paint; `#emit` drops a cut
+      // day that is unchanged.
+      const changed = to.filter(
+        (key) => this.closedWithin?.has(key) || !samePaint(copied.get(key)!, this.#day(key)),
+      );
       for (const key of changed) this.#emit(key, copied.get(key)!);
       // After every change: a painter clears its notice on each change.
       for (const key of changed) this.#outside(key, copied.get(key)!);

@@ -1549,6 +1549,53 @@ test("with closedWithin, a Closed stroke keeps only what lies in the column's ho
   ]);
 });
 
+test("a Closed stroke cut to the hours leaves the paint where it was cut away, and the kept part paints over it", async () => {
+  const open: Paint = { periodId: "open", startsAt: "17:00", endsAt: "22:00" };
+  const el = await zoneGrid(
+    { mon: [open] },
+    { mon: [{ periodId: "dinner", startsAt: "20:00", endsAt: "23:00" }] },
+  );
+  const seen = changes(el);
+  await drag(el, "mon", 720, 900);
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      day: [
+        { periodId: "open", startsAt: "17:00", endsAt: "20:00" },
+        shut("20:00", "21:00"),
+        { periodId: "open", startsAt: "21:00", endsAt: "22:00" },
+      ],
+    },
+  ]);
+});
+
+test("a Closed stroke cut into two pieces by the hours paints both pieces and leaves the paint between them", async () => {
+  const open: Paint = { periodId: "open", startsAt: "12:00", endsAt: "20:00" };
+  const el = await zoneGrid(
+    { mon: [open] },
+    {
+      mon: [
+        { periodId: "lunch", startsAt: "13:00", endsAt: "15:00" },
+        { periodId: "dinner", startsAt: "17:00", endsAt: "19:00" },
+      ],
+    },
+  );
+  const seen = changes(el);
+  await drag(el, "mon", 360, 720);
+  expect(seen).toEqual([
+    {
+      key: "mon",
+      day: [
+        { periodId: "open", startsAt: "12:00", endsAt: "13:00" },
+        shut("13:00", "15:00"),
+        { periodId: "open", startsAt: "15:00", endsAt: "17:00" },
+        shut("17:00", "18:00"),
+        { periodId: "open", startsAt: "18:00", endsAt: "20:00" },
+      ],
+    },
+  ]);
+});
+
 test("a stroke wholly outside the hours emits nothing", async () => {
   const el = await zoneGrid(
     { mon: [shut("20:00", "21:00")] },
@@ -1673,6 +1720,60 @@ test("Copy whose Closed paint lies wholly outside a bounded column's hours lands
   await el.updateComplete;
   expect(outside).toEqual([{ key: "tue" }]);
   expect(seen).toEqual([{ key: "tue", day: [] }]);
+});
+
+test("Copy cuts a bounded target to its hours even when the target already holds the source's paint", async () => {
+  const el = await zoneGrid(
+    { mon: [shut("21:00", "23:00")], tue: [shut("21:00", "23:00")] },
+    {
+      mon: [{ periodId: "dinner", startsAt: "20:00", endsAt: "23:00" }],
+      tue: [{ periodId: "dinner", startsAt: "20:00", endsAt: "22:00" }],
+    },
+  );
+  const outside: { key: string }[] = [];
+  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
+  const seen = changes(el);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "tue"));
+  await el.updateComplete;
+  await userEvent.click(chooserButton(el, "Copy"));
+  await el.updateComplete;
+  expect(seen).toEqual([{ key: "tue", day: [shut("21:00", "22:00")] }]);
+  expect(outside).toEqual([]);
+});
+
+test("Copy onto a bounded target already holding the source's paint, all of it outside the target's hours, clears it and sends paint-outside", async () => {
+  const el = await zoneGrid(
+    { mon: [shut("21:00", "23:00")], tue: [shut("21:00", "23:00")] },
+    { tue: [{ periodId: "lunch", startsAt: "13:00", endsAt: "16:00" }] },
+  );
+  const outside: { key: string }[] = [];
+  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
+  const seen = changes(el);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "tue"));
+  await el.updateComplete;
+  await userEvent.click(chooserButton(el, "Copy"));
+  await el.updateComplete;
+  expect(seen).toEqual([{ key: "tue", day: [] }]);
+  expect(outside).toEqual([{ key: "tue" }]);
+});
+
+test("Copy onto an unbounded target already holding the source's paint sends nothing", async () => {
+  const el = await zoneGrid(
+    { mon: [shut("21:00", "23:00")], tue: [shut("21:00", "23:00")] },
+    { mon: [{ periodId: "dinner", startsAt: "20:00", endsAt: "23:00" }] },
+  );
+  const outside: { key: string }[] = [];
+  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
+  const seen = changes(el);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "tue"));
+  await el.updateComplete;
+  await userEvent.click(chooserButton(el, "Copy"));
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(outside).toEqual([]);
 });
 
 test("Copy of Open paint beside Closed paint wholly outside a column's hours lands the Open there and sends paint-outside for that column alone, after every change", async () => {
