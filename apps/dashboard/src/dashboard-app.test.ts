@@ -8077,7 +8077,7 @@ describe("mounted public department dialogs", () => {
     expect((find(app, 'wt-input[name="name"]') as WtInput).value).toBe("Restaurant");
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
-  it("the real receipt link keeps its department and asks before leaving a Settings draft", async () => {
+  it("the real receipt link opens the Receipts tab of its department with no question and keeps a Settings draft", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1", [
       "venue_service.manage",
       "venue.view",
@@ -8086,17 +8086,12 @@ describe("mounted public department dialogs", () => {
     ]);
     const box = await draft(app);
     void navigationGuardFor(window)!.write("/manage/venue-operations/department/d1/view/receipt");
-    await choose(app, "keep");
+    await noQuestionAt(app, "/manage/venue-operations/department/d1/view/receipt");
+    const form = find(app, "department-settings") as HTMLElement & { tab: string };
+    await expect.poll(() => form.tab).toBe("receipt");
+    expect(box.isConnected).toBe(true);
     expect(box.value).toBe("Draft restaurant");
-    expect(location.pathname).toBe("/manage/venue-operations/department/d1");
-    void navigationGuardFor(window)!.write("/manage/venue-operations/department/d1/view/receipt");
-    await choose(app, "discard");
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/venue-operations/department/d1/view/receipt");
-    expect(box.isConnected).toBe(false);
-    expect(box.value).toBe("Restaurant");
-    await expect.poll(() => find(app, "dashboard-department-receipt-dialog")).not.toBeNull();
+    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
   });
   async function chooseTab(app: DashboardApp, tab: string) {
     const strip = find(app, "department-settings")!.shadowRoot!.querySelector("wt-tabs")!;
@@ -8176,16 +8171,15 @@ describe("mounted public department dialogs", () => {
       false,
       true,
     );
-    const screen = find(app, "dashboard-department-receipt-dialog") as HTMLElement & {
-      subject: { id: string };
-    };
-    expect(screen).not.toBeNull();
-    expect(screen.subject.id).toBe(id);
+    const dialog = find(app, "department-edit-dialog") as HTMLElement & { departmentId: string };
+    expect(dialog).not.toBeNull();
+    expect(dialog.departmentId).toBe(id);
     expect(find(app, "departments-list")).not.toBeNull();
-    await expect.poll(() => find(app, "dashboard-department-receipt-dialog")).not.toBeNull();
+    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
+    expect((find(app, "department-settings") as HTMLElement & { tab: string }).tab).toBe("receipt");
     expect(
       (
-        find(app, "dashboard-department-receipt-dialog") as HTMLElement & {
+        find(app, "dashboard-department-receipt-editor") as HTMLElement & {
           subject: { id: string };
         }
       ).subject.id,
@@ -8195,7 +8189,7 @@ describe("mounted public department dialogs", () => {
     expect(find(app, '[data-test="receipt-language"]')).toBeNull();
   });
   it.each(["cancel", "escape"] as const)(
-    "hosted Receipt %s Keeps then Discards one draft and returns to the list",
+    "the Receipts tab's %s Keeps then Discards one draft and returns to the list",
     async (destination) => {
       const app = await mountDepartments("/manage/venue-operations/department/d1/view/receipt", [
         "venue_service.manage",
@@ -8221,7 +8215,8 @@ describe("mounted public department dialogs", () => {
       await choose(app, "discard");
       await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
       expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-      expect(find(app, "dashboard-department-receipt-dialog")).toBeNull();
+      expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
+      expect(find(app, "department-edit-dialog")).toBeNull();
     },
   );
   it("a missing department Receipt URL does not borrow another department", async () => {
@@ -8229,7 +8224,7 @@ describe("mounted public department dialogs", () => {
       "venue_service.manage",
       "layout.configure",
     ]);
-    expect(find(app, "dashboard-department-receipt-dialog")).toBeNull();
+    expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
     expect(
       find(app, "venue-departments-shell")!.shadowRoot!.querySelector('[role="status"]')!
         .textContent,
@@ -8246,23 +8241,26 @@ describe("mounted public department dialogs", () => {
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/venue-operations/department/d2/view/receipt");
-    await expect.poll(() => find(app, "dashboard-department-receipt-dialog")).not.toBeNull();
+    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
     expect(
       (
-        find(app, "dashboard-department-receipt-dialog") as HTMLElement & {
+        find(app, "dashboard-department-receipt-editor") as HTMLElement & {
           subject: { id: string };
         }
       ).subject.id,
     ).toBe("d2");
   });
-  it("Settings hides Edit the receipt when the host cannot offer Receipt", async () => {
+  it("the department dialog offers no Receipts tab when the host cannot offer Receipt", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1", [
       "venue_service.manage",
       "venue.view",
       "venue.configure",
     ]);
-    expect(find(app, "department-settings")).not.toBeNull();
-    expect(find(app, '[data-test="receipt-department-d1"]')).toBeNull();
+    const form = find(app, "department-settings")!;
+    expect(form).not.toBeNull();
+    const strip = form.shadowRoot!.querySelector("wt-tabs")!;
+    expect(strip.items.map(({ key }) => key)).not.toContain("receipt");
+    expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
   });
   it.each([["venue_service.manage"], ["layout.configure"], []])(
     "a Receipt deep link cannot bypass either permission: %j",
@@ -8271,7 +8269,7 @@ describe("mounted public department dialogs", () => {
         "/manage/venue-operations/department/d1/view/receipt",
         permissions,
       );
-      expect(find(app, "dashboard-department-receipt-dialog")).toBeNull();
+      expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
       expect(find(app, 'button[data-key="receipt"]')).toBeNull();
       if (permissions.some((permission: string) => permission === "venue_service.manage")) {
         expect(find(app, "department-settings")).not.toBeNull();

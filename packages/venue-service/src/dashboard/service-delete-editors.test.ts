@@ -287,7 +287,7 @@ it.each(["week", "zone-week"])(
   },
 );
 
-it("department deletion removes its contributed receipt panel while another department draft survives", async () => {
+it("department deletion closes the department dialog with its Receipts tab while another department draft survives", async () => {
   await mount();
   const survivor = await settings("d2");
   history.replaceState(null, "", "/manage/venue-operations/department/d1/view/receipt");
@@ -301,14 +301,20 @@ it("department deletion removes its contributed receipt panel while another depa
     html`<section data-test="contributed-receipt" data-department=${subject.id}>${panel}</section>`;
   app.append(page);
   await page.updateComplete;
+  const dialog = page.shadowRoot!.querySelector("department-edit-dialog")!;
+  await dialog.updateComplete;
+  const form = dialog.shadowRoot!.querySelector("department-settings")!;
+  await form.updateComplete;
+  expect(form.tab).toBe("receipt");
   expect(
-    page
+    form
       .shadowRoot!.querySelector("[data-test=contributed-receipt]")
       ?.getAttribute("data-department"),
   ).toBe("d1");
   page.model = { ...page.model, departments: page.model.departments.filter((d) => d.id !== "d1") };
   await page.updateComplete;
-  expect(page.shadowRoot!.querySelector("[data-test=contributed-receipt]")).toBeNull();
+  await expect.poll(() => page.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
+  expect(form.isConnected).toBe(false);
   expect(
     survivor
       .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!

@@ -1,6 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
-import { registerIcons, type WtFormActions, type WtInput, type WtTabs } from "@waitron/ui";
+import {
+  leaveCoordinatorFor,
+  registerIcons,
+  type WtFormActions,
+  type WtInput,
+  type WtTabs,
+} from "@waitron/ui";
 import { DASHBOARD_ICONS } from "./icons.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, VenueDefaults } from "./api/client.js";
@@ -17,6 +23,12 @@ import {
   receiptRoot,
 } from "./testing/department-receipt-dialog-fixture.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
+import {
+  departmentDialog,
+  mountReceiptApp,
+  receiptTabEditor,
+} from "./testing/department-receipt-app-fixture.js";
+import type { DepartmentReceiptDialog } from "./screens/department-receipt-dialog.js";
 
 afterEach(() => {
   cleanupWidgets();
@@ -551,8 +563,12 @@ for (const locale of ["en-GB", "es-ES"]) {
   }
 }
 
-it("the receipt dialog's Cancel protects the appearance before closing", async () => {
-  const { app, el, dialog } = await mountReceiptDialog();
+it("the Receipts tab's Cancel protects the appearance before closing", async () => {
+  const { app } = await mountReceiptApp();
+  await expect.poll(() => receiptTabEditor(app)).toBeTruthy();
+  const el = receiptTabEditor(app)! as unknown as DepartmentReceiptDialog;
+  await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
+  const dialog = departmentDialog(app)!.shadowRoot!.querySelector("wt-modal")!;
   await editReceipt(el, "headerSubtitle-es-ES", "Edited heading");
   const input = receiptField(el, "headerSubtitle-es-ES");
   for (const decision of ["keep", "discard"] as const) {
@@ -569,7 +585,9 @@ it("the receipt dialog's Cancel protects the appearance before closing", async (
     if (decision === "keep") expect(input.value).toBe("Edited heading");
   }
   expect(input.isConnected).toBe(false);
-  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(leaveCoordinatorFor(app.shadowRoot!.querySelector("wt-unsaved-changes")!)!.isDirty()).toBe(
+    false,
+  );
 });
 
 it("an obsolete receipt department query cannot bypass a venue draft leave decision", async () => {
