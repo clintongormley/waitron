@@ -148,40 +148,52 @@ export async function readFloorPlanSetsModel(
     .from(menuPeriods)
     .where(inArray(menuPeriods.departmentId, departmentIds))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
-  const departmentsOut: FloorPlanSetsModel["departments"] = [];
-  for (const department of departmentRows) {
-    const ownZones = zones.filter((z) => z.departmentId === department.id);
-    const ownSets = sets.filter((s) => s.departmentId === department.id);
-    const { tableCounts, layouts } = await core.readLayouts(
-      tx,
-      ownSets.map((s) => s.setId),
-      ownZones.map((z) => z.id),
-    );
-    const layoutOf = new Map(layouts.map((l) => [`${l.setId}:${l.zoneId}`, l]));
-    const ownPeriods = periods.filter((p) => p.departmentId === department.id);
-    departmentsOut.push({
-      id: department.id,
-      name: department.name,
-      zones: ownZones.map((z) => ({
-        id: z.id,
-        name: z.name,
-        tableCount: tableCounts.get(z.id)!,
-      })),
-      sets: ownSets.map((set) => ({
-        id: set.setId,
-        name: set.name,
-        isDefault: set.isDefault,
-        usedBy: ownPeriods
-          .filter((p) => p.setId === set.setId || (set.isDefault && p.setId === null))
-          .map(({ id, name, colour }) => ({ id, name, colour })),
-        layouts: ownZones.map((z) => {
-          const { onPlan, spare } = layoutOf.get(`${set.setId}:${z.id}`)!;
-          return { zoneId: z.id, onPlan, spare };
-        }),
-      })),
-    });
+  const { tableCounts, layouts } = await core.readLayouts(
+    tx,
+    sets.map((s) => s.setId),
+    zones.map((z) => z.id),
+  );
+  const layoutOf = new Map(layouts.map((l) => [`${l.setId}:${l.zoneId}`, l]));
+  const zonesOf = byDepartment(zones);
+  const setsOf = byDepartment(sets);
+  const periodsOf = byDepartment(periods);
+  return {
+    departments: departmentRows.map((department) => {
+      const ownZones = zonesOf.get(department.id) ?? [];
+      const ownPeriods = periodsOf.get(department.id) ?? [];
+      return {
+        id: department.id,
+        name: department.name,
+        zones: ownZones.map((z) => ({
+          id: z.id,
+          name: z.name,
+          tableCount: tableCounts.get(z.id)!,
+        })),
+        sets: (setsOf.get(department.id) ?? []).map((set) => ({
+          id: set.setId,
+          name: set.name,
+          isDefault: set.isDefault,
+          usedBy: ownPeriods
+            .filter((p) => p.setId === set.setId || (set.isDefault && p.setId === null))
+            .map(({ id, name, colour }) => ({ id, name, colour })),
+          layouts: ownZones.map((z) => {
+            const { onPlan, spare } = layoutOf.get(`${set.setId}:${z.id}`)!;
+            return { zoneId: z.id, onPlan, spare };
+          }),
+        })),
+      };
+    }),
+  };
+}
+
+function byDepartment<T extends { departmentId: string }>(rows: readonly T[]): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const held = grouped.get(row.departmentId);
+    if (held === undefined) grouped.set(row.departmentId, [row]);
+    else held.push(row);
   }
-  return { departments: departmentsOut };
+  return grouped;
 }
 
 function setName(name: string): string {
@@ -320,7 +332,8 @@ export async function readFloorPlanSetDeleteImpact(
 
 /**
  * Deletes a set that is not its department's default. Its periods take `replaceWith`, another set
- * of the department, or the default (an empty field) when null. The periods and the link go
+ * of the department; the default, named or null, is stored as an empty field so the periods
+ * follow whichever set is the default later. The periods and the link go
  * before core's rows, which they name by plain foreign keys.
  */
 export async function deleteFloorPlanSet(
@@ -332,14 +345,17 @@ export async function deleteFloorPlanSet(
 ): Promise<void> {
   const set = await ownedSet(tx, cfg, setId);
   if (set.isDefault) throw new AppError("floor_plan_set.is_default", { setId });
+  let replacement: string | null = null;
   if (replaceWith !== null) {
     const held = await readFloorPlanSets(tx, cfg, { departmentId: set.departmentId });
-    if (replaceWith === setId || !held.some((other) => other.setId === replaceWith))
+    const chosen = held.find((other) => other.setId === replaceWith);
+    if (replaceWith === setId || chosen === undefined)
       throw new AppError("floor_plan_set.invalid", { field: "replaceWith" });
+    if (!chosen.isDefault) replacement = replaceWith;
   }
   await tx
     .update(menuPeriods)
-    .set({ floorPlanSetId: replaceWith })
+    .set({ floorPlanSetId: replacement })
     .where(eq(menuPeriods.floorPlanSetId, setId));
   await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, setId));
   await deletion.removeSets(tx, [setId]);

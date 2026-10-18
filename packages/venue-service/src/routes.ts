@@ -91,6 +91,7 @@ import {
 } from "./special-days.js";
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
 import { mountFloorPlanSetRoutes } from "./floor-plan-set-routes.js";
+import { onlyKeys } from "./request-keys.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -172,12 +173,6 @@ function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
     return value as "auto" | "on_request";
   if (!zone && field === "printTradingName" && typeof value === "boolean") return value;
   throw new AppError("management.request_invalid", { field });
-}
-
-/** Refuses any body key outside `allowed`, so a client cannot choose what the server derives. */
-function onlyKeys(body: object, allowed: readonly string[]): void {
-  const extra = Object.keys(body).find((key) => !allowed.includes(key));
-  if (extra !== undefined) throw new AppError("management.request_invalid", { field: extra });
 }
 
 function zoneSettingsBody(body: Record<string, unknown>): ZoneServiceSettingsInput {

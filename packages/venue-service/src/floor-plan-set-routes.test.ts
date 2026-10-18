@@ -491,6 +491,13 @@ describe("deleting a set", () => {
     expect(v.removed).toEqual([[v.dinnerSet]]);
   });
 
+  it("empties its periods' field when the default is named as the replacement", async () => {
+    const v = await casaMarina();
+    const res = await v.send("POST", `/${v.dinnerSet}/delete`, { replaceWith: v.standard });
+    expect(res.status).toBe(204);
+    expect(await periodSet(v.dinner)).toBeNull();
+  });
+
   it("gives its periods the replacement set", async () => {
     const v = await casaMarina();
     const res = await v.send("POST", `/${v.dinnerSet}/delete`, { replaceWith: v.privateParty });
@@ -535,6 +542,32 @@ describe("request shapes", () => {
 });
 
 describe("who may use the routes", () => {
+  it("refuses a request with no session before reading its body", async () => {
+    const v = await casaMarina();
+    const res = await v.send("POST", "", { colour: "red" }, "");
+    expect(await refusal(res)).toMatchObject({
+      status: 401,
+      code: "management_session.required",
+    });
+  });
+
+  it("refuses a venue.view person's write before reading its body", async () => {
+    const v = await casaMarina();
+    for (const [method, path] of [
+      ["POST", ""],
+      ["PATCH", `/${v.dinnerSet}`],
+      ["POST", `/${v.dinnerSet}/delete`],
+      ["PATCH", "/not-a-uuid"],
+    ] as const) {
+      const res = await v.send(method, path, { colour: "red" }, v.supervisor);
+      expect(await refusal(res)).toEqual({
+        status: 403,
+        code: "authorization.not_permitted",
+        params: { permission: "venue.configure" },
+      });
+    }
+  });
+
   it("lets a venue.view person read the model and refuses every write", async () => {
     const v = await casaMarina();
     expect((await model(v, v.supervisor)).departments.length).toBeGreaterThan(0);
