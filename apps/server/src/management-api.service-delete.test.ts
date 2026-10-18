@@ -563,7 +563,7 @@ describe("stale floor identifiers", () => {
     const deleted = await floorTarget();
     const live = await floorTarget(false);
     await run((tx) => takeOffToday(tx, v.cfg, live.tableId));
-    const tables = await run((tx) => listTables(tx, v.cfg, { includeDisabled: true }));
+    const tables = await run((tx) => listTables(tx, v.cfg, new Date(), { includeDisabled: true }));
     expect(tables).not.toContainEqual(expect.objectContaining({ id: deleted.tableId }));
     expect(tables).toContainEqual(expect.objectContaining({ id: live.tableId }));
     expect(await run((tx) => listZones(tx, v.cfg, { includeInactive: true }))).not.toContainEqual(

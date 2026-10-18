@@ -2584,7 +2584,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = await requireSession(deps, c);
       const tables = await withTransaction(deps.db, async (tx) => {
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
-        return (await listTables(tx, deps.cfg)).filter((table) => inScope(scope, table.zoneId));
+        return (await listTables(tx, deps.cfg, deps.clock.now().instant)).filter((table) =>
+          inScope(scope, table.zoneId),
+        );
       });
       return c.json(tables);
     }),

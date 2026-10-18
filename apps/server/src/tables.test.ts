@@ -106,7 +106,7 @@ describe("table CRUD", () => {
     const cfg = await setupVenue();
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terraza" }));
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "12", zoneId }));
-    const tables = await asApp(cfg, (tx) => listTables(tx, cfg));
+    const tables = await asApp(cfg, (tx) => listTables(tx, cfg, new Date()));
     expect(tables).toEqual([
       expect.objectContaining({
         id,
@@ -150,7 +150,9 @@ describe("a joined table's parts", () => {
       }),
     );
     const labels = async (options?: { includeDisabled: boolean }) =>
-      (await asApp(cfg, (tx) => listTables(tx, cfg, options))).map((table) => table.label);
+      (await asApp(cfg, (tx) => listTables(tx, cfg, new Date(), options))).map(
+        (table) => table.label,
+      );
     expect(await labels()).toEqual(["Long table"]);
     expect(await labels({ includeDisabled: true })).toEqual([
       "Counter 3",

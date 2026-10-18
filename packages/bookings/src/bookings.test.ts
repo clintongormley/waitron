@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  floorPlanPlacements,
+  floorPlanSets,
   floorPlanTableParts,
   floorPlanTables,
   floorPlans,
   floorTodayTables,
+  floorTodayZones,
   floorZones,
   newId,
   nowIso,
@@ -835,5 +838,119 @@ describe("a part of a joined table on the saved plan", () => {
       params: { tableId: table.c5, field: "tableId" },
     });
     expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.tableId).toBe(table.long);
+  });
+});
+
+describe("books table 4 while today's recorded layout stands it", () => {
+  const TODAY = "2026-10-10";
+  const TOMORROW = "2026-10-11";
+
+  /**
+   * Zone Inside with 4, 5 and 4+5 made of them; Standard places 4 and 5 and leaves 4+5 off,
+   * Dinner places 4+5. Today's plan records Standard for TODAY.
+   */
+  async function inside(locationId: string) {
+    const [zone] = await db
+      .insert(floorZones)
+      .values({ locationId, name: "Inside" })
+      .returning({ id: floorZones.id });
+    const [standard, dinner] = await db
+      .insert(floorPlanSets)
+      .values([{ locationId }, { locationId }])
+      .returning({ id: floorPlanSets.id });
+    const [standardPlan, dinnerPlan] = await db
+      .insert(floorPlans)
+      .values([
+        { zoneId: zone!.id, setId: standard!.id, savedAt: nowIso() },
+        { zoneId: zone!.id, setId: dinner!.id, savedAt: nowIso() },
+      ])
+      .returning({ id: floorPlans.id });
+    const master = {} as Record<"t4" | "t5" | "t45", string>;
+    const live = {} as Record<"t4" | "t5" | "t45", string>;
+    for (const [key, label] of [
+      ["t4", "4"],
+      ["t5", "5"],
+      ["t45", "4+5"],
+    ] as const) {
+      const [row] = await db
+        .insert(floorPlanTables)
+        .values({ planId: standardPlan!.id, zoneId: zone!.id, label, seats: 4 })
+        .returning({ id: floorPlanTables.id });
+      master[key] = row!.id;
+      const table = await db.execute<{ id: string }>(sql`
+        insert into dining_tables (id, created_at, location_id, zone_id, label, plan_table_id)
+        values (${newId()}, ${nowIso()}, ${locationId}, ${zone!.id}, ${label}, ${row!.id})
+        returning id`);
+      live[key] = table.rows[0]!.id;
+      await db.insert(floorTodayTables).values({ tableId: live[key] });
+    }
+    await db.insert(floorPlanTableParts).values([
+      { joinedTableId: master.t45, partTableId: master.t4 },
+      { joinedTableId: master.t45, partTableId: master.t5 },
+    ]);
+    const at = { y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 };
+    await db.insert(floorPlanPlacements).values([
+      { planId: standardPlan!.id, planTableId: master.t4, x: 0, ...at },
+      { planId: standardPlan!.id, planTableId: master.t5, x: 20, ...at },
+      { planId: dinnerPlan!.id, planTableId: master.t45, x: 0, ...at },
+    ]);
+    await db
+      .insert(floorTodayZones)
+      .values({ zoneId: zone!.id, businessDay: TODAY, setId: standard!.id });
+    const record = (setId: string) =>
+      db.update(floorTodayZones).set({ setId }).where(eq(floorTodayZones.zoneId, zone!.id));
+    return { live, recordDinner: () => record(dinner!.id) };
+  }
+
+  function book(cfg: VenueCfg, createdBy: string, bookingDate: string, tableId: string) {
+    return scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate,
+        bookingTime: "20:00",
+        partySize: 4,
+        contactName: "García",
+        tableId,
+        createdBy,
+      }),
+    );
+  }
+
+  const inJoined = (tableId: string) => ({
+    code: "table.in_joined_table",
+    params: { tableId, field: "tableId" },
+  });
+
+  it("accepts a booking for today at 4 and refuses one at 4+5", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const { live } = await inside(cfg.locationId);
+    const { id } = await book(cfg, createdBy, TODAY, live.t4);
+    expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.tableId).toBe(live.t4);
+    await expect(book(cfg, createdBy, TODAY, live.t45)).rejects.toMatchObject(inJoined(live.t45));
+  });
+
+  it("refuses 4 with Dinner recorded", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const { live, recordDinner } = await inside(cfg.locationId);
+    await recordDinner();
+    await expect(book(cfg, createdBy, TODAY, live.t4)).rejects.toMatchObject(inJoined(live.t4));
+  });
+
+  it("refuses a booking for tomorrow at 4", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const { live } = await inside(cfg.locationId);
+    await expect(book(cfg, createdBy, TOMORROW, live.t4)).rejects.toMatchObject(inJoined(live.t4));
+  });
+
+  it("judges an edit by the patch's date, else the stored booking's", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const { live } = await inside(cfg.locationId);
+    const { id } = await book(cfg, createdBy, TOMORROW, live.t45);
+    await expect(
+      scoped(cfg, (tx) => updateBooking(tx, cfg, id, { tableId: live.t5 })),
+    ).rejects.toMatchObject(inJoined(live.t5));
+    await scoped(cfg, (tx) => updateBooking(tx, cfg, id, { bookingDate: TODAY, tableId: live.t5 }));
+    expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.tableId).toBe(live.t5);
+    await scoped(cfg, (tx) => updateBooking(tx, cfg, id, { tableId: live.t4 }));
+    expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.tableId).toBe(live.t4);
   });
 });

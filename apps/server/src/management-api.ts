@@ -1730,7 +1730,9 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
       const tables = await withVenueAuth(deps, sessionId, (tx) =>
-        listTables(tx, cfg, { includeDisabled: c.req.query("includeDisabled") === "true" }),
+        listTables(tx, cfg, new Date(), {
+          includeDisabled: c.req.query("includeDisabled") === "true",
+        }),
       );
       return c.json(tables);
     }),
