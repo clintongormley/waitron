@@ -187,6 +187,7 @@ const en = {
   "painter.department": "Department or zone",
   "painter.paint": "Paint:",
   "painter.new_period": "+ New period",
+  "painter.edit": "Edit",
   "painter.edit_period": "Edit {name}",
   "painter.hint": "Drag down a day to paint · drag over a block to replace it",
   "painter.add_and_paint": "Add and paint with it",
@@ -1028,6 +1029,7 @@ const es: Record<keyof typeof en, string> = {
   "painter.department": "Departamento o zona",
   "painter.paint": "Pintar:",
   "painter.new_period": "+ Nuevo periodo",
+  "painter.edit": "Editar",
   "painter.edit_period": "Editar {name}",
   "painter.hint":
     "Arrastra hacia abajo en un día para pintar · arrastra sobre un bloque para sustituirlo",

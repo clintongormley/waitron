@@ -285,6 +285,29 @@ it("+ New period saves the period on its own, keeps the painting and chooses the
   expect(frame(painter).dirty).toBe(true);
 });
 
+it("each period chip offers a visible '✎ Edit', named 'Edit <period>'", async () => {
+  const { painter } = await mount();
+  const edit = chip(painter, "edit-p1")!;
+  expect(edit.textContent!.replace(/\s+/g, " ").trim()).toBe("✎ Edit");
+  expect(edit.getAttribute("aria-label")).toBe("Edit Lunch");
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-primary-text)";
+  probe.style.display = "block";
+  probe.style.blockSize = "var(--wt-tap-min)";
+  painter.shadowRoot!.append(probe);
+  expect(edit.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+    probe.getBoundingClientRect().height,
+  );
+  expect(getComputedStyle(edit).color).toBe(getComputedStyle(probe).color);
+  probe.remove();
+  painter.remove();
+  setLocale("es");
+  const spanish = (await mount()).painter;
+  const editar = chip(spanish, "edit-p1")!;
+  expect(editar.textContent!.replace(/\s+/g, " ").trim()).toBe("✎ Editar");
+  expect(editar.getAttribute("aria-label")).toBe("Editar Lunch");
+});
+
 it("✎ opens the period dialog with that period, and a refusal shows in it", async () => {
   const writes: Write[] = [];
   const { painter } = await mount();

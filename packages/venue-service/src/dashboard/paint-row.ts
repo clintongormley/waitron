@@ -91,7 +91,8 @@ export const paintRowStyles = css`
   }
   .pot .edit {
     padding-inline: var(--wt-space-2);
-    color: var(--wt-color-text-muted);
+    gap: var(--wt-space-1);
+    color: var(--wt-color-primary-text);
   }
   .new {
     border: 1px dashed var(--wt-color-border);
@@ -162,7 +163,7 @@ export function paintRow(options: {
                     ?disabled=${disabled}
                     @click=${pot.edit}
                   >
-                    ✎
+                    <span aria-hidden="true">✎</span> ${t("painter.edit")}
                   </button>`
                 : nothing
             }
