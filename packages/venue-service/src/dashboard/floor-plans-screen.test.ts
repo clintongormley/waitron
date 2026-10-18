@@ -535,6 +535,12 @@ it("follows the live read while Delete… is open, and closes once the set is go
   model.departments[0]!.sets.splice(1, 1);
   screen.api.rereadFloorPlanSets();
   await expect.poll(() => deleteDialogOf(screen)).toBeNull();
+  await expect
+    .poll(() => table.shadowRoot!.querySelector('tr[data-row-key="set:dinner"]'))
+    .toBeNull();
+  menuItems(table, "set:private")[0]!.click();
+  await screen.updateComplete;
+  expect(dialogOf(screen)?.mode).toBe("rename");
 });
 
 it("clears a refused Make default once another action begins", async () => {
