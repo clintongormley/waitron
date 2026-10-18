@@ -860,8 +860,6 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     countdown keeps running,
     since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it only while the pointer
     or keyboard focus is on the pop-up. Decide whether an arriving alert should close the menu.
-  - **For the owner:** a card taken on a connected machine that also prints a paper merchant
-    slip opens no drawer; B30 covers only the machine Waitron does not talk to.
 
 ## Task 17 (#991, a table that leaves without paying)
 

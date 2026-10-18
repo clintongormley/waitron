@@ -552,6 +552,10 @@ gets longer, so we should just make it look good with the date on its own line".
 
 ## Decisions and deliberate limits
 
+- **A card taken on a connected card machine never opens the drawer, even when the machine prints a
+  paper merchant slip (owner, 2026-10-17).** B30's drawer covers only a machine Waitron does not
+  talk to; the rare signed slip goes in the drawer through the manual open.
+
 - **A department without a tax-agency description takes the fiscal module's default when the
   description is read, never by writing one at creation (A662 plan, 2026-10-16).** Existing
   departments get it with no data migration. A stored description `parseReceipt`

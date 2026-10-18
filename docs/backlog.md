@@ -3133,9 +3133,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   [mockups](backlog/mockups/a405-printer-details/)
 
 - **Loose ends left by A662 (#1803).**
-  - Owner's call: the receipt logo's Remove is a ghost button, where the mockup shows blue link
-    text. The plan chose a ghost `wt-button`;
-    [mockup](backlog/mockups/a662-edit-receipt/1-logo.png). Change it if the owner prefers the link.
   - Nothing at start-up checks that boot hands `operationDescriptionRequired` to the module routes.
     With Veri\*Factu always offering a default description, the Departments readiness list is empty
     either way, so `apps/server/src/boot.departments-readiness.test.ts` no longer sees that flag;
@@ -3172,9 +3169,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
     sends the same request.
 
 - **Loose ends left by A661 (#1745).**
-  - A661's six wording and behaviour choices were built on the recommended defaults. The owner's
-    questions Q1–Q6 of 2026-10-15 are unanswered; change the build if the owner answers any of them
-    otherwise.
   - The payment-time choice could offer a receipt invoice printer. At payment only an A4 invoice
     printer is offered, as "A4 on {printer}" (`/api/invoice-delivery-options`,
     `apps/server/src/till-api.ts`); a receipt one is reached from the sale's print button. Offering
@@ -3211,8 +3205,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
     (`apps/server/src/testing/decode-ticket.ts`). `receipt-preview-api.test.ts`'s `legal()` and
     `nif()` can be plain constants.
 
-- Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
-  though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
+- Read-back gap: the printer editor cannot change a printer's connection type (`transport`),
+  though the API's printer update accepts it (`PATCH /management-api/printers/:id`,
+  `apps/server/src/print-api.ts`). A261 step 8 retired the location print-mode and drawer-policy toggles.
 
 - **One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still
   open:** No test pins what the two removed addresses, `/manage/receipt` and
@@ -3342,14 +3337,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the
   box is not confirmed.** It needs the fixed image on the box first.
   [Detail](backlog/printers.md#the-owners-bluetooth-printer-was-listed-only-under-show-all-devices-a137--the-cause-on-the-box-is-not-confirmed)
-
-- Not yet checked on paper: the logo, and the centred block, on the owner's box (FYI in the
-  campaign's questions file). Local screenshots in `~/waitron-campaign/w111-shots/`.
-  Left open by W111 (#1261, the receipt's top block).
-
-- **For the owner:** a card taken on a connected machine that also prints a paper merchant slip
-  opens no drawer; B30 covers only the machine Waitron does not talk to. Left open by service Task
-  16 (#981).
 
 - **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
   An agent told `not_approved` stops and needs resetting on its own setup page
