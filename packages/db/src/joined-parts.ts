@@ -113,58 +113,67 @@ export function needsMoving(tableId: SQLWrapper): SQL {
   )`;
 }
 
-/** A table follows a part of a joined table on its zone's saved plan, whatever the layout. */
-function anySavedPart(tableId: SQLWrapper): SQL {
+/**
+ * A table is a part of a joined table on its zone's saved plan, whatever the layout, and its zone
+ * has no set recorded for `businessDay` (any zone, when `businessDay` is null).
+ */
+function anySavedPart(tableId: SQLWrapper, businessDay: string | null): SQL {
+  const unrecorded =
+    businessDay === null
+      ? sql``
+      : sql`where not exists (
+          select 1 from floor_today_zones recorded
+          where recorded.zone_id = joined_master.zone_id
+            and recorded.business_day = ${businessDay}
+            and recorded.set_id is not null
+        )`;
   return sql`${tableId} in (
     select part_table.id
     from dining_tables part_table
     inner join floor_plan_table_parts saved_part on saved_part.part_table_id = part_table.plan_table_id
+    inner join floor_plan_tables joined_master on joined_master.id = saved_part.joined_table_id
+    ${unrecorded}
   )`;
 }
 
 /**
  * Reads the zone's record only when its business day is `businessDay` (spec decision 2); else,
  * and with no recorded set, every part of a joined table is a saved part and no joined table is.
- * Under a usable record a part is a saved part when the recorded layout places its joined table
- * or none of its parts, and a joined table is one when that layout leaves it off while placing a
- * part.
+ * Under a usable record it reads what the zone's last reset copied, so a layout saved since then
+ * changes nothing until Update layout: a part is a saved part when the copy places its joined
+ * table or none of its parts, and a joined table is one when the copy leaves it off while placing
+ * a part.
  */
 export function savedPart(tableId: SQLWrapper, businessDay: string | null): SQL {
-  if (businessDay === null) return anySavedPart(tableId);
-  const placedIn = (layout: SQL, planTableId: SQL) =>
+  if (businessDay === null) return anySavedPart(tableId, null);
+  const usable = (zoneId: SQL) =>
     sql`exists (
-      select 1 from floor_plan_placements placed
-      where placed.plan_id = ${layout} and placed.plan_table_id = ${planTableId}
+      select 1 from floor_today_zones recorded
+      where recorded.zone_id = ${zoneId}
+        and recorded.business_day = ${businessDay}
+        and recorded.set_id is not null
     )`;
-  const partPlacedIn = (layout: SQL, joinedPlanTableId: SQL) =>
+  const partPlaced = (joinedRowId: SQL) =>
     sql`exists (
       select 1
-      from floor_plan_table_parts sibling
-      inner join floor_plan_placements placed on placed.plan_table_id = sibling.part_table_id
-      where sibling.joined_table_id = ${joinedPlanTableId} and placed.plan_id = ${layout}
+      from floor_reset_table_parts sibling
+      inner join floor_reset_tables sibling_row on sibling_row.id = sibling.part_reset_table_id
+      where sibling.joined_reset_table_id = ${joinedRowId} and sibling_row.x is not null
     )`;
-  return sql`${tableId} in (
-    select part_table.id
-    from dining_tables part_table
-    inner join floor_plan_table_parts saved_part on saved_part.part_table_id = part_table.plan_table_id
-    inner join floor_plan_tables joined_master on joined_master.id = saved_part.joined_table_id
-    left join floor_today_zones recorded
-      on recorded.zone_id = joined_master.zone_id
-      and recorded.business_day = ${businessDay}
-    left join floor_plans layout
-      on layout.zone_id = recorded.zone_id and layout.set_id = recorded.set_id
-    where recorded.id is null
-      or ${placedIn(sql`layout.id`, sql`saved_part.joined_table_id`)}
-      or not ${partPlacedIn(sql`layout.id`, sql`saved_part.joined_table_id`)}
+  return sql`(${anySavedPart(tableId, businessDay)} or ${tableId} in (
+    select part_row.table_id
+    from floor_reset_table_parts copied_part
+    inner join floor_reset_tables part_row on part_row.id = copied_part.part_reset_table_id
+    inner join floor_reset_tables joined_row on joined_row.id = copied_part.joined_reset_table_id
+    where part_row.table_id is not null
+      and ${usable(sql`joined_row.zone_id`)}
+      and (joined_row.x is not null or not ${partPlaced(sql`joined_row.id`)})
     union
-    select joined_table.id
-    from dining_tables joined_table
-    inner join floor_plan_tables joined_master on joined_master.id = joined_table.plan_table_id
-    inner join floor_today_zones recorded
-      on recorded.zone_id = joined_master.zone_id and recorded.business_day = ${businessDay}
-    inner join floor_plans layout
-      on layout.zone_id = recorded.zone_id and layout.set_id = recorded.set_id
-    where not ${placedIn(sql`layout.id`, sql`joined_master.id`)}
-      and ${partPlacedIn(sql`layout.id`, sql`joined_master.id`)}
-  )`;
+    select joined_row.table_id
+    from floor_reset_tables joined_row
+    where joined_row.table_id is not null
+      and joined_row.x is null
+      and ${usable(sql`joined_row.zone_id`)}
+      and ${partPlaced(sql`joined_row.id`)}
+  ))`;
 }

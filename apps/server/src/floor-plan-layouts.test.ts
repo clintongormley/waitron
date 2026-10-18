@@ -17,6 +17,7 @@ import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/
 import { readLayout, saveLayout, type ZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import { takeOffToday } from "./floor-today-store.js";
 import { standardAndDinner } from "./testing/floor-today-venue.js";
+import { listTables } from "./tables.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import "./errors.js";
 
@@ -379,5 +380,48 @@ describe("a set's layout of a zone", () => {
     const dinner = await read(d.dinner, d.zoneId);
 
     expect(dinner).toMatchObject({ setId: d.dinner, setName: "Dinner", zoneId: d.zoneId });
+  });
+});
+
+describe("a saved edit of today's layout before Update layout", () => {
+  it("keeps the tables that stand today listed", async () => {
+    const d = await department();
+    const { ids } = await save(d.standard, d.zoneId, {
+      revision: 0,
+      tables: [
+        entry("four", fresh("4")),
+        entry("five", fresh("5"), { placement: { ...PLACE, x: 20 } }),
+        entry("joined", fresh("4+5"), { seats: 8, placement: null, partKeys: ["four", "five"] }),
+      ],
+    });
+    const listed = async () =>
+      new Set(
+        (await inTx(v, (tx) => listTables(tx, v.cfg, NOW))).map((table) => table.planTableId),
+      );
+    const before = await listed();
+    expect([ids.four, ids.five, ids.joined].map((id) => before.has(id!))).toEqual([
+      true,
+      true,
+      false,
+    ]);
+
+    const standard = await read(d.standard, d.zoneId);
+    await save(d.standard, d.zoneId, {
+      revision: standard.revision,
+      tables: asSaved(standard).map((t) =>
+        t.id === ids.joined
+          ? { ...t, placement: PLACE }
+          : t.id === ids.four || t.id === ids.five
+            ? { ...t, placement: null }
+            : t,
+      ),
+    });
+
+    const after = await listed();
+    expect([ids.four, ids.five, ids.joined].map((id) => after.has(id!))).toEqual([
+      true,
+      true,
+      false,
+    ]);
   });
 });

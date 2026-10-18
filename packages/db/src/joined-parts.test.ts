@@ -443,9 +443,33 @@ describe("a layout that stands a joined table's tables", () => {
     ]);
   });
 
+  /** Where each set's layout puts each reset row, as a reset onto that set copies it. */
+  const placed: Record<string, Record<string, number>> = {
+    [STANDARD]: { [R4]: 0, [R5]: 20 },
+    [DINNER]: { [R45]: 0 },
+    [ALL_OFF]: {},
+  };
+
+  /** Records `setId` for the zone and copies its layout into the reset rows, as a reset does. */
+  async function record(setId: string | null): Promise<void> {
+    await suite.db.update(floorTodayZones).set({ setId }).where(eq(floorTodayZones.zoneId, INSIDE));
+    for (const row of [R4, R5, R45]) {
+      const x = setId === null ? undefined : placed[setId]![row];
+      await suite.db
+        .update(floorResetTables)
+        .set(
+          x === undefined
+            ? { x: null, y: null, width: null, height: null, shape: null, rotation: null }
+            : { x, y: 0, ...AT },
+        )
+        .where(eq(floorResetTables.id, row));
+    }
+  }
+
   /** Today's rows as a reset onto `setId` leaves them, `drawn` on the map and the rest spares. */
   async function today(setId: string, drawn: string[], businessDay = TODAY): Promise<void> {
     await suite.db.insert(floorTodayZones).values({ zoneId: INSIDE, businessDay, setId });
+    await record(setId);
     await suite.db
       .insert(floorTodayTables)
       .values(
@@ -534,17 +558,30 @@ describe("a layout that stands a joined table's tables", () => {
     expect((await read(savedOn(YESTERDAY)))[T4]).toBe(1);
     expect((await read(savedOn(null)))[T4]).toBe(1);
 
-    await suite.db
-      .update(floorTodayZones)
-      .set({ setId: DINNER })
-      .where(eq(floorTodayZones.zoneId, INSIDE));
+    await record(DINNER);
     expect((await read(savedOn(TODAY)))[T4]).toBe(1);
 
-    await suite.db
-      .update(floorTodayZones)
-      .set({ setId: null })
-      .where(eq(floorTodayZones.zoneId, INSIDE));
+    await record(null);
     expect(await read(savedOn(TODAY))).toEqual({ [T4]: 1, [T5]: 1, [T45]: 0 });
+  });
+
+  it("counts parts by what today's reset copied, not by a later save of the recorded layout", async () => {
+    await today(STANDARD, [T4, T5]);
+    const standardPlan = `9${STANDARD.slice(1)}`;
+    await suite.db.delete(floorPlanPlacements).where(eq(floorPlanPlacements.planId, standardPlan));
+    await suite.db
+      .insert(floorPlanPlacements)
+      .values({ planId: standardPlan, planTableId: M45, x: 0, y: 0, ...AT });
+    expect(await read(savedOn(TODAY))).toEqual({ [T4]: 0, [T5]: 0, [T45]: 1 });
+
+    await record(DINNER);
+    expect(await read(savedOn(TODAY))).toEqual({ [T4]: 1, [T5]: 1, [T45]: 0 });
+  });
+
+  it("counts a part by today's copy of the parts, not by a later change to the saved ones", async () => {
+    await today(DINNER, [T45]);
+    await suite.db.delete(floorPlanTableParts).where(eq(floorPlanTableParts.partTableId, M4));
+    expect((await read(savedOn(TODAY)))[T4]).toBe(1);
   });
 
   it("counts 4 a saved part, and 4+5 not, under Standard recorded for yesterday", async () => {
@@ -556,16 +593,10 @@ describe("a layout that stands a joined table's tables", () => {
     await today(STANDARD, [T4, T5]);
     expect(await read(savedOn(TODAY))).toEqual({ [T4]: 0, [T5]: 0, [T45]: 1 });
 
-    await suite.db
-      .update(floorTodayZones)
-      .set({ setId: DINNER })
-      .where(eq(floorTodayZones.zoneId, INSIDE));
+    await record(DINNER);
     expect(await read(savedOn(TODAY))).toEqual({ [T4]: 1, [T5]: 1, [T45]: 0 });
 
-    await suite.db
-      .update(floorTodayZones)
-      .set({ setId: ALL_OFF })
-      .where(eq(floorTodayZones.zoneId, INSIDE));
+    await record(ALL_OFF);
     expect(await read(savedOn(TODAY))).toEqual({ [T4]: 1, [T5]: 1, [T45]: 0 });
   });
 });

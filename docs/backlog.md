@@ -2544,9 +2544,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `@waitron/ui`, an owner design decision. Left open by A504.
 
 - **A857. A booking can take a table the evening's layout puts away (2026-10-18).** Bookings refuse
-  only a joined table's parts, judged on the booking date's recorded layout (`requireActiveTable`,
-  `packages/bookings/src/bookings.ts`); nothing compares the table with the layout due at the
-  booking's time. Spec §11: the editor could warn, or the booking screen refuse. Left open by A504.
+  only a joined table's parts: on the business day a zone has recorded, as its last reset copied
+  them; on any other date, every part (`requireActiveTable`, `packages/bookings/src/bookings.ts`).
+  Nothing compares the table with the layout due at the booking's time. Spec §11: the editor could warn, or the booking screen refuse. Left open by A504.
 
 - **A858. No history of a zone's past layouts (2026-10-18).** A layout holds one place per table
   (`floor_plan_placements_table_key`), so a save overwrites the place before it. Spec §11 names

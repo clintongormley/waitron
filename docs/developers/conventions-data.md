@@ -1830,11 +1830,13 @@ as an order's table or accept a department transfer to it. A joined table with f
 parts still joined, that no party holds and no merge takes in, has come apart and is refused on
 the same paths (`joinedTableApart`; both through `joinedOutOfService`).
 
-Whether a table is a saved part is read from the zone's recorded layout, and only from a record of
+Whether a table is a saved part is read from what the zone's last reset copied (its
+`floor_reset_tables` rows and their copied parts), and only while the zone has a set recorded for
 the business day asked about (`savedPart`, `packages/db/src/joined-parts.ts`): a part is a saved
-part when that layout places its joined table, or none of its parts; a joined table is one when
-that layout leaves it off while placing one of its parts. With no such record, or one naming no
-set, every part is a saved part and no joined table is. `GET /api/tables` leaves saved parts out
+part when that copy places its joined table, or none of its parts; a joined table is one when the
+copy leaves it off while placing one of its parts. A layout saved after the reset therefore
+changes nothing here until a reset applies it. With no such record, or one naming no set, every
+part on the saved plan is a saved part and no joined table is. `GET /api/tables` leaves saved parts out
 (`apps/server/src/tables.ts`); bookings refuse one `table.in_joined_table`, judged on the booking's
 date (`requireActiveTable`, `packages/bookings/src/bookings.ts`).
 

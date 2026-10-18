@@ -46,7 +46,7 @@ function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
 
-/** `bookingDate` stands in for the business day the zone's recorded layout is judged on. */
+/** `bookingDate` stands in for the business day `savedPart` is asked about. */
 async function requireActiveTable(
   tx: Transaction,
   locationId: LocationId,

@@ -7,6 +7,8 @@ import {
   floorPlanTableParts,
   floorPlanTables,
   floorPlans,
+  floorResetTableParts,
+  floorResetTables,
   floorTodayTables,
   floorTodayZones,
   floorZones,
@@ -868,6 +870,7 @@ describe("books table 4 while today's recorded layout stands it", () => {
       .returning({ id: floorPlans.id });
     const master = {} as Record<"t4" | "t5" | "t45", string>;
     const live = {} as Record<"t4" | "t5" | "t45", string>;
+    const reset = {} as Record<"t4" | "t5" | "t45", string>;
     for (const [key, label] of [
       ["t4", "4"],
       ["t5", "5"],
@@ -884,12 +887,23 @@ describe("books table 4 while today's recorded layout stands it", () => {
         returning id`);
       live[key] = table.rows[0]!.id;
       await db.insert(floorTodayTables).values({ tableId: live[key] });
+      const [resetRow] = await db
+        .insert(floorResetTables)
+        .values({ zoneId: zone!.id, tableId: live[key], label, seats: 4, planTableId: row!.id })
+        .returning({ id: floorResetTables.id });
+      reset[key] = resetRow!.id;
     }
     await db.insert(floorPlanTableParts).values([
       { joinedTableId: master.t45, partTableId: master.t4 },
       { joinedTableId: master.t45, partTableId: master.t5 },
     ]);
+    await db.insert(floorResetTableParts).values([
+      { joinedResetTableId: reset.t45, partResetTableId: reset.t4 },
+      { joinedResetTableId: reset.t45, partResetTableId: reset.t5 },
+    ]);
     const at = { y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 };
+    const standardAt = { t4: 0, t5: 20 } as Partial<Record<"t4" | "t5" | "t45", number>>;
+    const dinnerAt = { t45: 0 } as Partial<Record<"t4" | "t5" | "t45", number>>;
     await db.insert(floorPlanPlacements).values([
       { planId: standardPlan!.id, planTableId: master.t4, x: 0, ...at },
       { planId: standardPlan!.id, planTableId: master.t5, x: 20, ...at },
@@ -898,9 +912,30 @@ describe("books table 4 while today's recorded layout stands it", () => {
     await db
       .insert(floorTodayZones)
       .values({ zoneId: zone!.id, businessDay: TODAY, setId: standard!.id });
-    const record = (setId: string) =>
-      db.update(floorTodayZones).set({ setId }).where(eq(floorTodayZones.zoneId, zone!.id));
-    return { live, recordDinner: () => record(dinner!.id) };
+    /** Records `setId` and copies where its layout puts each table into the reset rows, as a reset does. */
+    const record = async (setId: string, xs: Partial<Record<"t4" | "t5" | "t45", number>>) => {
+      await db.update(floorTodayZones).set({ setId }).where(eq(floorTodayZones.zoneId, zone!.id));
+      for (const key of ["t4", "t5", "t45"] as const) {
+        const x = xs[key];
+        await db
+          .update(floorResetTables)
+          .set(
+            x === undefined
+              ? { x: null, y: null, width: null, height: null, shape: null, rotation: null }
+              : { x, ...at },
+          )
+          .where(eq(floorResetTables.id, reset[key]));
+      }
+    };
+    await record(standard!.id, standardAt);
+    /** A dashboard save of Standard that places 4+5 and puts 4 and 5 away, applied by no reset. */
+    const saveStandardJoined = async () => {
+      await db.delete(floorPlanPlacements).where(eq(floorPlanPlacements.planId, standardPlan!.id));
+      await db
+        .insert(floorPlanPlacements)
+        .values({ planId: standardPlan!.id, planTableId: master.t45, x: 0, ...at });
+    };
+    return { live, recordDinner: () => record(dinner!.id, dinnerAt), saveStandardJoined };
   }
 
   function book(cfg: VenueCfg, createdBy: string, bookingDate: string, tableId: string) {
@@ -934,6 +969,15 @@ describe("books table 4 while today's recorded layout stands it", () => {
     const { live, recordDinner } = await inside(cfg.locationId);
     await recordDinner();
     await expect(book(cfg, createdBy, TODAY, live.t4)).rejects.toMatchObject(inJoined(live.t4));
+  });
+
+  it("books 4 for today after a save of Standard that no reset has applied", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const { live, saveStandardJoined } = await inside(cfg.locationId);
+    await saveStandardJoined();
+    const { id } = await book(cfg, createdBy, TODAY, live.t4);
+    expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.tableId).toBe(live.t4);
+    await expect(book(cfg, createdBy, TODAY, live.t45)).rejects.toMatchObject(inJoined(live.t45));
   });
 
   it("refuses a booking for tomorrow at 4", async () => {
