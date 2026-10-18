@@ -2330,3 +2330,52 @@ own status-only delegate, so that omission did not reach the replay path under t
 Receipts: `~/waitron-campaign-e/receipts/a679-promotion-reboot-20261019/`. The owner PDF revisions
 and viewing acceptance, retained legacy-suite failures, remaining entry/coverage/retirement
 checks, main integration, both final reviews and current-head CI still gate the complete item.
+
+## Configured-host kept-document qualification, 2026-10-19
+
+The retained configured-host case in `apps/server/src/first-fiscal-delivery.test.ts` sent a
+register statement to a configured hour contribution. Before this checkpoint, running that whole
+file produced one failure and 28 passes. Registration refused with
+`sif.allocation_invalid / outside_confirmation_missing` before the preparation assertions ran.
+
+The case now uses `hourFirstFiscalFixture` and a real `useVenueDb` database. The existing helper
+selects an hour and supplies the public key-only document and kept acknowledgement. Its document
+digest is synthetic; this case does not download, render or inspect a PDF. Internet time and the
+release stamp are controlled, as in the surrounding configured-hour suites.
+
+The caller consumes the current recovery-document grant, then enters real module preparation.
+That follows `packages/provisioning/src/first-setup-activation.ts:119`. The success assertion stays
+`resolves.toBe(true)`. The second call still must refuse; its expected error changes from
+`sif.allocation_invalid` with `outside_confirmation_missing` to `setup.not_ready` with empty params,
+the current shared recovery-document interface's error. This is the only changed expected value.
+The approved hour design and plan Tasks 6 and 9 replace register delivery with this interface;
+the owner's 2026-10-05 test-change decision permits the corresponding non-protected check update.
+No fiscal identity, number, money, hash, filing, permission or password-refusal expectation changes.
+
+All other case text and fixture values in the file retain their exact starting bytes. Every other
+test path retains its bytes. The ownership-only cleanup list now accepts either fixture through
+its `dispose` method. A nested database scope keeps database setup local to the configured-host
+case. No production code, guard, migration or configuration changes in this checkpoint.
+
+The final host/clock/route selection passed 44 cases across three files. In a separately
+frozen-installed checkout, the complete delivery file passed 29 cases. Deleting
+`grants.delete(module)` from the shared delivery service made its second-use assertion fail because
+the call resolved; restoring
+the service passed. This control checks the service's one-use behavior. It does not establish that
+the activation caller invokes it. The unedited shared activation suite separately passed 49 cases,
+including refusal before readiness/writes without kept authority and consumption after a readiness
+refusal. The protected write-path and immutability pair passed 20 cases; the focused database-helper
+and teardown guards passed 33. Server types, scoped lint and formatting passed.
+
+The broader retained-server selection still failed six cases: both direct/supervised launch cases
+and the CLI public-input-file case in `first-fiscal-launch.test.ts`; the kept-document route case in
+`first-fiscal-document.route.test.ts`; and the independent-trust and snapshot-recovery cases in
+`module-operation-host.test.ts`. That three-file run reported six failures and eleven passes.
+Their assertions are unchanged and remain gates. The earlier coverage gaps, remaining installed
+journeys, PDF decisions/viewing acceptance, protocol retirement, main integration, final reviews
+and current-head CI also remain open. No whole-item or landing readiness is claimed.
+
+The A679 backlog entry now lists remaining work and points here for completed qualification,
+instead of repeating checkpoint history. Earlier inventories and historical receipts stay intact.
+Local evidence: `~/waitron-campaign-e/receipts/a679-host-delivery-20261019/`, including raw logs,
+`test-preservation.json` and the installed omission/restoration control.

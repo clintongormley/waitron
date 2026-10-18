@@ -4,7 +4,29 @@ import { vi } from "vitest";
 import { declaredFirstFiscalFixture, publicDigest } from "../test/declared-first-fiscal.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 import { createFirstFiscalDelivery } from "./first-fiscal-delivery.js";
-const fixtures: Awaited<ReturnType<typeof declaredFirstFiscalFixture>>[] = [];
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
+import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
+vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
+  observeInternetHourClock: async () => {
+    const now = Date.now(),
+      mono = performance.now();
+    return {
+      source: "internet",
+      result: "usable",
+      instantMs: now,
+      uncertaintyMs: 500,
+      wallStartedMs: now,
+      wallFinishedMs: now,
+      monotonicStartedMs: mono,
+      monotonicFinishedMs: mono,
+    };
+  },
+}));
+vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
+  readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
+}));
+const fixtures: { dispose(): Promise<void> }[] = [];
 afterEach(async () => {
   vi.useRealTimers();
   await Promise.all(fixtures.splice(0).map((f) => f.dispose()));
@@ -235,38 +257,32 @@ it("an interrupted public-chunk write cannot publish or grant an incomplete hist
     code: "setup.attempt_invalid",
   });
 });
-it("the configured host routes the kept-document grant into real module preparation", async () => {
-  const f = await fixture();
-  const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
-  const { withOperationAuthority, withPreparedModuleOperations } = await import("@waitron/module");
-  const host = createFirstSetupModuleHost({
-    environment: {},
-    stateDir: f.stateDir,
-    venueDir: f.venueDir,
-    modules: f.modules,
+describe("configured hour delivery", () => {
+  const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
+  it("the configured host routes the kept-document grant into real module preparation", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
+    const f = await hourFirstFiscalFixture({ database: () => venue.db });
+    fixtures.push(f);
+    const { withOperationAuthority, withPreparedModuleOperations } =
+      await import("@waitron/module");
+    const host = f.host;
+    const prepare = () =>
+      host.coordinator.run(async (hold) => {
+        await host.recoveryDelivery.consume(f.ownerAttempt, f.module, hold);
+        return withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
+          withPreparedModuleOperations(
+            host.modules,
+            new Map([[f.module, { binding: f.context.binding, authority, input: f.input }]]),
+            f.context.binding.targetNodeId,
+            "setup",
+            async (ready) => ready.has(f.module),
+          ),
+        );
+      });
+    await expect(prepare()).resolves.toBe(true);
+    await expect(prepare()).rejects.toMatchObject({ code: "setup.not_ready", params: {} });
   });
-  await host.delivery.registerFirstFiscalDelivery(f.ownerAttempt, f.input);
-  const { statement: _, ...reference } = f.input;
-  void _;
-  await host.delivery.confirmFirstFiscalDocumentKept(
-    f.ownerAttempt,
-    { ...reference, kept: true },
-    await host.owner.reconfirm(f.ownerAttempt, f.password, "activation"),
-  );
-  const prepare = () =>
-    withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-      withPreparedModuleOperations(
-        host.modules,
-        new Map([
-          [f.module, { binding: f.context.binding, authority, input: f.input.statement.input }],
-        ]),
-        f.context.binding.targetNodeId,
-        "setup",
-        async (ready) => ready.has(f.module),
-      ),
-    );
-  await expect(prepare()).resolves.toBe(true);
-  await expect(prepare()).rejects.toMatchObject(missing);
 });
 it("keeps a public history larger than the legacy grant file in separately bounded chunks", async () => {
   const f = await fixture();
