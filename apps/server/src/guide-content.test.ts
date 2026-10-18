@@ -1,3 +1,5 @@
+// Weaker than its name: it checks that the guides render and that their ids, links and twins' ids
+// match, never that a guide or its twin says what the screen does or was updated with it.
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
