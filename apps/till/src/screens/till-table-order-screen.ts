@@ -1043,6 +1043,18 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-3);
       }
 
+      .draft-routing-warning {
+        display: flex;
+        align-items: baseline;
+        gap: var(--wt-space-2);
+      }
+      .draft-routing-warning > span {
+        color: var(--wt-color-warning);
+      }
+      .draft-routing-warning till-dead-ends-section {
+        flex: 1;
+        min-width: 0;
+      }
       .draft-line-tools {
         display: flex;
         flex-wrap: wrap;
@@ -1545,6 +1557,7 @@ export class TillTableOrderScreen extends LitElement {
     if (this.#watchedDraft !== undefined && this.#watchedDraft.store === store) return;
     this.#watchedDraft?.stop();
     this.#selected = new WeakSet();
+    this.#routingRows = new WeakMap();
     this.draftMoveStore = null;
     if (store !== null && store !== this.#shownDraft) {
       if (this.#shownDraft !== undefined) this.#resetDestination();
@@ -1650,6 +1663,10 @@ export class TillTableOrderScreen extends LitElement {
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
   #selected = new WeakSet<OrderLine>();
+  #routingRows = new WeakMap<
+    OrderLine,
+    { row: DeadEndAnswer["deadEnds"][number]; stations: DeadEndAnswer["stations"] }
+  >();
   @state() private draftMoveStore: WorkingOrderStore | null = null;
   /** Flagged lines the person chose to keep, which no longer ask Remove or Keep. */
   #kept = new WeakSet<OrderLine>();
@@ -2030,6 +2047,7 @@ export class TillTableOrderScreen extends LitElement {
     const pending = this.pendingDraft;
     if (
       pending === null ||
+      pending.detail.store !== this.#draftStore ||
       pending.detail.sent.length !== sent.length ||
       pending.detail.sent.some((line, index) => line !== sent[index])
     )
@@ -2054,6 +2072,12 @@ export class TillTableOrderScreen extends LitElement {
             ),
             stations: answer.stations,
           };
+    if (deadEnds !== undefined) {
+      for (const line of sent) this.#routingRows.delete(line);
+      for (const [line, row] of deadEnds.rows) {
+        this.#routingRows.set(line, { row, stations: deadEnds.stations });
+      }
+    }
     this.pendingDraft = {
       ...pending,
       checking: false,
@@ -2066,6 +2090,7 @@ export class TillTableOrderScreen extends LitElement {
     const pending = this.pendingDraft;
     if (
       pending === null ||
+      pending.detail.store !== this.#draftStore ||
       pending.detail.sent.length !== sent.length ||
       pending.detail.sent.some((line, index) => line !== sent[index])
     )
@@ -3425,7 +3450,56 @@ export class TillTableOrderScreen extends LitElement {
         tools.length === 0
           ? nothing
           : html`<span slot=${`after-${index}`} class="draft-line-tools">${tools}</span>`
-      }`;
+      }
+      ${this.#draftRoutingWarning(store, line, index)}`;
+  }
+
+  #draftRoutingWarning(
+    store: WorkingOrderStore,
+    line: OrderLine,
+    index: number,
+  ): TemplateResult | typeof nothing {
+    const routing = this.#routingRows.get(line);
+    if (routing === undefined || line.makeAt !== undefined || this.pendingDraft !== null)
+      return nothing;
+    const current = () =>
+      this.isConnected &&
+      store === this.#draftStore &&
+      this.#routingRows.get(line) === routing &&
+      store.lines.includes(line) &&
+      !store.editsLocked &&
+      !store.sending &&
+      !this.groupCommandBusy &&
+      this.pendingDraft === null;
+    return html`<div
+      slot=${`after-${index}`}
+      class="draft-routing-warning"
+      data-draft-routing-warning
+    >
+      <span aria-hidden="true">⚠</span>
+      <till-dead-ends-section
+        .answer=${{ sends: true, deadEnds: [{ ...routing.row, key: String(index), quantity: line.quantity }], stations: routing.stations }}
+        .allowRemove=${true}
+        ?inert=${store.sending || store.editsLocked || this.groupCommandBusy}
+        @make-at=${(event: CustomEvent<{ key: string; stationId: string }>) => {
+          event.stopPropagation();
+          if (
+            !current() ||
+            !routing.stations.some((station) => station.id === event.detail.stationId)
+          )
+            return;
+          store.setLineMakeAt(store.lines.indexOf(line), event.detail.stationId);
+          this.#routingRows.delete(line);
+          this.requestUpdate();
+        }}
+        @remove=${(event: Event) => {
+          event.stopPropagation();
+          if (!current()) return;
+          store.removeLine(store.lines.indexOf(line));
+          this.requestUpdate();
+        }}
+      ></till-dead-ends-section>
+    </div>`;
   }
 
   #splitDraftLine(store: WorkingOrderStore, line: OrderLine): void {
