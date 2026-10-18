@@ -15,6 +15,7 @@ import {
 } from "@waitron/ui";
 import type { FloorZone, TableParty, TableState, TodayPlacement } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
+import type { StringKey } from "../i18n/strings.js";
 import { t } from "../i18n/t.js";
 
 export type DropAction =
@@ -54,6 +55,14 @@ export function nextFloorMoment(): number {
 
 export function shownName(table: TableState): string {
   return table.today?.name ?? table.label;
+}
+
+/** A sentence naming the table: by its saved label in `saved`'s words ("Table 3 …"), or by today's
+ * name in `named`'s ("Ventana …"). */
+export function tableSentence(table: TableState, saved: StringKey, named: StringKey): string {
+  return table.today?.name == null
+    ? t(saved).replace("{table}", () => table.label)
+    : t(named).replace("{table}", () => table.today!.name!);
 }
 
 /** Its group's name for today, else its own name for today, else its saved label, as `shown()` in

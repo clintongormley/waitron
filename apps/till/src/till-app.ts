@@ -230,7 +230,7 @@ import type {
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
-import { mergeMembersOf, nextFloorMoment, shownUnder } from "./state/floor-today.js";
+import { mergeMembersOf, nextFloorMoment, shownUnder, tableSentence } from "./state/floor-today.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   AdjustmentAsk,
@@ -556,8 +556,12 @@ function isPartyOutOfDate(error: unknown): boolean {
 function tableWriteError(error: unknown): CounterError {
   const period = periodRefusal(error);
   if (period !== undefined) return period;
-  const code = (error as { code?: string } | undefined)?.code;
-  return code !== undefined && TABLE_REFUSALS.has(code) ? { code } : "table.error";
+  const refused = error as { code?: string; tableId?: unknown } | undefined;
+  const code = refused?.code;
+  if (code === undefined || !TABLE_REFUSALS.has(code)) return "table.error";
+  return code === "table.needs_moving" && typeof refused!.tableId === "string"
+    ? { code, tableId: refused!.tableId }
+    : { code };
 }
 
 /** A refusal of the person's draft save, or with `unsent` of its submission. Taken over, it names
@@ -960,7 +964,8 @@ interface WaitingOrderMove {
  * screen, with a second message when something else failed since. */
 type CounterError =
   | StringKey
-  | { code: string; menuId?: string }
+  /** `tableId`: the table a refusal names, for wording that names it. */
+  | { code: string; menuId?: string; tableId?: string }
   | { billPayments: string }
   /** `lineChange`: refused for a change to a line, not a move of items. */
   | { excess: string; lineChange?: true }
@@ -993,13 +998,22 @@ interface ReadBills {
   bills: PartyBill[] | null;
 }
 
-function errorText(error: CounterError, menus: readonly TillZoneMenu[]): string | TemplateResult {
+function errorText(
+  error: CounterError,
+  menus: readonly TillZoneMenu[],
+  tables: readonly TableState[],
+): string | TemplateResult {
   if (typeof error === "string") return t(error);
   if ("code" in error) {
     if (error.code === "menu_period.not_running") {
       const menu = menus.find((menu) => menu.id === error.menuId);
       if (menu !== undefined)
         return t("menu.period_not_running").replace("{menu}", () => menu.name);
+    }
+    if (error.code === "table.needs_moving") {
+      const table = tables.find((each) => each.id === error.tableId);
+      if (table !== undefined)
+        return tableSentence(table, "floor.needs_moving_first", "floor.needs_moving_first_named");
     }
     return codeMessage(error.code);
   }
@@ -13052,7 +13066,11 @@ export class TillApp extends LitElement {
   override render() {
     const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
     const errorMessage = this.errorKey
-      ? errorText(this.errorKey, this.#orderScreenShown() ? this.tableMenus : this.menus)
+      ? errorText(
+          this.errorKey,
+          this.#orderScreenShown() ? this.tableMenus : this.menus,
+          this.tables,
+        )
       : nothing;
     return html`
       ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}

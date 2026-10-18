@@ -18,7 +18,7 @@ import type {
 } from "../api/client.js";
 import type { TransferSnapshot } from "../state/department-transfer-monitor.js";
 import { limited } from "../state/draft-sync.js";
-import { outOfServiceJoined, shownName } from "../state/floor-today.js";
+import { needsMovingToday, outOfServiceJoined, shownName } from "../state/floor-today.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -602,7 +602,12 @@ export class TillDepartmentTransfers extends LitElement {
                   .options=${[
                     { value: "", label: t("department_transfer.no_table") },
                     ...this.tables
-                      .filter((table) => table.zoneId === this.zoneId && !outOfServiceJoined(table))
+                      .filter(
+                        (table) =>
+                          table.zoneId === this.zoneId &&
+                          !outOfServiceJoined(table) &&
+                          !needsMovingToday(table),
+                      )
                       .map((table) => ({ value: table.id, label: shownName(table) }))
                       .sort((a, b) => inNumberOrder(a.label, b.label)),
                   ]}

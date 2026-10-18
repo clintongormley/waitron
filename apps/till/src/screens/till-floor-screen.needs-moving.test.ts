@@ -336,6 +336,53 @@ describe("till-floor-screen: a table that needs moving", () => {
     expect(moveDialog(el)).toBeNull();
   });
 
+  it("asks the floor to read again once Mark moved is answered", async () => {
+    const el = await mount([moving("t3", 12)]);
+    const refreshes: unknown[] = [];
+    el.addEventListener("floor-refresh", (event) => refreshes.push((event as CustomEvent).detail));
+    await tap(el, "t3");
+    moveDialog(el)!.querySelector<HTMLElement>("[data-mark-moved]")!.click();
+    await settle(el);
+
+    expect(refreshes).toHaveLength(1);
+    expect(refusal(el)).toBeNull();
+  });
+
+  it("names the table a booking holds back when Mark moved is refused for it", async () => {
+    const api = stubApi();
+    api.markMovedToday.mockRejectedValue({
+      code: "table.booked",
+      tableId: "t4",
+      date: "2026-10-18",
+      time: "21:00",
+    });
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await tap(el, "t3");
+    moveDialog(el)!.querySelector<HTMLElement>("[data-mark-moved]")!.click();
+    await settle(el);
+    expect(refusal(el)).toBe("Table 4 has a booking coming up. Move the booking first.");
+
+    setLocale("es");
+    el.tables = [moving("t3", 12), planned("t4", 30, { name: "Ventana" })];
+    await el.updateComplete;
+    await tap(el, "t3");
+    moveDialog(el)!.querySelector<HTMLElement>("[data-mark-moved]")!.click();
+    await settle(el);
+    expect(refusal(el)).toBe("Ventana tiene una reserva próxima. Mueve primero la reserva.");
+  });
+
+  it("says a booking holds a table back in the code's own words when the read lacks that table", async () => {
+    const api = stubApi();
+    api.markMovedToday.mockRejectedValue({ code: "table.booked", tableId: "t9" });
+    const el = await mount([moving("t3", 12)], api);
+    await tap(el, "t3");
+    moveDialog(el)!.querySelector<HTMLElement>("[data-mark-moved]")!.click();
+    await settle(el);
+
+    expect(refusal(el)).toBe("That table has a booking coming up. Move the booking first");
+    expect(refusal(el)).not.toBe(codeMessage("server.internal"));
+  });
+
   it("says what still holds the table back in that code's own words", async () => {
     const api = stubApi();
     api.markMovedToday.mockRejectedValue({ code: "tab.already_open", tableId: "t4" });

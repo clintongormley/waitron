@@ -75,6 +75,7 @@ import {
   shownName,
   shownUnder,
   spareSpot,
+  tableSentence,
   withoutTodaysNames,
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
@@ -1284,10 +1285,15 @@ export class TillFloorScreen extends LitElement {
       }
       case "table.needs_moving": {
         const table = tableOf(refused.tableId);
-        if (table === undefined) return undefined;
-        return table.today?.name == null
-          ? t("floor.needs_moving_first").replace("{table}", () => table.label)
-          : t("floor.needs_moving_first_named").replace("{table}", () => table.today!.name!);
+        return table === undefined
+          ? undefined
+          : tableSentence(table, "floor.needs_moving_first", "floor.needs_moving_first_named");
+      }
+      case "table.booked": {
+        const table = tableOf(refused.tableId);
+        return table === undefined
+          ? undefined
+          : tableSentence(table, "floor.booked_first", "floor.booked_first_named");
       }
       case "table.new_place_taken": {
         const other = nameOf(refused.standingId);
@@ -1770,13 +1776,7 @@ export class TillFloorScreen extends LitElement {
               label: t("floor.needs_clearing"),
               color: "var(--wt-color-warning)",
             }
-          : needsMovingToday(table)
-            ? {
-                id: "needs-moving",
-                label: t("floor.needs_moving"),
-                color: "var(--wt-color-warning)",
-              }
-            : null;
+          : null;
     return toFloorTable(
       { id: table.id, label: shownUnder(table), seats: seatsFor(table) },
       {

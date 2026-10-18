@@ -8,6 +8,7 @@ import {
   pinText,
   seatsFor,
   standInStatus,
+  statusPin,
   statusWords,
 } from "./floor-map.js";
 import "@waitron/ui/src/components/wt-floor-map.js";
@@ -170,6 +171,49 @@ describe("words", () => {
     expect(pinText([delivery, party])).toBe("3 to serve");
     expect(pinText([party, delivery])).toBe("3 to serve");
     expect(pinText([other, party, delivery])).toBe("3 to serve");
+  });
+});
+
+describe("a table that needs moving", () => {
+  const movingToday = today({ needsMoving: true });
+
+  it("takes the clearing fill and reads Needs moving, even with a booking to come", () => {
+    const moving = table({ today: movingToday });
+    expect(standInStatus(moving)).toEqual({ fill: "clearing", dot: null });
+    expect(statusWords(moving)).toBe("Needs moving");
+    expect(pinText(moving)).toBe("Needs moving");
+    const booked = table({ today: movingToday, nextReservation: { time: "20:30" } });
+    expect(standInStatus(booked).fill).toBe("clearing");
+    expect(statusWords(booked)).toBe("Needs moving");
+    expect(pinText(booked)).toBe("Needs moving");
+    setLocale("es");
+    expect(statusWords(moving)).toBe("Por mover");
+  });
+
+  it("reads Needs clearing while it also needs clearing", () => {
+    const both = table({ condition: "needs_clearing", today: movingToday });
+    expect(standInStatus(both).fill).toBe("clearing");
+    expect(statusWords(both)).toBe("Needs clearing");
+  });
+
+  it("in a merge ranks with Needs clearing, above a bill, whose words win when a member needs clearing", () => {
+    const moving = table({ id: "a", today: movingToday });
+    const billed = table({ id: "b", ...seated, signals: [bill] });
+    const clearing = table({ id: "c", condition: "needs_clearing" });
+    expect(statusPin([billed, moving])).toEqual({
+      fill: "clearing",
+      dot: null,
+      text: "Needs moving",
+    });
+    expect(statusWords([moving, clearing])).toBe("Needs clearing");
+    expect(statusWords([clearing, moving])).toBe("Needs clearing");
+  });
+
+  it("is drawn in its old place with the clearing fill and its words", () => {
+    const drawn = mapTables([table({ today: movingToday })]);
+    expect(drawn.map((row) => [row.placement, row.fill, row.description])).toEqual([
+      [placement, "clearing", "Needs moving"],
+    ]);
   });
 });
 
