@@ -77,8 +77,11 @@ async function mount(
 }
 
 describe("dashboard-courses-screen", () => {
-  it("shows the Courses heading, its description and the shared course list", async () => {
+  it("shows the Courses heading, its description and the shared course list, which loads the courses itself", async () => {
     const { el, api } = await mount();
+    await vi.waitFor(() =>
+      expect(list(el).shadowRoot!.querySelectorAll("tbody tr[data-course]")).toHaveLength(2),
+    );
     expect(q(el, "h1")!.textContent!.trim()).toBe(t("kitchen.courses_title"));
     expect(q(el, ".description")!.textContent!.trim()).toBe(t("courses.description"));
     expect(el.shadowRoot!.querySelectorAll("dashboard-course-list")).toHaveLength(1);

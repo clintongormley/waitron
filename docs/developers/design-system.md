@@ -3589,7 +3589,7 @@ Every row has a pinned Actions menu; the default has no Make default or Delete, 
 enabled for the venue's area has no Delete and shows "Required". Add language opens its own dialog.
 Edit translations opens a dialog where the missing names for one language are typed in and saved
 together, with its Kind and Why filters, links to the relevant editors, and Translate all. A second exception (A212): the course
-list, on Venue settings' Kitchen tab and in the product editor's Courses window, adds and renames
+list, on the Courses page and in the product editor's Courses window, adds and renames
 courses in place without a modal, saving each change as it is made, and asks in a dialog before a Delete; the Courses window has one Done
 button. A third exception (W89, owner 2026-10-04): a menu's Price overrides tab sets each product's
 and each size's price in its own row, saving each change as it is made (Forms → "A value saved from

@@ -151,8 +151,8 @@ See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-de
 were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owner's account only).
 After A725, which changes the same station editor.
 
-Every setting on Venue settings' Kitchen tab is stored once for the venue today: the courses; bump
-mode and fire control on `locations` (`packages/db/src/schema/tenants.ts:84-85`); late flags in
+Every setting on Venue settings' Kitchen tab is stored once for the venue today: bump mode and
+fire control on `locations` (`packages/db/src/schema/tenants.ts:84-85`); late flags in
 `kitchen_timing_defaults`, which a station may override in `kitchen_station_timing`
 (`packages/db/src/schema/kitchen-timing.ts`); and `service_settings`
 (`packages/venue-service/src/schema/settings.ts`) — `edit_sent_lines`, `kitchen_ticket_grouping`,
@@ -160,10 +160,7 @@ mode and fire control on `locations` (`packages/db/src/schema/tenants.ts:84-85`)
 `clearing_workflow`, which is A757's. Moving them to departments and stations is a migration; before
 go-live nothing is carried forward.
 
-1. **Courses get their own page under Products and menus**, because products name them: a list with
-   drag handles, Add course, and Delete in each row's menu (courses already delete through
-   `wt-delete-dialog`).
-2. **The department dialog becomes tabbed — Details, Service, Receipts, Transfers.** Details,
+1. **The department dialog becomes tabbed — Details, Service, Receipts, Transfers.** Details,
    Service (with its "Orders and payment" section) and Transfers landed in A756's first pull
    request (#1852). Still left: the Receipts tab, into which receipt editing
    (`apps/dashboard/src/screens/department-receipt-dialog.ts`) moves while the departments table's
@@ -171,7 +168,7 @@ go-live nothing is carried forward.
    Service's "Courses and the kitchen" section, holding the reminder to send the next course
    (who sends a held course is dropped, per the A773 block above). A757 adds its optional table
    states to Service.
-3. **Prep stations gets an "Every station" card**, and each setting on it can differ per station:
+2. **Prep stations gets an "Every station" card**, and each setting on it can differ per station:
    late flags; done on the screen (today's bump mode: one item at a time or the whole ticket);
    identical dishes on a ticket; held courses (print in advance marked HOLD, or when sent); MOVED
    slips; changes after sending. The stations table gains a "Differs from every station" column.
@@ -179,7 +176,7 @@ go-live nothing is carried forward.
    switch exists for a printer-only station, which cannot see a change. A dish is believed to go
    to exactly one station (routing is single-target, A9), so one station answers whether an item
    may change; check that against the code.
-4. **The Kitchen tab goes.**
+3. **The Kitchen tab goes.**
 
 Wording: in the mock-ups a station's inherited choice reads "Same as every station". A725 point 6's
 "Venue setting: Print" was chosen when the default lived on Venue settings; the owner is asked to

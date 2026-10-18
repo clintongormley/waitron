@@ -2831,9 +2831,6 @@ describe("dashboard-app", () => {
           createdAt: "2026-10-01T00:00:00Z",
         },
       ]),
-      listCourses: vi
-        .fn()
-        .mockResolvedValue([{ id: "c1", name: "Starters", displayOrder: 0, active: true }]),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
     await flush(el);
@@ -2858,14 +2855,10 @@ describe("dashboard-app", () => {
     await flush(el);
     const kitchen = settings.shadowRoot!.querySelector<HTMLElement>("dashboard-kitchen-screen")!;
     await vi.waitFor(() =>
-      expect(kitchen.shadowRoot!.querySelector("dashboard-course-list")).not.toBeNull(),
+      expect(kitchen.shadowRoot!.querySelector("section.bump")).not.toBeNull(),
     );
     expect(kitchen.shadowRoot!.querySelector("[data-test=bump-line]")).toBeNull();
     expect(kitchen.shadowRoot!.querySelector("[data-test=fire-waiter]")).toBeNull();
-    const courses = kitchen.shadowRoot!.querySelector<HTMLElement>("dashboard-course-list")!;
-    await vi.waitFor(() => expect(courses.shadowRoot!.textContent).toContain("Starters"));
-    expect(courses.shadowRoot!.querySelector("[data-test=add-course]")).toBeNull();
-    expect(courses.shadowRoot!.querySelector("[data-test=name-c1]")).toBeNull();
   });
 
   it("Products and menus lists Courses after Modifiers to someone with venue.view", async () => {

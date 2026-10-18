@@ -134,18 +134,15 @@ describe("kitchen-screen", () => {
     expect(q(el, "[role=alert]")).not.toBeNull();
   });
 
-  it("shows the courses heading over the shared course list, which loads the courses itself", async () => {
+  it("the Kitchen tab lists no courses", async () => {
     const api = stubApi({}, STATIONS, TWO_COURSES);
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
-    const panel = q(el, "[data-test=courses-panel]")!;
-    expect(panel.querySelector("h2")!.textContent!.trim()).toBe(t("kitchen.courses_title"));
-    const list = panel.querySelector("dashboard-course-list")!;
-    expect(list.api).toBe(api);
-    await vi.waitFor(() =>
-      expect(list.shadowRoot!.querySelectorAll("tbody tr[data-course]")).toHaveLength(2),
-    );
-    expect(api.listCourses).toHaveBeenCalledTimes(1);
+    expect(q(el, "[data-test=bump-line]")).not.toBeNull();
+    expect(q(el, "[data-test=courses-panel]")).toBeNull();
+    expect(q(el, "dashboard-course-list")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("kitchen.courses_title"));
+    expect(api.listCourses).not.toHaveBeenCalled();
   });
 
   it("seeds the fire-control toggle from the PERSISTED setting (getFireControl) and reflects it", async () => {
