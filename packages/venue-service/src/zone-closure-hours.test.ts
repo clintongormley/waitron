@@ -15,7 +15,7 @@ import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { ensureDefaultSeasons } from "./seasons.js";
-import { assertSeasonClosuresInHours } from "./zone-closure-hours.js";
+import { assertDatedClosuresInHours, assertSeasonClosuresInHours } from "./zone-closure-hours.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -213,6 +213,31 @@ describe("assertSeasonClosuresInHours", () => {
           assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
             { zoneId, field: "", days: closedMonday([]) },
           ]),
+        ),
+      ),
+    ).toEqual({ code: "service_zone.not_found", params: { zoneId } });
+  });
+});
+
+describe("assertDatedClosuresInHours", () => {
+  it("refuses a zone that serves no department with service_zone.not_found", async () => {
+    const v = await venue();
+    const zoneId = randomUUID();
+    expect(
+      await refusal(() =>
+        withTransaction(db, (tx) =>
+          assertDatedClosuresInHours(
+            tx,
+            v.cfg,
+            [
+              {
+                zoneId,
+                date: "2026-11-02",
+                ranges: [{ kind: "closed", startsAt: "10:00", endsAt: "11:00" }],
+              },
+            ],
+            new Set(),
+          ),
         ),
       ),
     ).toEqual({ code: "service_zone.not_found", params: { zoneId } });
