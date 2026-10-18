@@ -95,6 +95,20 @@ function deferred<T>() {
 }
 
 describe("bounded multilingual translation reads", () => {
+  it("keeps a refreshed suggestion page when the opening suggestion read answers later", async () => {
+    const { reader, api } = setup();
+    const old = deferred<ContentSuggestionRead>();
+    api.suggestions
+      .mockImplementationOnce(() => old.promise)
+      .mockResolvedValueOnce({ ...suggestions(), cloudOrigin: "https://new.example" });
+    const opening = reader.open();
+    await vi.waitFor(() => expect(reader.page).not.toBeNull());
+    await reader.refreshSuggestions();
+    expect(reader.suggestions?.cloudOrigin).toBe("https://new.example");
+    old.resolve({ ...suggestions(), cloudOrigin: "https://old.example" });
+    await opening;
+    expect(reader.suggestions?.cloudOrigin).toBe("https://new.example");
+  });
   it("opens one item page and one suggestion page without following either cursor", async () => {
     const { reader, api } = setup();
     api.items.mockResolvedValue(items([row("001")], cursor("001")));

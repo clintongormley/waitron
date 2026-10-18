@@ -10,7 +10,9 @@ import {
   type TranslationItem,
 } from "@waitron/catalogue/src/content-translation-types.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { currentLocale, t } from "../i18n/t.js";
+import "@waitron/ui/src/components/wt-button.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
+import { leftToBrowser } from "../navigation.js";
 import type { TranslationDrafts } from "./content-translations-model.js";
 
 export function languageWindow(
@@ -30,6 +32,28 @@ export function languageWindow(
 }
 
 const rowKey = (row: Pick<TranslationItem, "kind" | "id">) => JSON.stringify([row.kind, row.id]);
+
+function editorHref(row: TranslationItem): string {
+  const id = encodeURIComponent(row.id);
+  const parent = encodeURIComponent(row.parent?.id ?? "");
+  switch (row.kind) {
+    case "product":
+    case "variant":
+      return `/manage/catalogue/product/${id}`;
+    case "option_list":
+      return `/manage/modifiers/view/options/list/${id}`;
+    case "option_label":
+      return `/manage/modifiers/view/options/list/${parent}`;
+    case "extra_list":
+      return `/manage/modifiers/view/extras/list/${id}`;
+    case "menu":
+    case "section":
+    case "included_menu":
+      return `/manage/menus/menu/${parent}/view/structure`;
+    case "unit":
+      return "/manage/units";
+  }
+}
 
 export interface TranslationWindowChange {
   cell: TranslationCellRef;
@@ -53,6 +77,12 @@ export class ContentTranslationWindow extends LitElement {
       .name {
         overflow-wrap: anywhere;
         margin-block: 0 var(--wt-space-3);
+      }
+      a {
+        display: inline-flex;
+        align-items: center;
+        min-block-size: var(--wt-tap-min);
+        color: var(--wt-color-primary-text);
       }
       .fields {
         display: grid;
@@ -180,6 +210,7 @@ export class ContentTranslationWindow extends LitElement {
     if (this.focused && held && !rows.some((row) => rowKey(row) === rowKey(held)))
       rows = [held, ...rows.slice(0, 49)];
     const overflow = this.drafts.staged().length > 100;
+    const staged = new Set(this.drafts.staged().map(translationCellKey));
     return html`${repeat(
       rows,
       rowKey,
@@ -191,6 +222,23 @@ export class ContentTranslationWindow extends LitElement {
           aria-label=${row.parent ? `${row.parent.name} › ${row.name}` : row.name}
         >
           <p class="name">${row.parent ? `${row.parent.name} › ${row.name}` : row.name}</p>
+          <a
+            href=${editorHref(row)}
+            aria-label=${fill("content_gaps.open_named", { name: row.name })}
+            @click=${(event: MouseEvent) => {
+              if ((row.kind !== "product" && row.kind !== "variant") || leftToBrowser(event))
+                return;
+              event.preventDefault();
+              this.dispatchEvent(
+                new CustomEvent("translation-open", {
+                  detail: { row },
+                  bubbles: true,
+                  composed: true,
+                }),
+              );
+            }}
+            >${t("content_gaps.open")}</a
+          >
           <div class="fields" style=${`--translation-columns: ${languages.length}`}>
             ${repeat(
               languages,
@@ -207,17 +255,46 @@ export class ContentTranslationWindow extends LitElement {
                       )?.message;
                       const active = this.drafts.origin(cell) !== null;
                       return html`<wt-input
-                        name=${`translation-${cell.kind}-${cell.id}-${cell.language}-${cell.field}`}
-                        lang=${language}
-                        label=${`${languageDisplayName(language, currentLocale())}${row.kind === "unit" ? ` · ${t(cell.field === "name" ? "units.name" : "units.abbreviation")}` : ""}`}
-                        placeholder=${cell.effectiveText?.trim() || cell.effectiveDefaultText?.trim() || cell.staffText || ""}
-                        .value=${this.rejected.get(key) ?? this.drafts.value(cell)}
-                        .error=${fault || (this.rejected.has(key) ? t("translations.input_unavailable") : "")}
-                        ?disabled=${this.disabled || !cell.eligible || (overflow && !active)}
-                        @focusin=${() => this.#focus(row, cell)}
-                        @focusout=${() => this.#blur()}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(cell, event)}
-                      ></wt-input>`;
+                          name=${`translation-${cell.kind}-${cell.id}-${cell.language}-${cell.field}`}
+                          lang=${language}
+                          label=${`${languageDisplayName(language, currentLocale())}${row.kind === "unit" ? ` · ${t(cell.field === "name" ? "units.name" : "units.abbreviation")}` : ""}`}
+                          placeholder=${cell.effectiveText?.trim() || cell.effectiveDefaultText?.trim() || cell.staffText || ""}
+                          .value=${this.rejected.get(key) ?? this.drafts.value(cell)}
+                          .error=${fault || (this.rejected.has(key) ? t("translations.input_unavailable") : "")}
+                          ?disabled=${this.disabled || !cell.eligible || (overflow && !active)}
+                          @focusin=${() => this.#focus(row, cell)}
+                          @focusout=${() => this.#blur()}
+                          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(cell, event)}
+                        ></wt-input>
+                        ${
+                          staged.has(key)
+                            ? html`<wt-button
+                                data-unstage=${key}
+                                variant="secondary"
+                                ?disabled=${this.disabled}
+                                aria-label=${fill("translations.unstage_named", { name: row.name, language: languageDisplayName(language, currentLocale()), field: t(cell.field === "name" ? "units.name" : "units.abbreviation") })}
+                                @click=${() => {
+                                  this.drafts.unstage(cell);
+                                  const rejected = new Map(this.rejected);
+                                  rejected.delete(key);
+                                  this.rejected = rejected;
+                                  this.dispatchEvent(
+                                    new CustomEvent<TranslationWindowChange>("translation-change", {
+                                      detail: {
+                                        cell,
+                                        value: this.drafts.value(cell),
+                                        accepted: true,
+                                      },
+                                      bubbles: true,
+                                      composed: true,
+                                    }),
+                                  );
+                                  this.requestUpdate();
+                                }}
+                                >${t("translations.unstage")}</wt-button
+                              >`
+                            : nothing
+                        }`;
                     },
                   )}
                 </div>`,

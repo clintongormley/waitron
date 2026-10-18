@@ -148,10 +148,24 @@ export class TranslationPages {
       ...(this.#cursors[position] === undefined ? {} : { after: this.#cursors[position] }),
     };
   }
-  async open(): Promise<void> {
+  get position(): number {
+    return this.#position;
+  }
+  get canPrevious(): boolean {
+    return this.#ready && this.#position > 0;
+  }
+  get canNext(): boolean {
+    return (
+      this.#ready &&
+      (this.#selection.staged
+        ? this.#stagedItems().length > (this.#position + 1) * 50
+        : this.page?.next != null)
+    );
+  }
+  async open(selection: Partial<TranslationSelection> = {}): Promise<void> {
     this.close();
     this.#active = true;
-    this.#selection = this.#initialSelection();
+    this.#selection = { ...this.#initialSelection(), ...selection };
     this.#position = 0;
     this.#cursors = [undefined];
     this.drafts = new TranslationDrafts(this.#config, []);
@@ -160,19 +174,20 @@ export class TranslationPages {
     this.readError = null;
     this.suggestionError = null;
     const opening = this.#opening;
+    const sequence = ++this.#suggestionSequence;
     const suggestion = this.api.suggestions({}).then(
       (value) => ({ value }),
       (error: unknown) => ({ error }),
     );
     await this.#readItems(0);
     const answer = await suggestion;
-    if (!this.#active || opening !== this.#opening) return;
+    if (!this.#active || opening !== this.#opening || sequence !== this.#suggestionSequence) return;
     if ("error" in answer) this.suggestionError = answer.error;
     else
       await this.#applySuggestions(
         answer.value,
         undefined,
-        () => this.#active && opening === this.#opening,
+        () => this.#active && opening === this.#opening && sequence === this.#suggestionSequence,
       );
   }
   close(): void {
@@ -334,6 +349,17 @@ export class TranslationPages {
         configuration: previous.configuration,
       });
       if (current()) await this.#applySuggestions(page, previous.next, current);
+    } catch (error) {
+      if (current()) this.suggestionError = error;
+    }
+  }
+  async refreshSuggestions(): Promise<void> {
+    if (!this.#active) return;
+    const sequence = ++this.#suggestionSequence;
+    const current = () => this.#active && sequence === this.#suggestionSequence;
+    try {
+      const page = await this.api.suggestions({});
+      if (current()) await this.#applySuggestions(page, undefined, current);
     } catch (error) {
       if (current()) this.suggestionError = error;
     }

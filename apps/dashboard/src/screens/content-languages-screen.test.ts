@@ -4,7 +4,12 @@ import { currentContentLanguages } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi, TranslationPage } from "../api/client.js";
+import type {
+  TranslationCell,
+  TranslationItemPage,
+  TranslationQuery,
+} from "@waitron/catalogue/src/content-translation-types.js";
+import type { DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -33,8 +38,8 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
       service: "not_connected" as const,
       cloudOrigin: null,
     })),
-    getContentTranslationTargets: vi.fn(async (language: string): Promise<TranslationPage> => ({
-      language,
+    getContentTranslationTargets: vi.fn(async (): Promise<TranslationItemPage> => ({
+      configuration: "suggestion-config",
       config: CONFIG,
       required: [],
       rows: [],
@@ -946,33 +951,40 @@ it("opens fresh translation fields for a language just added", async () => {
       service: "not_connected" as const,
       cloudOrigin: null,
     })),
-    getContentTranslationTargets: vi.fn(async (language: string): Promise<TranslationPage> => ({
-      language,
-      config,
-      required: [],
-      next: null,
-      total: language === "fr" ? 1 : 0,
-      rows:
-        language === "fr"
-          ? [
-              {
-                kind: "product",
-                id: "cheese",
-                name: "STAFF Cheese",
-                reason: "partial",
-                selectedText: null,
-                defaultText: "Formatge",
-                effectiveSelectedText: null,
-                effectiveDefaultText: "Formatge",
-                defaultRequired: false,
-                eligible: true,
-                unavailableReason: null,
-                owners: { kind: "product", parentId: null },
-                expected: "fresh-fr",
-              },
-            ]
-          : [],
-    })),
+    getContentTranslationTargets: vi.fn(
+      async (query: TranslationQuery): Promise<TranslationItemPage> => ({
+        config,
+        required: [],
+        configuration: "suggestion-config",
+        next: null,
+        total: 1,
+        rows: [
+          {
+            kind: "product",
+            id: "cheese",
+            name: "STAFF Cheese",
+            owners: { kind: "product", parentId: null },
+            cells: query.languages.map((language): TranslationCell => ({
+              kind: "product",
+              id: "cheese",
+              language,
+              field: "name",
+              owners: { kind: "product", parentId: null },
+              text: null,
+              inheritedText: null,
+              effectiveText: null,
+              defaultText: "Formatge",
+              inheritedDefaultText: null,
+              effectiveDefaultText: "Formatge",
+              expected: "fresh-fr",
+              staffText: "STAFF Cheese",
+              eligible: true,
+              unavailableReason: null,
+            })),
+          },
+        ],
+      }),
+    ),
   });
   const el = await mount(client);
   q(el, "[data-test=add-language]")!.click();
@@ -983,13 +995,24 @@ it("opens fresh translation fields for a language just added", async () => {
   q(el, "[data-test=edit-translations-fr]")!.click();
   await flush(el);
   await vi.waitFor(() =>
-    expect(translations(el).shadowRoot!.querySelector("wt-data-table")).not.toBeNull(),
+    expect(
+      translations(el).shadowRoot!.querySelector("dashboard-content-translation-window"),
+    ).not.toBeNull(),
   );
-  const table = translations(el).shadowRoot!.querySelector("wt-data-table")!;
+  const table = translations(el).shadowRoot!.querySelector("dashboard-content-translation-window")!;
   await table.updateComplete;
-  expect(translationModal(el).heading).toContain("Francés");
+  expect(translationModal(el).heading).toBe(t("content_languages.edit_translations"));
+  expect(
+    translations(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=missing]",
+    )!.value,
+  ).toBe("fr");
+  expect(
+    translations(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=jump]")!
+      .value,
+  ).toBe("fr");
   const field = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    "[name=translation-text-product-cheese]",
+    "[name=translation-product-cheese-fr-name]",
   );
   expect(field).not.toBeNull();
   expect(field!.value).toBe("");
@@ -1005,11 +1028,23 @@ it("opens only the clicked language's staged editor, keeping it closed until ask
   q(el, "[data-test=edit-translations-en]")!.click();
   await flush(el);
   await vi.waitFor(() =>
-    expect(client.getContentTranslationTargets).toHaveBeenCalledExactlyOnceWith("en", {}),
+    expect(client.getContentTranslationTargets).toHaveBeenCalledExactlyOnceWith({
+      languages: ["ca", "en", "de"],
+      missing: { mode: "language", language: "en" },
+    }),
   );
   expect(translations(el).open).toBe(true);
   expect(translations(el).language).toBe("en");
-  expect(translationModal(el).heading).toContain(name("en"));
+  expect(translationModal(el).heading).toBe(t("content_languages.edit_translations"));
+  expect(
+    translations(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=missing]",
+    )!.value,
+  ).toBe("en");
+  expect(
+    translations(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=jump]")!
+      .value,
+  ).toBe("en");
   translationModal(el).dispatchEvent(
     new CustomEvent("wt-close", { bubbles: true, composed: true }),
   );
@@ -1034,6 +1069,7 @@ it("keeps missing-report completeness unknown and closes a complete selected-lan
 });
 
 it("reopens for another language without keeping the preceding language's fields", async () => {
+  await page.viewport(1280, 900);
   const client = api();
   const el = await mount(client);
   q(el, "[data-test=edit-translations-en]")!.click();
@@ -1047,8 +1083,20 @@ it("reopens for another language without keeping the preceding language's fields
   q(el, "[data-test=edit-translations-de]")!.click();
   await flush(el);
   expect(translations(el).language).toBe("de");
-  expect(translationModal(el).heading).toContain(name("de"));
-  expect(client.getContentTranslationTargets).toHaveBeenNthCalledWith(2, "de", {});
+  expect(translationModal(el).heading).toBe(t("content_languages.edit_translations"));
+  expect(
+    translations(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=missing]",
+    )!.value,
+  ).toBe("de");
+  expect(
+    translations(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=jump]")!
+      .value,
+  ).toBe("de");
+  expect(client.getContentTranslationTargets).toHaveBeenNthCalledWith(2, {
+    languages: ["ca", "en", "de"],
+    missing: { mode: "language", language: "de" },
+  });
 });
 
 it("opens the chosen language's target read while completeness is still loading", async () => {
@@ -1057,7 +1105,16 @@ it("opens the chosen language's target read while completeness is still loading"
   await flush(el);
   expect(translations(el).open).toBe(true);
   expect(translations(el).language).toBe("de");
-  expect(translationModal(el).heading).toContain(name("de"));
+  expect(translationModal(el).heading).toBe(t("content_languages.edit_translations"));
+  expect(
+    translations(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=missing]",
+    )!.value,
+  ).toBe("de");
+  expect(
+    translations(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=jump]")!
+      .value,
+  ).toBe("de");
 });
 
 it.each(["es-ES", "en-GB"])(
@@ -1143,22 +1200,34 @@ it("closes a saved editor before the report refresh fails, keeping the failure o
 });
 
 it("a real translation PUT closes once before a failing report refresh", async () => {
+  const cell: TranslationCell = {
+    kind: "product",
+    id: "dish",
+    language: "ca",
+    field: "name",
+    owners: { kind: "product", parentId: null },
+    text: null,
+    inheritedText: null,
+    effectiveText: null,
+    defaultText: null,
+    inheritedDefaultText: null,
+    effectiveDefaultText: null,
+    expected: "baseline",
+    staffText: "STAFF Soup",
+    eligible: true,
+    unavailableReason: null,
+  };
   const row = {
     kind: "product",
     id: "dish",
     name: "STAFF Soup",
-    reason: "absent",
-    selectedText: null,
-    defaultText: null,
-    effectiveSelectedText: null,
-    effectiveDefaultText: null,
-    defaultRequired: true,
-    eligible: true,
-    unavailableReason: null,
     owners: { kind: "product", parentId: null },
-    expected: "baseline",
+    cells: [cell],
   };
   const client = api({
+    saveContentTranslations: vi.fn(async () => ({
+      saved: [{ ...cell, text: "Sopa", effectiveText: "Sopa", expected: "saved" }],
+    })),
     getContentSuggestions: vi.fn(async () => ({
       config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
       required: [],
@@ -1171,7 +1240,7 @@ it("a real translation PUT closes once before a failing report refresh", async (
       cloudOrigin: null,
     })),
     getContentTranslationTargets: vi.fn().mockResolvedValue({
-      language: "ca",
+      configuration: "suggestion-config",
       config: CONFIG,
       required: [],
       rows: [row],
@@ -1183,10 +1252,10 @@ it("a real translation PUT closes once before a failing report refresh", async (
   q(el, "[data-test=edit-translations-ca]")!.click();
   await flush(el);
   const form = translations(el);
-  const table = form.shadowRoot!.querySelector("wt-data-table")!;
+  const table = form.shadowRoot!.querySelector("dashboard-content-translation-window")!;
   await table.updateComplete;
   table
-    .shadowRoot!.querySelector("[name=translation-text-product-dish]")!
+    .shadowRoot!.querySelector("[name=translation-product-dish-ca-name]")!
     .dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "Sopa" }, bubbles: true, composed: true }),
     );
@@ -1199,8 +1268,17 @@ it("a real translation PUT closes once before a failing report refresh", async (
   expect(outcomes).toEqual([false]);
   expect(form.open).toBe(false);
   expect(translationModal(el).open).toBe(false);
-  expect(client.saveContentTranslations).toHaveBeenCalledExactlyOnceWith("ca", {
-    edits: [{ kind: "product", id: "dish", expected: "baseline", text: "Sopa" }],
+  expect(client.saveContentTranslations).toHaveBeenCalledExactlyOnceWith({
+    edits: [
+      {
+        kind: "product",
+        id: "dish",
+        language: "ca",
+        field: "name",
+        expected: "baseline",
+        text: "Sopa",
+      },
+    ],
   });
 });
 

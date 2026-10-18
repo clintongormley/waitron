@@ -96,6 +96,9 @@ export class TranslationDrafts {
   get suggestedCount(): number {
     return [...this.#drafts.values()].filter((draft) => draft.origin === "suggested").length;
   }
+  get waitingCount(): number {
+    return this.#waiting.size;
+  }
   edit(cell: TranslationCellRef, text: string): boolean {
     const key = translationCellKey(cell),
       previous = this.#drafts.get(key),

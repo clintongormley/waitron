@@ -1151,18 +1151,19 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   fixes and notes on complete live items. The dashboard suggestion reader uses that query; the
   multilingual page/save contract and editor remain unfinished. A separate cell draft model now
   retains personal text, explicit clears and fixes by item, language and field, blocks over-capacity
-  saves and commits the exact submitted snapshot while preserving newer input. The dialog still
-  uses its original model until the coordinated editor replacement. The new field view projects
+  saves and commits the exact submitted snapshot while preserving newer input. The field view projects
   bounded language windows, keeps a focused native field and cursor through row moves, exposes
-  separate optional unit fields and retains rejected input until that field is resolved. Its
-  integration with the dialog's page reads, filters, staged selection and Save is still open.
-  An unpublished page coordinator now reads one item page and one suggestion page per opening,
+  separate optional unit fields and retains rejected input until that field is resolved. The
+  editor now composes that view with the multilingual draft model and page coordinator. It reads
+  one item page and one suggestion page per opening,
   refreshes retained cells in requests of at most one hundred, retains hidden edits and focused
   fields, and rejects closed, superseded or configuration-mismatched answers. Show staged pages
-  distinct items, and refreshed field placeholders share the model's current facts. The legacy
-  dialog does not yet consume this coordinator. The client now accepts projected multilingual
+  distinct items, and refreshed field placeholders share the model's current facts. Filters,
+  explicit page navigation, optional unit fields, deliberate field unstaging and uncertain-batch
+  retry are wired through the editor. Its migrated leave and Translate all checks retain their
+  existing behavior. The client accepts projected multilingual
   queries and one whole cell batch on the language-free routes; its legacy call signatures and
-  public DTOs remain to be retired with the dialog replacement and Save integration. Regional
+  public DTOs remain to be retired with the remaining editor tests and consumers. Regional
   completeness notes wrap in full, with the row actions reachable at phone and desktop widths.
   No intermediate feature is ready to publish. Boot's configured-origin
   forwarding and obsolete callback cleanup wait for lane E. Automatic-translation review, future

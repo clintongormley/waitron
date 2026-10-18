@@ -601,7 +601,17 @@ export const en = {
   "translations.replace": "Use current name",
   "translations.discard": "Discard edit",
   "translations.help":
-    "Fill the names for this language. Save changes saves every edited row together; menus are published separately.",
+    "Edit the languages you need. Save changes saves your staged fields together; menus are published separately.",
+  "translations.missing_in": "Missing in",
+  "translations.any_language": "Any enabled language",
+  "translations.all_names": "All names",
+  "translations.jump": "Jump to language",
+  "translations.more_suggestions": "More suggestions",
+  "translations.retry_batch": "Retry these changes",
+  "translations.unstage": "Unstage field",
+  "translations.unstage_named": "Unstage field · {name} · {language} · {field}",
+  "translations.uncertain":
+    "The save could not be confirmed. Retry these exact changes before editing them again.",
   "translations.reasons":
     "Partly translated: fill the missing name for this language. No customer-facing name: start one here. Blank rows are not saved.",
   "translations.default_needed":
@@ -620,7 +630,7 @@ export const en = {
   "translations.hidden": "{count} hidden edits",
   "translations.show_edited": "Show edited",
   "translations.show_all": "Show all",
-  "translations.capacity": "100 items are edited. Save or undo an edit before starting another.",
+  "translations.capacity": "Your batch exceeds 100 fields. Unstage a field before saving.",
   "translations.input_unavailable":
     "This edit could not be staged. Review your staged edits and try again.",
   "translations.previous": "Previous",
@@ -3637,7 +3647,17 @@ export const es: Record<StringKey, string> = {
   "translations.replace": "Usar nombre actual",
   "translations.discard": "Descartar cambio",
   "translations.help":
-    "Rellena los nombres de este idioma. Guardar cambios guarda todas las filas editadas juntas; las cartas se publican por separado.",
+    "Edita los idiomas que necesites. Guardar cambios guarda juntos los campos pendientes; las cartas se publican por separado.",
+  "translations.missing_in": "Falta en",
+  "translations.any_language": "Cualquier idioma activado",
+  "translations.all_names": "Todos los nombres",
+  "translations.jump": "Ir al idioma",
+  "translations.more_suggestions": "Más sugerencias",
+  "translations.retry_batch": "Reintentar estos cambios",
+  "translations.unstage": "Retirar campo del lote",
+  "translations.unstage_named": "Retirar campo del lote · {name} · {language} · {field}",
+  "translations.uncertain":
+    "No se ha podido confirmar el guardado. Reintenta estos mismos cambios antes de volver a editarlos.",
   "translations.reasons":
     "Traducido a medias: rellena el nombre que falta en este idioma. Sin nombre para el cliente: empieza aquí. Las filas vacías no se guardan.",
   "translations.default_needed":
@@ -3659,7 +3679,7 @@ export const es: Record<StringKey, string> = {
   "translations.input_unavailable":
     "No se ha podido preparar este cambio. Revisa los cambios pendientes e inténtalo de nuevo.",
   "translations.capacity":
-    "Hay 100 elementos editados. Guarda o deshaz un cambio antes de empezar otro.",
+    "El lote supera los 100 campos. Retira un campo del lote antes de guardar.",
   "translations.previous": "Anterior",
   "translations.next": "Siguiente",
   "translations.page": "Página {page} de {pages}",

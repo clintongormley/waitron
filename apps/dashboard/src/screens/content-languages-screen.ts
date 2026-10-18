@@ -395,6 +395,7 @@ export class ContentLanguagesScreen extends LitElement {
           ? html`${this.#renderConfig(this.config, this.rules)}
               <dashboard-content-translations-dialog
                 .api=${this.api}
+                .config=${this.config}
                 .open=${this.translating}
                 .language=${this.translationLanguage}
                 @translations-closed=${(event: Event) => {

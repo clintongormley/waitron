@@ -1,13 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
-import type {
-  ContentSuggestionRead,
-  DashboardApi,
-  SuggestionRunView,
-  TranslationPage,
-  TranslationTarget,
-} from "../api/client.js";
+import type { ContentSuggestionRead, DashboardApi, SuggestionRunView } from "../api/client.js";
+import type { TranslationItemPage } from "@waitron/catalogue/src/content-translation-types.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -20,28 +15,40 @@ afterEach(() => {
   setLocale("es-ES");
 });
 
-const target = (id: string): TranslationTarget => ({
-  kind: "product",
-  id,
-  name: `STAFF ${id}`,
-  reason: "absent",
-  selectedText: null,
-  defaultText: null,
-  effectiveSelectedText: null,
-  effectiveDefaultText: null,
-  defaultRequired: true,
-  eligible: true,
-  unavailableReason: null,
-  owners: { kind: "product", parentId: null },
-  expected: `baseline-${id}`,
-});
-const translations = (language: string): TranslationPage => ({
-  language,
-  config: { defaultLanguage: "en", languages: ["en", "es"] },
+const config = { defaultLanguage: "en", languages: ["en", "es"] };
+const translations = (): TranslationItemPage => ({
+  config,
   required: [],
-  rows: [target("one")],
+  configuration: "suggestion-config",
   next: null,
   total: 1,
+  rows: [
+    {
+      kind: "product",
+      id: "one",
+      name: "STAFF one",
+      owners: { kind: "product", parentId: null },
+      cells: [
+        {
+          kind: "product",
+          id: "one",
+          language: "es",
+          field: "name",
+          owners: { kind: "product", parentId: null },
+          text: null,
+          inheritedText: null,
+          effectiveText: null,
+          defaultText: null,
+          inheritedDefaultText: null,
+          effectiveDefaultText: null,
+          expected: "baseline-one",
+          staffText: "STAFF one",
+          eligible: true,
+          unavailableReason: null,
+        },
+      ],
+    },
+  ],
 });
 const run = (overrides: Partial<SuggestionRunView> = {}): SuggestionRunView => ({
   state: "running",
@@ -82,7 +89,7 @@ function deferred<T>() {
 
 async function mount(overrides: Record<string, unknown> = {}, liveData?: LiveData) {
   const api = {
-    getContentTranslationTargets: vi.fn(async (language: string) => translations(language)),
+    getContentTranslationTargets: vi.fn(async () => translations()),
     saveContentTranslations: vi.fn(),
     getContentSuggestions: vi.fn(async () => read()),
     startContentSuggestions: vi.fn(async () => ({ run: SENDING })),
@@ -91,7 +98,7 @@ async function mount(overrides: Record<string, unknown> = {}, liveData?: LiveDat
   } as unknown as DashboardApi;
   const { el } = await mountWidget<ContentTranslationsDialog>(
     "dashboard-content-translations-dialog",
-    { open: true, language: "es", api },
+    { open: true, language: "es", config, api },
   );
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=loading]")).toBeNull());
   return { el, api };
@@ -145,7 +152,7 @@ describe("Translate all in the translations dialog", () => {
     const getContentSuggestions = vi.fn(async () => current);
     const { el, api } = await mount({ getContentSuggestions }, liveData);
     await vi.waitFor(() => expect(bar(el).run?.state).toBe("running"));
-    expect(getContentSuggestions).toHaveBeenCalledWith();
+    expect(getContentSuggestions).toHaveBeenCalledWith({});
     expect(bar(el).service).toBe("on");
     expect(bar(el).cloudOrigin).toBe("https://cloud.example.test");
     const translationReads = vi.mocked(api.getContentTranslationTargets).mock.calls.length;
@@ -330,7 +337,7 @@ describe("Translate all in the translations dialog", () => {
     expect(bar(el).service).toBeNull();
     expect(button(el).disabled).toBe(true);
     expect(el.shadowRoot!.querySelector("[data-test=read-error]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-content-translation-window")).not.toBeNull();
     liveData.invalidate([{ type: "content_suggestions" }]);
     await vi.waitFor(() => expect(bar(el).service).toBe("on"));
     expect(bar(el).error).toBe("");
@@ -403,7 +410,7 @@ describe("Translate all in the translations dialog", () => {
     const { el, api } = await mount({}, liveData);
     await vi.waitFor(() => expect(bar(el).service).toBe("on"));
     el.language = "en";
-    await vi.waitFor(() => expect(api.getContentSuggestions).toHaveBeenCalledWith());
+    await vi.waitFor(() => expect(api.getContentSuggestions).toHaveBeenCalledWith({}));
     await vi.waitFor(() => expect(bar(el).service).toBe("on"));
     const reads = vi.mocked(api.getContentSuggestions).mock.calls.length;
     el.open = false;
