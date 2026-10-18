@@ -1,22 +1,15 @@
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError, type BusinessDayClock } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { resolveDepartmentsDays } from "./day-resolver.js";
 import type { LocalDate } from "./hours-types.js";
 import type { ClosedWeekDay } from "./menu-timetable-types.js";
 import type { VenueScope } from "./operations.js";
-import { readDepartmentSeasonWeeks } from "./season-weeks.js";
+import { readDepartmentSeasonWeeks, type ServingRead } from "./season-weeks.js";
 import { serviceDayContext } from "./service-day-context.js";
 import { readServiceZones } from "./zone-closed-times.js";
 import { closureOutsideHours } from "./zone-own-hours.js";
 import "./errors.js";
-
-/** The clock and each serving zone's department, as `saveSeasonWeeks` read them in this
- *  transaction. */
-export interface ServingRead {
-  clock: BusinessDayClock;
-  departmentOf: ReadonlyMap<string, string>;
-}
 
 /** After a season-week write, inside its transaction: each listed zone's closures against its
  *  department's week in `seasonId` as now stored. `field` is the request path up to `days.`

@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError } from "@waitron/shared";
+import { AppError, type BusinessDayClock } from "@waitron/shared";
 import { assertBusinessDayScheduleWrite, sameScheduleRanges } from "./business-day-schedule.js";
 import { assertWeekEndOffsets, readDepartmentWeekReads, stageMenuWeek } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
@@ -16,11 +16,16 @@ import {
 import type { Season } from "./season-rules.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { rangeSpan, type ClosedRange, type ServiceRange } from "./service-day.js";
-import type { ServingRead } from "./zone-closure-hours.js";
 import { readServiceZones, stageZoneClosedWeek } from "./zone-closed-times.js";
 import "./errors.js";
 
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
+
+/** The clock and each serving zone's department, as a week save read them in its transaction. */
+export interface ServingRead {
+  clock: BusinessDayClock;
+  departmentOf: ReadonlyMap<string, string>;
+}
 
 /** Touching ranges of the same period become one; input sorted from the changeover. */
 export function joinTouching<T extends { startsAt: string; endsAt: string }>(

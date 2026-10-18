@@ -564,7 +564,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       "zonePaint",
       "expectedClockRevision",
     ] as const;
-    // Called after saveSpecialDay, which has validated `input` against SpecialDayInput.
     const assertSpecialDayClosuresInHours = (tx: Transaction, input: unknown) => {
       const { dates, zonePaint } = input as SpecialDayInput;
       return assertDatedClosuresInHours(
@@ -1353,15 +1352,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             body.days,
             body.expectedClockRevision as number,
             new Date(),
-            { seasonId },
-          );
-          await assertSeasonClosuresInHours(tx, ctx.cfg, seasonId, [
             {
-              zoneId,
-              field: "",
-              days: body.days as readonly ClosedWeekDay[],
+              seasonId,
+              afterWrite: (read) =>
+                assertSeasonClosuresInHours(
+                  tx,
+                  ctx.cfg,
+                  seasonId,
+                  [{ zoneId, field: "", days: body.days as readonly ClosedWeekDay[] }],
+                  read,
+                ),
             },
-          ]);
+          );
         });
         return c.body(null, 204);
       }),
