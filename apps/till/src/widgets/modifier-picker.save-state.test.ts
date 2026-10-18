@@ -11,6 +11,14 @@ beforeEach(() => setLocale("en"));
 
 function offeredItem(productId: string, staff: string, price: string) {
   return {
+    presentation: {
+      name: staff,
+      customerName: { es: `${staff} carta` },
+      kitchenName: `${staff} KDS`,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
     portion: "1",
     unit: {
       staffName: "Staff unit",

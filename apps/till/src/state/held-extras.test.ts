@@ -5,6 +5,14 @@ import type { OfferedModifier } from "../api/client.js";
 /** One offered product, with its three names DIFFERENT so a reader of the wrong one fails. */
 function item(productId: string, staff: string, price: string) {
   return {
+    presentation: {
+      name: staff,
+      customerName: { es: `${staff} para el cliente` },
+      kitchenName: `${staff} cocina`,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
     portion: "1",
     unit: {
       staffName: "Staff unit",

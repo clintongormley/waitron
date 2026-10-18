@@ -455,6 +455,14 @@ function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> 
     maxPicks: null,
     items: [
       {
+        presentation: {
+          name: "Staff lemon",
+          customerName: { en: "Guest lemon", es: "Limón" },
+          kitchenName: "LEMON",
+          variantName: null,
+          variantCustomerName: null,
+          variantKitchenName: null,
+        },
         productId: "lemon",
         name: "Staff lemon",
         customerName: { en: "Guest lemon", es: "Limón" },

@@ -6442,6 +6442,14 @@ describe("till-app", () => {
     maxPicks: null,
     items: [
       {
+        presentation: {
+          name: "Leche extra",
+          customerName: { es: "Leche extra carta" },
+          kitchenName: "Leche extra KDS",
+          variantName: null,
+          variantCustomerName: null,
+          variantKitchenName: null,
+        },
         portion: "1",
         unit: {
           staffName: "Staff unit",

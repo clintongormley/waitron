@@ -30,6 +30,14 @@ function offeredItem(
   preselected = false,
 ) {
   return {
+    presentation: {
+      name: staff,
+      customerName: { es: `${staff} carta`, en: `${staff} menu` },
+      kitchenName: `${staff} KDS`,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
     portion: "1",
     unit: {
       staffName: "Staff unit",

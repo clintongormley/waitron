@@ -97,6 +97,14 @@ function variant(id: string, unitPrice: string): LiveVariant {
 
 function extraItem(productId: string, price: string, available = true) {
   return {
+    presentation: {
+      name: `${productId} staff`,
+      customerName: null,
+      kitchenName: null,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
     portion: "1",
     unit: {
       staffName: "Staff unit",
@@ -222,7 +230,7 @@ const burgerLine = (): OrderLine => ({
   optionSnapshots: [
     {
       listName: { en: "doneness staff" },
-      listCustomerName: null,
+      listCustomerName: { en: "doneness staff" },
       listKitchenName: "doneness KDS",
       labelName: { en: "rare staff" },
       labelCustomerName: { en: "rare menu" },
@@ -230,7 +238,7 @@ const burgerLine = (): OrderLine => ({
     },
     {
       listName: { en: "onions staff" },
-      listCustomerName: null,
+      listCustomerName: { en: "onions staff" },
       listKitchenName: "onions KDS",
       labelName: { en: "none staff" },
       labelCustomerName: { en: "none menu" },

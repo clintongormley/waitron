@@ -7,6 +7,7 @@ import type { PricingUnit } from "./pricing.js";
 import type { ProductOrdering } from "./product-ordering.js";
 import type { VatClass } from "./vat-rates.js";
 import type { SellableUnit } from "./product-types.js";
+import type { ProductPresentation } from "./product-presentation.js";
 
 /**
  * The menu wire shapes — the JSON the catalogue's read paths hand across the HTTP boundary to a till
@@ -171,17 +172,6 @@ export interface AccessibleCatalogue {
 }
 
 /**
- * One product an extras list offers, with everything a surface needs to draw and describe it: the
- * RESOLVED price (the menu offer's own price, then the list item's, then the
- * product's `unit_price` — already settled, because a till has no way to walk it), the terms of the
- * OFFER, and the product's names and declarations. Every product value here is the picked product's
- * EFFECTIVE one — its own, or its parent's where a variant leaves it blank — except the names, which
- * are always its own.
- *
- * `ExtraListItem` (modifier-list-types.ts) carries none of the product's facts on purpose: the row
- * duplicates nothing the `products` row already holds. This shape is where the two are put back
- * together for a reader.
- *
  * `addAllergens` and `suitableFor` take the vocabulary of a CHILD line rather than of a product,
  * because that is what a pick becomes: the product's effective `allergens`, and its effective
  * `dietaryDeclarations` expanded the way a dish's own row is expanded. Shown BESIDE the dish's own
@@ -189,6 +179,8 @@ export interface AccessibleCatalogue {
  */
 export interface OfferedExtraItem {
   productId: string;
+  /** Raw parent and relative-variant facts, kept separate for independent language fallback. */
+  presentation: ProductPresentation;
   /** Physical amount supplied by one pick, in the effective product unit. */
   portion: string;
   unit: {

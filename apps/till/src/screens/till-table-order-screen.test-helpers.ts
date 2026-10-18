@@ -63,6 +63,14 @@ const extrasList: OfferedModifier = {
   maxPicks: null,
   items: [
     {
+      presentation: {
+        name: "Bacon",
+        customerName: { es: "Bacon carta" },
+        kitchenName: "Bacon KDS",
+        variantName: null,
+        variantCustomerName: null,
+        variantKitchenName: null,
+      },
       portion: "1",
       unit: {
         staffName: "Staff unit",

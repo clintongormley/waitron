@@ -1166,7 +1166,7 @@ describe("the Device Home Page each menu serves", () => {
 
   it("serves each menu's structure and Device Home Page on both offers routes, and its version alone in the menu state", async () => {
     const v = await setupLunch();
-    await app((tx) => updateSection(tx, v.postresId, { names: { [LOCALE]: "Para terminar" } }));
+    await app((tx) => updateSection(tx, v.postresId, { names: { es: "Para terminar" } }));
     await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.postresId }));
     await app((tx) => setHomeDisplay(tx, v.menuId, "till", { columns: 8, order: "menu_first" }));
     const versionId = await publish(v.menuId);
@@ -1190,7 +1190,7 @@ describe("the Device Home Page each menu serves", () => {
             kind: "section",
             sectionId: v.postresId,
             internalName: "Postres",
-            names: { [LOCALE]: "Para terminar" },
+            names: { es: "Para terminar" },
             image: null,
             color: null,
             members: [{ kind: "product", menuItemId: flanOffer, productId: v.flanId }],

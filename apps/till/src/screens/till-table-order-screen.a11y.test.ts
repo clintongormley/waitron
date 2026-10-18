@@ -278,6 +278,14 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       maxPicks: null,
       items: [
         {
+          presentation: {
+            name: "Queso",
+            customerName: { es: "Queso carta" },
+            kitchenName: "Queso KDS",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
           portion: "1",
           unit: {
             staffName: "Staff unit",

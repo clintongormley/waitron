@@ -167,6 +167,14 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
 
   it("a line with picks, an answer and the Modifiers control has no violations", async () => {
     const bacon = {
+      presentation: {
+        name: "Bacon",
+        customerName: { es: "Bacon carta" },
+        kitchenName: "Bacon KDS",
+        variantName: null,
+        variantCustomerName: null,
+        variantKitchenName: null,
+      },
       portion: "1",
       unit: {
         staffName: "Staff unit",

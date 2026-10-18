@@ -46,6 +46,14 @@ function offer(overrides: Partial<TillMenuOffer> & Pick<TillMenuOffer, "id" | "p
 
 function extraItem(productId: string, price: string, available = true) {
   return {
+    presentation: {
+      name: productId,
+      customerName: null,
+      kitchenName: null,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
     portion: "1",
     unit: {
       staffName: "Staff unit",

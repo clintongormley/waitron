@@ -4818,6 +4818,14 @@ describe("menuOfferToTillProduct", () => {
       maxPicks: 2,
       items: [
         {
+          presentation: {
+            name: "Bacon",
+            customerName: { es: "Bacon carta" },
+            kitchenName: "Bacon KDS",
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
           portion: "1",
           unit: {
             staffName: "Staff unit",
@@ -5270,6 +5278,14 @@ describe("menuOfferToTillProduct", () => {
 
   it("offers the picker only the extras items and option labels that can be sold now", () => {
     const item = (productId: string, available: boolean) => ({
+      presentation: {
+        name: productId,
+        customerName: null,
+        kitchenName: null,
+        variantName: null,
+        variantCustomerName: null,
+        variantKitchenName: null,
+      },
       portion: "1",
       unit: {
         staffName: "Staff unit",

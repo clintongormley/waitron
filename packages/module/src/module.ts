@@ -254,6 +254,14 @@ export type ZoneOfferedModifier =
       readonly maxPicks: number | null;
       readonly items: readonly {
         readonly productId: string;
+        readonly presentation: {
+          readonly name: string;
+          readonly customerName: Readonly<Record<string, string>> | null;
+          readonly kitchenName: string | null;
+          readonly variantName: string | null;
+          readonly variantCustomerName: Readonly<Record<string, string>> | null;
+          readonly variantKitchenName: string | null;
+        };
         readonly name: string;
         readonly customerName: Readonly<Record<string, string>> | null;
         readonly kitchenName: string | null;

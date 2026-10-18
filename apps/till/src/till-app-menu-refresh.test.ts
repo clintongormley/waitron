@@ -89,6 +89,14 @@ function burgerOffer(cheesePrice = "1.00"): TillMenuOffer {
         maxPicks: null,
         items: [
           {
+            presentation: {
+              name: "Extra cheese",
+              customerName: null,
+              kitchenName: null,
+              variantName: null,
+              variantCustomerName: null,
+              variantKitchenName: null,
+            },
             portion: "1",
             unit: {
               staffName: "Staff unit",

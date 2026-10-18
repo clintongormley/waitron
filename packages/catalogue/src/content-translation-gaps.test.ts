@@ -234,7 +234,7 @@ describe("complete translation gap predicates", () => {
   });
 
   it.each([
-    [{ es: "CLIENT Nombre", en: "CLIENT Name" }, {}],
+    [{ es: "CLIENT Spanish unit", en: "CLIENT Name" }, {}],
     [{}, { es: "kg", en: "kg" }],
     [{}, {}],
   ] as const)("counts a unit once per language with %s / %s", async (name, abbreviation) => {

@@ -1792,6 +1792,14 @@ describe("a dish not sold by the unit offers its options but no extras", () => {
   // The server refuses `extras.unsupported_product` on a dish whose unit has a scale or any decimal
   // places, because an extra is billed at the dish's quantity times its picks.
   const cheese = {
+    presentation: {
+      name: "Queso",
+      customerName: { es: "Queso carta" },
+      kitchenName: "Queso KDS",
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
     portion: "1",
     unit: {
       staffName: "Staff unit",

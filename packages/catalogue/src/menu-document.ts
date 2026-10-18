@@ -757,7 +757,7 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
 ];
 
 const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
-  ["names", ["name", "customerName", "kitchenName"]],
+  ["names", ["name", "customerName", "kitchenName", "presentation"]],
   ["image", ["image"]],
   ["allergens", ["addAllergens"]],
   ["diet", ["suitableFor"]],

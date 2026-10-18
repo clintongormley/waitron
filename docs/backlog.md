@@ -1201,9 +1201,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   Recorded option comparisons retain unchanged answers under their original language maps.
   Unit changes also appear in publication review for extras-only products, while previously
   published rows remain unchanged. No intermediate feature is ready to publish. Boot's
-  configured-origin forwarding and obsolete callback cleanup wait for lane E. Frozen extras
-  source pairs and their consumers still need integration; parent/newly-added-extra preparation
-  and retained/recalled integration reach lane G's reserved functions. Whole-feature validation
+  configured-origin forwarding and obsolete callback cleanup wait for lane E. New offers and
+  publications now retain the raw parent and relative-variant names separately, and publication
+  review includes source changes even when their composed display text is unchanged. The stored
+  publication remains unchanged until explicit publish. Consumer integration, parent/newly-added-extra
+  preparation and retained/recalled handling still reach lane G's reserved functions. Whole-feature validation
   and the final explanation audit remain open.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
@@ -3259,8 +3261,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Unresolved observation from W101 verification** — left open by W101 (#1351). Two full local
   `@waitron/till test:coverage` runs logged an unhandled rejection in `#holdIdentity` while
-  `#switchProfile` was reading identity. The triggering test and cause are unverified; isolate the
-  profile-switch case and its identity response before choosing a fix.
+  `#switchProfile` was reading identity. A682 isolated one test that deliberately returns null and
+  emits the same rejection; the real-response investigation remains open. The detail retains the
+  command and the limits of that probe.
   [Detail](backlog/till.md#unresolved-observation-from-w101-verification)
 
 - **Loose ends left by W97 (#1311).**

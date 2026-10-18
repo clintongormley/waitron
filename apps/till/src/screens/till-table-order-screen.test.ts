@@ -3036,6 +3036,14 @@ describe("till-table-order-screen", () => {
       ],
     };
     const extraItem = (productId: string, name: string, preselected: boolean) => ({
+      presentation: {
+        name: name,
+        customerName: { es: `${name} carta` },
+        kitchenName: `${name} KDS`,
+        variantName: null,
+        variantCustomerName: null,
+        variantKitchenName: null,
+      },
       portion: "1",
       unit: {
         staffName: "Staff unit",

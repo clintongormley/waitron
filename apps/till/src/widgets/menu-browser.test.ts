@@ -2044,6 +2044,14 @@ describe("till-menu-browser", () => {
 
     it("still offers a product not sold separately as an extra on a dish that lists it", async () => {
       const extra = {
+        presentation: {
+          name: "Cola",
+          customerName: null,
+          kitchenName: null,
+          variantName: null,
+          variantCustomerName: null,
+          variantKitchenName: null,
+        },
         portion: "1",
         unit: {
           staffName: "Staff unit",
