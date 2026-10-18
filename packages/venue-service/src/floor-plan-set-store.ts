@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, type SQL } from "drizzle-orm";
 import { floorZones, type Transaction } from "@waitron/db";
 import type { FloorDeletion, FloorPlanSets, FloorPlanSetSummary } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -379,8 +379,7 @@ export async function readFloorPlanSetDeleteImpact(
 /**
  * Deletes a set that is not its department's default. Its periods take `replaceWith`, another set
  * of the department; the default, named or null, is stored as an empty field so the periods
- * follow whichever set is the default later. The periods and the link go
- * before core's rows, which they name by plain foreign keys.
+ * follow whichever set is the default later.
  */
 export async function deleteFloorPlanSet(
   tx: Transaction,
@@ -399,10 +398,29 @@ export async function deleteFloorPlanSet(
       throw new AppError("floor_plan_set.invalid", { field: "replaceWith" });
     if (!chosen.isDefault) replacement = replaceWith;
   }
+  await removeFloorPlanSets(
+    tx,
+    deletion,
+    [setId],
+    eq(menuPeriods.floorPlanSetId, setId),
+    replacement,
+  );
+}
+
+/**
+ * Deletes `setIds` after the periods `periods` selects take `replacement`. The periods and the
+ * department links go before core's rows, which they name by plain foreign keys.
+ */
+export async function removeFloorPlanSets(
+  tx: Transaction,
+  deletion: Pick<FloorDeletion, "removeSets">,
+  setIds: readonly string[],
+  periods: SQL,
+  replacement: string | null,
+): Promise<void> {
+  await tx.update(menuPeriods).set({ floorPlanSetId: replacement }).where(periods);
   await tx
-    .update(menuPeriods)
-    .set({ floorPlanSetId: replacement })
-    .where(eq(menuPeriods.floorPlanSetId, setId));
-  await tx.delete(departmentFloorPlanSets).where(eq(departmentFloorPlanSets.setId, setId));
-  await deletion.removeSets(tx, [setId]);
+    .delete(departmentFloorPlanSets)
+    .where(inArray(departmentFloorPlanSets.setId, [...setIds]));
+  await deletion.removeSets(tx, setIds);
 }
