@@ -20,7 +20,8 @@ import {
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
-import { saveZonePlan } from "./floor-plan.js";
+import { saveLayout } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 
 import { mountTillApi } from "./till-api.js";
@@ -368,8 +369,8 @@ describe("the table routes' revision", () => {
       placement: { x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
       partKeys: [],
     });
-    await inTx(v, (tx) =>
-      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, {
+    await inTx(v, async (tx) =>
+      saveLayout(tx, v.cfg, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), {
         revision,
         tables: [entry("bar", renamed, 40), entry("a", other, 0)],
       }),
@@ -503,8 +504,8 @@ describe("today's routes", () => {
     ]);
     const partyId = await seatAt(table.t!);
     const label = (await tableRow(v, table.t!)).label;
-    await inTx(v, (tx) =>
-      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, {
+    await inTx(v, async (tx) =>
+      saveLayout(tx, v.cfg, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), {
         revision,
         tables: [
           {
@@ -790,8 +791,8 @@ describe("the zone reset's revision", () => {
     const partyId = await seatAt(table.t!);
     const label = (await tableRow(v, table.t!)).label;
     const renamed = `${label} b`;
-    await inTx(v, (tx) =>
-      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, {
+    await inTx(v, async (tx) =>
+      saveLayout(tx, v.cfg, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), {
         revision,
         tables: [
           {

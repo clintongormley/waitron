@@ -33,13 +33,8 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "@waitron/venue-service";
-import {
-  readLayout,
-  readZonePlan,
-  saveLayout,
-  saveZonePlan,
-  type ZonePlanSave,
-} from "./floor-plan.js";
+import { readLayout, saveLayout, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import {
   catchUpZone,
   ensureToday,
@@ -273,7 +268,9 @@ async function resave(
   zoneId: string,
   change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
 ): Promise<Record<string, string>> {
-  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const plan = await inTx(v, async (tx) =>
+    readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+  );
   const tables = plan.tables.map((table) => ({
     id: table.id,
     key: table.id,
@@ -283,12 +280,12 @@ async function resave(
     placement: table.placement,
     partKeys: table.partIds,
   }));
-  const { ids } = await inTx(v, (tx) =>
-    saveZonePlan(
+  const { ids } = await inTx(v, async (tx) =>
+    saveLayout(
       tx,
       v.cfg,
       REMOVALS,
-      zoneId,
+      await defaultLayout(tx, v.cfg, zoneId),
       { revision: plan.revision, tables: change(tables) },
       NOW,
     ),
@@ -1250,7 +1247,9 @@ describe("the parts of joined tables in the till's copy", () => {
   it("a joined table whose name an occupied table still holds leaves its parts in service", async () => {
     const { zoneId, master, table } = await plannedZone(v, [{ key: "t9", label: "T9" }], NOW);
     await seat(v, table.t9!);
-    const [t9] = (await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId))).tables;
+    const [t9] = (
+      await inTx(v, async (tx) => readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)))
+    ).tables;
     await resave(zoneId, (tables) => [
       ...tables.filter((entry) => entry.id !== master.t9),
       ...["Counter 3", "Counter 4", "Counter 5"].map((label, i) => ({
@@ -1691,7 +1690,9 @@ describe("a reset over a joined table split today", () => {
             : entry,
       ),
     );
-    const saved = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const saved = await inTx(v, async (tx) =>
+      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+    );
     expect(saved.tables.find((entry) => entry.id === master.long)!.partIds.sort()).toEqual(
       [master.c3!, master.c4!].sort(),
     );

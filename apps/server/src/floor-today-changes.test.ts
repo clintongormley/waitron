@@ -16,7 +16,8 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { foodOnItsWay } from "./delivery-release.js";
-import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import {
   backToSaved,
   moveToday,
@@ -125,7 +126,16 @@ async function labelOf(tableId: string): Promise<string | undefined> {
 }
 
 function save(zoneId: string, revision: number, tables: ZonePlanSave["tables"]) {
-  return inTx(v, (tx) => saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables }, NOW));
+  return inTx(v, async (tx) =>
+    saveLayout(
+      tx,
+      v.cfg,
+      REMOVALS,
+      await defaultLayout(tx, v.cfg, zoneId),
+      { revision, tables },
+      NOW,
+    ),
+  );
 }
 
 function place(x: number, y: number) {

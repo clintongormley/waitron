@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { expect } from "vitest";
 import {
   diningTables,
@@ -25,7 +25,8 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "@waitron/venue-service";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "../floor-plan.js";
+import { readLayout, saveLayout, type ZonePlanSave } from "../floor-plan.js";
+import { defaultLayout } from "./floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
 import { inTx, type PartyVenue } from "./party-venue.js";
 
@@ -100,34 +101,37 @@ export async function plannedZone(
       partKeys: entry.partKeys ?? [],
     });
   }
+  const layout = await inTx(v, (tx) => defaultLayout(tx, v.cfg, zoneId));
   const { revision, ids } = await inTx(v, (tx) =>
-    saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables }, now),
+    saveLayout(tx, v.cfg, REMOVALS, layout, { revision: 0, tables }, now),
   );
-  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, layout));
   for (const entry of entries) {
     table[entry.key] = plan.tables.find((t) => t.id === ids[entry.key])!.liveTableId!;
   }
   return { zoneId, table, master: ids, revision };
 }
 
-/** Gives master table `masterId` the size it keeps while off its zone's layout in `setId`. */
+/**
+ * Gives master table `masterId` the size it keeps while off its zone's layout in `setId`, by
+ * default its department's default set.
+ */
 export async function giveKeptSize(
   v: PartyVenue,
   masterId: string,
   size: { width: number; height: number },
-  setId: string | null = null,
+  setId?: string,
 ): Promise<void> {
   await inTx(v, async (tx) => {
+    const [master] = await tx
+      .select({ zoneId: floorPlanTables.zoneId })
+      .from(floorPlanTables)
+      .where(eq(floorPlanTables.id, masterId));
+    const inSet = setId ?? (await defaultLayout(tx, v.cfg, master!.zoneId!)).setId;
     const [plan] = await tx
       .select({ id: floorPlans.id })
       .from(floorPlans)
-      .innerJoin(floorPlanTables, eq(floorPlanTables.zoneId, floorPlans.zoneId))
-      .where(
-        and(
-          eq(floorPlanTables.id, masterId),
-          setId === null ? isNull(floorPlans.setId) : eq(floorPlans.setId, setId),
-        ),
-      );
+      .where(and(eq(floorPlans.zoneId, master!.zoneId!), eq(floorPlans.setId, inSet)));
     await tx
       .insert(floorPlanTableSizes)
       .values({ planId: plan!.id, planTableId: masterId, ...size });

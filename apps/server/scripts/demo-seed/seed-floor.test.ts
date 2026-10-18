@@ -11,9 +11,10 @@ import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAvailableProducts } from "@waitron/catalogue";
-import { listSalePolicies, resolveMakers } from "@waitron/venue-service";
+import { listSalePolicies, readFloorPlanSets, resolveMakers } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { readZonePlan } from "../../src/floor-plan.js";
+import { readLayout } from "../../src/floor-plan.js";
+import { defaultLayout } from "../../src/testing/floor-sets.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
 import { createTable } from "../../src/testing/live-table.js";
 import type { TillConfig } from "../../src/till-config.js";
@@ -202,7 +203,7 @@ describe("seedFloor", () => {
       nodeId: "unused",
       seriesId: "unused",
       locationId: brandLocationId(locationId),
-    } as unknown as Parameters<typeof readZonePlan>[1];
+    } as unknown as Parameters<typeof readLayout>[1];
 
     const res = await withTransaction(suite.db, async (tx) => {
       await seedFloor(tx, {
@@ -215,7 +216,8 @@ describe("seedFloor", () => {
         sql`select distinct zone_id from dining_tables where location_id = ${locationId}`,
       );
       const plans = [];
-      for (const { zone_id } of zones) plans.push(await readZonePlan(tx, cfg, zone_id));
+      for (const { zone_id } of zones)
+        plans.push(await readLayout(tx, cfg, await defaultLayout(tx, cfg, zone_id)));
       const { rows: today } = await tx.execute<{
         label: string;
         zone_id: string;
@@ -298,6 +300,66 @@ describe("seedFloor", () => {
       { x: 89, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
     ]);
   });
+
+  it.each([
+    ["en", "Standard"],
+    ["es", "Estándar"],
+  ] as const)(
+    "gives each department a Standard set holding its zones' tables (%s)",
+    async (locale, setName) => {
+      const { locationId } = await provisionVenue();
+      const cfg = {
+        nodeId: "unused",
+        seriesId: "unused",
+        locationId: brandLocationId(locationId),
+      } as unknown as Parameters<typeof readLayout>[1];
+
+      const res = await withTransaction(suite.db, async (tx) => {
+        await seedFloor(tx, {
+          locationId,
+          locale,
+          departmentTradingNames: TRADING_NAMES,
+          dataSet: CASA_DELGADO_ES,
+        });
+        const { rows: departments } = await tx.execute<{ id: string }>(
+          sql`select id from departments where location_id = ${locationId} and active`,
+        );
+        const sets = await readFloorPlanSets(tx, cfg);
+        const placed: Record<string, string[]> = {};
+        for (const set of sets) {
+          for (const zoneId of set.zoneIds) {
+            const layout = await readLayout(tx, cfg, { setId: set.setId, zoneId });
+            placed[zoneId] = layout.tables
+              .filter((t) => t.placement !== null)
+              .map((t) => t.label)
+              .sort();
+          }
+        }
+        const { rows: seeded } = await tx.execute<{ zone_id: string; label: string }>(
+          sql`select zone_id, label from dining_tables where location_id = ${locationId}`,
+        );
+        return { departments, sets, placed, seeded };
+      });
+
+      expect(
+        res.sets.map((s) => ({
+          departmentId: s.departmentId,
+          name: s.name,
+          isDefault: s.isDefault,
+        })),
+      ).toEqual(
+        expect.arrayContaining(
+          res.departments.map((d) => ({ departmentId: d.id, name: setName, isDefault: true })),
+        ),
+      );
+      expect(res.sets).toHaveLength(res.departments.length);
+      const seededByZone: Record<string, string[]> = {};
+      for (const { zone_id, label } of res.seeded) (seededByZone[zone_id] ??= []).push(label);
+      expect(res.seeded).toHaveLength(16);
+      for (const [zoneId, labels] of Object.entries(seededByZone))
+        expect(res.placed[zoneId]).toEqual(labels.sort());
+    },
+  );
 
   it("sizes a table by how many it seats, and draws only a round table round", () => {
     const placementOf = (label: string) => DEMO_TABLES.find((t) => t.label === label)!;

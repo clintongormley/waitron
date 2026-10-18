@@ -18,7 +18,8 @@ import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { partyTablesName } from "@waitron/shared";
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import { foodOnItsWay } from "./delivery-release.js";
-import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -782,7 +783,14 @@ describe("Split tables… on a group with nobody seated", () => {
       });
     }
     await inTx(v, async (tx) => {
-      await saveZonePlan(tx, v.cfg, removals, zoneId, { revision, tables: saved }, NOW);
+      await saveLayout(
+        tx,
+        v.cfg,
+        removals,
+        await defaultLayout(tx, v.cfg, zoneId),
+        { revision, tables: saved },
+        NOW,
+      );
       await resetZone(tx, v.cfg, removals, zoneId, NOW, "due");
     });
     const waiting = () =>

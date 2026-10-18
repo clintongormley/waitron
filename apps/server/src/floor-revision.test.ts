@@ -5,7 +5,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorTodayJoins, floorTodayTables, floorTodayZones } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import {
   moveChangedRooms,
   moveRoom,
@@ -93,7 +94,9 @@ async function resave(
   zoneId: string,
   change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
 ): Promise<void> {
-  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const plan = await inTx(v, async (tx) =>
+    readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+  );
   const tables = plan.tables.map((table) => ({
     id: table.id,
     key: table.id,
@@ -103,12 +106,12 @@ async function resave(
     placement: table.placement,
     partKeys: table.partIds,
   }));
-  await inTx(v, (tx) =>
-    saveZonePlan(
+  await inTx(v, async (tx) =>
+    saveLayout(
       tx,
       v.cfg,
       REMOVALS,
-      zoneId,
+      await defaultLayout(tx, v.cfg, zoneId),
       { revision: plan.revision, tables: change(tables) },
       NOW,
     ),

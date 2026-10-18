@@ -19,7 +19,8 @@ import {
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { compareLabels } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
-import { readZonePlan, saveZonePlan } from "./floor-plan.js";
+import { readLayout, saveLayout } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { moveBill } from "./move-bill.js";
@@ -1020,7 +1021,7 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
   await giveKeptSize(v, master.c4!, { width: 2, height: 2 });
   await seat(v, zone.table.c3!);
   await inTx(v, async (tx) => {
-    const plan = await readZonePlan(tx, v.cfg, zoneId);
+    const plan = await readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId));
     const tables = plan.tables.map((t) => ({
       id: t.id,
       key: t.id,
@@ -1030,11 +1031,11 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
       placement: t.placement,
       partKeys: t.id === master.long ? [master.c3!, master.c4!, master.c5!] : t.partIds,
     }));
-    await saveZonePlan(
+    await saveLayout(
       tx,
       v.cfg,
       REMOVALS,
-      zoneId,
+      await defaultLayout(tx, v.cfg, zoneId),
       { revision: plan.revision, tables },
       v.clock.now().instant,
     );

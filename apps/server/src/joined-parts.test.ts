@@ -5,13 +5,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorTodayTables, workingOrders } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
-import {
-  readLayout,
-  readZonePlan,
-  saveLayout,
-  saveZonePlan,
-  type ZonePlanSave,
-} from "./floor-plan.js";
+import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { placeSpareToday, resetZone } from "./floor-today-store.js";
@@ -203,7 +198,9 @@ describe("a part still in a joined table", () => {
     const atLong = await seat(v, table.long!);
     expect(await partyAt(v, table.long!)).toBe(atLong.partyId);
 
-    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const plan = await inTx(v, async (tx) =>
+      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+    );
     const tables: ZonePlanSave["tables"] = plan.tables
       .filter((entry) => entry.id !== master.long)
       .map((entry) => ({
@@ -215,8 +212,15 @@ describe("a part still in a joined table", () => {
         placement: entry.placement,
         partKeys: [],
       }));
-    await inTx(v, (tx) =>
-      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: plan.revision, tables }, NOW),
+    await inTx(v, async (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        await defaultLayout(tx, v.cfg, zoneId),
+        { revision: plan.revision, tables },
+        NOW,
+      ),
     );
     await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 
@@ -307,7 +311,9 @@ describe("a joined table come apart", () => {
     );
     await seat(v, table.c3!);
     await seat(v, table.c4!);
-    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const plan = await inTx(v, async (tx) =>
+      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+    );
     const tables: ZonePlanSave["tables"] = plan.tables.map((entry) => ({
       id: entry.id,
       key: entry.id,
@@ -325,11 +331,20 @@ describe("a joined table come apart", () => {
       placement: { x: 0, y: 20, width: 6, height: 2, shape: "rect", rotation: 0 },
       partKeys: [master.c3!, master.c4!, master.c5!],
     });
-    const { ids } = await inTx(v, (tx) =>
-      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables }, NOW),
+    const { ids } = await inTx(v, async (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        await defaultLayout(tx, v.cfg, zoneId),
+        { revision, tables },
+        NOW,
+      ),
     );
     await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
-    const after = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const after = await inTx(v, async (tx) =>
+      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+    );
     const long = after.tables.find((entry) => entry.id === ids.long)!.liveTableId!;
 
     await expect(seat(v, long)).rejects.toMatchObject(inJoinedTable(long));

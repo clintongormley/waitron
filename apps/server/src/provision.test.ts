@@ -23,6 +23,7 @@ import { parseModuleConfig } from "@waitron/module";
 import { createCategory } from "@waitron/catalogue";
 import {
   createDepartment,
+  linkFloorPlanSet,
   readHolidays,
   readHolidayAreaModel,
   saveHolidayArea,
@@ -559,6 +560,35 @@ describe("clearProvisionFixture", () => {
         (select cast(count(*) as int) from department_day_ranges) as paint,
         (select cast(count(*) as int) from locations) as locations`);
     expect(rows[0]).toEqual({ special_days: 0, dates: 0, paint: 0, locations: 0 });
+  });
+
+  it("clears a department's floor plan sets before the department and the venue", async () => {
+    const db = ownerDb();
+    const result = await applyHistoricalTestVenue(
+      planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
+      { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
+    );
+    const cfg = { locationId: brandLocationId(result.locationId) };
+    await withTransaction(db, async (tx) => {
+      const department = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        orderStart: "table",
+      });
+      const setId = randomUUID();
+      await tx.execute(sql`insert into floor_plan_sets (id, location_id)
+        values (${setId}, ${result.locationId})`);
+      await linkFloorPlanSet(tx, cfg, { setId, departmentId: department.id, name: "Standard" });
+    });
+
+    await clearProvisionFixture(db);
+
+    const { rows } = await db.execute<Record<string, number>>(sql`
+      select
+        (select cast(count(*) as int) from department_floor_plan_sets) as links,
+        (select cast(count(*) as int) from floor_plan_sets) as sets,
+        (select cast(count(*) as int) from departments) as departments,
+        (select cast(count(*) as int) from locations) as locations`);
+    expect(rows[0]).toEqual({ links: 0, sets: 0, departments: 0, locations: 0 });
   });
 
   it("clears a venue's routing cells before its stations", async () => {

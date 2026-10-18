@@ -22,13 +22,8 @@ import {
   resetZone,
   takeOffToday,
 } from "./floor-today-store.js";
-import {
-  readLayout,
-  readZonePlan,
-  saveLayout,
-  saveZonePlan,
-  type ZonePlanSave,
-} from "./floor-plan.js";
+import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { partsOf } from "./floor-today-parts.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
@@ -186,7 +181,7 @@ describe("splitting parts off a joined table", () => {
   it("splits Counter 5 at the size the saved plan places it at, once the owner has taken it out of Long table there and placed it", async () => {
     const { zoneId, table, master } = await LONG_PLUS_BAR();
     await inTx(v, async (tx) => {
-      const plan = await readZonePlan(tx, v.cfg, zoneId);
+      const plan = await readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId));
       const tables = plan.tables.map((t) => ({
         id: t.id,
         key: t.id,
@@ -199,11 +194,11 @@ describe("splitting parts off a joined table", () => {
             : t.placement,
         partKeys: t.partIds.filter((id) => id !== master.c5),
       }));
-      await saveZonePlan(
+      await saveLayout(
         tx,
         v.cfg,
         enabledTableRemovals(ALL_MODULES),
-        zoneId,
+        await defaultLayout(tx, v.cfg, zoneId),
         { revision: plan.revision, tables },
         NOW,
       );

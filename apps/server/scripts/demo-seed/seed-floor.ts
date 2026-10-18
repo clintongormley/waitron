@@ -23,7 +23,8 @@ import {
 } from "@waitron/venue-service";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { CountryDemoIdentity } from "@waitron/country";
-import { saveZonePlan } from "../../src/floor-plan.js";
+import { saveLayout } from "../../src/floor-plan.js";
+import { defaultLayout } from "../../src/testing/floor-sets.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import type { DemoDataSet } from "./data-set.js";
@@ -252,10 +253,13 @@ export async function seedFloor(
       );
     }
   }
+  const setName = locale === "es" ? "Estándar" : "Standard";
+  await defaultLayout(tx, cfg, deliCounterZone.id, setName);
   for (const [zoneKey, zoneId] of zoneIds) {
+    const layout = await defaultLayout(tx, cfg, zoneId, setName);
     const tables = floor.tables.filter((table) => table.zoneKey === zoneKey);
     if (tables.length === 0) continue;
-    await saveZonePlan(tx, cfg, [], zoneId, {
+    await saveLayout(tx, cfg, [], layout, {
       revision: 0,
       tables: tables.map((table) => ({
         key: table.label,
