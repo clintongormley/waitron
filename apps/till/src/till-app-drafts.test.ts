@@ -1,3 +1,9 @@
+import {
+  current,
+  currentGroup,
+  row,
+  orderGroup,
+} from "./screens/till-table-order-screen.current-orders.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
@@ -8546,6 +8552,33 @@ describe("direct line editing authority", () => {
     );
   });
 
+  it("refreshes committed line facts after its own autosave without restoring the older bill observation", async () => {
+    let answer!: (value: unknown) => void;
+    const updateOrderLine = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountApp({ updateOrderLine });
+    const order = await openMesa(el);
+    emit(order, "change-line", change());
+    await flush(el);
+    await tap(el, "Beer");
+    await vi.waitFor(() => expect(tableOrder(el)!.billEdit?.editorVersion).toBe(1));
+    const saved = tableOrder(el)!.billEdit;
+    const reads = api.getTabLines.mock.calls.length;
+    api.getTabLines.mockResolvedValue({ lines: [], revision: 5, editSentLines: true });
+    answer({ revision: 2, party: { id: "v1", revision: 4 } });
+    await flush(el, 6);
+    expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
+    expect(tableOrder(el)!.revision).toBe(5);
+    expect(tableOrder(el)!.billEdit).toEqual(saved);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(api.takeOverDraft).not.toHaveBeenCalled();
+  });
+
   it.each(["missing", "wrong bill", "old version", "old draft", "old draft revision"])(
     "sends nothing for a %s editing observation",
     async (kind) => {
@@ -8636,4 +8669,302 @@ describe("direct line editing authority", () => {
     expect(tableOrder(el)!.cancelOffer).toBeNull();
     expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("ticket.already_started"));
   });
+});
+
+describe("direct course and send editing authority", () => {
+  const observation = () => {
+    const { billId, editorVersion, draftId, draftRevision } = server.edit("wo-4");
+    return { billId, editorVersion, draftId, draftRevision };
+  };
+  const actions = [
+    {
+      type: "set-line-course",
+      method: "setLineCourse",
+      detail: { lineNo: 1, courseId: null },
+      args: ["wo-4", 1, null],
+    },
+    { type: "send-lines", method: "sendLines", detail: { lineNos: [1] }, args: ["wo-4", [1]] },
+  ] as const;
+
+  describe.each(actions)("$type", ({ type, method, detail, args }) => {
+    it("carries the shown editing observation and reloads after the command", async () => {
+      const write = vi.fn().mockResolvedValue(undefined);
+      const { el } = await mountApp({ [method]: write });
+      const order = await openMesa(el);
+      const expectedEdit = observation();
+      const reads = api.getTabLines.mock.calls.length;
+      emit(order, type, { ...detail, expectedEdit });
+      await flush(el, 6);
+      expect(write).toHaveBeenCalledExactlyOnceWith(...args, expectedEdit);
+      expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
+      expect(api.saveDraft).not.toHaveBeenCalled();
+      expect(api.takeOverDraft).not.toHaveBeenCalled();
+    });
+
+    it.each(["missing", "wrong bill", "old version", "old draft", "old draft revision"])(
+      "sends nothing for a %s observation",
+      async (kind) => {
+        const write = vi.fn().mockResolvedValue(undefined);
+        const { el } = await mountApp({ [method]: write });
+        const order = await openMesa(el);
+        const expectedEdit =
+          kind === "missing"
+            ? undefined
+            : {
+                ...observation(),
+                ...(kind === "wrong bill" ? { billId: "wo-7" } : {}),
+                ...(kind === "old version" ? { editorVersion: 7 } : {}),
+                ...(kind === "old draft" ? { draftId: "old-draft" } : {}),
+                ...(kind === "old draft revision" ? { draftRevision: 7 } : {}),
+              };
+        emit(order, type, { ...detail, expectedEdit });
+        await flush(el, 6);
+        expect(write).not.toHaveBeenCalled();
+        expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+        expect(api.saveDraft).not.toHaveBeenCalled();
+        expect(api.takeOverDraft).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["success", "refusal"])(
+      "ignores a late %s after an API replacement",
+      async (outcome) => {
+        let answer!: () => void;
+        let refuse!: (error: unknown) => void;
+        const write = vi.fn(
+          () =>
+            new Promise<void>((resolve, reject) => {
+              answer = resolve;
+              refuse = reject;
+            }),
+        );
+        const { el } = await mountApp({ [method]: write });
+        const order = await openMesa(el);
+        emit(order, type, { ...detail, expectedEdit: observation() });
+        await flush(el);
+        expect(write).toHaveBeenCalledOnce();
+        el.api = { ...api } as unknown as TillApi;
+        await flush(el, 6);
+        const reads = api.getTabLines.mock.calls.length;
+        if (outcome === "success") answer();
+        else refuse({ code: "ticket.already_started" });
+        await flush(el, 6);
+        expect(api.getTabLines).toHaveBeenCalledTimes(reads);
+        expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("ticket.already_started"));
+      },
+    );
+
+    it.each(["success", "refusal"])(
+      "keeps a newer editor observation after a late %s",
+      async (outcome) => {
+        let answer!: () => void;
+        let refuse!: (error: unknown) => void;
+        const write = vi.fn(
+          () =>
+            new Promise<void>((resolve, reject) => {
+              answer = resolve;
+              refuse = reject;
+            }),
+        );
+        const { el } = await mountApp({ [method]: write });
+        const order = await openMesa(el);
+        emit(order, type, { ...detail, expectedEdit: observation() });
+        await flush(el);
+        expect(write).toHaveBeenCalledOnce();
+        const refreshed = await server.listDrafts("v1");
+        api.listDrafts.mockResolvedValue({
+          ...refreshed,
+          billEdits: refreshed.billEdits.map((edit) =>
+            edit.billId === "wo-4" ? { ...edit, editorVersion: edit.editorVersion + 2 } : edit,
+          ),
+        });
+        window.dispatchEvent(new Event("focus"));
+        await flush(el, 6);
+        const reads = api.getTabLines.mock.calls.length;
+        if (outcome === "success") answer();
+        else refuse({ code: "ticket.already_started" });
+        await flush(el, 6);
+        expect(api.getTabLines).toHaveBeenCalledTimes(reads);
+        expect(tableOrder(el)!.billEdit?.editorVersion).toBe(2);
+        expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("ticket.already_started"));
+      },
+    );
+  });
+});
+
+describe("held-line move editing authority", () => {
+  const source = () => {
+    const { billId, editorVersion, draftId, draftRevision } = server.edit("wo-7");
+    return { billId, editorVersion, draftId, draftRevision };
+  };
+  const detail = () => ({
+    lineId: "other-line",
+    quantity: "2.000",
+    target: { groupId: "g4" },
+    expectedEdits: [source()],
+  });
+  async function opening(
+    write: ReturnType<typeof vi.fn>,
+    formFactor: FormFactor = drillFormFactor,
+  ) {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(formFactor)),
+      moveLinesToGroup: write,
+      listGroups: vi.fn().mockResolvedValue({
+        revision: 3,
+        groups: [orderGroup("g3", 3, "held"), orderGroup("g4", 4, "held")],
+      }),
+      readCurrentOrders: vi.fn().mockResolvedValue(
+        current({
+          revision: 3,
+          groups: [
+            currentGroup("g3", 3, "held", [
+              row("other-line", "Other bill dish", "2.000", {
+                workingOrderId: "wo-7",
+                released: false,
+              }),
+            ]),
+          ],
+          ungrouped: [],
+          reminder: null,
+        }),
+      ),
+      getPartyBills: vi.fn().mockResolvedValue(
+        ["wo-4", "wo-7"].map((workingOrderId) => ({
+          workingOrderId,
+          revision: 0,
+          invoiceType: "F2",
+          recipient: null,
+          partyId: "v1",
+          label: null,
+          status: "open",
+          total: "4.00",
+          outstanding: "4.00",
+          hasPayments: false,
+          receiptAvailable: false,
+        })),
+      ),
+    });
+    return { el, order: await openMesa(el) };
+  }
+
+  it.each([drillFormFactor, orderTabFormFactor])(
+    "carries only the moved source bill on the %s rendered screen",
+    async (formFactor) => {
+      const write = vi.fn().mockResolvedValue({ revision: 4 });
+      const { el, order } = await opening(write, formFactor);
+      order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await flush(el);
+      order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="other-line"]')!.click();
+      await flush(el);
+      order.shadowRoot!.querySelector<HTMLElement>('[data-move-target="g4"]')!.click();
+      await flush(el, 6);
+      expect(write).toHaveBeenCalledExactlyOnceWith(
+        "v1",
+        [{ lineId: "other-line", quantity: "2.000" }],
+        { groupId: "g4" },
+        {
+          submissionId: expect.any(String),
+          expectedPartyRevision: 3,
+          expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
+        },
+      );
+      expect(api.saveDraft).not.toHaveBeenCalled();
+      expect(api.takeOverDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    "missing",
+    "empty",
+    "wrong bill",
+    "old version",
+    "old draft",
+    "old draft revision",
+    "extra bill",
+    "duplicate bill",
+    "unknown line",
+  ])("sends no move for a %s observation", async (kind) => {
+    const write = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el, order } = await opening(write);
+    const expectedEdits =
+      kind === "missing"
+        ? undefined
+        : kind === "empty"
+          ? []
+          : [
+              {
+                ...source(),
+                ...(kind === "wrong bill" ? { billId: "wo-4" } : {}),
+                ...(kind === "old version" ? { editorVersion: 7 } : {}),
+                ...(kind === "old draft" ? { draftId: "old-draft" } : {}),
+                ...(kind === "old draft revision" ? { draftRevision: 7 } : {}),
+              },
+              ...(kind === "extra bill"
+                ? [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }]
+                : kind === "duplicate bill"
+                  ? [source()]
+                  : []),
+            ];
+    emit(order, "move-group-line", {
+      ...detail(),
+      ...(kind === "unknown line" ? { lineId: "unknown" } : {}),
+      expectedEdits,
+    });
+    await flush(el, 6);
+    expect(write).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    expect(api.saveDraft).not.toHaveBeenCalled();
+    expect(api.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it("refuses a move whose source observation changed while its picker stayed open", async () => {
+    const write = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el, order } = await opening(write);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+    order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="other-line"]')!.click();
+    await flush(el);
+    const refreshed = await server.listDrafts("v1");
+    api.listDrafts.mockResolvedValue({
+      ...refreshed,
+      billEdits: refreshed.billEdits.map((edit) =>
+        edit.billId === "wo-7" ? { ...edit, editorVersion: edit.editorVersion + 2 } : edit,
+      ),
+    });
+    window.dispatchEvent(new Event("focus"));
+    await flush(el, 6);
+    order.shadowRoot!.querySelector<HTMLElement>('[data-move-target="g4"]')!.click();
+    await flush(el, 6);
+    expect(write).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(["success", "refusal"])(
+    "ignores a late move %s after an API replacement",
+    async (outcome) => {
+      let answer!: (value: { revision: number }) => void;
+      let refuse!: (error: unknown) => void;
+      const write = vi.fn(
+        () =>
+          new Promise((resolve, reject) => {
+            answer = resolve;
+            refuse = reject;
+          }),
+      );
+      const { el, order } = await opening(write);
+      emit(order, "move-group-line", detail());
+      await flush(el);
+      expect(write).toHaveBeenCalledOnce();
+      el.api = { ...api } as unknown as TillApi;
+      await flush(el, 6);
+      const reads = api.getTabLines.mock.calls.length;
+      if (outcome === "success") answer({ revision: 25 });
+      else refuse({ code: "group.not_held" });
+      await flush(el, 6);
+      expect(api.getTabLines).toHaveBeenCalledTimes(reads);
+      expect(tableOrder(el)!.party?.revision).not.toBe(25);
+      expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("group.not_held"));
+    },
+  );
 });

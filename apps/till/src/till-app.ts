@@ -10433,10 +10433,58 @@ export class TillApp extends LitElement {
   }
 
   async #onMoveGroupLine(event: Event): Promise<void> {
-    const { lineId, quantity, target } = (event as CustomEvent<MoveGroupLineDetail>).detail;
-    await this.#onGroupRequest((party, command) =>
-      this.api.moveLinesToGroup(party.id, [{ lineId, quantity }], target, command),
-    );
+    if (this.groupCommandBusy) return;
+    if (this.orderParty === null) {
+      this.errorKey = "table.error";
+      return;
+    }
+    const { lineId, quantity, target, expectedEdits } = (event as CustomEvent<MoveGroupLineDetail>)
+      .detail;
+    const row = this.currentOrders?.groups
+      .flatMap((group) => group.rows)
+      .find((row) => row.lineId === lineId);
+    const billId =
+      row?.workingOrderId ??
+      (this.tabLines.some((line) => line.id === lineId) ? this.activeTabId : undefined);
+    const expectedEdit =
+      Array.isArray(expectedEdits) && expectedEdits.length === 1 ? expectedEdits[0] : null;
+    if (
+      billId === undefined ||
+      expectedEdit == null ||
+      expectedEdit.billId !== billId ||
+      !this.#billChoiceCurrent(expectedEdit)
+    ) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    const composition = this.#billComposition([billId]);
+    if (composition === null) return;
+    const live = () =>
+      this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
+    this.groupCommandBusy = true;
+    this.errorKey = undefined;
+    try {
+      if (await this.#refuseWithGroupsUnread()) return;
+      if (!(await this.#flushPartyKitchenNote()) || !live()) return;
+      const party = this.orderParty!;
+      const answer = await composition.api.moveLinesToGroup(
+        party.id,
+        [{ lineId, quantity }],
+        target,
+        {
+          submissionId: crypto.randomUUID(),
+          expectedPartyRevision: party.revision,
+          expectedEdits: [{ ...expectedEdit }],
+        },
+      );
+      if (!live()) return;
+      this.#notePartyRevision(party.id, answer.revision);
+      await this.#loadTabLines();
+    } catch (error) {
+      if (live()) await this.#onReleaseRefusal(error);
+    } finally {
+      this.groupCommandBusy = false;
+    }
   }
 
   async #onSplitGroupLine(event: Event): Promise<void> {
@@ -10640,42 +10688,69 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** The reload runs on both paths: after a raced `ticket.already_fired` the line is fired, and
-   * re-reading reconciles the picker. */
   async #onSetLineCourse(event: Event): Promise<void> {
-    const { lineNo, courseId } = (event as CustomEvent<{ lineNo: number; courseId: string | null }>)
-      .detail;
-    if (this.activeTabId === undefined) return;
+    const { lineNo, courseId, expectedEdit } = (
+      event as CustomEvent<{
+        lineNo: number;
+        courseId: string | null;
+        expectedEdit: BillEditExpected | null;
+      }>
+    ).detail;
+    const billId = this.activeTabId;
+    if (billId === undefined) return;
+    const composition = this.#billComposition([billId]);
+    if (composition === null) return;
+    if (
+      expectedEdit == null ||
+      expectedEdit.billId !== billId ||
+      !this.#billChoiceCurrent(expectedEdit)
+    ) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    const live = () =>
+      this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
     this.errorKey = undefined;
     try {
-      await this.api.setLineCourse(this.activeTabId, lineNo, courseId);
+      await composition.api.setLineCourse(billId, lineNo, courseId, expectedEdit);
     } catch (error) {
+      if (!live()) return;
       this.errorKey = tableWriteError(error);
     }
-    await this.#loadTabLines();
+    if (live()) await this.#loadTabLines();
   }
 
   async #onSendLines(event: Event): Promise<void> {
-    const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
-    const tabId = this.activeTabId;
-    if (tabId === undefined) return;
+    const { lineNos, expectedEdit } = (
+      event as CustomEvent<{
+        lineNos: number[];
+        expectedEdit: BillEditExpected | null;
+      }>
+    ).detail;
+    const billId = this.activeTabId;
+    if (billId === undefined) return;
+    const composition = this.#billComposition([billId]);
+    if (composition === null) return;
+    if (
+      expectedEdit == null ||
+      expectedEdit.billId !== billId ||
+      !this.#billChoiceCurrent(expectedEdit)
+    ) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    const live = () =>
+      this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
     this.errorKey = undefined;
-    const visit = this.#orderVisit;
-    const session = this.#operatorSession;
     try {
-      if (
-        !(await this.#flushPartyKitchenNote()) ||
-        visit !== this.#orderVisit ||
-        session !== this.#operatorSession ||
-        tabId !== this.activeTabId
-      )
-        return;
-      await this.api.sendLines(tabId, lineNos);
+      if (!(await this.#flushPartyKitchenNote()) || !live()) return;
+      await composition.api.sendLines(billId, lineNos, expectedEdit);
     } catch (error) {
+      if (!live()) return;
       await this.#onReleaseRefusal(error);
       return;
     }
-    await this.#loadTabLines();
+    if (live()) await this.#loadTabLines();
   }
 
   async #onRecallLines(event: Event): Promise<void> {
@@ -11953,11 +12028,19 @@ export class TillApp extends LitElement {
     } catch (error) {
       outcome = { error };
     }
-    if (!identity() || (!left() && !this.#billChoiceCurrent(change.expectedEdit))) return;
+    if (!identity()) return;
+    if (this.activeTabId === orderId && !this.#billChoiceCurrent(change.expectedEdit)) {
+      if (
+        "saved" in outcome &&
+        this.#draftSync === composition.sync &&
+        this.#draftSync?.edit?.editorId === this.operatorPersonId
+      )
+        await this.#rereadAmounts(orderId, visit);
+      return;
+    }
     if ("saved" in outcome) {
-      if (left()) return;
-      this.#noteBillParty(outcome.saved.party);
       if (this.activeTabId !== orderId) return;
+      this.#noteBillParty(outcome.saved.party);
       this.tabRevision = outcome.saved.revision;
       await this.#rereadAmounts(orderId, visit);
       return;
@@ -13480,6 +13563,21 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
+  #tableBillEdits(): BillEditExpected[] {
+    if (!this.#draftReady) return [];
+    const ids = new Set([
+      ...(this.activeTabId === undefined ? [] : [this.activeTabId]),
+      ...this.partyBills.map((bill) => bill.workingOrderId),
+      ...(this.currentOrders?.groups.flatMap((group) =>
+        group.rows.map((row) => row.workingOrderId),
+      ) ?? []),
+    ]);
+    return [...ids].sort().flatMap((id) => {
+      const edit = this.#draftSync?.expectedEditFor(id);
+      return edit == null ? [] : [edit];
+    });
+  }
+
   #billChoiceEdit(billId: string): BillEditExpected | null {
     const sync = this.#draftSync;
     const edit =
@@ -14654,6 +14752,7 @@ export class TillApp extends LitElement {
       .tables=${this.tables}
       .zones=${this.zones}
       .orderId=${this.activeTabId}
+      .billEdits=${this.#tableBillEdits()}
       .billEdit=${this.#draftReady ? (this.#draftSync?.expectedEdit ?? null) : null}
       .draftStore=${draft}
       .otherDrafts=${this.#otherDrafts(draft)}
@@ -14784,6 +14883,7 @@ export class TillApp extends LitElement {
           .tables=${this.tables}
           .zones=${this.zones}
           .orderId=${this.activeTabId}
+          .billEdits=${this.#tableBillEdits()}
           .billEdit=${this.#draftReady ? (this.#draftSync?.expectedEdit ?? null) : null}
           .draftStore=${draft}
           .otherDrafts=${this.#otherDrafts(draft)}

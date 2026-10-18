@@ -1564,8 +1564,8 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(moves.map((event) => event.detail)).toEqual([
-        { lineId: "l-steak", quantity: "2.000", target: { groupId: "g5" } },
-        { lineId: "l-fish", quantity: "1.000", target: "new" },
+        { lineId: "l-steak", quantity: "2.000", target: { groupId: "g5" }, expectedEdits: null },
+        { lineId: "l-fish", quantity: "1.000", target: "new", expectedEdits: null },
       ]);
       expect(moves[0]!.bubbles && moves[0]!.composed).toBe(true);
     });
@@ -1734,7 +1734,7 @@ describe("till-table-order-screen", () => {
 
       expect(errors).toEqual([]);
       expect(moves.map((event) => event.detail)).toEqual([
-        { lineId: "l-flan", quantity: "1.000", target: "new" },
+        { lineId: "l-flan", quantity: "1.000", target: "new", expectedEdits: null },
       ]);
     });
 
@@ -2011,7 +2011,7 @@ describe("till-table-order-screen", () => {
     let captured: CustomEvent | undefined;
     el.addEventListener("set-line-course", (e) => (captured = e as CustomEvent));
     await chooseOption(picker!, "");
-    expect(captured!.detail).toEqual({ lineNo: 3, courseId: null });
+    expect(captured!.detail).toEqual({ lineNo: 3, courseId: null, expectedEdit: null });
   });
 
   it("shows the held line's course from the server again when a re-read keeps it", async () => {
@@ -2034,7 +2034,7 @@ describe("till-table-order-screen", () => {
     expect(captured).toBeInstanceOf(CustomEvent);
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
-    expect(captured!.detail).toEqual({ lineNo: 3, courseId: "entrantes" });
+    expect(captured!.detail).toEqual({ lineNo: 3, courseId: "entrantes", expectedEdit: null });
   });
 
   it("clears a held tab line's course to null when the no-course placeholder is picked", async () => {
@@ -2045,7 +2045,27 @@ describe("till-table-order-screen", () => {
     el.addEventListener("set-line-course", (e) => (captured = e as CustomEvent));
     // The "" placeholder is the explicit no-course null (setLineCourse takes `string | null`).
     await chooseOption(picker, "");
-    expect(captured!.detail).toEqual({ lineNo: 3, courseId: null });
+    expect(captured!.detail).toEqual({ lineNo: 3, courseId: null, expectedEdit: null });
+  });
+
+  it("direct course and send events carry the shown bill observation", async () => {
+    const expectedEdit = { billId: "wo-4", editorVersion: 7, draftId: "draft-4", draftRevision: 3 };
+    const { el } = await mount({
+      lines: [heldLine],
+      courses,
+      orderId: "wo-4",
+      billEdit: expectedEdit,
+    });
+    await openDrawer(el);
+    const changed: CustomEvent[] = [];
+    const sent: CustomEvent[] = [];
+    el.addEventListener("set-line-course", (e) => changed.push(e as CustomEvent));
+    el.addEventListener("send-lines", (e) => sent.push(e as CustomEvent));
+    const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-line-course="3"]')!;
+    await chooseOption(picker, "entrantes");
+    expect(changed[0]!.detail).toEqual({ lineNo: 3, courseId: "entrantes", expectedEdit });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-send-line="3"]')!.click();
+    expect(sent[0]!.detail).toEqual({ lineNos: [3], expectedEdit });
   });
 
   it("shows a FIRED tab line's course READ-ONLY, offering no editable picker", async () => {
@@ -2281,7 +2301,7 @@ describe("till-table-order-screen", () => {
       expect(captured).toBeInstanceOf(CustomEvent);
       expect(captured!.composed).toBe(true);
       expect(captured!.bubbles).toBe(true);
-      expect(captured!.detail).toEqual({ lineNos: [3] });
+      expect(captured!.detail).toEqual({ lineNos: [3], expectedEdit: null });
     });
 
     it("renders NO Send on a PARENT line with no ticket item (firedAt null, state null)", async () => {

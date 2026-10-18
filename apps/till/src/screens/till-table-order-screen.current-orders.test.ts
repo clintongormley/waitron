@@ -358,7 +358,7 @@ describe("Current orders in the Tab drawer", () => {
     expect(text(q(el, "[data-move-dialog] .move-dish")!)).toBe("Steak ×2");
     q(el, '[data-move-target="g4"]')!.click();
     expect(moves.map((event) => event.detail)).toEqual([
-      { lineId: "l-steak", quantity: "2.000", target: { groupId: "g4" } },
+      { lineId: "l-steak", quantity: "2.000", target: { groupId: "g4" }, expectedEdits: null },
     ]);
   });
 
@@ -620,5 +620,46 @@ describe("the release reminder in Current orders", () => {
       await el.updateComplete;
       expect(reminder(el)!.dataset.groupReminder).toBe("due");
     });
+  });
+});
+
+describe("held-line move editing observation", () => {
+  it("retains the source bill observation from opening when another bill is on screen", async () => {
+    const own = { billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null };
+    const source = {
+      billId: "wo-check",
+      editorVersion: 7,
+      draftId: "draft-check",
+      draftRevision: 3,
+    };
+    const { el } = await mountCurrent({
+      orderId: "wo-4",
+      billEdit: own,
+      billEdits: [own, source],
+      bills: [bill("wo-4", "open"), bill("wo-check", "open")],
+      currentOrders: current({
+        groups: [
+          currentGroup("g3", 3, "held", [
+            row("other-line", "Other bill dish", "2.000", {
+              workingOrderId: "wo-check",
+              released: false,
+            }),
+          ]),
+        ],
+      }),
+    });
+    const events = capture(el, "move-group-line");
+    q(el, '[data-move-line="other-line"]')!.click();
+    await el.updateComplete;
+    el.billEdits = [own, { ...source, editorVersion: 9, draftRevision: 5 }];
+    await el.updateComplete;
+    q(el, '[data-move-target="g4"]')!.click();
+    expect(events[0]!.detail).toEqual({
+      lineId: "other-line",
+      quantity: "2.000",
+      target: { groupId: "g4" },
+      expectedEdits: [source],
+    });
+    expect(events[0]!.bubbles && events[0]!.composed).toBe(true);
   });
 });

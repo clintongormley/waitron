@@ -300,6 +300,7 @@ interface PendingDraft {
 
 /** A held row whose Move to… is open, on whichever bill of the party it sits. */
 interface MovePending {
+  expectedEdits: BillEditExpected[] | null;
   lineId: string;
   name: string;
   quantity: string;
@@ -308,6 +309,7 @@ interface MovePending {
 
 /** What a group's row offers while its group is held: Move always, Split only for `splits`. */
 interface HeldRow {
+  billId: string | undefined;
   lineId: string;
   name: string;
   quantity: string;
@@ -341,6 +343,7 @@ export interface ReorderGroupsDetail {
 
 /** `move-group-line`: a whole held line into another held group, or a new one at the end. */
 export interface MoveGroupLineDetail {
+  expectedEdits: BillEditExpected[] | null;
   lineId: string;
   quantity: string;
   target: { groupId: string } | "new";
@@ -1261,6 +1264,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The revision {@link lines} was read at. */
   @property({ attribute: false }) revision = 0;
   @property({ attribute: false }) billEdit: BillEditExpected | null = null;
+  @property({ attribute: false }) billEdits: readonly BillEditExpected[] = [];
   /** The venue's setting. When off, the server refuses to change or recall a sent line that has a
    * ticket item, so those lines offer Cancel instead. */
   @property({ attribute: false }) editSentLines = true;
@@ -2227,7 +2231,11 @@ export class TillTableOrderScreen extends LitElement {
   #setLineCourse(lineNo: number, courseId: string | null): void {
     this.dispatchEvent(
       new CustomEvent("set-line-course", {
-        detail: { lineNo, courseId },
+        detail: {
+          lineNo,
+          courseId,
+          expectedEdit: this.billEdit === null ? null : { ...this.billEdit },
+        },
         bubbles: true,
         composed: true,
       }),
@@ -2440,7 +2448,10 @@ export class TillTableOrderScreen extends LitElement {
   #sendLine(lineNo: number): void {
     this.dispatchEvent(
       new CustomEvent("send-lines", {
-        detail: { lineNos: [lineNo] },
+        detail: {
+          lineNos: [lineNo],
+          expectedEdit: this.billEdit === null ? null : { ...this.billEdit },
+        },
         bubbles: true,
         composed: true,
       }),
@@ -4196,6 +4207,7 @@ export class TillTableOrderScreen extends LitElement {
             ? nothing
             : this.#heldRowActions(
                 {
+                  billId: row.workingOrderId,
                   lineId: row.lineId,
                   name: row.name,
                   quantity: row.quantity,
@@ -4401,6 +4413,7 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : this.#heldRowActions(
               {
+                billId: this.orderId,
                 lineId: line.id,
                 name,
                 quantity: line.quantity,
@@ -4426,6 +4439,7 @@ export class TillTableOrderScreen extends LitElement {
             name: row.name,
             quantity: row.quantity,
             group,
+            expectedEdits: this.#moveLineEdits(row.billId),
           })}
       >
         ${t("table.move_line")}
@@ -4451,6 +4465,13 @@ export class TillTableOrderScreen extends LitElement {
     </span>`;
   }
 
+  #moveLineEdits(billId: string | undefined): BillEditExpected[] | null {
+    const edit =
+      this.billEdits.find((edit) => edit.billId === billId) ??
+      (this.billEdit?.billId === billId ? this.billEdit : null);
+    return edit == null ? null : [{ ...edit }];
+  }
+
   #reorderHeld(held: OrderGroup[], from: number, to: number): void {
     const ids = held.map((group) => group.id);
     [ids[from], ids[to]] = [ids[to]!, ids[from]!];
@@ -4465,6 +4486,7 @@ export class TillTableOrderScreen extends LitElement {
       lineId: pending.lineId,
       quantity: pending.quantity,
       target,
+      expectedEdits: pending.expectedEdits,
     } satisfies MoveGroupLineDetail);
   }
 

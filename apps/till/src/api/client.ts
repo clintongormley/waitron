@@ -4127,7 +4127,7 @@ export class TillApi {
     partyId: string,
     moves: { lineId: string; quantity: string }[],
     target: { groupId: string } | "new",
-    command: GroupCommand,
+    command: GroupCommand & { expectedEdits: BillEditExpected[] },
   ): Promise<{ revision: number }> {
     return this.#request(`/api/parties/${partyId}/groups/move`, "POST", {
       ...command,
@@ -4155,9 +4155,15 @@ export class TillApi {
    * explicit null, not an absent field. NON-FISCAL. Rejects `tab.not_open`, `course.not_found`,
    * `tab.line_not_found`, or `ticket.already_fired`.
    */
-  async setLineCourse(orderId: string, lineNo: number, courseId: string | null): Promise<void> {
+  async setLineCourse(
+    orderId: string,
+    lineNo: number,
+    courseId: string | null,
+    expectedEdit: BillEditExpected | null,
+  ): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/course`, "PATCH", {
       courseId,
+      expectedEdit,
     });
   }
 
@@ -4166,8 +4172,15 @@ export class TillApi {
    * NON-FISCAL; idempotent — an unknown or already-fired line matches nothing. Rejects `tab.not_open`,
    * and `group.line_held` for a named line in a held group, which only firing its group releases.
    */
-  async sendLines(orderId: string, lineNos: number[]): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", { lineNos });
+  async sendLines(
+    orderId: string,
+    lineNos: number[],
+    expectedEdit: BillEditExpected | null,
+  ): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", {
+      lineNos,
+      expectedEdit,
+    });
   }
 
   /**

@@ -219,6 +219,13 @@ async function flush(el: TillApp) {
   }
 }
 function emit(source: Element, type: string, detail?: unknown) {
+  if (
+    (type === "set-line-course" || type === "send-lines") &&
+    typeof detail === "object" &&
+    detail !== null &&
+    !Object.hasOwn(detail, "expectedEdit")
+  )
+    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 const counter = (el: TillApp) =>
@@ -1080,7 +1087,13 @@ it.each(["send-lines", "pay-tab", "bill-pay"])(
     expect(api.getBillBalance).not.toHaveBeenCalled();
     pending.resolve({ ...partyNote, note: "Together", revision: 3, ownerRevision: 4 });
     await flush(el);
-    if (action === "send-lines") expect(api.sendLines).toHaveBeenCalledWith("bill-table", [1]);
+    if (action === "send-lines")
+      expect(api.sendLines).toHaveBeenCalledWith("bill-table", [1], {
+        billId: "bill-table",
+        editorVersion: 0,
+        draftId: null,
+        draftRevision: null,
+      });
     if (action === "pay-tab")
       expect(api.recordSale).toHaveBeenCalledWith(
         [],

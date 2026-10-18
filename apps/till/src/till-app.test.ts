@@ -607,6 +607,13 @@ const stationQueueWidget = (el: TillApp) =>
   counterBody(el)?.shadowRoot?.querySelector<TillStationQueue>("till-station-queue") ?? null;
 
 function emit(source: Element, type: string, detail?: unknown): void {
+  if (
+    (type === "set-line-course" || type === "send-lines") &&
+    typeof detail === "object" &&
+    detail !== null &&
+    !Object.hasOwn(detail, "expectedEdit")
+  )
+    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
@@ -8899,6 +8906,12 @@ describe("till-app", () => {
             submissionId: expect.any(String),
             expectedPartyRevision: 3,
             draftRevision: 1,
+            expectedEdit: {
+              billId: "wo-7",
+              editorVersion: 1,
+              draftId: "draft-1",
+              draftRevision: 1,
+            },
             groups: [{ release: "fire", lineIds: [expect.any(String)] }],
           },
           { signal: expect.any(AbortSignal) },
@@ -9085,7 +9098,12 @@ describe("till-app", () => {
         await flush(el);
 
         // Re-filed on the tab's own working order (activeTabId), then re-read so the picker reconciles.
-        expect(setLineCourse).toHaveBeenCalledWith("wo-7", 1, "c2");
+        expect(setLineCourse).toHaveBeenCalledWith("wo-7", 1, "c2", {
+          billId: "wo-7",
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        });
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
@@ -9102,7 +9120,12 @@ describe("till-app", () => {
         emit(screen, "set-line-course", { lineNo: 1, courseId: null });
         await flush(el);
 
-        expect(setLineCourse).toHaveBeenCalledWith("wo-7", 1, null);
+        expect(setLineCourse).toHaveBeenCalledWith("wo-7", 1, null, {
+          billId: "wo-7",
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        });
       });
 
       it("a rejected set-line-course surfaces the banner AND still reloads to reconcile to server truth", async () => {
@@ -9185,7 +9208,12 @@ describe("till-app", () => {
         await flush(el);
 
         // Released on the tab's own working order (activeTabId), then re-read so the drawer reconciles.
-        expect(sendLines).toHaveBeenCalledWith("wo-7", [1]);
+        expect(sendLines).toHaveBeenCalledWith("wo-7", [1], {
+          billId: "wo-7",
+          editorVersion: 0,
+          draftId: null,
+          draftRevision: null,
+        });
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 

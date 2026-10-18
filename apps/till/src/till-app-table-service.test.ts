@@ -343,6 +343,13 @@ async function flush(el: TillApp): Promise<void> {
 }
 
 function emit(source: Element, type: string, detail?: unknown): void {
+  if (
+    (type === "change-line" || type === "set-line-course" || type === "send-lines") &&
+    typeof detail === "object" &&
+    detail !== null &&
+    !Object.hasOwn(detail, "expectedEdit")
+  )
+    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
@@ -1447,7 +1454,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
     await flush(el);
 
-    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7);
+    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7, {
+      billId: "wo-7",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
     const row = tableOrder(el)!.shadowRoot!.querySelector(".pending-line")!;
     expect(row.querySelector(".line-note")!.textContent).toContain("no onions");
     expect(row.querySelector(".line-total")!.textContent).toBe(
@@ -1522,7 +1534,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     emit(screen, "change-line", change);
     await flush(el);
 
-    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7);
+    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { note: "no onions" }, 7, {
+      billId: "wo-7",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
     expect(banner(el)!.textContent).toContain(t("held.changed_elsewhere"));
   });
@@ -2159,7 +2176,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(text).not.toContain(t("table.error"));
     });
 
-    it("names the refusal that lands after the operator logged out, and reads nothing again", async () => {
+    it("ignores the prior operator's late refusal after logout, and reads nothing again", async () => {
       const { el, settle, reads } = await changeOnFormFactor(tillFormFactor);
       emit(shell(el), "logout");
       await flush(el);
@@ -2169,7 +2186,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       settle().reject({ code: "ticket.already_started" });
       await flush(el);
 
-      expect(banner(el)!.textContent).toContain(startedRefusal);
+      expect(banner(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
       expect(reads()).toBe(readsOnLeaving);
     });
   });
@@ -2542,7 +2560,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     emit(screen, "change-line", { ...change, patch: { quantity: "2" } });
     await flush(el);
 
-    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { quantity: "2" }, 7);
+    expect(api.updateOrderLine).toHaveBeenCalledWith("wo-7", 5, { quantity: "2" }, 7, {
+      billId: "wo-7",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    });
     expect(banner(el)!.textContent).toContain(codeMessage("extras.unsupported_product"));
     expect(banner(el)!.textContent).not.toContain(t("table.error"));
   });

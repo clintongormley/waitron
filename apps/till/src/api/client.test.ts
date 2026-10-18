@@ -2308,7 +2308,7 @@ describe("TillApi", () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
     await expect(
-      new TillApi("", fetchStub).setLineCourse("wo-1", 2, "c-9"),
+      new TillApi("", fetchStub).setLineCourse("wo-1", 2, "c-9", null),
     ).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -2317,7 +2317,7 @@ describe("TillApi", () => {
         method: "PATCH",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ courseId: "c-9" }),
+        body: JSON.stringify({ courseId: "c-9", expectedEdit: null }),
       }),
     );
   });
@@ -2327,7 +2327,7 @@ describe("TillApi", () => {
     // course, not an absent field — so it must ride the body as an explicit null.
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
-    await new TillApi("", fetchStub).setLineCourse("wo-1", 2, null);
+    await new TillApi("", fetchStub).setLineCourse("wo-1", 2, null, null);
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/wo-1/lines/2/course",
@@ -2335,7 +2335,7 @@ describe("TillApi", () => {
         method: "PATCH",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ courseId: null }),
+        body: JSON.stringify({ courseId: null, expectedEdit: null }),
       }),
     );
   });
@@ -2347,15 +2347,17 @@ describe("TillApi", () => {
         new Response(JSON.stringify({ error: { code: "course.not_found" } }), { status: 404 }),
       );
 
-    await expect(new TillApi("", fetchStub).setLineCourse("wo-1", 2, "gone")).rejects.toMatchObject(
-      { code: "course.not_found" },
-    );
+    await expect(
+      new TillApi("", fetchStub).setLineCourse("wo-1", 2, "gone", null),
+    ).rejects.toMatchObject({ code: "course.not_found" });
   });
 
   it("sendLines POSTs { lineNos } to the tab's /lines/send route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
-    await expect(new TillApi("", fetchStub).sendLines("wo-1", [2, 3])).resolves.toBeUndefined();
+    await expect(
+      new TillApi("", fetchStub).sendLines("wo-1", [2, 3], null),
+    ).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/wo-1/lines/send",
@@ -2363,7 +2365,7 @@ describe("TillApi", () => {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ lineNos: [2, 3] }),
+        body: JSON.stringify({ lineNos: [2, 3], expectedEdit: null }),
       }),
     );
   });
@@ -2375,7 +2377,7 @@ describe("TillApi", () => {
         new Response(JSON.stringify({ error: { code: "tab.not_open" } }), { status: 409 }),
       );
 
-    await expect(new TillApi("", fetchStub).sendLines("wo-1", [2, 3])).rejects.toMatchObject({
+    await expect(new TillApi("", fetchStub).sendLines("wo-1", [2, 3], null)).rejects.toMatchObject({
       code: "tab.not_open",
     });
   });
@@ -4294,6 +4296,7 @@ describe("TillApi: a seated party", () => {
         {
           submissionId: "sub-7",
           expectedPartyRevision: 10,
+          expectedEdits: [{ billId: "wo-4", editorVersion: 3, draftId: null, draftRevision: null }],
         },
       ),
     ).resolves.toEqual({ revision: 11 });
@@ -4301,18 +4304,31 @@ describe("TillApi: a seated party", () => {
       api.moveLinesToGroup("v1", moves, "new", {
         submissionId: "sub-8",
         expectedPartyRevision: 11,
+        expectedEdits: [{ billId: "wo-4", editorVersion: 3, draftId: null, draftRevision: null }],
       }),
     ).resolves.toEqual({ revision: 12 });
 
     expect(fetchStub).toHaveBeenNthCalledWith(
       1,
       "/api/parties/v1/groups/move",
-      post({ submissionId: "sub-7", expectedPartyRevision: 10, moves, target: { groupId: "g3" } }),
+      post({
+        submissionId: "sub-7",
+        expectedPartyRevision: 10,
+        expectedEdits: [{ billId: "wo-4", editorVersion: 3, draftId: null, draftRevision: null }],
+        moves,
+        target: { groupId: "g3" },
+      }),
     );
     expect(fetchStub).toHaveBeenNthCalledWith(
       2,
       "/api/parties/v1/groups/move",
-      post({ submissionId: "sub-8", expectedPartyRevision: 11, moves, target: "new" }),
+      post({
+        submissionId: "sub-8",
+        expectedPartyRevision: 11,
+        expectedEdits: [{ billId: "wo-4", editorVersion: 3, draftId: null, draftRevision: null }],
+        moves,
+        target: "new",
+      }),
     );
   });
 

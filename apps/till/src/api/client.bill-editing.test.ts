@@ -142,3 +142,27 @@ describe("direct line editing observation", () => {
     },
   );
 });
+
+describe("direct course and send editing observations", () => {
+  it.each([null, { billId: "bill-2", editorVersion: 7, draftId: "draft-2", draftRevision: 3 }])(
+    "sends the explicit observation %j with the course or held-line request",
+    async (expectedEdit) => {
+      const fetch = vi.fn(async () => new Response(null, { status: 200 }));
+      const api = new TillApi("", fetch);
+      await api.setLineCourse("bill-2", 3, null, expectedEdit);
+      await api.sendLines("bill-2", [3, 5], expectedEdit);
+      expect(fetch).toHaveBeenNthCalledWith(1, "/api/working-orders/bill-2/lines/3/course", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ courseId: null, expectedEdit }),
+      });
+      expect(fetch).toHaveBeenNthCalledWith(2, "/api/working-orders/bill-2/lines/send", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lineNos: [3, 5], expectedEdit }),
+      });
+    },
+  );
+});

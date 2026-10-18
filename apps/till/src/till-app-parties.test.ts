@@ -376,6 +376,13 @@ async function flush(el: TillApp, rounds = 3): Promise<void> {
 }
 
 function emit(source: Element, type: string, detail?: unknown): void {
+  if (
+    type === "change-line" &&
+    typeof detail === "object" &&
+    detail !== null &&
+    !Object.hasOwn(detail, "expectedEdit")
+  )
+    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
@@ -5610,7 +5617,17 @@ describe("till-app: the order's groups", () => {
       await press(el, '[data-move-target="g2"]');
 
       expect(server.moveLinesToGroup.mock.calls).toEqual([
-        ["v1", [{ lineId: "line-flan", quantity: "1.000" }], { groupId: "g2" }, command(3)],
+        [
+          "v1",
+          [{ lineId: "line-flan", quantity: "1.000" }],
+          { groupId: "g2" },
+          {
+            ...command(3),
+            expectedEdits: [
+              { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            ],
+          },
+        ],
       ]);
       expect(heldGroupsList(el).map((group) => group.lines)).toEqual([
         ["Beer ×1"],
@@ -5628,7 +5645,17 @@ describe("till-app: the order's groups", () => {
       await press(el, '[data-move-target="new"]');
 
       expect(server.moveLinesToGroup.mock.calls).toEqual([
-        ["v1", [{ lineId: "line-fish", quantity: "1.000" }], "new", command(3)],
+        [
+          "v1",
+          [{ lineId: "line-fish", quantity: "1.000" }],
+          "new",
+          {
+            ...command(3),
+            expectedEdits: [
+              { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            ],
+          },
+        ],
       ]);
       expect(heldGroupsList(el).map((group) => group.lines)).toEqual([
         ["Beer ×1"],
@@ -5944,7 +5971,12 @@ describe("till-app: the order's groups", () => {
       ["reorder-groups", { heldGroupIds: ["g3", "g2", "g4"] }, "reorderGroups"],
       [
         "move-group-line",
-        { lineId: "line-flan", quantity: "1.000", target: { groupId: "g2" } },
+        {
+          lineId: "line-flan",
+          quantity: "1.000",
+          target: { groupId: "g2" },
+          expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
+        },
         "moveLinesToGroup",
       ],
       [
@@ -5978,7 +6010,14 @@ describe("till-app: the order's groups", () => {
                   draftRevision: null,
                 },
               }
-            : command(3),
+            : type === "move-group-line"
+              ? {
+                  ...command(3),
+                  expectedEdits: [
+                    { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+                  ],
+                }
+              : command(3),
         );
         expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
         expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
@@ -7328,7 +7367,13 @@ describe("till-app: Current orders", () => {
       "v1",
       [{ lineId: "line-9", quantity: "1.000" }],
       "new",
-      { submissionId: expect.any(String), expectedPartyRevision: 3 },
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+        expectedEdits: [
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
+      },
     );
     expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
     expect(banner(el)).toBeNull();
