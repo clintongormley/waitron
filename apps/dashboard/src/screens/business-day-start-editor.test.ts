@@ -561,6 +561,23 @@ it("re-reads the venue details passively at the waiting change's moment", async 
     vi.useRealTimers();
   }
 });
+it("re-reads once at once when a model read before its changeover arrives after it", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  try {
+    vi.setSystemTime(new Date("2026-10-21T01:00:00.001Z"));
+    const { el, api } = await rig({}, waitingModel());
+    const invalidate = api.liveData.invalidate as ReturnType<typeof vi.fn>;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(invalidate.mock.calls).toEqual([[[{ type: "location_day_cutover_changes" }]]]);
+    el.model = waitingModel();
+    await el.updateComplete;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    el.remove();
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("schedules no re-read for a change too far ahead for one timer", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   try {

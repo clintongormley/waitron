@@ -104,6 +104,7 @@ export class BusinessDayStartEditor extends LitElement {
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   #changeoverTimer?: ReturnType<typeof setTimeout>;
+  #rereadPassed?: string;
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation++;
@@ -163,7 +164,15 @@ export class BusinessDayStartEditor extends LitElement {
     const next = this.isConnected ? this.#waiting()[0] : undefined;
     if (!next) return;
     const delay = Date.parse(next.startsAt) - Date.now();
-    if (delay <= 0 || delay > LONGEST_TIMER_MS) return;
+    if (delay <= 0) {
+      // A model read just before the changeover can arrive after it; one re-read per changeover
+      // keeps a model still stale after it from asking again.
+      if (this.#rereadPassed === next.startsAt) return;
+      this.#rereadPassed = next.startsAt;
+      this.api.liveData.invalidate([{ type: "location_day_cutover_changes" }]);
+      return;
+    }
+    if (delay > LONGEST_TIMER_MS) return;
     this.#changeoverTimer = setTimeout(() => {
       this.#changeoverTimer = undefined;
       this.api.liveData.invalidate([{ type: "location_day_cutover_changes" }]);
