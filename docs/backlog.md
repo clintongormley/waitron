@@ -1152,8 +1152,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   multilingual page/save contract and editor remain unfinished. A separate cell draft model now
   retains personal text, explicit clears and fixes by item, language and field, blocks over-capacity
   saves and commits the exact submitted snapshot while preserving newer input. The dialog still
-  uses its original model until the coordinated editor replacement; no intermediate feature is
-  ready to publish. Boot's configured-origin
+  uses its original model until the coordinated editor replacement. The new field view projects
+  bounded language windows, keeps a focused native field and cursor through row moves, exposes
+  separate optional unit fields and retains rejected input until that field is resolved. Its
+  integration with the dialog's page reads, filters, staged selection and Save is still open;
+  no intermediate feature is ready to publish. Boot's configured-origin
   forwarding and obsolete callback cleanup wait for lane E. Automatic-translation review, future
   presentation and the remaining validation are unfinished.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)

@@ -621,6 +621,8 @@ export const en = {
   "translations.show_edited": "Show edited",
   "translations.show_all": "Show all",
   "translations.capacity": "100 items are edited. Save or undo an edit before starting another.",
+  "translations.input_unavailable":
+    "This edit could not be staged. Review your staged edits and try again.",
   "translations.previous": "Previous",
   "translations.next": "Next",
   "translations.page": "Page {page} of {pages}",
@@ -3654,6 +3656,8 @@ export const es: Record<StringKey, string> = {
   "translations.hidden": "{count} cambios ocultos",
   "translations.show_edited": "Ver editados",
   "translations.show_all": "Ver todos",
+  "translations.input_unavailable":
+    "No se ha podido preparar este cambio. Revisa los cambios pendientes e inténtalo de nuevo.",
   "translations.capacity":
     "Hay 100 elementos editados. Guarda o deshaz un cambio antes de empezar otro.",
   "translations.previous": "Anterior",
