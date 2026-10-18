@@ -12,7 +12,7 @@ import {
 } from "../packages/migrations/src/index.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { appendToChain } from "../packages/fiscal-verifactu/src/chain.js";
-import { openFilingCase } from "../packages/fiscal-verifactu/src/filing-cases.js";
+import { openFilingCase, recordCaseEvent } from "../packages/fiscal-verifactu/src/filing-cases.js";
 import {
   altaFor,
   anulacionFor,
@@ -99,14 +99,22 @@ it("applies the certificate migration without changing any filed fiscal row", as
   const [alta] = suite.db.execute<{ id: string }>(
     sql`select id from registros_facturacion where tipo_registro = 'alta'`,
   ).rows;
-  await suite.db.transaction((tx) =>
-    openFilingCase(tx, {
+  await suite.db.transaction(async (tx) => {
+    const opened = await openFilingCase(tx, {
       registroId: alta!.id,
       cause: "fiscal.registro_rechazado",
       evidence: { codigo: 1100, mensaje: "rechazado", csv: null },
       now: new Date("2026-07-20T18:00:00.000Z"),
-    }),
-  );
+    });
+    await recordCaseEvent(tx, {
+      caseId: opened.id,
+      actionKey: "a795-note",
+      kind: "note",
+      personId: "person-a",
+      action: "note",
+      now: new Date("2026-07-20T18:05:00.000Z"),
+    });
+  });
   await installChangeFeed(
     suite.db,
     ALL_MODULES.flatMap((module) => module.changes ?? []),
@@ -118,7 +126,13 @@ it("applies the certificate migration without changing any filed fiscal row", as
     )
     .rows.map(({ name }) => name);
   const before = snapshot(tables);
-  for (const filed of ["registros_facturacion", "cadenas", "registro_sif", "filing_cases"])
+  for (const filed of [
+    "registros_facturacion",
+    "cadenas",
+    "registro_sif",
+    "filing_cases",
+    "filing_case_events",
+  ])
     expect(before[filed]?.length, filed).toBeGreaterThan(0);
 
   const candidate = folderUpTo("candidate", target + 1);

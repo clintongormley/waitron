@@ -11,12 +11,14 @@ export const fiscalCertificateInstalls = table(
   "fiscal_certificate_installs",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    // No foreign key: a `local` table may not join a ledger or state one (CLAUDE.md §3).
+    // No foreign key: `nodes` is a state table, which a `local` one may not join (CLAUDE.md §3).
+    // Nothing in the database checks the node exists; the writer passes its own node's id.
     nodeId: id("node_id").notNull(),
     installedAt: ts("installed_at").notNull(),
     source: certificateSource("source").notNull(),
-    // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
-    // require. Null for a setup install.
+    // No foreign key: `persons` is a state table, which a `local` one may not join (CLAUDE.md §3).
+    // Nothing in the database checks the person exists; the writer takes the signed-in person.
+    // Null for a setup install.
     personId: id("person_id"),
     kind: certificateKind("kind").notNull(),
     fingerprint: label("fingerprint").notNull(),
