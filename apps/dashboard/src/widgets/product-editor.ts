@@ -84,6 +84,7 @@ import {
 import type { ProductChildKind } from "../state/product-child-create.js";
 import { fill, t, currentLocale } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
+import { guideHref, type GuideLink } from "../help-guide.js";
 import { allergenLabel, vatClassName } from "../i18n/domain.js";
 
 const SUMMARY_SEPARATOR = " · ";
@@ -1150,11 +1151,13 @@ export class ProductEditor extends LitElement {
     return choices.find(({ id }) => id === parentId)?.name ?? t("editor.missing_choice");
   }
 
-  private help(part: string, key: StringKey) {
+  private help(part: string, key: StringKey, guide?: GuideLink) {
     return html`<wt-help-tooltip
       slot="help"
       mode="help-mode"
       aria-label=${fill("help.badge_label", { part })}
+      guide-href=${guide ? guideHref(guide) : nothing}
+      guide-label=${guide ? t("help.guide_link") : nothing}
       >${t(key)}</wt-help-tooltip
     >`;
   }
@@ -1185,7 +1188,7 @@ export class ProductEditor extends LitElement {
         this.change("courseId", event.detail.value || null);
       }}
       @wt-combobox-action=${(event: Event) => this.related(event, "courses")}
-      >${this.help(t("product.course"), "help.products.course")}</wt-combobox
+      >${this.help(t("product.course"), "help.products.course", "products.course")}</wt-combobox
     >`;
   }
 
@@ -1578,7 +1581,7 @@ export class ProductEditor extends LitElement {
           event.stopPropagation();
           this.openUnits("price");
         }}
-        >${this.help(label, "help.products.price")}</wt-price-input
+        >${this.help(label, "help.products.price", "products.selling-unit")}</wt-price-input
       >
       ${
         this.unitUsage.length
@@ -1643,7 +1646,7 @@ export class ProductEditor extends LitElement {
             .join(", ") || t("editor.none")
         }
       >
-        ${this.help(t("editor.variants"), "help.products.variants")}
+        ${this.help(t("editor.variants"), "help.products.variants", "products.variants")}
         <div class="group">
           ${
             variants.length

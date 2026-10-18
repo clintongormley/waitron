@@ -774,6 +774,7 @@ export const en = {
   "nav.account_menu": "Account menu",
   "help.label": "Help",
   "help.badge_label": "Help: {part}",
+  "help.guide_link": "Read more in the guide",
   "help.account.settings":
     "Your name, display name, email, phone and language; your password, PIN and passkeys; an authenticator app for an extra sign-in check; and, where available, signing in with Google.",
   "help.products.keep_variant":
@@ -3772,6 +3773,7 @@ export const es: Record<StringKey, string> = {
   "nav.account_menu": "Menú de cuenta",
   "help.label": "Ayuda",
   "help.badge_label": "Ayuda: {part}",
+  "help.guide_link": "Más información en la guía",
   "help.account.settings":
     "Tu nombre, nombre visible, correo electrónico, teléfono e idioma; tu contraseña, PIN y passkeys; una aplicación de autenticación como comprobación adicional; y, si está disponible, el inicio de sesión con Google.",
   "help.products.keep_variant":

@@ -15,6 +15,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api": devServerProxy(),
+      "/help": devServerProxy(),
       "/management-api": devServerProxy(),
       "/media": devServerProxy(),
     },

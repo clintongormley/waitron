@@ -6378,6 +6378,46 @@ describe("help mode", () => {
     }
   });
 
+  it("links the price, course and Variants badges to their guide sections", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const el = await mountOpen();
+      const linked = [
+        { host: field(el, "unit-price"), href: "/help/en/products#selling-unit" },
+        { host: field(el, "product-course"), href: "/help/en/products#course" },
+        { host: folded(el, "variants"), href: "/help/en/products#variants" },
+      ];
+      for (const { host, href } of linked) {
+        const badge = await badgeOf(host);
+        expect(badge.getAttribute("guide-href")).toBe(href);
+        expect(badge.getAttribute("guide-label")).toBe(t("help.guide_link"));
+      }
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("links to the Spanish guide when the dashboard is in Spanish", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const el = await mountOpen();
+      const badge = await badgeOf(field(el, "product-course"));
+      expect(badge.getAttribute("guide-href")).toBe("/help/es/products#course");
+      expect(badge.getAttribute("guide-label")).toBe("Más información en la guía");
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("the VAT badge has no guide link", async () => {
+    const el = await mountOpen();
+    const badge = await badgeOf(field(el, "tax"));
+    expect(badge.hasAttribute("guide-href")).toBe(false);
+    expect(badge.guideHref).toBeFalsy();
+  });
+
   it("turning help on moves nothing in the editor", async () => {
     const el = await mountOpen();
     const boxes = () => [
