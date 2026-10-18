@@ -544,9 +544,28 @@ gets longer, so we should just make it look good with the date on its own line".
 
 - **The date and time always get their own line**, laid out deliberately, on simplified and full
   invoices. The layout and the date's format are what the mock-up decides.
-- **The law asks for the date and sets no format**: RD 1619/2012 art. 7.1.b, «La fecha de su
-  expedición», quoted in [verifactu-findings.md](../compliance/verifactu-findings.md). Whether
-  Orden HAC/1177/2024 sets a printed date format was not checked; check it before choosing one.
+- **The law asks for the date and sets no format** (checked 2026-10-19, provenance below): a full
+  invoice and a simplified one each need «La fecha de su expedición», and Orden HAC/1177/2024 sets
+  no format for a printed invoice's date. Neither RD 1619/2012 art. 6 nor art. 7 asks for the time of day
+  (the one «hora» in them is a vehicle's hours of navigation or flight).
+- **Mock-up (2026-10-19), rendered from the code** with a temporary switch, not drawn:
+  [simplified receipt](mockups/a754-receipt-date-line/1-simplified-receipt.png) and
+  [full invoice](mockups/a754-receipt-date-line/2-full-invoice.png). Three layouts: **A** a «Fecha»
+  row (caption left, value right) under the invoice number, the table on its own line; **B** the same
+  with the date in numbers (`15/01/2026 12:34`); **C** the date alone, uncaptioned, on the line under
+  the table. Owner's choice pending (lane B's questions).
+- On 58 mm paper «Factura simplificada» and its number do not fit one row either, today and in all
+  three layouts, so the number drops to a right-aligned line of its own.
+
+Provenance, downloaded 2026-10-19; every «» quote was found word for word, by script, in the
+downloaded text, and two control phrases («formato de la fecha de expedición», «la fecha se
+expresará en formato») were not:
+
+| Source | Says |
+| --- | --- |
+| RD 1619/2012 art. 6.1.b (full invoice), [BOE-A-2012-14696](https://www.boe.es/buscar/act.php?id=BOE-A-2012-14696), last update 31/03/2026 | «b) La fecha de su expedición.» |
+| RD 1619/2012 art. 7.1.b (simplified invoice), same page | «b) La fecha de su expedición.» |
+| Orden HAC/1177/2024, [BOE-A-2024-22138](https://www.boe.es/buscar/act.php?id=BOE-A-2024-22138), last update 28/10/2024 | Every «fecha» in it was read: they concern the records, their generation time, the chain, the QR's contents and the system's declaration. The one date format it states, «La fecha ha de ser completa, es decir, deberá indicar día, mes y año, en ese orden», is art. 15.1.l, the date the producer signs the declaración responsable, not an invoice's. Art. 21 leaves the QR's date encoding to AEAT's technical document («la codificación y formato de la información requerida se especificarán en el correspondiente documento técnico»); that date sits inside the QR, not in the printed text. |
 - The sample's Spanish "Mesa 6" and "Café y tostada" on a Catalan receipt are fine: they are
   internal sample values (owner).
 
