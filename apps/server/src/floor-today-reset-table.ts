@@ -10,11 +10,17 @@ import {
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError, compareLabels } from "@waitron/shared";
-import { catchUpZone, foodComingTo, placementColumns, placementOf } from "./floor-today-store.js";
+import {
+  catchUpZone,
+  foodComingTo,
+  layoutPlacesIn,
+  placementColumns,
+  placementOf,
+} from "./floor-today-store.js";
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
 import { partsOf } from "./floor-today-parts.js";
 import { todayOf } from "./floor-today-table.js";
-import { joinedPlaceAfter, standsIn } from "./joined-split-layout.js";
+import { blocksPlace, joinedPlaceAfter } from "./joined-split-layout.js";
 import { holdersOf } from "./parties.js";
 import type { Placement } from "./floor-reset-plan.js";
 import type { TillConfig } from "./till-config.js";
@@ -109,7 +115,14 @@ export async function resetTable(
     if (members.length > 0) await leaveMergesRestoring(tx, members);
   }
   if (place !== null) {
-    await refusePlaceTaken(tx, today.zoneId, tableId, place, new Set([tableId, ...backIds]));
+    await refusePlaceTaken(
+      tx,
+      today.zoneId,
+      tableId,
+      place,
+      new Set([tableId, ...backIds]),
+      savedPlace !== null,
+    );
   }
   await tx
     .update(diningTables)
@@ -154,13 +167,18 @@ async function apartNow(tx: Transaction, tableId: string): Promise<boolean> {
   return apart;
 }
 
-/** Refuses when a table drawn on today's map, other than `own`, stands in `place`; the first in number order is named. */
+/**
+ * Refuses when a table drawn on today's map, other than `own`, stands in `place`; the first in
+ * number order is named. When `place` is the saved one, a table standing exactly where the saved
+ * layout puts it does not count (`blocksPlace`), as at the reset that put them both down.
+ */
 async function refusePlaceTaken(
   tx: Transaction,
   zoneId: string,
   tableId: string,
   place: Placement,
   own: ReadonlySet<string>,
+  fromSaved: boolean,
 ): Promise<void> {
   const rows = await tx
     .select({
@@ -183,8 +201,14 @@ async function refusePlaceTaken(
         not(joinedOutOfService(diningTables.id)),
       ),
     );
+  const layoutPlaces = fromSaved
+    ? await layoutPlacesIn(tx, zoneId)
+    : new Map<string, Placement | null>();
   const standing = rows
-    .filter((row) => !own.has(row.id) && standsIn(place, placementOf(row)!))
+    .filter(
+      (row) =>
+        !own.has(row.id) && blocksPlace(place, placementOf(row)!, layoutPlaces.get(row.id) ?? null),
+    )
     .sort(byNumberOrder);
   if (standing.length > 0) {
     throw new AppError("table.place_taken", { tableId, standingId: standing[0]!.id });

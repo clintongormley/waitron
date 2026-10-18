@@ -902,6 +902,42 @@ describe("Reset table's place check, more cases", () => {
   });
 });
 
+const SIX = {
+  key: "six",
+  label: "Table 6",
+  seats: 2,
+  place: { x: 14, y: 20, width: 2, height: 2 },
+};
+
+describe("Reset table's place check, against a layout that overlaps its own tables", () => {
+  it("Long table saved over Table 6, which stands at its own saved place: Reset table puts Long table back overlapping it", async () => {
+    const { table, zoneId } = await longTableWith(LONG_SAVED, [SIX]);
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+    expect(await placeOf(table.six!)).toEqual(SIX.place);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect(await placeOf(table.six!)).toEqual(SIX.place);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+
+  it("Table 6 moved one square off its own saved place: refused naming Table 6, and nothing changes", async () => {
+    const { table } = await longTableWith(LONG_SAVED, [SIX]);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+    await moveTo(table.six!, 15, 20);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c5!]), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.six!,
+    });
+    expect(await everything()).toEqual(before);
+  });
+});
+
 describe("Reset table on a joined table saved with no place", () => {
   /** Long table saved with no place, put out today at 10, 20 (8 × 8, the size a new table gets). */
   async function longPutOut(others: PlannedEntry[]) {
@@ -985,6 +1021,19 @@ describe("Reset table on a joined table saved with no place", () => {
     await settles(() => reset(table.long!, [table.c3!]), zoneId);
 
     expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
+  });
+
+  it("Table 6 standing at its own saved place inside where Long table stood: the place comes from today's map, not the saved row, so Table 6 still counts and is named", async () => {
+    const { table } = await longPutOut([SIX]);
+    expect(await placeOf(table.six!)).toEqual(SIX.place);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c5!]), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.six!,
+    });
+    expect(await everything()).toEqual(before);
   });
 });
 
