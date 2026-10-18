@@ -96,7 +96,7 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
         id: "floor-plans",
         navLabelKey: "nav.floor_plans",
         group: "operations",
-        order: 11,
+        order: 13,
         requiresPermission: "venue.configure",
         readPermission: "venue.view",
       },

@@ -359,7 +359,7 @@ it("registers Floor plans in Operations, configured with venue.configure and rea
     id: "floor-plans",
     navLabelKey: "nav.floor_plans",
     group: "operations",
-    order: 11,
+    order: 13,
     requiresPermission: "venue.configure",
     readPermission: "venue.view",
   });
@@ -545,7 +545,7 @@ it("declares the Calendar's Week as a search destination", async () => {
   );
 });
 
-it("A725 puts Prep stations after Departments and zones and Floor plans (A504), before Calendar", () => {
+it("A725 puts Prep stations immediately after Departments and zones, before Calendar", () => {
   const screens = [
     VENUE_SERVICE_DASHBOARD.screen!,
     ...VENUE_SERVICE_DASHBOARD.moreScreens!.map(({ screen }) => screen),
@@ -554,8 +554,8 @@ it("A725 puts Prep stations after Departments and zones and Floor plans (A504), 
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   expect(screens.map(({ id }) => id)).toEqual([
     "venue-operations",
-    "floor-plans",
     "prep-stations",
+    "floor-plans",
     "opening-hours",
   ]);
 });

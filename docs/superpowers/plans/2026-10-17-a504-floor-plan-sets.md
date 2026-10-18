@@ -63,8 +63,9 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
    §9 left this open with "the proposal is yes". Without it, an editor open on another set could
    save a stale table list and delete a table the first editor added (`checkSave` deletes every
    table missing from the draft, `apps/server/src/floor-plan.ts:301-302`, `352`).
-3. **The Floor plans page is venue-service's** (screen `floor-plans`, Operations group, order 11,
-   between Departments and zones at 10 and Prep stations at 12,
+3. **The Floor plans page is venue-service's** (screen `floor-plans`, Operations group, order 13,
+   after Prep stations at 12 and before the Calendar at 15, so Prep stations still follows
+   Departments and zones as A725 decided (ruling 2026-10-18, Task 20),
    `packages/venue-service/src/dashboard/index.ts:16-21`, `75-79`), needing `venue.configure` with
    `venue.view` reading it. Its routes are venue-service's; the layout rows they make and copy go
    through a new core port, `CoreServices.floorPlanSets`, and every removal of a set goes through
@@ -1383,7 +1384,7 @@ state in both themes.
   `packages/venue-service/src/dashboard/client.ts:92`
 
 **Interfaces — Produces:** screen `floor-plans` (`navLabelKey: "nav.floor_plans"`, group
-`operations`, order 11, `requiresPermission: "venue.configure"`, `readPermission: "venue.view"`);
+`operations`, order 13, `requiresPermission: "venue.configure"`, `readPermission: "venue.view"`);
 `VenueServiceApi.floorPlanSets(): Promise<FloorPlanSetsModel>` subscribed as
 `getFloorPlanSets` on `floor_plan_sets`, `floor_plans`, `floor_plan_placements`,
 `floor_plan_tables`, `floor_plan_table_parts`, `department_floor_plan_sets`, `menu_periods`,
