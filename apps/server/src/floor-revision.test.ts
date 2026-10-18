@@ -81,7 +81,7 @@ const printOf = async (zoneId: string) =>
   (await inTx(v, (tx) => roomPrints(tx, v.cfg, [zoneId]))).get(zoneId);
 const readFloor = (now = NOW) => inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, now));
 const resetToSaved = (zoneId: string) =>
-  inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+  inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 
 async function finish(partyId: string): Promise<void> {
   const sent = await commandFor(v, partyId);

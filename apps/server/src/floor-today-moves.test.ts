@@ -335,7 +335,7 @@ describe("today's moves", () => {
     await placeSpare(table.spare!, { x: 20, y: 10 });
     expect(await todayRow(v, table.spare!)).toMatchObject({ x: 20 });
 
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 
     expect(await todayRow(v, table.spare!)).toMatchObject({
       x: null,

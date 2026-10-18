@@ -165,7 +165,8 @@ function save(zoneId: string, revision: number, tables: Entry[]) {
   return inTx(v, (tx) => saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables }, NOW));
 }
 
-const reset = (zoneId: string) => inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+const reset = (zoneId: string) =>
+  inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 
 async function todayRow(tableId: string) {
   const [row] = await inTx(v, (tx) =>

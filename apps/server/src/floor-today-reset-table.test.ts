@@ -1039,7 +1039,7 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
       v.clock.now().instant,
     );
   });
-  await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant));
+  await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant, "due"));
   return zone;
 }
 
@@ -1180,7 +1180,7 @@ describe("Reset table and the room's reset", () => {
     await seat(v, table.long!);
     await ok(splitOff(table.long!, [table.c4!, table.c5!]));
     const before = (await zoneRevisionOf(v, zoneId))!;
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant, "due"));
     expect(await zoneRevisionOf(v, zoneId)).toBe(before + 1);
 
     await settles(() => reset(table.long!, [table.c4!, table.c5!], 8), zoneId);
@@ -1201,7 +1201,7 @@ describe("Reset table and the room's reset", () => {
     await ok(splitOff(table.long!, [table.c4!, table.c5!]));
     await ok(reset(table.long!, [table.c4!, table.c5!], 8));
 
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 
     expect(await placeOf(table.long!)).toEqual({ x: 12, y: 20, width: 4, height: 2 });
     expect(await seatsOf(table.long!)).toBe(8);

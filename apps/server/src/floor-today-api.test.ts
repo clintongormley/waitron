@@ -8,6 +8,7 @@ import {
   tableInService,
   diningTables,
   floorPlans,
+  floorPlanSets,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodaySplitParts,
@@ -18,6 +19,7 @@ import {
   partyTables,
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
 import { saveZonePlan } from "./floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 
@@ -1216,3 +1218,37 @@ async function inService(tableId: string): Promise<boolean> {
   );
   return table!.inService;
 }
+
+describe("resetting a zone onto a layout", () => {
+  it("with no record yet, resets onto the department's default set and records it", async () => {
+    const zone = await inTx(v, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      const { id: zoneId } = await createServiceZone(tx, v.cfg, {
+        name: `Inside ${randomUUID().slice(0, 8)}`,
+        departmentId: department.id,
+      });
+      const [set] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await linkFloorPlanSet(tx, v.cfg, {
+        setId: set!.id,
+        departmentId: department.id,
+        name: "Standard",
+      });
+      // A set-less plan, which no longer counts once the department has a set.
+      await tx.insert(floorPlans).values({ zoneId, savedAt: "2026-01-01T00:00:00.000Z" });
+      return { zoneId, standard: set!.id };
+    });
+
+    await expectRevision(v, resetZoneToday(zone.zoneId), zone.zoneId, 1);
+
+    const [row] = await inTx(v, (tx) =>
+      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zone.zoneId)),
+    );
+    expect(row).toMatchObject({ setId: zone.standard, layoutRevision: 0, occurrence: null });
+  });
+});

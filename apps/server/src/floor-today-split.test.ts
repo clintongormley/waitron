@@ -15,8 +15,21 @@ import { writeClearingWorkflow } from "@waitron/venue-service";
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
 import { foodOnItsWay } from "./delivery-release.js";
-import { backToSaved, moveToday, putBackToday, takeOffToday } from "./floor-today-store.js";
-import { readZonePlan, saveZonePlan } from "./floor-plan.js";
+import {
+  backToSaved,
+  moveToday,
+  putBackToday,
+  resetZone,
+  takeOffToday,
+} from "./floor-today-store.js";
+import {
+  readLayout,
+  readZonePlan,
+  saveLayout,
+  saveZonePlan,
+  type ZonePlanSave,
+} from "./floor-plan.js";
+import { partsOf } from "./floor-today-parts.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { finishTable } from "./parties.js";
@@ -38,7 +51,13 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { giveKeptSize, plannedZone, splitOffRow, todayRow } from "./testing/floor-today-venue.js";
+import {
+  giveKeptSize,
+  plannedZone,
+  setsDepartment,
+  splitOffRow,
+  todayRow,
+} from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -700,5 +719,81 @@ describe("taking a joined table's tables off for today", () => {
     await takeOff(table.long!);
 
     expect((await todayRow(v, table.long!))?.takenOff).toBe(true);
+  });
+});
+
+describe("a part's size in today's split", () => {
+  it("a part's size comes from the recorded layout", async () => {
+    const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
+    const label = (base: string) => `${base} ${randomUUID().slice(0, 6)}`;
+    const removals = enabledTableRemovals(ALL_MODULES);
+    const save = async (setId: string, tables: ZonePlanSave["tables"]) => {
+      const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId: d.zoneId }));
+      return inTx(v, (tx) =>
+        saveLayout(
+          tx,
+          v.cfg,
+          removals,
+          { setId, zoneId: d.zoneId },
+          { revision: plan.revision, tables },
+          NOW,
+        ),
+      );
+    };
+    const joinedAt = { x: 10, y: 20, width: 6, height: 2, shape: "rect" as const, rotation: 0 };
+    const entries = (ids: Record<string, string> = {}) =>
+      (
+        [
+          ["c4", label("4"), null, []],
+          ["c5", label("5"), null, []],
+          ["long", label("4+5"), joinedAt, ["c4", "c5"]],
+        ] as const
+      ).map(([key, name, placement, partKeys]) => ({
+        ...(ids[key] === undefined ? {} : { id: ids[key] }),
+        key: ids[key] ?? key,
+        label: name,
+        seats: 4,
+        fixed: false,
+        placement,
+        partKeys: partKeys.map((k) => ids[k] ?? k),
+      }));
+    const { ids } = await save(d.standard, entries());
+    const standard = await inTx(v, (tx) =>
+      readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
+    );
+    await save(
+      d.dinner,
+      standard.tables.map((t) => ({
+        id: t.id,
+        key: t.id,
+        label: t.label,
+        seats: t.seats,
+        fixed: t.fixed,
+        placement: t.id === ids.long ? joinedAt : null,
+        partKeys: t.partIds,
+      })),
+    );
+    await giveKeptSize(v, ids.c4!, { width: 8, height: 8 }, d.standard);
+    await giveKeptSize(v, ids.c4!, { width: 12, height: 6 }, d.dinner);
+    await inTx(v, (tx) =>
+      resetZone(tx, v.cfg, removals, d.zoneId, NOW, { setId: d.dinner, occurrence: null }),
+    );
+    const live = async (masterId: string) =>
+      (
+        await inTx(v, (tx) =>
+          tx
+            .select({ id: diningTables.id })
+            .from(diningTables)
+            .where(eq(diningTables.planTableId, masterId)),
+        )
+      )[0]!.id;
+    const long = await live(ids.long!);
+    const c4 = await live(ids.c4!);
+
+    const parts = await inTx(v, (tx) => partsOf(tx, long));
+    await split(long, [c4], null);
+
+    expect(parts.map((part) => part.tableId).sort()).toEqual([c4, await live(ids.c5!)].sort());
+    expect(await todayRow(v, c4)).toMatchObject({ width: 12, height: 6 });
   });
 });

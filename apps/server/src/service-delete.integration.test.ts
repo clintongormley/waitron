@@ -882,7 +882,7 @@ it.each(["zone", "department"] as const)(
           .update(diningTables)
           .set({ planTableId: masters[i]!.id })
           .where(eq(diningTables.id, tableId));
-      await resetZone(tx, venue.cfg, removals, f.zoneId, NOW);
+      await resetZone(tx, venue.cfg, removals, f.zoneId, NOW, "due");
       return { plan: plan!, masters };
     });
     const seated = await seat(venue, f.tableId);
@@ -930,7 +930,7 @@ it.each(["zone", "department"] as const)(
     expect(await run(completeSnapshot)).toEqual(unchanged);
     await join(venue, seated.partyId, second);
     await run((tx) => leaveTables(tx, [f.tableId]));
-    await run((tx) => resetZone(tx, venue.cfg, removals, f.zoneId, NOW));
+    await run((tx) => resetZone(tx, venue.cfg, removals, f.zoneId, NOW, "due"));
     expect(
       await run((tx) =>
         tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, f.tableId)),
@@ -1225,7 +1225,7 @@ it("rechecks an upcoming booking added after the master editor opened, but allow
       .update(diningTables)
       .set({ planTableId: master!.id })
       .where(eq(diningTables.id, f.tableId));
-    await resetZone(tx, venue.cfg, removals, f.zoneId, NOW);
+    await resetZone(tx, venue.cfg, removals, f.zoneId, NOW, "due");
     return master!.id;
   });
   const opened = await run((tx) => readZonePlan(tx, venue.cfg, f.zoneId));

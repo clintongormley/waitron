@@ -801,7 +801,7 @@ describe("saveZonePlan", () => {
     expect(before.today.find((row) => row.tableId === live)).toMatchObject({ x: 0 });
     expect(before.today.find((row) => row.tableId === barLive)).toBeDefined();
 
-    await inTx(v, (tx) => resetZone(tx, v.cfg, NONE, z, NOW));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, NONE, z, NOW, "due"));
 
     expect(await tableRow(v, live)).toMatchObject({ label: patio });
     expect(await todayOf(live)).toMatchObject({ x: 30 });

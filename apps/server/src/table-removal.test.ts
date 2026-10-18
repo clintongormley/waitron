@@ -204,7 +204,7 @@ async function strayPartyRow(partyId: string, tableId: string): Promise<void> {
 }
 
 const reset = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
-  inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, NOW));
+  inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, NOW, "due"));
 const catchUp = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
   inTx(v, (tx) => catchUpZone(tx, v.cfg, removals, zoneId, NOW));
 

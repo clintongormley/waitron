@@ -528,7 +528,7 @@ describe("stale floor identifiers", () => {
       "zone.not_found",
       (tx, f) => saveZonePlan(tx, v.cfg, [], f.zoneId, { revision: 1, tables: [] }, now),
     ],
-    ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, v.cfg, [], f.zoneId, now)],
+    ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, v.cfg, [], f.zoneId, now, "due")],
     ["floor catch-up", "zone.not_found", (tx, f) => catchUpZone(tx, v.cfg, [], f.zoneId, now)],
     ["table move", "table.not_found", (tx, f) => moveToday(tx, v.cfg, f.tableId, { x: 2, y: 2 })],
     ["table rotate", "table.not_found", (tx, f) => rotateToday(tx, v.cfg, f.tableId)],

@@ -10,6 +10,7 @@ import {
   floorResetTableParts,
   floorResetTables,
   floorTodaySplitParts,
+  floorTodayZones,
   stillJoinedPart,
   type Transaction,
 } from "@waitron/db";
@@ -29,7 +30,10 @@ export interface Part extends LaidPart {
 const joinedRow = aliasedTable(floorResetTables, "joined_row");
 const partRow = aliasedTable(floorResetTables, "part_row");
 
-/** Every part of the joined table in today's copy that has a live table, in number order. */
+/**
+ * Every part of the joined table in today's copy that has a live table, in number order, sized
+ * from the zone's recorded layout.
+ */
 export async function partsOf(tx: Transaction, tableId: string): Promise<Part[]> {
   const rows = await tx
     .select({
@@ -53,7 +57,14 @@ export async function partsOf(tx: Transaction, tableId: string): Promise<Part[]>
     .innerJoin(partRow, eq(partRow.id, floorResetTableParts.partResetTableId))
     .innerJoin(diningTables, eq(diningTables.id, partRow.tableId))
     .leftJoin(floorPlanTables, eq(floorPlanTables.id, diningTables.planTableId))
-    .leftJoin(floorPlans, eq(floorPlans.zoneId, floorPlanTables.zoneId))
+    .leftJoin(floorTodayZones, eq(floorTodayZones.zoneId, floorPlanTables.zoneId))
+    .leftJoin(
+      floorPlans,
+      and(
+        eq(floorPlans.zoneId, floorPlanTables.zoneId),
+        sql`${floorPlans.setId} is ${floorTodayZones.setId}`,
+      ),
+    )
     .leftJoin(
       floorPlanPlacements,
       and(

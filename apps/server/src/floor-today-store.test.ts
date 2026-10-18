@@ -26,7 +26,13 @@ import {
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import {
+  readLayout,
+  readZonePlan,
+  saveLayout,
+  saveZonePlan,
+  type ZonePlanSave,
+} from "./floor-plan.js";
 import {
   catchUpZone,
   ensureToday,
@@ -50,7 +56,7 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { giveKeptSize, mergeOf, plannedZone } from "./testing/floor-today-venue.js";
+import { giveKeptSize, mergeOf, plannedZone, setsDepartment } from "./testing/floor-today-venue.js";
 import { handOverOrder, listTablesWithState } from "./working-order.js";
 import "./errors.js";
 
@@ -234,8 +240,12 @@ async function finish(partyId: string): Promise<void> {
   await inTx(v, (tx) => finishTable(tx, { partyId, ...sent }));
 }
 
-const reset = (zoneId: string, removals: readonly TableRemoval[] = NONE, now = NOW) =>
-  inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, now));
+const reset = (
+  zoneId: string,
+  removals: readonly TableRemoval[] = NONE,
+  now = NOW,
+  onto: Parameters<typeof resetZone>[5] = "due",
+) => inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, now, onto));
 const catchUp = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
   inTx(v, (tx) => catchUpZone(tx, v.cfg, removals, zoneId, NOW));
 
@@ -1741,5 +1751,142 @@ describe("a reset over a joined table split today", () => {
     expect((await liveTablesOf(zoneId)).map((t) => t.id)).toContain(table.c5);
     expect(await todayRow(table.c5!)).toBeUndefined();
     expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+  });
+});
+
+describe("resets onto a set's layout", () => {
+  const PAINTED = new Date("2026-10-09T06:00:00Z");
+  // 21:00 in Madrid on Friday, while Dinner runs.
+  const FRIDAY_NIGHT = new Date("2026-10-09T19:00:00Z");
+  const at = (x: number) => ({ x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 });
+
+  async function saveSet(
+    setId: string,
+    zoneId: string,
+    change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
+    now = NOW,
+  ): Promise<Record<string, string>> {
+    const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId }));
+    const tables = plan.tables.map((table) => ({
+      id: table.id,
+      key: table.id,
+      label: table.label,
+      seats: table.seats,
+      fixed: table.fixed,
+      placement: table.placement,
+      partKeys: table.partIds,
+    }));
+    const { ids } = await inTx(v, (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        { setId, zoneId },
+        { revision: plan.revision, tables: change(tables) },
+        now,
+      ),
+    );
+    return ids;
+  }
+
+  /** Standard stands A at 0 and B at 20; Dinner stands A at 40 and leaves B off. */
+  async function twoLayouts(now = NOW) {
+    const d = await setsDepartment(v, PAINTED);
+    const a = `A ${randomUUID().slice(0, 6)}`;
+    const b = `B ${randomUUID().slice(0, 6)}`;
+    const ids = await saveSet(
+      d.standard,
+      d.zoneId,
+      () => [
+        { key: "a", label: a, seats: 4, fixed: false, placement: at(0), partKeys: [] },
+        { key: "b", label: b, seats: 4, fixed: false, placement: at(20), partKeys: [] },
+      ],
+      now,
+    );
+    await saveSet(
+      d.dinner,
+      d.zoneId,
+      (tables) =>
+        tables.map((t) => ({
+          ...t,
+          placement: t.id === ids.a ? at(40) : t.id === ids.b ? null : t.placement,
+        })),
+      now,
+    );
+    return { ...d, a: ids.a!, b: ids.b! };
+  }
+
+  async function liveOf(masterId: string): Promise<string> {
+    const [row] = await inTx(v, (tx) =>
+      tx
+        .select({ id: diningTables.id })
+        .from(diningTables)
+        .where(eq(diningTables.planTableId, masterId)),
+    );
+    return row!.id;
+  }
+
+  async function layoutRevision(setId: string, zoneId: string): Promise<number> {
+    const [row] = await inTx(v, (tx) =>
+      tx
+        .select({ revision: floorPlans.revision })
+        .from(floorPlans)
+        .where(and(eq(floorPlans.setId, setId), eq(floorPlans.zoneId, zoneId))),
+    );
+    return row!.revision;
+  }
+
+  it("the day's first read resets onto the due set and records it", async () => {
+    const d = await twoLayouts(FRIDAY_NIGHT);
+    expect(await todayZone(d.zoneId)).toMatchObject({ businessDay: "2026-10-09", setId: d.dinner });
+
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+
+    expect(await todayZone(d.zoneId)).toMatchObject({
+      businessDay: "2026-10-10",
+      setId: d.standard,
+      layoutRevision: await layoutRevision(d.standard, d.zoneId),
+      occurrence: JSON.stringify([d.departmentId, "2026-10-10", d.lunchPeriod, "12:00"]),
+    });
+    expect(await todayRow(await liveOf(d.a))).toMatchObject({ x: 0 });
+    expect(await todayRow(await liveOf(d.b))).toMatchObject({ x: 20 });
+  });
+
+  it("a reset reads only the chosen set's places", async () => {
+    const d = await twoLayouts();
+
+    await reset(d.zoneId, NONE, NOW, { setId: d.dinner, occurrence: null });
+
+    expect(await todayRow(await liveOf(d.a))).toMatchObject({ x: 40 });
+    expect(await todayRow(await liveOf(d.b))).toMatchObject({ x: null });
+    expect(await todayZone(d.zoneId)).toMatchObject({
+      setId: d.dinner,
+      layoutRevision: await layoutRevision(d.dinner, d.zoneId),
+      occurrence: null,
+    });
+    expect((await liveTablesOf(d.zoneId)).length).toBe(2);
+  });
+
+  it("the dashboard's first save resets onto the due layout, not the set saved", async () => {
+    const d = await setsDepartment(v, PAINTED);
+
+    const ids = await saveSet(d.dinner, d.zoneId, () => [
+      {
+        key: "a",
+        label: `A ${randomUUID().slice(0, 6)}`,
+        seats: 4,
+        fixed: false,
+        placement: at(0),
+        partKeys: [],
+      },
+    ]);
+
+    expect(await todayZone(d.zoneId)).toMatchObject({
+      businessDay: "2026-10-10",
+      setId: d.standard,
+      layoutRevision: await layoutRevision(d.standard, d.zoneId),
+      occurrence: JSON.stringify([d.departmentId, "2026-10-10", d.lunchPeriod, "12:00"]),
+    });
+    expect(await todayRow(await liveOf(ids.a!))).toMatchObject({ x: null });
   });
 });

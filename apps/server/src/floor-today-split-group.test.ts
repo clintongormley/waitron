@@ -783,7 +783,7 @@ describe("Split tables… on a group with nobody seated", () => {
     }
     await inTx(v, async (tx) => {
       await saveZonePlan(tx, v.cfg, removals, zoneId, { revision, tables: saved }, NOW);
-      await resetZone(tx, v.cfg, removals, zoneId, NOW);
+      await resetZone(tx, v.cfg, removals, zoneId, NOW, "due");
     });
     const waiting = () =>
       inTx(v, (tx) =>

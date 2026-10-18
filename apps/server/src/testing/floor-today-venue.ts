@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { expect } from "vitest";
 import {
   diningTables,
   floorPlans,
+  floorPlanSets,
   floorPlanTables,
   floorPlanTableSizes,
   floorTodayJoinTables,
@@ -13,7 +14,17 @@ import {
   floorTodayZones,
   floorZones,
 } from "@waitron/db";
-import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
+import { createCatalogue } from "@waitron/catalogue";
+import {
+  createDepartment,
+  createServiceZone,
+  linkFloorPlanSet,
+  menuPeriods,
+  replaceMenuWeek,
+  saveMenuPeriod,
+  zoneSalePolicies,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
 import { readZonePlan, saveZonePlan, type ZonePlanSave } from "../floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
 import { inTx, type PartyVenue } from "./party-venue.js";
@@ -99,21 +110,108 @@ export async function plannedZone(
   return { zoneId, table, master: ids, revision };
 }
 
-/** Gives master table `masterId` the size it keeps while off its zone's plan. */
+/** Gives master table `masterId` the size it keeps while off its zone's layout in `setId`. */
 export async function giveKeptSize(
   v: PartyVenue,
   masterId: string,
   size: { width: number; height: number },
+  setId: string | null = null,
 ): Promise<void> {
   await inTx(v, async (tx) => {
     const [plan] = await tx
       .select({ id: floorPlans.id })
       .from(floorPlans)
       .innerJoin(floorPlanTables, eq(floorPlanTables.zoneId, floorPlans.zoneId))
-      .where(eq(floorPlanTables.id, masterId));
+      .where(
+        and(
+          eq(floorPlanTables.id, masterId),
+          setId === null ? isNull(floorPlans.setId) : eq(floorPlans.setId, setId),
+        ),
+      );
     await tx
       .insert(floorPlanTableSizes)
       .values({ planId: plan!.id, planTableId: masterId, ...size });
+  });
+}
+
+/**
+ * A fresh department with one zone, Lunch (12:00-15:00) and Dinner (20:00-23:00) painted every
+ * day from `paintedAt`, and sets Standard (its default) and Dinner, which Dinner's period picks.
+ */
+export async function setsDepartment(
+  v: PartyVenue,
+  paintedAt: Date,
+): Promise<{
+  departmentId: string;
+  zoneId: string;
+  standard: string;
+  dinner: string;
+  lunchPeriod: string;
+  dinnerPeriod: string;
+}> {
+  const name = (base: string) => `${base} ${randomUUID().slice(0, 8)}`;
+  return inTx(v, async (tx) => {
+    const department = await createDepartment(tx, v.cfg, {
+      name: name("Dept"),
+      orderStart: "table",
+    });
+    const zone = await createServiceZone(tx, v.cfg, {
+      name: name("Inside"),
+      departmentId: department.id,
+    });
+    const menu = await createCatalogue(tx, { name: name("Menu") });
+    const period = async (periodName: string) =>
+      (
+        await saveMenuPeriod(
+          tx,
+          v.cfg,
+          department.id,
+          { name: periodName, menuId: menu.id, staffMenuIds: [] },
+          0,
+        )
+      ).id;
+    const lunchPeriod = await period("Lunch");
+    const dinnerPeriod = await period("Dinner");
+    await replaceMenuWeek(
+      tx,
+      v.cfg,
+      department.id,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: [
+          { periodId: lunchPeriod, startsAt: "12:00", endsAt: "15:00" },
+          { periodId: dinnerPeriod, startsAt: "20:00", endsAt: "23:00" },
+        ],
+      })),
+      paintedAt,
+      0,
+    );
+    const set = async (setName: string) => {
+      const [row] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await linkFloorPlanSet(tx, v.cfg, {
+        setId: row!.id,
+        departmentId: department.id,
+        name: setName,
+      });
+      return row!.id;
+    };
+    const standard = await set("Standard");
+    const dinner = await set("Dinner");
+    await tx
+      .update(menuPeriods)
+      .set({ floorPlanSetId: dinner })
+      .where(eq(menuPeriods.id, dinnerPeriod));
+    return {
+      departmentId: department.id,
+      zoneId: zone.id,
+      standard,
+      dinner,
+      lunchPeriod,
+      dinnerPeriod,
+    };
   });
 }
 

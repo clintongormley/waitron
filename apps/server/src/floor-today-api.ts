@@ -1,9 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, exists, sql } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import {
   diningTables,
   floorPlans,
   floorTodayTables,
+  floorTodayZones,
   floorZones,
   withTransaction,
   type Transaction,
@@ -19,6 +20,7 @@ import {
   placeSpareToday,
   putBackToday,
   resetZone,
+  type ResetOnto,
   rotateToday,
   seatsToday,
   takeOffToday,
@@ -30,6 +32,8 @@ import { nameToday } from "./floor-today-name.js";
 import type { Logger } from "./logger.js";
 import { withMovedSlips } from "./moved-slips.js";
 import type { Run, TillApiDeps } from "./till-api.js";
+import { VENUE_SERVICE } from "./modules.js";
+import type { TillConfig } from "./till-config.js";
 import { requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
 import {
@@ -233,9 +237,16 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       const revision = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const [zone] = await tx
-          .select({ active: floorZones.active, planId: floorPlans.id })
+          .select({
+            active: floorZones.active,
+            hasPlan: sql<number>`${exists(
+              tx
+                .select({ id: floorPlans.id })
+                .from(floorPlans)
+                .where(eq(floorPlans.zoneId, floorZones.id)),
+            )}`,
+          })
           .from(floorZones)
-          .leftJoin(floorPlans, eq(floorPlans.zoneId, floorZones.id))
           .where(and(eq(floorZones.id, zoneId), eq(floorZones.locationId, deps.cfg.locationId)));
         if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
         const now = deps.clock.now().instant;
@@ -245,10 +256,27 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         else if (await hasTodayRow(tx, deps.cfg.locationId, zoneId)) {
           throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
         }
-        if (!zone.active || zone.planId === null) return from;
-        return (await resetZone(tx, deps.cfg, removals, zoneId, now)) ?? from;
+        if (!zone.active || !zone.hasPlan) return from;
+        const onto = await recordedOrDefault(tx, deps.cfg, zoneId);
+        return (await resetZone(tx, deps.cfg, removals, zoneId, now, onto)) ?? from;
       });
       return c.json({ zoneId, revision });
     }),
   );
+}
+
+/** The layout the zone's record names; with no record, the department's default set. */
+async function recordedOrDefault(
+  tx: Transaction,
+  cfg: TillConfig,
+  zoneId: string,
+): Promise<ResetOnto> {
+  const [record] = await tx
+    .select({ setId: floorTodayZones.setId, occurrence: floorTodayZones.occurrence })
+    .from(floorTodayZones)
+    .where(eq(floorTodayZones.zoneId, zoneId));
+  if (record !== undefined) return record;
+  const sets = await VENUE_SERVICE.readFloorPlanSets(tx, cfg);
+  const fallback = sets.find((set) => set.isDefault && set.zoneIds.includes(zoneId));
+  return { setId: fallback?.setId ?? null, occurrence: null };
 }

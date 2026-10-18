@@ -205,7 +205,7 @@ describe("a part still in a joined table", () => {
     await inTx(v, (tx) =>
       saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: plan.revision, tables }, NOW),
     );
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 
     const atCounter = await seat(v, table.c3!);
     expect(await partyAt(v, table.c3!)).toBe(atCounter.partyId);
@@ -315,7 +315,7 @@ describe("a joined table come apart", () => {
     const { ids } = await inTx(v, (tx) =>
       saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables }, NOW),
     );
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
     const after = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
     const long = after.tables.find((entry) => entry.id === ids.long)!.liveTableId!;
 

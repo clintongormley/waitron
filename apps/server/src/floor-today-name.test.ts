@@ -766,7 +766,7 @@ describe("a reset clears today's name", () => {
 
   const nameOf = async (tableId: string) => (await todayRow(v, tableId))!.name;
   const resetRoom = (zoneId: string, now = new Date()) =>
-    inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, now));
+    inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, now, "due"));
   const newDay = (now: Date) => inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, now));
   const finish = async (partyId: string) => {
     const command = await commandFor(v, partyId);

@@ -440,10 +440,7 @@ function masterColumns(table: ZonePlanSave["tables"][number]) {
   return { seats: table.seats, fixed: table.fixed, ...placementColumns(null) };
 }
 
-/**
- * Writes a checked save to the master plan; nothing live changes until the zone's next reset,
- * except on the zone's first save, which builds today's plan at once (decision 16).
- */
+/** Writes a checked save to the zone's set-less plan; nothing live changes until the zone's next reset, but for its first save. */
 export async function saveZonePlan(
   tx: Transaction,
   cfg: TillConfig,
@@ -454,18 +451,30 @@ export async function saveZonePlan(
 ): Promise<{ revision: number; ids: Record<string, string> }> {
   const checked = await checkSave(tx, cfg, removals, { zoneId, setId: null }, input, now);
   const saved = await writeSave(tx, { zoneId, setId: null }, checked, now);
+  await firstSaveReset(tx, cfg, removals, zoneId, now);
+  return { revision: saved.revision, ids: saved.ids };
+}
+
+/** A zone's first save builds today's plan at once, from the layout due now (spec decision 19). */
+async function firstSaveReset(
+  tx: Transaction,
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+  zoneId: string,
+  now: Date,
+): Promise<void> {
   const [today] = await tx
     .select({ id: floorTodayZones.id })
     .from(floorTodayZones)
     .where(eq(floorTodayZones.zoneId, zoneId));
-  if (today === undefined) await resetZone(tx, cfg, removals, zoneId, now);
-  return { revision: saved.revision, ids: saved.ids };
+  if (today === undefined) await resetZone(tx, cfg, removals, zoneId, now, "due");
 }
 
 /**
  * Writes a checked save to a set's layout. A save that changes the zone's shared tables moves
  * the revision of every layout of the zone in the set's department, writing the missing ones,
- * so an editor open on another set cannot save a stale table list over it.
+ * so an editor open on another set cannot save a stale table list over it. As the set-less save,
+ * a zone's first save builds today's plan.
  */
 export async function saveLayout(
   tx: Transaction,
@@ -505,6 +514,7 @@ export async function saveLayout(
       }
     }
   }
+  await firstSaveReset(tx, cfg, removals, at.zoneId, now);
   return { revision: saved.revision, ids: saved.ids };
 }
 
