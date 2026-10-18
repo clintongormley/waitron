@@ -756,7 +756,6 @@ export interface UnsentDraft {
  * bill with no party. */
 export type BillParty = { id: string; revision: number } | null;
 
-/** What an adjustment does to a bill (service plan Task 11, spec §7). */
 export type AdjustmentAction = "cancel" | "comp" | "discount_percent" | "discount_amount";
 
 /** A person's role, lowest first. */

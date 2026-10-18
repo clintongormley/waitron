@@ -52,7 +52,7 @@ export interface ZonePlan {
 }
 
 export interface ZonePlanSave {
-  /** The copy's revision; 0 when the zone had no master plan. */
+  /** The copy's revision; 0 when the set had no layout of the zone. */
   revision: number;
   tables: {
     id?: string;
@@ -397,7 +397,7 @@ function masterColumns(table: ZonePlanSave["tables"][number]) {
   return { seats: table.seats, fixed: table.fixed };
 }
 
-/** A zone's first save builds today's plan at once, from the layout due now (spec decision 19). */
+/** A zone's first save builds today's plan at once, from the layout due now. */
 async function firstSaveReset(
   tx: Transaction,
   cfg: TillConfig,

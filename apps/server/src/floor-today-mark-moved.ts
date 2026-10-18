@@ -38,9 +38,9 @@ export async function tableNeedsMoving(tx: Transaction, tableId: string): Promis
 
 /**
  * Applies the change of a table that needs moving, with every row of a pending joined group
- * holding it (plan decision 8), and clears their marks. Refused `table.new_place_taken` while a
+ * holding it, and clears their marks. Refused `table.new_place_taken` while a
  * drawn table outside the group that does not itself need moving blocks one of the group's new
- * places (`blocksPlace`). A table that does not need moving is left as it is (plan decision 11).
+ * places (`blocksPlace`). A table that does not need moving is left as it is.
  */
 export async function markMoved(
   tx: Transaction,

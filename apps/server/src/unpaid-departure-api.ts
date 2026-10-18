@@ -32,7 +32,7 @@ function parseDeparture(body: Record<string, unknown>): UnpaidDepartureRequest {
 }
 
 /**
- * Record unpaid departure (spec §8), behind the till session: the departure itself, who may
+ * Record unpaid departure, behind the till session: the departure itself, who may
  * authorise one, and the departures still owed. The invoices a departure issues are filed under the
  * requesting device, as a bill payment's are.
  */

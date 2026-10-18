@@ -297,7 +297,7 @@ async function counterLabel(tx: Transaction, party: SourceParty): Promise<string
   return partyDisplayName(party.name, (await partyTableLabels(tx, [party.id])).get(party.id)!);
 }
 
-/** The party's main bill leaves only as its last unpaid bill (spec §13 item 5). */
+/** The party's main bill leaves only as its last unpaid bill. */
 async function refuseMainBillLeaving(
   tx: Transaction,
   party: SourceParty,

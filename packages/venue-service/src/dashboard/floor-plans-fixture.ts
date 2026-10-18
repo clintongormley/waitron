@@ -2,7 +2,7 @@ import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
 
 const layout = (zoneId: string, onPlan: number, spare: number) => ({ zoneId, onPlan, spare });
 
-/** Casa Marina (spec §3): Restaurant with three sets, Bar with an empty zone, Deli with no set. */
+/** Casa Marina: Restaurant with three sets, Bar with an empty zone, Deli with no set. */
 export function casaMarina(): FloorPlanSetsModel {
   return {
     departments: [

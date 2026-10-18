@@ -1108,7 +1108,7 @@ export async function readStoredOrder(
  * working-order identity for `issuancePass`, and refuses a lineless order (see
  * {@link readLockedLines}).
  *
- * A line never sent whose product cannot be sold now is refused `product.unavailable` (spec §11.3):
+ * A line never sent whose product cannot be sold now is refused `product.unavailable`:
  * staff remove it, or split the rest off, before paying. A sent line pays whatever its product's
  * availability. `refuseUnsentUnavailable: false` is for a payment the card network has already
  * captured, which is filed as it stands.

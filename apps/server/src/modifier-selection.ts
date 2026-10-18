@@ -208,7 +208,7 @@ export function namedPicks(
 /**
  * The extras answer to an edit of a SAVED line (plan D10). A pick that names a stored child's list,
  * product and per-dish quantity keeps that child, and is accepted even where its list no longer
- * offers it at that quantity, or at all (spec §11.7 example 7). Every other pick is NEW: it must be
+ * offers it at that quantity, or at all. Every other pick is NEW: it must be
  * offered by an active list in `offered` now, and it is priced from that list. A stored child no pick
  * keeps is removed. The lists' own rules apply to the kept and new picks together, except that the
  * kept picks alone may exceed a cap the list has since lowered.

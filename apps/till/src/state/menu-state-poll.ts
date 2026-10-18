@@ -1,6 +1,5 @@
 import type { MenuStateAnswer } from "../api/client.js";
 
-/** How often a signed-in till reads its zones' menu state (plan decision D11). */
 const POLL_MS = 15_000;
 
 /**

@@ -5,7 +5,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { todayBusinessDay } from "./floor-today-store.js";
 import type { TillConfig } from "./till-config.js";
 
-/** The zones that have a plan on the till: those whose department has a set (plan decision 19). */
+/** The zones that have a plan on the till: those whose department has a set. */
 export function plannedZones(sets: readonly FloorPlanSetSummary[]): Set<string> {
   return new Set(sets.flatMap((set) => set.zoneIds));
 }
@@ -138,7 +138,7 @@ export async function zoneLayoutsOn(
   return { states, rows };
 }
 
-/** The banner's facts, or null when the recorded layout is the due one (spec decision 5; plan decision 12). */
+/** The banner's facts, or null when the recorded layout is the due one. */
 export function layoutOffer(
   state: ZoneLayoutState,
 ): { setId: string; revision: number; periodName: string | null } | null {

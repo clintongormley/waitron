@@ -314,7 +314,7 @@ async function zoneActive(tx: Transaction, cfg: TillConfig, zoneId: string): Pro
 /**
  * Today's record of the zone, which the reset goes back to; null, and nothing reset, when the
  * zone's department has no set or there is no record of today — `ensureToday` has already made
- * the day's first reset wherever a saved layout is due (plan decisions 13 and 24). Refuses
+ * the day's first reset wherever a saved layout is due. Refuses
  * `floor_today.layout_changed` when the recorded set is deleted or not its department's.
  */
 async function recordedOnto(

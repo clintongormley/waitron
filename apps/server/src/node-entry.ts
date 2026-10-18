@@ -64,7 +64,7 @@ import { classifyBootFailure } from "./boot-failure.js";
 import { redactSecrets } from "./redact-secrets.js";
 import "./errors.js";
 
-/** How long a boot must survive before its failure counter is cleared (spec §9.2). */
+/** How long a boot must survive before its failure counter is cleared. */
 const STAYED_UP_MS = 120_000;
 
 /**

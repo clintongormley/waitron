@@ -471,7 +471,7 @@ async function catchUpPass(
     );
   };
   // A marked group waits for Mark moved while any of its tables would still move; once none
-  // would (taken off, say), it applies as any other row does (plan decision 10).
+  // would (taken off, say), it applies as any other row does.
   for (const id of stillToMove(rowOf, groupsOfRow, moves)) {
     if (carry.has(id)) continue;
     for (const [target, row] of rowOf) if (row.id === id) rowOf.delete(target);
@@ -509,7 +509,7 @@ async function catchUpPass(
     return today === undefined || today.takenOff ? null : placementOf(today);
   };
   // Rows marked earlier whose table would still move: their tables will be carried by hand, so
-  // they block no table off the map (plan decision 10).
+  // they block no table off the map.
   const needing = new Set(
     rows.flatMap((row) =>
       row.readyToMove &&
@@ -609,7 +609,7 @@ async function catchUpPass(
     });
     const newly = [...blockedMoves({ moving: drawnMoving, staying: [...staying, ...keptPlaces] })];
     // On a later read a blocked drawn table is marked, as every drawn table that would move is,
-    // and a table that needs moving blocks no table off the map (spec §7.5, No lock).
+    // and a table that needs moving blocks no table off the map.
     const newlyOff = [
       ...blockedMoves({
         moving: offMoving,
@@ -623,7 +623,7 @@ async function catchUpPass(
     if (blocked.size + blockedCreates.size === before) break;
   }
 
-  // A drawn table whose new place is taken keeps its place, marked ready to move (spec §7.5).
+  // A drawn table whose new place is taken keeps its place, marked ready to move.
   const drawnBlocked = [...rowOf].flatMap(([target, row]) =>
     target.tableId !== null && blocked.has(target.tableId) && drawnAt(target.tableId) !== null
       ? [row.id]
@@ -702,7 +702,7 @@ async function catchUpPass(
     placedNow.add(target);
     await leaveMerges(tx, [tableId]);
     // A table still taken off stays off at its new place when its row says so, or when the row was
-    // marked, as staff then took it off after the reset (owner ruling).
+    // marked, as staff then took it off after the reset.
     const keepOff = rowOf.get(target)!.takenOff || rowOf.get(target)!.readyToMove;
     const columns = todayColumns(target, keepOff && todayRows.get(tableId)?.takenOff === true);
     await tx
@@ -772,8 +772,8 @@ async function joinedOutOfServiceIn(
 }
 
 /**
- * Each marked row whose table would still move, with every row of its joined group (plan decision
- * 8). A group is marked whole, so a member that moves is itself a marked row here.
+ * Each marked row whose table would still move, with every row of its joined group. A group is
+ * marked whole, so a member that moves is itself a marked row here.
  */
 function stillToMove(
   rowOf: ReadonlyMap<Target, { id: string; placed: boolean; readyToMove: boolean }>,
@@ -792,7 +792,7 @@ function stillToMove(
 
 /**
  * The reset rows to mark ready to move: each applied row not yet placed whose table moves, with
- * every row of a joined group (plan decision 8) holding one such row.
+ * every row of a joined group holding one such row.
  */
 function readyToMove(
   apply: ResetPlan["apply"],
@@ -936,9 +936,9 @@ function mergedWith(
 /**
  * For each zone with a table or a layout: resets it onto its due layout when its today's plan is
  * for an earlier business day (or it has none), else catchUpZone when it has pending rows; one
- * query finds those zones. A zone whose due layout has no saved row is left as it is (plan
- * decision 24). A caught-up zone whose plan changed moves its revision by one. Answers the
- * business day, null when the venue's clock names none.
+ * query finds those zones. A zone whose due layout has no saved row is left as it is. A caught-up
+ * zone whose plan changed moves its revision by one. Answers the business day, null when the
+ * venue's clock names none.
  */
 export async function ensureToday(
   tx: Transaction,
@@ -1062,7 +1062,7 @@ function pendingGroupMember(
  * Whether the zone holds a pending reset row a catch-up could apply, whose place, and the place of
  * every pending row of a joined group holding it, is not taken: one not marked ready to move, or
  * a marked one whose table, and every pending, unplaced table of the joined group of a pending
- * joined row holding it (plan decision 8), no longer moves. Weaker than "will apply": a row can
+ * joined row holding it, no longer moves. Weaker than "will apply": a row can
  * still wait for its guests or its name.
  */
 export function catchUpDue(zoneId: SQLWrapper): SQL {
@@ -1275,8 +1275,7 @@ export async function seatsToday(
  * Sets the table's today's row from what the last reset copied for it, after it leaves any merge.
  * Its label and its today's name are left alone. The kitchen is told of each bill of a party at the
  * table's group, and each counter order with food on its way to one of its tables, when
- * `kitchenToBeTold` (kitchen-print.ts) says so. On a table that needs moving it is Mark moved
- * (plan decision 23).
+ * `kitchenToBeTold` (kitchen-print.ts) says so. On a table that needs moving it is Mark moved.
  */
 export async function backToSaved(
   tx: Transaction,

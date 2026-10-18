@@ -293,7 +293,7 @@ function equipmentName(device: DeviceRow, role: EquipmentRole): string {
     : name;
 }
 
-/** A battery report older than this is greyed and says when it was taken (spec §6). */
+/** A battery report older than this is greyed and says when it was taken. */
 const BATTERY_STALE_MS = 10 * 60_000;
 
 /** A lightning bolt; U+FE0E asks for the text form, which takes the cell's colour, not an emoji. */
@@ -1616,7 +1616,7 @@ export class DevicesScreen extends LitElement {
     };
     const readerId = submittedReader === "" ? null : submittedReader;
     if (this.readerState === "ready" && readerId !== this.#storedReaderId) {
-      // Saved separately: the reader belongs to the payments module and its own permission (spec §5).
+      // Saved separately: the reader belongs to the payments module and its own permission.
       try {
         await this.api.setDeviceReader(device.id, readerId);
         if (epoch !== this.#editEpoch) return;

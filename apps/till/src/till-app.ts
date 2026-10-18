@@ -6985,9 +6985,9 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * A save refused `working_order.out_of_date` was made from a copy another till has since changed
-   * (spec §10.7 example 2): the order is loaded again as it now stands, and staff are told, so they
-   * make their change again on it. An order closed meanwhile reads as a stale retrieve.
+   * A save refused `working_order.out_of_date` was made from a copy another till has since
+   * changed: the order is loaded again as it now stands, and staff are told, so they make their
+   * change again on it. An order closed meanwhile reads as a stale retrieve.
    */
   async #reloadChangedOrder(id: string): Promise<void> {
     const session = this.#operatorSession;

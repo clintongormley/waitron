@@ -444,7 +444,7 @@ declare module "@waitron/shared" {
     "unpaid_departure.bill_holds_payment": { workingOrderId: string };
     /**
      * The party's main bill was to leave while the party holds another bill that is open or
-     * presented: it moves only as the party's last unpaid bill (spec §13 item 5). Split a table
+     * presented: it moves only as the party's last unpaid bill. Split a table
      * refuses the party's main bill as the bill the new party takes.
      */
     "party.main_bill_stays": { partyId: string };

@@ -64,7 +64,7 @@ export function recordedRun(
 }
 
 /** A missing start still matches only the run `withExtension` made by cutting the recorded
- *  painted range at today's keep open's end (plan decision 22); anything else is gone. */
+ *  painted range at today's keep open's end; anything else is gone. */
 export function matchRecorded(
   day: DueDay,
   recorded: RecordedRun,
@@ -91,7 +91,7 @@ export function matchRecorded(
 }
 
 /** Running → next later today → last that ran today; never a run starting earlier than the
- *  recorded one (spec decision 4), which applies only while the record still matches a run. */
+ *  recorded one, which applies only while the record still matches a run. */
 export function dueRun(input: {
   day: DueDay;
   minute: number;

@@ -1255,7 +1255,7 @@ export interface CurrentOrderGroup {
   rows: CurrentOrderRow[];
 }
 
-/** What the party has ordered and what is known of it (spec §4 Current orders). */
+/** What the party has ordered and what is known of it. */
 export interface CurrentOrders {
   revision: number;
   reminder: ReleaseReminder | null;

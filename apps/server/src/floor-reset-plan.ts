@@ -38,9 +38,9 @@ export interface LiveTable {
   mergedWithHeld: boolean;
   /** It is in a split group, a joined table and the parts split off it today, one of whose members waits or has food on its way. */
   splitWithBusy: boolean;
-  /** It needs clearing, so it waits as a held table does, and is seeded as one is (spec decision 10). */
+  /** It needs clearing, so it waits as a held table does, and is seeded as one is. */
   clearing: boolean;
-  /** It is in a joined group of the reset, a joined table and its parts, with a waiting member (plan decision 8). */
+  /** It is in a joined group of the reset, a joined table and its parts, with a waiting member. */
   joinedWithWaiting: boolean;
   /** Its new place is taken by a table that stays, so it keeps its place for now. */
   blocked: boolean;
@@ -71,7 +71,7 @@ export function planReset(input: {
   targets: readonly Target[];
   live: readonly LiveTable[];
   takenElsewhere: ReadonlySet<string>;
-  /** Targets with no table yet, a joined table to create whose group waits (plan decision 8). */
+  /** Targets with no table yet, a joined table to create whose group waits. */
   waitingToCreate?: ReadonlySet<Target>;
 }): ResetPlan {
   const live = new Map(input.live.map((table) => [table.id, table]));
@@ -147,7 +147,7 @@ export function planReset(input: {
   return plan;
 }
 
-/** Whether applying `target` would carry a table drawn on today's map somewhere else (plan decision 10). */
+/** Whether applying `target` would carry a table drawn on today's map somewhere else. */
 export function movesTable(
   today: {
     placement: Placement | null;
@@ -171,7 +171,7 @@ export function movesTable(
 }
 
 /** The moving tables that must keep their place: repeated until a pass blocks nothing new; a
- *  blocked table's current place joins `staying` (spec decision 13). Tables moving together never
+ *  blocked table's current place joins `staying`. Tables moving together never
  *  block each other, nor does a staying table at `own`, its place in the layout being applied. */
 export function blockedMoves(input: {
   moving: readonly { tableId: string; from: Placement | null; to: Placement | null }[];
