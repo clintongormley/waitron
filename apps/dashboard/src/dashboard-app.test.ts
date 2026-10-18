@@ -7732,8 +7732,11 @@ describe("inline translation application leave paths", () => {
             gaps: [{ kind: "product", id: "dish", name: "STAFF Soup", reason: "partial" }],
           },
         ]),
-        getContentSuggestions: vi.fn(async (language: string) => ({
-          language,
+        getContentSuggestions: vi.fn(async () => ({
+          config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+          required: [],
+          configuration: "suggestion-config",
+          waitingFixes: 0,
           run: null,
           suggestions: [],
           next: null,

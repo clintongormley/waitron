@@ -18,6 +18,7 @@ import {
   type TranslationContext,
   type TranslationItemPage,
 } from "@waitron/catalogue";
+import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { translationCloudFixture } from "../test/translation-cloud-fixture.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -97,8 +98,8 @@ async function refused(response: Response, status: number, code: string) {
   expect(await response.json()).toMatchObject({ error: { code } });
 }
 
-async function read(http: Hono, language: string): Promise<ContentSuggestionRead> {
-  const response = await send(http, "GET", `${LIST}?language=${language}`);
+async function read(http: Hono): Promise<ContentSuggestionRead> {
+  const response = await send(http, "GET", LIST);
   expect(response.status).toBe(200);
   return response.json() as Promise<ContentSuggestionRead>;
 }
@@ -170,7 +171,7 @@ it("refuses a start from another origin with authorization.not_permitted", async
 
 it.each([
   ["POST", JOBS, "{}"],
-  ["GET", `${LIST}?language=en`, undefined],
+  ["GET", LIST, undefined],
   ["DELETE", `${LIST}/00000000-0000-4000-8000-000000000000`, undefined],
 ] as const)(
   "%s %s refuses no session with 401 and a person without catalogue.manage with 403",
@@ -239,13 +240,13 @@ it("refuses a second run while one is active with content.suggestion_job_running
   expect(await jobRows()).toHaveLength(1);
 });
 
-it("lists a language's suggestions with the run, the service and Cloud's origin, and marks a finished run opened once", async () => {
+it("lists all suggestions with the run, the service and Cloud's origin, and marks a finished run opened once", async () => {
   const f = await connected();
   try {
     const id = await bread();
     const http = mount({ connection: f.client });
     expect((await send(http, "POST", JOBS, { body: "{}" })).status).toBe(200);
-    expect(await read(http, "en")).toMatchObject({
+    expect(await read(http)).toMatchObject({
       service: "on",
       cloudOrigin: CLOUD,
       run: { state: "sending", opened: false },
@@ -260,8 +261,11 @@ it("lists a language's suggestions with the run, the service and Cloud's origin,
         isPrimary: () => true,
       }),
     );
-    expect(await read(http, "en")).toEqual({
-      language: "en",
+    expect(await read(http)).toEqual({
+      config: { defaultLanguage: "es", languages: ["es", "en"] },
+      required: [],
+      configuration: expect.any(String),
+      waitingFixes: 0,
       service: "on",
       cloudOrigin: CLOUD,
       next: null,
@@ -276,13 +280,15 @@ it("lists a language's suggestions with the run, the service and Cloud's origin,
           placeholder: false,
           fix: null,
           stale: false,
+          cell: { kind: "product", id, language: "en", field: "name" },
+          expected: expect.any(String),
         },
       ],
     });
     const [opened] = await jobRows();
     expect(opened!.openedAt).not.toBeNull();
     await new Promise((resolve) => setTimeout(resolve, 10));
-    await read(http, "en");
+    await read(http);
     const [again] = await jobRows();
     expect(again!.openedAt).toBe(opened!.openedAt);
   } finally {
@@ -304,7 +310,7 @@ it("a read off the primary leaves a finished run unopened", async () => {
       }),
     );
     const standby = mount({ connection: f.client, isPrimary: () => false });
-    expect(await read(standby, "en")).toMatchObject({
+    expect(await read(standby)).toMatchObject({
       run: { state: "done", opened: false },
       suggestions: [{ text: "EN STAFF Bread" }],
     });
@@ -325,13 +331,16 @@ it("answers a damaged Cloud connection file with cloud.state_invalid as 409, on 
     },
   });
   await refused(await send(http, "POST", JOBS, { body: "{}" }), 409, "cloud.state_invalid");
-  await refused(await send(http, "GET", `${LIST}?language=en`), 409, "cloud.state_invalid");
+  await refused(await send(http, "GET", LIST), 409, "cloud.state_invalid");
   expect(await jobRows()).toEqual([]);
 });
 
 it("a read without Cloud says not_connected and has no Cloud origin", async () => {
-  expect(await read(mount({ connection: undefined, cloudOrigin: undefined }), "en")).toEqual({
-    language: "en",
+  expect(await read(mount({ connection: undefined, cloudOrigin: undefined }))).toEqual({
+    config: { defaultLanguage: "es", languages: ["es", "en"] },
+    required: [],
+    configuration: expect.any(String),
+    waitingFixes: 0,
     service: "not_connected",
     cloudOrigin: null,
     run: null,
@@ -341,7 +350,7 @@ it("a read without Cloud says not_connected and has no Cloud origin", async () =
 });
 
 it.each([
-  ["no language", ""],
+  ["a language", "?language=en"],
   ["two languages", "?language=en&language=es"],
   ["two cursors", "?language=en&after=a&after=b"],
   ["an unknown key", "?language=en&page=2"],
@@ -349,11 +358,11 @@ it.each([
   await refused(await send(mount(), "GET", `${LIST}${query}`), 400, "content.translation_invalid");
 });
 
-it("refuses a list in a language the venue has not enabled with content.languages_invalid", async () => {
+it("refuses the removed language filter even when that language is disabled", async () => {
   await refused(
     await send(mount(), "GET", `${LIST}?language=fr`),
     400,
-    "content.languages_invalid",
+    "content.translation_invalid",
   );
 });
 
@@ -414,5 +423,78 @@ it("saving the name through the translations route removes its suggestion", asyn
     }),
   });
   expect(save.status).toBe(200);
-  expect(await read(http, "en")).toMatchObject({ suggestions: [] });
+  expect(await read(http)).toMatchObject({ suggestions: [] });
+});
+
+it("reads all-language metadata with no query and refuses the retired language filter", async () => {
+  const http = mount();
+  const response = await send(http, "GET", LIST);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    config: { defaultLanguage: "es", languages: ["es", "en"] },
+    required: [],
+    configuration: expect.any(String),
+    waitingFixes: 0,
+    suggestions: [],
+  });
+  await refused(await send(http, "GET", `${LIST}?language=en`), 400, "content.translation_invalid");
+});
+
+it("forwards the last-examined cursor, configuration and fix filter, including empty pages", async () => {
+  const id = await bread();
+  const [note] = await suite.db
+    .insert(contentSuggestions)
+    .values({ id: "z-note", kind: "product", itemId: id, placeholder: true })
+    .returning();
+  await suite.db.insert(contentSuggestions).values(
+    Array.from({ length: 100 }, (_, i) => ({
+      id: `a-${String(i).padStart(3, "0")}`,
+      kind: "product" as const,
+      itemId: i === 0 ? id : `gone-${i}`,
+      language: "en",
+      text: "CLIENT English",
+      expected: "{}",
+    })),
+  );
+  const http = mount();
+  const response = await send(http, "GET", `${LIST}?fixesOnly=1`);
+  expect(response.status).toBe(200);
+  const first = (await response.json()) as ContentSuggestionRead;
+  expect(first.suggestions).toEqual([]);
+  expect(first.next).toBe("a-099");
+  expect(first.waitingFixes).toBe(1);
+  const params = new URLSearchParams({
+    after: first.next!,
+    configuration: first.configuration,
+    fixesOnly: "1",
+  });
+  const next = await send(http, "GET", `${LIST}?${params}`);
+  expect(next.status).toBe(200);
+  expect(await next.json()).toMatchObject({
+    next: null,
+    waitingFixes: 1,
+    suggestions: [{ id: note!.id, cell: null, expected: null, placeholder: true }],
+  });
+  await inTx((tx) =>
+    writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "fr"] }),
+  );
+  await refused(await send(http, "GET", `${LIST}?${params}`), 409, "content.translation_stale");
+  expect(
+    await suite.db.select().from(contentSuggestions).where(eq(contentSuggestions.id, note!.id)),
+  ).toHaveLength(1);
+});
+
+it.each([
+  "?fixesOnly=0",
+  "?fixesOnly=true",
+  "?fixesOnly=",
+  "?fixesOnly=1&fixesOnly=1",
+  "?configuration=a&configuration=b",
+  "?configuration=",
+  "?after=",
+  "?after=a",
+  "?after=a&configuration=b&after=c",
+  "?extra=1",
+])("refuses malformed all-language query %s", async (query) => {
+  await refused(await send(mount(), "GET", `${LIST}${query}`), 400, "content.translation_invalid");
 });

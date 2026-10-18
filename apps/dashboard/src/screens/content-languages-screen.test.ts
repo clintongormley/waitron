@@ -22,8 +22,11 @@ function api(overrides: Record<string, unknown> = {}): DashboardApi {
     getContentLanguageRules: vi.fn().mockResolvedValue(NO_RULES),
     updateContentLanguages: vi.fn().mockResolvedValue(undefined),
     getContentTranslationGaps: vi.fn().mockResolvedValue([]),
-    getContentSuggestions: vi.fn(async (language: string) => ({
-      language,
+    getContentSuggestions: vi.fn(async () => ({
+      config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+      required: [],
+      configuration: "suggestion-config",
+      waitingFixes: 0,
       run: null,
       suggestions: [],
       next: null,
@@ -932,8 +935,11 @@ it("opens fresh translation fields for a language just added", async () => {
         count: language === "fr" ? 1 : 0,
       })),
     ),
-    getContentSuggestions: vi.fn(async (language: string) => ({
-      language,
+    getContentSuggestions: vi.fn(async () => ({
+      config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+      required: [],
+      configuration: "suggestion-config",
+      waitingFixes: 0,
       run: null,
       suggestions: [],
       next: null,
@@ -1153,8 +1159,11 @@ it("a real translation PUT closes once before a failing report refresh", async (
     expected: "baseline",
   };
   const client = api({
-    getContentSuggestions: vi.fn(async (language: string) => ({
-      language,
+    getContentSuggestions: vi.fn(async () => ({
+      config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+      required: [],
+      configuration: "suggestion-config",
+      waitingFixes: 0,
       run: null,
       suggestions: [],
       next: null,

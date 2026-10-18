@@ -17,7 +17,7 @@ import {
   storeSuggestionPage,
   suggestionStale,
 } from "./content-suggestion-store.js";
-import type { ContentSuggestionView } from "./content-suggestion-types.js";
+import type { ContentSuggestionQuery, ContentSuggestionView } from "./content-suggestion-types.js";
 import { contentSuggestions } from "./schema/suggestions.js";
 import {
   addPlainProducts,
@@ -72,8 +72,8 @@ async function storedVenue(): Promise<SuggestionVenue> {
   });
   return venue;
 }
-const page = (language: string, after?: string) =>
-  app((tx) => listContentSuggestions(tx, language, after === undefined ? {} : { after }, context));
+const page = (query: ContentSuggestionQuery = {}) =>
+  app((tx) => listContentSuggestions(tx, query, context));
 const summary = (views: readonly ContentSuggestionView[]) =>
   inOrder(
     views.map(({ itemId, language, text, placeholder, fix, stale }) => ({
@@ -94,10 +94,10 @@ const named = (itemId: string, language: string, text: string) => ({
   stale: false,
 });
 
-it("lists the page language, the default language and the item rows", async () => {
+it("lists every enabled language and the item rows", async () => {
   const venue = await storedVenue();
-  const listed = await page("es");
-  expect(listed.language).toBe("es");
+  const listed = await page();
+  expect(listed.config).toEqual({ defaultLanguage: "ca", languages: ["ca", "es", "en"] });
   expect(listed.next).toBeNull();
   expect(listed.run).toMatchObject({ state: "done", waiting: 6 });
   expect(listed.suggestions.every((view) => view.kind === "product")).toBe(true);
@@ -112,8 +112,11 @@ it("lists the page language, the default language and the item rows", async () =
         stale: false,
       },
       named(venue.bread, "es", "CLIENT-ES Pan"),
+      named(venue.bread, "en", "CLIENT-EN Bread"),
       named(venue.wine, "ca", "CLIENT-CA Vi"),
       named(venue.wine, "es", "CLIENT-ES Vino"),
+      named(venue.wine, "en", "CLIENT-EN Wine"),
+      named(venue.cheese, "en", "CLIENT-EN Cheese"),
       {
         itemId: venue.cheese,
         language: "ca",
@@ -124,9 +127,14 @@ it("lists the page language, the default language and the item rows", async () =
       },
     ]),
   );
-  expect((await page("ca")).suggestions.map((view) => view.language).sort()).toEqual([
+  expect((await page()).suggestions.map((view) => view.language).sort()).toEqual([
     "ca",
     "ca",
+    "en",
+    "en",
+    "en",
+    "es",
+    "es",
     null,
   ]);
 });
@@ -146,10 +154,10 @@ it("lists 100 suggestions a page, by id", async () => {
     );
     return created;
   });
-  const first = await page("en");
+  const first = await page();
   expect(first.suggestions).toHaveLength(100);
   expect(first.next).toBe(first.suggestions.at(-1)!.id);
-  const second = await page("en", first.next!);
+  const second = await page({ after: first.next!, configuration: first.configuration });
   expect(second.suggestions).toHaveLength(20);
   expect(second.next).toBeNull();
   expect([...first.suggestions, ...second.suggestions].map((view) => view.itemId).sort()).toEqual(
@@ -157,9 +165,11 @@ it("lists 100 suggestions a page, by id", async () => {
   );
 });
 
-it("refuses a language the venue has not enabled with content.languages_invalid", async () => {
+it("refuses a single-language filter with content.translation_invalid", async () => {
   await seedSuggestionVenue(suite.db);
-  await expect(page("fr")).rejects.toMatchObject({ code: "content.languages_invalid" });
+  await expect(page({ language: "fr" } as never)).rejects.toMatchObject({
+    code: "content.translation_invalid",
+  });
 });
 
 it("a language added after the job leaves the suggestions current", async () => {
@@ -179,7 +189,7 @@ it("a language added after the job leaves the suggestions current", async () => 
     resolveTranslationTargets(tx, "es", [{ kind: "product", id: venue.bread }], context),
   );
   expect(stored!.expected).not.toBe(targets[0]!.target.expected);
-  const { suggestions } = await page("es");
+  const { suggestions } = await page();
   expect(
     suggestions.find((view) => view.itemId === venue.bread && view.language === "es"),
   ).toMatchObject({
@@ -197,13 +207,13 @@ it("marks a suggestion stale once that item's text in that language changes, and
       .set({ customerName: { ca: "CLIENT-CA Pa", en: "CLIENT-EN Bread typed" } })
       .where(eq(products.id, venue.bread)),
   );
-  const english = (await page("en")).suggestions;
+  const english = (await page()).suggestions;
   expect(
     english.find((view) => view.itemId === venue.bread && view.language === "en"),
   ).toMatchObject({
     stale: true,
   });
-  const spanish = (await page("es")).suggestions;
+  const spanish = (await page()).suggestions;
   expect(
     spanish.find((view) => view.itemId === venue.bread && view.language === "es"),
   ).toMatchObject({
@@ -214,7 +224,7 @@ it("marks a suggestion stale once that item's text in that language changes, and
 it("a suggestion for a deleted product is neither listed nor kept by the next run", async () => {
   const venue = await storedVenue();
   await app((tx) => deactivateProduct(tx, venue.wine));
-  const listed = (await page("es")).suggestions.map((view) => view.itemId);
+  const listed = (await page()).suggestions.map((view) => view.itemId);
   expect(listed).not.toContain(venue.wine);
   expect(listed).toContain(venue.bread);
   await app((tx) => startSuggestionRun(tx, context));

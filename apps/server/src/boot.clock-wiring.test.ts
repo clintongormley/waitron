@@ -194,10 +194,9 @@ describe("boot's authority clock wiring", () => {
           cutoverChanges: [{ effectiveBusinessDay: "2026-10-14", dayCutover: "07:00" }],
         });
 
-      const listed = await fetch(
-        `http://127.0.0.1:${port}/management-api/content-suggestions?language=es`,
-        { headers: { cookie: venue.managerCookie } },
-      );
+      const listed = await fetch(`http://127.0.0.1:${port}/management-api/content-suggestions`, {
+        headers: { cookie: venue.managerCookie },
+      });
       expect(listed.status).toBe(200);
       expect(await listed.json()).toMatchObject({
         service: "not_connected",

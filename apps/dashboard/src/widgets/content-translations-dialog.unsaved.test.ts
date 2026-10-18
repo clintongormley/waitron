@@ -39,8 +39,11 @@ const result: TranslationPage = {
 class TranslationLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api = {
-    getContentSuggestions: vi.fn(async (language: string) => ({
-      language,
+    getContentSuggestions: vi.fn(async () => ({
+      config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+      required: [],
+      configuration: "suggestion-config",
+      waitingFixes: 0,
       run: null,
       suggestions: [],
       next: null,
@@ -269,6 +272,8 @@ const soup = (id: string, itemId: string, text: string): ContentSuggestionView =
   placeholder: false,
   fix: null,
   stale: false,
+  cell: null,
+  expected: null,
 });
 function suggestionApi(page: TranslationPage, suggestions: ContentSuggestionView[]) {
   return {
@@ -281,8 +286,11 @@ function suggestionApi(page: TranslationPage, suggestions: ContentSuggestionView
         total: page.rows.length,
       };
     }),
-    getContentSuggestions: vi.fn(async (language: string) => ({
-      language,
+    getContentSuggestions: vi.fn(async () => ({
+      config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+      required: [],
+      configuration: "suggestion-config",
+      waitingFixes: 0,
       run: null,
       suggestions,
       next: null,

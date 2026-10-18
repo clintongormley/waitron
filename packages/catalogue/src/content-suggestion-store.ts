@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gt, sql, type SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
@@ -18,11 +18,13 @@ import {
 } from "./content-suggestion-jobs.js";
 import type {
   ContentSuggestionPage,
+  ContentSuggestionQuery,
   ContentSuggestionView,
   SuggestionResult,
   SuggestionPage,
 } from "./content-suggestion-types.js";
 import {
+  liveTranslationRows,
   readTranslationSettings,
   resolveTranslationRow,
   type TranslationContext,
@@ -41,6 +43,9 @@ import {
 } from "./content-translation-baseline.js";
 import "./errors.js";
 import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
+
+import { TRANSLATION_GAP_KINDS } from "./content-translation-kinds.js";
+import { invalidTranslationQuery, translationConfiguration } from "./content-translation-cells.js";
 
 type Fix = SuggestionResult["corrections"][number];
 interface PlannedRow {
@@ -311,30 +316,48 @@ export function suggestionStale(stored: string, current: string): boolean {
 
 export async function listContentSuggestions(
   tx: Transaction,
-  language: string,
-  query: { after?: string },
+  query: ContentSuggestionQuery,
   context: TranslationContext,
 ): Promise<ContentSuggestionPage> {
+  if (
+    query === null ||
+    typeof query !== "object" ||
+    Array.isArray(query) ||
+    Object.keys(query).some((key) => !["after", "configuration", "fixesOnly"].includes(key)) ||
+    (Object.hasOwn(query, "after") &&
+      (typeof query.after !== "string" ||
+        !query.after.trim() ||
+        query.configuration === undefined)) ||
+    (Object.hasOwn(query, "configuration") &&
+      (typeof query.configuration !== "string" || !query.configuration)) ||
+    (Object.hasOwn(query, "fixesOnly") && query.fixesOnly !== true)
+  )
+    invalidTranslationQuery();
   const settings = await readTranslationSettings(tx, context);
-  const { config } = settings;
-  if (!config.languages.includes(language)) throw new AppError("content.languages_invalid", {});
-  const shown = or(
-    inArray(contentSuggestions.language, [...new Set([language, config.defaultLanguage])]),
-    isNull(contentSuggestions.language),
-    isNull(contentSuggestions.text),
-  );
+  const { config, required } = settings;
+  const configuration = translationConfiguration(settings);
+  if (query.configuration !== undefined && query.configuration !== configuration)
+    throw new AppError("content.translation_stale", { scope: "configuration" });
   const rows = await tx
     .select()
     .from(contentSuggestions)
-    .where(query.after === undefined ? shown : and(shown, gt(contentSuggestions.id, query.after)))
+    .where(query.after === undefined ? undefined : gt(contentSuggestions.id, query.after))
     .orderBy(asc(contentSuggestions.id))
     .limit(SUGGESTION_PAGE);
+  const counts = await tx.execute<{ count: number }>(sql`
+    select count(*) as count from content_suggestions s
+    join (${liveTranslationRows(TRANSLATION_GAP_KINDS)}) live
+      on live.kind = s.kind and live.id = s.item_id
+    where s.fix_field is not null or s.placeholder = 1
+  `);
   const keyOf = (row: (typeof rows)[number]) => suggestionRef({ kind: row.kind, id: row.itemId });
   const refs = new Map<string, TranslationRef>();
   for (const row of rows) refs.set(keyOf(row), { kind: row.kind, id: row.itemId });
   const live = await readLiveItems(tx, [...refs.values()], settings);
   const suggestions: ContentSuggestionView[] = [];
   for (const row of rows) {
+    if (query.fixesOnly && row.fixField === null && !row.placeholder) continue;
+    if (row.text !== null && !config.languages.includes(row.language!)) continue;
     const item = live.get(keyOf(row));
     if (!item) continue;
     const target =
@@ -347,6 +370,12 @@ export async function listContentSuggestions(
       language: row.language,
       text: row.text,
       placeholder: row.placeholder,
+      cell:
+        row.language === null
+          ? null
+          : { kind: row.kind, id: row.itemId, language: row.language, field: "name" },
+      expected:
+        target?.eligible && config.languages.includes(row.language!) ? nameEvidence(target) : null,
       // The three fix columns are set together or not at all (content_suggestions_fix_ck).
       fix:
         row.fixField === null
@@ -363,7 +392,10 @@ export async function listContentSuggestions(
     });
   }
   return {
-    language,
+    config,
+    required,
+    configuration,
+    waitingFixes: counts.rows[0]!.count,
     run: await readSuggestionRun(tx),
     suggestions,
     next: rows.length === SUGGESTION_PAGE ? rows.at(-1)!.id : null,

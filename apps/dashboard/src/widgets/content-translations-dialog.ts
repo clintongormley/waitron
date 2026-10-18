@@ -397,13 +397,19 @@ export class ContentTranslationsDialog extends LitElement {
     const suggestions: ContentSuggestionView[] = [];
     let after: string | null = null;
     const pages = new Set<string>();
+    let configuration: string | undefined;
     try {
       do {
         const value: ContentSuggestionRead = await client.getContentSuggestions(
-          language,
-          after ?? undefined,
+          after === null ? undefined : { after, configuration },
         );
-        if (value.language !== language) throw new Error("suggestion scan changed");
+        if (
+          !value.config.languages.includes(language) ||
+          !value.configuration ||
+          (configuration !== undefined && value.configuration !== configuration)
+        )
+          throw new Error("suggestion scan changed");
+        configuration = value.configuration;
         suggestions.push(...value.suggestions);
         after = value.next;
         if (after !== null && pages.has(after)) throw new Error("suggestion scan repeated");
@@ -428,7 +434,7 @@ export class ContentTranslationsDialog extends LitElement {
         read: async (): Promise<SuggestionRunRead> => {
           const sequence = ++this.#suggestionReads;
           try {
-            return { sequence, value: await client.getContentSuggestions(language) };
+            return { sequence, value: await client.getContentSuggestions() };
           } catch (error) {
             return { sequence, failed: codeOf(error) };
           }

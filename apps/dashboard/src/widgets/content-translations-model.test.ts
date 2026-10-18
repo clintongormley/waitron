@@ -718,6 +718,8 @@ it("indexes each item's suggestions for the page language, its default and its n
     placeholder: false,
     fix: null,
     stale: false,
+    cell: null,
+    expected: null,
     ...overrides,
   });
   const views = [

@@ -58,7 +58,10 @@ const run = (overrides: Partial<SuggestionRunView> = {}): SuggestionRunView => (
 });
 const SENDING = run({ state: "sending", progress: 0, done: 0 });
 const read = (overrides: Partial<ContentSuggestionRead> = {}): ContentSuggestionRead => ({
-  language: "es",
+  config: { defaultLanguage: "en", languages: ["en", "es"] },
+  required: [],
+  configuration: "suggestion-config",
+  waitingFixes: 0,
   run: null,
   suggestions: [],
   next: null,
@@ -81,7 +84,7 @@ async function mount(overrides: Record<string, unknown> = {}, liveData?: LiveDat
   const api = {
     getContentTranslationTargets: vi.fn(async (language: string) => translations(language)),
     saveContentTranslations: vi.fn(),
-    getContentSuggestions: vi.fn(async (language: string) => read({ language })),
+    getContentSuggestions: vi.fn(async () => read()),
     startContentSuggestions: vi.fn(async () => ({ run: SENDING })),
     ...(liveData ? { liveData } : {}),
     ...overrides,
@@ -142,7 +145,7 @@ describe("Translate all in the translations dialog", () => {
     const getContentSuggestions = vi.fn(async () => current);
     const { el, api } = await mount({ getContentSuggestions }, liveData);
     await vi.waitFor(() => expect(bar(el).run?.state).toBe("running"));
-    expect(getContentSuggestions).toHaveBeenCalledWith("es");
+    expect(getContentSuggestions).toHaveBeenCalledWith();
     expect(bar(el).service).toBe("on");
     expect(bar(el).cloudOrigin).toBe("https://cloud.example.test");
     const translationReads = vi.mocked(api.getContentTranslationTargets).mock.calls.length;
@@ -400,7 +403,7 @@ describe("Translate all in the translations dialog", () => {
     const { el, api } = await mount({}, liveData);
     await vi.waitFor(() => expect(bar(el).service).toBe("on"));
     el.language = "en";
-    await vi.waitFor(() => expect(api.getContentSuggestions).toHaveBeenCalledWith("en"));
+    await vi.waitFor(() => expect(api.getContentSuggestions).toHaveBeenCalledWith());
     await vi.waitFor(() => expect(bar(el).service).toBe("on"));
     const reads = vi.mocked(api.getContentSuggestions).mock.calls.length;
     el.open = false;

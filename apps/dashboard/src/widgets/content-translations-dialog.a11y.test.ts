@@ -222,6 +222,8 @@ const note = (overrides: Partial<ContentSuggestionView>): ContentSuggestionView 
   placeholder: false,
   fix: null,
   stale: false,
+  cell: null,
+  expected: null,
   ...overrides,
 });
 describe.each(["light", "dark"] as const)(
@@ -249,8 +251,11 @@ describe.each(["light", "dark"] as const)(
           ];
           const api = {
             getContentTranslationTargets: vi.fn(async () => result(rows)),
-            getContentSuggestions: vi.fn(async (language: string) => ({
-              language,
+            getContentSuggestions: vi.fn(async () => ({
+              config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+              required: [],
+              configuration: "suggestion-config",
+              waitingFixes: 0,
               run: null,
               service: "on" as const,
               cloudOrigin: null,

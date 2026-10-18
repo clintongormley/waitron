@@ -1,3 +1,5 @@
+import type { ContentLanguages } from "@waitron/shared";
+import type { TranslationCellRef } from "./content-translation-types.js";
 import type { TranslationGapKind } from "./content-translation-report-types.js";
 
 export interface SuggestionResult {
@@ -63,10 +65,21 @@ export interface ContentSuggestionView {
   placeholder: boolean;
   fix: { field: string; wrong: string; right: string } | null;
   stale: boolean;
+  cell: TranslationCellRef | null;
+  expected: string | null;
+}
+
+export interface ContentSuggestionQuery {
+  after?: string;
+  configuration?: string;
+  fixesOnly?: true;
 }
 
 export interface ContentSuggestionPage {
-  language: string;
+  config: ContentLanguages;
+  required: string[];
+  configuration: string;
+  waitingFixes: number;
   run: SuggestionRunView | null;
   suggestions: ContentSuggestionView[];
   next: string | null;

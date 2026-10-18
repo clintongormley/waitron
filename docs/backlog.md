@@ -1145,8 +1145,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   The language screen consumes count-only summaries; retained-cell reads and live dependencies
   are wired. The legacy single-language map writers and default-companion cleanup are retired.
   Spelling fixes now retain evidence only for an exact saved name match; listing rechecks that
-  evidence, and pruning keeps fixes and notes on complete live items. All-language suggestion
-  paging, the dashboard page/save contract and the editor are unfinished. Boot's configured-origin
+  evidence, and pruning keeps fixes and notes on complete live items. Suggestion pages now examine
+  at most one hundred stored candidates across languages, advance past filtered rows, reject a
+  changed configuration and return current name-cell tokens. A separate count includes waiting
+  fixes and notes on complete live items. The dashboard suggestion reader uses that query; the
+  multilingual page/save contract, draft model and editor remain unfinished. Boot's configured-origin
   forwarding and obsolete callback cleanup wait for lane E. Automatic-translation review, future
   presentation and the remaining validation are unfinished.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)

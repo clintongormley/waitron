@@ -35,8 +35,11 @@ const result = (rows: TranslationTarget[], next: string | null = null): Translat
 });
 async function mount(rows = [target()], overrides: Record<string, unknown> = {}) {
   const api = {
-    getContentSuggestions: vi.fn(async (language: string) => ({
-      language,
+    getContentSuggestions: vi.fn(async () => ({
+      config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+      required: [],
+      configuration: "suggestion-config",
+      waitingFixes: 0,
       run: null,
       suggestions: [],
       next: null,
@@ -93,8 +96,11 @@ describe("staged translation dialog", () => {
       setLocale(locale);
       const language = "ca-ES-valencia";
       const api = {
-        getContentSuggestions: vi.fn(async (language: string) => ({
-          language,
+        getContentSuggestions: vi.fn(async () => ({
+          config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+          required: [],
+          configuration: "suggestion-config",
+          waitingFixes: 0,
           run: null,
           suggestions: [],
           next: null,
@@ -122,8 +128,11 @@ describe("staged translation dialog", () => {
     async (locale, language, sentence) => {
       setLocale(locale);
       const api = {
-        getContentSuggestions: vi.fn(async (language: string) => ({
-          language,
+        getContentSuggestions: vi.fn(async () => ({
+          config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+          required: [],
+          configuration: "suggestion-config",
+          waitingFixes: 0,
           run: null,
           suggestions: [],
           next: null,
@@ -149,8 +158,11 @@ describe("staged translation dialog", () => {
     cleanupWidgets();
     const language = "x-$&";
     const api = {
-      getContentSuggestions: vi.fn(async (language: string) => ({
-        language,
+      getContentSuggestions: vi.fn(async () => ({
+        config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+        required: [],
+        configuration: "suggestion-config",
+        waitingFixes: 0,
         run: null,
         suggestions: [],
         next: null,
@@ -172,8 +184,11 @@ describe("staged translation dialog", () => {
     const language = "x-$&";
     const defaultLanguage = "y-$&";
     const api = {
-      getContentSuggestions: vi.fn(async (language: string) => ({
-        language,
+      getContentSuggestions: vi.fn(async () => ({
+        config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+        required: [],
+        configuration: "suggestion-config",
+        waitingFixes: 0,
         run: null,
         suggestions: [],
         next: null,
@@ -205,8 +220,11 @@ describe("staged translation dialog", () => {
   });
   it("reads every opening page through the passive client and saves through the active client", async () => {
     const passive = {
-      getContentSuggestions: vi.fn(async (language: string) => ({
-        language,
+      getContentSuggestions: vi.fn(async () => ({
+        config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+        required: [],
+        configuration: "suggestion-config",
+        waitingFixes: 0,
         run: null,
         suggestions: [],
         next: null,
@@ -221,7 +239,7 @@ describe("staged translation dialog", () => {
     expect(field(el, "one")).not.toBeNull();
     expect(api.getContentTranslationTargets).not.toHaveBeenCalled();
     expect(passive.getContentTranslationTargets).toHaveBeenCalledExactlyOnceWith("es", {});
-    await vi.waitFor(() => expect(passive.getContentSuggestions).toHaveBeenCalledWith("es"));
+    await vi.waitFor(() => expect(passive.getContentSuggestions).toHaveBeenCalledWith());
     expect(api.getContentSuggestions).not.toHaveBeenCalled();
     await edit(el, "one", "Croqueta");
     await click(el, "save");
@@ -927,8 +945,11 @@ it("a late opening GET and late review GET cannot overwrite a reopened draft", a
     .mockResolvedValue(result([target("one", { defaultRequired: false })]));
   const api = {
     getContentTranslationTargets: read,
-    getContentSuggestions: vi.fn(async (language: string) => ({
-      language,
+    getContentSuggestions: vi.fn(async () => ({
+      config: { defaultLanguage: "en", languages: ["en", "es", "fr", "ca"] },
+      required: [],
+      configuration: "suggestion-config",
+      waitingFixes: 0,
       run: null,
       suggestions: [],
       next: null,

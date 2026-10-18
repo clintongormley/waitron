@@ -3,6 +3,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { languageDisplayName } from "@waitron/shared";
 import type {
   ContentSuggestionRead,
+  ContentSuggestionQuery,
   ContentSuggestionView,
   DashboardApi,
   TranslationBatch,
@@ -45,6 +46,8 @@ const suggestion = (
   placeholder: false,
   fix: null,
   stale: false,
+  cell: null,
+  expected: null,
   ...overrides,
 });
 
@@ -96,11 +99,15 @@ function fakeApi(state: Venue, overrides: Record<string, unknown> = {}) {
       },
     ),
     getContentSuggestions: vi.fn(
-      async (language: string, after?: string): Promise<ContentSuggestionRead> => {
+      async (query: ContentSuggestionQuery = {}): Promise<ContentSuggestionRead> => {
+        const after = query.after;
         const start = after === undefined ? 0 : Number(after);
         const end = start + state.suggestionPage;
         return {
-          language,
+          config: state.config,
+          required: [],
+          configuration: "suggestion-config",
+          waitingFixes: 0,
           run: null,
           service: "on",
           cloudOrigin: null,
@@ -216,8 +223,14 @@ describe("Translate all suggestions as drafts", () => {
         suggestionPage: 1,
       }),
     );
-    expect(api.getContentSuggestions).toHaveBeenCalledWith("es", "1");
-    expect(api.getContentSuggestions).toHaveBeenCalledWith("es", "2");
+    expect(api.getContentSuggestions).toHaveBeenCalledWith({
+      after: "1",
+      configuration: "suggestion-config",
+    });
+    expect(api.getContentSuggestions).toHaveBeenCalledWith({
+      after: "2",
+      configuration: "suggestion-config",
+    });
     expect(field(el, "three")!.value).toBe("CLIENT-es three");
   });
   it("saves suggested and typed names together, and an edited suggestion as typed", async () => {
@@ -567,8 +580,8 @@ describe("Translate all suggestions as drafts", () => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
     const read = api.getContentSuggestions.getMockImplementation()!;
-    api.getContentSuggestions.mockImplementation(async (language: string, after?: string) => {
-      const value = await read(language, after);
+    api.getContentSuggestions.mockImplementation(async (query: ContentSuggestionQuery = {}) => {
+      const value = await read(query);
       await held;
       return value;
     });
@@ -650,8 +663,8 @@ describe("Translate all suggestions as drafts", () => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
     const read = api.getContentSuggestions.getMockImplementation()!;
-    api.getContentSuggestions.mockImplementation(async (language: string, after?: string) => {
-      const value = await read(language, after);
+    api.getContentSuggestions.mockImplementation(async (query: ContentSuggestionQuery = {}) => {
+      const value = await read(query);
       await held;
       return value;
     });
@@ -715,11 +728,13 @@ describe("Translate all suggestions as drafts", () => {
         suggestion("s3", "one", { language: "fr", text: "CLIENT-fr one" }),
       ];
       let release = (): void => {};
+      let reopenedRead = false;
       if (beforeRead) {
         const held = new Promise<void>((resolve) => (release = resolve));
         const read = api.getContentSuggestions.getMockImplementation()!;
-        api.getContentSuggestions.mockImplementation(async (language: string, after?: string) => {
-          const value = await read(language, after);
+        api.getContentSuggestions.mockImplementation(async (query: ContentSuggestionQuery = {}) => {
+          const value = await read(query);
+          reopenedRead = true;
           await held;
           return value;
         });
@@ -728,8 +743,7 @@ describe("Translate all suggestions as drafts", () => {
       await el.updateComplete;
       el.language = "fr";
       el.open = true;
-      if (beforeRead)
-        await vi.waitFor(() => expect(api.getContentSuggestions).toHaveBeenCalledWith("fr"));
+      if (beforeRead) await vi.waitFor(() => expect(reopenedRead).toBe(true));
       else await vi.waitFor(() => expect(field(el, "one")?.value).toBe("CLIENT-fr one"));
       refuse();
       await expect(api.discardContentSuggestion.mock.results[1]!.value).rejects.toEqual({
@@ -786,12 +800,15 @@ describe("Translate all suggestions as drafts", () => {
         suggestion("s3", "one", { language: "fr", text: "CLIENT-fr one" }),
       ];
       let release = (): void => {};
+      let reopenedRead = false;
       if (beforeRead) {
         const held = new Promise<void>((resolve) => (release = resolve));
         const read = api.getContentSuggestions.getMockImplementation()!;
-        api.getContentSuggestions.mockImplementation(async (language: string, after?: string) => {
-          const value = await read(language, after);
-          if (language === "fr") await held;
+        api.getContentSuggestions.mockImplementation(async (query: ContentSuggestionQuery = {}) => {
+          const isFrench = state.language === "fr";
+          const value = await read(query);
+          reopenedRead = true;
+          if (isFrench) await held;
           return value;
         });
       }
@@ -799,8 +816,7 @@ describe("Translate all suggestions as drafts", () => {
       await el.updateComplete;
       el.language = "fr";
       el.open = true;
-      if (beforeRead)
-        await vi.waitFor(() => expect(api.getContentSuggestions).toHaveBeenCalledWith("fr"));
+      if (beforeRead) await vi.waitFor(() => expect(reopenedRead).toBe(true));
       else await vi.waitFor(() => expect(field(el, "one")?.value).toBe("CLIENT-fr one"));
       refuse();
       await expect(api.discardContentSuggestion.mock.results[1]!.value).rejects.toEqual({
@@ -900,15 +916,21 @@ describe("Translate all suggestions as drafts", () => {
     });
     const api = fakeApi(state);
     const read = api.getContentSuggestions.getMockImplementation()!;
-    api.getContentSuggestions.mockImplementation(async (language: string, after?: string) => {
+    api.getContentSuggestions.mockImplementation(async (query: ContentSuggestionQuery = {}) => {
+      const after = query.after;
       if (after === "1") await held;
-      return read(language, after);
+      return read(query);
     });
     const { el } = await mountWidget<ContentTranslationsDialog>(
       "dashboard-content-translations-dialog",
       { open: true, language: "es", api: api as unknown as DashboardApi },
     );
-    await vi.waitFor(() => expect(api.getContentSuggestions).toHaveBeenCalledWith("es", "1"));
+    await vi.waitFor(() =>
+      expect(api.getContentSuggestions).toHaveBeenCalledWith({
+        after: "1",
+        configuration: "suggestion-config",
+      }),
+    );
     el.open = false;
     await el.updateComplete;
     release();
@@ -916,7 +938,10 @@ describe("Translate all suggestions as drafts", () => {
     // A zero-delay timer runs after every microtask the released read queues, so a further page
     // request would already have been made.
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(api.getContentSuggestions).not.toHaveBeenCalledWith("es", "2");
+    expect(api.getContentSuggestions).not.toHaveBeenCalledWith({
+      after: "2",
+      configuration: "suggestion-config",
+    });
   });
   it("a stale refusal on save empties that suggested row and keeps the others", async () => {
     const { el, api } = await open(
@@ -987,9 +1012,10 @@ describe("Translate all suggestions as drafts", () => {
     let refuseLater = true;
     const { el, api } = await open(state, {
       liveData,
-      getContentSuggestions: vi.fn(async (language: string, after?: string) => {
+      getContentSuggestions: vi.fn(async (query: ContentSuggestionQuery = {}) => {
+        const after = query.after;
         if (after !== undefined && refuseLater) throw { code: "cloud.unavailable" };
-        return base.getContentSuggestions(language, after);
+        return base.getContentSuggestions(query);
       }),
     });
     const bar = el.shadowRoot!.querySelector<
@@ -1027,9 +1053,10 @@ describe("Translate all suggestions as drafts", () => {
     const base = fakeApi(state);
     let refuseLater = false;
     const { el } = await open(state, {
-      getContentSuggestions: vi.fn(async (language: string, after?: string) => {
+      getContentSuggestions: vi.fn(async (query: ContentSuggestionQuery = {}) => {
+        const after = query.after;
         if (after !== undefined && refuseLater) throw { code: "cloud.unavailable" };
-        return base.getContentSuggestions(language, after);
+        return base.getContentSuggestions(query);
       }),
     });
     const bar = el.shadowRoot!.querySelector<
@@ -1052,8 +1079,8 @@ describe("Translate all suggestions as drafts", () => {
     };
     const base = fakeApi(state);
     const { el, api } = await open(state, {
-      getContentSuggestions: vi.fn(async (language: string, after?: string) =>
-        after === undefined ? base.getContentSuggestions(language) : laterPage(),
+      getContentSuggestions: vi.fn(async (query: ContentSuggestionQuery = {}) =>
+        query.after === undefined ? base.getContentSuggestions(query) : laterPage(),
       ),
     });
     const bar = el.shadowRoot!.querySelector<
@@ -1067,21 +1094,26 @@ describe("Translate all suggestions as drafts", () => {
     el.open = true;
     await vi.waitFor(() =>
       expect(
-        api.getContentSuggestions.mock.calls.slice(reads).some(([, after]) => after !== undefined),
+        api.getContentSuggestions.mock.calls
+          .slice(reads)
+          .some(([query]) => query?.after !== undefined),
       ).toBe(true),
     );
     await el.updateComplete;
     await bar.updateComplete;
     expect(bar.error).toBe("");
   });
-  it("a suggestion page for another language, or one that repeats its cursor, fills nothing", async () => {
+  it("a suggestion page with the viewed language disabled, or one that repeats its cursor, fills nothing", async () => {
     for (const answer of [
-      { language: "fr", next: null },
-      { language: "es", next: "1" },
+      { config: { defaultLanguage: "fr", languages: ["fr"] }, next: null },
+      { config: { defaultLanguage: "en", languages: ["en", "es"] }, next: "1" },
     ]) {
       const { el, api } = await open(venue({ listed: [target("one")] }), {
         getContentSuggestions: vi.fn(async () => ({
           ...answer,
+          required: [],
+          configuration: "suggestion-config",
+          waitingFixes: 0,
           run: null,
           service: "on",
           cloudOrigin: null,
@@ -1336,8 +1368,8 @@ describe("rows the page leaves out", () => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
     const read = api.getContentSuggestions.getMockImplementation()!;
-    api.getContentSuggestions.mockImplementation(async (language: string, after?: string) => {
-      const value = await read(language, after);
+    api.getContentSuggestions.mockImplementation(async (query: ContentSuggestionQuery = {}) => {
+      const value = await read(query);
       await held;
       return value;
     });
@@ -1504,4 +1536,29 @@ describe("the 100-draft limit and continuing later", () => {
     expect(q(el, "[data-test=suggestion-capacity]")).toBeNull();
     expect(field(el, "149")!.value).toBe("CLIENT-es 149");
   });
+});
+
+it("rejects a suggestion continuation from another language configuration before borrowing text", async () => {
+  const state = venue({
+    listed: [target("one")],
+    suggestions: [suggestion("s1", "one")],
+    suggestionPage: 1,
+  });
+  const base = fakeApi(state);
+  const { el, api } = await open(state, {
+    getContentSuggestions: vi.fn(async (query: ContentSuggestionQuery = {}) => ({
+      ...(await base.getContentSuggestions(query)),
+      configuration: query.after === undefined ? "original-config" : "changed-config",
+      next: query.after === undefined ? "1" : null,
+    })),
+  });
+  expect(api.getContentSuggestions).toHaveBeenCalledWith({
+    after: "1",
+    configuration: "original-config",
+  });
+  expect(field(el, "one")!.value).toBe("");
+  const bar = el.shadowRoot!.querySelector<
+    HTMLElementTagNameMap["dashboard-content-suggestions-bar"]
+  >("dashboard-content-suggestions-bar")!;
+  expect(bar.error).not.toBe("");
 });

@@ -84,8 +84,8 @@ async function evidence(cell: TranslationCellRef) {
 async function latest(cell: TranslationCellRef) {
   return (await app((tx) => resolveTranslationCells(tx, [cell], context))).cells[0]!;
 }
-async function listed(id: string, language = "ca") {
-  return (await app((tx) => listContentSuggestions(tx, language, {}, context))).suggestions.find(
+async function listed(id: string) {
+  return (await app((tx) => listContentSuggestions(tx, {}, context))).suggestions.find(
     (view) => view.itemId === id,
   );
 }
@@ -157,7 +157,7 @@ describe("language correction evidence", () => {
         if (change === "disabled language")
           await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
       });
-      const view = await listed(cell.id, change === "disabled language" ? "es" : "ca");
+      const view = await listed(cell.id);
       if (view) expect(view.stale).toBe(true);
       expect(await evidence(cell)).toEqual(before);
     },

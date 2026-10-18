@@ -230,11 +230,17 @@ export type {
   TranslationTarget,
 };
 import type {
+  ContentSuggestionQuery,
   ContentSuggestionRead,
   ContentSuggestionView,
   SuggestionRunView,
 } from "@waitron/catalogue/src/content-suggestion-types.js";
-export type { ContentSuggestionRead, ContentSuggestionView, SuggestionRunView };
+export type {
+  ContentSuggestionQuery,
+  ContentSuggestionRead,
+  ContentSuggestionView,
+  SuggestionRunView,
+};
 export interface TranslationQuery {
   after?: string;
   targets?: TranslationRef[];
@@ -2456,10 +2462,13 @@ export class DashboardApi {
     return this.#request("/management-api/content-suggestions/jobs", "POST", {});
   }
 
-  getContentSuggestions(language: string, after?: string): Promise<ContentSuggestionRead> {
-    const params = new URLSearchParams({ language });
-    if (after !== undefined) params.append("after", after);
-    return this.#request(`/management-api/content-suggestions?${params}`, "GET");
+  getContentSuggestions(query: ContentSuggestionQuery = {}): Promise<ContentSuggestionRead> {
+    const params = new URLSearchParams();
+    if (query.after !== undefined) params.append("after", query.after);
+    if (query.configuration !== undefined) params.append("configuration", query.configuration);
+    if (query.fixesOnly) params.append("fixesOnly", "1");
+    const suffix = params.size ? `?${params}` : "";
+    return this.#request(`/management-api/content-suggestions${suffix}`, "GET");
   }
 
   discardContentSuggestion(id: string): Promise<{ deleted: string }> {
