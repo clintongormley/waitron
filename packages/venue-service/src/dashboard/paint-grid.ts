@@ -327,12 +327,13 @@ export class PaintGrid extends LitElement {
       this.cutover,
       this.closedErases,
     );
-    const [from] = stepSpan(this.#day(selected.key)[index]!, this.cutover);
+    const block = this.#day(selected.key)[index]!;
+    const [from] = stepSpan(block, this.cutover);
     const covering = day.find((paint) => {
       const [start, end] = stepSpan(paint, this.cutover);
       return start <= from && from < end;
     });
-    if (covering && this.#outside(selected.key, [covering])) {
+    if (this.#outside(selected.key, [{ ...block, periodId }])) {
       void this.#focusAfter(selected.key, selected.startsAt);
       return;
     }

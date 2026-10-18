@@ -8,7 +8,6 @@ export interface PaintPot {
   id: string | null;
   name: string;
   colour?: CalendarColour;
-  /** Offers ✎ beside the chip. */
   edit?: () => void;
 }
 

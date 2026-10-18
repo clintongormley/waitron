@@ -457,13 +457,13 @@ export class SeasonPainter extends LitElement {
     const department = this.model.departments.find(({ id }) => departmentKey(id) === key);
     for (const zone of department?.zones ?? []) {
       const zoneWeek = draft.get(zoneKey(zone.id));
-      const day = zoneWeek?.get(event.detail.key) ?? [];
-      const cut = closuresInHours(event.detail.day.filter(isPeriodPaint), day, {
-        dayCutover: this.model.dayCutover,
-        endMinute: 1440,
-      }).map(({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }));
-      if (zoneWeek && !samePaint(cut, day))
-        draft.set(zoneKey(zone.id), copyWeek(zoneWeek).set(event.detail.key, cut));
+      if (!zoneWeek) continue;
+      const cut = closuresInHours(
+        event.detail.day.filter(isPeriodPaint),
+        zoneWeek.get(event.detail.key)!,
+        { dayCutover: this.model.dayCutover, endMinute: 1440 },
+      ).map(({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }));
+      draft.set(zoneKey(zone.id), copyWeek(zoneWeek).set(event.detail.key, cut));
     }
     this.draft = draft;
     this.scope?.changed();

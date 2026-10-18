@@ -1627,6 +1627,36 @@ test("a block changed to Closed wholly outside the column's hours sends paint-ou
   expect(seen).toEqual([]);
 });
 
+test("a block changed to Closed wholly outside the hours, touching Closed paint inside them, sends paint-outside and leaves the day", async () => {
+  const el = await zoneGrid(
+    { mon: [lunch, shut("16:00", "17:00")] },
+    { mon: [{ periodId: "dinner", startsAt: "16:00", endsAt: "23:00" }] },
+  );
+  const outside: { key: string }[] = [];
+  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await userEvent.click(menuButton(el, "Closed"));
+  await el.updateComplete;
+  expect(outside).toEqual([{ key: "mon" }]);
+  expect(seen).toEqual([]);
+});
+
+test("a Closed block wholly outside the hours changed to a period is changed, with no paint-outside", async () => {
+  const el = await zoneGrid(
+    { mon: [shut("13:00", "16:00")] },
+    { mon: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
+  );
+  const outside: { key: string }[] = [];
+  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await userEvent.click(menuButton(el, "Lunch"));
+  await el.updateComplete;
+  expect(outside).toEqual([]);
+  expect(seen).toEqual([{ key: "mon", day: [lunch] }]);
+});
+
 test("Copy whose Closed paint lies wholly outside a bounded column's hours lands what survives the cut there and sends paint-outside for it", async () => {
   const kept = shut("20:00", "21:00");
   const el = await zoneGrid(

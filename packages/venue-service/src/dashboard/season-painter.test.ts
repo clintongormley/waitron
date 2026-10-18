@@ -399,6 +399,7 @@ it("each period chip offers a visible '✎ Edit', named 'Edit <period>'", async 
   const edit = chip(painter, "edit-p1")!;
   expect(edit.textContent!.replace(/\s+/g, " ").trim()).toBe("✎ Edit");
   expect(edit.getAttribute("aria-label")).toBe("Edit Lunch");
+  expect(edit.querySelector('[aria-hidden="true"]')?.textContent).toBe("✎");
   const probe = document.createElement("span");
   probe.style.color = "var(--wt-color-primary-text)";
   probe.style.display = "block";

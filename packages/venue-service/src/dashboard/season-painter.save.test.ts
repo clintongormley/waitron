@@ -130,7 +130,9 @@ it("shrinking Restaurant's Tuesday cuts Terrace's Tuesday in the same Save", asy
   );
   button(painter, "paint-closed").click();
   await settle(painter);
+  const changed = vi.spyOn((painter as unknown as { scope: { changed(): void } }).scope, "changed");
   await drag(painter, "2", 10 * 60, 12 * 60);
+  expect(changed).toHaveBeenCalledTimes(1);
   await save(painter, writes);
   expect(writes.map(({ body }) => body)).toEqual([
     {

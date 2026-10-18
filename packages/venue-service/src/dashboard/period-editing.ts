@@ -47,8 +47,9 @@ export function periodsLink() {
 }
 
 /**
- * One period dialog at a time, saved on its own: a painter's ✎ and "+ New period", or the Periods
- * page's Add and Edit. A period just created is chosen, through `chose`, before the model lists it.
+ * One period dialog at a time, saved on its own: a painter's "✎ Edit" and "+ New period", or the
+ * Periods page's Add and Edit. A period just created is chosen, through `chose`, before the model
+ * lists it.
  */
 export class PeriodEditing implements ReactiveController {
   private editor?: {
@@ -129,7 +130,7 @@ export class PeriodEditing implements ReactiveController {
     );
   }
 
-  /** The department's periods as paint chips, each with its ✎. */
+  /** The department's periods as paint chips. */
   pots(department: Department): PaintPot[] {
     return department.periods.map((period) => ({
       ...period,
