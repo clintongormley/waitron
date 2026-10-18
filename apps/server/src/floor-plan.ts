@@ -16,6 +16,7 @@ import {
 import type { FloorPlanSetSummary, TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
+import { placedIdsAsRead } from "./floor-plan-sets.js";
 import { placementOf, resetZone, spareLabels } from "./floor-today-store.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { refusedByAModule } from "./table-removal.js";
@@ -213,17 +214,13 @@ async function planTables(tx: Transaction, masters: LayoutTable[]): Promise<Plan
   }));
 }
 
-/**
- * The layout's tables with each place as the layout reads it: a part's place in a layout that
- * places its joined table reads as off, so a change of parts saved in another set never leaves
- * this layout invalid.
- */
+/** The layout's tables with each place as the layout reads it (`placedIdsAsRead`). */
 export function placedAsRead(masters: readonly LayoutTable[]): LayoutTable[] {
-  const placedIds = new Set(masters.flatMap((m) => (m.placement === null ? [] : [m.id])));
+  const placed = placedIdsAsRead(
+    masters.map((m) => ({ id: m.id, placed: m.placement !== null, partOf: m.partOf })),
+  );
   return masters.map((master) =>
-    master.partOf !== null && placedIds.has(master.partOf)
-      ? { ...master, placement: null }
-      : master,
+    master.placement === null || placed.has(master.id) ? master : { ...master, placement: null },
   );
 }
 

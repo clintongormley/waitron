@@ -16,15 +16,29 @@ import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
 /**
- * A layout's tables on the plan and spare, each table counted once (spec §3). A part's place
- * reads as off while its joined table is placed; an unplaced joined table with a placed part has
- * come apart, so it is no spare, and its unplaced parts are free tables; while none of its parts
- * is placed, its parts are still joined and the joined table is the spare.
+ * The ids of `tables` placed as a layout reads them: a part's place in a layout that places its
+ * joined table reads as off, so a change of parts saved in another set never leaves the layout
+ * invalid.
+ */
+export function placedIdsAsRead(
+  tables: readonly { id: string; placed: boolean; partOf: string | null }[],
+): Set<string> {
+  const placed = new Set(tables.flatMap((t) => (t.placed ? [t.id] : [])));
+  return new Set(
+    tables.flatMap((t) => (t.placed && !(t.partOf !== null && placed.has(t.partOf)) ? [t.id] : [])),
+  );
+}
+
+/**
+ * A layout's tables on the plan and spare, each table counted once and placed as the layout reads
+ * it (`placedIdsAsRead`). An unplaced joined table with a placed part has come apart, so it is no
+ * spare, and its unplaced parts are free tables; while none of its parts is placed, its parts are
+ * still joined and the joined table is the spare.
  */
 export function layoutCounts(
   tables: readonly { id: string; placed: boolean; partOf: string | null }[],
 ): { onPlan: number; spare: number } {
-  const placed = new Set(tables.filter((t) => t.placed).map((t) => t.id));
+  const placed = placedIdsAsRead(tables);
   const partsOf = new Map<string, string[]>();
   for (const t of tables) {
     if (t.partOf === null) continue;
@@ -37,8 +51,7 @@ export function layoutCounts(
   let onPlan = 0;
   let spare = 0;
   for (const t of tables) {
-    if (t.partOf !== null && placed.has(t.partOf)) continue;
-    if (t.placed) onPlan += 1;
+    if (placed.has(t.id)) onPlan += 1;
     else if (t.partOf !== null ? anyPartPlaced(t.partOf) : !anyPartPlaced(t.id)) spare += 1;
   }
   return { onPlan, spare };
