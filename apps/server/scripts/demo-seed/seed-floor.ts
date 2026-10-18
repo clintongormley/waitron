@@ -6,7 +6,6 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   categories,
   diningTables,
-  floorPlanSets,
   kitchenStations,
   tableServiceStatuses,
   type Transaction,
@@ -15,7 +14,7 @@ import {
   createServiceZone,
   departmentSalePolicies,
   departments,
-  linkFloorPlanSet,
+  createFloorPlanSet,
   menuPeriods,
   saveMenuPeriod,
   updateMenuPeriod,
@@ -26,6 +25,7 @@ import {
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { CountryDemoIdentity } from "@waitron/country";
 import { saveLayout } from "../../src/floor-plan.js";
+import { floorPlanSetsFor } from "../../src/floor-plan-sets.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import type { DemoDataSet } from "./data-set.js";
@@ -257,12 +257,10 @@ export async function seedFloor(
   const setName = locale === "es" ? "Estándar" : "Standard";
   const setOf = new Map<string, string>();
   for (const departmentId of [defaultPolicy.department_id, deliDepartmentId]) {
-    const [set] = await tx
-      .insert(floorPlanSets)
-      .values({ locationId })
-      .returning({ id: floorPlanSets.id });
-    await linkFloorPlanSet(tx, cfg, { setId: set!.id, departmentId, name: setName });
-    setOf.set(departmentId, set!.id);
+    setOf.set(
+      departmentId,
+      await createFloorPlanSet(tx, cfg, floorPlanSetsFor(cfg), { departmentId, name: setName }),
+    );
   }
   for (const [zoneKey, zoneId] of zoneIds) {
     const layout = { setId: setOf.get(defaultPolicy.department_id)!, zoneId };
