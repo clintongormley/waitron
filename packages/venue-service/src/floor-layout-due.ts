@@ -191,8 +191,8 @@ export async function dueFloorLayouts(
   return result;
 }
 
-/** Each department's painted day, keep open and runs on `moment`'s business day, read in one
- *  statement per table whatever the number of departments. */
+/** Each department's painted day, keep open and runs on `moment`'s business day, read with a
+ *  number of statements independent of how many departments there are. */
 async function dueDays(
   tx: Transaction,
   cfg: { locationId: LocationId },

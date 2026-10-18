@@ -195,6 +195,57 @@ describe("which floor layout is due", () => {
     });
   });
 
+  it("gives each department its own day and keep open", async () => {
+    const f = await fixture();
+    const bar = await run(async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Bar menu" });
+      const period = async (name: string) =>
+        (await saveMenuPeriod(tx, f.cfg, f.bar, { name, menuId: menu.id, staffMenuIds: [] }, 0)).id;
+      const morning = await period("Morning");
+      const evening = await period("Evening");
+      await replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.bar,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [
+            { periodId: morning, startsAt: "09:00", endsAt: "13:00" },
+            { periodId: evening, startsAt: "17:00", endsAt: "23:00" },
+          ],
+        })),
+        at("08:00"),
+        0,
+      );
+      const standard = await newSet(tx, f.cfg, f.bar, "Standard");
+      const late = await newSet(tx, f.cfg, f.bar, "Late");
+      await tx.update(menuPeriods).set({ floorPlanSetId: late }).where(eq(menuPeriods.id, evening));
+      await tx.insert(periodExtensions).values({
+        departmentId: f.restaurant,
+        businessDay: FRIDAY,
+        periodId: f.lunch,
+        startsAt: "15:00:00",
+        endsAt: "21:00:00",
+      });
+      return { standard, late, evening };
+    });
+
+    const layouts = await due(f, [f.zones.dining, f.zones.counter], at("16:00"));
+
+    expect(layouts.get(f.zones.dining)).toEqual({
+      setId: f.standard,
+      setName: "Standard",
+      occurrence: key(f.restaurant, FRIDAY, f.lunch, "12:00"),
+      periodName: "Lunch",
+    });
+    expect(layouts.get(f.zones.counter)).toEqual({
+      setId: bar.late,
+      setName: "Late",
+      occurrence: key(f.bar, FRIDAY, bar.evening, "17:00"),
+      periodName: "Evening",
+    });
+  });
+
   it("follows a changed default", async () => {
     const f = await fixture();
     await run(async (tx) => {
