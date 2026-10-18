@@ -516,8 +516,16 @@ export class SetupApi {
     });
   }
 
-  startAgainFirstSetup(snapshot: FirstSetupResolutionSnapshot): Promise<{ restarting: true }> {
-    return this.#request("/setup-api/first-setup/resolution/start-again", "POST", snapshot);
+  startAgainFirstSetup(
+    snapshot: FirstSetupResolutionSnapshot,
+    owner?: FirstSetupOwner,
+  ): Promise<{ restarting: true }> {
+    return this.#request(
+      "/setup-api/first-setup/resolution/start-again",
+      "POST",
+      snapshot,
+      owner === undefined ? undefined : firstSetupHeaders(owner),
+    );
   }
 
   finishFirstSetup(

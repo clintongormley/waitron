@@ -514,6 +514,44 @@ export class FirstSetupSession {
       return result;
     });
   }
+  retireMissingDatabase() {
+    return this.#run(async (current) => {
+      if (this.recoveryRequired) failure("setup.owner_required");
+      const owner = this.#owner(false);
+      if (
+        !this.#state ||
+        !["claimed", "consumption-intent", "abandoned"].includes(this.#state.status)
+      )
+        failure("setup.attempt_conflict");
+      try {
+        const inspection = await this.#api.inspectFirstSetupResolution();
+        current();
+        if (
+          inspection.pair !== "valid" ||
+          inspection.database !== "missing" ||
+          inspection.password !== "checkable" ||
+          !/^[a-f0-9]{64}$/.test(inspection.inspectionId) ||
+          inspection.revision !== owner.revision ||
+          inspection.ownerGeneration !== owner.ownerGeneration
+        )
+          failure("setup.attempt_conflict");
+        const result = await this.#api.startAgainFirstSetup(
+          {
+            inspectionId: inspection.inspectionId,
+            revision: owner.revision,
+            ownerGeneration: owner.ownerGeneration,
+          },
+          owner,
+        );
+        current();
+        if (result.restarting !== true) failure("setup.attempt_conflict");
+        return result;
+      } finally {
+        this.#proofRequired = true;
+        this.#needsRefresh = true;
+      }
+    });
+  }
   runEmailTest(email: EmailSettingsDraft) {
     return this.#run(async (current) => {
       const result = await this.#api.runFirstSetupEmailTest(this.#owner(), email);

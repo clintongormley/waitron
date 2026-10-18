@@ -7,6 +7,8 @@ export const initialOwnerStrings = {
     required: "Enter your password.",
     resumeHelp: "Enter the administrator password you chose during setup.",
     interrupted: "First setup was interrupted",
+    missingDatabase:
+      "The setup database is missing. Check your backups before starting again. Missing data cannot be recovered by starting again.",
     uncheckable: "This box cannot check the original setup password. Keep its files for recovery.",
     finish: "Finish setup",
     finishReview: "Check the saved details.",
@@ -39,6 +41,8 @@ export const initialOwnerStrings = {
     required: "Introduce tu contraseña.",
     resumeHelp: "Introduce la contraseña de administrador que elegiste al configurar.",
     interrupted: "La configuración inicial se interrumpió",
+    missingDatabase:
+      "Falta la base de datos de configuración. Revisa tus copias antes de empezar de nuevo. Empezar de nuevo no recupera los datos perdidos.",
     uncheckable:
       "Este equipo no puede comprobar la contraseña original. Conserva sus archivos para recuperarlo.",
     finish: "Finalizar configuración",

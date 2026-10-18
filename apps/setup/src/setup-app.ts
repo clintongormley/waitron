@@ -1123,18 +1123,24 @@ export class SetupApp extends LitElement {
     try {
       const session = await this.#openFirstSession();
       if (!current()) return;
+      if (session.state) {
+        const inspection = await this.api.inspectFirstSetupResolution();
+        if (!current()) return;
+        this.firstInspection = inspection;
+      }
       if (
-        session.state &&
+        !session.state ||
+        this.firstInspection?.database === "missing" ||
         ["activation-started", "committed", "publication"].includes(session.state.status)
       ) {
-        this.firstInspection = await this.api.inspectFirstSetupResolution();
-        if (!current()) return;
         await session.recover(this.#firstResolutionSnapshot(), password);
-      } else if (!session.state) await session.recover(this.#firstResolutionSnapshot(), password);
-      else await session.resume(password);
+      } else await session.resume(password);
       if (!current()) return;
       this.#acceptFirstIdentity();
-      if (!["claimed", "consumption-intent"].includes(session.state!.status)) {
+      if (
+        this.firstInspection?.database === "missing" ||
+        !["claimed", "consumption-intent"].includes(session.state!.status)
+      ) {
         this.screen = "first-owner";
         return;
       }
@@ -1165,14 +1171,20 @@ export class SetupApp extends LitElement {
     };
   }
   async #startAgainFirstSetup(): Promise<void> {
-    if (this.firstOwnerBusy || !this.firstRetireConfirmed || !this.firstInspection?.emptyDatabase)
+    const missing = this.firstInspection?.database === "missing";
+    if (
+      this.firstOwnerBusy ||
+      !this.firstRetireConfirmed ||
+      (!missing && !this.firstInspection?.emptyDatabase)
+    )
       return;
     const generation = ++this.#firstGeneration;
     const current = () => this.isConnected && generation === this.#firstGeneration;
     this.firstOwnerBusy = true;
     this.firstOwnerError = undefined;
     try {
-      await this.api.startAgainFirstSetup(this.#firstResolutionSnapshot());
+      if (missing) await this.#firstSession!.retireMissingDatabase();
+      else await this.api.startAgainFirstSetup(this.#firstResolutionSnapshot());
       if (!current()) return;
       this.firstRestarting = true;
       this.firstOwnerPassword = "";
@@ -1180,7 +1192,13 @@ export class SetupApp extends LitElement {
       await this.#firstSession?.dispose();
       this.#firstSession = undefined;
     } catch (error) {
-      if (current()) this.firstOwnerError = this.#describeFirstError(error);
+      if (current()) {
+        if (missing) {
+          this.firstRestartConfirm = false;
+          this.firstRetireConfirmed = false;
+        }
+        this.firstOwnerError = this.#describeFirstError(error);
+      }
     } finally {
       if (current()) this.firstOwnerBusy = false;
     }
@@ -1989,12 +2007,20 @@ export class SetupApp extends LitElement {
   #renderFirstOwner(): TemplateResult {
     const t = initialOwnerStrings[setupLocale()];
     const state = this.#firstSession?.state;
-    const inspection = state ? undefined : this.firstInspection;
+    const missing = this.firstInspection?.database === "missing";
+    const inspection = !state || missing ? this.firstInspection : undefined;
+    const authenticatedMissing =
+      missing &&
+      state !== undefined &&
+      !this.#firstSession?.recoveryRequired &&
+      ["claimed", "consumption-intent", "abandoned"].includes(state.status);
     const canRestart =
-      inspection?.emptyDatabase === true &&
-      inspection.password === "checkable" &&
-      inspection.revision !== null &&
-      inspection.ownerGeneration !== null;
+      authenticatedMissing ||
+      (inspection?.emptyDatabase === true &&
+        state === undefined &&
+        inspection.password === "checkable" &&
+        inspection.revision !== null &&
+        inspection.ownerGeneration !== null);
     if (!this.#firstPasswordScope && this.isConnected) {
       this.#firstPasswordScope = draftScopeFor(this, {
         id: this.#firstPasswordOwner,
@@ -2018,9 +2044,10 @@ export class SetupApp extends LitElement {
       <h1>${inspection ? t.interrupted : t.heading}</h1>
       ${this.firstRestarting ? html`<p role="status">${t.restarting}</p>` : nothing}
       ${inspection?.password === "uncheckable" ? html`<p>${t.uncheckable}</p>` : nothing}
+      ${missing ? html`<p data-test="missing-database">${t.missingDatabase}</p>` : nothing}
       ${this.firstOwnerBusy ? html`<p role="status">${t.waiting}</p>` : nothing}
       ${
-        (!terminal || this.#firstSession?.recoveryRequired) &&
+        ((!terminal && !authenticatedMissing) || this.#firstSession?.recoveryRequired) &&
         !this.firstOwnerBusy &&
         !this.firstRestarting &&
         (state !== undefined || inspection?.password === "checkable")
@@ -2109,10 +2136,11 @@ export class SetupApp extends LitElement {
           : nothing
       }
       ${state?.status === "abandoned" ? html`<p>${t.retired}</p>` : nothing}
-      ${state?.consumptionIntent && terminal && state.status !== "complete" ? html`<p>${t.consumed}</p>` : nothing}
-      ${state?.status === "complete" ? html`<p>${t.complete}</p>` : nothing}
+      ${!missing && state?.consumptionIntent && terminal && state.status !== "complete" ? html`<p>${t.consumed}</p>` : nothing}
+      ${!missing && state?.status === "complete" ? html`<p>${t.complete}</p>` : nothing}
       ${
         state &&
+        !missing &&
         ["activation-started", "committed", "publication"].includes(state.status) &&
         !this.#firstSession?.recoveryRequired
           ? html`<p>${t.finishHelp}</p>
@@ -2130,8 +2158,8 @@ export class SetupApp extends LitElement {
           ? html`<wt-form-actions .error=${this.firstOwnerError?.() ?? t.error}></wt-form-actions>`
           : nothing
       }
-      ${state?.status === "abandoned" && !state.consumptionIntent ? html`<wt-button data-test="replace-attempt" @click=${() => this.#replaceFirstSetup()}>${t.replace}</wt-button>` : nothing}
-      ${state && !terminal ? html`<wt-button data-test="abandon-attempt" variant="ghost" ?disabled=${this.firstOwnerBusy} @click=${() => void this.#abandonFirstSetup()}>${t.abandon}</wt-button>` : nothing}
+      ${!missing && state?.status === "abandoned" && !state.consumptionIntent ? html`<wt-button data-test="replace-attempt" @click=${() => this.#replaceFirstSetup()}>${t.replace}</wt-button>` : nothing}
+      ${!missing && state && !terminal ? html`<wt-button data-test="abandon-attempt" variant="ghost" ?disabled=${this.firstOwnerBusy} @click=${() => void this.#abandonFirstSetup()}>${t.abandon}</wt-button>` : nothing}
       <wt-button
         data-test="reconnect-first"
         variant="secondary"

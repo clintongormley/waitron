@@ -338,8 +338,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   abandoned or partly activated attempts stay on the recovery page. The Finish interface now
   re-enters the original certificate and email settings through the dedicated resolution route.
   Mounted-browser checks and the existing real HTTPS route suites run separately; the complete
-  installed browser-to-server journey remains open. Password-led retirement with a missing
-  database and interrupted workspace selection still need their UI journeys.
+  installed browser-to-server journey remains open. Missing-database repair now keeps the wizard
+  on its repair page after password recovery. Confirmed retirement checks fresh evidence and sends
+  recovered ownership; a refused or lost answer requires password recovery again. Mounted browser
+  checks and the existing HTTPS retirement suites run separately. Interrupted workspace selection
+  still needs its UI journey.
   The exact approved standby wrapper and hour-admission dispatch are implemented. Real-database
   checks refuse the original box's same-hour code and accept the next hour without an advance
   reservation. The branch prints the selected code in first setup and accepts reported codes

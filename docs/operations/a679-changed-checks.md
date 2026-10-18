@@ -1798,3 +1798,57 @@ not import Pillow; the retained final images use the repository's installed Shar
 fixture initially accessed a private draft property; it now sends the existing patch event.
 The long review captures use a 2,200-pixel viewport height so the phone-width footer is visible;
 the other states use 1,200. These remain mounted-source views, not installed-server acceptance.
+
+## Password-led missing-database repair, 2026-10-18
+
+If the retained setup database is missing, password recovery keeps you on repair rather than
+continuing to certificates or offering Finish. For a claimed, consumption-intent or abandoned
+attempt, you can confirm Start again. The session reads fresh missing-database evidence, binds
+it to the recovered revision and owner generation, and sends the recovered capability through
+the existing HTTPS retirement route. A refused or incomplete answer requires password recovery
+again, including after a status refresh. Later activation states remain on repair. No fiscal
+writer, server handler, database schema, migration or guard changes in this checkpoint.
+
+Authority: hour-code plan Task 9 and its retained guided-repair Task 5 boundary. The backend
+continues to own retirement, preservation and workspace creation. The browser does not treat a
+missing database as proof of an empty setup. The complete installed browser-to-server journey,
+interrupted workspace selection and every earlier whole-branch delivery gate remain open.
+
+Changed existing test checks: **none**. All 3,020 starting test paths are byte-identical to
+`f6ed577ae7f2cdde59ba895eba6250bba7e090fb`; all fiscal, server and root-guard source paths also
+match that checkpoint. Preserve every earlier inventory for the eventual sole PR.
+
+New checks:
+
+- `apps/setup/src/setup-app-missing-database.test.ts` exercises actual password, confirmation and
+  cancel controls, both tab entry paths, owner headers, refused/late answers and terminal states.
+- `apps/setup/src/first-setup-retirement.test.ts` refuses changed classifications, snapshots,
+  unchecked passwords, incomplete answers, reused proof after refresh and disposed sessions.
+- `apps/setup/src/setup-app-missing-database.a11y.test.ts` covers password, recovered, confirmation
+  and refusal states in EN/ES, both themes and 390/1280 widths, with native focus and axe checks.
+  Its shared browser fixture lives in `apps/setup/test/missing-database-browser.ts`.
+
+Observed verification: complete setup suite, 97 files and 1,822 cases; coverage 98.08% statements,
+96.03% branches, 99.22% functions and 99.50% lines. The existing two HTTPS retirement/Finish
+suites pass 33 cases, the unchanged fiscal golden/immutability pair passes 20 and two selected
+root suites pass 3,154. Setup types, scoped lint, formatting, whitespace and its browser build
+pass. The build's chunk-size warning is retained. The 32 mounted views were inspected; their
+HTTP responses are synthetic, separate from the real HTTPS suites.
+
+The separately frozen-installed candidate passes the 32 new behavioral cases before and after
+eight independent omissions. Each omission fails an intended assertion: late password inspection,
+wizard missing-database routing, owner transport, snapshot revision, missing classification,
+password proof after refresh, late session inspection and late retirement answer.
+Its final three-file run also passes all 64 behavioral and accessibility cases.
+
+Qualifications: the initial empty-database retry regression was caught by the unchanged existing
+test and fixed in the implementation. The newly extracted fixture initially lost its custom-element
+side-effect import; that all-failure run is not feature evidence. After the import was restored,
+the missing-database completion wording and late password-inspection cases failed for their intended
+reasons before their fixes. The initial contact-sheet imports could not resolve Sharp; the final
+sheet uses the server package's resolved entry. The first coverage command wrote the package's
+default directory; the final explicit command writes to the external receipt directory. No bar,
+exclusion, assertion or fixture value was weakened.
+
+Local receipts: `~/waitron-campaign-e/receipts/a679-missing-database-ui-20261018/`, including
+`verification.json`, `controls-final.json`, raw logs, test-preservation audit and the 32 captures.
