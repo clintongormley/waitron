@@ -5,7 +5,7 @@ import {
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
-import { captureError, withTransaction, type Transaction } from "@waitron/db";
+import { captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -201,6 +201,17 @@ describe("installCertificate's local refusals", () => {
     });
   }
 
+  it("does not refuse a file of exactly the size limit as too_large", async () => {
+    const v = await venue();
+    const server = await serve();
+    const file = { pfx: randomBytes(100 * 1024), passphrase: "cert-pass-9" };
+    await expect(installCertificate(depsFor(v, server), bodyFor(v, file), NOW)).resolves.toEqual({
+      outcome: "refused",
+      reason: "unreadable",
+      field: "file",
+    });
+  });
+
   it("refuses as expired at the exact end instant", async () => {
     const v = await venue();
     const server = await serve();
@@ -277,6 +288,22 @@ describe("installCertificate's live check", () => {
       taxId: null,
       organisation: null,
     });
+  });
+
+  it("answers unreachable when AEAT does not answer within checkTimeoutMs", async () => {
+    const v = await venue();
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => (release = resolve));
+    const server = await serve({ status: 200, body: SIN_DATOS_BODY, hold });
+    const before = await state();
+    try {
+      await expect(
+        installCertificate(depsFor(v, server, { checkTimeoutMs: 50 }), bodyFor(v, candidate), NOW),
+      ).resolves.toEqual({ outcome: "refused", reason: "unreachable" });
+      expect(await state()).toEqual(before);
+    } finally {
+      release();
+    }
   });
 
   it("passes a closed connection through with no field", async () => {
@@ -399,6 +426,7 @@ describe("installCertificate's write", () => {
   it("refuses fiscal.certificate_changed when the card read no entry and one now exists", async () => {
     const v = await venue();
     const server = await serve();
+    const before = await state();
     const error = await captureError(() =>
       installCertificate(
         depsFor(v, server),
@@ -407,16 +435,15 @@ describe("installCertificate's write", () => {
       ),
     );
     expect(error).toMatchObject({ code: "fiscal.certificate_changed" });
+    expect(await state()).toEqual(before);
   });
 
   it("re-authorises inside the final write", async () => {
     const v = await venue();
     const server = await serve();
     const before = await state();
-    const seen: Transaction[] = [];
     let calls = 0;
-    const authorize = async (tx: Transaction) => {
-      seen.push(tx);
+    const authorize = async () => {
       calls += 1;
       if (calls === 1) return { personId: "p-1" };
       throw notPermitted();

@@ -104,7 +104,7 @@ type Local = { ok: true; details: CertificateDetails } | { ok: false; answer: In
 
 function refused(
   reason: RefusalReason,
-  field?: "file" | "passphrase",
+  field: "file" | "passphrase",
   details?: Record<string, string | number>,
 ): { ok: false; answer: InstallAnswer } {
   return {
@@ -112,7 +112,7 @@ function refused(
     answer: {
       outcome: "refused",
       reason,
-      ...(field === undefined ? {} : { field }),
+      field,
       ...(details === undefined ? {} : { details }),
     },
   };
