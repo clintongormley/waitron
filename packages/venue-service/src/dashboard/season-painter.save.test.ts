@@ -667,6 +667,43 @@ it("a paint made while a save is in flight is kept, and is still unsaved once th
   expect(frame(painter).dirty).toBe(false);
 });
 
+it("a save sends season-week-saved, clean unless painted during the save", async () => {
+  let succeed!: () => void;
+  const late = new Promise<void>((resolve) => {
+    succeed = resolve;
+  });
+  const { painter, writes } = await mount(withBar(), [late]);
+  const saved: { clean: boolean }[] = [];
+  const seen = { bubbles: false, composed: false };
+  painter.addEventListener("season-week-saved", (event) => {
+    seen.bubbles = event.bubbles;
+    seen.composed = event.composed;
+    saved.push((event as CustomEvent<{ clean: boolean }>).detail);
+  });
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  saveButton(painter).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(saved).toEqual([]);
+  await drag(painter, "4", 7 * 60, 9 * 60);
+  succeed();
+  await expect.poll(() => saved).toEqual([{ clean: false }]);
+  expect(seen).toEqual({ bubbles: true, composed: true });
+  await expect.poll(() => frame(painter).busy).toBe(false);
+  await save(painter, writes);
+  expect(saved).toEqual([{ clean: false }, { clean: true }]);
+});
+
+it("a refused save sends no season-week-saved", async () => {
+  const { painter, writes } = await mount(withBar(), [
+    { code: "season.not_found", params: { seasonId: "winter" } },
+  ]);
+  const saved: unknown[] = [];
+  painter.addEventListener("season-week-saved", (event) => saved.push(event));
+  await drag(painter, "3", 7 * 60, 9 * 60);
+  await save(painter, writes);
+  expect(saved).toEqual([]);
+});
+
 it("Save writes the season being painted, not the venue's current season", async () => {
   const { painter, writes, navigations } = await mount();
   button(painter, "next-season").click();

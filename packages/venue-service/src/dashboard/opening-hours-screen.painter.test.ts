@@ -427,6 +427,109 @@ describe("links into the painter", () => {
   });
 });
 
+describe("Save closes the season painter", () => {
+  const saveButton = (painter: SeasonPainter) =>
+    frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!;
+  async function openFromChip(el: Screen) {
+    const chip = await expect
+      .poll(() =>
+        el
+          .shadowRoot!.querySelector("opening-hours-year")
+          ?.shadowRoot?.querySelector("season-chips")
+          ?.shadowRoot?.querySelector<HTMLElement>("[data-season=spring] [data-test=season-week]"),
+      )
+      .toBeTruthy()
+      .then(() =>
+        el
+          .shadowRoot!.querySelector("opening-hours-year")!
+          .shadowRoot!.querySelector("season-chips")!
+          .shadowRoot!.querySelector<HTMLElement>("[data-season=spring] [data-test=season-week]")!,
+      );
+    chip.click();
+    return shownPainter(el);
+  }
+
+  it("Save closes the painter and returns to the view it opened over", async () => {
+    const writes: unknown[] = [];
+    const el = await mount("/manage/opening-hours/view/year/year/2027", () => withBar(), writes);
+    const painter = await openFromChip(el);
+    const back = vi.spyOn(history, "back");
+    await drag(painter, "3", 7 * 60, 9 * 60);
+    saveButton(painter).click();
+    await expect.poll(() => painterOf(el)).toBeNull();
+    expect(writes.filter((write) => (write as unknown[])[1] === "PUT")).toHaveLength(1);
+    expect(back).toHaveBeenCalledTimes(1);
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+    expect(drawnView(el)).toBe("year");
+    expect(el.shadowRoot!.querySelector("opening-hours-year")!.year).toBe(2027);
+  });
+
+  it("Save on a painter loaded directly closes onto the Year by replacement", async () => {
+    const el = await mount("/manage/opening-hours/view/season/season/winter/department/d1");
+    const painter = await shownPainter(el);
+    const pushed = pushedPaths();
+    const replaced = vi.spyOn(history, "replaceState");
+    const back = vi.spyOn(history, "back");
+    await drag(painter, "3", 7 * 60, 9 * 60);
+    saveButton(painter).click();
+    await expect.poll(() => painterOf(el)).toBeNull();
+    expect(location.pathname).toBe("/manage/opening-hours/view/year");
+    expect(
+      replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
+    ).toContain("/manage/opening-hours/view/year");
+    expect(pushed()).toEqual([]);
+    expect(back).not.toHaveBeenCalled();
+    expect(drawnView(el)).toBe("year");
+  });
+
+  it("a refused Save keeps the painter open with its message beside Save", async () => {
+    const el = await mount("/manage/opening-hours/view/year/year/2027");
+    const painter = await openFromChip(el);
+    vi.spyOn(el.api, "saveSeasonWeeks").mockRejectedValueOnce({
+      code: "season.not_found",
+      params: { seasonId: "spring" },
+    });
+    const back = vi.spyOn(history, "back");
+    await drag(painter, "3", 7 * 60, 9 * 60);
+    saveButton(painter).click();
+    await expect.poll(() => frame(painter).refusal).toBe("This could not be saved. Try again.");
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await settle(painter);
+    expect(painterOf(el)).toBe(painter);
+    expect(frame(painter).dirty).toBe(true);
+    expect(back).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+  });
+
+  it("a paint made while the save is in flight keeps the painter open, unsaved", async () => {
+    const el = await mount("/manage/opening-hours/view/year/year/2027");
+    const painter = await openFromChip(el);
+    let succeed!: () => void;
+    const save = vi.spyOn(el.api, "saveSeasonWeeks").mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          succeed = resolve;
+        }),
+    );
+    const back = vi.spyOn(history, "back");
+    await drag(painter, "3", 7 * 60, 9 * 60);
+    saveButton(painter).click();
+    await expect.poll(() => save.mock.calls.length).toBe(1);
+    await drag(painter, "4", 7 * 60, 9 * 60);
+    succeed();
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await settle(painter);
+    expect(painterOf(el)).toBe(painter);
+    expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+    expect(frame(painter).dirty).toBe(true);
+    expect(grid(painter).days.get("4")).toEqual([
+      { periodId: "p1", startsAt: "13:00", endsAt: "15:00" },
+    ]);
+    expect(back).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/manage/opening-hours/view/season/season/spring/department/d1");
+  });
+});
+
 describe("leaving a painter with edits", () => {
   it("the Periods link opens the window over a painter with paint, asking nothing, and closing it returns to the same paint", async () => {
     const base = "/manage/opening-hours/view/season/season/winter/department/d1";

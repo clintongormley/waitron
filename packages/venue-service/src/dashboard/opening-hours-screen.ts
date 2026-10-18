@@ -1086,6 +1086,10 @@ export class OpeningHoursScreen extends LitElement {
         event.stopPropagation();
         if (this.currentPainter(event)) this.closePainter();
       }}
+      @season-week-saved=${(event: CustomEvent<{ clean: boolean }>) => {
+        event.stopPropagation();
+        if (this.currentPainter(event) && event.detail.clean) this.closePainter();
+      }}
     ></season-painter>`;
   }
   private specialPainter() {

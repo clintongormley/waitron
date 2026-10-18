@@ -524,6 +524,13 @@ export class SeasonPainter extends LitElement {
       sent: new Map([...(this.confirming?.sent ?? []), ...sent]),
       barrier: this.api.rereadWatches(),
     };
+    this.dispatchEvent(
+      new CustomEvent<{ clean: boolean }>("season-week-saved", {
+        detail: { clean: !this.scope?.isDirty() },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
   /** A refusal naming `departments.<i>` or `zones.<i>` shows that week, marking the day it names. */
   private refuse(error: unknown, departments: string[], zones: string[]) {
