@@ -1,3 +1,5 @@
+import { escapeHtml } from "./recovery-surface.js";
+
 export interface GuideSection {
   id: string;
   heading: string;
@@ -46,32 +48,6 @@ function fail(line: number, what: string): never {
 
 function shown(text: string): string {
   return JSON.stringify(text.length > 60 ? `${text.slice(0, 60)}…` : text);
-}
-
-function escapeHtml(text: string): string {
-  let out = "";
-  for (const character of text) {
-    switch (character) {
-      case "&":
-        out += "&amp;";
-        break;
-      case "<":
-        out += "&lt;";
-        break;
-      case ">":
-        out += "&gt;";
-        break;
-      case '"':
-        out += "&quot;";
-        break;
-      case "'":
-        out += "&#39;";
-        break;
-      default:
-        out += character;
-    }
-  }
-  return out;
 }
 
 function failAt(context: InlineContext, offset: number, what: string): never {
