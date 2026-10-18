@@ -2604,6 +2604,32 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (`floor_plan_placements_table_key`), so a save overwrites the place before it. Spec §11 names
   it as a gap. Left open by A504.
 
+- **A879. After Leave it here, bookings and the dashboard's table list still follow the last
+  reset's copy, not today's map (2026-10-18).** Where the new layout joins 4 and 5, the dashboard
+  list leaves out 4 and 5 and lists the off-map 4+5, and a booking today at 4 is refused
+  `table.in_joined_table`, until the next reset. It was already so while they needed moving.
+  Left open by A878.
+  [Detail](backlog/till.md#a879-after-leave-it-here-bookings-and-the-dashboards-table-list-still-follow-the-last-resets-copy)
+
+- **A880. Two tables pressed on the till's floor list at once: the second can be refused as out of
+  date (2026-10-18).** Leave it here or Mark moved on one table, then on another before the first
+  is answered, sends the same room revision twice, so the second can come back
+  `floor_today.out_of_date`. Found by reading `#sendTodayAction`
+  (`apps/till/src/screens/till-floor-screen.ts`); A878's finish-branch review reproduced it (a
+  browser probe sent `t3` and `t4` with revision 6, and the server answered 200, then 409
+  `floor_today.out_of_date`). Left open by A878.
+
+- **A881. A till's refusal line vanished after the person's language was changed on another till
+  (2026-10-18).** Seen in A878's scripted screenshot runs; whether the language change or something
+  else in the same 20 seconds cleared it was not isolated. Next: reproduce, then decide whether a
+  refusal should outlive it. Left open by A878.
+
+- **A883. Back to its saved place's `table.place_taken` refusal does not name the tables
+  (2026-10-18).** The till shows the code's own words ("Another table is in its place. Move it,
+  then try again"), while Reset table's refusal under the same code names both
+  (`#namedRefusal`). A sentence naming both tables needs new words in English and Spanish from the
+  owner. Left open by A878.
+
 - **A859. Floor plans and the till's layout banner: looks left to the owner (2026-10-18).** A504's
   look passes kept five things as built, as judgement calls.
   Left open by A504.

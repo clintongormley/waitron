@@ -4193,6 +4193,12 @@ export class TillApi {
     return this.#todayChange(tableId, "mark-moved", {}, zoneRevision);
   }
 
+  /** Keep a table that needs moving where it stands until the next reset →
+   * `POST /api/tables/:id/today/leave-here`. */
+  leaveHereToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "leave-here", {}, zoneRevision);
+  }
+
   /** Merge two free tables, `tableId` moving against `targetId` → `POST /api/tables/:id/today/merge`.
    * `seats` is left out when unset: the server refuses a null. */
   mergeToday(

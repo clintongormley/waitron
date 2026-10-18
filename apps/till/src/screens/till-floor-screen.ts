@@ -120,6 +120,7 @@ const WAITING = {
 } as const satisfies Record<string, Record<string, StringKey>>;
 
 type Waiting = keyof typeof WAITING;
+type TodayAction = "leave-here" | "mark-moved";
 
 function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
@@ -250,6 +251,10 @@ export class TillFloorScreen extends LitElement {
         .screen {
           padding-inline: 0;
         }
+      }
+
+      [data-leave-here-offer] {
+        align-self: flex-start;
       }
 
       .head {
@@ -636,6 +641,10 @@ export class TillFloorScreen extends LitElement {
   @state() private details: { tableId: string } | null = null;
   /** The floor's last refusal, in its code's words. */
   @state() private refusal: string | null = null;
+  /** Drawn only while `refusal` still reads `message` and the table still needs moving. */
+  @state() private leaveOffer: { tableId: string; message: string } | null = null;
+  /** A table's Leave it here or Mark moved being sent; any other press for it is ignored meanwhile. */
+  @state() private sendingToday: ReadonlyMap<string, TodayAction> = new Map();
   /** A merge's seats, or Change seats, waiting for the seats prompt. */
   @state() private askingSeats: {
     heading: string;
@@ -774,8 +783,8 @@ export class TillFloorScreen extends LitElement {
 
   /**
    * A seated table resumes; a table needing clearing offers Mark cleared, and one needing moving
-   * Mark moved; a free one asks for guests, headed and seated beside the other tables `seat` names
-   * when a drop gives them.
+   * Leave it here and Mark moved; a free one asks for guests, headed and seated beside the other
+   * tables `seat` names when a drop gives them.
    */
   #openTable(
     table: TableState,
@@ -929,13 +938,51 @@ export class TillFloorScreen extends LitElement {
   }
 
   #markMoved(table: TableState): void {
+    this.#sendTodayAction(table, "mark-moved", (api, sent) => api.markMovedToday(table.id, sent), {
+      offersLeaveHere: true,
+    });
+  }
+
+  #leaveHere(table: TableState): void {
+    this.leaveOffer = null;
+    this.#sendTodayAction(table, "leave-here", (api, sent) => api.leaveHereToday(table.id, sent));
+  }
+
+  #sendTodayAction(
+    table: TableState,
+    action: TodayAction,
+    call: (api: TillApi, revision: number) => Promise<FloorAnswer>,
+    { offersLeaveHere = false }: { offersLeaveHere?: boolean } = {},
+  ): void {
     this.moving = null;
     const api = this.api;
     if (api === undefined || !this.tables.some((current) => current.id === table.id)) return;
+    if (this.sendingToday.has(table.id)) return;
     this.refusal = null;
+    this.sendingToday = new Map(this.sendingToday).set(table.id, action);
     void this.#settle(
-      this.#send(this.#revision(table.zoneId), (sent) => api.markMovedToday(table.id, sent)),
-    );
+      this.#send(this.#revision(table.zoneId), (sent) => call(api, sent)),
+      offersLeaveHere ? { written: { tableId: table.id } } : {},
+    ).finally(() => {
+      const sending = new Map(this.sendingToday);
+      sending.delete(table.id);
+      this.sendingToday = sending;
+    });
+  }
+
+  #leaveHereOffer(): TemplateResult | typeof nothing {
+    const offer = this.leaveOffer;
+    if (offer === null || offer.message !== this.refusal || !this.canChangeToday) return nothing;
+    const table = this.#zone.visible.find((each) => each.id === offer.tableId);
+    if (table === undefined || !needsMovingToday(table)) return nothing;
+    return html`<wt-button
+      data-leave-here-offer
+      size="sm"
+      variant="secondary"
+      @click=${() => this.#leaveHere(table)}
+    >
+      ${t("floor.leave_here")}
+    </wt-button>`;
   }
 
   #emit(type: string, detail: unknown): void {
@@ -1100,7 +1147,10 @@ export class TillFloorScreen extends LitElement {
         this.renaming = this.#renameOpening(table);
         return;
       case "back":
-        send((sent) => api.backToSavedToday(table.id, sent));
+        void this.#settle(
+          this.#send(revision, (sent) => api.backToSavedToday(table.id, sent)),
+          { written: { tableId: table.id, back: true } },
+        );
         return;
       case "take-off":
         send((sent) => api.takeOffToday(table.id, sent));
@@ -1198,15 +1248,17 @@ export class TillFloorScreen extends LitElement {
             const revision = answer.zoneRevisions?.[room.zoneId];
             return revision === undefined ? null : { zoneId: room.zoneId, revision };
           });
-    await this.#settle(call, (refused) => {
-      if (merge === null || seats !== undefined || !asksSeats(refused)) return false;
-      this.askingSeats = {
-        heading: action.heading,
-        seats: this.#joinSeats(merge.moving, merge.target),
-        action: "join",
-        resend: (chosen) => void this.#join(api, action, room, bills, chosen),
-      };
-      return true;
+    await this.#settle(call, {
+      asks: (refused) => {
+        if (merge === null || seats !== undefined || !asksSeats(refused)) return false;
+        this.askingSeats = {
+          heading: action.heading,
+          seats: this.#joinSeats(merge.moving, merge.target),
+          action: "join",
+          resend: (chosen) => void this.#join(api, action, room, bills, chosen),
+        };
+        return true;
+      },
     });
   }
 
@@ -1229,15 +1281,17 @@ export class TillFloorScreen extends LitElement {
           sent,
         ),
       ),
-      (refused) => {
-        if (seats !== undefined || !asksSeats(refused)) return false;
-        this.askingSeats = {
-          heading: action.heading,
-          seats: this.#joinSeats(action.tableId, action.targetId),
-          action: "join",
-          resend: (chosen) => void this.#merge(api, action, revision, chosen),
-        };
-        return true;
+      {
+        asks: (refused) => {
+          if (seats !== undefined || !asksSeats(refused)) return false;
+          this.askingSeats = {
+            heading: action.heading,
+            seats: this.#joinSeats(action.tableId, action.targetId),
+            action: "join",
+            resend: (chosen) => void this.#merge(api, action, revision, chosen),
+          };
+          return true;
+        },
       },
     );
   }
@@ -1253,15 +1307,30 @@ export class TillFloorScreen extends LitElement {
 
   async #settle(
     call: Promise<FloorAnswer | null>,
-    asks: (refused: { code?: string; field?: unknown }) => boolean = () => false,
-    refresh?: FloorRefreshDetail,
+    {
+      asks = () => false,
+      refresh,
+      written,
+    }: {
+      asks?: (refused: { code?: string; field?: unknown }) => boolean;
+      refresh?: FloorRefreshDetail;
+      written?: { tableId: string; back?: true };
+    } = {},
   ): Promise<void> {
     try {
       this.#carry(await call);
     } catch (cause) {
       const refused = (cause ?? {}) as Refused;
       if (asks(refused)) return;
-      this.refusal = this.#refusalText(refused);
+      const refusal =
+        written?.back === true && refused.code === "table.place_taken"
+          ? codeMessage("table.place_taken")
+          : this.#refusalText(refused);
+      this.refusal = refusal;
+      this.leaveOffer =
+        written !== undefined && refused.code === "table.new_place_taken"
+          ? { tableId: written.tableId, message: refusal }
+          : null;
       this.#setPending(null);
     }
     this.#requestFloorRefresh(refresh);
@@ -1754,7 +1823,7 @@ export class TillFloorScreen extends LitElement {
     this.refusal = null;
     const api = this.api;
     if (api === undefined) return;
-    void this.#settle(call(api, this.#revision(zoneId)), undefined, refresh);
+    void this.#settle(call(api, this.#revision(zoneId)), { refresh });
   }
 
   #requestFloorRefresh(detail?: FloorRefreshDetail): void {
@@ -1942,6 +2011,7 @@ export class TillFloorScreen extends LitElement {
                 </p>`
         }
         ${this.refusal === null ? nothing : html`<p data-floor-refusal role="status">${this.refusal}</p>`}
+        ${this.#leaveHereOffer()}
         ${(() => {
           const zone = this.zones.find((z) => z.id === activeKey);
           return zone?.closesAt
@@ -2081,11 +2151,23 @@ export class TillFloorScreen extends LitElement {
         slot="footer"
         ?data-clear-cancel=${clear}
         ?data-move-cancel=${!clear}
-        variant="secondary"
+        variant=${clear ? "secondary" : "ghost"}
         @click=${close}
       >
         ${t("action.cancel")}
       </wt-button>
+      ${
+        !clear && this.#actsOn(kind)
+          ? html`<wt-button
+              slot="footer"
+              data-leave-here
+              variant="secondary"
+              @click=${() => this.#leaveHere(table)}
+            >
+              ${t("floor.leave_here")}
+            </wt-button>`
+          : nothing
+      }
       ${
         this.#actsOn(kind)
           ? html`<wt-button
@@ -2102,16 +2184,30 @@ export class TillFloorScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  /** A card is one button, so a table needing clearing or moving, whose card holds its own Mark
-   * cleared or Mark moved, is a plain box instead. */
+  /** A card is one button, so a table needing clearing or moving is a plain box instead. */
   #waitingCard(table: TableState, kind: Waiting): TemplateResult {
     const words = WAITING[kind];
     const clear = kind === "clear";
+    const sending = this.sendingToday.get(table.id);
     return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
       <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
       <span class="occupancy" ?data-needs-clearing=${clear} ?data-needs-moving=${!clear}
         >${t(words.state)}</span
       >
+      ${
+        !clear && this.#actsOn(kind)
+          ? html`<wt-button
+              size="sm"
+              variant="secondary"
+              data-leave-here
+              .loading=${sending === "leave-here"}
+              .disabled=${sending !== undefined}
+              @click=${() => this.#leaveHere(table)}
+            >
+              ${t("floor.leave_here")}
+            </wt-button>`
+          : nothing
+      }
       ${
         this.#actsOn(kind)
           ? html`<wt-button
@@ -2119,6 +2215,8 @@ export class TillFloorScreen extends LitElement {
               variant="secondary"
               ?data-mark-cleared=${clear}
               ?data-mark-moved=${!clear}
+              .loading=${!clear && sending === "mark-moved"}
+              .disabled=${!clear && sending !== undefined}
               @click=${() => this.#markWaiting(kind, table)}
             >
               ${t(words.action)}
@@ -2128,7 +2226,6 @@ export class TillFloorScreen extends LitElement {
     </div>`;
   }
 
-  /** Mark moved changes today's plan, so it needs a device that may; Mark cleared does not. */
   #actsOn(kind: Waiting): boolean {
     return kind === "clear" || this.canChangeToday;
   }

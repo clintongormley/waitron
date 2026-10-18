@@ -382,7 +382,7 @@ declare module "@waitron/shared" {
     "table.split_off": { tableId: string };
     /** Taking a table off for today found an order with food on its way to it. */
     "table.delivery_pending": { tableId: string };
-    /** Reset table found `standingId` standing in the place joined table `tableId` would take. */
+    /** Reset table or Back to its saved place found `standingId` standing in the place `tableId` would take. */
     "table.place_taken": { tableId: string; standingId: string };
     /** Mark moved found `standingId`, a table that does not need moving, standing in a new place of `tableId`'s change. */
     "table.new_place_taken": { tableId: string; standingId: string };
@@ -393,7 +393,7 @@ declare module "@waitron/shared" {
     "table.needs_clearing": { tableId: string };
     /**
      * The table's reset row waits for Mark moved, so no party may be seated at it, moved to it or
-     * joined to it, and it may not be merged, until it is marked moved.
+     * joined to it, and it may not be merged.
      */
     "table.needs_moving": { tableId: string };
     /**

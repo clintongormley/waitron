@@ -892,6 +892,7 @@ export const en = {
   "floor.clear_body": "Mark it cleared once it is ready for the next party.",
   "floor.needs_moving": "Needs moving",
   "floor.mark_moved": "Mark moved",
+  "floor.leave_here": "Leave it here",
   "floor.move_title": "Table {table} needs moving",
   "floor.move_title_named": "{table} needs moving",
   "floor.move_body":
@@ -2445,6 +2446,7 @@ export const es: Record<StringKey, string> = {
   "floor.clear_body": "Márcala como recogida cuando esté lista para los siguientes clientes.",
   "floor.needs_moving": "Por mover",
   "floor.mark_moved": "Marcar movida",
+  "floor.leave_here": "Dejar aquí",
   "floor.move_title": "La mesa {table} está por mover",
   "floor.move_title_named": "{table} está por mover",
   "floor.move_body":

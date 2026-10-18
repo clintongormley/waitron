@@ -140,6 +140,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/tables/:id/today/seats                        | table                  | refuses POST /api/tables/:id/today/seats             |
  * | POST /api/tables/:id/today/back                         | table                  | refuses POST /api/tables/:id/today/back              |
  * | POST /api/tables/:id/today/mark-moved                   | table                  | refuses POST /api/tables/:id/today/mark-moved        |
+ * | POST /api/tables/:id/today/leave-here                   | table                  | refuses POST /api/tables/:id/today/leave-here        |
  * | POST /api/tables/:id/today/merge                        | table; body target     | refuses .../today/merge (table), (target)            |
  * | POST /api/tables/:id/today/split-off                    | table; body parts      | refuses .../today/split-off (table), (part)          |
  * | POST /api/tables/:id/today/reset                        | table; body parts      | refuses .../today/reset (table), (part)              |
@@ -826,6 +827,13 @@ const ROUTES: readonly Row[] = [
     "POST /api/tables/:id/today/mark-moved",
     "POST",
     (x) => `/api/tables/${x.deliTable}/today/mark-moved`,
+    () => ({ zoneRevision: 0 }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/today/leave-here",
+    "POST",
+    (x) => `/api/tables/${x.deliTable}/today/leave-here`,
     () => ({ zoneRevision: 0 }),
     deliTableZone,
   ],

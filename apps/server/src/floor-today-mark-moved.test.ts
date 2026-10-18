@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -90,6 +90,7 @@ async function send(method: string, path: string, body?: unknown): Promise<Respo
 }
 
 const markMoved = (tableId: string) => send("POST", `/api/tables/${tableId}/today/mark-moved`, {});
+const leaveHere = (tableId: string) => send("POST", `/api/tables/${tableId}/today/leave-here`, {});
 const back = (tableId: string) => send("POST", `/api/tables/${tableId}/today/back`, {});
 
 async function refusal(answer: Promise<Response>): Promise<{ status: number; body: unknown }> {
@@ -100,6 +101,11 @@ async function refusal(answer: Promise<Response>): Promise<{ status: number; bod
 const newPlaceTaken = (tableId: string, standingId: string) => ({
   status: 409,
   body: { error: { code: "table.new_place_taken", params: { tableId, standingId } } },
+});
+
+const placeTaken = (tableId: string, standingId: string) => ({
+  status: 409,
+  body: { error: { code: "table.place_taken", params: { tableId, standingId } } },
 });
 
 async function seatAt(tableId: string): Promise<string> {
@@ -135,6 +141,24 @@ async function readyOf(tableId: string) {
       .select({ pending: floorResetTables.pending, readyToMove: floorResetTables.readyToMove })
       .from(floorResetTables)
       .where(eq(floorResetTables.tableId, tableId)),
+  );
+  return row;
+}
+
+async function rowStateOf(tableId: string | null, zoneId?: string) {
+  const [row] = await inTx(v, (tx) =>
+    tx
+      .select({
+        pending: floorResetTables.pending,
+        readyToMove: floorResetTables.readyToMove,
+        placed: floorResetTables.placed,
+      })
+      .from(floorResetTables)
+      .where(
+        tableId === null
+          ? and(isNull(floorResetTables.tableId), eq(floorResetTables.zoneId, zoneId!))
+          : eq(floorResetTables.tableId, tableId),
+      ),
   );
   return row;
 }
@@ -201,6 +225,24 @@ async function threeNeedsMoving(more: Placed[] = []) {
   return { ...s, t3 };
 }
 
+/** Dinner (4+5 at 60) recorded with guests at 4+5, then reset onto Standard (4 at 0, 5 at 20). */
+async function fourPlusFiveSeatedAcrossStandard(more: Placed[] = []) {
+  const s = await standardAndDinner([
+    { key: "t4", standard: 0, dinner: null },
+    { key: "t5", standard: 20, dinner: null },
+    { key: "t45", standard: null, dinner: 60, partKeys: ["t4", "t5"] },
+    ...more,
+  ]);
+  await s.onto(s.d.dinner);
+  const [t4, t5, t45] = [s.live("t4"), s.live("t5"), s.live("t45")];
+  const partyId = await seatAt(t45);
+  await s.onto(s.d.standard);
+  expect(await todayRow(t45)).toMatchObject({ x: 60 });
+  await finish(partyId);
+  expect(await needsMoving(t45)).toBe(true);
+  return { ...s, t4, t5, t45 };
+}
+
 describe("Mark moved", () => {
   it("puts a table needing moving in its new place and clears its mark", async () => {
     const z = await threeNeedsMoving();
@@ -238,24 +280,6 @@ describe("Mark moved", () => {
       expect(await readyOf(id)).toEqual({ pending: false, readyToMove: false });
     }
   });
-
-  /** Dinner (4+5 at 60) recorded with guests at 4+5, then reset onto Standard (4 at 0, 5 at 20). */
-  async function fourPlusFiveSeatedAcrossStandard(more: Placed[] = []) {
-    const s = await standardAndDinner([
-      { key: "t4", standard: 0, dinner: null },
-      { key: "t5", standard: 20, dinner: null },
-      { key: "t45", standard: null, dinner: 60, partKeys: ["t4", "t5"] },
-      ...more,
-    ]);
-    await s.onto(s.d.dinner);
-    const [t4, t5, t45] = [s.live("t4"), s.live("t5"), s.live("t45")];
-    const partyId = await seatAt(t45);
-    await s.onto(s.d.standard);
-    expect(await todayRow(t45)).toMatchObject({ x: 60 });
-    await finish(partyId);
-    expect(await needsMoving(t45)).toBe(true);
-    return { ...s, t4, t5, t45 };
-  }
 
   it("takes 4+5 apart", async () => {
     const z = await fourPlusFiveSeatedAcrossStandard();
@@ -632,5 +656,426 @@ describe("Mark moved", () => {
 
     expect((await tableRow(v, table.a!)).label).toBe(renamed);
     expect(await todayRow(table.a!)).toMatchObject({ x: 40 });
+  });
+});
+
+describe("Leave it here", () => {
+  const ended = { pending: false, readyToMove: false, placed: true };
+
+  /** Table 3 needs moving and table 8 stands in its new place, so Mark moved is refused. */
+  async function threeBlocked(more: Placed[] = []) {
+    const z = await threeNeedsMoving([{ key: "t8", standard: 120, dinner: 120 }, ...more]);
+    const t8 = z.live("t8");
+    await setToday(t8, { x: 36 });
+    expect(await refusal(markMoved(z.t3))).toEqual(newPlaceTaken(z.t3, t8));
+    return { ...z, t8 };
+  }
+
+  /**
+   * c3 and c4 (and any others in `entries`) joined by a new layout as a joined table still to be
+   * made at (0, 40); `kept` keeps its place, the rest go off the map. c3's guests leave after the
+   * reset.
+   */
+  async function joinedStillToBeMade(
+    entries: { key: string; place: { x: number; y: number } | null }[],
+    parts: string[],
+    kept: string[],
+  ) {
+    const z = await plannedZone(v, entries, NOW);
+    const partyId = await seatAt(z.table.c3!);
+    await inTx(v, async (tx) => {
+      const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+      const plan = await readLayout(tx, v.cfg, layout);
+      await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        layout,
+        {
+          revision: plan.revision,
+          tables: [
+            ...plan.tables.map((t) => ({
+              id: t.id,
+              key: t.id,
+              label: t.label,
+              seats: t.seats,
+              fixed: t.fixed,
+              placement: kept.some((key) => z.master[key] === t.id) ? t.placement : null,
+              partKeys: t.partIds,
+            })),
+            {
+              key: "long",
+              label: fresh("Long"),
+              seats: 8,
+              fixed: false,
+              placement: { x: 0, y: 40, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
+              partKeys: parts.map((key) => z.master[key]!),
+            },
+          ],
+        },
+        NOW,
+      );
+      await resetZone(tx, v.cfg, REMOVALS, z.zoneId, NOW, "due");
+    });
+    await finish(partyId);
+    expect(await needsMoving(z.table.c4!)).toBe(true);
+    return z;
+  }
+
+  it("leaves a table whose Mark moved was refused where it stands, seatable, and the saved layout unchanged", async () => {
+    const z = await threeBlocked();
+    const saved = await inTx(v, (tx) =>
+      readLayout(tx, v.cfg, { setId: z.d.dinner, zoneId: z.d.zoneId }),
+    );
+    const before = (await zoneRevisionOf(v, z.d.zoneId))!;
+
+    await expectRevision(v, leaveHere(z.t3), z.d.zoneId, before + 1);
+
+    expect(await todayRow(z.t3)).toMatchObject({ x: 0, takenOff: false });
+    expect(await needsMoving(z.t3)).toBe(false);
+    expect(await rowStateOf(z.t3)).toEqual(ended);
+    expect(
+      await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: z.d.dinner, zoneId: z.d.zoneId })),
+    ).toEqual(saved);
+    await seatAt(z.t3);
+  });
+
+  it("a later read does not mark it again, even once the table in its way has gone", async () => {
+    const z = await threeBlocked();
+    await expectRevision(v, leaveHere(z.t3), z.d.zoneId);
+    await setToday(z.t8, { x: 120 });
+
+    for (let read = 0; read < 2; read++) {
+      expect((await readStates()).get(z.t3)!.today.needsMoving).toBe(false);
+      expect(await todayRow(z.t3)).toMatchObject({ x: 0 });
+    }
+  });
+
+  it("the next reset tries again, and marks it while a table with guests stands in its new place", async () => {
+    const z = await threeBlocked();
+    await expectRevision(v, leaveHere(z.t3), z.d.zoneId);
+    await setToday(z.t8, { x: 36 });
+    await seatAt(z.t8);
+
+    await z.onto(z.d.dinner);
+
+    expect(await needsMoving(z.t3)).toBe(true);
+    expect(await rowStateOf(z.t3)).toEqual({ pending: true, readyToMove: true, placed: false });
+    expect(await todayRow(z.t3)).toMatchObject({ x: 0 });
+  });
+
+  it("the next reset with nothing in its way puts it in its new place", async () => {
+    const z = await threeBlocked();
+    await expectRevision(v, leaveHere(z.t3), z.d.zoneId);
+    await setToday(z.t8, { x: 120 });
+
+    await z.onto(z.d.dinner);
+
+    expect(await todayRow(z.t3)).toMatchObject({ x: 40 });
+    expect(await needsMoving(z.t3)).toBe(false);
+  });
+
+  it("is joinable once left", async () => {
+    const z = await threeBlocked([{ key: "t5", standard: 80, dinner: 80 }]);
+    const t5 = z.live("t5");
+    await expectRevision(v, leaveHere(z.t3), z.d.zoneId);
+
+    await expectRevision(
+      v,
+      send("POST", `/api/tables/${t5}/today/merge`, { targetId: z.t3, side: "right", seats: 8 }),
+      z.d.zoneId,
+    );
+  });
+
+  it("leaves the whole joined group: 4 and 5 stay apart and 4+5 off the map", async () => {
+    const s = await standardAndDinner([
+      { key: "t4", standard: 0, dinner: null },
+      { key: "t5", standard: 20, dinner: null },
+      { key: "t45", standard: null, dinner: 60, partKeys: ["t4", "t5"] },
+    ]);
+    await s.onto(s.d.standard);
+    const [t4, t5, t45] = [s.live("t4"), s.live("t5"), s.live("t45")];
+    const partyId = await seatAt(t4);
+    await s.onto(s.d.dinner);
+    await finish(partyId);
+    expect(await needsMoving(t5)).toBe(true);
+
+    await expectRevision(v, leaveHere(t5), s.d.zoneId);
+
+    expect(await todayRow(t4)).toMatchObject({ x: 0 });
+    expect(await todayRow(t5)).toMatchObject({ x: 20 });
+    expect(await todayRow(t45)).toMatchObject({ x: null });
+    for (const id of [t4, t5, t45]) expect(await rowStateOf(id)).toEqual(ended);
+    await seatAt(t4);
+    await seatAt(t5);
+  });
+
+  it("leaves 4+5 standing joined and seatable", async () => {
+    const z = await fourPlusFiveSeatedAcrossStandard();
+
+    await expectRevision(v, leaveHere(z.t45), z.d.zoneId);
+
+    expect(await todayRow(z.t45)).toMatchObject({ x: 60 });
+    expect(await needsMoving(z.t45)).toBe(false);
+    expect(await todayRow(z.t4)).toMatchObject({ x: null });
+    expect(await todayRow(z.t5)).toMatchObject({ x: null });
+    await seatAt(z.t45);
+    const atFour = await send("POST", `/api/tables/${z.t4}/seat`, {});
+    expect(atFour.status).toBe(409);
+    expect(((await atFour.json()) as { error: { code: string } }).error.code).toBe(
+      "table.in_joined_table",
+    );
+  });
+
+  it("ends the row of a joined table still to be made, which is not made later", async () => {
+    const z = await joinedStillToBeMade(
+      [
+        { key: "c3", place: { x: 0, y: 0 } },
+        { key: "c4", place: { x: 20, y: 0 } },
+        { key: "t8", place: { x: 80, y: 0 } },
+      ],
+      ["c3", "c4"],
+      ["t8"],
+    );
+    const [c3, c4, t8] = [z.table.c3!, z.table.c4!, z.table.t8!];
+    await setToday(t8, { x: 0, y: 40 });
+    const tablesIn = async () =>
+      (
+        await inTx(v, (tx) =>
+          tx.select().from(diningTables).where(eq(diningTables.zoneId, z.zoneId)),
+        )
+      ).length;
+    const count = await tablesIn();
+
+    await expectRevision(v, leaveHere(c4), z.zoneId);
+    await setToday(t8, { x: 80, y: 0 });
+    await readStates();
+
+    expect(await tablesIn()).toBe(count);
+    expect(await needsMoving(c4)).toBe(false);
+    expect(await needsMoving(c3)).toBe(false);
+    expect(await rowStateOf(null, z.zoneId)).toMatchObject({ pending: false });
+    await seatAt(c4);
+  });
+
+  it("keeps a rename the dashboard gave it, and its place", async () => {
+    const { zoneId, table, master, revision } = await plannedZone(
+      v,
+      [{ key: "a", place: { x: 0, y: 0 } }],
+      NOW,
+    );
+    const partyId = await seatAt(table.a!);
+    const renamed = fresh("Renamed");
+    await inTx(v, async (tx) => {
+      const layout = await defaultLayout(tx, v.cfg, zoneId);
+      const plan = await readLayout(tx, v.cfg, layout);
+      const saved = plan.tables.find((t) => t.id === master.a)!;
+      await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        layout,
+        {
+          revision,
+          tables: [
+            {
+              id: saved.id,
+              key: "a",
+              label: renamed,
+              seats: saved.seats,
+              fixed: saved.fixed,
+              placement: { ...saved.placement!, x: 40 },
+              partKeys: [],
+            },
+          ],
+        },
+        NOW,
+      );
+      await resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due");
+    });
+    await finish(partyId);
+    expect(await needsMoving(table.a!)).toBe(true);
+
+    await expectRevision(v, leaveHere(table.a!), zoneId);
+
+    expect((await tableRow(v, table.a!)).label).toBe(renamed);
+    expect(await todayRow(table.a!)).toMatchObject({ x: 0 });
+    expect(await rowStateOf(table.a!)).toEqual(ended);
+  });
+
+  it("keeps its place and old name while a rename to a name another zone holds waits", async () => {
+    const elsewhere = await plannedZone(v, [{ key: "b", place: { x: 0, y: 0 } }], NOW);
+    const heldName = (await tableRow(v, elsewhere.table.b!)).label;
+    const { zoneId, table, master, revision } = await plannedZone(
+      v,
+      [{ key: "a", place: { x: 0, y: 0 } }],
+      NOW,
+    );
+    const oldName = (await tableRow(v, table.a!)).label;
+    const partyId = await seatAt(table.a!);
+    await inTx(v, async (tx) => {
+      const layout = await defaultLayout(tx, v.cfg, zoneId);
+      const plan = await readLayout(tx, v.cfg, layout);
+      const saved = plan.tables.find((t) => t.id === master.a)!;
+      await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        layout,
+        {
+          revision,
+          tables: [
+            {
+              id: saved.id,
+              key: "a",
+              label: fresh("Renamed"),
+              seats: saved.seats,
+              fixed: saved.fixed,
+              placement: { ...saved.placement!, x: 40 },
+              partKeys: [],
+            },
+          ],
+        },
+        NOW,
+      );
+      await resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due");
+    });
+    await finish(partyId);
+    expect(await needsMoving(table.a!)).toBe(true);
+    await inTx(v, (tx) =>
+      tx
+        .update(floorResetTables)
+        .set({ label: heldName })
+        .where(eq(floorResetTables.tableId, table.a!)),
+    );
+
+    await expectRevision(v, leaveHere(table.a!), zoneId);
+
+    for (let read = 0; read < 2; read++) {
+      expect(await needsMoving(table.a!)).toBe(false);
+      expect(await rowStateOf(table.a!)).toEqual({
+        pending: true,
+        readyToMove: false,
+        placed: true,
+      });
+      expect(await todayRow(table.a!)).toMatchObject({ x: 0 });
+      expect((await tableRow(v, table.a!)).label).toBe(oldName);
+    }
+  });
+
+  it("after Leave it here on 2 of a swap, Mark moved on 3 is refused naming 2, and 3 can be left too", async () => {
+    const s = await standardAndDinner([
+      { key: "t2", standard: 0, dinner: 40 },
+      { key: "t3", standard: 40, dinner: 0 },
+    ]);
+    await s.onto(s.d.standard);
+    const [t2, t3] = [s.live("t2"), s.live("t3")];
+    const party2 = await seatAt(t2);
+    const party3 = await seatAt(t3);
+    await s.onto(s.d.dinner);
+    await finish(party2);
+    await finish(party3);
+    expect(await needsMoving(t2)).toBe(true);
+    expect(await needsMoving(t3)).toBe(true);
+
+    await expectRevision(v, leaveHere(t2), s.d.zoneId);
+    expect(await refusal(markMoved(t3))).toEqual(newPlaceTaken(t3, t2));
+    await expectRevision(v, leaveHere(t3), s.d.zoneId);
+
+    expect(await todayRow(t2)).toMatchObject({ x: 0 });
+    expect(await todayRow(t3)).toMatchObject({ x: 40 });
+    expect(await needsMoving(t2)).toBe(false);
+    expect(await needsMoving(t3)).toBe(false);
+  });
+
+  it("changes nothing on a table that does not need moving", async () => {
+    const { zoneId, table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
+    await setToday(table.a!, { x: 30 });
+    const read = (await zoneRevisionOf(v, zoneId))!;
+    const before = await everything();
+
+    await expectRevision(v, leaveHere(table.a!), zoneId, read);
+
+    expect(await everything()).toEqual(before);
+  });
+
+  it("is refused, writing nothing, when the room has moved on", async () => {
+    const z = await threeNeedsMoving();
+    const before = (await zoneRevisionOf(v, z.d.zoneId))!;
+    const rows = await everything();
+
+    const answer = await refusal(
+      send("POST", `/api/tables/${z.t3}/today/leave-here`, { zoneRevision: before - 1 }),
+    );
+
+    expect(answer.status).toBe(409);
+    expect((answer.body as { error: { code: string } }).error.code).toBe("floor_today.out_of_date");
+    expect(await everything()).toEqual(rows);
+    expect(await needsMoving(z.t3)).toBe(true);
+  });
+
+  it("ends the row of a group member that has guests, so floor reads do not keep running the catch-up", async () => {
+    const z = await joinedStillToBeMade(
+      [
+        { key: "c3", place: { x: 0, y: 0 } },
+        { key: "c4", place: { x: 20, y: 0 } },
+        { key: "c9", place: null },
+      ],
+      ["c3", "c4", "c9"],
+      [],
+    );
+    const [c3, c4, c9] = [z.table.c3!, z.table.c4!, z.table.c9!];
+    expect(await needsMoving(c9)).toBe(false);
+    await seatAt(c9);
+
+    await expectRevision(v, leaveHere(c4), z.zoneId);
+
+    for (const id of [c9, c3, c4]) expect(await rowStateOf(id)).toEqual(ended);
+  });
+});
+
+describe("Back to its saved place checks what stands there", () => {
+  const move = (tableId: string, x: number, y: number) =>
+    send("POST", `/api/tables/${tableId}/today/move`, { x, y });
+
+  /** Table 3 marked moved into its new place at 40, then dragged back to 0; table 8 at 120. */
+  async function threeDraggedOff() {
+    const z = await threeNeedsMoving([{ key: "t8", standard: 120, dinner: 120 }]);
+    const t8 = z.live("t8");
+    await expectRevision(v, markMoved(z.t3), z.d.zoneId);
+    expect(await todayRow(z.t3)).toMatchObject({ x: 40 });
+    await expectRevision(v, move(z.t3, 0, 0), z.d.zoneId);
+    return { ...z, t8 };
+  }
+
+  it("after Leave it here, Back is refused while the table that blocked it stands there", async () => {
+    const z = await threeNeedsMoving([{ key: "t8", standard: 120, dinner: 120 }]);
+    const t8 = z.live("t8");
+    await setToday(t8, { x: 36 });
+    expect(await refusal(markMoved(z.t3))).toEqual(newPlaceTaken(z.t3, t8));
+    await expectRevision(v, leaveHere(z.t3), z.d.zoneId);
+    const before = await everything();
+
+    expect(await refusal(back(z.t3))).toEqual(placeTaken(z.t3, t8));
+
+    expect(await everything()).toEqual(before);
+  });
+
+  it("Back after an ordinary drag is refused while another table stands in the saved place", async () => {
+    const z = await threeDraggedOff();
+    await expectRevision(v, move(z.t8, 36, 0), z.d.zoneId);
+    const before = await everything();
+
+    expect(await refusal(back(z.t3))).toEqual(placeTaken(z.t3, z.t8));
+
+    expect(await everything()).toEqual(before);
+  });
+
+  it("Back is still served when nothing stands in the saved place", async () => {
+    const z = await threeDraggedOff();
+
+    await expectRevision(v, back(z.t3), z.d.zoneId);
+
+    expect(await todayRow(z.t3)).toMatchObject({ x: 40 });
   });
 });

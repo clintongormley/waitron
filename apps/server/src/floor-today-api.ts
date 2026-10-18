@@ -27,7 +27,7 @@ import {
 } from "./floor-today-store.js";
 import { plannedZones } from "./floor-layout-due.js";
 import { writeMerge } from "./floor-today-merges.js";
-import { markMoved } from "./floor-today-mark-moved.js";
+import { leaveHere, markMoved } from "./floor-today-mark-moved.js";
 import { resetTable } from "./floor-today-reset-table.js";
 import { splitOff } from "./floor-today-split-group.js";
 import { nameToday } from "./floor-today-name.js";
@@ -206,6 +206,9 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
   }));
   tableRoute("mark-moved", () => ({
     write: (tx, tableId) => markMoved(tx, deps.cfg, removals, tableId, deps.clock.now().instant),
+  }));
+  tableRoute("leave-here", () => ({
+    write: (tx, tableId) => leaveHere(tx, deps.cfg, removals, tableId, deps.clock.now().instant),
   }));
   tableRoute("name", (body) => {
     if (body.name === undefined) throw invalid("name");
