@@ -47,6 +47,14 @@ A755; design-system.md, Forms).
 Nothing guards that hint-or-"?" rule across screens, and other setup screens may still break it
 (backlog A237).
 
+Outside the setup wizard that "?" takes `mode="help-mode"`, so it shows only while help is on
+(A582; design-system.md, Help mode). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its
+name — it reads, as text, the template and string literals of each non-test `.ts` file under
+`apps/` and `packages/`, `apps/setup` excepted. It does not see a "?" made with
+`document.createElement`, one whose tag name or `mode` is built at run time, or one in a `.js` or
+test file, and it does not check that a badge sits in a positioned box, so a badge without one
+hangs over a far ancestor's corner unnoticed.
+
 ### Dialog footer controls must occupy the primitive's real slots
 
 `wt-form-actions` offers `cancel` on the left, `secondary` beside the primary action, and the

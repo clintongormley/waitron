@@ -255,6 +255,9 @@ called weaker than its name, the topic file lists what it does not see.
   a native dropdown cannot take the approved look (A178). Guard: `scripts/native-form-fields.test.ts`,
   weaker than its name — it reads string literals, and holds the files it allows by name only to a
   line count.
+- **A `wt-help-tooltip` outside the setup wizard carries `mode="help-mode"`**, so it shows only while
+  help is on (A582). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads
+  literals as text; what it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Before treating a numeric field as whole numbers, follow its checks and wire conversion and
   try a fraction.** Cost: A284 almost skipped a logout timer because its comment said whole minutes;
   receipt: [conventions-ui.md](docs/developers/conventions-ui.md).

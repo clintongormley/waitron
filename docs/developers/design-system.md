@@ -2100,8 +2100,9 @@ listeners only when the value changes, `subscribeHelpMode(listener)` returns an 
 in the page, so a badge that was out of the page shows the current state. It is held in memory
 only: nothing is written to storage, so a reload starts with help off (the "nothing is saved" case
 in `packages/ui/src/help-mode.test.ts`). `wt-help-switch` is the button that turns it on and off;
-no app shows one yet. An app is to turn help off on sign-out, lock or a change of person (A582's
-later slices).
+the dashboard shows one in its banner and turns help off whenever it returns to the sign-in screen
+(see "Dashboard banner"). No other app shows one yet; the till is to turn help off on lock and on a
+change of person too (A582's later slices).
 
 - A help badge is `<wt-help-tooltip mode="help-mode">` placed in a primitive's `help` slot, or
   drawn by a primitive from its own `help` (a `wt-menu-row`, a `wt-data-table` column, a `wt-tabs`
@@ -2113,8 +2114,9 @@ later slices).
   `fieldStyles` for `wt-input`, `wt-textarea`, `wt-combobox`, `wt-price-input` and `wt-file-input`;
   the stepper's own grid, which places a help-mode badge in the field box's cell, so that cell
   is the box it hangs from; `wt-disclosure`'s header row; `wt-dialog`'s heading row.
-- The setup wizard keeps always mode. Every other new badge takes `mode="help-mode"`. Nothing guards
-  this across screens.
+- The setup wizard keeps always mode. Every other badge takes `mode="help-mode"`. Guard:
+  `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads literals as text; what it
+  does not see is in [conventions-ui.md](conventions-ui.md).
 - In a right-to-left page the badge hangs over the top left corner (it is placed with
   `inset-inline-end`).
 
@@ -2164,7 +2166,10 @@ right to left, stretched or beside a long error hangs the badge over the field b
 `packages/ui/src/components/wt-help-switch.test.ts`, `wt-menu-row.test.ts`,
 `wt-data-table.help.test.ts` and `wt-tabs.help.test.ts`, beside them, for the switch, menu rows,
 columns and tabs; and the "a help badge inside a menu row, and a menu that changes size" cases in
-`wt-row-actions.test.ts`. Nothing checks a badge a screen slots somewhere else.
+`wt-row-actions.test.ts`. A badge a screen places outside a primitive's `help` slot is checked
+only by that screen's own tests: SumUp's affiliate badge, the one such badge, by the "the affiliate
+help is hidden until help is on, then hangs over the heading's top trailing corner" case in
+`packages/payments-sumup/src/dashboard/sumup-connect-form.test.ts`; nothing checks a new one.
 
 ### Forms
 
@@ -3202,7 +3207,7 @@ sidebar has no entry for that screen. The bar wraps its links at phone width whi
 the minimum tap height.
 
 When the session may see alerts, the alerts bell (`dashboard-alerts-bell`, a `wt-row-actions` with
-the `bell` icon and a `wt-count-badge` in its `badge` slot) sits immediately before the account menu.
+the `bell` icon and a `wt-count-badge` in its `badge` slot) sits immediately before the help switch.
 The badge is red when any open alert is an error, amber when any is a warning, and blue (`--wt-color-primary`) when every open alert is a notice; each listed alert's leading edge takes its own level's colour. While there are open alerts,
 the trigger's accessible name includes the count, because the badge has no name of its own. The
 panel lists at most five alerts and, below the drawer breakpoint (`48rem`), spans the screen's width
@@ -3213,6 +3218,14 @@ while that shows, because the bar sits in the same row (`.banner-row` and `.aler
 breakpoint it spans the banner's width less a small gutter on each side. While the floor plan editor
 is open, the shell hands the toast and the update bar to the editor's `notices` slot, at the top of
 its modal, because the modal makes the page underneath inert.
+
+Signed in, the help switch (`wt-help-switch`, named "Help" / "Ayuda") sits immediately before the
+account menu, after the alerts bell when that shows; signed out there is none. Help stays on while
+moving between screens and goes off whenever the dashboard returns to the sign-in screen
+(`#returnToLogin`, `apps/dashboard/src/dashboard-app.ts`): on logging out, on the session expiring
+here or in another tab, and on a request refused for the session. In the account menu, Account
+settings sits in a `wt-menu-row` whose help says what it opens (see "Help mode", "A menu option").
+Pinned by `apps/dashboard/src/dashboard-app.help.test.ts`.
 
 When the server reports a different build from the one the page first saw, an update bar
 (`wt-banner`, "Waitron was updated." / "Waitron se ha actualizado." with Reload / Recargar) appears
