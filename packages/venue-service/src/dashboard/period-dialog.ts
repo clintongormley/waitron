@@ -584,8 +584,7 @@ export class PeriodDialog extends LitElement {
             }}
           ></wt-input>
           <p data-test="offset-explanation">${t("menu.offset_explanation")}</p>
-          ${this.floorPlanField(current)}
-          ${this.paintedInSection()}
+          ${this.floorPlanField(current)} ${this.paintedInSection()}
         </div>
         <wt-form-actions
           slot="footer"

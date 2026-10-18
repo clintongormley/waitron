@@ -371,9 +371,8 @@ it("a Floor plan-only change protects navigation and choosing the default back m
     },
   ];
   await el.updateComplete;
-  const plan = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-    "[name=floorPlanSetId]",
-  )!;
+  const plan =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=floorPlanSetId]")!;
   expect(plan).not.toBeNull();
   const pick = async (value: string) => {
     plan.dispatchEvent(

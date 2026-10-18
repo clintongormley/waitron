@@ -691,7 +691,12 @@ it("no Floor plan column while no department has a zone with tables", async () =
 it("the period dialog opened from a row offers the department's sets and sends the chosen one", async () => {
   const writes: { path: string; body: Record<string, unknown> }[] = [];
   const read = answering(plannedModel, paintedIn, withTables);
-  const el = await mount((async (path: string, method: string, body: unknown, ...rest: unknown[]) => {
+  const el = await mount((async (
+    path: string,
+    method: string,
+    body: unknown,
+    ...rest: unknown[]
+  ) => {
     if (method === "PATCH") {
       writes.push({ path, body: body as Record<string, unknown> });
       return undefined;
@@ -704,9 +709,10 @@ it("the period dialog opened from a row offers the department's sets and sends t
   await expect.poll(() => dialogOf(el)?.period?.id).toBe("p1");
   const dialog = dialogOf(el)!;
   await dialog.updateComplete;
-  const plan = dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-    "[name=floorPlanSetId]",
-  )!;
+  const plan =
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=floorPlanSetId]",
+    )!;
   expect(plan.value).toBe("dinner");
   expect(plan.options.map((o) => o.label)).toEqual(["House (default)", "Dinner"]);
   plan.dispatchEvent(
@@ -720,9 +726,7 @@ it("the period dialog opened from a row offers the department's sets and sends t
 });
 
 it("says when the floor plan sets cannot be read", async () => {
-  const el = await mount(
-    answering(model, paintedIn, () => Promise.reject(new Error("down"))),
-  );
+  const el = await mount(answering(model, paintedIn, () => Promise.reject(new Error("down"))));
   await loaded(el);
   await expect
     .poll(() => el.shadowRoot!.querySelector("[data-test=floor-plans-error]")?.textContent)
