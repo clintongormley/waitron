@@ -4525,6 +4525,13 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`.
   [Detail](backlog/box.md#the-amazon-s3-delete-and-archive-rehearsals-open-edges-a538-9)
 
+- **A822. The pause rehearsal's bucket policy is built by a `denyListing(prefix)` method (owner,
+  2026-10-17).** `ctx.bucketPolicy.put(document)` (`apps/server/src/testing/aws-rehearsal.ts`)
+  accepts any policy text and checks it back down to the one allowed shape; a `denyListing(prefix)`
+  method that builds the document itself cannot be handed a wrong one. Test tooling only. Done when
+  the `ctx.bucketPolicy` cases in `apps/server/src/testing/aws-listing-denial.test.ts` exercise the
+  new method and pass.
+
 - **The Amazon S3 pause rehearsal's open edges (A538-8).** Left open by #1658, in
   `apps/server/src/testing/aws-rehearsal.ts`, `testing/aws-pause-gate.ts` and
   `aws-stream-pause.aws-rehearsal.test.ts`.
@@ -4605,9 +4612,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   would quietly fall back to "Contact support.". The printer word list has such a check
   (`scripts/a4-hold-code-copies.test.ts`). Left open by A595 (#1675).
 
-- **A destination holding only old-format archive names reads as never backed up.** Since A538-3a
-  the status counts only names `parseBackupArchiveKey` reads. Left open by A538-3.
-
 - **No test covers the supervisor ignoring results from a backup run a reload replaced.**
   `backup-supervisor.ts` drops `onUploaded`/`onDestinationResult` reports once that run's
   controller is aborted; removing both checks left the supervisor suites green in A538-3's review,
@@ -4633,8 +4637,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **When a nightly report job exists, the backup slot should fire after it** — left open by the "backups off or stale" reminder (#371).
 
-- **The remaining cold-restore operator surface** (promote Slice 4): connection rebinding, advertised
-  origin and an authenticated entry.
+- **A823. Check which cold-restore steps still lack an operator surface, then list only those
+  (owner, 2026-10-17).** Promote Slice 4 named connection rebinding, an advertised origin and an
+  authenticated entry, and nothing in the code shows which of them is still missing. Walk the
+  restore steps in a test, then rewrite this entry to name only the real gaps, or delete it if
+  none is missing.
 
 - **Reconsider the backup container against off-the-shelf tools** (a brainstorm): `WBA1` plus
   `WBK1` is restorable only by Waitron code. Scheduled local archives stream through protected
@@ -4666,7 +4673,7 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **What `waitron.sh install`'s self-refresh (C83, #890) left open:** No case in `scripts/waitron-sh.test.mjs` covers a script not run from a file, a link `readlink -f` cannot follow, a folder the script cannot enter, or a box with neither curl nor wget. [Detail](backlog/box.md#what-waitronsh-installs-self-refresh-c83-890-left-open)
 
-- **What `waitron.sh --reset install` (#1122) left open:** a build or pull that fails still leaves the box's files changed, as a plain `install` always has. Also open: the simplify review suggested `waitron.sh reset … --install [ref]` instead of `--reset … install [ref]`, reusing reset's own option reading; the form shipped is the one the owner asked for, so that is the owner's call. [Detail](backlog/box.md#what-waitronsh---reset-install-1122-left-open)
+- **What `waitron.sh --reset install` (#1122) left open:** a build or pull that fails still leaves the box's files changed, as a plain `install` always has. [Detail](backlog/box.md#what-waitronsh---reset-install-1122-left-open)
 
 - **What showing the failed start's reason (#695) left:** [Detail](backlog/box.md#what-showing-the-failed-starts-reason-695-left)
 
@@ -4688,12 +4695,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **Creation/provisioning `dayCutover` still needs input validation.** The W6 review (#1104) passed `"24:00"` and `"99:99"`
   through `planVenue`; both emerged with seconds appended. **Next action:** choose the validation
   boundary and a domain refusal, then test invalid values before they reach storage.
-
-- **#1042 needs every venue migrated before it reset** — the owner's box included (dev venues:
-  `wa-wt reset demo <name>`): it changed the hashes of
-  `packages/db/drizzle/0001_behavioural_triggers.sql` and
-  `packages/media/drizzle/0001_image_references.sql`, so boot refuses such a venue with
-  `provisioning.database_ahead`. Left open by C127 (#1036, #1042).
 
 - **`resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged, and nothing chmods the
   staging folder** — found by #658 while pruning comments. Still open, not fixed, by the owner's
@@ -4881,18 +4882,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   through SMTP instead of capturing them on the box, and the top bar's inbox link (A227) would become
   demo-only again. Not built.
   [Detail](backlog/box.md#a-venue-preparing-to-go-live-sends-real-email-through-smtp-owner-2026-10-03--open)
-
-- **Reset pre-production venues before using W53 with orders recorded before this migration** —
-  left open by W53 (#1152); otherwise their live tickets and settled reprints can show the old unit
-  wording.
-
-- **Reset retained pre-live venues before installing core `0092`, which rebuilds both tables** —
-  left open by W52 (#1170).
-
-- **Installing W98 needs every populated venue reset** — left open by A204's W98 (#1331): it drops
-  `zone_menus` and rebuilds `zone_service_policies`, and nothing carries the old per-zone menus
-  across. The shared dev venue was reset when it landed (2026-10-07); the owner's box needs a reset
-  too.
 
 - **A blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }`** — left open by
   A178 (#1010 to #1019), seen while building, not changed: the same parsing is on `main` before

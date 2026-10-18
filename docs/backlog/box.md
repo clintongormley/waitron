@@ -116,9 +116,7 @@ approved.
   old ones. Nothing has been taken down or wiped at that point, and the error asks for a re-run;
   making it leave the files untouched means fetching into a temporary folder and moving the files
   into place only once the images are in. Raised by the run-it review and not taken because it
-  restructures `install`. Also open: the simplify review suggested `waitron.sh reset … --install
-[ref]` instead of `--reset … install [ref]`, reusing reset's own option reading; the form shipped
-  is the one the owner asked for, so that is the owner's call.
+  restructures `install`.
 
 ## What showing the failed start's reason (#695) left
 
@@ -457,12 +455,9 @@ step-name checks compare against hand-written lists, so a step added later is no
 
 **The Amazon S3 pause rehearsal's open edges (A538-8).** Left open by #1658, in
 `apps/server/src/testing/aws-rehearsal.ts`, `testing/aws-pause-gate.ts` and
-`aws-stream-pause.aws-rehearsal.test.ts`: (1) `ctx.bucketPolicy.put(document)` accepts any policy
-text and checks it back down to the one allowed shape; the simplify review proposed a
-`denyListing(prefix)` method that builds the document itself (about 60 lines and 20 refusal cases
-fewer) — a redesign of a safety check, so the owner's call; (2) the scenario's `beforeRestart`
-hook is called only by the AWS file, so no local test fails if the call goes (the AWS run would
-stop with "step 7's restart was never watched"); (3) the held-check evidence counts a held call at
+`aws-stream-pause.aws-rehearsal.test.ts` (its bucket-policy method is A822): (1) the scenario's
+`beforeRestart` hook is called only by the AWS file, so no local test fails if the call goes (the
+AWS run would stop with "step 7's restart was never watched"); (2) the held-check evidence counts a held call at
 the server's own proxy but cannot say which call it is (TLS hides it) — the later logged 403 is what
 ties the refusal to the pause check.
 
