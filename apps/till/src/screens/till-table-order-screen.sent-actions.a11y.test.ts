@@ -42,6 +42,7 @@ describe.each(["en", "es"] as const)("Sent dish actions in %s", (locale) => {
   describe.each(["light", "dark"] as const)("%s", (theme) => {
     it.each([390, 1280])("opens native held and served menus at %i", async (width) => {
       await page.viewport(width, 1000);
+      expect(window.innerWidth).toBe(width);
       setLocale(locale);
       const orders = structuredClone(current());
       orders.groups[2]!.rows[0]!.kitchen!.stationId = "cold";
@@ -95,11 +96,11 @@ describe.each(["en", "es"] as const)("Sent dish actions in %s", (locale) => {
         expect(actions.map((action) => action.textContent!.trim())).toEqual(
           kind === "held"
             ? locale === "es"
-              ? ["Marchar ya", "Retirar", "Cambiar de estación…"]
-              : ["Fire now", "Recall", "Move to station…"]
+              ? ["Marchar ya", "Retirar", "Cambiar de estación…", "Cancelar…"]
+              : ["Fire now", "Recall", "Move to station…", "Void…"]
             : locale === "es"
-              ? ["Deshacer servido"]
-              : ["Undo served"],
+              ? ["Cancelar…", "Deshacer servido"]
+              : ["Void…", "Undo served"],
         );
         for (const action of actions) {
           expect(action.checkVisibility()).toBe(true);

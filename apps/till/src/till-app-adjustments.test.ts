@@ -2,6 +2,8 @@ import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { CancellationRead } from "./api/line-cancel-types.js";
+import type { TillSentOrders } from "./widgets/sent-orders.js";
+import type { WtRowActions } from "@waitron/ui";
 import type { TillCancelItemDialog } from "./widgets/cancel-item-dialog.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
@@ -1427,6 +1429,107 @@ describe("till-app: service cancellation consent", () => {
     ...more,
   });
 
+  it.each([
+    ["open", "not_started", ["remove_charge"]],
+    ["open", "started", ["keep_charge", "remove_charge"]],
+    ["settled", "started", ["keep_charge"]],
+  ] as const)(
+    "native Sent Void reads %s/%s consent before offering a money choice",
+    async (status, stage, choices) => {
+      const read = consent(status, stage);
+      const readCurrentOrders = vi.fn().mockResolvedValue({
+        revision: 3,
+        hasGroups: false,
+        nextDisplayNumber: 1,
+        retainedCourses: [],
+        reminder: null,
+        groups: [],
+        ungrouped: [
+          {
+            billStatus: status,
+            netAmount: "30.00",
+            readyAt: null,
+            firedAt: wine.firedAt,
+            lineId: "line-1",
+            workingOrderId: "wo-4",
+            lineNo: 1,
+            courseId: null,
+            name: "Wine",
+            quantity: "1.000",
+            unitPrecision: 0,
+            servedQuantity: "0.000",
+            servedAt: null,
+            released: true,
+            kitchen: null,
+            note: null,
+            extras: [],
+          },
+        ],
+      });
+      const methods = apiFor(read, {
+        readCurrentOrders,
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([
+            {
+              ...bill,
+              status,
+              outstanding: status === "settled" ? "0.00" : "30.00",
+              hasPayments: status === "settled",
+              receiptAvailable: status === "settled",
+            },
+          ]),
+      });
+      const { el } = await mountApp(methods);
+      const order = await openMesa4(el);
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+      await order.updateComplete;
+      order.style.width = "1280px";
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await order.updateComplete;
+      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      if (review?.checkVisibility()) {
+        await userEvent.click(review);
+        await order.updateComplete;
+      }
+      const sent = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+      await sent.updateComplete;
+      await userEvent.click(sent.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
+      await sent.updateComplete;
+      await userEvent.click(
+        sent.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="line-1"]')!,
+      );
+      await order.updateComplete;
+      const more = order.shadowRoot!.querySelector<WtRowActions>(
+        "[data-sent-line-dialog] wt-row-actions",
+      )!;
+      await more.updateComplete;
+      await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-void]")!);
+      await flush(el);
+      const widget = cancelDialog(el)!;
+      await widget.updateComplete;
+      expect(methods.getCancellation).toHaveBeenCalledExactlyOnceWith(
+        "v1",
+        "line-1",
+        expect.any(Object),
+      );
+      expect(widget.consent).toEqual(read);
+      expect(
+        [...widget.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="outcome"]')].map(
+          (radio) => radio.value,
+        ),
+      ).toEqual(choices);
+      expect(order.shadowRoot!.querySelector("[data-sent-line-dialog]")!.hasAttribute("open")).toBe(
+        false,
+      );
+      expect(methods.cancelItem).not.toHaveBeenCalled();
+      expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+      expect(api.applyAdjustment).not.toHaveBeenCalled();
+    },
+  );
+
   it("keeps the shown editor observation in the explicit cancellation command", async () => {
     const methods = apiFor();
     const { el } = await mountApp(methods);
@@ -1889,6 +1992,10 @@ describe("till-app: service cancellation consent", () => {
             workingOrderId: "wo-4",
             lineNo: 1,
             name: "Recorded wine",
+            billStatus: "settled",
+            netAmount: "30.00",
+            readyAt: null,
+            firedAt: wine.firedAt,
             quantity: "1.000",
             unitPrecision: 0,
             courseId: null,

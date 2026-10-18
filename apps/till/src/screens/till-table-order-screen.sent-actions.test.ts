@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
 import type { PartyBill, TabLine } from "../api/client.js";
 import { DraftStore } from "../state/draft-sync.js";
+import { WorkingOrderStore } from "../state/working-order.js";
 import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
@@ -316,3 +317,171 @@ it.each(["owner", "paid", "unmovable", "started", "row-unmovable"] as const)(
     expect(events).toEqual([]);
   },
 );
+
+it.each(["open", "placed", "settled"] as const)(
+  "Void from a %s Sent dish opens fresh cancellation consent instead of an adjustment",
+  async (status) => {
+    const orders = structuredClone(current());
+    orders.groups[2]!.rows[0]!.billStatus = status;
+    const store = new DraftStore();
+    store.billStatus = status;
+    const el = await openLine("held", {
+      currentOrders: orders,
+      bills: [bill(status)],
+      draftStore: store,
+    });
+    const cancellations = capture(el, "cancel-item");
+    const adjustments = capture(el, "adjust");
+    await openMore(el);
+    const cancel = q(el, "[data-sent-line-void]");
+    expect(cancel).not.toBeNull();
+    expect(cancel.textContent).toBe("Void…");
+    await userEvent.click(cancel);
+    await el.updateComplete;
+    expect(cancellations.map((event) => [event.detail, event.bubbles, event.composed])).toEqual([
+      [{ lineId: "l-flan" }, true, true],
+    ]);
+    expect(adjustments).toEqual([]);
+    expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
+  },
+);
+
+it("Void on an actually served dish still opens consent for its original parent", async () => {
+  const el = await openLine("served", { bills: [bill("open")] });
+  const cancellations = capture(el, "cancel-item");
+  await openMore(el);
+  const cancel = q(el, "[data-sent-line-void]");
+  expect(cancel).not.toBeNull();
+  await userEvent.click(cancel);
+  expect(cancellations.map((event) => event.detail)).toEqual([{ lineId: "l-croq" }]);
+});
+
+it.each(["owner", "loading", "sending", "abandoned", "row-abandoned", "cancelled"] as const)(
+  "Void is absent for %s, without hiding the recorded information",
+  async (blocked) => {
+    const store = new DraftStore();
+    if (blocked === "owner") store.ownershipLocked = true;
+    if (blocked === "sending") store.sending = true;
+    if (blocked === "loading") store.lockEdits();
+    const orders = structuredClone(current());
+    if (blocked === "row-abandoned") orders.groups[2]!.rows[0]!.billStatus = "abandoned";
+    if (blocked === "cancelled") {
+      orders.groups[0]!.rows[0]!.cancelledQuantity = "4.000";
+      orders.groups[0]!.rows[0]!.servedQuantity = "0.000";
+    }
+    const el = await openLine(blocked === "cancelled" ? "served" : "held", {
+      currentOrders: orders,
+      bills: [bill(blocked === "abandoned" ? "abandoned" : "open")],
+      draftStore: store,
+    });
+    const more = q(el, "[data-sent-line-dialog] wt-row-actions");
+    if (more !== null) await openMore(el);
+    expect(q(el, "[data-sent-line-void]")).toBeNull();
+    expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
+    expect(q(el, "[data-sent-line-amount]").textContent).toContain("€");
+  },
+);
+
+it.each([
+  "owner",
+  "loading",
+  "sending",
+  "busy",
+  "groupCommandBusy",
+  "abandoned",
+  "row-abandoned",
+  "cancelled",
+  "gone",
+  "api",
+  "party",
+  "bill",
+  "serviceVisit",
+  "unread",
+  "closed",
+] as const)("a retained Void cannot begin consent after %s changes", async (change) => {
+  const store = new DraftStore();
+  const el = await openLine("held", { draftStore: store, bills: [bill("open")] });
+  const cancellations = capture(el, "cancel-item");
+  await openMore(el);
+  const cancel = q(el, "[data-sent-line-void]");
+  expect(cancel).not.toBeNull();
+  if (change === "owner") store.ownershipLocked = true;
+  if (change === "sending") store.sending = true;
+  if (change === "loading") store.lockEdits();
+  if (change === "busy" || change === "groupCommandBusy") el[change] = true;
+  if (change === "abandoned") el.bills = [bill("abandoned")];
+  if (change === "api") el.api = {} as TillTableOrderScreen["api"];
+  if (change === "party") el.party = { id: "other" } as TillTableOrderScreen["party"];
+  if (change === "bill") el.orderId = "other";
+  if (change === "serviceVisit") el.serviceVisit++;
+  if (change === "unread") el.currentOrdersUnread = true;
+  if (change === "closed") {
+    await userEvent.click(q(el, "[data-sent-line-close]"));
+    await el.updateComplete;
+  }
+  if (change === "row-abandoned" || change === "cancelled" || change === "gone") {
+    const orders = structuredClone(current());
+    if (change === "row-abandoned") orders.groups[2]!.rows[0]!.billStatus = "abandoned";
+    if (change === "cancelled") orders.groups[2]!.rows[0]!.cancelledQuantity = "2.000";
+    if (change === "gone") orders.groups[2]!.rows = [];
+    el.currentOrders = orders;
+  }
+  cancel.click();
+  await el.updateComplete;
+  expect(cancellations).toEqual([]);
+});
+
+it.each(["owner", "loading"] as const)("paid Void still refuses the %s lock", async (lock) => {
+  const store = new DraftStore();
+  store.billStatus = "settled";
+  const orders = structuredClone(current());
+  orders.groups[2]!.rows[0]!.billStatus = "settled";
+  const el = await openLine("held", {
+    draftStore: store,
+    currentOrders: orders,
+    bills: [bill("settled")],
+  });
+  const events = capture(el, "cancel-item");
+  await openMore(el);
+  const cancel = q(el, "[data-sent-line-void]");
+  expect(cancel).not.toBeNull();
+  if (lock === "owner") store.ownershipLocked = true;
+  else store.lockEdits();
+  cancel.click();
+  await el.updateComplete;
+  expect(events).toEqual([]);
+  expect(q(el, "[data-sent-line-void]")).toBeNull();
+});
+
+it("Void also respects a plain order store's reload lock", async () => {
+  const store = new WorkingOrderStore();
+  const el = await openLine("held", { draftStore: store });
+  const events = capture(el, "cancel-item");
+  await openMore(el);
+  const cancel = q(el, "[data-sent-line-void]");
+  expect(cancel).not.toBeNull();
+  store.lockEdits();
+  cancel.click();
+  await el.updateComplete;
+  expect(events).toEqual([]);
+  expect(q(el, "[data-sent-line-void]")).toBeNull();
+});
+
+it("a previous Void cannot consume a reopened dish window", async () => {
+  const el = await openLine("held");
+  const events = capture(el, "cancel-item");
+  await openMore(el);
+  const previous = q(el, "[data-sent-line-void]");
+  await userEvent.click(q(el, "[data-sent-line-close]"));
+  await el.updateComplete;
+  const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!);
+  await el.updateComplete;
+  previous.click();
+  await el.updateComplete;
+  expect(events).toEqual([]);
+  expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-void]"));
+  expect(events.map((event) => event.detail)).toEqual([{ lineId: "l-flan" }]);
+});

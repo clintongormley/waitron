@@ -1015,6 +1015,7 @@ export const en = {
   // Per-line kitchen actions
   "table.send_line": "Send",
   "table.recall_line": "Recall",
+  "table.void_line": "Void…",
   "table.cancel_line": "Cancel",
   "table.cancel_started": "The kitchen has started this — cancel and bin it?",
   "table.change_line": "Change",
@@ -2567,6 +2568,7 @@ export const es: Record<StringKey, string> = {
   "table.split_group_line": "Separar cantidad",
   "table.send_line": "Enviar",
   "table.recall_line": "Retirar",
+  "table.void_line": "Cancelar…",
   "table.cancel_line": "Cancelar",
   "table.cancel_started": "La cocina ya lo ha empezado — ¿cancelar y tirarlo?",
   "table.change_line": "Cambiar",

@@ -1,4 +1,4 @@
-import type { RetainedDraftCandidate } from "../state/draft-sync.js";
+import { DraftStore, type RetainedDraftCandidate } from "../state/draft-sync.js";
 import { groupName, groupNumberText } from "../widgets/group-name.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import {
@@ -2723,9 +2723,22 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  #canVoidSent(slice: SentSlice): boolean {
+    const store = this.#draftStore;
+    const locked = store instanceof DraftStore ? store.compositionLocked : store?.editsLocked;
+    const bill = this.bills.find((bill) => bill.workingOrderId === slice.row.workingOrderId);
+    return (
+      slice.kind !== "cancelled_charged" &&
+      slice.row.billStatus !== "abandoned" &&
+      bill?.status !== "abandoned" &&
+      !locked &&
+      !this.#draftStore?.sending
+    );
+  }
+
   #actOnSentLine(
     pending: typeof this.sentLinePending,
-    action: "fire" | "recall" | "station",
+    action: "fire" | "recall" | "station" | "void",
   ): void {
     if (
       pending === null ||
@@ -2740,13 +2753,15 @@ export class TillTableOrderScreen extends LitElement {
       slice === undefined ||
       (action === "fire" && !this.#canFireSent(slice)) ||
       (action === "recall" && !this.#canRecallSent(slice)) ||
-      (action === "station" && !this.#canMoveSent(slice))
+      (action === "station" && !this.#canMoveSent(slice)) ||
+      (action === "void" && !this.#canVoidSent(slice))
     )
       return;
     this.sentLinePending = null;
     this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
     if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
     else if (action === "recall") this.#recallLine(slice.row.lineNo);
+    else if (action === "void") this.#dispatch("cancel-item", { lineId: slice.row.lineId });
     else
       this.#dispatch("move-station", {
         workingOrderId: slice.row.workingOrderId,
@@ -2762,13 +2777,15 @@ export class TillTableOrderScreen extends LitElement {
     const recall = this.#canRecallSent(slice);
     const station = this.#canMoveSent(slice);
     const unserve = slice.kind === "served" && this.#sentBillOpen(slice.row);
-    if (!fire && !recall && !station && !unserve) return nothing;
+    const canVoid = this.#canVoidSent(slice);
+    if (!fire && !recall && !station && !unserve && !canVoid) return nothing;
     const pending = this.sentLinePending;
     const disabled = this.busy || this.groupCommandBusy;
     return html`<wt-row-actions label=${t("shell.more")}>
       ${fire ? html`<wt-button variant=${disabled ? "secondary" : "primary"} data-sent-line-fire ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "fire")}>${t("table.destination_fire_now")}</wt-button>` : nothing}
       ${recall ? html`<wt-button variant="secondary" data-sent-line-recall ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "recall")}>${t("table.recall_line")}</wt-button>` : nothing}
       ${station ? html`<wt-button variant="secondary" data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
+      ${canVoid ? html`<wt-button variant=${disabled ? "secondary" : "danger"} data-sent-line-void ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "void")}>${t("table.void_line")}</wt-button>` : nothing}
       ${unserve ? html`<wt-button variant="secondary" data-sent-line-unserve ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button>` : nothing}
     </wt-row-actions>`;
   }

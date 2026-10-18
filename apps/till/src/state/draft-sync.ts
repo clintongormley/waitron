@@ -50,8 +50,12 @@ export class DraftStore extends WorkingOrderStore {
     this.emit("changed");
   }
 
+  get compositionLocked(): boolean {
+    return this.#ownershipLocked || super.editsLocked;
+  }
+
   override get editsLocked(): boolean {
-    return this.#ownershipLocked || this.#billStatus !== "open" || super.editsLocked;
+    return this.compositionLocked || this.#billStatus !== "open";
   }
 
   declare placer?: (courseId: string | null, exceptIndex?: number) => ReturnType<typeof placeFor>;
