@@ -46,3 +46,26 @@ describe.each(["light", "dark"] as const)("wt-language-chooser a11y (%s theme)",
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)(
+  'wt-language-chooser layout="group" a11y (%s theme)',
+  (theme) => {
+    test.each([
+      ["with its languages", loadLocales],
+      ["before its languages arrive", () => new Promise<never>(() => {})],
+    ] as const)("%s", async (_state, load) => {
+      const el = document.createElement("wt-language-chooser") as WtLanguageChooser;
+      el.setAttribute("layout", "group");
+      el.label = "Idioma";
+      el.active = "es-ES";
+      el.loadLocales = load;
+      (await mountThemed("<div></div>", theme)).append(el);
+      await new Promise((resolve) => setTimeout(resolve));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelectorAll('[role="group"] button').length).toBe(
+        load === loadLocales ? 2 : 1,
+      );
+      await expectNoA11yViolations(host);
+    });
+  },
+);

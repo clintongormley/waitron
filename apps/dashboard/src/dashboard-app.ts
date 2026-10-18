@@ -928,6 +928,9 @@ export class DashboardApp extends LitElement {
   );
   /** A stable field, so the chooser's `loadLocales` property does not change on every render. */
   readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
+  /** The account menu's choices load with no press, so the read must not count as activity. */
+  readonly #loadLocalesPassively = () =>
+    (this.api.background ?? this.api).getLocales().then((r) => r.locales);
   @state() private alerts: AlertView[] = [];
   @state() private alertsVisible = false;
   @state() private alertError: string | null = null;
@@ -1752,11 +1755,15 @@ export class DashboardApp extends LitElement {
                 .labels=${this.#themeLabelsFor(currentLocale())}
               ></wt-theme-chooser>`
         }
-        <wt-language-chooser
-          data-test="language-chooser"
-          .active=${currentLocale()}
-          .loadLocales=${this.#loadLocales}
-        ></wt-language-chooser>
+        ${
+          authenticated
+            ? nothing
+            : html`<wt-language-chooser
+                data-test="language-chooser"
+                .active=${currentLocale()}
+                .loadLocales=${this.#loadLocales}
+              ></wt-language-chooser>`
+        }
         ${
           authenticated
             ? html`${
@@ -1805,6 +1812,13 @@ export class DashboardApp extends LitElement {
                     labels: this.#themeLabelsFor(currentLocale()),
                     onPick: chooseTheme,
                   })}
+                  <wt-language-chooser
+                    layout="group"
+                    data-test="language-chooser"
+                    label=${t("profile.language")}
+                    .active=${currentLocale()}
+                    .loadLocales=${this.#loadLocalesPassively}
+                  ></wt-language-chooser>
                   <wt-button
                     variant="ghost"
                     align="start"

@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi, type MockInstance } from "vitest";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
-import { setLocale, t } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
@@ -217,7 +217,6 @@ it("signed in, the banner has a Help switch between the bell and the account men
   });
   const actions = q(el, ".banner-actions")!;
   expect([...actions.children].map((child) => child.getAttribute("data-test"))).toEqual([
-    "language-chooser",
     "alerts-bell",
     "help-switch",
     "account-menu",
@@ -422,5 +421,172 @@ it("a keyboard user can turn help on with the account menu open, and the menu st
   } finally {
     window.removeEventListener("error", onError);
     await page.viewport(width, height);
+  }
+});
+
+/** Runs `body` at a real viewport size inside the real page's outer margin (`index.html` pads the
+ * body by 24px), then restores the size. */
+async function atViewport(host: HTMLElement, width: number, body: () => Promise<void>) {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  host.style.padding = "24px";
+  try {
+    await page.viewport(width, 800);
+    await vi.waitFor(() => expect(window.innerWidth).toBe(width));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await body();
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+}
+
+const languageGroup = (el: DashboardApp) =>
+  q(el, "[data-test=account-menu] [data-test=language-chooser]");
+const languageChoice = (el: DashboardApp, code: string) =>
+  languageGroup(el)?.shadowRoot!.querySelector<HTMLButtonElement>(`[data-test=lang-${code}]`) ??
+  null;
+
+/** Measured on a68cc3661, before the help switch, with the language chooser in the banner: the same
+ * at 320, 360, 390 and 480 px, in English and Spanish. */
+const bannerHeightBeforeTheSwitch = { live: 102, demo: 94 } as const;
+
+it.each(
+  (["live", "demo"] as const).flatMap((intent) =>
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      ([320, 360, 390, 480] as const).map((width) => [intent, locale, width] as const),
+    ),
+  ),
+)(
+  "signed in, when the intent is %s, in %s, at %ipx the switch, bell and account menu share the lockup's row, and the banner keeps its height",
+  async (intent, locale, width) => {
+    const { el, host } = await signedIn({
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, sessionDefault: locale, onboardingIntent: intent }),
+      liveData: new LiveData(),
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
+    });
+    await atViewport(host, width, async () => {
+      const banner = q(el, "[data-test=brand-banner]")!;
+      const items = [
+        "[data-test=nav-toggle]",
+        ".brand-logo",
+        "[data-test=venue-name]",
+        "[data-test=alerts-bell]",
+        "[data-test=help-switch]",
+        "[data-test=account-menu]",
+      ].map((selector) => ({ selector, box: q(el, selector)!.getBoundingClientRect() }));
+      const outer = banner.getBoundingClientRect();
+      for (const { selector, box } of items) {
+        expect(box.width, `${selector} is visible`).toBeGreaterThan(0);
+        expect(box.left, `${selector} starts inside the banner`).toBeGreaterThanOrEqual(outer.left);
+        expect(box.right, `${selector} ends inside the banner`).toBeLessThanOrEqual(outer.right);
+      }
+      for (const [i, a] of items.entries()) {
+        for (const b of items.slice(i + 1)) {
+          const overlapX = Math.min(a.box.right, b.box.right) - Math.max(a.box.left, b.box.left);
+          const overlapY = Math.min(a.box.bottom, b.box.bottom) - Math.max(a.box.top, b.box.top);
+          expect(overlapX > 0.5 && overlapY > 0.5, `${a.selector} overlaps ${b.selector}`).toBe(
+            false,
+          );
+        }
+      }
+      expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
+      const logo = items[1]!.box;
+      expect(logo.width, "the lockup keeps a readable width").toBeGreaterThanOrEqual(
+        width === 320 ? 31 : 60,
+      );
+      for (const { selector, box } of items.slice(3))
+        expect(box.top, `${selector} shares the lockup's row`).toBeLessThan(logo.bottom);
+      expect(outer.height).toBe(bannerHeightBeforeTheSwitch[intent]);
+    });
+  },
+);
+
+it("signed in, the banner has no language chooser and the account menu holds the language choices after Theme", async () => {
+  const { el } = await signedIn();
+  expect(q(el, ".banner-actions > wt-language-chooser")).toBeNull();
+  expect([...accountMenu(el).children].map((child) => child.getAttribute("data-test"))).toEqual([
+    "profile-row",
+    "theme-choices",
+    "language-chooser",
+    "logout",
+  ]);
+  const group = languageGroup(el)!;
+  expect(group.getAttribute("layout")).toBe("group");
+  await openAccountMenu(el);
+  await vi.waitFor(() => expect(languageChoice(el, "es-ES")).not.toBeNull());
+  await expect
+    .element(group.shadowRoot!.querySelector<HTMLElement>("[role=group]")!)
+    .toHaveAccessibleName("Language");
+  expect(languageChoice(el, "en-GB")!.getAttribute("aria-pressed")).toBe("true");
+  expect(languageChoice(el, "es-ES")!.getAttribute("aria-pressed")).toBe("false");
+});
+
+it("signed in, the account menu reads the languages through the passive client, once", async () => {
+  const background = {
+    getLocales: vi.fn().mockResolvedValue({
+      locales: [
+        { code: "es-ES", label: "Español" },
+        { code: "en-GB", label: "English" },
+      ],
+      venueDefault: "es-ES",
+      loginDefault: "es-ES",
+      venueName: "Deli Test SL",
+    }),
+  };
+  const { el, api } = await signedIn({ background });
+  await vi.waitFor(() => expect(languageChoice(el, "es-ES")).not.toBeNull());
+  expect(background.getLocales).toHaveBeenCalledOnce();
+  expect(api.getLocales).not.toHaveBeenCalled();
+});
+
+it.each([1280, 390])(
+  "there is one language chooser at %ipx, signed in and signed out",
+  async (width) => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 844);
+    try {
+      const { el } = await signedIn();
+      expect(el.shadowRoot!.querySelectorAll("wt-language-chooser")).toHaveLength(1);
+      q(el, "[data-test=logout]")!.click();
+      await flush(el);
+      expect(login(el)).not.toBeNull();
+      const choosers = el.shadowRoot!.querySelectorAll("wt-language-chooser");
+      expect(choosers).toHaveLength(1);
+      expect(choosers[0]!.getAttribute("layout")).toBe("menu");
+      expect(choosers[0]!.parentElement!.classList.contains("banner-actions")).toBe(true);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
+
+it("a language picked in the account menu changes the language, and closes the menu", async () => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(390, 844);
+  try {
+    const { el, api } = await signedIn();
+    expect(currentLocale()).toBe("en-GB");
+    await openAccountMenu(el);
+    await vi.waitFor(() => expect(languageChoice(el, "es-ES")).not.toBeNull());
+    await userEvent.click(languageChoice(el, "es-ES")!);
+    await vi.waitFor(() => expect(currentLocale()).toBe("es-ES"));
+    expect(api.putLocale).toHaveBeenCalledExactlyOnceWith("es-ES");
+    await flush(el);
+    expect(menuPopup(el).matches(":popover-open")).toBe(false);
+    expect(languageChoice(el, "es-ES")!.getAttribute("aria-pressed")).toBe("true");
+    await expect.element(switchButton(el)).toHaveAccessibleName("Ayuda");
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+});
+
+it("the account menu's language choices have no accessibility violations, in both themes", async () => {
+  for (const theme of ["light", "dark"] as const) {
+    const { el } = await signedIn({}, theme);
+    await openAccountMenu(el);
+    await vi.waitFor(() => expect(languageChoice(el, "es-ES")).not.toBeNull());
+    await expectNoA11yViolations(q(el, "[data-test=brand-banner]")!);
+    cleanupWidgets();
   }
 });

@@ -1017,3 +1017,201 @@ describe("wt-language-chooser keyboard, dismissal and focus", () => {
     expect(el.shadowRoot!.querySelector('[aria-checked="true"]')).toBeNull();
   });
 });
+
+describe('wt-language-chooser layout="group"', () => {
+  /** Properties are set before the element joins the page, as a Lit template sets them. */
+  async function mountGroup(
+    props: Partial<WtLanguageChooser> = {},
+    parent?: Node,
+  ): Promise<WtLanguageChooser> {
+    const el = document.createElement("wt-language-chooser");
+    el.setAttribute("layout", "group");
+    Object.assign(el, props);
+    if (parent) parent.appendChild(el);
+    else (await mount("<div></div>")).append(el);
+    await settle(el);
+    return el;
+  }
+
+  const groupOf = (el: WtLanguageChooser) =>
+    el.shadowRoot!.querySelector<HTMLElement>('[role="group"]')!;
+  const choicesOf = (el: WtLanguageChooser) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLButtonElement>('[role="group"] button'),
+  ];
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("is a group named by its visible label, holding one button per loaded language, with no trigger and no pop-up", async () => {
+    const loadLocales = vi.fn(twoLocales);
+    const el = await mountGroup({ active: "es-ES", label: "Idioma", loadLocales });
+
+    expect(loadLocales).toHaveBeenCalledOnce();
+    await expect.element(page.elementLocator(groupOf(el))).toHaveAccessibleName("Idioma");
+    expect(
+      groupOf(el).querySelector<HTMLElement>(`#${groupOf(el).getAttribute("aria-labelledby")}`)!
+        .textContent,
+    ).toBe("Idioma");
+    expect(choicesOf(el).map((b) => b.getAttribute("data-test"))).toEqual([
+      "lang-es-ES",
+      "lang-en-GB",
+    ]);
+    expect(choicesOf(el).map((b) => b.textContent!.trim())).toEqual([
+      "Español (servidor)",
+      "English (server)",
+    ]);
+    expect(choicesOf(el).map((b) => b.type)).toEqual(["button", "button"]);
+    expect(triggerOf(el)).toBeNull();
+    expect(menuOf(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("[popover]")).toBeNull();
+  });
+
+  it("marks the active language alone as pressed, and follows its parent when it changes", async () => {
+    const el = await mountGroup({ active: "es-ES", loadLocales: twoLocales });
+    expect(choicesOf(el).map((b) => b.getAttribute("aria-pressed"))).toEqual(["true", "false"]);
+    el.active = "en-GB";
+    await el.updateComplete;
+    expect(choicesOf(el).map((b) => b.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+  });
+
+  it("a pick sends wt-locale-selected with the code, across a shadow root, and leaves the language to its parent", async () => {
+    const wrapper = await mountInShadowRoot("<span></span>");
+    const el = await mountGroup(
+      { active: "es-ES", loadLocales: twoLocales },
+      wrapper.getRootNode(),
+    );
+    const heard: CustomEvent<{ code: string }>[] = [];
+    const listener = (e: Event) => heard.push(e as CustomEvent<{ code: string }>);
+    document.addEventListener("wt-locale-selected", listener);
+    try {
+      choicesOf(el)[1]!.click();
+      await el.updateComplete;
+    } finally {
+      document.removeEventListener("wt-locale-selected", listener);
+    }
+    expect(heard).toHaveLength(1);
+    expect(heard[0]!.bubbles).toBe(true);
+    expect(heard[0]!.composed).toBe(true);
+    expect(heard[0]!.detail).toEqual({ code: "en-GB" });
+    expect(el.active).toBe("es-ES");
+    expect(choicesOf(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("draws only the active language, pressed, until its languages arrive", async () => {
+    const load = deferred<{ code: string; label: string }[]>();
+    const el = await mountGroup({ active: "en-GB", loadLocales: () => load.promise });
+    expect(choicesOf(el).map((b) => b.getAttribute("data-test"))).toEqual(["lang-en-GB"]);
+    expect(choicesOf(el)[0]!.textContent!.trim()).toBe("English");
+    expect(choicesOf(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+    load.resolve(await twoLocales());
+    await settle(el);
+    expect(choicesOf(el)).toHaveLength(2);
+  });
+
+  it("after a failed load draws only the active language, raises no unhandled rejection, and tries again when connected again", async () => {
+    const rejections: unknown[] = [];
+    const onRejection = (event: PromiseRejectionEvent): void => {
+      rejections.push(event.reason);
+      event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    try {
+      const loadLocales = vi.fn().mockRejectedValue({ code: "server.internal" });
+      const el = await mountGroup({ active: "es-ES", loadLocales });
+      await settle(el);
+      expect(loadLocales).toHaveBeenCalledOnce();
+      expect(choicesOf(el).map((b) => b.getAttribute("data-test"))).toEqual(["lang-es-ES"]);
+      expect(choicesOf(el)[0]!.getAttribute("aria-pressed")).toBe("true");
+      expect(rejections).toEqual([]);
+
+      loadLocales.mockImplementation(twoLocales);
+      const parent = el.parentElement!;
+      el.remove();
+      parent.append(el);
+      await settle(el);
+      expect(loadLocales).toHaveBeenCalledTimes(2);
+      expect(choicesOf(el)).toHaveLength(2);
+    } finally {
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
+  });
+
+  it("loads once: connected again after a load that worked, it fetches nothing", async () => {
+    const loadLocales = vi.fn(twoLocales);
+    const el = await mountGroup({ active: "es-ES", loadLocales });
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await settle(el);
+    expect(loadLocales).toHaveBeenCalledOnce();
+    expect(choicesOf(el)).toHaveLength(2);
+  });
+
+  it("starts no second load while the first is pending, even when connected again", async () => {
+    const load = deferred<{ code: string; label: string }[]>();
+    const loadLocales = vi.fn(() => load.promise);
+    const el = await mountGroup({ active: "es-ES", loadLocales });
+    const parent = el.parentElement!;
+    el.remove();
+    parent.append(el);
+    await settle(el);
+    expect(loadLocales).toHaveBeenCalledOnce();
+    load.resolve(await twoLocales());
+    await settle(el);
+    expect(choicesOf(el)).toHaveLength(2);
+  });
+
+  it("switched to group layout while on the page, it loads its languages", async () => {
+    const loadLocales = vi.fn(twoLocales);
+    const el = await mountChooser({ active: "es-ES", loadLocales });
+    expect(loadLocales).not.toHaveBeenCalled();
+    el.layout = "group";
+    await settle(el);
+    expect(loadLocales).toHaveBeenCalledOnce();
+    expect(choicesOf(el)).toHaveLength(2);
+  });
+
+  it("makes each choice at least a tap target, the label first and every choice on the label's row at 320 px", async () => {
+    const el = await mountGroup({ active: "es-ES", label: "Language" });
+    host.style.width = "320px";
+    await el.updateComplete;
+    const tap = parseFloat(getComputedStyle(host).getPropertyValue("--wt-tap-min"));
+    expect(tap).toBeGreaterThan(0);
+    const label = groupOf(el).querySelector("span")!.getBoundingClientRect();
+    for (const box of choicesOf(el).map((b) => b.getBoundingClientRect())) {
+      expect(box.width).toBeGreaterThanOrEqual(tap);
+      expect(box.height).toBeGreaterThanOrEqual(tap);
+      expect(box.left).toBeGreaterThanOrEqual(label.right);
+      expect(box.top).toBeLessThan(label.bottom);
+    }
+  });
+
+  it.each(["light", "dark"] as const)(
+    "fills the pressed choice alone from the primary tokens, and draws its label muted and small, in the %s theme",
+    async (theme) => {
+      const el = await mountGroup({ active: "en-GB", label: "Language", loadLocales: twoLocales });
+      host.setAttribute("data-theme", theme);
+      const [spanish, english] = choicesOf(el);
+      const probe = document.createElement("span");
+      probe.style.background = "var(--wt-color-primary)";
+      probe.style.color = "var(--wt-color-on-primary)";
+      probe.style.borderColor = "var(--wt-color-text-muted)";
+      probe.style.fontSize = "var(--wt-font-size-sm)";
+      host.append(probe);
+      const want = getComputedStyle(probe);
+      expect(getComputedStyle(english!).backgroundColor).toBe(want.backgroundColor);
+      expect(getComputedStyle(english!).color).toBe(want.color);
+      expect(getComputedStyle(spanish!).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+      const label = getComputedStyle(groupOf(el).querySelector("span")!);
+      expect(label.color).toBe(want.borderTopColor);
+      expect(label.fontSize).toBe(want.fontSize);
+    },
+  );
+});

@@ -178,13 +178,14 @@ it("signed out, puts the theme chooser in the banner just before the language ch
   ]);
 });
 
-it("signed in, the banner has no theme chooser and the account menu holds the Theme choices between Account settings and Log out", async () => {
+it("signed in, the banner has no theme chooser and the account menu holds the Theme choices between Account settings and the language choices", async () => {
   const { el } = await mountApp(signedInApi("en-GB"));
   expect(q(el, "[data-test=account-menu]")).not.toBeNull();
   expect(bannerChooser(el)).toBeNull();
   expect([...accountMenu(el).children].map((child) => child.getAttribute("data-test"))).toEqual([
     "profile-row",
     "theme-choices",
+    "language-chooser",
     "logout",
   ]);
   await openAccountMenu(el);
