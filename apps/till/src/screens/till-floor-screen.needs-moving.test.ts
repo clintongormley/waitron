@@ -202,7 +202,7 @@ describe("till-floor-screen: a table that needs moving", () => {
     expect(card(el, "t3").querySelector("[data-needs-moving]")).toBeNull();
   });
 
-  it("Join with… is not offered on it, and leaves it out as a target", async () => {
+  it("Join with… is not offered on it, and lists it as a target that cannot be picked", async () => {
     const el = await mount([moving("t3", 12), planned("t4", 30), planned("t5", 50)]);
 
     send(mapOf(el), "wt-table-details", { tableId: "t3" });
@@ -224,7 +224,15 @@ describe("till-floor-screen: a table that needs moving", () => {
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-join-with-dialog"]>(
         "till-join-with-dialog",
       )!;
-    expect(dialog.targets.map((table) => table.id)).toEqual(["t5"]);
+    expect(dialog.targets.map((table) => table.id)).toEqual(["t3", "t5"]);
+    await dialog.updateComplete;
+    const row =
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-target="t3"]')!;
+    expect(row.disabled).toBe(true);
+    expect(row.textContent).toContain("Needs moving");
+    expect(dialog.shadowRoot!.querySelector('[data-target-reason="t3"]')!.textContent!.trim()).toBe(
+      codeMessage("table.needs_moving"),
+    );
   });
 
   it("names both tables when Mark moved is refused because another stands in the new place", async () => {

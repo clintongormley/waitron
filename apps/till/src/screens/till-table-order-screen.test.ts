@@ -4237,43 +4237,56 @@ describe("till-table-order-screen", () => {
       ["Join a table", "join"],
       ["Move guests", "move"],
       ["Move this bill", "move-bill"],
-    ])("%s leaves out a table that needs moving", async (_name, action) => {
-      const onMap = (needsMoving: boolean) => ({
-        placement: { x: 0, y: 0, width: 2, height: 2, shape: "round" as const, rotation: 0 },
-        seats: 2,
-        fixed: false,
-        takenOff: false,
-        joinId: null,
-        joinSeats: null,
-        inJoinedTable: null,
-        joined: null,
-        splitOffFrom: null,
-        zoneRevision: 0,
-        needsMoving,
-      });
-      const { el } = await mount({
-        lines: [pendingLine],
-        orderId: "wo-check",
-        party: anaParty,
-        bills: partyBills().bills,
-        tables: [
-          tableState({
-            id: "t4",
-            label: "Mesa 4",
-            state: "open-tab",
-            condition: "held",
-            party: anaParty,
-          }),
-          tableState({ id: "t5", label: "Mesa 5", today: onMap(true) }),
-          tableState({ id: "t6", label: "Mesa 6", today: onMap(false) }),
-        ],
-      });
-      await toMenu(el);
-      click(el, `[data-action="${action}"]`);
-      await el.updateComplete;
-      expect(targetIds(el)).toContain("t6");
-      expect(targetIds(el)).not.toContain("t5");
-    });
+    ])(
+      "%s lists a table that needs moving but cannot pick it, saying why",
+      async (_name, action) => {
+        const onMap = (needsMoving: boolean) => ({
+          placement: { x: 0, y: 0, width: 2, height: 2, shape: "round" as const, rotation: 0 },
+          seats: 2,
+          fixed: false,
+          takenOff: false,
+          joinId: null,
+          joinSeats: null,
+          inJoinedTable: null,
+          joined: null,
+          splitOffFrom: null,
+          zoneRevision: 0,
+          needsMoving,
+        });
+        const { el } = await mount({
+          lines: [pendingLine],
+          orderId: "wo-check",
+          party: anaParty,
+          bills: partyBills().bills,
+          tables: [
+            tableState({
+              id: "t4",
+              label: "Mesa 4",
+              state: "open-tab",
+              condition: "held",
+              party: anaParty,
+            }),
+            tableState({ id: "t5", label: "Mesa 5", today: onMap(true) }),
+            tableState({ id: "t6", label: "Mesa 6", today: onMap(false) }),
+          ],
+        });
+        await toMenu(el);
+        click(el, `[data-action="${action}"]`);
+        await el.updateComplete;
+        expect(targetIds(el)).toContain("t6");
+        expect(targetIds(el)).toContain("t5");
+        const listed = (id: string) =>
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+            `[data-target="${id}"]`,
+          )!;
+        expect(listed("t5").textContent).toContain(t("floor.needs_moving"));
+        expect(listed("t5").disabled).toBe(true);
+        expect(listed("t6").disabled).toBe(false);
+        expect(el.shadowRoot!.querySelector('[data-target-reason="t5"]')!.textContent!.trim()).toBe(
+          codeMessage("table.needs_moving"),
+        );
+      },
+    );
 
     it("offers target tables in number order, a moving party's own tables first", async () => {
       const ana: TableParty = { ...anaParty, tableIds: ["t10", "t2"] };

@@ -497,7 +497,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
     ).toEqual(["long", "stool-2"]);
   });
 
-  it("Move to table leaves out a table that needs moving", async () => {
+  it("Move to table lists a table that needs moving but cannot pick it, saying why", async () => {
     const onMap = (needsMoving: boolean) => ({
       placement: { x: 0, y: 0, width: 2, height: 2, shape: "round" as const, rotation: 0 },
       seats: 2,
@@ -518,6 +518,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
         tableRow("t2", "Mesa 2", { today: onMap(false) }),
       ],
     });
+    const moved = heard(el, "move-held-order");
 
     await openPicker(el);
 
@@ -525,7 +526,16 @@ describe("till-held-orders: moving a counter order to a table", () => {
       [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
         (row) => row.dataset.target,
       ),
-    ).toEqual(["t2"]);
+    ).toEqual(["t1", "t2"]);
+    expect(target(el, "t1")!.textContent).toContain(t("floor.needs_moving"));
+    expect(target(el, "t1")!.disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector('[data-target-reason="t1"]')!.textContent!.trim()).toBe(
+      codeMessage("table.needs_moving"),
+    );
+    target(el, "t1")!.click();
+    await el.updateComplete;
+    expect(moved).toEqual([]);
+    expect(target(el, "t2")!.disabled).toBe(false);
   });
 
   it("says so when the floor lists no table", async () => {

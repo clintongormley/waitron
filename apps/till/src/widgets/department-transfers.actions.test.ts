@@ -417,9 +417,13 @@ it("offers no part of a joined table as the destination table", async () => {
   ).toEqual(["", "long", "stool-2"]);
 });
 
-it("offers no table that needs moving as the destination table", async () => {
+it("offers a table that needs moving as the destination table, as one that needs clearing", async () => {
   const floor = joinedFloor().map((row) =>
-    row.id === "stool-2" ? { ...row, today: { ...row.today!, needsMoving: true } } : row,
+    row.id === "stool-2"
+      ? { ...row, today: { ...row.today!, needsMoving: true } }
+      : row.id === "long"
+        ? { ...row, condition: "needs_clearing" as const }
+        : row,
   );
   const { el } = await mount(undefined, floor);
   click(el, "[data-accept]");
@@ -434,7 +438,7 @@ it("offers no table that needs moving as the destination table", async () => {
     el
       .shadowRoot!.querySelector<HTMLElement & { options: { value: string }[] }>("[name=tableId]")!
       .options.map((option) => option.value),
-  ).toEqual(["", "long"]);
+  ).toEqual(["", "long", "stool-2"]);
 });
 
 it("shows table.in_joined_table beside the destination table", async () => {
