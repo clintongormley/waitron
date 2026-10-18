@@ -1089,12 +1089,15 @@ help about anything you want very quickly."
   `docs/content-and-images.md`, English only); nothing in the apps links to them and the box does
   not serve them. The design (below) proposes serving them from the box in English and Spanish.
 - **Design (2026-10-18):** [2026-10-18-a582-help-mode-design.md](../superpowers/specs/2026-10-18-a582-help-mode-design.md),
-  pictures in [mockups/a582-help-mode/](mockups/a582-help-mode/). It settles the open points above
-  as recommendations and waits for the owner's answer to its one question (§9).
+  pictures in [mockups/a582-help-mode/](mockups/a582-help-mode/). It settles the open points above.
+  The owner approved it on 2026-10-18 with one change: on a till or handheld there is no Help row
+  in More, because the "?" stays in the bar at the top right at every width. With help on, an open
+  menu shows a blue "?" beside each option that has help. Being built in lane C, slice 1 on branch
+  `feat/a582-1-help-badge`.
 - **Relation to A237.** The standing rule (owner 2026-10-03) makes a short explanation the field's
   hint, never a "?" button. Help mode fits beside it: hints stay where they are, and help mode is the
-  place for the longer explanation. A237's remaining "?" buttons may move into help mode instead of
-  becoming hints; decide in the plan.
+  place for the longer explanation. Decided with the design (owner, 2026-10-18; design §7): the
+  dashboard's remaining "?" buttons become help-mode badges, and the setup wizard keeps its own.
 
 
 ## A653 — every long dashboard table scrolls the same way, with less above it
