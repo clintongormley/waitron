@@ -1312,6 +1312,23 @@ That helper now also waits for the opening animation, and the case covers immedi
 presses with the same draft and submitted-value assertions. This reproduces a mechanism for
 A828's CI failure; that CI run retained no pointer trace.
 
+Follow-up to #1864, measured 2026-10-19 in the running, seeded demo dashboard: 24 coordinate
+presses on the exposed Vegan chip selected it, across 390 px and 1280 px, mouse and Chromium touch
+emulation, with requested press delays of 0 and 150 ms (observed holds: 2 to 308.5 ms). The
+disclosure was still opening at 23 presses. Each press and release reached the chip at the same
+position; the disclosure body's `scrollTop` stayed zero. The probe scrolled with the wheel, then waited until the chip's centre was
+hit-testable before pressing, without a locator scrolling the chip into view.
+
+A separate ten-case probe used Playwright's locator click immediately after opening the section.
+One press missed: before pointer-down, the disclosure body had scrolled 299 px inside a 19 px-high
+clip. By release its scroll was 197 px, its height was 125 px, and the chip had moved from y=626 to
+y=728. This is the difference the earlier widget trace did not measure: the automated click can
+scroll the opening clip itself. The visible-target sample found no missed presses; it does not
+establish every physical device or gesture. Both probes ran against the same product code, with
+no test helper or API stubs. Receipt commands: `node
+~/waitron-campaign-f/receipts/a882-person-tap-20261018-235902/real-taps.mjs` and the sibling
+`locator-control.mjs`; their event traces and `verification.json` are retained beside them.
+
 ## A test waits for a browser grant by tracking the request, never by a fixed sleep.
 
 Where the browser has Web Locks, the Payments screen asks for one before it reads a card reader's
