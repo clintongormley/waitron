@@ -531,6 +531,12 @@ describe.each(["light", "dark"] as const)("top-seller name overflow (%s)", (them
                   total: "99999.99",
                   variants: [{ name: variantName, quantity: "88888", total: "88888.88" }],
                 },
+                {
+                  name: "Croquetas de jamón artesanas",
+                  quantity: "55555",
+                  total: "55555.55",
+                  variants: [],
+                },
               ],
             }),
           }),
@@ -550,6 +556,14 @@ describe.each(["light", "dark"] as const)("top-seller name overflow (%s)", (them
       expect(tableBox.left).toBeGreaterThanOrEqual(cardBox.left + parseFloat(padding.paddingLeft));
       expect(tableBox.right).toBeLessThanOrEqual(cardBox.right - parseFloat(padding.paddingRight));
       expect(cardBox.right).toBeLessThanOrEqual(innerWidth);
+      const ordinaryName = card.querySelector<HTMLElement>("[data-test=seller-row-1] th")!;
+      expect(ordinaryName.textContent).toBe("Croquetas de jamón artesanas");
+      expect(ordinaryName.title).toBe("Croquetas de jamón artesanas");
+      const range = document.createRange();
+      range.selectNodeContents(ordinaryName);
+      const tops = [...range.getClientRects()].map((box) => box.top);
+      expect(Math.max(...tops) - Math.min(...tops)).toBeGreaterThan(0);
+      expect(ordinaryName.scrollWidth).toBeLessThanOrEqual(ordinaryName.clientWidth);
       const names = [
         card.querySelector<HTMLElement>("[data-test=seller-name]")!,
         card.querySelector<HTMLElement>("[data-test=variant-name]")!,
@@ -557,19 +571,19 @@ describe.each(["light", "dark"] as const)("top-seller name overflow (%s)", (them
       for (const [index, name] of names.entries()) {
         expect(name.textContent).toBe([productName, variantName][index]);
         expect(name.title).toBe([productName, variantName][index]);
-        const cell = name.closest("th")!;
-        const style = getComputedStyle(cell);
+        const word = name.querySelector<HTMLElement>(".seller-word")!;
+        const style = getComputedStyle(word);
         expect(style.textOverflow).toBe("ellipsis");
         expect(style.whiteSpace).toBe("nowrap");
         expect(style.overflowX).toBe("hidden");
-        expect(cell.clientWidth).toBeGreaterThan(0);
-        expect(cell.scrollWidth).toBeGreaterThan(cell.clientWidth);
+        expect(word.clientWidth).toBeGreaterThan(0);
+        expect(word.scrollWidth).toBeGreaterThan(word.clientWidth);
       }
       const numbers = [...table.querySelectorAll<HTMLElement>("td")];
       expect(numbers.map((cell) => cell.textContent)).toEqual(
         locale === "en-GB"
-          ? ["99999", "€99,999.99", "88888", "€88,888.88"]
-          : ["99999", "99.999,99\u00a0€", "88888", "88.888,88\u00a0€"],
+          ? ["99999", "€99,999.99", "88888", "€88,888.88", "55555", "€55,555.55"]
+          : ["99999", "99.999,99\u00a0€", "88888", "88.888,88\u00a0€", "55555", "55.555,55\u00a0€"],
       );
       for (const number of numbers) {
         expect(number.scrollWidth).toBeLessThanOrEqual(number.clientWidth);

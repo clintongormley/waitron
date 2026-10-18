@@ -905,7 +905,9 @@ plans to retire the editor.
 
 ## Decisions and deliberate limits
 
-- **Long top-seller names on the overview (A829, owner, 2026-10-17).** Keep each name on one line, truncate it with an ellipsis, and show its full text on hover through `title`.
+- **Long top-seller names on the overview (A829, owner, 2026-10-17).** Wrap between words;
+  truncate a word wider than its column with an ellipsis and show the full name on hover through
+  `title`, as A784 does for a day's name in the Calendar.
 
 **Page search (owner, 2026-10-15, A727).** Search finds named tabs, windows and views inside
 readable pages, showing their name and containing page. Page matches precede inner results.
