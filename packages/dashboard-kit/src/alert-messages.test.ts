@@ -71,6 +71,39 @@ describe("a money placeholder", () => {
   });
 });
 
+registerAlertMessages({ "test.dated": { en: "On {when:date}.", es: "ES {when:date}." } });
+
+describe("a date placeholder", () => {
+  it("writes a calendar day the way the alert's language writes it, whatever the region", () => {
+    for (const l of ["en", "en-GB"]) {
+      expect(alertMessage("test.dated", { when: "2026-10-25" }, l)).toBe("On 25 Oct 2026.");
+    }
+    for (const l of ["es", "es-ES"]) {
+      expect(alertMessage("test.dated", { when: "2026-10-25" }, l)).toBe("ES 25 oct 2026.");
+    }
+  });
+
+  it("writes the day the param names, not the day before or after in another time zone", () => {
+    expect(alertMessage("test.dated", { when: "2026-01-01" }, "en")).toBe("On 1 Jan 2026.");
+    expect(alertMessage("test.dated", { when: "2026-12-31" }, "en")).toBe("On 31 Dec 2026.");
+  });
+
+  it("shows a dash for a value that is not a YYYY-MM-DD day", () => {
+    for (const when of [
+      null,
+      undefined,
+      20261025,
+      "25/10/2026",
+      "2026-10-25T00:00:00Z",
+      "2026-13-01",
+      "2026-02-30",
+      "",
+    ]) {
+      expect(alertMessage("test.dated", { when }, "en")).toBe("On —.");
+    }
+  });
+});
+
 describe("alertMessage", () => {
   it("fills params into the locale's sentence, stripping the region", () => {
     expect(alertMessage("test.rejected", { reason: "Tax id", errorCode: 4102 }, "es-ES")).toBe(

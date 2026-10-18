@@ -551,6 +551,11 @@ describe("awaitingCertAlertSource", () => {
       severity: "error",
     });
   });
+
+  it("fiscal.awaiting_certificate links to Venue settings", async () => {
+    const [a] = await awaitingCertAlertSource({ current: true }).read(ctx);
+    expect(a).toMatchObject({ screen: "venue-settings" });
+  });
 });
 
 const suite = useVenueDb({

@@ -317,6 +317,7 @@ export function awaitingCertAlertSource(holder: AwaitingCertStatus): AlertSource
           params: {},
           severity: "error",
           since: null,
+          screen: "venue-settings",
         },
       ];
     },
