@@ -85,6 +85,19 @@ export function wizardApi(
         modules:
           options.offering === false ? [] : [{ module: "fiscal-verifactu", version: "0.0.0" }],
       });
+    if (path.endsWith("/first-setup/resolution"))
+      return Response.json({
+        version: 2,
+        inspectionId: "a".repeat(64),
+        pair: "valid",
+        database: "no-venue-rows",
+        password: "checkable",
+        revision: 1,
+        ownerGeneration: 1,
+        repairEligible: false,
+        emptyDatabase: true,
+        artifacts: [],
+      });
     if (path.endsWith("/first-setup/status"))
       return Response.json(
         headers.has("X-Waitron-Setup-Owner") ? { claimed: true, state: initial } : { claimed },

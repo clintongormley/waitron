@@ -1,6 +1,10 @@
 import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
 import { draftScopeFor } from "@waitron/ui";
 import { FirstSetupSession } from "./first-setup-session.js";
+import type {
+  FirstSetupInspection,
+  FirstSetupResolutionSnapshot,
+} from "./api/first-setup-types.js";
 import "./screens/initial-setup-screen.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import {
@@ -571,6 +575,12 @@ export class SetupApp extends LitElement {
     ++this.#firstGeneration;
     void this.#firstSession?.dispose();
     this.#firstSession = undefined;
+    this.firstOwnerPassword = "";
+    this.firstOwnerBusy = false;
+    this.firstInspection = undefined;
+    this.firstRestartConfirm = false;
+    this.firstRetireConfirmed = false;
+    this.firstRestarting = false;
     this.#firstPasswordScope?.dispose();
     this.#firstPasswordScope = undefined;
     ++this.#cloudRecoveryAttempt;
@@ -703,7 +713,15 @@ export class SetupApp extends LitElement {
       const first = await this.api.firstSetupStatus();
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
       if (first.claimed || first.conflict) {
-        await this.#openFirstSession();
+        try {
+          await this.#openFirstSession();
+        } catch (error) {
+          if (this.isConnected && generation === this.#connectionGeneration) {
+            this.screen = "first-owner";
+            this.firstOwnerError = this.#describeFirstError(error);
+          }
+          throw error;
+        }
         if (!this.isConnected || generation !== this.#connectionGeneration) return;
         this.screen = "first-owner";
       } else if (this.screen === "connection" && !discovery.caDownloadAvailable)
@@ -736,7 +754,15 @@ export class SetupApp extends LitElement {
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
       this.connectionAnswered = true;
       if (first.claimed || first.conflict) {
-        await this.#openFirstSession();
+        try {
+          await this.#openFirstSession();
+        } catch (error) {
+          if (this.isConnected && generation === this.#connectionGeneration) {
+            this.screen = "first-owner";
+            this.firstOwnerError = this.#describeFirstError(error);
+          }
+          throw error;
+        }
         if (!this.isConnected || generation !== this.#connectionGeneration) return;
         this.screen = "first-owner";
       } else this.screen = "mode";
@@ -969,6 +995,10 @@ export class SetupApp extends LitElement {
   @state() private firstPasswordAttempted = false;
   @state() private firstReady = false;
   @state() private firstOfferings: { module: string; version: string }[] = [];
+  @state() private firstInspection?: FirstSetupInspection;
+  @state() private firstRestartConfirm = false;
+  @state() private firstRetireConfirmed = false;
+  @state() private firstRestarting = false;
   #firstSession?: FirstSetupSession;
   #firstGeneration = 0;
   #firstReplacing = false;
@@ -986,7 +1016,18 @@ export class SetupApp extends LitElement {
       if (this.#firstSession === session) this.#firstSession = undefined;
       throw error;
     }
-    await session.refresh();
+    let inspect = false;
+    try {
+      await session.refresh();
+    } catch (error) {
+      if (session.state || (error as { code?: string })?.code !== "setup.attempt_conflict")
+        throw error;
+      inspect = true;
+    }
+    if ((inspect || session.recoveryRequired) && !session.state) {
+      const inspection = await this.api.inspectFirstSetupResolution();
+      if (this.isConnected && this.#firstSession === session) this.firstInspection = inspection;
+    }
     return session;
   }
   #acceptFirstIdentity(): void {
@@ -1078,14 +1119,55 @@ export class SetupApp extends LitElement {
     try {
       const session = await this.#openFirstSession();
       if (!current()) return;
-      await session.resume(password);
+      if (!session.state) await session.recover(this.#firstResolutionSnapshot(), password);
+      else await session.resume(password);
       if (!current()) return;
       this.#acceptFirstIdentity();
+      if (!["claimed", "consumption-intent"].includes(session.state!.status)) {
+        this.screen = "first-owner";
+        return;
+      }
       this.firstOfferings = (
         await this.api.firstSetupOfferings(session.state!.venue.location.fiscalTerritory)
       ).modules;
       if (!current()) return;
       this.#afterFirstOwner();
+    } catch (error) {
+      if (current()) this.firstOwnerError = this.#describeFirstError(error);
+    } finally {
+      if (current()) this.firstOwnerBusy = false;
+    }
+  }
+  #firstResolutionSnapshot(): FirstSetupResolutionSnapshot {
+    const inspection = this.firstInspection;
+    if (
+      !inspection ||
+      inspection.password !== "checkable" ||
+      inspection.revision === null ||
+      inspection.ownerGeneration === null
+    )
+      throw { code: "setup.not_ready" };
+    return {
+      inspectionId: inspection.inspectionId,
+      revision: inspection.revision,
+      ownerGeneration: inspection.ownerGeneration,
+    };
+  }
+  async #startAgainFirstSetup(): Promise<void> {
+    if (this.firstOwnerBusy || !this.firstRetireConfirmed || !this.firstInspection?.emptyDatabase)
+      return;
+    const generation = ++this.#firstGeneration;
+    const current = () => this.isConnected && generation === this.#firstGeneration;
+    this.firstOwnerBusy = true;
+    this.firstOwnerError = undefined;
+    try {
+      await this.api.startAgainFirstSetup(this.#firstResolutionSnapshot());
+      if (!current()) return;
+      this.firstRestarting = true;
+      this.firstOwnerPassword = "";
+      this.#firstPasswordScope?.commit("");
+      await this.#firstSession?.dispose();
+      this.#firstSession = undefined;
     } catch (error) {
       if (current()) this.firstOwnerError = this.#describeFirstError(error);
     } finally {
@@ -1100,11 +1182,27 @@ export class SetupApp extends LitElement {
     this.firstOwnerBusy = true;
     const generation = ++this.#firstGeneration;
     try {
+      this.firstInspection = undefined;
+      this.firstRestartConfirm = false;
+      this.firstRetireConfirmed = false;
+      this.firstRestarting = false;
       await this.#openFirstSession();
       const session = this.#firstSession!;
-      await session.refresh();
+      let inspect = false;
+      try {
+        await session.refresh();
+      } catch (error) {
+        if (session.state || (error as { code?: string })?.code !== "setup.attempt_conflict")
+          throw error;
+        inspect = true;
+      }
+      if ((inspect || session.recoveryRequired) && !session.state) {
+        const inspection = await this.api.inspectFirstSetupResolution();
+        if (!this.isConnected || generation !== this.#firstGeneration) return;
+        this.firstInspection = inspection;
+      }
       if (!this.isConnected || generation !== this.#firstGeneration) return;
-      if (!session.state && !session.recoveryRequired) {
+      if (!inspect && !session.state && !session.recoveryRequired) {
         await session.dispose();
         if (!this.isConnected || generation !== this.#firstGeneration) return;
         this.#firstSession = undefined;
@@ -1843,6 +1941,12 @@ export class SetupApp extends LitElement {
   #renderFirstOwner(): TemplateResult {
     const t = initialOwnerStrings[setupLocale()];
     const state = this.#firstSession?.state;
+    const inspection = state ? undefined : this.firstInspection;
+    const canRestart =
+      inspection?.emptyDatabase === true &&
+      inspection.password === "checkable" &&
+      inspection.revision !== null &&
+      inspection.ownerGeneration !== null;
     if (!this.#firstPasswordScope && this.isConnected) {
       this.#firstPasswordScope = draftScopeFor(this, {
         id: this.#firstPasswordOwner,
@@ -1858,12 +1962,20 @@ export class SetupApp extends LitElement {
     const terminal =
       state?.status === "complete" ||
       state?.status === "abandoned" ||
-      state?.status === "uncertain";
+      state?.status === "uncertain" ||
+      state?.status === "activation-started" ||
+      state?.status === "committed" ||
+      state?.status === "publication";
     return html`<section data-test="screen-first-owner">
-      <h1>${t.heading}</h1>
+      <h1>${inspection ? t.interrupted : t.heading}</h1>
+      ${this.firstRestarting ? html`<p role="status">${t.restarting}</p>` : nothing}
+      ${inspection?.password === "uncheckable" ? html`<p>${t.uncheckable}</p>` : nothing}
       ${this.firstOwnerBusy ? html`<p role="status">${t.waiting}</p>` : nothing}
       ${
-        !terminal && !this.firstOwnerBusy
+        !terminal &&
+        !this.firstOwnerBusy &&
+        !this.firstRestarting &&
+        (state !== undefined || inspection?.password === "checkable")
           ? html`<p>${t.resumeHelp}</p>
               <wt-input
                 data-test="resume-password"
@@ -1893,9 +2005,69 @@ export class SetupApp extends LitElement {
               </wt-form-actions>`
           : nothing
       }
+      ${
+        inspection && !this.firstRestarting
+          ? html`
+              <wt-button
+                data-test="start-again"
+                variant="secondary"
+                ?disabled=${this.firstOwnerBusy || !canRestart}
+                @click=${() => {
+                  this.firstRestartConfirm = true;
+                }}
+                >${t.startAgain}</wt-button
+              >
+              ${!canRestart ? html`<p>${t.startUnavailable}</p>` : nothing}
+              ${
+                this.firstRestartConfirm
+                  ? html` <p>${t.startAgainHelp}</p>
+                      <label
+                        ><input
+                          data-test="retire-confirmed"
+                          name="retire-empty-setup"
+                          type="checkbox"
+                          .checked=${this.firstRetireConfirmed}
+                          ?disabled=${this.firstOwnerBusy}
+                          @change=${(event: Event) => {
+                            this.firstRetireConfirmed = (
+                              event.currentTarget as HTMLInputElement
+                            ).checked;
+                          }}
+                        />${t.retireConfirmed}</label
+                      >
+                      <wt-form-actions .error=${this.firstOwnerError?.() ?? ""}>
+                        <wt-button
+                          slot="cancel"
+                          data-test="cancel-start-again"
+                          variant="secondary"
+                          ?disabled=${this.firstOwnerBusy}
+                          @click=${() => {
+                            this.firstRestartConfirm = false;
+                            this.firstRetireConfirmed = false;
+                          }}
+                          >${t.cancel}</wt-button
+                        >
+                        <wt-button
+                          data-test="confirm-start-again"
+                          variant=${this.firstRetireConfirmed || this.firstOwnerBusy ? "danger" : "secondary"}
+                          ?disabled=${!this.firstRetireConfirmed || this.firstOwnerBusy}
+                          @click=${() => void this.#startAgainFirstSetup()}
+                          >${t.startAgain}</wt-button
+                        >
+                      </wt-form-actions>`
+                  : nothing
+              }
+            `
+          : nothing
+      }
       ${state?.status === "abandoned" ? html`<p>${t.retired}</p>` : nothing}
       ${state?.consumptionIntent && terminal && state.status !== "complete" ? html`<p>${t.consumed}</p>` : nothing}
       ${state?.status === "complete" ? html`<p>${t.complete}</p>` : nothing}
+      ${
+        !terminal && !inspection && !state && !this.firstOwnerBusy
+          ? html`<wt-form-actions .error=${this.firstOwnerError?.() ?? t.error}></wt-form-actions>`
+          : nothing
+      }
       ${state?.status === "abandoned" && !state.consumptionIntent ? html`<wt-button data-test="replace-attempt" @click=${() => this.#replaceFirstSetup()}>${t.replace}</wt-button>` : nothing}
       ${state && !terminal ? html`<wt-button data-test="abandon-attempt" variant="ghost" ?disabled=${this.firstOwnerBusy} @click=${() => void this.#abandonFirstSetup()}>${t.abandon}</wt-button>` : nothing}
       <wt-button

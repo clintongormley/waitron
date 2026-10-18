@@ -4,6 +4,7 @@ import type {
   FirstSetupOwnership,
   FirstSetupProvisionBody,
   FirstSetupState,
+  FirstSetupResolutionSnapshot,
 } from "./api/first-setup-types.js";
 
 export const FIRST_SETUP_SESSION_KEY = "waitron:first-setup:v1";
@@ -324,6 +325,21 @@ export class FirstSetupSession {
     return this.#run(async (current) => {
       this.#proofRequired = true;
       const result = await this.#api.resumeFirstSetup(this.#saved!.clientClaimNonce, password);
+      current();
+      if (!publicState(result.state)) failure("setup.attempt_conflict");
+      await this.#holdAttempt(result.state.attemptId);
+      current();
+      this.#acceptOwnership(result);
+    });
+  }
+  recover(snapshot: FirstSetupResolutionSnapshot, password: string): Promise<void> {
+    return this.#run(async (current) => {
+      this.#proofRequired = true;
+      const result = await this.#api.recoverFirstSetupOwner(
+        snapshot,
+        this.#saved!.clientClaimNonce,
+        password,
+      );
       current();
       if (!publicState(result.state)) failure("setup.attempt_conflict");
       await this.#holdAttempt(result.state.attemptId);

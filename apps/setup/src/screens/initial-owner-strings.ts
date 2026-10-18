@@ -2,11 +2,20 @@ export const initialOwnerStrings = {
   en: {
     heading: "First setup",
     waiting: "Saving setup ownership…",
-    resume: "Resume setup",
+    resume: "Continue with your setup password",
     password: "Administrator password",
     required: "Enter your password.",
-    resumeHelp:
-      "Use the original setup tab and its administrator password. Losing that tab’s saved proof needs incident resolution.",
+    resumeHelp: "Enter the administrator password you chose during setup.",
+    interrupted: "First setup was interrupted",
+    uncheckable: "This box cannot check the original setup password. Keep its files for recovery.",
+    startAgain: "Start again",
+    startAgainHelp:
+      "Keep the old attempt and its files, and begin in a new workspace. Previously selected installation codes stay used.",
+    retireConfirmed: "Keep the old attempt and start again.",
+    cancel: "Cancel",
+    restarting: "The old attempt is retained. Reconnect to continue in the new workspace.",
+    startUnavailable:
+      "Start again without a password is available only when the box can verify an unused, empty setup.",
     abandon: "Abandon this attempt",
     replace: "Enter new setup details",
     retired: "This attempt is abandoned. Its history is retained.",
@@ -21,11 +30,21 @@ export const initialOwnerStrings = {
   es: {
     heading: "Primera configuración",
     waiting: "Guardando titularidad de configuración…",
-    resume: "Reanudar configuración",
+    resume: "Continuar con tu contraseña de configuración",
     password: "Contraseña de administrador",
     required: "Introduce tu contraseña.",
-    resumeHelp:
-      "Usa la pestaña original y su contraseña de administrador. Si pierdes la prueba guardada de esa pestaña, hay que resolver la incidencia.",
+    resumeHelp: "Introduce la contraseña de administrador que elegiste al configurar.",
+    interrupted: "La configuración inicial se interrumpió",
+    uncheckable:
+      "Este equipo no puede comprobar la contraseña original. Conserva sus archivos para recuperarlo.",
+    startAgain: "Empezar de nuevo",
+    startAgainHelp:
+      "Conserva el intento anterior y sus archivos, y empieza en un espacio nuevo. Los códigos de instalación ya elegidos siguen usados.",
+    retireConfirmed: "Conservar el intento anterior y empezar de nuevo.",
+    cancel: "Cancelar",
+    restarting: "El intento anterior se conserva. Reconecta para continuar en el espacio nuevo.",
+    startUnavailable:
+      "Solo puedes empezar sin contraseña si el equipo verifica que la configuración está vacía y sin usar.",
     abandon: "Abandonar este intento",
     replace: "Introducir nuevos datos",
     retired: "Intento abandonado. Su historial se conserva.",

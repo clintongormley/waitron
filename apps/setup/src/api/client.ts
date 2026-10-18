@@ -7,6 +7,8 @@ import type {
   FirstSetupUpdate,
   FirstSetupPublicRequest,
   FirstSetupProvisionBody,
+  FirstSetupInspection,
+  FirstSetupResolutionSnapshot,
 } from "./first-setup-types.js";
 
 // Local copies of the server's JSON shapes: a runtime import of `@waitron/provisioning` would pull
@@ -496,6 +498,26 @@ export class SetupApi {
 
   resumeFirstSetup(clientClaimNonce: string, password: string): Promise<FirstSetupOwnership> {
     return this.#request("/setup-api/first-setup/resume", "POST", { clientClaimNonce, password });
+  }
+
+  inspectFirstSetupResolution(): Promise<FirstSetupInspection> {
+    return this.#request("/setup-api/first-setup/resolution", "GET");
+  }
+
+  recoverFirstSetupOwner(
+    snapshot: FirstSetupResolutionSnapshot,
+    clientClaimNonce: string,
+    password: string,
+  ): Promise<FirstSetupOwnership> {
+    return this.#request("/setup-api/first-setup/resolution/recover", "POST", {
+      ...snapshot,
+      clientClaimNonce,
+      password,
+    });
+  }
+
+  startAgainFirstSetup(snapshot: FirstSetupResolutionSnapshot): Promise<{ restarting: true }> {
+    return this.#request("/setup-api/first-setup/resolution/start-again", "POST", snapshot);
   }
 
   reconfirmFirstSetup(

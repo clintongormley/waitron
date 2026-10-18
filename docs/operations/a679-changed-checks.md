@@ -1699,3 +1699,50 @@ Task 9 remains partial. The manager’s dashboard controls, interrupted-page ord
 entry journeys still need implementation and qualification. Tasks 8 and 10–12, the earlier
 provisioning coverage and legacy server failures, final reviews, current-head CI and landing
 remain open. The branch is not ready for publication.
+
+## Interrupted setup controls, 2026-10-18
+
+You can continue from a new tab with the original setup password. The wizard reads the repair
+snapshot and sends its identifier, revision and ownership generation to the existing HTTPS
+recovery route. Start again follows the password option and asks you to confirm retention of
+the old attempt. The server still decides whether retirement is allowed.
+
+Two existing checks deliberately follow the approved interruption design:
+
+- `apps/setup/src/setup-app-first-fiscal.test.ts:107` expects “Continue with your setup password”
+  instead of “Resume”. The owner’s 2026-10-16 password-first wording is recorded in the
+  [replacement design](../superpowers/specs/2026-10-15-a679-two-route-redesign.md#appendix-f-keepchangedrop-inventory).
+  The same case retains its no-claim, no-activation and secret-draft assertions.
+- In the same file, the owner-refusal fixture intercepts `/resolution/recover` instead of
+  `/resume`. A new tab has no previous browser proof, so it takes password recovery. Every
+  original refusal and corrected-password assertion remains. The existing same-tab resume
+  case still uses `/resume`.
+
+The shared `apps/setup/test/first-setup-browser.ts` fixture gains the public repair inspection
+response. No existing fixture value changes. No fiscal test, writer, SQL, migration or guard changes.
+
+New browser cases cover recovery from a new tab, terminal and partly activated states, explicit
+retirement consent, missing and uncertain databases, failed inspections, stale answers and password
+draft disposal. The unsaved-change case reads the native password control after Discard.
+Accessibility checks cover English and Spanish, both themes and 390/1280-pixel viewports.
+
+Local receipts are in `~/waitron-campaign-e/receipts/a679-interrupted-ui-20261018`.
+These mounted-wizard checks use synthetic HTTP replies. They do not qualify the complete installed
+server journey. The manager controls, exact Finish interface, password-led missing-database
+retirement and interrupted workspace selection remain open, along with the earlier whole-branch
+gates. Keep every previous inventory for the eventual single PR.
+
+The final setup coverage run passes 1,698 cases in 90 files: 98.10% statements, 95.99% branches,
+99.22% functions and 99.52% lines. The initial statement result was 97.74%; seven added refusal,
+late-response and draft-discard cases close that gap without changing coverage settings.
+Five root suites pass 3,343 cases, and the unchanged golden/immutability pair passes 20.
+Setup types, focused lint, formatting and its browser build pass. Forty mounted captures were
+inspected; their replies are synthetic, and the build's size warnings remain visible in its log.
+
+The frozen-installed candidate passes 52 focused cases. Six independent omissions fail assertions:
+the recovery snapshot, terminal-state routing, password disposal, empty-only availability,
+late retirement and conflicting-read recovery. Restoring the final source passes 52 cases again.
+A first proposed conflicting-read omission started from an already failing candidate and is kept
+as unqualified evidence. The final receipt starts from a passing baseline. That reconnect defect
+needed both inspection and preserving the recovery screen after the conflict; its initial partial
+fix still failed the regression case. No failure is waived.

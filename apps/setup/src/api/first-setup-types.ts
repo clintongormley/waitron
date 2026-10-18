@@ -46,6 +46,27 @@ export interface FirstSetupStatus {
   conflict?: boolean;
   state?: FirstSetupState;
 }
+export interface FirstSetupInspection {
+  version: 2;
+  inspectionId: string;
+  pair: "missing" | "partial" | "invalid" | "valid" | "repairable";
+  database:
+    "missing" | "unreadable" | "corrupt" | "partial" | "unknown" | "no-venue-rows" | "occupied";
+  password: "checkable" | "uncheckable";
+  revision: number | null;
+  ownerGeneration: number | null;
+  repairEligible: boolean;
+  emptyDatabase: boolean;
+  artifacts: {
+    name: string;
+    status: "missing" | "present" | "invalid" | "unreadable";
+    digest?: string;
+  }[];
+}
+export type FirstSetupResolutionSnapshot = Pick<FirstSetupInspection, "inspectionId"> & {
+  revision: number;
+  ownerGeneration: number;
+};
 export interface FirstSetupUpdate {
   state: FirstSetupState;
 }

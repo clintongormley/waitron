@@ -104,7 +104,7 @@ it("keeps development Live on the disposable setup path", async () => {
 it("reloads into owner recovery without automatically claiming, activating or reusing the secret draft", async () => {
   const { app, requests } = await mount({ claimed: true });
   const owner = await screen(app, "first-owner");
-  expect(owner.textContent).toContain("Resume");
+  expect(owner.textContent).toContain("Continue with your setup password");
   expect(
     requests.filter((r) => r.path.endsWith("/claim") || r.path.endsWith("/provision")),
   ).toEqual([]);
@@ -385,7 +385,7 @@ it("shows an owner-proof refusal and keeps the resume action usable for a correc
   const { app } = await mount({
     claimed: true,
     intercept(path) {
-      if (path.endsWith("/resume"))
+      if (path.endsWith("/resolution/recover"))
         return Response.json(
           { error: { code: "setup.owner_required", params: {} } },
           { status: 403 },
