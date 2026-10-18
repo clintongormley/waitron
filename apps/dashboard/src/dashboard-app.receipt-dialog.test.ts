@@ -1,3 +1,4 @@
+import { navigationGuardFor } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale } from "./i18n/t.js";
@@ -6,6 +7,7 @@ import {
   deferred,
   receiptModel,
   editReceipt,
+  receiptField,
   receiptSave,
   receiptRoot,
 } from "./testing/department-receipt-editor-fixture.js";
@@ -107,6 +109,39 @@ it("a live receipt read after Cancel begins cannot keep the dialog open", async 
   expect(modal.open).toBe(false);
   expect(receiptTabEditor(app)).toBeNull();
   expect(departmentDialog(app)).toBeNull();
+});
+it("a dirty receipt draft asks before another department's Receipts address; Keep stays, Discard opens it", async () => {
+  const { app } = await mountReceiptTab({
+    departments: [
+      { id: "bar", name: "Bar" },
+      { id: "cafe", name: "Cafe" },
+    ],
+  });
+  const editor = receiptTabEditor(app)!;
+  await editReceipt(editor, "email", "draft@example.com");
+  const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  const cafe = "/manage/venue-operations/department/cafe/view/receipt";
+  for (const decision of ["keep", "discard"] as const) {
+    void navigationGuardFor(window)!.write(cafe);
+    await expect.poll(() => question.open).toBe(true);
+    await question.updateComplete;
+    await userEvent.click(
+      page.elementLocator(question.shadowRoot!.querySelector(`[data-choice=${decision}]`)!),
+    );
+    await expect.poll(() => question.open).toBe(false);
+    if (decision === "keep") {
+      expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/receipt");
+      expect(receiptTabEditor(app)).toBe(editor);
+      expect(editor.subject).toEqual({ id: "bar", name: "Bar" });
+      expect(receiptField(editor, "email").value).toBe("draft@example.com");
+    }
+  }
+  await expect.poll(() => location.pathname).toBe(cafe);
+  await expect.poll(() => receiptTabEditor(app)?.subject?.id).toBe("cafe");
+  expect(departmentForm(app)!.tab).toBe("receipt");
+  const next = receiptTabEditor(app)!;
+  await expect.poll(() => next.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
+  expect(receiptField(next, "email").value).toBe("");
 });
 it("Venue settings no longer hosts a global receipt tab or global receipt reads", async () => {
   const { app, fetchImpl } = await mount({ path: "/manage/venue-settings/view/receipts" });

@@ -355,22 +355,22 @@ it("a selected department removed during its live read returns its identity to t
   expect(returned).toEqual(["bar"]);
 });
 
-it("an ignored replacement subject does not overwrite a dirty receipt or consume its later opening", async () => {
-  const { el, api } = await mountReceiptEditor();
+it("a replacement subject loads the new department and shows its values in place of a dirty draft", async () => {
+  const { el, api, app } = await mountReceiptEditor();
   await editReceipt(el, "email", "draft@example.com");
-  el.subject = { id: "terrace", name: "Terrace" };
-  await el.updateComplete;
-  expect(api.getDepartmentReceipt).toHaveBeenCalledTimes(1);
-  expect(receiptField(el, "email").value).toBe("draft@example.com");
-  expect(receiptSave(el).disabled).toBe(false);
-  expect(receiptField(el, "operationDescription").value).toBe("Dining service");
-  await editReceipt(el, "email", "");
-  await userEvent.click(
-    page.elementLocator(receiptRoot(el).querySelector("[data-test=cancel-receipt]")!),
+  api.getDepartmentReceipt.mockImplementation(async (id: string) =>
+    id === "terrace"
+      ? { ...receiptModel, receipt: { operationDescription: "Terrace service" } }
+      : structuredClone(receiptModel),
   );
   el.subject = { id: "terrace", name: "Terrace" };
   await el.updateComplete;
-  await expect.poll(() => api.getDepartmentReceipt.mock.lastCall?.[0]).toBe("terrace");
+  await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+  expect(api.getDepartmentReceipt.mock.lastCall?.[0]).toBe("terrace");
+  await expect.poll(() => receiptField(el, "operationDescription")?.value).toBe("Terrace service");
+  expect(receiptField(el, "email").value).toBe("");
+  expect(receiptSave(el).disabled).toBe(true);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
 it("compares and sends trimmed offered text while preserving hidden authored values exactly", async () => {

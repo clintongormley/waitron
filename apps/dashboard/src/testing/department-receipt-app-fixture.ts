@@ -23,6 +23,7 @@ export async function mountReceiptApp(
     permissions?: string[];
     required?: boolean;
     path?: string;
+    departments?: { id: string; name: string }[];
     locale?: string;
     theme?: Theme;
     respond?: (path: string, init: RequestInit) => Promise<Response> | undefined;
@@ -40,21 +41,23 @@ export async function mountReceiptApp(
     options.path ?? "/manage/venue-operations/department/bar/view/receipt",
   );
   const model = {
-    departments: [{ id: "bar", name: "Bar", tradingName: "Casa", active: true }],
+    departments: (options.departments ?? [{ id: "bar", name: "Bar" }]).map((department) => ({
+      ...department,
+      tradingName: "Casa",
+      active: true,
+    })),
     zones: [],
     floorZones: [],
     readiness: [],
     salePolicies: {
-      departments: [
-        {
-          departmentId: "bar",
-          orderStart: "counter",
-          paidWhen: "prepay",
-          collectionNumber: "none",
-          receiptPrintMode: "auto",
-          printTradingName: true,
-        },
-      ],
+      departments: (options.departments ?? [{ id: "bar" }]).map(({ id }) => ({
+        departmentId: id,
+        orderStart: "counter",
+        paidWhen: "prepay",
+        collectionNumber: "none",
+        receiptPrintMode: "auto",
+        printTradingName: true,
+      })),
       zones: [],
     },
     settings: { editSentLines: true },
@@ -101,11 +104,6 @@ export async function mountReceiptApp(
       "/management-api/google/config": { configured: false },
       "/api/content-languages": { defaultLanguage: "es", languages: ["es", "ca"] },
       "/management-api/venue-service": model,
-      "/management-api/venue-service/departments/bar/receipt": {
-        ...receiptModel,
-        venueDefaults: {},
-        operationDescriptionRequired: options.required ?? true,
-      },
       "/management-api/receipt-preview": preview(),
       "/management-api/receipt": { receipt: {}, venueAddress: [] },
       "/management-api/receipt-settings": { settings: {} },
@@ -133,6 +131,13 @@ export async function mountReceiptApp(
     return new Response(
       JSON.stringify(
         answers[path] ??
+          (/^\/management-api\/venue-service\/departments\/[^/]+\/receipt$/.test(path)
+            ? {
+                ...receiptModel,
+                venueDefaults: {},
+                operationDescriptionRequired: options.required ?? true,
+              }
+            : undefined) ??
           (path.endsWith("/transfers")
             ? { departmentId: "bar", receivingProfileId: null, destinationDepartmentIds: [] }
             : []),
