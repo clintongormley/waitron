@@ -1953,7 +1953,6 @@ describe("resets onto a set's layout", () => {
         .update(zoneServicePolicies)
         .set({ departmentId: moved.id })
         .where(eq(zoneServicePolicies.zoneId, zone.id));
-      // A set-less layout row, which a reset with no due set used to read.
       await tx
         .insert(floorPlans)
         .values({ zoneId: zone.id, revision: 1, savedAt: FRIDAY_NIGHT.toISOString() });
