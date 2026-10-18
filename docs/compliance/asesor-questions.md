@@ -1839,6 +1839,9 @@ The original question, retained for the record:
 
 ### Q10. Is a certificate renewal gap an incidencia, or negligence?
 
+> **Pointer, 2026-10-18:** open again if the overlap fails — see A795's design, worked example E8
+> ([2026-10-18-a795-aeat-certificate-after-setup-design.md](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)).
+
 > **Dissolved 2026-07-27 — the premise was wrong.** Retained because the reasoning is still
 > worth having if the mitigation ever fails.
 >

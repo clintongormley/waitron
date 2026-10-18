@@ -112,16 +112,27 @@ deleted after each run.
   a network failure, not as a missing certificate.** **Measured** (P5): `skipped=[] batchesSent=0`,
   the record stayed `pendiente` with `intentos: 1` and its next try one minute later
   (`2026-10-18T10:01:00.000Z` after a pass at 10:00). Then `fiscal.awaiting_certificate` is **not**
-  raised. **That AEAT refuses an expired certificate the same way is assumed**: AEAT might instead
-  accept the connection and refuse the records in its reply, which the pass would handle as AEAT
-  refusals, not as a network failure. No expired real certificate was available; §8 makes it a check
-  before landing.
-- If the connection is refused, the records keep waiting, and `fiscal.submission_delayed` fires once
-  the oldest waiting record is four hours old (warning at 4 h, error at 24 h:
+  raised. **How AEAT answers an expired certificate is not known**; no expired real certificate was
+  available, and §8 makes it a check before landing. There are three possibilities, and the pass
+  treats them in two ways:
+  - **AEAT refuses during the connection** (P5's shape, above), or **answers with an HTTP error or a
+    SOAP fault**. The `@waitron/verifactu` client throws on any SOAP fault and any status that is not
+    2xx (`client.js`, its `post`, read), and the pass sends every exception from `client.submit`
+    through one catch to the same back-off (`drain.ts:306-312`, read). **Measured 2026-10-18** (re-run
+    of the claims reviewer's case as a scratch test: two waiting records, one pass, the fiscal
+    alerts read five hours later): an HTTP 403 page and a SOAP fault with HTTP 500 each left both
+    records `pendiente` with `intentos: 1` and raised only `["fiscal.submission_delayed","warning"]`.
+  - **AEAT answers with a reply refusing each record.** The records are marked `rechazado` and each
+    opens a filing case. **Measured 2026-10-18** (same scratch test, the fake AEAT refusing both with
+    4112): both rows `rechazado` with `codigo_error "4112"`, alerts `[["fiscal.filing_cases_open","error"]]`.
+    `fiscal.submission_stopped` and `fiscal.refusals_repeated` appear only once three refusals in a
+    row share one code (`SAME_CODE_REFUSAL_LIMIT`, `drain.ts:62`; `submission-alerts.ts:79-89`, read).
+    **Refused records are no longer waiting, so a new certificate does not re-send them**; they stay
+    filing cases for someone to resolve.
+- In the first case the records keep waiting, and `fiscal.submission_delayed` fires once the oldest
+  waiting record is four hours old (warning at 4 h, error at 24 h:
   `packages/fiscal-verifactu/src/submission-alerts.ts:12-13`); its text says "check that the fiscal
-  certificate is valid". If AEAT instead refused the records in its reply, they would no longer be
-  waiting, and what shows is the refusal alerts the same source raises (`fiscal.submission_stopped`,
-  `fiscal.filing_cases_open`, `fiscal.refusals_repeated`, `submission-alerts.ts:48-75`). **Read.**
+  certificate is valid". **Read**, and seen in the measurement above.
 - After a failed send, the retry wait doubles from one minute up to a ceiling of one hour
   (`backoffMs`, `drain.ts:64-80`; ceiling `BACKOFF_MAX_MS`, `drain.ts:67`). **Read**, except the first
   step: the existing test "backs off a transiently-failed batch exponentially, capped at 3600s,
@@ -204,7 +215,7 @@ From sources already in the repo, quoted:
 ### 2.8 The probes
 
 Run 2026-10-18 on this machine (Node v26.11.1, OpenSSL 4.0.3). The box image runs `node:26-slim`
-(`deploy/Dockerfile:153`); nothing was measured there. Test certificates were made with OpenSSL 4.0.3
+(`deploy/Dockerfile:153`); only P8 was run there (below). Test certificates were made with OpenSSL 4.0.3
 by `/Users/clintongormley/waitron-campaign/a795-probes/make-fixtures.sh`: a private test authority,
 and certificates for "PROBE DELI SL" (`organizationIdentifier=VATES-B12345678`, valid 1 Jan 2026 – 3
 Oct 2027), an expired one (to 1 Oct 2026), a not-yet-valid one (from 1 Jan 2027), one for another
@@ -224,10 +235,17 @@ scripts in `/Users/clintongormley/waitron-campaign/a795-probes/`.
 | P6 read the certificate's details from the file with Node's documented API (`new TLSSocket(null, { secureContext }).getCertificate()`), no network | `null` | `12345678Z ANA GARCIA (R: B12345678) valid_to=Oct  3 00:00:00 2027 GMT raw=926 bytes` |
 | P7 today's `readCertExpiry` the morning before a 01:30 expiry | `daysRemaining 1` | `daysRemaining 0` |
 | P8 `createSecureContext` on old and current encryptions, and the error each failure carries | the RC2 file `opened` | RC2, right passphrase: `code=ERR_CRYPTO_UNSUPPORTED_OPERATION message=Unsupported PKCS12 PFX data`; RC2, wrong passphrase: `code=undefined message=mac verify failure`; 3DES `opened`; current file, wrong passphrase: `code=undefined message=mac verify failure`; random bytes `code=undefined message=wrong tag`; no key `code=ERR_CRYPTO_OPERATION_FAILED message=Unable to load private key from PFX data` |
+| P3b the claims reviewer's `p3undici.mjs`: a Node HTTPS server checking client certificates, limited to TLS 1.2 and then 1.3, called through undici as `mtlsFetch` does | the same error for both versions | re-run 2026-10-18: TLS 1.2, expired: `cause.code=ECONNRESET Client network socket disconnected before secure TLS connection was established`; TLS 1.3, expired: `cause.code=UND_ERR_SOCKET other side closed`; valid `HTTP 200` on both |
 | P9 `mtlsFetch` to a closed port, and to a name that does not resolve | the same `other side closed` P3 saw | closed port: `cause.code=ECONNREFUSED`; unknown name (previous run): `cause.code=ENOTFOUND` |
 
 P6 also tried the undocumented `createSecureContext(...).context.getCertificate()`; it worked, but the
-build uses the documented route. P8 shows a wrong passphrase and random bytes are told apart only by
+build uses the documented route. P8 was also run, **measured 2026-10-18**, inside `docker run
+--network none node:26-slim` (Node v26.10.0, OpenSSL 3.5.8) with the claims reviewer's script
+(`/Users/clintongormley/waitron-campaign/a795-review/p8docker/probe.mjs`): the same codes and messages
+as on this machine (RC2 right passphrase `ERR_CRYPTO_UNSUPPORTED_OPERATION Unsupported PKCS12 PFX
+data`; wrong passphrase `mac verify failure` for RC2, 3DES and AES; 3DES and AES `opened`; random
+bytes `wrong tag`; no key `ERR_CRYPTO_OPERATION_FAILED`), plus `not enough data` for an empty and for
+a truncated file. P8 shows a wrong passphrase and random bytes are told apart only by
 the message text (`code` is `undefined` for both), so the build pins that matching with tests (§8).
 
 ---
@@ -279,9 +297,10 @@ nothing.
 
 **No personal ID number or personal name from the certificate is shown or kept.** A representative
 certificate's common name is the person's ID number and name (P6 printed one; the real sample is
-described in `first-aeat-contact.md`). The house precedent is A664's personal-data audit: "Retain only
-the required evidence identity; do not generalise it to every contact copy"
-(`docs/superpowers/specs/2026-10-16-a664-personal-data-audit.md:11`). The card needs to identify the
+described in `first-aeat-contact.md`). This is a data-minimising decision of this design. A664's
+proposed policy points the same way: "Retain only the required evidence identity; do not generalise
+it to every contact copy" (`docs/superpowers/specs/2026-10-16-a664-personal-data-audit.md:11`, a
+proposal, about invoice copies). The card needs to identify the
 certificate, not the person, so it shows the organisation and the company's tax ID, and neither the
 card, the install record, a log line nor an error's parameters carry the subject's `serialNumber` or
 common name. Whether every FNMT representative certificate carries `O` is a check before landing (§8);
@@ -308,8 +327,9 @@ fields, the same three export guides the setup wizard shows (Windows, Mac, Firef
 module cannot import from `apps/setup`.
 
 The button says **Save** (design-system.md → Forms). It follows the house form rule for a form that
-saves (`docs/developers/design-system.md:2208-2252`): quiet and disabled only while the draft is
-unchanged — choosing a file is a change, so Save works from then on. Pressing it with the passphrase
+saves (`docs/developers/design-system.md:2208-2252`): quiet and disabled while the draft is
+unchanged, while a save is in progress, and, after a failed Save, while one of its own fields is
+still marked. Choosing a file is a change, so Save works from then on. Pressing it with the passphrase
 empty marks that field ("Enter the certificate passphrase.") with the one bottom sentence, and from
 then on the form re-checks itself on every change. A refusal from the server puts its sentence under
 the field it names, or at the bottom if it names none, and never disables Save. The dialog takes a
@@ -352,13 +372,20 @@ In this order; the first failure answers, nothing is written, the current certif
    and the chosen type (`aeatEndpointFor(config.environment)(certKind)`): a production box asks
    production AEAT, a preproduction box asks the test environment. Any well-formed answer passes,
    including "no records" (_SinDatos_). It files nothing (`apps/server/src/aeat.preprod.test.ts` uses
-   the same call for that reason). Three outcomes refuse, each with its own sentence (§7):
+   the same call for that reason). Four outcomes refuse, each with its own sentence (§7):
    - **AEAT could not be reached** — the connection never opened: a name that does not resolve
-     (`ENOTFOUND`), a refused connection (`ECONNREFUSED`) (both P9), or no answer within 30 seconds.
-   - **AEAT closed the connection** — it opened and was then closed, the shape P3 saw for a refused
-     certificate (`other side closed`). From the box this cannot be told apart from a connection cut
-     for another reason, so the sentence says the certificate may have been refused.
-   - **AEAT answered with an error** — its code is shown.
+     (`ENOTFOUND`), a refused connection (`ECONNREFUSED`) (both P9), or no answer within 30 seconds
+     (the build's own timer; undici's connect timeout was not measured and falls to the last case
+     unless the build's tests show its code).
+   - **AEAT closed the connection** — it opened and was then closed before an answer: `UND_ERR_SOCKET
+     other side closed` (P3, and P3b on TLS 1.3) or `ECONNRESET` (P3b on TLS 1.2). Which one AEAT
+     produces depends on its TLS version, which is not known. From the box this cannot be told apart
+     from a connection cut for another reason, so the sentence says the certificate may have been
+     refused.
+   - **AEAT answered with an error** — a SOAP fault, shown with its fault code and reason (a SOAP
+     code such as `env:Client`, not an AEAT number), or an HTTP error, shown with its status. When the
+     reply carries an AEAT error number, that is shown instead.
+   - **Anything else** — a catch-all, with its own sentence, so no failure goes unexplained.
    - Receipt that a consulta can prove a certificate: a representative certificate's consulta against
      the test environment answered `SinDatos` on 2026-07-28 (`docs/compliance/first-aeat-contact.md`).
      **Not yet shown**: a consulta to production, and a consulta with a company seal at `www10`. The
@@ -536,14 +563,20 @@ wait one minute (P5), and go at 13:03 with the new one, marked as sent late.
 away from 17 Oct to 2 Nov, opening the dashboard only now and then.
 - 26 Aug: amber, "expires on 25 Oct 2026, in 60 day(s)" (mockup 12).
 - 11 Oct: red, 14 days (mockup 13). With Q3's default an email has gone out at each step.
-- 25 Oct, 00:59: it expires. Sales go on; every invoice is chained and queued as always. If AEAT
-  refuses the expired certificate during the connection (assumed; P3 shows that shape locally), each
-  send fails, the records wait, and the wait doubles up to hourly. Alerts: `fiscal.certificate_expired`
-  at once; `fiscal.submission_delayed` as a warning four hours after the oldest waiting record and as
-  an error after 24 hours (mockup 14). `fiscal.awaiting_certificate` does not appear — the certificate
-  is there, just expired.
-- 2 Nov: Marta installs the new one (E1). The waiting records go on their next retry, within the
-  hour, up to 1,000 per send, marked as sent late.
+- 25 Oct, 00:59: it expires. Sales go on; every invoice is chained and queued as always.
+  `fiscal.certificate_expired` shows at once; `fiscal.awaiting_certificate` does not — the
+  certificate is there, just expired. What else happens depends on how AEAT answers (§2.3, unknown
+  until §8's check):
+  - If AEAT refuses during the connection, or answers with an HTTP error or a SOAP fault, each send
+    fails, the records wait, and the wait doubles up to hourly; `fiscal.submission_delayed` shows as a
+    warning four hours after the oldest waiting record and as an error after 24 hours (mockup 14). On
+    2 Nov Marta installs the new one (E1), and the waiting records go on their next retry, within the
+    hour, up to 1,000 per send, marked as sent late.
+  - If AEAT instead answers with a reply refusing each record, every send between 25 Oct and 2 Nov
+    marks its records `rechazado` and opens a filing case each (`fiscal.filing_cases_open`; and
+    `fiscal.submission_stopped` and `fiscal.refusals_repeated` once three in a row share one code).
+    Installing the new certificate does not re-send them: they stay filing cases to resolve one by
+    one. This is the worse outcome, and a reason the warning matters.
 - **Asesor Q10 is open again in this case.** Q10 asked whether a gap while a certificate is replaced
   is a technical incident AEAT accepts or negligence. It was dissolved only on the premise that the
   owner overlaps certificates, and kept "if the mitigation ever fails"
@@ -665,6 +698,9 @@ the setup wizard's strings (`apps/setup/src/i18n/strings/venue.ts:172-197, 402-4
 | unreachable (bottom) | Waitron could not reach AEAT. The current certificate is unchanged. Check the internet connection, then try again. | Waitron no ha podido contactar con la AEAT. El certificado actual no cambia. Comprueba la conexión a internet y vuelve a intentarlo. |
 | closed (bottom) | AEAT closed the connection, so it may have refused this certificate. The current certificate is unchanged. Check the certificate type, then try again. | La AEAT ha cerrado la conexión, así que puede haber rechazado este certificado. El certificado actual no cambia. Comprueba el tipo de certificado y vuelve a intentarlo. |
 | AEAT refused (bottom) | AEAT refused this certificate for {taxpayerNif} ({codigo}). The current certificate is unchanged. | La AEAT ha rechazado este certificado para {taxpayerNif} ({codigo}). El certificado actual no cambia. |
+| SOAP fault (bottom) | AEAT answered with an error: {faultCode} {faultReason}. The current certificate is unchanged. | La AEAT ha respondido con un error: {faultCode} {faultReason}. El certificado actual no cambia. |
+| HTTP error (bottom) | AEAT answered with HTTP error {status}. The current certificate is unchanged. Try again later. | La AEAT ha respondido con el error HTTP {status}. El certificado actual no cambia. Vuelve a intentarlo más tarde. |
+| anything else (bottom) | The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Try again; if it fails again, contact support. | La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Vuelve a intentarlo; si vuelve a fallar, contacta con soporte. |
 | changed (bottom) | Someone else installed a certificate meanwhile. Close this window to see it. | Otra persona ha instalado un certificado mientras tanto. Cierra esta ventana para verlo. |
 | alert `fiscal.certificate_expiring` | The AEAT certificate expires on {date:date}, in {days} day(s). Install the new one in Venue settings before then, or fiscal records will wait. | El certificado de la AEAT caduca el {date:date}, dentro de {days} día(s). Instala el nuevo en Ajustes del local antes de esa fecha o los registros fiscales quedarán en espera. |
 | alert `fiscal.certificate_expired` | The AEAT certificate expired on {date:date}. Sales continue, but fiscal records wait until you install a new one in Venue settings. | El certificado de la AEAT caducó el {date:date}. Las ventas continúan, pero los registros fiscales esperan hasta que instales uno nuevo en Ajustes del local. |
@@ -694,7 +730,8 @@ twice (risk-trigger branch). The owner lands it.
 3. **The routes and the live check.** `GET`/`POST /management-api/fiscal-certificate`; permission per
    Q1; the answer shape and logging of §3.5; the consulta through `mtlsFetch` against a local
    mutual-TLS server in tests (`@waitron/server-kit/testing/mtls.js`, as `aeat-transport.test.ts`
-   does), covering the unreachable, closed and error outcomes; the revision check; a test that a sale
+   does), covering the unreachable, closed (a TLS 1.2 refusal, `ECONNRESET`, and a TLS 1.3 one,
+   `other side closed`), error (an HTTP 403 and a SOAP fault) and catch-all outcomes; the revision check; a test that a sale
    commits while a live check is held open; a test that a pass after the install uses the new
    certificate (P4's shape) and one already running finishes with the old (E7).
 4. **The card and the dialog.** The panel-only contribution contract, the module's dashboard
@@ -711,8 +748,9 @@ part is redesigned before landing, not shipped on assumption:
 - a consulta to production AEAT, and a consulta with a company seal at `www10`;
 - what AEAT does with a seal sent to `www1`, and with a representative certificate sent to `www10`
   (whether §3.5 step 7 catches a wrong type);
-- how AEAT answers an expired certificate — refused during the connection, as P5 assumed, or accepted
-  and the records refused — which decides what E8's alerts look like;
+- how AEAT answers an expired certificate — refused during the connection (as P5 assumed; and with
+  which error, `other side closed` or `ECONNRESET`), an HTTP error or SOAP fault, or a reply refusing
+  each record — which decides what E8's alerts look like and whether its records become filing cases;
 - where a real seal keeps the company's tax ID, and whether real representative certificates all
   carry `organizationIdentifier` and `O` (§3.3, §3.5 step 6);
 - whether files exported by FNMT's own procedure, by the browsers the export guides cover and by the
@@ -723,7 +761,7 @@ part is redesigned before landing, not shipped on assumption:
 ## 9. Questions for the owner
 
 Three, one at a time, each with a recommendation. Everything else above was decided against a house
-precedent named beside it.
+precedent, or for a reason, named beside it.
 
 ### Q1 of 3 — Who may replace the certificate?
 
@@ -742,8 +780,10 @@ administrator, is away. Can Jordi install the new file Marta emailed him?
 
 _Example:_ Bar Lucía's company seal expires on 25 Oct 2026. A seal cannot be renewed: FNMT needs a
 fresh application, a Registro Mercantil certificate under 15 working days old and a manual check, and
-publishes no lead time; our research says "Schedule on months of lead time". A representative
-certificate is quicker to get, and a personal one renews online only in its last 60 days.
+publishes no lead time; our research says "Schedule on months of lead time". A sole or joint
+director's representative certificate (.11.1) needs no documents and downloads about an hour after
+identity is accredited; other representatives need the same registry papers as a seal. A personal
+certificate renews online only in its last 60 days.
 
 - **A (recommended): by type.** A seal: amber from 90 days (27 Jul), red from 30 (25 Sep). A
   representative certificate: amber from 60 days, red from 14.
@@ -784,7 +824,8 @@ above.
 - Old RC2-encrypted files: a separate reason and sentence, measured as P8 (§3.5 step 2, E6, §8).
 - Placement after the core panels, and the contract change a panel-only module needs (§3.1, §6).
 - The Save rule now follows design-system.md, and names `wt-file-input` (§3.4).
-- Personal ID numbers and names are not shown, kept or logged (A664 precedent), and the check results
+- Personal ID numbers and names are not shown, kept or logged (a data-minimising decision; A664's
+  proposed policy points the same way), and the check results
   travel in the route's answer, not in logged error parameters (§3.3, §3.5).
 - A852 widened to every file filing cannot use; the test-submission database's install row stated
   (§3.7, §6).
@@ -795,6 +836,18 @@ above.
   and Q3's model job.
 
 ---
+
+### Second claims check (2026-10-18)
+
+- A third way AEAT may answer an expired certificate — a reply refusing each record — is added,
+  measured with the fake AEAT; refused records become filing cases and a new certificate does not
+  re-send them (§2.3, E8, §8). An HTTP error and a SOAP fault were measured to back off like a
+  network failure.
+- The live check's outcomes: `ECONNRESET` (TLS 1.2) joins "closed the connection"; SOAP faults and
+  HTTP statuses are shown as such; a catch-all reason with its own sentence (§3.5 step 7, §7, §8).
+- A852's wording no longer says the files are sealed in production; asesor Q10 gets a dated pointer;
+  A664 is cited as a proposal; Q2's "quicker to get" is narrowed to the .11.1 route; the Save rule
+  names all three disabled states; P8 is cited as run in `node:26-slim`.
 
 ## Mockups
 

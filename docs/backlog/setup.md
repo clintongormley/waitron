@@ -10,7 +10,10 @@ their full text.
   wizard's certificate screen checks only that a file was chosen and the passphrase is not empty
   (`apps/setup/src/screens/cert-screen.ts`), and the server's `parseAeatCert` never opens the file.
   Measured 2026-10-18 (P1): a wrong passphrase, 600 random bytes, a file with no private key and an
-  expired certificate were all accepted and would be sealed.
+  expired certificate were all accepted by `parseAeatCert`. A preproduction setup then seals them as
+  given (`setup-api.ts`, the seal step, read). A production setup cannot finish with one: it requires
+  an accepted fiscal test (`assertFiscalReady`, which throws `setup.fiscal_test_required` otherwise,
+  `apps/server/src/fiscal-readiness.ts:129-135`, read), and the test can never accept such a file.
 - For a wrong passphrase, a production setup's fiscal test then seals it, records a test sale and
   runs a filing pass; the connection fails with `mac verify failure` (measured with `mtlsFetch`
   against a local server), the pass backs the record off without a skip (measured through the real
