@@ -83,9 +83,10 @@ function anySavedPart(tableId: SQLWrapper): SQL {
 
 /**
  * Reads the zone's record only when its business day is `businessDay` (spec decision 2); else,
- * and with no recorded set, every part of a joined table is a saved part, as before A504. Under a
- * usable record a part is a saved part when the recorded layout places its joined table or none
- * of its parts, and a joined table is one when that layout leaves it off while placing a part.
+ * and with no recorded set, every part of a joined table is a saved part and no joined table is.
+ * Under a usable record a part is a saved part when the recorded layout places its joined table
+ * or none of its parts, and a joined table is one when that layout leaves it off while placing a
+ * part.
  */
 export function savedPart(tableId: SQLWrapper, businessDay: string | null): SQL {
   if (businessDay === null) return anySavedPart(tableId);
@@ -109,7 +110,6 @@ export function savedPart(tableId: SQLWrapper, businessDay: string | null): SQL 
     left join floor_today_zones recorded
       on recorded.zone_id = joined_master.zone_id
       and recorded.business_day = ${businessDay}
-      and recorded.set_id is not null
     left join floor_plans layout
       on layout.zone_id = recorded.zone_id and layout.set_id = recorded.set_id
     where recorded.id is null

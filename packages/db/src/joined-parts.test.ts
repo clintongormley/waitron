@@ -1,4 +1,4 @@
-import { eq, sql, type SQL } from "drizzle-orm";
+import { eq, inArray, sql, type SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   joinedOutOfService,
@@ -506,6 +506,23 @@ describe("a layout that stands a joined table's tables", () => {
     expect((await read(stillJoinedPart))[T5]).toBe(1);
   });
 
+  it("under Standard, 4 and 5 taken off for today are still joined until one is put back", async () => {
+    await today(STANDARD, [T4, T5]);
+    await suite.db
+      .update(floorTodayTables)
+      .set({ takenOff: true })
+      .where(inArray(floorTodayTables.tableId, [T4, T5]));
+    expect(await read(stillJoinedPart)).toEqual({ [T4]: 1, [T5]: 1, [T45]: 0 });
+    expect((await read(joinedTableApart))[T45]).toBe(0);
+
+    await suite.db
+      .update(floorTodayTables)
+      .set({ takenOff: false })
+      .where(eq(floorTodayTables.tableId, T4));
+    expect(await read(stillJoinedPart)).toEqual({ [T4]: 0, [T5]: 0, [T45]: 0 });
+    expect((await read(joinedTableApart))[T45]).toBe(1);
+  });
+
   const savedOn = (day: string | null) => (tableId: SQL) => savedPart(tableId, day);
 
   it("counts 4 a saved part by the layout recorded for the day asked about", async () => {
@@ -524,12 +541,12 @@ describe("a layout that stands a joined table's tables", () => {
       .update(floorTodayZones)
       .set({ setId: null })
       .where(eq(floorTodayZones.zoneId, INSIDE));
-    expect((await read(savedOn(TODAY)))[T4]).toBe(1);
+    expect(await read(savedOn(TODAY))).toEqual({ [T4]: 1, [T5]: 1, [T45]: 0 });
   });
 
-  it("counts 4 a saved part under Standard recorded for yesterday", async () => {
+  it("counts 4 a saved part, and 4+5 not, under Standard recorded for yesterday", async () => {
     await today(STANDARD, [T4, T5], YESTERDAY);
-    expect((await read(savedOn(TODAY)))[T4]).toBe(1);
+    expect(await read(savedOn(TODAY))).toEqual({ [T4]: 1, [T5]: 1, [T45]: 0 });
   });
 
   it("counts 4+5 a saved part when the recorded layout stands its tables and leaves it off", async () => {
