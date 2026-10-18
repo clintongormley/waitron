@@ -21,7 +21,8 @@ export interface ComboboxOption {
    * row that makes or opens something, rather than choosing a value, does not read as one more
    * item of the list. */
   primary?: true;
-  /** Drawn in `--wt-color-text-muted` in the open list and on the closed field when chosen. */
+  /** Drawn in `--wt-color-text-muted` in the open list and on the closed field when chosen;
+   * `primary` wins on a row that sets both. */
   muted?: true;
   /** A second, muted line under the label in the open list; the row's name holds both lines.
    * Never shown on the closed trigger. */
@@ -510,9 +511,8 @@ export class WtCombobox extends LitElement {
 
   /** The closed-state trigger text: the chosen option's `valueLabel`, else its `label`, or a count
    * once more than one is chosen. */
-  private get selectedText(): string {
+  private selectedText(chosen: ComboboxOption | undefined): string {
     if (this.multiple && this.values.length > 1) return this.countLabel(this.values.length);
-    const chosen = this.chosenOption;
     return chosen ? closedText(chosen) : "";
   }
 
@@ -1092,14 +1092,15 @@ export class WtCombobox extends LitElement {
   override render() {
     const hasError = this.error !== "";
     const hasHint = this.hint !== "";
-    const selectedText = this.selectedText;
+    const chosen = this.chosenOption;
+    const selectedText = this.selectedText(chosen);
     const trigger: TriggerParts = {
       id: this.name || this.generatedTriggerId,
       invalid: this.invalid || hasError,
       describedBy: [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])],
       selectedText,
       shownText: selectedText || this.placeholder || this.hint,
-      muted: Boolean(this.chosenOption?.muted),
+      muted: Boolean(chosen?.muted),
     };
     return html`
       <div class="row">

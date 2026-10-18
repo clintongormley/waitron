@@ -3771,6 +3771,19 @@ function mutedTokenColour(): string {
   return colour;
 }
 
+test("a multi-select's count is not muted when its first choice is", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Floor plans" multiple show-empty-option></wt-combobox>',
+    [...MUTED_DEFAULT, { value: "garden", label: "Garden" }],
+  );
+  el.countLabel = (count) => `${count} plans`;
+  el.values = ["", "terrace"];
+  await el.updateComplete;
+  expect(fieldParts(el).value.textContent).toBe("2 plans");
+  expect(fieldParts(el).value.classList.contains("muted")).toBe(false);
+  expect(getComputedStyle(fieldParts(el).value).color).not.toBe(mutedTokenColour());
+});
+
 describe.each(["light", "dark"] as const)("a muted option (%s theme)", (theme) => {
   async function mountMuted(attributes: string): Promise<WtCombobox> {
     const el = (await mountThemed(
