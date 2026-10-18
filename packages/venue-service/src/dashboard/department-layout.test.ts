@@ -75,6 +75,12 @@ describe.each(["light", "dark"] as const)("department phone bounds (%s)", (theme
       inside(section.querySelector("h2")!, bounds);
       const destinations = [...section.querySelectorAll(".destination")];
       expect(destinations).toHaveLength(1);
+      for (const destination of destinations) {
+        expect(destination.scrollWidth).toBeLessThanOrEqual(destination.clientWidth);
+        const text = document.createRange();
+        text.selectNodeContents(destination);
+        expect(text.getClientRects().length).toBeGreaterThan(1);
+      }
       for (const field of [
         ...destinations,
         section.querySelector("fieldset")!,
