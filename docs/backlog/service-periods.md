@@ -283,12 +283,12 @@ makes"):
 - Decision 7: a zone's day on which its department is closed shows "<department> closed all day"
   behind the zone's paint, which stays drawn on top.
 
-A762's plan, Decision 3, superseded Decision 9 (the special-day editor kept the day's name as its
+A762's plan, Decision 3 (#1850), superseded Decision 9 (the special-day editor kept the day's name as its
 heading): the editor is now titled "<name>: special day, <dates>".
 
 ## A762's plan defaults sent to the owner as an FYI
 
-Left open by A762.
+Left open by A762, #1850.
 
 A762's plan made these choices by default and sent them to the owner to overrule if wanted
 ([plan](../superpowers/plans/2026-10-18-a762-painter-colour-bands.md), "Decisions this plan
@@ -311,7 +311,7 @@ makes"):
 
 ## A purple season looks like a special day
 
-Left open by A762.
+Left open by A762, #1850.
 
 A purple season's line (`--wt-color-station-purple-dot`) against the special-day purple
 (`--wt-color-palette-purple`) is 1.26:1 in light and 1.63:1 in dark (hand-computed over the token
