@@ -650,7 +650,11 @@ export class ContentTranslationsDialog extends LitElement {
     this.suggestionAction = view.id;
     this.suggestionError = "";
     try {
-      await api.discardContentSuggestion(view.id);
+      try {
+        await api.discardContentSuggestion(view.id);
+      } catch (error) {
+        if (codeOf(error) !== "content.suggestion_not_found") throw error;
+      }
       this.#discardedSuggestions.add(view.id);
       this.reader?.drafts.discardSuggestion(view.id);
       this.#notifyDraft();
@@ -953,7 +957,7 @@ export class ContentTranslationsDialog extends LitElement {
                   >${t("translations.review_latest")}</wt-button
                 >
               </div>
-              ${count > 100 ? html`<p role="alert">${t("translations.capacity")}</p>` : nothing}
+              ${count >= 100 ? html`<p role=${count > 100 ? "alert" : "status"}>${t(count > 100 ? "translations.capacity" : "translations.batch_full")}</p>` : nothing}
               ${draft!.waitingCount > 0 && draft!.suggestedCount > 0 ? html`<p data-test="suggestion-capacity" role="status">${fill("suggestions.capacity", { shown: String(draft!.suggestedCount) })}</p>` : nothing}
               <dashboard-content-translation-window
                 .rows=${reader.page?.rows ?? []}

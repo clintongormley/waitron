@@ -455,6 +455,9 @@ it("uses passive reads for Use fix and the active client only for saving and dis
   await vi.waitFor(() =>
     expect(api.discardContentSuggestion).toHaveBeenCalledExactlyOnceWith("s1"),
   );
+  await api.discardContentSuggestion.mock.results[0]!.value;
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await el.updateComplete;
   expect(field(el).value).toBe("Croqueta");
   button(el, "save").click();
   await vi.waitFor(() => expect(api.saveContentTranslations).toHaveBeenCalledOnce());
@@ -483,6 +486,8 @@ it("does not drop borrowed text when discard fails and shows the action refusal 
     }),
   });
   action(el, "s1", "discard-suggestion")!.click();
+  await api.discardContentSuggestion.mock.results[0]!.value.catch(() => {});
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await vi.waitFor(() => expect(action(el, "s1", "discard-suggestion")?.loading).toBe(false));
   await el.updateComplete;
   expect(panel(el)).toBeTruthy();

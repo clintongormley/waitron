@@ -633,6 +633,7 @@ export const en = {
   "translations.hidden": "{count} hidden edits",
   "translations.show_edited": "Show edited",
   "translations.show_all": "Show all",
+  "translations.batch_full": "This batch has reached its 100-field limit.",
   "translations.capacity": "Your batch exceeds 100 fields. Unstage a field before saving.",
   "translations.input_unavailable":
     "This edit could not be staged. Review your staged edits and try again.",
@@ -3690,6 +3691,7 @@ export const es: Record<StringKey, string> = {
   "translations.show_all": "Ver todos",
   "translations.input_unavailable":
     "No se ha podido preparar este cambio. Revisa los cambios pendientes e inténtalo de nuevo.",
+  "translations.batch_full": "Este lote ha llegado al límite de 100 campos.",
   "translations.capacity":
     "El lote supera los 100 campos. Retira un campo del lote antes de guardar.",
   "translations.previous": "Anterior",

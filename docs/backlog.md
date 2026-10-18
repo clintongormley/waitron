@@ -1184,8 +1184,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   available. Submitted fields take priority over newly arrived untouched suggestions at capacity.
   The original accessibility suite now exercises the multilingual editor and its retry/review
   states in both languages and themes at phone and desktop widths, with one deadline per staged
-  state. The original draft suite still needs migration and validation. The client accepts projected
-  multilingual
+  state. The original draft suite now checks independent optional-language drafts, per-suggestion
+  Discard, off-page staged cells and explicit suggestion paging. Already-deleted suggestions clear
+  their borrowed drafts; unrelated refusals retain them. A full 100-cell batch shows its own status,
+  while an over-limit batch keeps its refusal. Reopening and reconnect checks retain pending action
+  gates, personal text and deleted-id suppression, including deletion between two readers.
+  The client accepts projected multilingual
   queries and one whole cell batch on the language-free routes; its legacy call signatures and
   public DTOs remain to be retired with the remaining editor tests and consumers. Regional
   completeness notes wrap in full, with the row actions reachable at phone and desktop widths.
