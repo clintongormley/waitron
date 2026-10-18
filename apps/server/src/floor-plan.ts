@@ -264,7 +264,7 @@ function wholeIn(value: unknown, low: number, high: number): boolean {
   return Number.isInteger(value) && (value as number) >= low && (value as number) <= high;
 }
 
-/** The ranges `floor_plan_tables`' checks hold. */
+/** The ranges `floor_plan_placements`' checks hold. */
 function checkPlacement(placement: Placement, at: string): void {
   const ranges: [keyof Placement, number, number][] = [
     ["x", 0, 999],
