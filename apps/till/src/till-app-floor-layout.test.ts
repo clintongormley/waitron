@@ -183,3 +183,30 @@ it("re-reads both after a layout_changed refusal and shows what is now due", asy
     codeMessage("floor_today.layout_changed"),
   );
 });
+
+it("re-reads the zones after Reset to … plan, so a banner offering only that set's edit goes at once", async () => {
+  const edited: FloorZone = {
+    ...offered,
+    layoutSetName: "Dinner",
+    layoutDue: { setId: "set-dinner", revision: 4, periodName: null },
+  };
+  const listZones = vi.fn().mockResolvedValueOnce([edited]).mockResolvedValue([updated]);
+  const resetZoneToday = vi.fn().mockResolvedValue({ zoneId: "z1", revision: 6 });
+  const { floor } = await mount({ listZones, resetZoneToday });
+  expect(banner(floor)!.querySelector('[role="status"]')!.textContent!.trim()).toBe(
+    "A newer layout is ready.",
+  );
+  const zoneReads = listZones.mock.calls.length;
+  floor
+    .shadowRoot!.querySelector("till-floor-zone-menu")!
+    .dispatchEvent(
+      new CustomEvent("zone-reset", { detail: { zoneId: "z1" }, bubbles: true, composed: true }),
+    );
+  for (let i = 0; i < 5; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await floor.updateComplete;
+  }
+  expect(resetZoneToday).toHaveBeenCalledExactlyOnceWith("z1", 5);
+  expect(listZones.mock.calls.length).toBe(zoneReads + 1);
+  expect(banner(floor)).toBeNull();
+});

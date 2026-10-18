@@ -532,3 +532,17 @@ export async function measured(): Promise<void> {
   for (let frame = 0; frame < 2; frame++)
     await new Promise((resolve) => requestAnimationFrame(resolve));
 }
+
+/** Presses the floor's List/Map toggle: the toolbar's button, or on a phone the zone menu's item. */
+export async function toggleFloorView(
+  floor: HTMLElement & { updateComplete: Promise<unknown> },
+): Promise<void> {
+  const root = floor.shadowRoot!;
+  const toggle =
+    root.querySelector<HTMLElement>("[data-view-toggle]") ??
+    root
+      .querySelector("till-floor-zone-menu")!
+      .shadowRoot!.querySelector<HTMLElement>('[data-menu-item="view"]')!;
+  toggle.click();
+  await floor.updateComplete;
+}

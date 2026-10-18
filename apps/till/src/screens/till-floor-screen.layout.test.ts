@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
 import type { FloorRefreshDetail, TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
@@ -114,8 +114,7 @@ describe("till-floor-screen: the layout banner", () => {
     expect(follows(tabs, bannerOf(el)!)).toBe(true);
     expect(follows(bannerOf(el)!, map)).toBe(true);
 
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
+    await toggleFloorView(el);
     const list = el.shadowRoot!.querySelector(".grid")!;
     expect(statusText(el)).toBe("Dinner layout is ready.");
     expect(follows(bannerOf(el)!, list)).toBe(true);

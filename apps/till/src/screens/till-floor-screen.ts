@@ -656,8 +656,17 @@ export class TillFloorScreen extends LitElement {
   #reminderTimer?: ReturnType<typeof setTimeout>;
   #rereadTimer?: ReturnType<typeof setInterval>;
 
+  @state() private phone = false;
+  #phoneWidth?: MediaQueryList;
+  readonly #onPhoneWidth = (event: MediaQueryListEvent) => {
+    this.phone = event.matches;
+  };
+
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#phoneWidth = window.matchMedia(PHONE_WIDTH);
+    this.phone = this.#phoneWidth.matches;
+    this.#phoneWidth.addEventListener("change", this.#onPhoneWidth);
     // The timers stopped while the screen was off the page. A reminder that fell due meanwhile
     // redraws at once; the floor's re-read waits a full 15 s.
     if (this.hasUpdated) {
@@ -668,6 +677,8 @@ export class TillFloorScreen extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#phoneWidth?.removeEventListener("change", this.#onPhoneWidth);
+    this.#phoneWidth = undefined;
     clearTimeout(this.#reminderTimer);
     clearInterval(this.#rereadTimer);
     this.#rereadTimer = undefined;
@@ -1678,34 +1689,51 @@ export class TillFloorScreen extends LitElement {
    * Every action is a write through a `take-orders` route, so the menu needs `canChangeToday`. A zone
    * with a saved plan and no tables is offered it too, since only a reset brings in tables its plan
    * has gained. `planned` covers a zone list read before the plan was saved: a floor refresh re-reads
-   * the tables, not the zones.
+   * the tables, not the zones. On a phone the menu also holds List or Map, so it shows whenever the floor
+   * does.
    */
-  #zoneMenu(planned: boolean, activeKey: string | undefined): TemplateResult | typeof nothing {
-    const zone = this.zones.find((each) => each.id === activeKey);
-    if (zone === undefined || !(planned || zone.hasPlan) || !this.canChangeToday) return nothing;
+  #zoneMenu(
+    planned: boolean,
+    activeKey: string | undefined,
+    view: "map" | "list",
+  ): TemplateResult | typeof nothing {
+    const zone = this.zones.find((each) => each.id === activeKey) ?? null;
+    const zoneId = zone?.id ?? null;
+    const canChange = zone !== null && (planned || zone.hasPlan) && this.canChangeToday;
+    if (!canChange && !this.phone) return nothing;
     return html`<till-floor-zone-menu
       .zone=${zone}
       .tables=${this.#zone.visible}
+      .phone=${this.phone}
+      .view=${view}
+      .canChangeToday=${canChange}
+      @zone-toggle-view=${(event: Event) => {
+        event.stopPropagation();
+        this.#toggleView(view);
+      }}
       @zone-place-spare=${(event: CustomEvent<{ tableId: string }>) =>
-        this.#onZoneChange(event, zone.id, (api, revision) =>
+        this.#onZoneChange(event, zoneId, (api, revision) =>
           this.#send(revision, (sent) =>
             api.placeSpareToday(event.detail.tableId, spareSpot(this.#zone.visible), sent),
           ),
         )}
       @zone-put-back=${(event: CustomEvent<{ tableId: string }>) =>
-        this.#onZoneChange(event, zone.id, (api, revision) =>
+        this.#onZoneChange(event, zoneId, (api, revision) =>
           this.#send(revision, (sent) => api.putBackToday(event.detail.tableId, sent)),
         )}
       @zone-reset=${(event: CustomEvent<{ zoneId: string }>) =>
-        this.#onZoneChange(event, event.detail.zoneId, (api, revision) =>
-          api.resetZoneToday(event.detail.zoneId, revision),
+        this.#onZoneChange(
+          event,
+          event.detail.zoneId,
+          (api, revision) => api.resetZoneToday(event.detail.zoneId, revision),
+          { zones: true },
         )}
     ></till-floor-zone-menu>`;
   }
 
   #onZoneChange(
     event: Event,
-    zoneId: string,
+    zoneId: string | null,
     call: (api: TillApi, revision: number | null) => Promise<FloorAnswer>,
     refresh?: FloorRefreshDetail,
   ): void {
@@ -1873,15 +1901,19 @@ export class TillFloorScreen extends LitElement {
               : nothing
           }
           <div class="actions">
-            <wt-button
-              class="view-toggle"
-              data-view-toggle
-              variant="secondary"
-              @click=${() => this.#toggleView(view)}
-            >
-              ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
-            </wt-button>
-            ${this.#zoneMenu(planned, activeKey)}
+            ${
+              this.phone
+                ? nothing
+                : html`<wt-button
+                    class="view-toggle"
+                    data-view-toggle
+                    variant="secondary"
+                    @click=${() => this.#toggleView(view)}
+                  >
+                    ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
+                  </wt-button>`
+            }
+            ${this.#zoneMenu(planned, activeKey, view)}
           </div>
         </div>
         ${this.#layoutBanner(activeKey)}

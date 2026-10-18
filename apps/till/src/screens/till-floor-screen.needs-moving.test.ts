@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WtDialog, WtFloorMap } from "@waitron/ui";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
@@ -101,8 +101,7 @@ async function tap(el: TillFloorScreen, tableId: string): Promise<void> {
 }
 
 async function toList(el: TillFloorScreen): Promise<void> {
-  el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-  await el.updateComplete;
+  await toggleFloorView(el);
 }
 
 beforeEach(() => setLocale("en"));
