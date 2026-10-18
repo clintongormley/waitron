@@ -4,7 +4,7 @@ import {
   TranslationDrafts,
   indexSuggestions,
   type RowSuggestion,
-} from "./content-translations-model.js";
+} from "./content-translations-legacy-model.js";
 
 const target = (id = "one", overrides: Partial<TranslationTarget> = {}): TranslationTarget => ({
   kind: "product",

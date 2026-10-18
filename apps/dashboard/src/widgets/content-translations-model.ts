@@ -1,350 +1,340 @@
+import type { ContentLanguages } from "@waitron/shared";
 import { sameValue } from "./product-editor-model.js";
-import type {
-  ContentSuggestionView,
-  TranslationBatch,
-  TranslationRef,
-  TranslationTarget,
-} from "../api/client.js";
-
-export interface FieldFault {
-  target: TranslationRef;
-  field: "text" | "defaultText";
-  message: string;
-}
+import {
+  translationCellKey,
+  type TranslationCell,
+  type TranslationCellEdit,
+  type TranslationCellKey,
+  type TranslationCellPage,
+  type TranslationCellRef,
+} from "@waitron/catalogue/src/content-translation-types.js";
+import type { ContentSuggestionView } from "@waitron/catalogue/src/content-suggestion-types.js";
 
 export type ReviewChoice = "keep" | "replace" | "discard";
-
-export interface RowSuggestion {
-  ids: string[];
-  text: string | null;
-  defaultText: string | null;
-  stale: boolean;
-  placeholder: boolean;
-  fixes: { field: string; wrong: string; right: string }[];
+export type DraftOrigin = "personal" | "suggested" | "fix";
+export interface FieldFault {
+  cell: TranslationCellRef;
+  message: "review" | "capacity" | "name_bytes" | "batch_bytes";
 }
-
-interface DraftValues {
-  text: string;
-  defaultText: string;
+type Batch = { edits: TranslationCellEdit[] };
+interface Draft {
+  base: TranslationCell;
+  config: ContentLanguages;
+  value: string;
+  origin: DraftOrigin;
+  suggestionId?: string;
+  revision: number;
 }
+interface Input {
+  value: string;
+  revision: number;
+}
+interface SubmittedCell {
+  revision: number;
+  config: ContentLanguages;
+}
+const normalized = (text: string | null): string | null => text?.trim() || null;
+const reference = ({ kind, id, language, field }: TranslationCellRef): TranslationCellRef => ({
+  kind,
+  id,
+  language,
+  field,
+});
+const sameConfig = (left: ContentLanguages, right: ContentLanguages): boolean =>
+  left.defaultLanguage === right.defaultLanguage &&
+  sameValue([...left.languages].sort(), [...right.languages].sort());
 
 export class TranslationDrafts {
-  #latest = new Map<string, TranslationTarget>();
-  #receivedSnapshot = false;
-  #gaps: readonly TranslationTarget[] = [];
-  #latestDefaultLanguage: string;
-  readonly #targets: Map<string, TranslationTarget>;
-  readonly #values = new Map<string, DraftValues>();
-  #suggestions = new Map<string, RowSuggestion>();
-  #filled = new Map<string, DraftValues>();
-  /** What a suggestion had filled when a person's edit began, and the suggestion ids it came from;
-   * a Discard that deletes any id of a suggestion sharing one of these ids takes back each field
-   * still holding that text, even once a read no longer lists the suggestion. */
-  readonly #borrowed = new Map<string, DraftValues & { ids: readonly string[] }>();
+  #config: ContentLanguages;
+  #current = new Map<TranslationCellKey, TranslationCell>();
+  readonly #drafts = new Map<TranslationCellKey, Draft>();
+  readonly #inputs = new Map<TranslationCellKey, Input>();
   readonly #dismissed = new Set<string>();
-  readonly #staleIds = new Set<string>();
-  constructor(
-    readonly language: string,
-    public defaultLanguage: string,
-    public rows: readonly TranslationTarget[],
-  ) {
-    this.rows = structuredClone(rows);
-    this.#targets = new Map(this.rows.map((row) => [translationKey(row), row]));
-    this.#latestDefaultLanguage = defaultLanguage;
+  readonly #waiting = new Set<string>();
+  readonly #submitted = new WeakMap<Batch, ReadonlyMap<TranslationCellKey, SubmittedCell>>();
+  #revision = 0;
+
+  constructor(config: ContentLanguages, cells: readonly TranslationCell[]) {
+    this.#config = structuredClone(config);
+    for (const cell of cells) this.#current.set(translationCellKey(cell), structuredClone(cell));
   }
-  get arrivals(): number {
-    return this.#gaps.filter((row) => !this.#targets.has(translationKey(row))).length;
+  current(cell: TranslationCellRef): TranslationCell | undefined {
+    const current = this.#current.get(translationCellKey(cell));
+    return current && structuredClone(current);
   }
-  current(ref: TranslationRef): TranslationTarget | undefined {
-    return this.#latest.get(translationKey(ref));
-  }
-  changed(ref: TranslationRef): boolean {
-    const baseline = this.#targets.get(translationKey(ref));
-    const current = this.current(ref);
+  value(cell: TranslationCellRef): string {
+    const key = translationCellKey(cell);
     return (
-      this.isEdited(ref) &&
-      this.#receivedSnapshot &&
-      (!current || !current.eligible || current.expected !== baseline?.expected)
+      this.#drafts.get(key)?.value ??
+      this.#inputs.get(key)?.value ??
+      this.#current.get(key)?.text ??
+      ""
     );
   }
-  snapshot(
-    gaps: readonly TranslationTarget[],
-    retained: readonly TranslationTarget[],
-    defaultLanguage = this.defaultLanguage,
-  ): void {
-    this.#receivedSnapshot = true;
-    this.#latestDefaultLanguage = defaultLanguage;
-    if (!this.personalSubmission().edits.length) this.defaultLanguage = defaultLanguage;
-    this.#gaps = gaps;
-    this.#latest = new Map([...gaps, ...retained].map((row) => [translationKey(row), row]));
-    const present = new Set(gaps.map(translationKey));
-    this.rows = this.rows.filter((row) => this.isEdited(row) || present.has(translationKey(row)));
-    const kept = new Set(this.rows.map(translationKey));
-    for (const key of this.#targets.keys()) if (!kept.has(key)) this.#targets.delete(key);
-    for (const row of this.rows) {
-      if (!this.isEdited(row)) {
-        const latest = this.current(row);
-        if (latest) Object.assign(row, latest);
-      }
-    }
-    this.#refill();
+  origin(cell: TranslationCellRef): DraftOrigin | null {
+    const key = translationCellKey(cell);
+    return this.#drafts.get(key)?.origin ?? (this.#inputs.has(key) ? "personal" : null);
   }
-  review(latest: readonly TranslationTarget[], choices: Map<string, ReviewChoice>): void {
-    const current = new Map(latest.map((row) => [translationKey(row), row]));
-    const unresolved: TranslationTarget[] = [];
-    for (const row of this.rows) {
-      if (!this.isEdited(row)) continue;
-      const key = translationKey(row);
-      const next = current.get(key);
-      if (!next || (this.changed(row) && !choices.has(key))) {
-        unresolved.push(row);
+  changed(cell: TranslationCellRef): boolean {
+    const key = translationCellKey(cell),
+      draft = this.#drafts.get(key),
+      latest = this.#current.get(key);
+    return (
+      !!draft &&
+      (!latest?.eligible ||
+        !this.#config.languages.includes(cell.language) ||
+        !sameConfig(draft.config, this.#config) ||
+        draft.base.expected !== latest.expected ||
+        !sameValue(draft.base.owners, latest.owners))
+    );
+  }
+  staged(): readonly TranslationCellRef[] {
+    return [...this.#drafts.values()].map((draft) => reference(draft.base));
+  }
+  get suggestedCount(): number {
+    return [...this.#drafts.values()].filter((draft) => draft.origin === "suggested").length;
+  }
+  edit(cell: TranslationCellRef, text: string): boolean {
+    const key = translationCellKey(cell),
+      previous = this.#drafts.get(key),
+      base = previous?.base ?? this.#current.get(key);
+    if (!base || (!base.eligible && !previous)) return false;
+    const different = normalized(text) !== normalized(base.text);
+    const personalCount = [...this.#drafts.values()].filter(
+      (draft) => draft.origin !== "suggested",
+    ).length;
+    if (different && !previous && personalCount >= 101) return false;
+    const revision = ++this.#revision;
+    this.#inputs.set(key, { value: text, revision });
+    if (!different) this.#drafts.delete(key);
+    else
+      this.#drafts.set(key, {
+        base: structuredClone(base),
+        config: structuredClone(previous?.config ?? this.#config),
+        value: text,
+        origin: "personal",
+        revision,
+      });
+    this.#makeRoom();
+    return true;
+  }
+  #makeRoom(): void {
+    for (const [key, draft] of [...this.#drafts].reverse()) {
+      if (this.#drafts.size <= 100) break;
+      if (draft.origin !== "suggested") continue;
+      if (draft.suggestionId) this.#waiting.add(draft.suggestionId);
+      this.#drafts.delete(key);
+    }
+  }
+  receive(page: TranslationCellPage): void {
+    this.#config = structuredClone(page.config);
+    const next = new Map<TranslationCellKey, TranslationCell>();
+    for (const key of this.#drafts.keys()) {
+      const current = this.#current.get(key);
+      if (current) next.set(key, current);
+    }
+    for (const cell of page.cells) next.set(translationCellKey(cell), structuredClone(cell));
+    this.#current = next;
+    for (const [key, draft] of this.#drafts) {
+      if (draft.origin !== "suggested") continue;
+      if (this.changed(draft.base) || normalized(this.#current.get(key)?.effectiveText ?? null))
+        this.#drafts.delete(key);
+    }
+  }
+  #matches(view: ContentSuggestionView, cell: TranslationCell): boolean {
+    return (
+      !!view.cell &&
+      translationCellKey(view.cell) === translationCellKey(cell) &&
+      view.kind === cell.kind &&
+      view.itemId === cell.id &&
+      view.language === cell.language &&
+      view.cell.field === "name" &&
+      !view.stale &&
+      !view.placeholder &&
+      !!view.expected &&
+      view.expected === cell.expected &&
+      cell.eligible &&
+      this.#config.languages.includes(cell.language) &&
+      !this.#dismissed.has(view.id)
+    );
+  }
+  suggest(views: readonly ContentSuggestionView[]): void {
+    for (const view of views) {
+      if (!view.cell) continue;
+      const key = translationCellKey(view.cell),
+        current = this.#current.get(key),
+        previous = this.#drafts.get(key);
+      if (
+        previous?.origin === "suggested" &&
+        previous.suggestionId === view.id &&
+        (!current || !this.#matches(view, current) || !normalized(view.text))
+      )
+        this.#drafts.delete(key);
+      if (
+        !current ||
+        !this.#matches(view, current) ||
+        !normalized(view.text) ||
+        view.fix ||
+        normalized(current.effectiveText) ||
+        this.#inputs.has(key) ||
+        (previous && previous.origin !== "suggested")
+      )
+        continue;
+      if (!previous && (this.#waiting.has(view.id) || this.#drafts.size >= 100)) {
+        this.#waiting.add(view.id);
         continue;
       }
-      const choice = choices.get(key);
-      if (choice === "discard" || choice === "replace") this.#values.delete(key);
-      if (choice === "keep" && (!next.eligible || !sameValue(next.owners, row.owners))) {
-        unresolved.push(row);
+      this.#drafts.set(key, {
+        base: structuredClone(current),
+        config: structuredClone(this.#config),
+        value: view.text!,
+        origin: "suggested",
+        suggestionId: view.id,
+        revision: ++this.#revision,
+      });
+    }
+  }
+  useFix(view: ContentSuggestionView, current: TranslationCell): "staged" | "stale" | "full" {
+    const key = translationCellKey(current);
+    if (
+      !this.#matches(view, current) ||
+      !view.fix ||
+      view.fix.field !== current.language ||
+      view.fix.wrong !== current.effectiveText ||
+      !normalized(view.fix.right) ||
+      this.#inputs.has(key) ||
+      this.#drafts.get(key)?.origin === "fix"
+    )
+      return "stale";
+    const observed = this.#current.get(key);
+    if (observed && !sameValue(observed.owners, current.owners)) return "stale";
+    if (!this.#drafts.has(key) && this.#drafts.size - this.suggestedCount >= 100) return "full";
+    this.#current.set(key, structuredClone(current));
+    this.#drafts.set(key, {
+      base: structuredClone(current),
+      config: structuredClone(this.#config),
+      value: view.fix.right,
+      origin: "fix",
+      suggestionId: view.id,
+      revision: ++this.#revision,
+    });
+    this.#makeRoom();
+    return "staged";
+  }
+  review(
+    current: readonly TranslationCell[],
+    choices: ReadonlyMap<TranslationCellKey, ReviewChoice>,
+  ): void {
+    for (const cell of current) {
+      const key = translationCellKey(cell),
+        choice = choices.get(key),
+        draft = this.#drafts.get(key);
+      this.#current.set(key, structuredClone(cell));
+      if (choice === "discard" || choice === "replace") {
+        this.unstage(cell);
         continue;
       }
       if (
-        choice === "keep" &&
-        (!next.defaultRequired || this.#latestDefaultLanguage !== this.defaultLanguage)
-      ) {
-        const values = this.#values.get(key);
-        if (values) values.defaultText = "";
-      }
-      Object.assign(row, next);
-      if (next.eligible || this.#gaps.some((gap) => translationKey(gap) === key))
-        unresolved.push(row);
+        choice !== "keep" ||
+        !draft ||
+        !cell.eligible ||
+        !this.#config.languages.includes(cell.language) ||
+        !sameValue(draft.base.owners, cell.owners)
+      )
+        continue;
+      draft.base = structuredClone(cell);
+      draft.config = structuredClone(this.#config);
+      if (normalized(draft.value) === normalized(cell.text)) this.#drafts.delete(key);
     }
-    this.rows = [
-      ...this.#gaps.map(
-        (row) => unresolved.find((held) => translationKey(held) === translationKey(row)) ?? row,
-      ),
-      ...unresolved.filter(
-        (row) => !this.#gaps.some((gap) => translationKey(gap) === translationKey(row)),
-      ),
-    ];
-    this.#targets.clear();
-    for (const row of this.rows) this.#targets.set(translationKey(row), row);
-    if (!this.rows.some((row) => this.changed(row)))
-      this.defaultLanguage = this.#latestDefaultLanguage;
-    this.#refill();
   }
-  get count(): number {
-    return this.submission().edits.length;
+  unstage(cell: TranslationCellRef): void {
+    const key = translationCellKey(cell),
+      draft = this.#drafts.get(key);
+    if (draft?.suggestionId) this.#dismissed.add(draft.suggestionId);
+    this.#drafts.delete(key);
+    this.#inputs.delete(key);
   }
-  edit(ref: TranslationRef, field: "text" | "defaultText", text: string): void {
-    const key = translationKey(ref);
-    const row = this.#targets.get(key);
-    if (!row?.eligible || (field === "defaultText" && !this.needsDefault(row))) return;
-    if (!this.isEdited(ref) && !this.isSuggested(ref) && this.count >= 100) return;
-    if (!this.#values.has(key)) {
-      const filled = this.#filled.get(key);
-      if (filled) this.#borrowed.set(key, { ...filled, ids: [...this.#suggestions.get(key)!.ids] });
-      else this.#borrowed.delete(key);
+  discardSuggestion(id: string): void {
+    this.#dismissed.add(id);
+    for (const [key, draft] of this.#drafts) {
+      if (draft.origin === "suggested" && draft.suggestionId === id) this.#drafts.delete(key);
     }
-    const next = {
-      text: this.value(row, "text"),
-      defaultText: this.value(row, "defaultText"),
-      [field]: text,
-    };
-    const filled = this.#filled.get(key);
-    if (filled?.text === next.text && filled.defaultText === next.defaultText)
-      this.#values.delete(key);
-    else this.#values.set(key, next);
   }
-  needsDefault(row: TranslationTarget): boolean {
-    return this.language !== this.defaultLanguage && row.defaultRequired;
-  }
-  value(ref: TranslationRef, field: "text" | "defaultText"): string {
-    const key = translationKey(ref);
-    return (
-      this.#values.get(key)?.[field] ??
-      this.#filled.get(key)?.[field] ??
-      (field === "text" ? (this.#targets.get(key)?.selectedText ?? "") : "")
+  #batch(personal: boolean): Batch {
+    const edits = [...this.#drafts.values()]
+      .filter((draft) => !personal || draft.origin !== "suggested")
+      .map((draft) => ({
+        ...reference(draft.base),
+        expected: draft.base.expected,
+        text: normalized(draft.value),
+      }));
+    const batch = { edits };
+    this.#submitted.set(
+      batch,
+      new Map(
+        edits.map((edit) => {
+          const draft = this.#drafts.get(translationCellKey(edit))!;
+          return [
+            translationCellKey(edit),
+            { revision: draft.revision, config: structuredClone(draft.config) },
+          ];
+        }),
+      ),
     );
+    return batch;
   }
-  /** A person's own edit; a suggestion filled in and left untouched is not one. */
-  isEdited(ref: TranslationRef): boolean {
-    const key = translationKey(ref);
-    const row = this.#targets.get(key);
-    const values = this.#values.get(key);
-    if (!row || !values) return false;
-    const text = values.text.trim();
-    const companion = values.defaultText.trim();
-    if (!text && !companion) return false;
-    return text !== (row.selectedText ?? "").trim() || companion !== "";
+  submission(): Batch {
+    return this.#batch(false);
   }
-  isSuggested(ref: TranslationRef): boolean {
-    const key = translationKey(ref);
-    return this.#filled.has(key) && !this.#values.has(key) && this.#targets.has(key);
-  }
-  get suggestedCount(): number {
-    return this.rows.filter((row) => this.isSuggested(row)).length;
-  }
-  /** Rows a waiting suggestion could fill that the 100-edit limit left empty. */
-  get unfilledCount(): number {
-    return this.rows.filter(
-      (row) =>
-        !this.#filled.has(translationKey(row)) &&
-        !this.#values.has(translationKey(row)) &&
-        this.#fillable(row) !== undefined,
-    ).length;
-  }
-  suggestionFor(ref: TranslationRef): RowSuggestion | undefined {
-    const found = this.#suggestions.get(translationKey(ref));
-    if (!found || found.ids.some((id) => this.#dismissed.has(id))) return undefined;
-    return found.ids.some((id) => this.#staleIds.has(id)) ? { ...found, stale: true } : found;
-  }
-  suggest(found: ReadonlyMap<string, RowSuggestion>): void {
-    this.#suggestions = new Map(found);
-    this.#refill();
-  }
-  /** `deleted` defaults to every id of the row's current suggestion. `discarded` is the row's
-   * suggestion ids when its discard began: no suggestion that includes any of them fills the row
-   * again, and an edit's untouched text borrowed from a suggestion that includes any of them is
-   * taken back. */
-  unsuggest(ref: TranslationRef, deleted?: readonly string[], discarded?: readonly string[]): void {
-    const key = translationKey(ref);
-    const current = this.#suggestions.get(key)?.ids ?? [];
-    const gone = new Set(deleted ?? current);
-    const group = new Set([...(discarded ?? []), ...gone]);
-    for (const id of group) this.#dismissed.add(id);
-    const values = this.#values.get(key);
-    const borrowed = this.#borrowed.get(key);
-    if (borrowed?.ids.some((id) => group.has(id))) {
-      if (values) {
-        if (values.text === borrowed.text) values.text = this.#targets.get(key)?.selectedText ?? "";
-        if (values.defaultText === borrowed.defaultText) values.defaultText = "";
-        if (!this.isEdited(ref)) this.#values.delete(key);
-      }
-      this.#borrowed.delete(key);
-    }
-    this.#refill();
-  }
-  markStale(ref: TranslationRef): void {
-    for (const id of this.#suggestions.get(translationKey(ref))?.ids ?? []) this.#staleIds.add(id);
-    this.#refill();
-  }
-  #fillable(row: TranslationTarget): DraftValues | undefined {
-    const found = this.suggestionFor(row);
-    if (
-      !row.eligible ||
-      (row.effectiveSelectedText ?? "").trim() ||
-      !found ||
-      found.stale ||
-      found.text === null
-    )
-      return undefined;
-    if (!this.needsDefault(row)) return { text: found.text, defaultText: "" };
-    return found.defaultText === null
-      ? undefined
-      : { text: found.text, defaultText: found.defaultText };
-  }
-  // A row filled before keeps its place while its suggestion can still fill it.
-  #refill(): void {
-    const previous = this.#filled;
-    this.#filled = new Map();
-    let room = 100 - this.personalSubmission().edits.length;
-    const fill = (row: TranslationTarget): void => {
-      const key = translationKey(row);
-      if (this.#filled.has(key)) return;
-      if (this.#values.has(key)) {
-        const values = this.#fillable(row);
-        if (previous.has(key) && values) this.#filled.set(key, values);
-        return;
-      }
-      if (room <= 0) return;
-      const values = this.#fillable(row);
-      if (!values) return;
-      this.#filled.set(key, values);
-      room--;
-    };
-    for (const row of this.rows) if (previous.has(translationKey(row))) fill(row);
-    for (const row of this.rows) fill(row);
-  }
-  submission(): TranslationBatch {
-    return this.#batch((row) => this.isEdited(row) || this.isSuggested(row));
-  }
-  personalSubmission(): TranslationBatch {
-    return this.#batch((row) => this.isEdited(row));
-  }
-  #batch(include: (row: TranslationTarget) => boolean): TranslationBatch {
-    return {
-      edits: this.rows.filter(include).map((row) => ({
-        kind: row.kind,
-        id: row.id,
-        expected: row.expected,
-        text: this.value(row, "text").trim(),
-        ...(this.needsDefault(row) && this.value(row, "defaultText").trim()
-          ? { defaultText: this.value(row, "defaultText").trim() }
-          : {}),
-      })),
-    };
+  personalSubmission(): Batch {
+    return this.#batch(true);
   }
   validate(): FieldFault[] {
     const faults: FieldFault[] = [];
-    for (const row of this.rows) {
-      if (!this.isEdited(row) && !this.isSuggested(row)) continue;
-      const target = { kind: row.kind, id: row.id };
-      if (this.changed(row)) faults.push({ target, field: "text", message: "review" });
-      const fields = this.needsDefault(row)
-        ? (["text", "defaultText"] as const)
-        : (["text"] as const);
-      for (const field of fields) {
-        const value = this.value(row, field).trim();
-        if (!value) faults.push({ target, field, message: "required" });
-        else if (new TextEncoder().encode(value).length > 4096)
-          faults.push({ target, field, message: "name_bytes" });
-      }
+    for (const [index, draft] of [...this.#drafts.values()].entries()) {
+      const cell = reference(draft.base);
+      if (this.changed(cell)) faults.push({ cell, message: "review" });
+      if (index >= 100) faults.push({ cell, message: "capacity" });
+      if (new TextEncoder().encode(draft.value.trim()).length > 4096)
+        faults.push({ cell, message: "name_bytes" });
     }
     if (new TextEncoder().encode(JSON.stringify(this.submission())).length > 262144) {
-      const first = this.submission().edits[0]!;
-      faults.push({
-        target: { kind: first.kind, id: first.id },
-        field: "text",
-        message: "batch_bytes",
-      });
+      const first = this.staged()[0];
+      if (first) faults.push({ cell: first, message: "batch_bytes" });
     }
     return faults;
   }
-  reset(): void {
-    this.#values.clear();
-    this.#borrowed.clear();
-    this.#refill();
-  }
-}
-
-export function indexSuggestions(
-  views: readonly ContentSuggestionView[],
-  language: string,
-  defaultLanguage: string,
-): Map<string, RowSuggestion> {
-  const index = new Map<string, RowSuggestion>();
-  for (const view of views) {
-    const key = translationKey({ kind: view.kind, id: view.itemId });
-    const entry = index.get(key) ?? {
-      ids: [],
-      text: null,
-      defaultText: null,
-      stale: false,
-      placeholder: false,
-      fixes: [],
-    };
-    entry.ids.push(view.id);
-    if (view.placeholder) entry.placeholder = true;
-    if (view.fix) entry.fixes.push(view.fix);
-    if (view.text !== null && (view.language === language || view.language === defaultLanguage)) {
-      if (view.language === language) entry.text = view.text;
-      else entry.defaultText = view.text;
-      entry.stale ||= view.stale;
+  commit(submitted: Batch, saved: readonly TranslationCell[]): void {
+    const versions = this.#submitted.get(submitted);
+    if (!versions) return;
+    const replies = new Map(saved.map((cell) => [translationCellKey(cell), cell]));
+    for (const edit of submitted.edits) {
+      const key = translationCellKey(edit),
+        cell = replies.get(key);
+      if (!cell) continue;
+      const draft = this.#drafts.get(key),
+        input = this.#inputs.get(key);
+      const snapshot = versions.get(key),
+        revision = snapshot?.revision;
+      const newer =
+        revision !== undefined && (input?.revision ?? draft?.revision ?? revision) > revision;
+      this.#current.set(key, structuredClone(cell));
+      if (!newer) {
+        this.#drafts.delete(key);
+        this.#inputs.delete(key);
+        continue;
+      }
+      const value = input?.value ?? draft?.value ?? "";
+      if (normalized(value) === normalized(cell.text)) this.#drafts.delete(key);
+      else
+        this.#drafts.set(key, {
+          base: structuredClone(cell),
+          config: structuredClone(snapshot?.config ?? this.#config),
+          value,
+          origin: draft?.origin === "fix" ? "fix" : "personal",
+          revision: input?.revision ?? draft!.revision,
+        });
     }
-    index.set(key, entry);
+    this.#submitted.delete(submitted);
   }
-  return index;
-}
-
-export function translationKey(ref: TranslationRef): string {
-  return `${ref.kind}:${ref.id}`;
 }

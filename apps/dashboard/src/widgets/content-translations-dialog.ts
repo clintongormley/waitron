@@ -40,7 +40,7 @@ import {
   translationKey,
   type FieldFault,
   type ReviewChoice,
-} from "./content-translations-model.js";
+} from "./content-translations-legacy-model.js";
 import { runActive, type SuggestionService } from "./content-suggestions-bar.js";
 
 const KINDS: readonly TranslationGapKind[] = [

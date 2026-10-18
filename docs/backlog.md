@@ -1149,7 +1149,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   at most one hundred stored candidates across languages, advance past filtered rows, reject a
   changed configuration and return current name-cell tokens. A separate count includes waiting
   fixes and notes on complete live items. The dashboard suggestion reader uses that query; the
-  multilingual page/save contract, draft model and editor remain unfinished. Boot's configured-origin
+  multilingual page/save contract and editor remain unfinished. A separate cell draft model now
+  retains personal text, explicit clears and fixes by item, language and field, blocks over-capacity
+  saves and commits the exact submitted snapshot while preserving newer input. The dialog still
+  uses its original model until the coordinated editor replacement; no intermediate feature is
+  ready to publish. Boot's configured-origin
   forwarding and obsolete callback cleanup wait for lane E. Automatic-translation review, future
   presentation and the remaining validation are unfinished.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
