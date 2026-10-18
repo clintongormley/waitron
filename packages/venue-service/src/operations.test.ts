@@ -295,52 +295,73 @@ describe("new department service periods", () => {
       (await db.execute(sql`select id from menu_periods where department_id = ${empty.id}`)).rows,
     ).toEqual([]);
   });
-  it.each([
-    ["21:00", "refuses", 1],
-    ["03:00", "accepts", 0],
-  ] as const)(
-    "with a %s start waiting, %s a new department whose default week would clash with it",
-    async (dayCutover, _, refusals) => {
-      vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
-      try {
-        const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
-        const id = brandLocationId(await seedLocation(`Waiting ${randomUUID()}`));
-        await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
-        await db.insert(locationBusinessDaySettings).values({ locationId: id, revision: 1 });
-        await db.insert(locationDayCutoverChanges).values({
-          locationId: id,
-          effectiveBusinessDay: "2026-11-04",
-          dayCutover: `${dayCutover}:00`,
-        });
-        const create = scoped((tx) =>
-          createDepartment(tx, { locationId: id }, { name: "Terrace", orderStart: "counter" }),
-        );
-        if (refusals === 0) await expect(create).resolves.toMatchObject({ name: "Terrace" });
-        else
-          await expect(create).rejects.toMatchObject({
-            code: "hours.clock_change_conflict",
-            params: {
-              dayCutover: "21:00",
-              conflictCount: 5,
-              conflicts: expect.arrayContaining([
-                expect.objectContaining({
-                  departmentName: "Terrace",
-                  startsAt: "09:00",
-                  endsAt: "17:00",
-                  reason: "endpoint_day",
-                }),
-              ]),
-            },
-          });
-        const rows = await db.execute(
-          sql`select name from departments where location_id = ${id} and name = 'Terrace'`,
-        );
-        expect(rows.rows).toHaveLength(1 - refusals);
-      } finally {
-        vi.useRealTimers();
-      }
-    },
-  );
+  /** A location with a menu and a business-day start of `dayCutover` waiting for 2026-11-04. */
+  async function waitingLocation(dayCutover: string) {
+    const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
+    const id = brandLocationId(await seedLocation(`Waiting ${randomUUID()}`));
+    await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
+    await db.insert(locationBusinessDaySettings).values({ locationId: id, revision: 1 });
+    await db.insert(locationDayCutoverChanges).values({
+      locationId: id,
+      effectiveBusinessDay: "2026-11-04",
+      dayCutover: `${dayCutover}:00`,
+    });
+    return id;
+  }
+  const terraces = async (id: LocationId) =>
+    (
+      await db.execute(
+        sql`select name from departments where location_id = ${id} and name = 'Terrace'`,
+      )
+    ).rows;
+  const createTerrace = (id: LocationId) =>
+    scoped((tx) =>
+      createDepartment(tx, { locationId: id }, { name: "Terrace", orderStart: "counter" }),
+    );
+
+  it("with a 21:00 start waiting, refuses a new department whose default week would clash with it", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
+    try {
+      const id = await waitingLocation("21:00");
+      await expect(createTerrace(id)).rejects.toMatchObject({
+        code: "hours.clock_change_conflict",
+        params: {
+          dayCutover: "21:00",
+          startsAt: "2026-11-04T20:00:00.000Z",
+          conflictCount: 5,
+          conflicts: expect.arrayContaining([
+            expect.objectContaining({
+              departmentName: "Terrace",
+              startsAt: "09:00",
+              endsAt: "17:00",
+              reason: "endpoint_day",
+            }),
+          ]),
+        },
+      });
+      expect(await terraces(id)).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("with a 03:00 start waiting, adds a department with its default week", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
+    try {
+      const id = await waitingLocation("03:00");
+      const department = await createTerrace(id);
+      expect(department).toMatchObject({ name: "Terrace" });
+      expect(await terraces(id)).toEqual([{ name: "Terrace" }]);
+      const slots = await db.execute(
+        sql`select d.weekday, s.starts_at, s.ends_at from department_days d join department_day_ranges s on s.day_id = d.id join seasons se on se.id = d.season_id and se.starts_on = '12-01' where d.department_id = ${department.id} order by d.weekday`,
+      );
+      expect(slots.rows).toEqual(
+        [1, 2, 3, 4, 5].map((weekday) => ({ weekday, starts_at: "09:00:00", ends_at: "17:00:00" })),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 let db: Database;
