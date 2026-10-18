@@ -151,6 +151,8 @@ rows are owner stops or need marking in the PR.
 | 14b | `business-day-start-editor.unsaved.test.ts:40,103-125` | date-field draft cases, acknowledge before Save → the time field's draft cases, Save without acknowledgement |
 | 14b | `venue-details-business-day.test.ts:29-72,146-208` | date draft and acknowledge → time draft, Save after the preview |
 
+Task 3a confirmed its three rows; exact base lines: `business-day-start.test.ts:176` and `:181-192` (preview half, values as the row says), `:358` (GET permission query), `:608` and `:626` (conflict-count queries; 7, 14, 56 and 4 seasons unchanged). No other assertion failed.
+
 ## Review focus (inputs no task's main tests reach; each line names the test that pins it)
 
 1. **The rule-2 flip mid-dialog**: a preview taken at 00:20 for 00:30 and a Save at 00:31 must be

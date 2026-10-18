@@ -173,7 +173,7 @@ describe("dated route protection", () => {
     const before = await inTx((tx) => readVenueDetails(tx, venue.cfg));
     const preview = await request(
       "GET",
-      "/business-day-start/preview?effectiveBusinessDay=2026-11-04&dayCutover=03%3A00&expectedClockRevision=0",
+      "/business-day-start/preview?dayCutover=03%3A00&expectedClockRevision=0",
     );
     expect(preview.status).toBe(200);
     const previewBody = await preview.json();
@@ -181,16 +181,16 @@ describe("dated route protection", () => {
     expect(previewBody).toMatchObject({
       revision: 0,
       previousDay: {
-        businessDay: "2026-11-03",
+        businessDay: "2026-11-02",
         dayCutover: "05:00",
-        startAt: "2026-11-03T04:00:00.000Z",
-        endAt: "2026-11-04T02:00:00.000Z",
+        startAt: "2026-11-02T04:00:00.000Z",
+        endAt: "2026-11-03T02:00:00.000Z",
       },
       effectiveDay: {
-        businessDay: "2026-11-04",
+        businessDay: "2026-11-03",
         dayCutover: "03:00",
-        startAt: "2026-11-04T02:00:00.000Z",
-        endAt: "2026-11-05T02:00:00.000Z",
+        startAt: "2026-11-03T02:00:00.000Z",
+        endAt: "2026-11-04T02:00:00.000Z",
       },
       conflicts: [],
       conflictCount: 0,
@@ -358,7 +358,7 @@ describe("dated route protection", () => {
   it.each(["PUT", "DELETE", "GET"])("requires the proper permission for %s", async (method) => {
     const path =
       method === "GET"
-        ? "/business-day-start/preview?effectiveBusinessDay=2026-11-04&dayCutover=03%3A00&expectedClockRevision=0"
+        ? "/business-day-start/preview?dayCutover=03%3A00&expectedClockRevision=0"
         : "/business-day-start";
     const body =
       method === "GET" ? undefined : method === "PUT" ? proposal() : { expectedClockRevision: 0 };
@@ -612,7 +612,7 @@ describe("dated start schedule refusal", () => {
   it("previews conflicts without writing and refuses incompatible PUT through the real boundary", async () => {
     const { department } = await authorRange("05:00", "05:00");
     const saved = await clockRows();
-    const query = new URLSearchParams(proposal() as unknown as Record<string, string>);
+    const query = new URLSearchParams({ dayCutover: "03:00", expectedClockRevision: "0" });
     const preview = await request("GET", `/business-day-start/preview?${query}`);
     expect(preview.status).toBe(200);
     const body = await preview.json();
@@ -630,7 +630,7 @@ describe("dated start schedule refusal", () => {
     const late = await authorRange("05:00", "05:00", { everySeason: true });
     const bar = await authorRange("05:00", "05:00", { everySeason: true, name: "Bar" });
     const saved = await clockRows();
-    const query = new URLSearchParams(proposal() as unknown as Record<string, string>);
+    const query = new URLSearchParams({ dayCutover: "03:00", expectedClockRevision: "0" });
     const preview = await request("GET", `/business-day-start/preview?${query}`);
     expect(preview.status).toBe(200);
     const body = (await preview.json()) as {
@@ -649,6 +649,79 @@ describe("dated start schedule refusal", () => {
       error: { code: "venue.business_day_hours_conflict", params: { conflictCount: 14 } },
     });
     expect(await clockRows()).toEqual(saved);
+  });
+});
+
+describe("the preview chooses the changeover itself", () => {
+  async function previewAt(instant: string, dayCutover: string) {
+    at = new Date(instant);
+    const query = new URLSearchParams({ dayCutover, expectedClockRevision: "0" });
+    const response = await request("GET", `/business-day-start/preview?${query}`);
+    expect(response.status).toBe(200);
+    return (await response.json()) as {
+      previousDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
+      effectiveDay: { businessDay: string };
+    };
+  }
+  it("takes tonight's changeover when the new start is still ahead", async () => {
+    const early = await previewAt("2026-10-20T20:00:00Z", "03:00");
+    expect(early.effectiveDay.businessDay).toBe("2026-10-21");
+    expect(early.previousDay).toEqual({
+      businessDay: "2026-10-20",
+      dayCutover: "05:00",
+      startAt: "2026-10-20T03:00:00.000Z",
+      endAt: "2026-10-21T01:00:00.000Z",
+    });
+    const late = await previewAt("2026-10-20T20:00:00Z", "21:00");
+    expect(late.effectiveDay.businessDay).toBe("2026-10-21");
+    expect(late.previousDay.endAt).toBe("2026-10-21T19:00:00.000Z");
+  });
+  it("takes the following changeover when the new start has already passed tonight", async () => {
+    const body = await previewAt("2026-10-20T23:00:00Z", "00:30");
+    expect(body.effectiveDay.businessDay).toBe("2026-10-22");
+    expect(body.previousDay).toMatchObject({
+      businessDay: "2026-10-21",
+      startAt: "2026-10-21T03:00:00.000Z",
+      endAt: "2026-10-21T22:30:00.000Z",
+    });
+  });
+  it("bounds the day the clocks go back at 23 hours", async () => {
+    const body = await previewAt("2026-10-24T20:00:00Z", "03:00");
+    expect(body.previousDay).toMatchObject({
+      startAt: "2026-10-24T03:00:00.000Z",
+      endAt: "2026-10-25T02:00:00.000Z",
+    });
+  });
+  it("refuses a query that names the effective date", async () => {
+    at = new Date("2026-10-20T20:00:00Z");
+    const response = await request(
+      "GET",
+      "/business-day-start/preview?effectiveBusinessDay=2026-10-21&dayCutover=03%3A00&expectedClockRevision=0",
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: "venue.business_day_invalid",
+        params: { field: "body", reason: "unknown_field" },
+      },
+    });
+  });
+  it("keeps a waiting change whose changeover has passed and takes effect one changeover later", async () => {
+    await inTx((tx) =>
+      tx.insert(locationDayCutoverChanges).values({
+        locationId: venue.cfg.locationId,
+        effectiveBusinessDay: "2026-10-21",
+        dayCutover: "21:00:00",
+      }),
+    );
+    const body = await previewAt("2026-10-21T11:00:00Z", "10:00");
+    expect(body.effectiveDay.businessDay).toBe("2026-10-22");
+    expect(body.previousDay).toMatchObject({
+      businessDay: "2026-10-21",
+      startAt: "2026-10-21T19:00:00.000Z",
+      endAt: "2026-10-22T08:00:00.000Z",
+    });
+    expect((await clockRows()).changes).toHaveLength(1);
   });
 });
 

@@ -15,6 +15,7 @@ import {
   type BusinessDayClock,
 } from "@waitron/shared";
 import { localTimeOccurrences } from "@waitron/venue-service";
+import { clockTransitionAt, planBusinessDayStart } from "./business-day-changeover.js";
 import type {
   BusinessDayClockModel,
   BusinessDayStartInput,
@@ -55,16 +56,23 @@ function proposalOf(input: unknown): BusinessDayStartInput {
   } catch {
     invalid("effectiveBusinessDay", "date");
   }
+  return {
+    expectedClockRevision,
+    effectiveBusinessDay: body.effectiveBusinessDay,
+    dayCutover: cutoverOf(body),
+  };
+}
+function cutoverOf(body: Record<string, unknown>): string {
   if (
     typeof body.dayCutover !== "string" ||
     !/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(body.dayCutover)
   )
     invalid("dayCutover", "cutover");
-  return {
-    expectedClockRevision,
-    effectiveBusinessDay: body.effectiveBusinessDay,
-    dayCutover: body.dayCutover.slice(0, 5),
-  };
+  return body.dayCutover.slice(0, 5);
+}
+function startOf(input: unknown): { expectedClockRevision: number; dayCutover: string } {
+  const body = bodyObject(input, ["dayCutover", "expectedClockRevision"]);
+  return { expectedClockRevision: revisionOf(body), dayCutover: cutoverOf(body) };
 }
 export async function readBusinessDayClockModel(
   tx: Transaction,
@@ -181,21 +189,24 @@ export async function previewBusinessDayStart(
   input: unknown,
   at: Date,
 ): Promise<BusinessDayStartPreview> {
-  const proposal = proposalOf(input);
+  const start = startOf(input);
   const model = await readBusinessDayClockModel(tx, cfg, at);
-  assertRevision(model, proposal.expectedClockRevision);
-  assertEditable(model, at);
-  const candidate = candidateFor(model, proposal);
-  await protectHistory(tx, cfg, model.clock, candidate, proposal.effectiveBusinessDay);
+  assertRevision(model, start.expectedClockRevision);
+  if (clockTransitionAt(model.clock, start.dayCutover, at) !== null)
+    invalid("dayCutover", "clock_transition");
+  const plan = planBusinessDayStart(model.clock, start.dayCutover, at);
+  const effectiveDay = plan.effectiveBusinessDay;
+  await protectHistory(tx, cfg, plan.before, plan.candidate, effectiveDay);
   let conflicts: BusinessDayStartPreview["conflicts"] = [];
   let conflictCount = 0;
   try {
+    // Measured from the start in force, not from a waiting change this Save replaces.
     await VENUE_SERVICE.assertBusinessDayClockChange(
       tx,
       { locationId: locationId(cfg.locationId) },
-      model.clock,
-      candidate,
-      proposal.effectiveBusinessDay,
+      plan.before,
+      plan.candidate,
+      effectiveDay,
     );
   } catch (error) {
     if (!(error instanceof AppError) || error.code !== "venue.business_day_hours_conflict")
@@ -204,8 +215,8 @@ export async function previewBusinessDayStart(
   }
   return {
     revision: model.revision,
-    previousDay: view(candidate, addDays(proposal.effectiveBusinessDay, -1)),
-    effectiveDay: view(candidate, proposal.effectiveBusinessDay),
+    previousDay: view(plan.candidate, addDays(effectiveDay, -1)),
+    effectiveDay: view(plan.candidate, effectiveDay),
     conflicts,
     conflictCount,
     backupDeadlines: { archive: null, cloud: null },
