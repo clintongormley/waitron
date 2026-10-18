@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { fieldLabelState } from "@waitron/ui-core/field-styles";
-import { cleanup, host, mount } from "../test-helpers.js";
+import { cleanup, host, mount, textLines } from "../test-helpers.js";
 import { focusFirstInvalid } from "../interactive.js";
 import "./wt-colour-chooser.js";
 import "./wt-modal.js";
@@ -80,11 +80,8 @@ function columns(el: WtColourChooser): number {
   return getComputedStyle(group).gridTemplateColumns.split(" ").length;
 }
 
-/** The lines a tile's colour name is drawn on: the distinct tops of its text's boxes. */
 function nameLines(tile: HTMLElement): number {
-  const range = document.createRange();
-  range.selectNodeContents(tile.querySelector(".colour-name")!);
-  return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+  return textLines(tile.querySelector(".colour-name")!).length;
 }
 
 function expectNamesOnOneLine(tiles: HTMLElement[]): void {

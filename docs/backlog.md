@@ -1423,6 +1423,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   on 2026-10-18 by A783's look: each row's month select, and the required star on "Starts on", fall
   past the right edge (`seasons-window-{light,dark}-390[-es].png` in
   `~/waitron-campaign-b/a783-shots/`; `packages/venue-service/src/dashboard/seasons-window.ts`).
+  Left open by A783.
 
 - **The Periods window: two looks from A719's LOOK (#1838).** At 390 px a period's swatch beside a
   name that wraps shrinks to 14.4 px wide (the others are 16 px); at 1280 px the window is full
@@ -2578,7 +2579,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **At 390 px the Floor plans screen cuts period names in its "Used by" column.** Seen on the demo
   venue on 2026-10-18 by A783's look: a set's period chips are cut off by the column, both themes,
   English and Spanish (`floor-plans-{light,dark}-390[-es].png` in `~/waitron-campaign-b/a783-shots/`;
-  `packages/venue-service/src/dashboard/floor-plans-screen.ts`).
+  `packages/venue-service/src/dashboard/floor-plans-screen.ts`). Left open by A783.
 
 - **A860. A floor-check rule copied four times (2026-10-18).** Whether a table's new place is
   taken is decided in four places, in TypeScript and in SQL, each excluding a slightly different set
@@ -3751,8 +3752,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   move it into `packages/ui/src/components/wt-form-actions.ts`. Left open by A719 (#1838).
 
 - **A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by
-  #1828).** `wt-colour-chooser` copies the panel placement and the grid arrow-key handling that
-  other `wt-*` components (`wt-combobox` among them) each carry their own copy of;
+  #1828).** `wt-colour-chooser` copies the panel placement (which since A783 also picks two or four
+  columns) and the arrow-key handling that other `wt-*` components (`wt-combobox` among them)
+  each carry their own copy of;
   `wt-language-chooser` and `wt-theme-chooser` already share theirs through
   `packages/ui/src/menu-popover.ts`. Move both into shared helpers in `packages/ui` and have every
   copy use them; each component's own tests and mutation score must hold.
@@ -4602,11 +4604,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **At 390 px the staff role dialog's open colour panel covers its own Colour field.** Seen by
   A783's look on 2026-10-18 at 390 × 844: the panel, now eight rows of two, is 462 px tall, too tall
-  to fit above or below the field, so it is placed at top 374, over the field at about 376–432.
-  Picking a colour still works. The period, station and season choosers at 390 px still open below
-  their field (`role-chooser-new-*-390*.png` and `role-chooser-edit-host-*-390*.png` in
-  `~/waitron-campaign-b/a783-shots/`; `positionPopup` in
-  `packages/ui/src/components/wt-colour-chooser.ts`).
+  to fit below the field, so it is moved up to top 374 (the window's height less its own and
+  8 px), over the field at about 376–432. Picking a colour still works. The period, station and
+  season choosers at 390 px still open below their field (`role-chooser-new-*-390*.png` and
+  `role-chooser-edit-host-*-390*.png` in `~/waitron-campaign-b/a783-shots/`; `positionPopup` in
+  `packages/ui/src/components/wt-colour-chooser.ts`). Left open by A783.
 
 - **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** When the
   changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25

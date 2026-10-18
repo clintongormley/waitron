@@ -510,7 +510,6 @@ describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => 
   });
 });
 
-// The fills a prep station picks from, in the order the picker offers them.
 const STATION_FILLS = [
   "red",
   "orange",
