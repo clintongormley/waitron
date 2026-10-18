@@ -1514,8 +1514,14 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **The "Add to" offer reads every special day with every date** (`GET …/special-days`) to show a
   name and a latest date — left open by A506-5, #1603.
 
-- **The period dialog's End offset field: queued as A789** (owner, 2026-10-17: no offset at all; a
-  period is when its menu can be ordered).
+- **A789 — last orders without an offset: a period is when its menu can be ordered** — DESIGNED
+  2026-10-18, waiting for the owner's answer to one question (Q39 in lane C's questions file;
+  [design](superpowers/specs/2026-10-18-a789-last-orders-design.md), pictures in
+  [mockups/a789-last-orders/](backlog/mockups/a789-last-orders/)); not built. The period end offset
+  and the period "Keep open" go (the zone one stays); a dish taken during a period and sent after it
+  ends opens a window asking the waiter to check with the kitchen, and once confirmed it is sent and
+  marked on the kitchen ticket. Four slices; the till slice waits for lane G's A773-1, whose design
+  says a period-ended line is never sent.
 
 - **A painter opened from a Painted in chip in the Periods window does not return to the window
   when it closes**, so a manager loses their place — left open by A506-11, #1694.
@@ -1543,7 +1549,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   A506-9, #1651.
 
 - **The end-offset check accepts a cutoff past the changeover** (a 06:00 cutoff past a 05:00
-  changeover was saved). Decide whether to refuse it — left open by A506-9, #1651.
+  changeover was saved). Decide whether to refuse it — left open by A506-9, #1651. A789's design
+  removes the end offset; if the owner approves it, this entry goes with A789's slice 1.
   [Detail](backlog/service-periods.md#the-end-offset-check-accepts-a-cutoff-past-the-changeover)
 
 - **A date another manager removed stays in the special-day draft** when this draft changed its
@@ -1666,7 +1673,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Sending grace after a period extension is replaced or expires** — decide whether a positive
   end offset survives a later period's extension or the business-day changeover; two real-store
   probes observed it ending with the replaced/expired row. The current one-row/today-only rule is
-  approved slice 3 decision 4. [Detail](backlog/service-periods.md#sending-grace-when-a-period-extension-is-replaced-or-expires)
+  approved slice 3 decision 4. A789's design removes both the offset and the period extension; if
+  the owner approves it, this entry goes with A789's slices 1–2. [Detail](backlog/service-periods.md#sending-grace-when-a-period-extension-is-replaced-or-expires)
 
 - **Who authorised today's station or period change** — A366 slice 3 decision 14 leaves
   the authorising person's identity unstored. Decide whether to retain that identity before
