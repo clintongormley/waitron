@@ -1646,3 +1646,56 @@ Task 9 remains partial for completed-manager reissue, interrupted-page ordering 
 journeys. Tasks 8 and 10–12, earlier provisioning coverage and legacy server failures, final
 whole-branch reviews and publication gates remain open. Preserve all earlier inventories for the
 eventual pull request.
+
+
+## Completed-manager recovery document service (2026-10-18)
+
+If you lose a completed box’s raw recovery key, the new HTTPS service accepts an authenticated
+manager with `system.manage`. The fiscal module renders the replacement PDF before the host
+commits its named verifier. A failed render leaves the previous key and retained PDF usable.
+The host retains one PDF in memory for identical authorised reprints. A new key, an outside key
+rotation or a restart makes the old download grant unusable.
+
+No existing test file changes in this checkpoint. New checks live in:
+
+- `apps/server/src/recovery-document-api.test.ts`: TLS and origin restrictions, management
+  permission before evidence reads and again inside the transaction, malformed input, failed
+  rendering, named-verifier binding, concurrent replacements and retained-download revocation.
+- `apps/server/src/recovery-document-evidence.test.ts`: public projection of the preparation
+  journal and restored history, both roots after workspace selection, missing evidence and
+  damaged or unsafe sources. The first run exposed duplicate reads through macOS path aliases;
+  the reader now compares canonical paths. The initial selected-workspace fixture also needed
+  canonical anchor paths. No existing guard changed.
+- `packages/fiscal-verifactu/src/completed-recovery-document.test.ts`: real English and Spanish
+  PDFs include current, retired and retained codes for the taxpayer and environment, including
+  codes recorded under another software identifier. The compared series, counters, SIF rows,
+  chain heads and allocations remain unchanged. Damaged evidence refuses.
+- `apps/server/src/recovery-document.boot.test.ts`: the real trading listener uses certificate-
+  verified HTTPS, replaces a lost key, includes restored-sheet codes and reprints identical
+  bytes. Verifier snapshots still accept only their matching old or new keys. This checks the
+  verifier boundary; it does not exercise a complete older-backup restore.
+
+Local receipts are in `~/waitron-campaign-e/receipts/a679-manager-interruption-20261018`.
+The final new server checks pass 39 cases; the fiscal document checks pass seven. Nearby recovery
+checks pass, as do the unedited golden/immutability pair within the 80-case fiscal run. Five root
+suites pass 3,204 cases. Scoped coverage measures 100% in each category for the two new server
+files and the new fiscal renderer; these are not package-wide reports. Four package type checks,
+focused lint and the server’s Node bundle build pass. No thresholds or coverage exclusions change.
+
+A separately frozen-installed candidate passes the same 39 server and seven fiscal checks.
+Nine independent omitted safeguards each cause assertion failures, and the restored candidate
+passes again. Preserve `controls.json`, the logs and all earlier inventories for the eventual PR.
+The generated English and Spanish A4 sheets, including the long key name, were rendered to PNG
+and inspected. They are synthetic examples, not the owner’s Drive acceptance.
+
+Initial test setup failures included a missing deployment stamp, the wrong suspension field and
+missing trading TLS files. Type checks caught an overly broad environment type and a test-header
+union; the final code uses checked environment values and explicit header types. These initial
+failures remain in the receipts and are not counted as feature RED evidence. The route’s 404,
+missing fiscal contribution, missing-key refusal and path-alias assertion failures are the
+observed behavior failures that preceded their fixes.
+
+Task 9 remains partial. The manager’s dashboard controls, interrupted-page ordering and complete
+entry journeys still need implementation and qualification. Tasks 8 and 10–12, the earlier
+provisioning coverage and legacy server failures, final reviews, current-head CI and landing
+remain open. The branch is not ready for publication.

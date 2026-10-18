@@ -330,8 +330,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Protected-code and fiscal-assertion restrictions remain.
   The unfinished-key HTTPS service and wizard replacement controls are implemented on the branch.
   Browser checks require the original password, retain the frozen hour and require the replacement
-  PDF to be kept before Review. Completed-manager reissue, interrupted-page ordering and full
-  installed journeys remain open.
+  PDF to be kept before Review. Completed-manager HTTPS replacement and identical-PDF replay
+  now have real trading-listener checks, including retained installation codes. The manager’s
+  dashboard controls, interrupted-page ordering and full installed journeys remain open.
   The exact approved standby wrapper and hour-admission dispatch are implemented. Real-database
   checks refuse the original box's same-hour code and accept the next hour without an advance
   reservation. The branch prints the selected code in first setup and accepts reported codes
@@ -353,7 +354,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   retain independent recovery context, and refusals clear it. First setup now projects the owned
   hour preparation into the combined country/place/time-zone review and generates a key-only PDF
   for explicit kept confirmation. Browser checks use simulated endpoint responses; authorised
-  reissue, interrupted-page ordering and installed complete journeys remain open.
+  manager controls, interrupted-page ordering and installed complete journeys remain open.
   Hour codec, module admission and clock units pass locally, with source timestamps embedded
   by the Node bundler. History enumeration, durable selection and the shared host store have focused
   local checks. Certificate-free owned preproduction readiness and publication have focused checks;

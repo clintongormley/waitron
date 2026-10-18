@@ -1435,6 +1435,17 @@ export interface ModuleBackupContribution {
     node: import("./provisioning.js").ProvisionedNode & { readonly venueId: string },
     input: unknown,
   ) => Promise<unknown>;
+  /** Render a transient recovery PDF; the host commits its named verifier only after rendering succeeds. */
+  readonly recoveryDocument?: (
+    tx: Transaction,
+    node: import("./provisioning.js").ProvisionedNode,
+    context: {
+      readonly nodeKey: { readonly nodeId: string; readonly name: string; readonly secret: string };
+      readonly createdAt: string;
+      readonly locale: "en" | "es";
+      readonly evidence: Readonly<Record<string, unknown>>;
+    },
+  ) => Promise<Uint8Array<ArrayBuffer>>;
 }
 
 /** One table whose rows may cross from preparation into a fresh production database. */

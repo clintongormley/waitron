@@ -261,6 +261,7 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
+import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
@@ -2201,7 +2202,18 @@ async function bootServer(
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
   mountRecoveryPackApi(
     app,
-    { db, node: till, venueId: till.locationId, modules: setsToMigrate, now },
+    {
+      db,
+      node: till,
+      venueId: till.locationId,
+      modules: setsToMigrate,
+      now,
+      documentEvidence: (module) =>
+        readRecoveryDocumentEvidence(
+          { stateDir: config.stateDir, venueDir: config.venueDir },
+          module,
+        ),
+    },
     log,
   );
   const cloudConnection = cloudOrigin
