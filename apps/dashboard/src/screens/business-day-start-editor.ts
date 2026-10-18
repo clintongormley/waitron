@@ -91,7 +91,6 @@ export class BusinessDayStartEditor extends LitElement {
   @state() private errors: Partial<Record<keyof Draft, string>> = {};
   @state() private actionError = "";
   @state() private previewError = "";
-  @state() private acknowledged = "";
   #baseline?: Draft;
   #revision = 0;
   #clockIdentity = "";
@@ -116,20 +115,17 @@ export class BusinessDayStartEditor extends LitElement {
     this.#leave = undefined;
     this.busy = false;
     this.preview = undefined;
-    this.acknowledged = "";
     super.disconnectedCallback();
   }
   protected override willUpdate(changes: PropertyValues): void {
     if (changes.has("model") && this.draft && this.#clockIdentity !== this.#identity()) {
       this.#sequence++;
       this.preview = undefined;
-      this.acknowledged = "";
       if (!this.actionError) this.actionError = t("business_day.changed");
     }
     if (changes.has("readOnly") && this.readOnly) {
       this.#sequence++;
       this.preview = undefined;
-      this.acknowledged = "";
     }
   }
   protected override updated(changes: PropertyValues): void {
@@ -225,7 +221,6 @@ export class BusinessDayStartEditor extends LitElement {
     this.draft = undefined;
     this.#baseline = undefined;
     this.preview = undefined;
-    this.acknowledged = "";
     this.actionError = "";
     this.errors = {};
   }
@@ -270,7 +265,6 @@ export class BusinessDayStartEditor extends LitElement {
     const sequence = ++this.#sequence;
     this.preview = undefined;
     this.previewError = "";
-    this.acknowledged = "";
     if (
       !this.draft ||
       this.readOnly ||
@@ -292,7 +286,7 @@ export class BusinessDayStartEditor extends LitElement {
       })
       .catch((error: unknown) => {
         if (sequence === this.#sequence && this.isConnected)
-          this.previewError = codeMessage(codeOf(error));
+          this.previewError = this.#refusal(error);
       });
   }
   #change(field: keyof Draft, event: CustomEvent<{ value: string }>): void {
@@ -313,7 +307,7 @@ export class BusinessDayStartEditor extends LitElement {
       this.actionError = t("form.fix_fields");
       return;
     }
-    if (!this.#ready() || this.acknowledged !== this.#key()) return;
+    if (!this.#ready()) return;
     const generation = this.#generation;
     this.busy = true;
     this.actionError = "";
@@ -330,22 +324,40 @@ export class BusinessDayStartEditor extends LitElement {
       );
     } catch (error) {
       if (generation !== this.#generation || !this.isConnected) return;
-      const params =
-        typeof error === "object" && error !== null
-          ? (error as { params?: Record<string, unknown> }).params
-          : undefined;
       const code = codeOf(error);
-      const message = codeMessage(code);
-      const field = params?.field;
-      if (field === "dayCutover") this.errors = { dayCutover: message };
+      const params = this.#params(error);
+      const message = this.#refusal(error);
+      if (params?.field === "dayCutover") this.errors = { dayCutover: message };
       this.actionError = message;
       if (code === "venue.business_day_changed" || code === "venue.business_day_locked") {
         this.preview = undefined;
-        this.acknowledged = "";
       }
+      if (params?.reason === "changeover_passed") this.#refreshPreview();
     } finally {
       if (generation === this.#generation || !this.draft) this.busy = false;
     }
+  }
+  #params(error: unknown): Record<string, unknown> | undefined {
+    return typeof error === "object" && error !== null
+      ? (error as { params?: Record<string, unknown> }).params
+      : undefined;
+  }
+  #refusal(error: unknown): string {
+    const code = codeOf(error);
+    const params = this.#params(error);
+    if (code === "venue.business_day_invalid" && params?.reason === "changeover_passed")
+      return t("business_day.changeover_passed");
+    if (
+      code === "venue.business_day_invalid" &&
+      params?.reason === "clock_transition" &&
+      typeof params.clocksChangeOn === "string" &&
+      typeof params.saveFrom === "string"
+    )
+      return fill("business_day.clock_transition", {
+        date: formatBusinessDate(params.clocksChangeOn),
+        when: formatChangeoverMoment(params.saveFrom, this.model.clock.timeZone),
+      });
+    return codeMessage(code);
   }
   #clockTime(at: string): string {
     return new Intl.DateTimeFormat("en-GB", {
@@ -537,17 +549,6 @@ export class BusinessDayStartEditor extends LitElement {
                         >`
                     : nothing
                 }
-                ${
-                  ready && this.acknowledged !== this.#key()
-                    ? html`<wt-button
-                        data-test="acknowledge"
-                        @click=${() => {
-                          if (active() && this.#ready()) this.acknowledged = this.#key();
-                        }}
-                        >${t("business_day.acknowledge")}</wt-button
-                      >`
-                    : nothing
-                }
                 <wt-form-actions .error=${this.actionError}
                   ><wt-button
                     slot="cancel"
@@ -559,8 +560,8 @@ export class BusinessDayStartEditor extends LitElement {
                     >${t("action.cancel")}</wt-button
                   ><wt-button
                     data-test="save"
-                    variant=${saveAction.variant}
-                    ?disabled=${saveAction.unchanged || this.busy || this.readOnly || !ready || this.acknowledged !== this.#key() || (this.attempted && Object.keys(this.#problems()).length > 0)}
+                    variant=${ready ? saveAction.variant : "secondary"}
+                    ?disabled=${saveAction.unchanged || this.busy || this.readOnly || !ready || (this.attempted && Object.keys(this.#problems()).length > 0)}
                     @click=${() => {
                       if (active()) void this.#save();
                     }}

@@ -202,12 +202,10 @@ it("a real child save closes before the parent refresh fails and cannot submit t
       );
     await editor.updateComplete;
   }
-  await expect.poll(() => editor.shadowRoot!.querySelector("[data-test=acknowledge]")).toBeTruthy();
-  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=acknowledge]")!.click();
-  await editor.updateComplete;
   const save =
     editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
-  expect(save.disabled).toBe(false);
+  await expect.poll(() => save.disabled).toBe(false);
+  expect(editor.shadowRoot!.querySelector("[data-test=acknowledge]")).toBeNull();
   save.click();
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).toBeTruthy();
   expect(writes).toBe(1);

@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { afterEach, expect, it } from "vitest";
-import { LeaveController, type WtInput } from "@waitron/ui";
+import { LeaveController, type WtButton, type WtInput } from "@waitron/ui";
 import type {
   DashboardApi,
   BusinessDayClockModel,
@@ -98,8 +98,9 @@ async function mount(write?: () => Promise<{ changed: boolean; model: VenueDetai
 }
 async function ready(editor: Editor) {
   await change(editor, "dayCutover", "03:00");
-  await expect.poll(() => editor.shadowRoot!.querySelector("[data-test=acknowledge]")).toBeTruthy();
-  await click(editor, "acknowledge");
+  await expect
+    .poll(() => editor.shadowRoot!.querySelector<WtButton>("[data-test=save]")!.disabled)
+    .toBe(false);
 }
 for (const name of ["dayCutover"]) {
   it(`protects invalid ${name} and releases on a literal revert`, async () => {
@@ -155,6 +156,19 @@ it("a refusal keeps a protected retryable draft", async () => {
   await ready(editor);
   await click(editor, "save");
   await expect.poll(() => editor.shadowRoot!.querySelector("wt-form-actions")?.error).toBeTruthy();
+  expect(unload()).toBe(true);
+  expect(q<WtInput>(editor, "[name=dayCutover]").value).toBe("03:00");
+});
+it("a changeover that passed during Save keeps the protected draft", async () => {
+  const { editor } = await mount(async () => {
+    throw {
+      code: "venue.business_day_invalid",
+      params: { field: "dayCutover", reason: "changeover_passed" },
+    };
+  });
+  await ready(editor);
+  await click(editor, "save");
+  await expect.poll(() => q<WtInput>(editor, "[name=dayCutover]").error).toBeTruthy();
   expect(unload()).toBe(true);
   expect(q<WtInput>(editor, "[name=dayCutover]").value).toBe("03:00");
 });

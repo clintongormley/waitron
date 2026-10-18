@@ -241,6 +241,18 @@ New cases beside them (no existing assertion changed): read-only with two waitin
 
 New cases beside them: mockup 02's three lines, the request carrying only the time and revision, no preview request before the time is changed, the not-today day line in EN and ES, the clocks-go-back day (23 h), mockup 04's heading and lines, the `kept_open` line, each clash label in EN and ES, the whole preview in Spanish with the new field label. The acknowledge button and the Save gating are left for Task 14b.
 
+## Task 14b — Save gating without acknowledgement (lines at `c071e9b95`)
+
+| File:line (at `c071e9b95`) | Before → after | Why |
+| --- | --- | --- |
+| `apps/dashboard/src/screens/business-day-start-editor.test.ts:125` (`ready()`), `:143`, `:170` | `click(el, "acknowledge")` before Save → removed; each case's `save.disabled` assertion after it unchanged | design §5: no acknowledge step; Save is gated by a ready preview |
+| `business-day-start-editor.test.ts:132-149` (first case) | preview resolved at once; Save disabled after the time change because unacknowledged → the preview is held back: after the time change Save is disabled AND `variant "secondary"`; after it resolves Save is enabled AND `variant "primary"`; the write `toEqual` unchanged | Save is quiet and disabled until a ready preview, then primary (Forms contract) |
+| `business-day-start-editor.test.ts:132,184,237` | test titles name acknowledgement → name the ready preview / a disabled Save; bodies unchanged | wording only |
+| `business-day-start-editor.unsaved.test.ts:101-102` (`ready()`) | poll for `[data-test=acknowledge]` and click it → poll until Save is enabled | no acknowledge step |
+| `venue-details-business-day.test.ts:205-210` | poll for and click acknowledge, then `save.disabled` false → poll until `save.disabled` is false, and `[data-test=acknowledge]` is null | no acknowledge step |
+
+New cases beside them: a ready 05:00 → 03:00 preview makes Save primary and enabled with no acknowledge button and writes `{ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00", expectedClockRevision: 4 }`; clashes keep Save secondary and disabled and a submitted form writes nothing; `changeover_passed` in EN and ES under the field and at the bottom, with a second preview request and the draft kept; `clock_transition` in EN and ES on Save, and in EN on the preview; unsaved: a `changeover_passed` refusal keeps the protected draft. No other existing assertion failed.
+
 ## Review focus (inputs no task's main tests reach; each line names the test that pins it)
 
 1. **The rule-2 flip mid-dialog**: a preview taken at 00:20 for 00:30 and a Save at 00:31 must be

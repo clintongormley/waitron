@@ -863,7 +863,9 @@ export const en = {
   "business_day.conflict_on_special_day": "{name}: {line}",
 
   "business_day.open_hours": "Review opening hours",
-  "business_day.acknowledge": "I have reviewed the transition",
+  "business_day.changeover_passed":
+    "That changeover has just passed. Check the new time and save again.",
+  "business_day.clock_transition": "The clocks change on {date}. Save again from {when}.",
   "business_day.change": "Change start",
   "venue_details.name": "Venue name",
   "venue_details.addressLine1": "Street address",
@@ -3815,7 +3817,10 @@ export const es: Record<StringKey, string> = {
   "business_day.conflict_on_special_day": "{name}: {line}",
 
   "business_day.open_hours": "Revisar horarios",
-  "business_day.acknowledge": "He revisado la transición",
+  "business_day.changeover_passed":
+    "Ese cambio de día acaba de pasar. Revisa la nueva hora y vuelve a guardar.",
+  "business_day.clock_transition":
+    "La hora oficial cambia el {date}. Vuelve a guardar desde {when}.",
   "business_day.change": "Cambiar inicio",
   "venue_details.name": "Nombre del local",
   "venue_details.addressLine1": "Dirección",
