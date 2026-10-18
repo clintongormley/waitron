@@ -41,7 +41,7 @@ import type { OrderAttendance } from "./working-order.js";
 import "./errors.js";
 
 /**
- * Move guests, join tables and split a table. Each checks the revision of the party in
+ * Move guests, join tables and split a table (spec §6). Each checks the revision of the party in
  * the path; a move or join then checks that the party the till read at the target table still holds
  * it, and that party's revision, before any table's or bill's own state (P27), so of two tills
  * acting from one read the second is refused `party.out_of_date`.

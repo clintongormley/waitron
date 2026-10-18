@@ -52,7 +52,7 @@ const ADVANCE_FROM: Record<Exclude<TicketState, "queued">, TicketState> = {
   ready: "preparing",
 };
 
-/** How often the screen re-reads its queue and notices. */
+/** How often the screen re-reads its queue and notices (plan decision D11). */
 const REFRESH_MS = 15_000;
 
 /**

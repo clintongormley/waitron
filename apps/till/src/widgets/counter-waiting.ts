@@ -19,9 +19,9 @@ export function waitingScope(order: CounterWaitingOrder): string {
 }
 
 /**
- * The counter orders still waiting on the counter: sent and not paid, or paid and not handed
- * over. A pure view that renders nothing when no order waits; the app turns its
- * `hand-over-order` and `pay-waiting-order` events into API calls, its
+ * The counter orders still waiting on the counter: sent and not paid, or paid and not handed over
+ * (spec §5, "Counter service"). A pure view that renders nothing when no order waits; the app turns
+ * its `hand-over-order` and `pay-waiting-order` events into API calls, its
  * `cancel-credit-waiting-order` event into the cancel and credit dialog, and its
  * `move-waiting-order` event into the move-to-station dialog.
  */

@@ -110,9 +110,9 @@ async function approverToCheck(
 }
 
 /**
- * The till's adjustment routes, behind the till session: apply a cancel, comp or discount to an
- * open bill, a table's or a counter order, preview what it would do, and the reasons and approvers
- * the till offers.
+ * The till's adjustment routes (service plan Task 11, spec §7), behind the till session: apply a
+ * cancel, comp or discount to an open bill, a table's or a counter order, preview what it would
+ * do, and the reasons and approvers the till offers.
  */
 export function mountAdjustmentsApi(
   app: Hono,

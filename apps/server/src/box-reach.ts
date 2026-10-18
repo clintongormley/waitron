@@ -11,7 +11,7 @@ export interface ReachInfo {
   addresses: string[]; // non-internal, cert-coverable IPv4s (filtered to the CA's permitted subtrees)
   hostnameUrl: string; // e.g. "https://waitron.local:8080" (":443"/":80" omitted)
   ipUrls: string[]; // one per address, same port rule
-  /** The URL the IP-QR encodes — the FIRST ip URL, since `.local` is unreliable on iOS;
+  /** The URL the IP-QR encodes — the FIRST ip URL, since `.local` is unreliable on iOS (spec §7);
    *  null when the box has no non-internal IPv4 (e.g. a container with only loopback). */
   qrTarget: string | null;
 }

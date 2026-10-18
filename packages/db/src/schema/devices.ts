@@ -63,7 +63,8 @@ export const devices = table(
     deletedAt: tsString("deleted_at"),
     lastSeenAt: tsString("last_seen_at"),
     // A whole percent, 0 to 100, not basis points like the `rate()` columns. The range is held by
-    // `PUT /api/device/battery`: a CHECK would make drizzle-kit rebuild `devices`.
+    // `PUT /api/device/battery`: a CHECK would make drizzle-kit rebuild `devices` (add-a-device
+    // spec §6).
     batteryLevel: smallCount("battery_level"),
     batteryCharging: flag("battery_charging"),
     batteryReportedAt: tsString("battery_reported_at"),
