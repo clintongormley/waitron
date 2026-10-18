@@ -376,6 +376,17 @@ describe("end offsets for an hours save after the start moved", () => {
     const past = [oneOff("2026-10-22", p("03:00", "04:00"))];
     expect(findSeasonEndOffsetClash(lateWednesday(), past, offsets, settled, today)).toBeNull();
   });
+  it("leaves a repeating day's past occurrence out", () => {
+    const yearly = {
+      ...oneOff("2026-10-22", p("12:00", "14:00"), {
+        periodId: "next",
+        startsAt: "14:15",
+        endsAt: "18:00",
+      }),
+      occursIn: (year: number) => (year === 2026 ? "2026-10-22" : null),
+    };
+    expect(findSeasonEndOffsetClash(noWeek, [yearly], offsets, settled, today)).toBeNull();
+  });
   it("still refuses a past one-off date whose own periods clash, naming it", () => {
     const past = [
       oneOff("2026-10-23", p("12:00", "14:00"), {
