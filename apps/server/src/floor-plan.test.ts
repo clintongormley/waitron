@@ -162,12 +162,10 @@ function check(zoneId: string, input: ZonePlanSave, removals: readonly TableRemo
   return inTx(v, (tx) => checkZonePlanSave(tx, v.cfg, removals, zoneId, input, NOW));
 }
 
-/** The layout of zone `zoneId` in its department's default set. */
 async function layoutOf(zoneId: string): Promise<LayoutRef> {
   return inTx(v, (tx) => defaultLayout(tx, v.cfg, zoneId));
 }
 
-/** The zone's layout in its department's default set. */
 async function readDefault(zoneId: string) {
   const at = await layoutOf(zoneId);
   return inTx(v, (tx) => readLayout(tx, v.cfg, at));
