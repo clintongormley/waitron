@@ -1593,29 +1593,53 @@ describe("a reset over a joined table split today", () => {
         .where(eq(diningTables.id, tableId)),
     );
 
-  it("a reset takes back Counter 5 split off and needing clearing, and clears its mark", async () => {
+  const markCleared = (tableId: string) =>
+    inTx(v, (tx) =>
+      tx.update(diningTables).set({ needsClearingSince: null }).where(eq(diningTables.id, tableId)),
+    );
+
+  it("a reset leaves Counter 5 split off and needing clearing, with its mark, and takes it back once cleared", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);
+    const longBefore = await todayRow(table.long!);
 
     await reset(zoneId);
 
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await flags(table.c5!)).toMatchObject({ joined: false });
+    expect(await todayRow(table.long!)).toEqual(longBefore);
+
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await flags(table.c5!)).toMatchObject({ joined: true });
     expect(await todayRow(table.long!)).toMatchObject(WHOLE);
   });
 
-  it("a reset takes back Counter 4 and Counter 5 split off and needing clearing, and clears both marks", async () => {
+  it("a reset leaves Counter 4 and Counter 5 split off and needing clearing, with both marks, and takes them back once both are cleared", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c4!, table.c5!], 2);
     await markNeedsClearing(table.c4!);
     await markNeedsClearing(table.c5!);
+    const splitBefore = await splitRowsOf(table.long!);
+    const longBefore = await todayRow(table.long!);
 
     await reset(zoneId);
 
-    expect((await tableRow(v, table.c4!)).needsClearingSince).toBeNull();
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
+    expect((await tableRow(v, table.c4!)).needsClearingSince).toBe(MARKED);
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
+    expect(await todayRow(table.long!)).toEqual(longBefore);
+
+    await markCleared(table.c4!);
+    await catchUp(zoneId);
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
+
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await todayRow(table.long!)).toMatchObject(WHOLE);
   });
@@ -1631,7 +1655,7 @@ describe("a reset over a joined table split today", () => {
     expect((await tableRow(v, table.bar!)).needsClearingSince).toBe(MARKED);
   });
 
-  it("a reset while guests sit at a part split off leaves the mark on the other part, and the catch-up after they leave clears it", async () => {
+  it("a reset while guests sit at a part split off leaves the mark on the other part, and the catch-up after they leave still waits for it", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c4!, table.c5!], 2);
     await markNeedsClearing(table.c5!);
@@ -1646,8 +1670,8 @@ describe("a reset over a joined table split today", () => {
     await finish(partyId);
     await catchUp(zoneId);
 
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
-    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
   });
 
   it("a reset leaves a split part's clearing mark when two live tables follow its saved joined table", async () => {
@@ -1660,16 +1684,17 @@ describe("a reset over a joined table split today", () => {
         .set({ planTableId: master.long! })
         .where(eq(diningTables.id, table.bar!)),
     );
+    const longBefore = await todayRow(table.long!);
 
     await reset(zoneId);
 
-    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await todayRow(table.long!)).toEqual(longBefore);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
     expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
     expect(await flags(table.c5!)).toEqual({ joined: false, apart: false });
   });
 
-  it("a delayed reset clears a split part's mark from its copied plan after a new saved plan stands it apart", async () => {
+  it("a delayed reset takes a split part back from its copied plan after a new saved plan stands it apart, once its mark is cleared", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c4!, table.c5!], 2);
     await markNeedsClearing(table.c5!);
@@ -1707,7 +1732,12 @@ describe("a reset over a joined table split today", () => {
     await finish(partyId);
     await catchUp(zoneId);
 
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
+
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await todayRow(table.long!)).toMatchObject(WHOLE);
     expect(await todayRow(table.c5!)).toMatchObject({ x: null, takenOff: false });
@@ -1715,7 +1745,7 @@ describe("a reset over a joined table split today", () => {
     expect(await pendingRows(zoneId)).toEqual([]);
   });
 
-  it("a reset leaves the mark on Counter 5 split off when the saved plan stands it apart from Long table", async () => {
+  it("a reset leaves Counter 5 split off and its mark when the saved plan stands it apart from Long table, and stands it apart once cleared", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);
@@ -1731,13 +1761,18 @@ describe("a reset over a joined table split today", () => {
 
     await reset(zoneId);
 
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await todayRow(table.c5!)).toMatchObject({ x: 60, takenOff: false });
     expect(await flags(table.c5!)).toMatchObject({ joined: false });
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
   });
 
-  it("a reset leaves the mark on Counter 5 split off when the saved plan drops it and an unpaid order to it keeps it", async () => {
+  it("a reset leaves Counter 5 split off and its mark when the saved plan drops it, and once cleared an unpaid order to it keeps it", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);
@@ -1758,10 +1793,15 @@ describe("a reset over a joined table split today", () => {
 
     await reset(zoneId);
 
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect((await liveTablesOf(zoneId)).map((t) => t.id)).toContain(table.c5);
     expect(await todayRow(table.c5!)).toBeUndefined();
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
   });
 });
 
