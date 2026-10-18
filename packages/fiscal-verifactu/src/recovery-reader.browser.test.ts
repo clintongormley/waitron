@@ -161,7 +161,7 @@ describe("strict recovery PDF attachment reader", () => {
     });
   });
   it("offers manual entry for a real generated PDF whose attachment was stripped", async () => {
-    const pdf = await PDFDocument.load(await renderRecoveryPdf(document, "en"));
+    const pdf = await PDFDocument.load(await renderRecoveryPdf(document, "en", "Europe/Madrid"));
     pdf.catalog.lookup(PDFName.of("Names"), PDFDict).delete(PDFName.of("EmbeddedFiles"));
     pdf.catalog.delete(PDFName.of("AF"));
     await expect(readRecoveryPdf(await pdf.save())).rejects.toThrow(
@@ -169,7 +169,7 @@ describe("strict recovery PDF attachment reader", () => {
     );
   });
   it("binds the real generated carrier to its exact canonical attachment", async () => {
-    const bytes = await renderRecoveryPdf(document, "en");
+    const bytes = await renderRecoveryPdf(document, "en", "Europe/Madrid");
     const pdf = await PDFDocument.load(bytes);
     const info = pdf.context.lookup(pdf.context.trailerInfo.Info, PDFDict);
     expect(info.lookup(PDFName.of("WaitronRecoveryDigest"), PDFString).decodeText()).toBe(
@@ -180,7 +180,7 @@ describe("strict recovery PDF attachment reader", () => {
   it.each(["secret", "scope", "context"])(
     "refuses a canonical valid %s attachment edit with original visible pages",
     async (kind) => {
-      const original = await renderRecoveryPdf(document, "en");
+      const original = await renderRecoveryPdf(document, "en", "Europe/Madrid");
       const pdf = await PDFDocument.load(original);
       const edited = structuredClone(document);
       if (kind === "secret") Object.assign(edited.nodeKey, { secret: "z".repeat(32) });
@@ -205,7 +205,7 @@ describe("strict recovery PDF attachment reader", () => {
   it.each(["missing", "malformed", "wrong version", "mismatch", "not a string"])(
     "refuses %s content binding on an attachment-bearing PDF",
     async (kind) => {
-      const pdf = await PDFDocument.load(await renderRecoveryPdf(document, "en"));
+      const pdf = await PDFDocument.load(await renderRecoveryPdf(document, "en", "Europe/Madrid"));
       const info = pdf.context.lookup(pdf.context.trailerInfo.Info, PDFDict);
       const key = PDFName.of("WaitronRecoveryDigest");
       if (kind === "missing") info.delete(key);

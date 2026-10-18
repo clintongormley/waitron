@@ -24,7 +24,7 @@ describe("transient recovery delivery session", () => {
       session: Object.entries(sessionStorage),
     };
     const confirm = vi.fn(async () => "host-grant");
-    const session = createRecoveryDelivery(document, "en", confirm);
+    const session = createRecoveryDelivery(document, "en", confirm, "Europe/Madrid");
     try {
       const download = await session.download();
       const print = await session.print();
@@ -59,7 +59,7 @@ describe("transient recovery delivery session", () => {
     }
   });
   it("rejects render completion after disposal", async () => {
-    const session = createRecoveryDelivery(document, "es", async () => true);
+    const session = createRecoveryDelivery(document, "es", async () => true, "Europe/Madrid");
     const pending = session.download();
     session.dispose();
     await expect(pending).rejects.toThrow("Recovery delivery disposed");
@@ -73,6 +73,7 @@ describe("transient recovery delivery session", () => {
         new Promise<string>((resolve) => {
           done = resolve;
         }),
+      "Europe/Madrid",
     );
     await session.ready();
     const pending = session.kept();
@@ -83,7 +84,7 @@ describe("transient recovery delivery session", () => {
   });
   it("freezes caller input and rejects invalid data", async () => {
     const input = structuredClone(document);
-    const session = createRecoveryDelivery(input, "en", async () => true);
+    const session = createRecoveryDelivery(input, "en", async () => true, "Europe/Madrid");
     Object.assign(input.nodeKey, { secret: "z".repeat(32) });
     try {
       expect(
@@ -96,7 +97,12 @@ describe("transient recovery delivery session", () => {
     } finally {
       session.dispose();
     }
-    const bad = createRecoveryDelivery({ ...document, venueName: "" }, "en", async () => true);
+    const bad = createRecoveryDelivery(
+      { ...document, venueName: "" },
+      "en",
+      async () => true,
+      "Europe/Madrid",
+    );
     try {
       await expect(bad.ready()).rejects.toThrow("Recovery PDF refused");
     } finally {

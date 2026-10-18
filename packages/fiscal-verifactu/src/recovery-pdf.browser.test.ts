@@ -18,7 +18,7 @@ describe("key-only recovery PDF", () => {
   it.each(["en", "es"] as const)(
     "renders complete A4 identification and recoverable printed values in %s",
     async (locale) => {
-      const bytes = await renderRecoveryPdf(document, locale);
+      const bytes = await renderRecoveryPdf(document, locale, "Europe/Madrid");
       expect(await readRecoveryPdf(bytes)).toEqual({
         document,
         attachmentBytes: recoveryDocumentBytes(document),
@@ -39,28 +39,28 @@ describe("key-only recovery PDF", () => {
           document.venueName,
           document.scope.taxpayerNif,
           document.scope.softwareId,
-          document.nodeKey.nodeId,
+          "NODE -1",
           document.nodeKey.name,
-          document.createdAt,
+          locale === "en" ? "17 October 2026, 14:30" : "17 de octubre de 2026, 14:30",
         ])
           expect(text).toContain(value);
         expect(text).toContain(
           locale === "en" ? "Waitron recovery key" : "Clave de recuperación de Waitron",
         );
-        expect(text).toContain(
-          locale === "en" ? "Standard key (raw192)" : "Clave estándar (raw192)",
-        );
+        expect(text).not.toMatch(/raw192|47 characters|47 caracteres/);
         for (const instruction of locale === "en"
           ? [
               "Keep this sheet",
               "matching backup",
-              "separate backup password",
+              "own password",
+              "separately from this sheet",
               "older sheets for older backups",
             ]
           : [
               "Guarda esta hoja",
               "copia de seguridad correspondiente",
-              "contraseña independiente",
+              "propia contraseña",
+              "separados de esta hoja",
               "hojas anteriores para copias anteriores",
             ])
           expect(text).toContain(instruction);
@@ -76,9 +76,7 @@ describe("key-only recovery PDF", () => {
             document.nodeKey.name,
           ),
         ).toBe(document.nodeKey.secret);
-        expect(text).not.toMatch(
-          /allocation|register|signing|Cloud|administrator|TLS|S000001|P000001/i,
-        );
+        expect(text).not.toMatch(/allocation|register|signing|administrator|TLS|S000001|P000001/i);
       } finally {
         await task.destroy();
       }
@@ -94,7 +92,7 @@ describe("key-only recovery PDF", () => {
         venueName: label("V"),
         nodeKey: { ...document.nodeKey, nodeId: label("N"), name: label("K") },
       };
-      const task = openRecoveryPdf(await renderRecoveryPdf(input, locale));
+      const task = openRecoveryPdf(await renderRecoveryPdf(input, locale, "Europe/Madrid"));
       try {
         const pdf = await task.promise;
         const texts: string[] = [];
@@ -104,19 +102,12 @@ describe("key-only recovery PDF", () => {
               .map((item) => ("str" in item ? item.str : ""))
               .join(" "),
           );
-        for (const value of [
-          input.taxpayerName,
-          input.venueName,
-          input.nodeKey.nodeId,
-          input.nodeKey.name,
-        ])
+        for (const value of [input.taxpayerName, input.venueName, "NWWWWWWW", input.nodeKey.name])
           expect(texts.join("").replace(/\s/g, "")).toContain(value);
-        const keyPage = texts.find((text) =>
-          text.includes(locale === "en" ? "Standard key (raw192)" : "Clave estándar (raw192)"),
-        );
+        const keyPage = texts.find((text) => text.includes(locale === "en" ? "Key:" : "Clave:"));
         expect(keyPage).toContain(locale === "en" ? "Key:" : "Clave:");
         expect(keyPage).toContain(locale === "en" ? "Check:" : "Control:");
-        expect(keyPage).toContain("47");
+        expect(keyPage).toContain("06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8");
       } finally {
         await task.destroy();
       }
@@ -124,7 +115,7 @@ describe("key-only recovery PDF", () => {
   );
   it("freezes the input before font loading", async () => {
     const d = structuredClone(document);
-    const pending = renderRecoveryPdf(d, "en");
+    const pending = renderRecoveryPdf(d, "en", "Europe/Madrid");
     Object.assign(d.nodeKey, { secret: "z".repeat(32) });
     expect((await readRecoveryPdf(await pending)).document).toEqual(document);
   });

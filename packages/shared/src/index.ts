@@ -1,9 +1,8 @@
-// The public surface of @waitron/shared. Re-exports only.
-//
 // Excluded from coverage by path in vitest.config.ts: @vitest/coverage-v8 has reported phantom
 // uncovered entries for this barrel on some runs and not others, and an in-file `v8 ignore file`
 // did not reliably suppress them.
 export { AppError, hasCode, isAppError } from "./errors.js";
+export { shortNodeId } from "./short-node-id.js";
 export type { ErrorCode, ErrorParams } from "./errors.js";
 export type {
   Branded,

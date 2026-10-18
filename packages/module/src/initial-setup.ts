@@ -43,7 +43,11 @@ export interface InitialSetupContribution {
     imported: InitialSetupImport,
     document: {
       readonly key: { readonly nodeId: string; readonly name: string; readonly secret: string };
-      readonly identity: { readonly taxpayerName: string; readonly venueName: string };
+      readonly identity: {
+        readonly taxpayerName: string;
+        readonly venueName: string;
+        readonly timeZone: string;
+      };
       readonly locale: "en" | "es";
     },
   ): Promise<{ readonly bytes: Uint8Array; readonly statement: unknown }>;

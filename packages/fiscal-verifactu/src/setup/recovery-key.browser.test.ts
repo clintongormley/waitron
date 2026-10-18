@@ -47,7 +47,7 @@ function type(el: LitElement, name: string, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
 }
 async function printed() {
-  const bytes = await renderRecoveryPdf(saved, "en");
+  const bytes = await renderRecoveryPdf(saved, "en", "Europe/Madrid");
   const task = openRecoveryPdf(bytes);
   try {
     const pdf = await task.promise;
@@ -92,7 +92,7 @@ it("imports the saved key-only PDF for the matching selected backup", async () =
   const el = await mount();
   const events: Array<{ secret?: string }> = [];
   el.addEventListener("recovery-key-change", (event) => events.push((event as CustomEvent).detail));
-  upload(el, await renderRecoveryPdf(saved, "es"));
+  upload(el, await renderRecoveryPdf(saved, "es", "Europe/Madrid"));
   await vi.waitFor(() =>
     expect(events.at(-1)).toEqual({ secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" }),
   );
@@ -113,7 +113,7 @@ it.each(["taxpayer", "environment", "software", "node", "name"])(
     if (fault === "software") wrong.scope = { ...wrong.scope, softwareId: "W2" };
     if (fault === "node") wrong.nodeKey = { ...wrong.nodeKey, nodeId: "node-2" };
     if (fault === "name") wrong.nodeKey = { ...wrong.nodeKey, name: "Earlier key" };
-    upload(el, await renderRecoveryPdf(wrong, "en"));
+    upload(el, await renderRecoveryPdf(wrong, "en", "Europe/Madrid"));
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("#pdf-error")!.textContent).toContain(
         "this backup's named key",
@@ -172,7 +172,7 @@ it("clears manual entry on selected-backup change and on removal", async () => {
 });
 it.each(["selection", "remove", "edit"])("ignores an old PDF read after %s", async (fault) => {
   const el = await mount();
-  const bytes = await renderRecoveryPdf(saved, "en");
+  const bytes = await renderRecoveryPdf(saved, "en", "Europe/Madrid");
   let release!: (bytes: ArrayBuffer) => void;
   const held = new Promise<ArrayBuffer>((resolve) => {
     release = resolve;
@@ -213,7 +213,7 @@ it("refuses an oversized PDF before reading its bytes", async () => {
 it("clears the native PDF picker when its backup selection changes", async () => {
   const el = await mount();
   const picker = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
-  upload(el, await renderRecoveryPdf(saved, "en"));
+  upload(el, await renderRecoveryPdf(saved, "en", "Europe/Madrid"));
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Key loaded"));
   expect(picker.files).toHaveLength(1);
   el.selection = { ...selection, keyName: "Earlier key" };

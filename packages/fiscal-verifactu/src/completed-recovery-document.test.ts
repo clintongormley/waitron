@@ -1,7 +1,13 @@
 import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { deployment, invoiceSeries, stampDeployment, withTransaction } from "@waitron/db";
+import {
+  deployment,
+  invoiceSeries,
+  locations,
+  stampDeployment,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_RECOVERY_DOCUMENT } from "./completed-recovery-document.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -103,11 +109,12 @@ it.each(["en", "es"] as const)(
       const pdf = await task.promise;
       const text = (await (await pdf.getPage(1)).getTextContent()).items
         .map((item) => ("str" in item ? item.str : ""))
-        .join(" ");
+        .join(" ")
+        .replace(/\s+/g, " ");
       expect(text).toContain(
         locale === "en"
-          ? "Installation codes: 06RB, 06RC, 06RD"
-          : "Códigos de instalación: 06RB, 06RC, 06RD",
+          ? "Installation codes 06RB, 06RC, 06RD"
+          : "Códigos de instalación 06RB, 06RC, 06RD",
       );
       const attachment = JSON.parse(
         Buffer.from((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!).toString(
@@ -156,6 +163,24 @@ it("a missing environment stamp refuses before rendering a recovery sheet", asyn
     code: "sif.allocation_invalid",
     params: { reason: "history_invalid" },
   });
+});
+it("the completed manager sheet uses the saved venue zone rather than the host zone", async () => {
+  await suite.db
+    .update(locations)
+    .set({ timeZone: "Atlantic/Canary" })
+    .where(eq(locations.id, node.locationId));
+  const task = getDocument({ data: await render("en"), useSystemFonts: false, useWasm: false });
+  try {
+    const pdf = await task.promise;
+    const text = (await (await pdf.getPage(1)).getTextContent()).items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ")
+      .replace(/\s+/g, " ");
+    expect(text).toContain("18 October 2026, 13:00");
+    expect(text).toContain("Western European Summer Time");
+  } finally {
+    await task.destroy();
+  }
 });
 it("unrelated taxpayer and target-environment codes are excluded, while duplicate known codes are printed once", async () => {
   const bytes = await render("en", {

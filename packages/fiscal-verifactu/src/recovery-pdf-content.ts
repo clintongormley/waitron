@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { create, type Font } from "fontkit";
+import { shortNodeId } from "@waitron/shared";
 import { encodeNodeKey } from "./paper-register-compact.js";
 import {
   parseRecoveryDocument,
@@ -14,9 +15,28 @@ export async function renderRecoveryPdfWithFont(
   input: RecoveryDocument,
   locale: "en" | "es",
   loadFont: () => Promise<Uint8Array>,
+  timeZone: string,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const document = await parseRecoveryDocument(input);
   if (locale !== "en" && locale !== "es") refuseRecovery();
+  if (typeof timeZone !== "string" || timeZone === "") refuseRecovery();
+  let created: string;
+  try {
+    const language = locale === "en" ? "en-GB" : "es-ES";
+    const date = new Date(document.createdAt);
+    const day = new Intl.DateTimeFormat(language, { timeZone, dateStyle: "long" }).format(date);
+    const time = new Intl.DateTimeFormat(language, {
+      timeZone,
+      timeStyle: "short",
+      hourCycle: "h23",
+    }).format(date);
+    const zone = new Intl.DateTimeFormat(language, { timeZone, timeZoneName: "long" })
+      .formatToParts(date)
+      .find((part) => part.type === "timeZoneName")!.value;
+    created = `${day}, ${time} (${zone})`;
+  } catch {
+    refuseRecovery();
+  }
   const fontBytes = await loadFont();
   const font = create(fontBytes as unknown as Buffer) as Font;
   const safe = (text: string) =>
@@ -64,33 +84,46 @@ export async function renderRecoveryPdfWithFont(
     });
   });
   const write = (text: string, size = 11) =>
-    pdf.fontSize(size).text(safe(text), { paragraphGap: 8 });
+    pdf.fontSize(size).text(safe(text), 42, pdf.y, { width: pdf.page.width - 84, paragraphGap: 8 });
+  const row = (label: string, value: string) => {
+    pdf.fontSize(11);
+    const left = { width: 150 };
+    const right = { width: pdf.page.width - 246 };
+    const height = Math.max(
+      pdf.heightOfString(safe(label), left),
+      pdf.heightOfString(safe(value), right),
+    );
+    if (pdf.y + height > pdf.page.height - pdf.page.margins.bottom) pdf.addPage();
+    const y = pdf.y;
+    pdf.text(safe(label), 42, y, left);
+    pdf.text(safe(value), 204, y, right);
+    pdf.y = y + height + 8;
+  };
   write(en ? "Waitron recovery key" : "Clave de recuperación de Waitron", 22);
   pdf.moveDown();
-  write(`${en ? "Legal name" : "Razón social"}: ${document.taxpayerName}`);
-  write(`NIF: ${document.scope.taxpayerNif}`);
-  write(`${en ? "Venue" : "Local"}: ${document.venueName}`);
-  write(
-    `${en ? "Environment" : "Entorno"}: ${document.scope.environment === "production" ? (en ? "Production" : "Producción") : en ? "Preproduction" : "Preproducción"}`,
+  row(en ? "Legal name" : "Razón social", document.taxpayerName);
+  row("NIF", document.scope.taxpayerNif);
+  row(en ? "Venue" : "Local", document.venueName);
+  row(
+    en ? "Environment" : "Entorno",
+    document.scope.environment === "production"
+      ? en
+        ? "Production"
+        : "Producción"
+      : en
+        ? "Preproduction"
+        : "Preproducción",
   );
-  write(`${en ? "Software ID" : "ID del software"}: ${document.scope.softwareId}`);
-  write(`${en ? "Node ID" : "ID del nodo"}: ${document.nodeKey.nodeId}`);
-  write(`${en ? "Key name" : "Nombre de la clave"}: ${document.nodeKey.name}`);
-  write(
-    `${en ? "Installation codes" : "Códigos de instalación"}: ${document.installationCodes.join(", ")}`,
-  );
-  write(`${en ? "Created (UTC)" : "Creado (UTC)"}: ${document.createdAt}`);
+  row(en ? "Software ID" : "ID del software", document.scope.softwareId);
+  row(en ? "Node ID" : "ID del nodo", shortNodeId(document.nodeKey.nodeId));
+  row(en ? "Key name" : "Nombre de la clave", document.nodeKey.name);
+  row(en ? "Installation codes" : "Códigos de instalación", document.installationCodes.join(", "));
+  row(en ? "Created" : "Creado", created);
   pdf.moveDown();
   if (pdf.y > pdf.page.height - pdf.page.margins.bottom - 120) pdf.addPage();
-  write(en ? "Standard key (raw192)" : "Clave estándar (raw192)", 14);
   const printed = await encodeNodeKey(document.nodeKey, document.scope, "raw192");
   write(`${en ? "Key" : "Clave"}: ${printed.fields.value}`, 14);
   write(`${en ? "Check" : "Control"}: ${printed.fields.check}`, 14);
-  write(
-    en
-      ? "47 characters to enter. Spaces are optional."
-      : "47 caracteres para introducir. Los espacios son opcionales.",
-  );
   pdf.moveDown();
   write(
     en
@@ -99,8 +132,8 @@ export async function renderRecoveryPdfWithFont(
   );
   write(
     en
-      ? "Recovery also needs the matching backup and any separate backup password. This sheet is not a backup of your sales."
-      : "La recuperación también necesita la copia de seguridad correspondiente y cualquier contraseña independiente de la copia. Esta hoja no es una copia de seguridad de tus ventas.",
+      ? "A backup in Waitron Cloud needs your Cloud login. A downloaded backup file needs its own password. Keep these separately from this sheet. This sheet is not a backup of your sales."
+      : "Una copia en Waitron Cloud necesita tu acceso a Cloud. Un archivo de copia descargado necesita su propia contraseña. Guárdalos separados de esta hoja. Esta hoja no es una copia de seguridad de tus ventas.",
   );
   write(
     en

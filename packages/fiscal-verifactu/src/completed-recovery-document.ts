@@ -22,7 +22,7 @@ export const FISCAL_RECOVERY_DOCUMENT: NonNullable<
   const environment = stamp?.environment ?? null;
   const sif = await currentSif(tx, node.nodeId);
   const [venue] = await tx
-    .select({ name: locations.name })
+    .select({ name: locations.name, timeZone: locations.timeZone })
     .from(locations)
     .where(eq(locations.id, node.locationId));
   if (
@@ -63,5 +63,6 @@ export const FISCAL_RECOVERY_DOCUMENT: NonNullable<
       installationCodes,
     },
     context.locale,
+    venue.timeZone,
   );
 };

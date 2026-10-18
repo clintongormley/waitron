@@ -137,7 +137,7 @@ export function createHourInitialSetup(
         nodeKey: document.key,
       };
       const { renderRecoveryPdf } = await import("./recovery-pdf-node.js");
-      const bytes = await renderRecoveryPdf(recovery, document.locale);
+      const bytes = await renderRecoveryPdf(recovery, document.locale, document.identity.timeZone);
       return { bytes, statement: recoveryDocumentPublic(recovery) };
     },
     async commandResume(context, actions) {

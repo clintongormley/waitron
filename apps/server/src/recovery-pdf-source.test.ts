@@ -35,6 +35,7 @@ it.each(["en", "es"] as const)(
         resolve("../../packages/fiscal-verifactu/test/recovery-pdf-node-runner.ts"),
         input,
         locale,
+        "Europe/Madrid",
       ],
       { encoding: "buffer", timeout: 15000, maxBuffer: 8 * 1024 * 1024 },
     );

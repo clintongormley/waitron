@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { shortNodeId } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
@@ -268,6 +269,8 @@ export class SetupRecoveryCopy extends LitElement {
                 <dd>${preview.locationName}</dd>
                 <dt>${t("restore.preview_date")}</dt>
                 <dd><time datetime=${preview.createdAt}>${preview.createdAt}</time></dd>
+                <dt>${t("restore.preview_node")}</dt>
+                <dd>${shortNodeId(preview.nodeId)}</dd>
                 <dt>${t("restore.preview_node_key")}</dt>
                 <dd>${preview.nodeRecoveryKeyName ?? t("restore.preview_unnamed")}</dd>
               </dl>

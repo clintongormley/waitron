@@ -361,3 +361,26 @@ including the replacement plan's global constraint and Task 1 example. The lower
 readers still inspect every recorded series, including unsupported historical configurations.
 The new configuration check does not make an altered recorded allocation valid: recovery first
 checks the stored configuration against its allocation and retains its `series_mismatch` refusal.
+
+
+## Owner PDF review, 2026-10-18; presentation checkpoint 2026-10-19
+
+This dated addition supersedes the earlier raw-format label and character-count explanation.
+You see labels and values in two columns, a creation date in the venue's time zone and the
+sheet's language, and the first eight node-ID characters grouped in fours. The backup preview
+shows that same short form; recovery continues to use the full identifier. Generated key names
+retain their existing four-character suffix. The raw192 format marker stays in machine data
+where needed and is omitted from the printed page.
+
+The instructions distinguish what accompanies the recovery key: your Cloud login for a backup
+in Waitron Cloud, or the downloaded archive's own password. Keep those credentials separately
+from this sheet. The sheet carries neither credential.
+
+The owner also requested one short combined key/check field and only the current installation
+code. The requested dependency inspection found that the existing eight-symbol check binds
+the key to taxpayer/node/name, and that recovery reads the sheet's reported-code list to raise
+its hour floor. Those findings and recommended replacements are recorded in Lane E's
+questions under “two PDF revision dependencies”. The check and reported list remain unchanged
+at this presentation checkpoint, pending those answers. The sheet still awaits viewing acceptance.
+See the [changed-check inventory](../../operations/a679-changed-checks.md#recovery-pdf-presentation-revision-2026-10-19)
+for the observed checks and their limits.

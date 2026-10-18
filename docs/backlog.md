@@ -340,7 +340,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   downloads identical repeat bytes without another activation or hour-journal change. These checks
   use synthetic external certificate, clock and email responses; complete restore and interruption
   journeys remain open. Generated EN/ES A4 setup and replacement PDFs await the owner's viewing
-  approval in `~/My Drive/Waitron mockups/2026-10-18 A679 recovery PDF/`.
+  approval in `~/My Drive/Waitron mockups/2026-10-18 A679 recovery PDF/`. The owner requested
+  revisions: the branch now has two-column fields, localized venue-time dates, matching short
+  node labels on sheet and preview, and separate Cloud-login/archive-password instructions.
+  Shortening and combining the key/check and replacing the reported installation-code list
+  still await the recorded dependency answers; PDF viewing acceptance remains open.
   Direct and supervised source-process checks now cover fresh boot/reboot and interrupted entry.
   The dedicated repair listener serves the built wizard and its public bootstrap reads; trusted
   HTTPS checks recover ownership without creating a missing database. Installed Chrome reaches

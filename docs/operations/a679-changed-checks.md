@@ -2230,3 +2230,63 @@ kept-document host's `outside_confirmation_missing`. Those failures remain gates
 failures/coverage gaps, remaining installed admission/promotion and entry qualification, active
 protocol retirement, full prose/current-main reconciliation, owner PDF viewing approval, both
 final Claude reviews and current-head CI remain required before landing.
+
+
+## Recovery PDF presentation revision, 2026-10-19
+
+The owner's PDF feedback, relayed on 2026-10-18, changes the printed presentation. The sheet now
+uses two columns, a localized creation date in the venue's saved time zone, a short grouped node
+identifier, and separate instructions for Cloud credentials and archive passwords. The backup
+preview shows the same short identifier; the module still receives the full node ID. The existing
+generated key name already ends in a four-character group. This checkpoint does not change its
+stored or printed name.
+
+The command-line renderer receives the frozen venue zone, the wizard receives its reviewed zone,
+and manager reissue reads the zone from `locations`. The time zone is an explicit rendering
+argument, not a new field in the PDF's embedded recovery data or public delivery statement.
+
+| Existing check | Before | After | Authority |
+| --- | --- | --- | --- |
+| `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts:51` | Full printed `node-1` and ISO creation timestamp. | `NODE -1` and localized Madrid date/time. Full ID, raw timestamp and secret remain checked in the attachment. | Owner PDF feedback points 2 and 4. |
+| `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts:76` | Visible text excludes `Cloud` with other internal protocol terms. | Cloud is allowed for the requested login instruction; the other exclusions remain. | Feedback point 8. |
+| `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts:172` | Inline colon separates the installation-code label and values. | Two-column label and the same exact code values, with extracted whitespace normalized. | Feedback point 1. No list value changes. |
+| `packages/fiscal-verifactu/src/recovery-pdf.browser.test.ts:42` | Full printed ID, ISO date, raw format heading and separate-password phrase. | Short grouped ID, localized date, no format/count explanation, explicit own-password/separate-storage instructions. | Feedback points 2–4, 7 and 8. |
+| `packages/fiscal-verifactu/src/recovery-pdf.browser.test.ts:79` | `Cloud` excluded from visible text. | Only that exclusion is removed; new presentation cases require the Cloud-login instruction. | Feedback point 8. |
+| `packages/fiscal-verifactu/src/recovery-pdf.browser.test.ts:105` | Maximum-length node ID printed in full; key page found by raw-format heading; page contains `47`. | Exact short node prefix; key page found by its key label; page contains the complete original payload and check labels. Other maximum-length labels remain checked. | Feedback points 3, 4 and 7. |
+| `packages/fiscal-verifactu/src/completed-recovery-document.test.ts:113` | Inline code label/value with colon. | Same exact code list in two columns, normalizing PDF extraction whitespace. | Feedback point 1. |
+
+Other changes to existing tests supply an explicit `Europe/Madrid` argument to the PDF renderer,
+transient delivery, or source/bundled runner. Those files are `recovery-delivery.browser.test.ts`,
+`recovery-reader.browser.test.ts`, `setup/recovery-key.browser.test.ts`,
+`setup/recovery-key.a11y.browser.test.ts` and `apps/server/src/recovery-pdf-source.test.ts`,
+as well as the two PDF suites above. Three command-document fixtures in
+`initial-hour-setup.test.ts` gain their venue time zone. Their original assertions stay intact.
+No existing test declaration is removed. Preserve every earlier inventory in this document.
+
+Observed checks: the ten PDF/key/hour suites pass 168 cases; the selected setup family passes 44
+and the new preview accessibility suite passes two; the short-ID suite passes five. Server document
+checks pass 60, command delivery passes 20, and the unedited golden-hash/immutability pair passes
+20. Five selected root suites pass 4,866 cases. Six affected package type checks, scoped lint and
+formatting pass. The setup bundle builds with its existing chunk-size warning. These are focused
+results, not package coverage or whole-branch acceptance.
+
+In a frozen-installed disposable candidate, seven independent date/column/instruction/zone
+omissions fail their selected assertions and restoration passes. Two further omissions fail the
+PDF and preview short-ID checks, then pass after restoration. Four final EN/ES Madrid/Canary
+PDFs and eight mounted preview language/theme/width views were inspected. The preview fixture
+uses the generic recovery form; it does not qualify the complete hour-recovery journey. Earlier
+PDF exports made while controls were running are superseded by `*-final.pdf`.
+
+Receipts: `~/waitron-campaign-e/receipts/a679-pdf-revision-20261018/`. The first surrounding run
+reported four whitespace-extraction failures; normalizing the column gap retained the exact code
+values. A broad fixture edit briefly added a zone to an unrelated public-statement fixture; type
+checking caught it and that fixture was restored. A static diff also caught and restored an
+unintended shortened ID at the decoder call before the final run. The first standalone bundle
+command lacked the package binary path; `pnpm exec node` supplied it. A later comparison refused
+a candidate containing pre-format test bytes; the final resync recorded those paths before export.
+
+The shorter combined key/check and the single installation code remain pending the questions
+recorded under “two PDF revision dependencies” in the lane. The current check binds scope/node/name,
+and recovery currently consumes a reported code list. Neither dependent behavior is changed here.
+A679 remains incomplete and unpublished; earlier legacy/coverage/entry/retirement/integration gates,
+owner PDF acceptance, both final reviews and current-head CI still apply.

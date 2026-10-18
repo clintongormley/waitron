@@ -81,6 +81,7 @@ for (const theme of ["light", "dark"] as const)
                   },
                 },
                 locale,
+                "Europe/Madrid",
               );
               const picker = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
               const transfer = new DataTransfer();

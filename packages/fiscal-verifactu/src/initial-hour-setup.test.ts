@@ -77,7 +77,11 @@ it.each(["en", "es"] as const)(
         name: "2026-10-16 · ACRY",
         secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
       },
-      identity: { taxpayerName: "Olivo Restauración SL", venueName: "Olivo Centro" },
+      identity: {
+        taxpayerName: "Olivo Restauración SL",
+        venueName: "Olivo Centro",
+        timeZone: "Europe/Madrid",
+      },
       locale,
     });
     expect(document.statement).toEqual({
@@ -127,6 +131,27 @@ it.each(["en", "es"] as const)(
   },
 );
 
+it("the command recovery sheet uses the frozen venue zone", async () => {
+  const f = configured();
+  const saved = fixture();
+  const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
+    key: { nodeId: "node", name: "2026-10-16 · ACRY", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Atlantic/Canary" },
+    locale: "en",
+  });
+  const task = getDocument({ data: document.bytes.slice(), useSystemFonts: false, useWasm: false });
+  try {
+    const pdf = await task.promise;
+    const text = (await (await pdf.getPage(1)).getTextContent()).items
+      .map((item) => ("str" in item ? item.str : ""))
+      .join(" ");
+    expect(text).toContain("16 October 2026, 12:40");
+    expect(text).toContain("Western European Summer Time");
+  } finally {
+    await task.destroy();
+  }
+});
+
 it("the command document seat refuses a foreign staged node and changed hour input", async () => {
   const f = configured();
   const saved = fixture();
@@ -136,7 +161,7 @@ it("the command document seat refuses a foreign staged node and changed hour inp
       name: "2026-10-16 · ACRY",
       secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
     },
-    identity: { taxpayerName: "Olivo", venueName: "Centro" },
+    identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Europe/Madrid" },
     locale: "en" as const,
   };
   await expect(
@@ -157,7 +182,7 @@ it("dates a delayed recovery document when it is created without selecting anoth
   vi.setSystemTime(new Date("2026-10-17T12:30:00Z"));
   const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
     key: { nodeId: "node", name: "2026-10-17 · ACRY", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
-    identity: { taxpayerName: "Olivo", venueName: "Centro" },
+    identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Europe/Madrid" },
     locale: "en",
   });
   expect(document.statement).toMatchObject({ createdAt: "2026-10-17T12:30:00.000Z" });

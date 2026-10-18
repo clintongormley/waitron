@@ -27,6 +27,7 @@ export const restoreEn = {
   "restore.preview_location": "Location",
   "restore.preview_date": "Backup date",
   "restore.preview_node_key": "Node recovery key",
+  "restore.preview_node": "Node",
   "restore.preview_unnamed": "This backup's node key has no stored name.",
   "restore.preview_older_key": "An older backup reinstates its older node key.",
   "restore.preview_keep_keys": "Keep older paper keys until no older backup remains.",
@@ -200,6 +201,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_location": "Local",
   "restore.preview_date": "Fecha de la copia",
   "restore.preview_node_key": "Clave de recuperación del nodo",
+  "restore.preview_node": "Nodo",
   "restore.preview_unnamed": "La clave del nodo de esta copia no tiene nombre guardado.",
   "restore.preview_older_key": "Una copia antigua restablece la clave del nodo de entonces.",
   "restore.preview_keep_keys":

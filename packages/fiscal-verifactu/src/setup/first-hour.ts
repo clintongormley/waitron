@@ -368,6 +368,7 @@ export class FirstSetupHour extends LitElement {
         async () => {
           await api.confirmRecoveryDocument!(this.#reference!);
         },
+        context.venue.location.timeZone,
       );
       const binding = await delivery.ready();
       if (!current()) return;

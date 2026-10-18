@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { LitElement } from "lit";
 import { applyTokens } from "@waitron/ui";
 import type { InitialSetupActions } from "@waitron/module/src/setup-contract.js";
-import { readRecoveryPdf } from "../recovery-reader.js";
+import { readRecoveryPdf, openRecoveryPdf } from "../recovery-reader.js";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
 const instant = Date.parse("2026-10-18T12:30:00Z");
 const clock = {
@@ -360,6 +360,45 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
   expect(el.shadowRoot!.textContent).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
 });
+it("the wizard PDF uses the reviewed Canary venue zone", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(instant);
+  try {
+    const request = structuredClone(context);
+    request.venue.location.timeZone = "Atlantic/Canary";
+    const { el, api } = await mount({ request });
+    api.stageNodeKey = async () => ({
+      stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
+      key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    });
+    api.registerRecoveryDocument = async () => {};
+    api.confirmRecoveryDocument = async () => {};
+    await ready(el);
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
+    );
+    await userEvent.click(button(el, "prepare-pdf"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
+    );
+    const download = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pdf]")!;
+    const task = openRecoveryPdf(new Uint8Array(await (await fetch(download.href)).arrayBuffer()));
+    try {
+      const pdf = await task.promise;
+      const text = (await (await pdf.getPage(1)).getTextContent()).items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ");
+      expect(text).toContain("18 October 2026, 13:30");
+      expect(text).toContain("Western European Summer Time");
+    } finally {
+      await task.destroy();
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("continues a frozen hour through its public request without selecting another", async () => {
   const { el, calls, api } = await mount({ request: { ...context, status: "consumption-intent" } });
   api.request = async () => {

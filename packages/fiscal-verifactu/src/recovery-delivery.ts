@@ -31,6 +31,7 @@ export function createRecoveryDelivery<T>(
   document: RecoveryDocument,
   locale: "en" | "es",
   confirmKept: (binding: RecoveryDeliveryBinding) => Promise<T>,
+  timeZone: string,
 ) {
   let disposed = false;
   let input: RecoveryDocument | undefined = structuredClone(document);
@@ -43,7 +44,7 @@ export function createRecoveryDelivery<T>(
     const parsed = await parseRecoveryDocument(input);
     input = undefined;
     active();
-    const bytes = await renderRecoveryPdf(parsed, locale);
+    const bytes = await renderRecoveryPdf(parsed, locale, timeZone);
     active();
     const statement = recoveryDocumentPublic(parsed);
     const binding = {
