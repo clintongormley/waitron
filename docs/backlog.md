@@ -1195,6 +1195,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   in `packages/db/src/configuration-transfer.ts`), so an imported variant can arrive with a stored
   category that the effective category and the editor's read then ignore.
 
+- **The course dropdown says "— none —" where the folded Kitchen line says "Course: None
+  specified"** (`product.no_course`, `modifiers.none_specified`,
+  `apps/dashboard/src/i18n/strings.ts`) — left open by A211 (#1096).
+
 - **The catalogue-screen test "ignores the closed window's late close…" catches its guard's
   removal only through an unhandled error** — left open by A212 (#1087): because the late close
   throws before it changes anything a state assertion could see.
@@ -1280,12 +1284,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
     offers no way to drop just the extras. Read, not run.
 
 - **A821 — one test: an extra on a dish sold in millilitres is refused** (owner, 2026-10-17). The
-  owner confirms the rule: extras go only on dishes sold in whole portions
-  ([modifiers.md](developers/modifiers.md), `extras.unsupported_product`). By
-  `packages/catalogue/src/pricing.ts` (`quantity` of an extra = dish quantity × portion × picks) an
-  extra on 250 ml of a dish whose unit has no decimals would be billed 250 times (read, not run).
-  Order an extra on a 250 ml dish and expect `extras.unsupported_product`: if it is refused, delete
-  this entry; if not, fix the rule so it is. Left open by A663 Part 2d (#1779).
+  owner's rule: extras go only on dishes sold in whole portions. Today's check (`soldByTheUnit`,
+  `apps/server/src/working-order.ts`; its twin in `apps/till/src/widgets/product-name.ts`) refuses
+  with `extras.unsupported_product` only a dish whose unit has a scale or allows decimal places,
+  and a unit records nothing else about what it counts, so by reading a 250 ml dish whose unit has
+  no decimals keeps its extras today (read, not run). Order an extra on such a dish: if it is
+  refused, delete this entry; if not, a unit needs a way to say it is a measure rather than a
+  portion, and the check refuses extras on one. Left open by A663 Part 2d (#1779).
 
 - **The extras form cannot pick a variant**, though the catalogue accepts one as an extras item
   (owner decision 2026-09-24): its picker lists top-level products only (`listProducts`). **Next
@@ -1312,9 +1317,9 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 - **The combined end-to-end journey has not been walked**: creating a unit, a category and the
   extras and options a product carries from inside a dirty product draft, through the actual routes
   against a real database, and taking the result through the till. **Next action:** walk it once
-  at the real box with the owner present, as part of walking the box after 2 November (owner,
-  2026-10-17; with "The three displays walked end to end" under _The till, devices and table
-  service_).
+  at the real box with the owner present, alongside **The displays and the printers walked at
+  the real box** (_What to work on next_), after the owner is back on 2 November (owner,
+  2026-10-17).
 
 - **The catalogue picker was deleted and nothing replaced it.** `selectedCatalogueId`
   (`catalogue-screen.ts`) takes the first catalogue in the list, which is also the one every new
