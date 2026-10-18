@@ -95,6 +95,10 @@
      24px is WCAG 2.2's level AA minimum target (2.5.8). */
   --wt-stepper-button-width: 24px;
 
+  /* The dashboard's help badge; a till sets 32px and 24px. 24px is WCAG 2.2's AA minimum target. */
+  --wt-help-badge-target: 24px;
+  --wt-help-badge-size: 20px;
+
   /* The room a price field leaves for its amount where nothing stretches it: "9999.99" at
      --wt-font-size-md, with its 12px padding on each side. A sign drawn by `locale` widens the box
      beyond this. */

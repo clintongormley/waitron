@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
+import { HelpModeController } from "../help-mode.js";
 
 @customElement("wt-help-tooltip")
 export class WtHelpTooltip extends LitElement {
@@ -41,6 +42,33 @@ export class WtHelpTooltip extends LitElement {
         place-items: center;
       }
 
+      :host([mode="help-mode"]:not([data-help-on])) {
+        display: none;
+      }
+
+      /* Hangs over the top trailing corner of the nearest positioned box: a primitive that offers a
+         help slot positions the slot's wrapper. */
+      :host([mode="help-mode"][data-help-on]) {
+        position: absolute;
+        inset-block-start: 0;
+        inset-inline-end: 0;
+        margin-block-start: calc(var(--wt-help-badge-target) / -2);
+        margin-inline-end: calc(var(--wt-help-badge-target) / -2);
+      }
+
+      :host([mode="help-mode"]) button {
+        width: var(--wt-help-badge-target);
+        height: var(--wt-help-badge-target);
+      }
+
+      :host([mode="help-mode"]) .icon {
+        width: var(--wt-help-badge-size);
+        height: var(--wt-help-badge-size);
+        border: 0;
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+      }
+
       /* Fixed, because positionTooltip writes viewport coordinates onto it. */
       [popover] {
         position: fixed;
@@ -57,12 +85,25 @@ export class WtHelpTooltip extends LitElement {
   ];
 
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
+  /** `help-mode` follows the help switch; anything else is always visible. */
+  @property({ reflect: true }) mode: "always" | "help-mode" = "always";
   @state() private open = false;
 
   private readonly tooltipId = uniqueId("wt-help-tooltip");
 
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
+
+  readonly #help = new HelpModeController(this);
+
+  override willUpdate(): void {
+    // Only the help-mode CSS reads this attribute, so it follows the switch alone.
+    this.toggleAttribute("data-help-on", this.#help.on);
+  }
+
+  override updated(): void {
+    if (this.mode === "help-mode" && !this.#help.on) this.popup.hidePopover();
+  }
 
   private onToggle(): void {
     this.open = this.popup.matches(":popover-open");

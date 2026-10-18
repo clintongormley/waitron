@@ -23,6 +23,20 @@ test("the same button is clean once aria-label restores its accessible name", as
   await expectNoA11yViolations(host);
 });
 
+// Two, side by side: axe passes a lone small target under WCAG 2.5.8's spacing exception.
+const SMALL_TARGETS =
+  '<div style="display: flex">' +
+  '<button aria-label="x" style="width: 10px; height: 10px; padding: 0"></button>' +
+  '<button aria-label="y" style="width: 10px; height: 10px; padding: 0"></button></div>';
+
+test("an extra rule can be switched on, and only then does it judge the page", async () => {
+  await mountThemed(SMALL_TARGETS, "light");
+  await expectNoA11yViolations(host);
+  await expect(expectNoA11yViolations(host, { enable: ["target-size"] })).rejects.toThrow(
+    /target-size/,
+  );
+});
+
 const COLOUR_READINGS = ["equalRatio", "fgAlpha", "colorParse"];
 
 const OVERLAPPED_TEXT =
