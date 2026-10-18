@@ -9,6 +9,7 @@ import {
   selectDepartmentTab,
   supplyReceiptEditor,
   editReceipt,
+  receiptInput,
 } from "../testing/department-edit-fixture.js";
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -287,7 +288,8 @@ it("Enter in a receipt field, receipt unchanged and Details dirty, writes nothin
   const editor = await supplyReceiptEditor(el, form);
   await editDepartmentField(form, "name", "Restaurant draft");
   await selectDepartmentTab(form, "receipt");
-  await userEvent.click(page.elementLocator(editor.shadowRoot!.querySelector("input")!));
+  await userEvent.click(page.elementLocator(editor.shadowRoot!.querySelector("wt-input")!));
+  expect(editor.shadowRoot!.activeElement?.shadowRoot?.activeElement).toBe(receiptInput(editor));
   await userEvent.keyboard("{Enter}");
   await form.updateComplete;
   expect(writes).toEqual([]);

@@ -9,6 +9,7 @@ import {
   selectDepartmentTab,
   supplyReceiptEditor,
   editReceipt,
+  receiptInput,
 } from "../testing/department-edit-fixture.js";
 
 beforeEach(() => setLocale("en"));
@@ -104,7 +105,7 @@ it("untouched Escape on the Receipts tab closes without a leave question", async
   const { el, app, form, modal } = await mountDepartmentEditor();
   const editor = await supplyReceiptEditor(el, form);
   await selectDepartmentTab(form, "receipt");
-  editor.shadowRoot!.querySelector("input")!.focus();
+  receiptInput(editor).focus();
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => modal.open).toBe(false);
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);

@@ -5,6 +5,7 @@ import { expect } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { VenueServiceApi } from "../dashboard/client.js";
 import { zonesModel } from "./department-zones-fixture.js";
+import "@waitron/ui/src/components/wt-input.js";
 import "../dashboard/department-edit-dialog.js";
 import type { DepartmentTab } from "../dashboard/department-settings.js";
 
@@ -142,15 +143,17 @@ export class ReceiptEditorStub extends LitElement {
     );
   }
   override render() {
-    return html`<input
-        type="text"
+    return html`<wt-input
         name="receiptSubtitle"
+        label="Subtitle"
         .value=${this.value}
-        @input=${(event: Event) => {
-          this.value = (event.target as HTMLInputElement).value;
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.value = event.detail.value;
           this.#scope?.changed();
         }}
-      /><button data-test="save-receipt" @click=${() => void this.save()}>Save</button
+      ></wt-input
+      ><button data-test="save-receipt" @click=${() => void this.save()}>Save</button
       ><button data-test="cancel-receipt" @click=${() => this.notify("department-receipt-cancel")}>
         Cancel
       </button>`;
@@ -168,6 +171,9 @@ export async function supplyReceiptEditor(
   await editor.updateComplete;
   return editor;
 }
+export function receiptInput(editor: ReceiptEditorStub) {
+  return editor.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+}
 export async function editReceipt(editor: ReceiptEditorStub, value: string) {
-  await userEvent.fill(page.elementLocator(editor.shadowRoot!.querySelector("input")!), value);
+  await userEvent.fill(page.elementLocator(receiptInput(editor)), value);
 }
