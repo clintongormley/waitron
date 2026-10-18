@@ -29,7 +29,13 @@ import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { segmentedOptionStyles } from "./segmented-control-styles.js";
 import { StoreChangeController } from "../state/store-controller.js";
-import type { OrderFlow, PayOutcome, TillActiveReader, TillProduct } from "../api/client.js";
+import type {
+  OrderFlow,
+  PayOutcome,
+  Tender,
+  TillActiveReader,
+  TillProduct,
+} from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
 import { productUnit, soldByTheUnit, unitName } from "./product-name.js";
@@ -48,6 +54,12 @@ export type ConfirmPaymentDetail = (
 
 /** `guests` is absent unless the screen asks for it; null prints no guests line. */
 export interface ReceiptGuestsDetail {
+  guests?: number | null;
+}
+
+export interface RetainedTender {
+  tender: Tender;
+  outstanding: string;
   guests?: number | null;
 }
 
@@ -285,6 +297,7 @@ export class TillTenderPay extends LitElement {
   @property({ type: Boolean }) asksGuests = false;
   /** The count the guests field starts on; null starts it empty. */
   @property({ attribute: false }) receiptGuests: number | null = null;
+  @property({ attribute: false }) confirmation?: RetainedTender;
 
   @state() private view: View = "idle";
   @state() private entry = "";
@@ -833,6 +846,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderView() {
+    if (this.confirmation !== undefined) return this.#renderConfirmation(this.confirmation);
     if (this.view === "weighing") return this.#renderWeighing();
     if (this.weighOnly) return nothing;
     if (this.view === "paying") return this.#renderPaying();
@@ -1153,6 +1167,75 @@ export class TillTenderPay extends LitElement {
         <wt-button class="switch-tender" variant="secondary" @click=${() => this.#requestCancel()}>
           ${t("card.cancel")}
         </wt-button>
+      </div>
+    `;
+  }
+
+  #retryConfirmation(confirmation: RetainedTender): void {
+    if (!this.isConnected || this.busy || this.confirmation !== confirmation) return;
+    this.dispatchEvent(
+      new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
+        detail: {
+          ...confirmation.tender,
+          ...(confirmation.guests === undefined ? {} : { guests: confirmation.guests }),
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #renderConfirmation(confirmation: RetainedTender) {
+    const { tender, outstanding, guests } = confirmation;
+    return html`
+      <div class="summary">
+        <p class="tender-kind">${t(tender.method === "cash" ? "tender.cash" : "tender.card")}</p>
+        <div class="row">
+          <span class="label">${t("label.total")}</span>
+          <span class="amount total">${formatMoney(outstanding, currentLocale())}</span>
+        </div>
+        ${
+          tender.method === "cash"
+            ? html`<div class="row">
+                  <span class="label">${t("label.tendered")}</span>
+                  <span class="amount tendered"
+                    >${formatMoney(tender.amount, currentLocale())}</span
+                  >
+                </div>
+                <div class="row change">
+                  <span class="label">${t("label.change")}</span>
+                  <span class="amount"
+                    >${formatMoney(subtractDecimal(decimal(tender.amount), decimal(outstanding)), currentLocale())}</span
+                  >
+                </div>`
+            : html`<wt-input
+                name="externalRef"
+                .value=${tender.externalRef ?? ""}
+                .label=${t("tender.card_ref")}
+                disabled
+              ></wt-input>`
+        }
+      </div>
+      ${
+        guests === undefined
+          ? nothing
+          : guestsStepper({
+              text: guests === null ? "" : String(guests),
+              disabled: true,
+              error: "",
+              onChange: (event) => event.stopPropagation(),
+            })
+      }
+      ${this.busy ? nothing : html`<p role="status">${t("sale.unconfirmed")}</p>`}
+      <div class="actions">
+        <wt-button
+          class="confirm"
+          variant="primary"
+          size="lg"
+          ?disabled=${this.busy}
+          @click=${() => this.#retryConfirmation(confirmation)}
+          >${t("action.confirm_payment")}</wt-button
+        >
       </div>
     `;
   }

@@ -126,7 +126,7 @@ import type {
   TillZoneMenu,
   PartyBill,
 } from "../api/client.js";
-import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
+import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 import { heldGroupIds, inHeldGroup, sendsAlone } from "../state/held-groups.js";
 import {
@@ -1202,6 +1202,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) loading = false;
+  @property({ attribute: false }) paymentConfirmation?: RetainedTender;
   /** `false` hides the pay section. */
   @property({ type: Boolean }) canSettle = true;
   /** See the tender card's `takesCash`. */
@@ -3518,16 +3519,17 @@ export class TillTableOrderScreen extends LitElement {
     `;
   }
 
-  /** The bill on screen can take a payment unless the party's bills say it is paid or abandoned; a
-   * presented bill is collected. */
   #chargeable(): boolean {
     const shown = this.#shownBill;
-    return shown === undefined || owing(shown);
+    return this.paymentConfirmation !== undefined || shown === undefined || owing(shown);
   }
 
   #paySection(): TemplateResult {
     const shown = this.#shownBill;
-    const partlyPaid = shown !== undefined && paidInPart(shown) ? shown : undefined;
+    const partlyPaid =
+      this.paymentConfirmation === undefined && shown !== undefined && paidInPart(shown)
+        ? shown
+        : undefined;
     if (partlyPaid === undefined)
       return html`<section
         class="pay"
@@ -3542,8 +3544,9 @@ export class TillTableOrderScreen extends LitElement {
           .fullInvoices=${this.fullInvoices}
           .asksGuests=${shown?.invoiceType !== "F1"}
           .receiptGuests=${defaultReceiptGuests(this.party)}
+          .confirmation=${this.paymentConfirmation}
         ></till-tender-pay>
-        ${this.#billChoices(shown)} ${this.#payWays()}
+        ${this.paymentConfirmation === undefined ? html`${this.#billChoices(shown)} ${this.#payWays()}` : nothing}
       </section>`;
     const received = this.#balanceShown()?.received;
     return html`<section class="pay" data-bill-payments>

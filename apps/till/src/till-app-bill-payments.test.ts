@@ -2,6 +2,7 @@ import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import type { TillFindBillDialog } from "./widgets/find-bill-dialog.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
@@ -1730,6 +1731,198 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await flush(el);
       expect(send.mock.calls[2]).toEqual(original);
       expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    },
+  );
+
+  it.each([
+    ["open", "cash", "settled"],
+    ["open", "card", "settled"],
+    ["placed", "cash", "settled"],
+    ["placed", "card", "settled"],
+    ["open", "cash", "part-paid"],
+    ["open", "card", "part-paid"],
+    ["placed", "cash", "part-paid"],
+    ["placed", "card", "part-paid"],
+  ] as const)(
+    "A773 shows the original %s bill's %s confirmation after reopening a %s bill as another operator",
+    async (status, method, refreshed) => {
+      const send = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue([billOf({ status })]),
+        ...(status === "open" ? { recordSale: send } : { collectOrder: send }),
+      });
+      await openTable(el);
+      const tender =
+        method === "cash"
+          ? { method, amount: "150" }
+          : { method, amount: "120.00", externalRef: "operation-17" };
+      const initial = tableOrder(el).shadowRoot!.querySelector("till-tender-pay")!;
+      await userEvent.click(
+        initial.shadowRoot!.querySelector(method === "cash" ? ".pay" : ".pay-card")!,
+      );
+      await initial.updateComplete;
+      if (method === "cash") {
+        const pad = initial.shadowRoot!.querySelector("till-numeric-pad")!;
+        await pad.updateComplete;
+        for (const digit of "150")
+          await userEvent.click(pad.shadowRoot!.querySelector(`[data-key="${digit}"]`)!);
+      } else {
+        const ref =
+          initial.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+            '[name="externalRef"]',
+          )!;
+        await ref.updateComplete;
+        await userEvent.fill(ref.shadowRoot!.querySelector("input")!, "operation-17");
+      }
+      await userEvent.click(initial.shadowRoot!.querySelector(".confirm")!);
+      await expect.poll(() => send.mock.calls.length, { timeout: 10_000 }).toBe(1);
+      await flush(el);
+      const original = structuredClone(send.mock.calls[0]);
+      const expectedEdit = { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null };
+      expect(original).toEqual(
+        status === "open"
+          ? [[], tender, "wo-4", undefined, undefined, undefined, undefined, 4, expectedEdit]
+          : ["wo-4", tender, undefined, 4, expectedEdit],
+      );
+      const confirmation = () => tableOrder(el).shadowRoot!.querySelector("till-tender-pay")!;
+      await expect
+        .poll(() => confirmation()?.shadowRoot?.querySelector(".confirm") ?? null)
+        .not.toBeNull();
+      expect(text(confirmation().shadowRoot!.querySelector(".total"))).toBe(money("120.00"));
+      expect(confirmation().shadowRoot!.querySelector(".pay")).toBeNull();
+      expect(confirmation().shadowRoot!.querySelector(".pay-card")).toBeNull();
+      expect(confirmation().shadowRoot!.querySelector(".cancel")).toBeNull();
+      expect(confirmation().shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+      const guests =
+        confirmation().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>(
+          '[name="guests"]',
+        )!;
+      await guests.updateComplete;
+      expect(guests.shadowRoot!.querySelector("input")!.value).toBe("4");
+      expect(guests.shadowRoot!.querySelector("input")!.disabled).toBe(true);
+      if (method === "cash") {
+        expect(text(confirmation().shadowRoot!.querySelector(".tendered"))).toBe(money("150.00"));
+        expect(text(confirmation().shadowRoot!.querySelector(".change .amount"))).toBe(
+          money("30.00"),
+        );
+      } else {
+        const ref =
+          confirmation().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+            '[name="externalRef"]',
+          )!;
+        await ref.updateComplete;
+        expect(ref.shadowRoot!.querySelector("input")!.value).toBe("operation-17");
+        expect(ref.shadowRoot!.querySelector("input")!.disabled).toBe(true);
+      }
+
+      emit(shell(el), "logout");
+      await flush(el);
+      const question = el.shadowRoot!.querySelector("wt-unsaved-changes");
+      if (question?.open) await discardUnsavedLeave(el);
+      vi.mocked(api.getTablesState).mockResolvedValue([
+        mesa({ guestCount: 9, outstanding: "0.00" }),
+      ]);
+      vi.mocked(api.getPartyBills).mockResolvedValue([
+        billOf({
+          status: refreshed === "settled" ? "settled" : "open",
+          outstanding: refreshed === "settled" ? "0.00" : "70.00",
+          receiptAvailable: true,
+          hasPayments: true,
+        }),
+      ]);
+      vi.mocked(api.getTabLines).mockResolvedValue({ lines: [], revision: 1, editSentLines: true });
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+      await flush(el);
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el), "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      tableOrder(el).shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await flush(el);
+      await expect
+        .poll(() => confirmation()?.shadowRoot?.querySelector(".confirm") ?? null)
+        .not.toBeNull();
+      expect(text(confirmation().shadowRoot!.querySelector(".total"))).toBe(money("120.00"));
+      const retainedGuests =
+        confirmation().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>(
+          '[name="guests"]',
+        )!;
+      await retainedGuests.updateComplete;
+      expect(retainedGuests.shadowRoot!.querySelector("input")!.value).toBe("4");
+      expect(retainedGuests.shadowRoot!.querySelector("input")!.disabled).toBe(true);
+      expect(text(confirmation().shadowRoot!.querySelector('[role="status"]'))).toBe(
+        t("sale.unconfirmed"),
+      );
+      expect(send).toHaveBeenCalledOnce();
+      send.mockResolvedValueOnce(invoiceOf("120.00"));
+      const confirm = confirmation().shadowRoot!.querySelector(".confirm")!;
+      await userEvent.click(confirm);
+      await flush(el);
+      expect(send.mock.calls[1]).toEqual(original);
+      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    },
+  );
+
+  it.each(["cash", "card"] as const)(
+    "A773 retains a %s payment in the handheld's embedded table card",
+    async (method) => {
+      const send = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(invoiceOf("120.00"));
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "phone-portrait" }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "h1", name: "Handheld", formFactor: "phone-portrait" }),
+        recordSale: send,
+      });
+      const order = await openTable(el);
+      expect(order.embedded).toBe(true);
+      const tender =
+        method === "cash"
+          ? { method, amount: "150.00" }
+          : { method, amount: "120.00", externalRef: "operation-17" };
+      emit(order, "pay-tab", { ...tender, guests: 4 });
+      await flush(el);
+      expect(send).toHaveBeenCalledOnce();
+      const recovery = order.shadowRoot!.querySelector("till-tender-pay")!;
+      const confirm = recovery.shadowRoot!.querySelector(".confirm");
+      expect(confirm).not.toBeNull();
+      expect(text(recovery.shadowRoot!.querySelector(".total"))).toBe(money("120.00"));
+      const guests =
+        recovery.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>(
+          '[name="guests"]',
+        )!;
+      await guests.updateComplete;
+      expect(guests.shadowRoot!.querySelector("input")!.value).toBe("4");
+      expect(guests.shadowRoot!.querySelector("input")!.disabled).toBe(true);
+      await userEvent.click(confirm!);
+      await flush(el);
+      expect(send.mock.calls).toEqual([
+        [
+          [],
+          tender,
+          "wo-4",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          4,
+          { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
+        [
+          [],
+          tender,
+          "wo-4",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          4,
+          { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
+      ]);
     },
   );
 
