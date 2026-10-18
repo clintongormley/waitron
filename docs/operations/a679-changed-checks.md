@@ -1081,3 +1081,46 @@ during admission, power loss, successful staged activation, or a lost response a
 Default hour-preparation composition, fresh restart clocks, historical invoice preservation and
 managed-Cloud placement remain open in Task 7. No protected writer, SQL, schema, guard or earlier
 fiscal check changes.
+
+## Historical invoices across selected recovery, 2026-10-18
+
+No existing assertion or fixture changes. Four cases are appended to
+`apps/server/src/hour-recovery-host.test.ts`. They use the existing selected archive fixture and
+add imports for the real sale writer, fiscal backend, drain, record reader and Cloud recovery client.
+Production code is unchanged in this unit.
+
+You can run them with:
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/hour-recovery-host.test.ts \
+  -t 'retains issued invoices'
+```
+
+Each case records `A-06RB/123`, drains it through the synthetic AEAT HTTP transport and records
+`A-06RB/124` without draining it. The real record validator and fingerprint computation check the
+stored records before the backup is made. The fixture therefore contains a validated historical
+chain, a saved acceptance receipt and a pending record rather than only unused series counters.
+
+Archive bytes, an archive file and a bucket point use their real placement adapters. The fourth
+case uses the real managed-Cloud recovery client with synthetic control-plane responses and
+downloaded artifact bytes, then its archive placement adapter. All four compare every column of
+the historical sales, lines, tenders, settlements, fiscal records and submission rows after restore.
+They check exact recovered counters and retired series, refuse a sale on the old series and record
+`A-06RC/1`. The earlier rows remain equal after that sale.
+
+A reconstructed selected service then performs checked committed replay on the following day.
+The bucket case replays the same bucket point; the other cases use the original archive.
+The later sale, all stored submission facts and every series counter remain unchanged. No extra
+allocation or preparation revision appears, and the synthetic internet-clock observer is not called.
+
+In an independently installed disposable checkout, replacing the admitted database with a valid
+snapshot captured before either sale made all four historical-row equality assertions fail. The
+records and receipt rows were absent. That diagnostic snapshot exists only in the disposable test
+copy; the committed test has no unused snapshot fixture. Restoring the original placement code
+and final test source supplies the positive control.
+
+These checks explicitly supply selected preparation. They do not qualify default HTTP/CLI hour
+composition, the default S3 downloader, successful staged-process interruption or lost-response
+recovery after process death. The managed callback places the archive directly rather than
+running the setup route and restart sequence. Those Task 7 entry checks remain open. No protected
+writer, restore hook, production SQL, schema, guard or earlier fiscal check changes.

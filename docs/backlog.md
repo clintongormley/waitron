@@ -420,6 +420,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   repeat wrong-key and missing-preparation refusals without changing the destination database
   or identity; wrong-key checks also run in two successive Node processes. Interruption during
   admission and default hour-preparation composition remain open.
+  New archive, file, bucket-point and managed-Cloud cases now record two real sales, accept one
+  through the synthetic AEAT transport and leave the other pending. They compare the restored
+  commercial and fiscal rows exactly, refuse the retired series, issue on the fresh hour and retain
+  that later sale and its counter through checked replay with a reconstructed host. The managed
+  case uses the real Cloud recovery client with synthetic HTTP replies and downloaded bytes;
+  these cases still supply the selected preparation service explicitly. Default entry wiring,
+  interrupted staged activation and the remaining Task 7 work are open.
   Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,

@@ -9,6 +9,7 @@ import {
   setBreakGlassVerifierTx,
   stampDeployment,
   withTransaction,
+  type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -21,7 +22,7 @@ import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError, locationId, seriesId } from "@waitron/shared";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { runRestoreHooks, restoreFromArtifact, restoreFromArtifactFile } from "./restore.js";
@@ -35,9 +36,18 @@ import { writeStreamRestore } from "./restore-stream.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
 import { runRestore } from "./restore-command.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createHash } from "node:crypto";
+import { recordSale } from "@waitron/core";
+import { assertValid, computeHuella } from "@waitron/verifactu";
+import { createFakeAeat } from "@waitron/verifactu/testing";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
+import { drain } from "@waitron/fiscal-verifactu/src/drain.js";
+import { decodeRegistroRow, fromRegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";
+import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
+import { createCloudRecoveryClient } from "./cloud-recovery.js";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -1580,4 +1590,271 @@ describe("selected-hour admission before archive placement", () => {
       await placed.close();
     }
   });
+
+  it.each(["archive", "file", "stream", "managed"] as const)(
+    "%s recovery retains issued invoices and filing receipts before selling on the fresh hour",
+    async (source) => {
+      const clock = {
+        ...steadyClock,
+        now: () => ({ ...steadyClock.now(), instant: new Date(), offsetMinutes: 120 }),
+      };
+      const aeat = createFakeAeat({ serverNow: new Date() });
+      const backend = (db: Database) =>
+        new VerifactuBackend({
+          db,
+          clock,
+          deploymentEnvironment: "preproduction",
+          environment: "preproduction",
+          resolveClient: async () => aeat.client(),
+        });
+      const sell = (db: Database, id: string) =>
+        withTransaction(db, (tx) =>
+          recordSale(
+            tx,
+            backend(db),
+            saleInput({
+              nodeId: node.nodeId,
+              seriesId: seriesId(id),
+              clock,
+              settlement: {
+                kind: "immediate",
+                tenders: [
+                  { method: "card", amount: "16.31", tipAmount: "1.90", settledAt: new Date() },
+                ],
+              },
+            }),
+          ),
+        );
+      const [standard] = await suite.db
+        .select()
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.code, "A-06RB"));
+      const first = await sell(suite.db, standard!.id);
+      const submitted = await drain(
+        {
+          db: suite.db,
+          resolveClient: async () => aeat.client(),
+          environment: "preproduction",
+          skipRetryMs: 300_000,
+        },
+        new Date(),
+      );
+      expect(submitted.recordsAccepted).toBe(1);
+      const second = await sell(suite.db, standard!.id);
+      const snapshot = async (db: Database) => ({
+        sales: (await db.execute(sql`select * from sales order by id`)).rows,
+        lines: (await db.execute(sql`select * from sale_lines order by sale_id, line_no`)).rows,
+        tenders: (await db.execute(sql`select * from tenders order by id`)).rows,
+        settlements: (await db.execute(sql`select * from sale_settlements order by id`)).rows,
+        records: (await db.execute(sql`select * from registros_facturacion order by secuencia`))
+          .rows,
+        submissions: (await db.execute(sql`select * from envios order by registro_id`)).rows,
+      });
+      const before = await snapshot(suite.db);
+      expect(before.records.map((row) => row.num_serie_factura)).toEqual([
+        "A-06RB/123",
+        "A-06RB/124",
+      ]);
+      expect(before.records[1]?.anterior_huella).toBe(before.records[0]?.huella);
+      expect(
+        before.submissions.find((row) => row.registro_id === before.records[0]?.id),
+      ).toMatchObject({
+        estado: "aceptado",
+        intentos: 1,
+        csv: expect.any(String),
+        confirmado_en: expect.any(String),
+      });
+      expect(
+        before.submissions.find((row) => row.registro_id === before.records[1]?.id),
+      ).toMatchObject({
+        estado: "pendiente",
+        intentos: 0,
+        csv: null,
+        confirmado_en: null,
+      });
+      for (const row of before.records) {
+        const record = fromRegistroRow(decodeRegistroRow(row));
+        assertValid(record);
+        expect(computeHuella(record)).toBe(row.huella);
+      }
+      const originalSeries = await suite.db.select().from(invoiceSeries);
+      const f = await archiveHost(source === "stream" ? "stream" : "archive");
+      const common = {
+        ...f.restore,
+        modules: f.service.modules,
+        withModuleOperations: f.service.runner(f.outcome.input),
+      };
+      if (source === "stream") {
+        await writeStreamRestore({ ...common, databasePath: f.database, entries: f.entries });
+      } else if (source === "file") {
+        const artifactPath = join(root, "historical.backup.enc");
+        await writeFile(artifactPath, f.restore.artifact);
+        await restoreFromArtifactFile({ ...common, artifactPath });
+      } else if (source === "managed") {
+        const pointId = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
+        const point = {
+          id: pointId,
+          venueId: node.locationId,
+          capturedAt: new Date().toISOString(),
+          modules: (
+            await buildManifest({
+              db: suite.db,
+              modules: ALL_MODULES,
+              environment: "preproduction",
+              now: new Date(),
+            })
+          ).modules,
+          digest: createHash("sha256").update(f.restore.artifact).digest("hex"),
+          size: f.restore.artifact.length,
+          objectKey: `snapshots/${pointId}`,
+          verification: "verified",
+          kind: "snapshot",
+          deleting: false,
+          deletedAt: null,
+        };
+        const expiresAt = new Date(Date.now() + 900_000).toISOString();
+        const client = createCloudRecoveryClient({
+          stateDir: f.roots.stateDir,
+          origin: "https://cloud.example.test",
+          environment: "preproduction",
+          fetch: async (url, init) => {
+            const action = new URL(String(url)).pathname.split("/").at(-1);
+            const body = JSON.parse(String(init?.body)) as { payload: string };
+            if (action === "start" || action === "status")
+              return Response.json({
+                requestId: JSON.parse(Buffer.from(body.payload, "base64url").toString())[2],
+                state: action === "start" ? "awaiting_owner" : "approved",
+                expiresAt,
+                operationId:
+                  action === "start"
+                    ? null
+                    : JSON.parse(Buffer.from(body.payload, "base64url").toString())[2],
+              });
+            if (action === "info") return Response.json({ point, operationExpiresAt: expiresAt });
+            if (action === "read")
+              return Response.json({
+                point,
+                location: {
+                  endpoint: "https://store.example.test",
+                  bucket: "copy",
+                  region: "local",
+                },
+                credentials: {
+                  accessKeyId: "unused",
+                  secretAccessKey: "unused",
+                  sessionToken: "unused",
+                },
+                recoveryKey: "archive password",
+                expiresAt,
+                operationExpiresAt: expiresAt,
+              });
+            throw new Error(`unexpected Cloud recovery action ${action}`);
+          },
+          download: async () => f.restore.artifact,
+        });
+        await client.start();
+        await client.restore(async (request) => {
+          await restoreFromArtifact({ ...common, ...request });
+        }, pointId);
+      } else {
+        await restoreFromArtifact(common);
+      }
+      const placed = await openVenueDatabase(f.roots.venueDir);
+      try {
+        expect(await snapshot(placed.venue)).toEqual(before);
+        const series = await placed.venue.select().from(invoiceSeries);
+        for (const row of originalSeries)
+          expect(series.find((entry) => entry.id === row.id)).toEqual({
+            ...row,
+            retiredAt: expect.any(Date),
+          });
+        expect(
+          series
+            .filter((row) => row.retiredAt === null)
+            .map(({ code, nextNumber }) => ({ code, nextNumber })),
+        ).toEqual([
+          { code: "A-06RC", nextNumber: 1 },
+          { code: "FF-06RC", nextNumber: 1 },
+          { code: "R-06RC", nextNumber: 1 },
+        ]);
+        await expect(sell(placed.venue, standard!.id)).rejects.toMatchObject({
+          code: "sale.series_retired",
+        });
+        const fresh = series.find((row) => row.code === "A-06RC")!;
+        const resumed = await sell(placed.venue, fresh.id);
+        const afterSale = await snapshot(placed.venue);
+        expect(afterSale.sales.filter((row) => row.id !== resumed.saleId)).toEqual(before.sales);
+        expect(afterSale.lines.filter((row) => row.sale_id !== resumed.saleId)).toEqual(
+          before.lines,
+        );
+        expect(afterSale.tenders.filter((row) => row.sale_id !== resumed.saleId)).toEqual(
+          before.tenders,
+        );
+        expect(afterSale.settlements.filter((row) => row.sale_id !== resumed.saleId)).toEqual(
+          before.settlements,
+        );
+        expect(afterSale.records.filter((row) => row.sale_id !== resumed.saleId)).toEqual(
+          before.records,
+        );
+        expect(
+          afterSale.submissions.filter(
+            (row) =>
+              !afterSale.records.some(
+                (record) => record.sale_id === resumed.saleId && record.id === row.registro_id,
+              ),
+          ),
+        ).toEqual(before.submissions);
+        expect(afterSale.records.find((row) => row.sale_id === resumed.saleId)).toMatchObject({
+          num_serie_factura: "A-06RC/1",
+          primer_registro: 1,
+          anterior_huella: null,
+        });
+        expect(afterSale.sales.map((row) => row.id).sort()).toEqual(
+          [first.saleId, second.saleId, resumed.saleId].sort(),
+        );
+        expect(await placed.venue.select().from(fiscalAllocations)).toHaveLength(2);
+      } finally {
+        await placed.close();
+      }
+      const committed = await openVenueDatabase(f.roots.venueDir);
+      let afterIssuance: Awaited<ReturnType<typeof snapshot>>;
+      let afterSeries: (typeof invoiceSeries.$inferSelect)[];
+      try {
+        afterIssuance = await snapshot(committed.venue);
+        afterSeries = await committed.venue.select().from(invoiceSeries);
+      } finally {
+        await committed.close();
+      }
+      const next = createSelectedRecoveryPreparation(f.options);
+      vi.setSystemTime(new Date("2026-10-17T13:10:00Z"));
+      external.internet.mockClear();
+      const replay = {
+        ...f.restore,
+        modules: next.modules,
+        withModuleOperations: next.runner(f.outcome.input),
+        resumeOperation: f.options.binding,
+      };
+      if (source === "stream") {
+        await writeFile(
+          f.database,
+          unpackArchive(decryptArtifact(f.restore.artifact, "archive password")).find(
+            (entry) => entry.name === "db.dump",
+          )!.bytes,
+        );
+        await writeStreamRestore({ ...replay, databasePath: f.database, entries: f.entries });
+      } else {
+        await restoreFromArtifact(replay);
+      }
+      const reopened = await openVenueDatabase(f.roots.venueDir);
+      try {
+        expect(await snapshot(reopened.venue)).toEqual(afterIssuance);
+        expect(await reopened.venue.select().from(invoiceSeries)).toEqual(afterSeries);
+        expect(await reopened.venue.select().from(fiscalAllocations)).toHaveLength(2);
+      } finally {
+        await reopened.close();
+      }
+      expect(external.internet).not.toHaveBeenCalled();
+      expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(1);
+    },
+  );
 });
