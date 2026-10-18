@@ -247,8 +247,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **A screen does not draw its own form field**: a `<select>`, a `<textarea>` or a text `<input>`
   comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Cost:
   a native dropdown cannot take the approved look (A178). Guard: `scripts/native-form-fields.test.ts`,
-  weaker than its name — it reads string literals, and holds the files it allows by name only to a
-  line count.
+  weaker than its name — it reads string literals.
 - **A `wt-help-tooltip` outside the setup wizard carries `mode="help-mode"`**, so it shows only while
   help is on (owner, 2026-10-18, A582 design §7). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads
   literals as text; what it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
@@ -329,8 +328,7 @@ called weaker than its name, the topic file lists what it does not see.
   review found a bill refund route checking no action.
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`**, so the
   menu stays on a phone's screen (owner decision, A155). Guard: `scripts/pinned-actions-column.test.ts`,
-  weaker than its name — it knows a menu column only by the literal `key: "actions"`, so every
-  object with that key is held to the rule and a data column must take another key. See
+  weaker than its name — it knows a menu column only by the literal `key: "actions"`. See
   [design-system.md](docs/developers/design-system.md).
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS
   class.** Cost: the categories screen's swatches and thumbnails never rendered, through review and
