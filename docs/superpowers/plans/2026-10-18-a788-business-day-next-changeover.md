@@ -199,6 +199,15 @@ Task 10 confirmed the plan's Task 10 row (exact base lines below)
 
 New cases beside them (no existing assertion changed): `clock-change-conflict.test.ts` (EN, ES, each hours reason, the name fallback, the venue's zone, other codes), a `period-dialog.test.ts` bottom-line case, a row in `special-day-painter.save.test.ts`'s beside-Save `it.each`, and a refused special-day delete in `special-day-painter.test.ts`, and a refused department add in `department-dialogs.test.ts`. The follow-up adds `timeZone` to the `hours.clock_change_conflict` params; the server assertions it extends (`business-day-schedule.test.ts`, `menu-timetable-routes.test.ts`, `operations.test.ts`) are all this branch's own, as the code did not exist at base. No other existing assertion failed in the ten browser files run (`Tests  452 passed (452)`) or the five server files run (`Tests  326 passed (326)`); the rest of the package's suite was not run.
 
+Task 11 confirmed the plan's Task 11 row (exact base lines below)
+
+| File:line (base `373b96623`) | Before → after | Why |
+| --- | --- | --- |
+| `packages/venue-service/src/business-day-schedule.test.ts:640-645` (case "checks annual menu ranges against every retained start" → "… against the start in force") | annual 2026-12-25 07:00–07:00 after the 07:00 start took effect: rejects `{ code: "special_day.invalid", params: { field: "paint.0.ranges" } }` → resolves; added in the same case: annual 2026-12-26 06:00–08:00 rejects that same `{ code, params: { field: "paint.0.ranges" } }` | a repeating day is checked against the start in force (07:00), not every start the venue had |
+| `business-day-schedule.test.ts:647-656` (case "checks annual zone ranges against every retained start" → "… against the start in force") | the same for zone paint, `field: "zonePaint.0.ranges"` | same |
+
+Retitled only, assertions unchanged: `:602` and `:613` ("against the retained 07:00 start" → "against the 07:00 start in force"). New cases beside them (no existing assertion changed): `inForceClock` and "undated hours are checked against the start in force" in `business-day-schedule.test.ts`, and a season-closure case in `zone-closure-hours.test.ts`, whose `venue()` helper now also returns `restaurant` and `menuId`. No other existing assertion failed (`pnpm exec vitest run --project node` in `packages/venue-service`: `Tests  2544 passed (2544)`).
+
 ## Review focus (inputs no task's main tests reach; each line names the test that pins it)
 
 1. **The rule-2 flip mid-dialog**: a preview taken at 00:20 for 00:30 and a Save at 00:31 must be
