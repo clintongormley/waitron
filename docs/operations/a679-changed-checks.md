@@ -2076,3 +2076,71 @@ The fresh-boot/reboot case has a 180-second test bound, covering its initial 45-
 two 45-second listener waits, two ten-second shutdown waits and untimed setup. That test-only
 bound was added after the installed candidate was removed; the two affected source cases were
 rerun. Runtime files and all earlier assertions are unchanged by that final budget adjustment.
+
+## Replacement boot and interrupted selection, 2026-10-18
+
+You can follow confirmed Start again into its replacement with the new cases in
+`apps/server/src/first-fiscal-hour.e2e.test.ts`. They run direct `bin.ts` and supervised
+`node-entry.ts` as separate processes, recover the original password through certificate-verified
+HTTPS, retire the missing-database attempt, and boot and reboot the selected workspace.
+The old attempt, claim, certificate and staged restore/reset files retain their bytes; the old
+database stays absent. Only the selected workspace acquires a database.
+
+Each entry also loses either the state selection witness or target backlink before restarting.
+The next process serves repair and leaves the replacement database absent. A wrong password and
+changed workspace ID refuse; the original password completes the same selection, after which
+ordinary setup boots there. These are lost-file experiments, separate from the existing
+write-interruption route tests.
+
+Changed existing checks: none. One import, a shutdown observation helper and six new cases are added; the earlier cases retain
+their bodies and values. Authority is the hour plan's Task 10 actual-entry and interruption
+qualification, with the retained-original and isolated-selection rules from Tasks 5 and 9.
+No production, fiscal writer, SQL, schema, migration, guard, exclusion or configuration changes.
+
+The six-suite source command covering the process suite, entry, resolution boot, selection routes,
+bootstrap and the entire boot suite passes 131 cases. Server types, scoped lint/format and the
+unedited protected fiscal pair pass. The initial new test took an inspection before creating its
+retained staged files, so the evidence check correctly refused with 409. The final fixture inspects
+after those files exist; that first run is not a production-defect reproduction.
+
+The new cases also await the process's own restart exit before launching its successor. They do
+not send the signal that the assertion is meant to observe. Both entry processes exit cleanly
+with code 0; an initial new assertion expected termination by signal and was corrected after
+observing the exit and reading `run-server.ts`. Closing the test HTTP client before waiting
+avoids holding the listener open during shutdown. The cleanup path still stops a child if an
+earlier assertion fails.
+
+The retained installed-Chrome probe uses the built setup app with real HTTPS and filesystem
+selection. In each locale it confirms Start again, loses the replacement backlink, reopens repair,
+refuses a wrong password, and completes the same selection with the original password. It then
+boots the replacement, follows the native secure-connection Continue action and opens normal
+setup there. Two journeys pass; 16 EN/ES light/dark 390/1280 captures were inspected. The first
+probe omitted Continue and timed out waiting for the next page. That probe error is retained,
+not treated as a product defect or acceptance pass.
+
+An initial omission probe selected zero cases because Vitest quotes interpolated table values
+in test names. Its log reports 19 skipped. The qualified controls use the actual listed names
+and require assertion failures and counted restoration passes.
+
+The first selected-root omission also exposed a test cleanup error: an already-closed HTTP
+client threw during teardown and hid the boot assertion. The new fixture now closes each client
+once, including on failure. Qualification restarts with that fixture; the masked failure is not
+counted as a successful omission control.
+
+Selected-root omissions are qualified against the existing direct/supervised boot assertions in
+`first-setup-resolution.boot.test.ts`: they fail the expected environment or ordered-effect
+comparison and pass after restoration. The separate process omission reached the selected-CA
+wait and reported `ENOENT`; it is retained as that observation, not relabelled an assertion error.
+
+Final installed qualification passes all 19 process cases before and after six omissions:
+selection workspace binding, original password, direct selected roots, supervised selected roots,
+Start again restart and selection-resumption restart. Each omission fails its intended assertion
+and its restored selection passes. The final new source selection passes six cases; the previous
+13 process cases remain unchanged. Types, lint, formatting, 28 focused root cases and the
+unedited 20 fiscal cases pass. The installed server and setup builds pass with the retained
+setup chunk-size warning. These results do not supply package-wide coverage or branch CI.
+
+Receipts: `~/waitron-campaign-e/receipts/a679-selected-reboot-20261018/`. This checkpoint does not
+complete A679. Preserve the earlier package coverage gaps, retained policy-suite failures,
+remaining installed restore/promotion/Finish acceptance, owner PDF viewing approval,
+retirement/prose/main integration and final review/current-head CI gates.

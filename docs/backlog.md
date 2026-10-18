@@ -347,6 +347,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   that listener's real password controls in English and Spanish, in both themes and at phone and
   desktop widths. Confirmed Start again selects an isolated workspace, retains the old frozen
   attempt and requests restart; the replacement's first boot is not part of that browser check.
+  Further real-process checks now follow password-authorised Start again through the replacement's
+  first boot and reboot, using both direct and supervised entry. Lost selection witnesses return
+  to password recovery; successful resumption retains the same workspace. The old attempt,
+  certificate and staged requests retain their bytes, and its missing database remains missing.
+  A later installed-Chrome journey also completes password-led interrupted selection and opens
+  normal setup in that replacement, through the secure-connection Continue action. Its English
+  and Spanish views were checked in both themes at phone and desktop widths. Complete backup
+  restore, promotion and exact Finish remain separate acceptance work.
   The restore command refuses an outstanding claim; provisioning refuses a
   changed series request without opening its database. These checks do not qualify a complete
   archive/bucket/Cloud restore or replace the remaining installed recovery journeys.
