@@ -779,6 +779,16 @@ export const en = {
     "Your name, display name, email, phone and language; your password, PIN and passkeys; an authenticator app for an extra sign-in check; and, where available, signing in with Google.",
   "help.products.keep_variant":
     "Cancels archiving this variant. Archiving happens only when you save the product.",
+  "help.products.price":
+    "The price includes VAT, per unit. For a weight or a unit with decimals the till asks how much; otherwise each tap sells one.",
+  "help.products.vat":
+    "The VAT class. A sale uses the class's rate on the day it is invoiced. A change reaches the tills when the menu is published again.",
+  "help.products.course":
+    "The course this dish goes out in, unless staff change it on a table's order. Picked as an extra, it goes out with its dish.",
+  "help.products.variants":
+    "Versions of this product, such as sizes, each with its own name. A variant without a price sells at the product's. Once a menu with an active variant is published, the till sells only the variants.",
+  "help.products.availability":
+    "Unavailable: its Available switch is off, so the tills stop selling it within seconds, without publishing. Archived: no longer sold, for good.",
   // Theme choice. light/dark/device also name the icon-only buttons in the account menu.
   "theme.label": "Theme",
   "theme.light": "Light",
@@ -3759,6 +3769,16 @@ export const es: Record<StringKey, string> = {
     "Tu nombre, nombre visible, correo electrónico, teléfono e idioma; tu contraseña, PIN y passkeys; una aplicación de autenticación como comprobación adicional; y, si está disponible, el inicio de sesión con Google.",
   "help.products.keep_variant":
     "Cancela el archivado de esta variante. Se archiva solo al guardar el producto.",
+  "help.products.price":
+    "El precio incluye el IVA, por unidad. Si se vende al peso o con una unidad con decimales, la caja pregunta la cantidad; si no, cada toque vende una.",
+  "help.products.vat":
+    "La clase de IVA. Una venta aplica el tipo de la clase el día de la factura. Un cambio llega a la caja al volver a publicar la carta.",
+  "help.products.course":
+    "El curso en que sale este plato, salvo que el personal lo cambie en el pedido de una mesa. Pedido como extra, sale con su plato.",
+  "help.products.variants":
+    "Versiones de este producto, como tamaños, cada una con su nombre. Una variante sin precio se vende al del producto. Al publicar una carta con una variante activa, la caja solo vende las variantes.",
+  "help.products.availability":
+    "No disponible: su interruptor Disponible está apagado, así que la caja deja de venderlo en segundos, sin publicar. Archivado: ya no se vende, de forma definitiva.",
   "theme.label": "Tema",
   "theme.light": "Claro",
   "theme.dark": "Oscuro",

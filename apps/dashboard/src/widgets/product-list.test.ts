@@ -15,7 +15,7 @@ import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";
 import type { FolderMadeAt } from "./folder-made-at.js";
-import { registerIcons } from "@waitron/ui";
+import { registerIcons, setHelpMode, type WtHelpTooltip } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -6790,5 +6790,33 @@ describe("A668 effective allergen cells", () => {
     await el.updateComplete;
     await table.updateComplete;
     expect(table.filterValues("allergens")).toEqual(["pending"]);
+  });
+});
+
+describe("help mode", () => {
+  afterEach(() => setHelpMode(false));
+
+  async function availabilityBadge(root: ShadowRoot): Promise<WtHelpTooltip> {
+    const heading = [...root.querySelectorAll("thead th")].find((cell) =>
+      cell.textContent!.trim().startsWith(t("product.availability")),
+    )!;
+    const badge = heading.querySelector<WtHelpTooltip>("wt-help-tooltip");
+    expect(badge).not.toBeNull();
+    await badge!.updateComplete;
+    return badge!;
+  }
+
+  it.each([
+    { locale: "en-GB", name: "Help: Availability" },
+    { locale: "es-ES", name: "Ayuda: Disponibilidad" },
+  ])("the Availability column has help ($locale)", async ({ locale, name }) => {
+    setLocale(locale);
+    const { root } = await mountTree();
+    expect((await availabilityBadge(root)).checkVisibility()).toBe(false);
+    setHelpMode(true);
+    const badge = await availabilityBadge(root);
+    expect(badge.checkVisibility()).toBe(true);
+    await expect.element(badge.shadowRoot!.querySelector("button")!).toHaveAccessibleName(name);
+    expect(badge.textContent!.trim()).toBe(t("help.products.availability"));
   });
 });
