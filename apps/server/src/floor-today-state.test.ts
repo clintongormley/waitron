@@ -577,6 +577,43 @@ describe("the till's table-state answer says what needs moving", () => {
     for (const id of [t45, t4, t5]) expect(await readyToMoveOf(id)).toBe(true);
   });
 
+  it("a marked joined table of three parts is not due while its far part still moves", async () => {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    const s = await standardAndDinner(
+      v,
+      NOW,
+      [
+        { key: "t3", label: fresh("3") },
+        { key: "t4", label: fresh("4") },
+        { key: "t5", label: fresh("5") },
+        { key: "t45", label: fresh("3+4+5"), partKeys: ["t3", "t4", "t5"] },
+      ],
+      {
+        standard: { t3: 0, t4: 20, t5: 40, t45: null },
+        dinner: { t3: null, t4: null, t5: null, t45: 0 },
+      },
+    );
+    await s.onto(s.d.dinner);
+    const [t3, t4, t5, t45] = [s.live("t3"), s.live("t4"), s.live("t5"), s.live("t45")];
+    await seatAndFinishAcross(t45, () => s.onto(s.d.standard));
+    await catchUp();
+    expect(await readyToMoveOf(t45)).toBe(true);
+
+    await inTx(v, (tx) => takeOffToday(tx, v.cfg, t45));
+    await inTx(v, (tx) => placeSpareToday(tx, v.cfg, t5, { x: 99, y: 0 }));
+    expect((await todayRow(v, t5))!.x).toBe(99);
+
+    const due = await inTx(v, (tx) =>
+      tx
+        .select({ id: floorZones.id })
+        .from(floorZones)
+        .where(and(eq(floorZones.id, s.d.zoneId), catchUpDue(floorZones.id))),
+    );
+    expect(due).toEqual([]);
+    await catchUp();
+    for (const id of [t45, t3, t4, t5]) expect(await readyToMoveOf(id)).toBe(true);
+  });
+
   it("a member of a marked group whose own change is seats only (seats changed today) reads false", async () => {
     await inTx(v, (tx) => writeClearingWorkflow(tx, false));
     const s = await standardAndDinner(
