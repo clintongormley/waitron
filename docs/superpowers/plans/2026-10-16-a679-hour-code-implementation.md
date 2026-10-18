@@ -30,6 +30,12 @@
 
 ## Global constraints
 
+**Owner clarification, 2026-10-18 at 12:10:** the supported configuration has exactly one prefix
+for each of `standard`, `full` and `rectificative`. This supersedes "multiple bases per purpose"
+below and Task 1's two-standard-base example. Refuse unsupported configurations; do not add a
+trading-series chooser. Keep all historical evidence. See the [dated design addendum](../specs/2026-10-16-a679-hour-coded-series-design.md#owner-clarification-2026-10-18-at-1210-one-prefix-per-purpose).
+
+
 - Epoch: **2026-01-01T00:00:00Z**. Encode elapsed whole UTC hours most-significant first in exactly four symbols.
 - Alphabet: `0123456789ABCDEFGHJKMNPQRSTVWXYZ`; preserve leading zeroes and generate uppercase.
 - `2026-10-16T11:40:00Z` → hour `6923` → `06RB`; next hour → `06RC`.

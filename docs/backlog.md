@@ -336,8 +336,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   during recovery, retaining them with the operation and refusing the same or an earlier hour.
   Dormant configuration and authenticated promotion preparation now have module, real-node and
   verified-HTTPS boot checks on the branch. The promotion API accepts the sheet's codes and
-  selects its hour at promotion. The existing trading reader refuses several standard or full
-  bases; the choice of a trading series remains an owner question. Complete entry journeys,
+  selects its hour at promotion. The owner clarified one prefix per purpose on 2026-10-18 at
+  12:10; configuration boundaries reject duplicates without adding a trading-series chooser.
+  Complete entry journeys,
   including admission and promotion screens, remain open.
   Owner acceptance is viewing real generated EN/ES PDFs through Drive; automated
   recovery-field entry checks remain the driver’s work. Preserve existing branch work.

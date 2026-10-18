@@ -6,6 +6,7 @@ import { liveSeriesBases } from "./reserved-series.js";
 import { readModuleAllocationSeries } from "./allocation-operation.js";
 import { assertFiscalRestoreCommitted } from "./restore-committed.js";
 import "./errors.js";
+import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
 import { createHash } from "node:crypto";
 import { readRetainedHourDormant } from "./hour-dormant-standby.js";
 import { fiscalAllocations } from "./schema/allocations.js";
@@ -59,6 +60,7 @@ export const readHourRecoveryState: NonNullable<
       return refuse();
     const bases = dormant?.bases ?? (await liveSeriesBases(tx, node));
     if (dormant === undefined) await readModuleAllocationSeries(tx, node, bases);
+    assertHourSeriesConfiguration(bases);
     const history = await readHourHistory(tx, environment);
     const committed = history.records.some(
       (row) =>

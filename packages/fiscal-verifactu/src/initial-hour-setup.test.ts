@@ -571,3 +571,50 @@ it("refuses a delivered sheet whose installation code differs from its frozen ac
     }),
   );
 });
+
+it.each(["standard", "full", "rectificative", "unknown"])(
+  "refuses a matching setup allocation with a second %s prefix",
+  (purpose) => {
+    const saved = fixture();
+    saved.bases = [...saved.bases, { code: "second", purpose }];
+    saved.request.input.allocation.series.push({ code: "second-06RB", purpose });
+    expect(() => readHourSetupInput(saved, saved.request.input)).toThrowError(
+      expect.objectContaining({
+        code: "sif.allocation_invalid",
+        params: { reason: "series_configuration_unsupported" },
+      }),
+    );
+  },
+);
+
+it.each(["standard", "full", "rectificative"])(
+  "refuses a matching setup allocation missing its %s prefix",
+  (purpose) => {
+    const saved = fixture();
+    saved.bases = saved.bases.filter((base) => base.purpose !== purpose);
+    saved.request.input.allocation.series = saved.request.input.allocation.series.filter(
+      (series) => series.purpose !== purpose,
+    );
+    expect(() => readHourSetupInput(saved, saved.request.input)).toThrowError(
+      expect.objectContaining({
+        code: "sif.allocation_invalid",
+        params: { reason: "series_configuration_unsupported" },
+      }),
+    );
+  },
+);
+
+it.each(["standard", "rectificative", "unknown"])(
+  "refuses three setup prefixes whose full purpose is replaced by %s",
+  (purpose) => {
+    const saved = fixture();
+    saved.bases = saved.bases.map((base, index) => (index === 1 ? { ...base, purpose } : base));
+    saved.request.input.allocation.series[1]!.purpose = purpose;
+    expect(() => readHourSetupInput(saved, saved.request.input)).toThrowError(
+      expect.objectContaining({
+        code: "sif.allocation_invalid",
+        params: { reason: "series_configuration_unsupported" },
+      }),
+    );
+  },
+);

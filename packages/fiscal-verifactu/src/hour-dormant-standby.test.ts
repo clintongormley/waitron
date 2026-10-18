@@ -24,7 +24,6 @@ const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const primary = { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) };
 const standby = { ...primary, nodeId: TENANT_A.nodeId2 };
 const bases = [
-  { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
   { code: "R", purpose: "rectificative" },
   { code: "a/B_1.2-3", purpose: "standard" },
@@ -176,7 +175,7 @@ it("refuses a changed primary configuration before establishment", async () => {
   const reserved = await reserve();
   await suite.db
     .update(invoiceSeries)
-    .set({ purpose: "rectificative" })
+    .set({ code: "changed" })
     .where(eq(invoiceSeries.code, "a/B_1.2-3"));
   await expect(establish(reserved.state)).rejects.toMatchObject({
     code: "sif.allocation_invalid",

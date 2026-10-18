@@ -1,4 +1,5 @@
 import "./errors.js";
+import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
 import { isDeepStrictEqual as equal } from "node:util";
 import { and, eq, isNull } from "drizzle-orm";
 import { deployment, invoiceSeries, nodes, readTenant, type Transaction } from "@waitron/db";
@@ -78,6 +79,7 @@ function readDormant(value: unknown): Dormant {
     )
   )
     return refuse();
+  assertHourSeriesConfiguration(value.bases);
   return structuredClone(value) as unknown as Dormant;
 }
 function retained(values: readonly unknown[]): Dormant[] {

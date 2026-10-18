@@ -340,3 +340,24 @@ code or stop an old seller; the existing isolation and taxpayer-wide coordinatio
 
 The source and focused checks for the first-setup PDF and recovery entry are on the A679 branch.
 Dormant promotion's host preparation and completed-manager reissue remain implementation tasks.
+
+
+## Owner clarification, 2026-10-18 at 12:10: one prefix per purpose
+
+Your box has one configured prefix for receipts (`standard`), one for full invoices (`full`)
+and one for corrections (`rectificative`). Setup, recovery and dormant admission refuse a
+configuration with a missing purpose or more than one prefix for a purpose. The refusal is
+`sif.allocation_invalid` with reason `series_configuration_unsupported`. There is no trading-series
+chooser and no silent choice among prefixes.
+
+A promoted or recovered box combines each configured prefix with its newly selected code.
+For example, `A`, `FF` and `R` with `06RC` become `A-06RC`, `FF-06RC` and `R-06RC`, each starting
+at one. They are the new node's series. Recorded series and counters remain historical evidence;
+reading that evidence checks the spent-hour floor and whether the saved configuration was changed.
+It does not choose an old series for new trading.
+
+This answer supersedes the earlier requirement to support several bases for one purpose,
+including the replacement plan's global constraint and Task 1 example. The lower-level history
+readers still inspect every recorded series, including unsupported historical configurations.
+The new configuration check does not make an altered recorded allocation valid: recovery first
+checks the stored configuration against its allocation and retains its `series_mismatch` refusal.

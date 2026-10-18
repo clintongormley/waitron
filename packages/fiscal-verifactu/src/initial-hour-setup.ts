@@ -10,6 +10,7 @@ import { AppError } from "@waitron/shared";
 import { encodeHourIdentity, decodeHourIdentity, isHourIdentity } from "./hour-identity.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
 import "./errors.js";
+import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
 import {
   parseRecoveryDocumentPublic,
   recoveryDocumentPublic,
@@ -39,6 +40,7 @@ function contextBinding(context: InitialSetupContext) {
     context.recipientVenueId !== context.binding.sourceId
   )
     refuse();
+  assertHourSeriesConfiguration(context.bases);
 }
 export function readHourSetupInput(context: InitialSetupContext, input: unknown) {
   contextBinding(context);

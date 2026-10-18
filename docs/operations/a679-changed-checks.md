@@ -1555,3 +1555,52 @@ approved standby-wrapper change remains part of the branch; this delta adds no p
 Receipts, coverage reports and omission/restoration checks are under the lane's local
 `receipts/a679-dormant-host-20261018/`. Whole-package coverage, the earlier legacy failures,
 reissue screens, PDF viewing acceptance and final review/CI gates remain open.
+
+
+## One prefix per purpose, owner answer 2026-10-18 at 12:10
+
+This dated section supersedes the earlier repeated-purpose acceptance and the dormant/promotion
+checkpoint's pending trading-series question. The owner requires exactly one configured prefix
+for each purpose and explicitly asks to replace the two-standard-base host scenario with a refusal
+and an ordinary one-per-purpose case.
+
+- `apps/server/src/hour-promotion.test.ts`: the shared successful fixture now has `A/standard`,
+  `FF/full`, `R/rectificative`; its extra corrective prefix is removed. All existing new-node series,
+  old `123` counters, no-reservation, role, HTTPS and exact-retry assertions stay. The former
+  ambiguous-standard test selected an hour, then expected the old trading reader's string error
+  and transaction rollback. Its replacement covers all three duplicate purposes: admission must
+  refuse `sif.allocation_invalid / series_configuration_unsupported`, retain all compared fiscal
+  rows and mirror mode, and save no dormant configuration or hour. No late activation is attempted.
+- `packages/fiscal-verifactu/src/hour-dormant-standby.test.ts`: the supported fixture keeps exactly
+  `FF/full`, `R/rectificative`, `a/B_1.2-3/standard`, preserving the punctuation and case example.
+  The changed-primary fixture now renames that standard prefix to `changed` rather than changing
+  the extra prefix's purpose. It still requires `reservation_mismatch` and no durable admission.
+- `packages/fiscal-verifactu/src/hour-recovery-state.test.ts`: the supported fixture drops its
+  second standard and full prefix. The historical-floor case's configured-base count changes
+  from five to three; its literal spent hour, recorded-time floor, no-contradiction and old-counter
+  assertions stay. The configuration-reading case still compares every prefix and exact spelling.
+  New real-database cases record two prefixes for each purpose and require explicit refusal with
+  unchanged rows and one retained allocation. The seed helper accepts that complete configuration;
+  its default and `123` counters are unchanged. The original stored-purpose corruption case still
+  requires `series_mismatch`; validation order was corrected after it caught a regression.
+- `packages/fiscal-verifactu/src/initial-hour-setup.test.ts`: new cases submit matching request and
+  allocation pairs with duplicate or missing purposes, including three-prefix duplicate/unknown
+  shapes. They require the same explicit unsupported-configuration refusal. All original cases
+  and assertions are retained.
+
+Authority is the owner's 12:10 answer in Lane E's questions and the dated design addendum.
+The six protected paths compared at this checkpoint remain byte-identical to starting
+`707e78728c4d3a24e414881f64fc0b22f42657fa`. Lower-level hour/history tests are retained; their ability
+to inspect recorded repeated-purpose evidence is separate from accepting a new configuration.
+
+Source qualification: 135 affected fiscal cases, 171 server recovery/promotion/re-registration cases,
+294 surrounding fiscal cases including the unedited protected pair, and 4,847 root cases passed.
+The separately installed candidate passed 135 affected fiscal and 34 promotion cases. Four
+independent omission/restoration controls caught the removed validation. The new helper's scoped
+report counts four statements, four branches, three functions and three lines, all covered; this
+is not a package-wide coverage result. Types, scoped lint, formatting and whitespace checks passed.
+AST comparison retains 202 of 204 old matcher expressions exactly; only the two replacements
+listed above differ. This syntax inventory does not establish behavioral equivalence. Receipts:
+Lane E `receipts/a679-one-prefix-20261018/verification.json`, `controls.json`,
+`assertion-audit.json` and the retained command logs. Earlier whole-branch failures and acceptance
+gates remain open.

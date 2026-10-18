@@ -79,7 +79,6 @@ const bases = [
   { code: "A", purpose: "standard" },
   { code: "FF", purpose: "full" },
   { code: "R", purpose: "rectificative" },
-  { code: "a/B_1.2-3", purpose: "rectificative" },
 ];
 const joinBinding: OperationBinding = {
   module: "fiscal-verifactu",
@@ -396,23 +395,30 @@ it("retains the selected hour across restart but discards transient comparison a
   expect((await rows()).allocations).toHaveLength(2);
 });
 
-it("keeps the existing refusal for ambiguous standard-series selection and rolls promotion back", async () => {
-  await suite.db
-    .insert(invoiceSeries)
-    .values({ nodeId: primary.nodeId, code: "X-06RB", purpose: "standard" });
-  const s = await service();
-  await admit(s);
-  await compare(s);
-  const selected = (await s.prepare(binding, { breakGlass: key.secret }, context, {
-    action: "select",
-    answer: "no",
-    installationCodes: ["06RB"],
-  })) as { input: unknown };
-  const before = await rows();
-  await expect(promote(s, selected.input)).rejects.toThrow("has more than one standard series");
-  expect(await rows()).toEqual(before);
-  expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("mirror");
-});
+it.each(["standard", "full", "rectificative"])(
+  "refuses a second %s prefix before dormant admission or hour selection",
+  async (purpose) => {
+    await suite.db.insert(invoiceSeries).values({
+      nodeId: primary.nodeId,
+      code: "a/B_1.2-3-06RB",
+      purpose,
+    });
+    const s = await service();
+    const before = await rows();
+    await expect(admit(s)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "series_configuration_unsupported" },
+    });
+    expect(await rows()).toEqual(before);
+    expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("mirror");
+    expect(
+      await readModulePreparationHistory(
+        { stateDir: join(root, "state"), venueDir: join(root, "venue") },
+        binding.module,
+      ),
+    ).toEqual([]);
+  },
+);
 
 it("serves clock, sheet-code selection and authenticated promotion through the management routes", async () => {
   const s = await service();

@@ -24,26 +24,29 @@ const binding: OperationBinding = {
 };
 const bases = [
   { code: "a/b_.-", purpose: "standard" },
-  { code: "B", purpose: "standard" },
   { code: "FF", purpose: "full" },
-  { code: "full2", purpose: "full" },
   { code: "R", purpose: "rectificative" },
 ];
 const read = (operation = binding, target = node) =>
   FISCAL_OPERATIONS.readRecoveryState!(suite.db, target, operation);
 afterEach(() => vi.useRealTimers());
 
-async function seed() {
+async function seed(configuration = bases) {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
   await seedTenants(suite.db);
   await stampDeployment(suite.db, "preproduction");
   const initial = { ...binding, action: "setup", eventId: "first", sourceId: "original" };
-  await activate(initial, "06RB", "2026-10-16T11:40:00.000Z");
+  await activate(initial, "06RB", "2026-10-16T11:40:00.000Z", configuration);
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
 }
 
-async function activate(initial: OperationBinding, identity: string, issuedAt: string) {
+async function activate(
+  initial: OperationBinding,
+  identity: string,
+  issuedAt: string,
+  configuration = bases,
+) {
   const operatorId =
     initial.action === "setup"
       ? "administrator"
@@ -67,7 +70,7 @@ async function activate(initial: OperationBinding, identity: string, issuedAt: s
           source: "hour",
           reservationEvidence: null,
           issuedAt,
-          series: bases.map((base) => ({ ...base, code: `${base.code}-${identity}` })),
+          series: configuration.map((base) => ({ ...base, code: `${base.code}-${identity}` })),
         },
         approval: {
           version: 1,
@@ -85,7 +88,7 @@ async function activate(initial: OperationBinding, identity: string, issuedAt: s
     };
     await withHourAdmission(
       operation,
-      { requiredBases: bases, priorActivation: "none" },
+      { requiredBases: configuration, priorActivation: "none" },
       (evidence) =>
         withCollectedModuleAllocation(
           operation,
@@ -106,7 +109,7 @@ it("recognises a matching committed restore without modifying its retained resul
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
 });
 
-it("reads every base and exact spelling without collapsing repeated purposes or writing counters", async () => {
+it("reads each configured prefix and exact spelling without writing counters", async () => {
   await seed();
   const before = await suite.db.select().from(invoiceSeries);
   const facts = await read();
@@ -159,7 +162,7 @@ it("includes higher retired names on another node under another software identif
     recordedTimeFloorMs: Date.parse("2026-10-16T13:20:00Z"),
     contradictions: [],
   });
-  expect(facts.bases).toHaveLength(5);
+  expect(facts.bases).toHaveLength(3);
 });
 
 it.each([{ module: "another-module" }, { action: "promote" }, { targetNodeId: TENANT_A.nodeId2 }])(
@@ -222,3 +225,17 @@ describe("recorded country", () => {
     expect((await read()).country).toBe("GB");
   });
 });
+
+it.each(["standard", "full", "rectificative"])(
+  "refuses recovery with two %s prefixes without changing fiscal rows",
+  async (purpose) => {
+    await seed([...bases, { code: "second", purpose }]);
+    const before = await suite.db.select().from(invoiceSeries);
+    await expect(read()).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "series_configuration_unsupported" },
+    });
+    expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
+    expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+  },
+);
