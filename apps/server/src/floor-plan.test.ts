@@ -1088,15 +1088,7 @@ describe("saveLayout", () => {
     );
     expect(tables).toHaveLength(2);
     for (const table of tables) {
-      expect(table).toMatchObject({
-        zoneId: z,
-        x: null,
-        y: null,
-        width: null,
-        height: null,
-        shape: null,
-        rotation: null,
-      });
+      expect(table).toMatchObject({ zoneId: z });
     }
   });
 

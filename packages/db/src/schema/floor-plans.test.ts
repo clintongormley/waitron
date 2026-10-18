@@ -102,42 +102,29 @@ describe("floor plan tables", () => {
   }
 
   it.each([
-    ["rotation 20", { rotation: 20 }, "floor_plan_tables_rotation_ck"],
-    ["rotation 360", { rotation: 360 }, "floor_plan_tables_rotation_ck"],
-    ["rotation -15", { rotation: -15 }, "floor_plan_tables_rotation_ck"],
-    ["x -1", { x: -1 }, "floor_plan_tables_x_ck"],
-    ["x 1000", { x: 1000 }, "floor_plan_tables_x_ck"],
-    ["y 1000", { y: 1000 }, "floor_plan_tables_y_ck"],
-    ["width 0", { width: 0 }, "floor_plan_tables_width_ck"],
-    ["height 100", { height: 100 }, "floor_plan_tables_height_ck"],
-    ["shape square", { shape: "square" }, "floor_plan_tables_shape_ck"],
     ["seats 1000", { seats: 1000 }, "floor_plan_tables_seats_ck"],
     ["seats -1", { seats: -1 }, "floor_plan_tables_seats_ck"],
-    ["a position without a size", { width: null }, "floor_plan_tables_placement_ck"],
-    ["a size without a position", { x: null, y: null }, "floor_plan_tables_placement_ck"],
-    ["no shape", { shape: null }, "floor_plan_tables_placement_ck"],
   ] as const)("refuses a master table with %s", async (_name, patch, constraint) => {
     const error = await captureError(() => insertMasterTable({ ...GOOD_MASTER_TABLE, ...patch }));
     expect(checkFailed(error, constraint)).toBe(true);
   });
 
   it.each([
-    ["the bounds' low ends", { x: 0, y: 0, width: 1, height: 1, rotation: 0, seats: 0 }],
-    ["the bounds' high ends", { x: 999, y: 999, width: 99, height: 99, rotation: 345, seats: 999 }],
-    ["a round table turned 15", { shape: "round", rotation: 15, seats: null }],
+    ["the bounds' low ends", { seats: 0 }],
+    ["the bounds' high ends", { seats: 999 }],
   ] as const)("accepts a master table at %s (the control)", async (name, patch) => {
     await insertMasterTable({ ...GOOD_MASTER_TABLE, label: `ok ${name}`, ...patch });
   });
 
-  it("accepts a master spare with no position at all", async () => {
-    await insertMasterTable({ planId: PLAN, label: "spare", ...NO_PLACE });
+  it("accepts a master table with no seat count, not fixed unless asked", async () => {
+    await insertMasterTable({ zoneId: ZONE, label: "spare" });
     const [row] = await inTx((tx) =>
       tx.select().from(floorPlanTables).where(eq(floorPlanTables.label, "spare")),
     );
-    expect(row).toMatchObject({ ...NO_PLACE, seats: null, fixed: false });
+    expect(row).toMatchObject({ seats: null, fixed: false });
   });
 
-  it("keeps names unique within a plan", async () => {
+  it("keeps names unique within a zone", async () => {
     await insertMasterTable({ ...GOOD_MASTER_TABLE, label: "dup" });
     const error = await captureError(() =>
       insertMasterTable({ ...GOOD_MASTER_TABLE, label: "dup" }),
@@ -145,7 +132,7 @@ describe("floor plan tables", () => {
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "floor_plan_tables",
-        columns: ["plan_id", "label"],
+        columns: ["zone_id", "label"],
       }),
     ).toBe(true);
   });
@@ -318,7 +305,7 @@ describe("floor plan tables", () => {
     const masterId = await inTx(async (tx) => {
       const [row] = await tx
         .insert(floorPlanTables)
-        .values({ ...GOOD_MASTER_TABLE, label: "T1", fixed: true, rotation: 345 })
+        .values({ ...GOOD_MASTER_TABLE, label: "T1", fixed: true })
         .returning({ id: floorPlanTables.id });
       return row!.id;
     });
@@ -343,7 +330,7 @@ describe("floor plan tables", () => {
     expect(plan).toEqual({
       id: PLAN,
       zoneId: ZONE,
-      setId: null,
+      setId: SET,
       revision: 0,
       savedAt: "2026-10-08T10:00:00Z",
     });
@@ -352,13 +339,10 @@ describe("floor plan tables", () => {
     );
     expect(master).toEqual({
       id: masterId,
-      planId: PLAN,
-      zoneId: null,
+      zoneId: ZONE,
       label: "T1",
       seats: 4,
       fixed: true,
-      ...PLACED,
-      rotation: 345,
     });
     const live = await inTx((tx) =>
       tx
@@ -963,15 +947,15 @@ describe("rangeCheck", () => {
     new SQLiteSyncDialect().sqlToQuery(fragment).sql;
 
   it("writes whole-number bounds into the check as they are", () => {
-    expect(render(rangeCheck(floorPlanTables.x, 0, 999))).toBe(
-      '"floor_plan_tables"."x" is null or "floor_plan_tables"."x" between 0 and 999',
+    expect(render(rangeCheck(floorPlanPlacements.x, 0, 999))).toBe(
+      '"floor_plan_placements"."x" is null or "floor_plan_placements"."x" between 0 and 999',
     );
   });
 
   it("refuses a bound that is not a whole number, since it is pasted into the SQL", () => {
-    expect(() => rangeCheck(floorPlanTables.x, 0.5, 999)).toThrow(/whole/);
-    expect(() => rangeCheck(floorPlanTables.x, 0, Number.NaN)).toThrow(/whole/);
-    expect(() => rangeCheck(floorPlanTables.x, 0, "1) or (1" as unknown as number)).toThrow(
+    expect(() => rangeCheck(floorPlanPlacements.x, 0.5, 999)).toThrow(/whole/);
+    expect(() => rangeCheck(floorPlanPlacements.x, 0, Number.NaN)).toThrow(/whole/);
+    expect(() => rangeCheck(floorPlanPlacements.x, 0, "1) or (1" as unknown as number)).toThrow(
       /whole/,
     );
   });
