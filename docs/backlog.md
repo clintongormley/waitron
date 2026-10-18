@@ -5464,6 +5464,10 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   2026-09-21, task P6). Either bring the three decisions across and re-baseline, or change the
   sentence to say what it is.
   [Detail](backlog/ci.md#the-pglite-throughput-bench-no-longer-matches-the-shape-it-says-it-matches)
+- **The PGlite throughput bench fails while seeding** — OPEN (found 2026-10-18, A861's review of
+  #1856). Its seed insert binds two values but its SQL names only `$2`, so PGlite refuses it with
+  `42P18`; on pglite 0.5.9 and 0.5.10 alike.
+  [Detail](backlog/ci.md#the-pglite-throughput-bench-fails-while-seeding)
 
 - **`packages/db`'s static mutants are not in its mutation score** — OPEN, left by A539.
   `"ignoreStatic": true` in `packages/db/stryker.config.json` leaves out every mutant in code that

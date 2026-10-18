@@ -208,6 +208,17 @@ behind: `numeric` money and quantity columns where the real columns are now whol
 (#475 and task P6), and a `tenant_id` column the real schema no longer has. Either bring the three
 decisions across and re-baseline, or change the sentence to say what it is.
 
+## The PGlite throughput bench fails while seeding
+
+**The PGlite throughput bench fails while seeding — OPEN (found 2026-10-18, A861's Codex review of
+Dependabot #1856).** `seed` in `bench/pglite-throughput/src/bench.ts` runs
+`insert into bench_chains (till_id, sequence, last_hash) values ($2, 0, '')` with two values
+(`"tenant-1"` and the till id). PGlite answers `42P18: could not determine data type of parameter
+$1`. Codex got the same error on pglite 0.5.9 and 0.5.10, so the pglite bump did not cause it. The
+mismatch came in with #378 (91caf00d9), which took `tenant_id` and `$1` out of the SQL but left both
+values. Fix: pass only the till id and write `$1`. It belongs with the entry above: either one
+re-baselines the bench.
+
 ## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests
 
 **Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).**
