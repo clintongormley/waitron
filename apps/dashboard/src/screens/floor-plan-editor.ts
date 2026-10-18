@@ -837,6 +837,10 @@ export class FloorPlanEditor extends LitElement {
       this.saving = false;
       if (request !== this.#request) return;
       const code = codeOf(error);
+      if (SET_GONE.has(code)) {
+        this.#retireZone();
+        return;
+      }
       if (code === "floor_plan.out_of_date") this.outOfDate = true;
       const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
       this.#placeRefusal(code, params, body);
@@ -885,7 +889,9 @@ export class FloorPlanEditor extends LitElement {
     } catch (error) {
       if (this.isConnected && request === this.#request) {
         this.loadingNewer = false;
-        if (replace) {
+        if (SET_GONE.has(codeOf(error))) {
+          this.#retireZone();
+        } else if (replace) {
           const code = codeOf(error);
           this.message = actionMessage(() => codeMessage(code));
         } else {
