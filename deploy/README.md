@@ -286,13 +286,14 @@ sudo bash waitron.sh reset --all    # also wipe the certificate, so a new one is
 ```
 
 Both forms wipe every volume in the table above except one folder: plain `reset` keeps `tls/` inside the box's `state`
-volume, which holds the certificate authority the phone already trusts and the box's own certificate
-signed by it. Because that folder survives, a phone that has already been told to trust this box does
-not need to trust it again after a plain `reset`. `reset --all` throws `tls/` away too, so the box
-mints a brand-new certificate authority on its next boot and every phone has to go through the trust
-step again. Neither form touches `.env`, so if a branch install pinned an image there, the box comes
-back on that same image. Only the data in the volumes is wiped, and that includes the venue's
-databases, because they live in the `state` volume.
+volume, which holds the certificate authority the box's devices already trust and the box's own
+certificate signed by it. Because that folder survives, a device that has already been told to trust
+this box does not need to trust it again after a plain `reset`. `reset --all` throws `tls/` away too, so the box
+mints a brand-new certificate authority on its next boot and every device has to go through the
+trust step again. That includes any device with a dashboard or till tab left open across the reset:
+take it through the trust step, then reopen the dashboard or till. Neither form touches `.env`, so if
+a branch install pinned an image there, the box comes back on that same image. Only the data in the
+volumes is wiped, and that includes the venue's databases, because they live in the `state` volume.
 
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
 without a terminal (an unattended script) it needs `--yes` instead.
