@@ -1,3 +1,5 @@
+import type { BillEditExpected } from "./client.js";
+
 export interface CancellationContext {
   billStatus: "open" | "placed" | "settled" | "abandoned";
   stage: "not_started" | "started";
@@ -22,6 +24,7 @@ export interface CancellationRead {
 }
 
 export interface CancelItemRequest {
+  expectedEdit: BillEditExpected;
   quantity: string;
   outcome: "remove_charge" | "keep_charge";
   expectedPartyRevision: number;

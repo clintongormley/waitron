@@ -850,6 +850,7 @@ interface CounterRelocation {
 }
 
 interface CancellingItem {
+  bill: BillComposition;
   id: number;
   partyId: string;
   billId: string;
@@ -2796,6 +2797,7 @@ export class TillApp extends LitElement {
     session: number;
     visit: number;
     api: TillApi;
+    bill: BillComposition;
     controller: AbortController;
   };
   /** The people who can approve the adjustment being confirmed; set, their PIN prompt is open. */
@@ -11088,11 +11090,12 @@ export class TillApp extends LitElement {
   }
 
   #cancellationCurrent(
-    open: Pick<CancellingItem, "partyId" | "billId" | "session" | "visit" | "api">,
+    open: Pick<CancellingItem, "partyId" | "billId" | "session" | "visit" | "api" | "bill">,
   ): boolean {
     return (
       this.isConnected &&
       open.api === this.api &&
+      this.#billCompositionCurrent(open.bill) &&
       open.session === this.#operatorSession &&
       this.orderParty?.id === open.partyId &&
       !this.#hasLeftOrder(open.billId, open.visit)
@@ -11123,7 +11126,10 @@ export class TillApp extends LitElement {
       ...(this.currentOrders?.groups.flatMap((group) => group.rows) ?? []),
     ].find((row) => row.lineId === lineId && row.workingOrderId === this.activeTabId);
     if (line === undefined && recorded === undefined) return;
+    const bill = this.#billComposition([this.activeTabId]);
+    if (bill === null) return;
     const opening = {
+      bill,
       partyId: this.orderParty.id,
       billId: this.activeTabId,
       session: this.#operatorSession,
@@ -11138,7 +11144,8 @@ export class TillApp extends LitElement {
         signal: opening.controller.signal,
       });
       if (this.#cancelItemRead !== opening || !this.#cancellationCurrent(opening)) return;
-      if (consent.billId !== opening.billId) return;
+      if (consent.billId !== opening.billId || !this.#billCompositionUnchanged(opening.bill))
+        return;
       this.cancellingItem = {
         ...opening,
         id: ++this.#cancelItems,
@@ -11169,6 +11176,7 @@ export class TillApp extends LitElement {
       event.detail.lineId !== open.lineId
     )
       return;
+    if (!this.#cancellationReady(open)) return;
     const choice = event.detail;
     if (choice.outcome === "remove_charge") {
       await this.#openCancelAdjustment(open, choice);
@@ -11184,11 +11192,12 @@ export class TillApp extends LitElement {
     this.cancellingItem = { ...open, busy: true, refusal: "" };
     try {
       const reasons = await open.api.listAdjustmentReasons();
-      if (!this.#itemCancellationShown(open)) return;
+      if (!this.#itemCancellationShown(open) || !this.#cancellationReady(open)) return;
       const target = lineAdjustTarget(line, this.tabLines, open.name);
       this.cancellingItem = null;
       this.adjusting = {
         id: ++this.#adjustments,
+        bill: open.bill,
         surface: "table",
         orderId: open.billId,
         revision: choice.consent.billRevision,
@@ -11225,13 +11234,21 @@ export class TillApp extends LitElement {
     );
   }
 
+  #cancellationReady(open: CancellingItem): boolean {
+    if (!this.#itemCancellationShown(open)) return false;
+    if (this.#billCompositionUnchanged(open.bill)) return true;
+    if (this.cancellingItem?.id === open.id)
+      this.cancellingItem = { ...open, busy: false, refusal: codeMessage("draft.out_of_date") };
+    return false;
+  }
+
   async #sendItemCancellation(
     open: CancellingItem,
     choice: CancelItemChoice,
     adjustment?: Adjusting,
     approver?: { personId: string; pin: string },
   ): Promise<void> {
-    if (!this.#itemCancellationShown(open)) return;
+    if (!this.#cancellationReady(open)) return;
     if (
       choice.outcome === "refund" &&
       (open.consent.context.billStatus !== "settled" ||
@@ -11240,6 +11257,7 @@ export class TillApp extends LitElement {
     )
       return;
     const command: CancelItemRequest = {
+      expectedEdit: open.bill.expectedEdits[0]!,
       quantity: choice.quantity,
       outcome: choice.outcome === "refund" ? "keep_charge" : choice.outcome,
       expectedPartyRevision: choice.consent.revision,
@@ -11261,7 +11279,7 @@ export class TillApp extends LitElement {
       const answer = await this.#resend(
         (signal) => open.api.cancelItem(open.partyId, open.lineId, command, { signal }),
         limit.signal,
-        () => open.session === this.#operatorSession,
+        () => this.#cancellationCurrent(open),
       );
       if (!this.#itemCancellationShown(open)) return;
       this.#notePartyRevision(open.partyId, answer.revision);
@@ -11321,6 +11339,7 @@ export class TillApp extends LitElement {
         if (this.#cancellationCurrent(open)) this.errorKey ??= "adjust.unconfirmed";
       } else {
         this.cancellingItem = { ...open, busy: false, refusal: codeMessage(code) };
+        if (DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
       }
     } finally {
       limit.done();

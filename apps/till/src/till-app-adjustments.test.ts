@@ -1427,6 +1427,218 @@ describe("till-app: service cancellation consent", () => {
     ...more,
   });
 
+  it("keeps the shown editor observation in the explicit cancellation command", async () => {
+    const methods = apiFor();
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({ expectedEdit: billEdit });
+    expect(cancelDialog(el)).toBeNull();
+  });
+
+  it("does not read cancellation choices without authoritative bill metadata", async () => {
+    const methods = apiFor(consent(), {
+      listDrafts: vi.fn().mockResolvedValue({ drafts: [], billEdits: [] }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    expect(methods.getCancellation).not.toHaveBeenCalled();
+    expect(cancelDialog(el)).toBeNull();
+    expect(banner(el)?.textContent).toBe(codeMessage("draft.out_of_date"));
+  });
+
+  it("keeps the cancellation observation through the reason preview and manager approval", async () => {
+    const methods = apiFor(consent("open", "not_started"), {
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await removeCharge(el);
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", {
+      expectedRevision: 6,
+      expectedEdit: billEdit,
+      lineId: "line-1",
+      action: "cancel",
+      reasonId: "r-mistake",
+      note: "Wrong dish",
+      quantity: "1",
+    });
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    await pinPad(el, "1234");
+    expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({
+      expectedEdit: billEdit,
+      approver: { personId: "m-1", pin: "1234" },
+    });
+    expect(dialog(el)).toBeNull();
+  });
+
+  it.each(["wo-4", "wo-check"])(
+    "a refreshed %s cannot silently replace the cancellation observation",
+    async (changedBill) => {
+      let version = 0;
+      const listDrafts = vi.fn(async (partyId: string) => {
+        const snapshot = await drafts.listDrafts(partyId);
+        return {
+          ...snapshot,
+          billEdits: snapshot.billEdits.map((edit) =>
+            edit.billId === changedBill ? { ...edit, editorVersion: version } : edit,
+          ),
+        };
+      });
+      const methods = apiFor(consent(), { listDrafts });
+      const { el } = await mountApp(methods);
+      await openMesa4(el);
+      await openCancel(el);
+      await clickChoice(el, 'input[value="keep_charge"]');
+      const before = listDrafts.mock.calls.length;
+      version = 1;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(before);
+      await flush(el);
+      await clickChoice(el, "[data-confirm]");
+      if (changedBill === "wo-4") {
+        expect(methods.cancelItem).not.toHaveBeenCalled();
+        expect(cancelDialog(el)?.refusal).toBe(codeMessage("draft.out_of_date"));
+      } else {
+        expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({ expectedEdit: billEdit });
+        expect(cancelDialog(el)).toBeNull();
+      }
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refreshes editing metadata after cancellation ownership refusal without acquiring it", async () => {
+    const methods = apiFor(consent(), {
+      cancelItem: vi.fn().mockRejectedValue({ code: "draft.taken_over" }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    drafts.listDrafts.mockClear();
+    await clickChoice(el, "[data-confirm]");
+    expect(cancelDialog(el)?.refusal).toBe(codeMessage("draft.taken_over"));
+    expect(drafts.listDrafts).toHaveBeenCalledWith("v1", expect.any(Object));
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it("a pending kitchen read cannot open choices against a newer bill observation", async () => {
+    let version = 0;
+    let resolve!: (value: CancellationRead) => void;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      return {
+        ...snapshot,
+        billEdits: snapshot.billEdits.map((edit) =>
+          edit.billId === "wo-4" ? { ...edit, editorVersion: version } : edit,
+        ),
+      };
+    });
+    const methods = apiFor(consent(), {
+      listDrafts,
+      getCancellation: vi.fn(
+        () =>
+          new Promise<CancellationRead>((answer) => {
+            resolve = answer;
+          }),
+      ),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    const calls = listDrafts.mock.calls.length;
+    version = 1;
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(calls);
+    await flush(el);
+    resolve(consent());
+    await flush(el);
+    expect(cancelDialog(el)).toBeNull();
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toBe(codeMessage("draft.out_of_date"));
+  });
+
+  it("a cancellation manager prompt cannot approve an older bill observation", async () => {
+    let version = 0;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      return {
+        ...snapshot,
+        billEdits: snapshot.billEdits.map((edit) =>
+          edit.billId === "wo-4" ? { ...edit, editorVersion: version } : edit,
+        ),
+      };
+    });
+    const methods = apiFor(consent("open", "not_started"), {
+      listDrafts,
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await removeCharge(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(approval(el)).not.toBeNull();
+    const calls = listDrafts.mock.calls.length;
+    version = 1;
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(calls);
+    await flush(el);
+    await pinPad(el, "1234");
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+    expect(approval(el)).toBeNull();
+    expect(bottomMessage(el)).toBe(codeMessage("draft.out_of_date"));
+  });
+
+  it("a lost cancellation reply retries the original observation after an ownership refresh", async () => {
+    let version = 0;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      return {
+        ...snapshot,
+        billEdits: snapshot.billEdits.map((edit) =>
+          edit.billId === "wo-4" ? { ...edit, editorVersion: version } : edit,
+        ),
+      };
+    });
+    let reject!: (error: unknown) => void;
+    const methods = apiFor(consent(), {
+      listDrafts,
+      cancelItem: vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((_resolve, refuse) => {
+              reject = refuse;
+            }),
+        )
+        .mockResolvedValue({ revision: 4 }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await clickChoice(el, "[data-confirm]");
+    const calls = listDrafts.mock.calls.length;
+    version = 1;
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(calls);
+    await flush(el);
+    reject(new TypeError("Failed to fetch"));
+    await expect.poll(() => methods.cancelItem.mock.calls.length, { timeout: 4000 }).toBe(2);
+    expect(methods.cancelItem.mock.calls[1]![2]).toEqual(methods.cancelItem.mock.calls[0]![2]);
+    expect(methods.cancelItem.mock.calls[1]![2]).toMatchObject({ expectedEdit: billEdit });
+    await expect.poll(() => cancelDialog(el)).toBeNull();
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
   it("reads the kitchen facts before opening and sends the exact explicit keep-charge consent", async () => {
     const read = consent();
     const methods = apiFor(read);
@@ -1447,6 +1659,7 @@ describe("till-app: service cancellation consent", () => {
         outcome: "keep_charge",
         expectedPartyRevision: 3,
         expectedBillRevision: 6,
+        expectedEdit: billEdit,
         expectedContext: read.context,
         submissionId: expect.any(String),
       },
@@ -1561,6 +1774,7 @@ describe("till-app: service cancellation consent", () => {
     expect(cancelDialog(el)).toBeNull();
     expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", {
       expectedRevision: 6,
+      expectedEdit: billEdit,
       lineId: "line-1",
       action: "cancel",
       reasonId: "r-mistake",
@@ -1577,6 +1791,7 @@ describe("till-app: service cancellation consent", () => {
         outcome: "remove_charge",
         expectedPartyRevision: 3,
         expectedBillRevision: 6,
+        expectedEdit: billEdit,
         expectedContext: read.context,
         submissionId: expect.any(String),
         reasonId: "r-mistake",
@@ -2115,6 +2330,7 @@ describe("till-app: service cancellation consent", () => {
         outcome: "keep_charge",
         expectedPartyRevision: 3,
         expectedBillRevision: 6,
+        expectedEdit: billEdit,
         expectedContext: consent("settled").context,
         submissionId: expect.any(String),
       });

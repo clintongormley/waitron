@@ -19,7 +19,14 @@ const context = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const expectedEdit = {
+  billId: "bill-4",
+  editorVersion: 7,
+  draftId: null,
+  draftRevision: null,
+};
 const command = {
+  expectedEdit,
   submissionId: "cancel-1",
   expectedPartyRevision: 8,
   expectedBillRevision: 4,
@@ -91,6 +98,7 @@ describe("the cancellation HTTP client", () => {
     const api = new TillApi("", fetcher);
     const read = await api.getCancellation("party-1", "dish-3");
     const keep = {
+      expectedEdit,
       submissionId: "keep-1",
       expectedPartyRevision: read.revision,
       expectedBillRevision: read.billRevision,
