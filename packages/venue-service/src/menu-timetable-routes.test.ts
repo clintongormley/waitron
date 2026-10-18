@@ -632,6 +632,8 @@ describe("the opening-hours period API", () => {
     expect(await colour()).toBe("indigo");
     await answers(await r.send("PATCH", `/menu-periods/${id}`, r.manager, { colour: "teal" }), 204);
     expect(await colour()).toBe("teal");
+    await answers(await r.send("PATCH", `/menu-periods/${id}`, r.manager, { colour: "sky" }), 204);
+    expect(await colour()).toBe("sky");
   });
 
   for (const method of ["POST", "PATCH"] as const) {

@@ -631,10 +631,10 @@ describe("service-period writers", () => {
     );
   });
 
-  it("chooses the first unused department colour, repeating red after all thirteen", async () => {
+  it("chooses the first unused department colour, repeating red after all of them", async () => {
     const v = await venue({ timetable: false });
     const colours = [];
-    for (let index = 0; index < 14; index++) {
+    for (let index = 0; index < 17; index++) {
       const { id } = await scoped((tx) =>
         saveMenuPeriod(
           tx,
@@ -658,13 +658,16 @@ describe("service-period writers", () => {
       "red",
       "orange",
       "amber",
+      "yellow",
       "lime",
       "green",
       "teal",
       "cyan",
+      "sky",
       "blue",
       "indigo",
       "purple",
+      "magenta",
       "pink",
       "brown",
       "grey",
@@ -2055,7 +2058,7 @@ describe("the editor's model", () => {
           id: periods.brunch,
           name: "Brunch navideño",
           menuId: menus["Brunch de Navidad"],
-          colour: "green",
+          colour: "lime",
           staffMenuIds: [],
           endOffsetMinutes: 0,
           floorPlanSetId: null,
@@ -2066,7 +2069,7 @@ describe("the editor's model", () => {
           id: periods.madrugada,
           name: "Madrugada",
           menuId: menus.Copas,
-          colour: "lime",
+          colour: "yellow",
           staffMenuIds: [],
           endOffsetMinutes: 0,
           floorPlanSetId: null,

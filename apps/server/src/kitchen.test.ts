@@ -18,7 +18,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import {
+  AppError,
+  STATION_COLOURS,
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+} from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import {
   createCourse,
@@ -212,23 +217,8 @@ describe("kitchen-station config", () => {
 
   it("A725 reuses red when every station colour is occupied", async () => {
     const cfg = await setupVenue();
-    const colours = [
-      "red",
-      "orange",
-      "amber",
-      "lime",
-      "green",
-      "teal",
-      "cyan",
-      "blue",
-      "indigo",
-      "purple",
-      "pink",
-      "brown",
-      "grey",
-    ] as const;
     await asApp(cfg, async (tx) => {
-      for (const colour of colours)
+      for (const colour of STATION_COLOURS)
         await createStation(tx, cfg, { name: `Station ${colour}`, colour });
     });
     const last = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Extra station" }));

@@ -1017,6 +1017,8 @@ describe("service-period configuration", () => {
     const t = tables();
     t.menu_periods![0]!.colour = "cyan";
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).not.toThrow();
+    t.menu_periods![0]!.colour = "magenta";
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).not.toThrow();
   });
   it.each([
     [
@@ -1388,6 +1390,9 @@ describe("season weeks in a configuration bundle", () => {
     const teal = seasonTables();
     teal.seasons![0]!.colour = "teal";
     expect(() => validate(teal, clock)).not.toThrow();
+    const yellow = seasonTables();
+    yellow.seasons![0]!.colour = "yellow";
+    expect(() => validate(yellow, clock)).not.toThrow();
   });
 
   it("refuses a period's end offset reaching the next day's placement in the same season", () => {

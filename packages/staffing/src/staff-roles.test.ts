@@ -171,6 +171,12 @@ describe("staff roles", () => {
     expect(
       (await inTx((tx) => listStaffRoles(tx, v.cfg))).map(({ name, colour }) => [name, colour]),
     ).toEqual([["Waiter", "pink"]]);
+    await inTx((tx) =>
+      updateStaffRole(tx, v.cfg, created.id, { name: "Waiter", colour: "yellow" }),
+    );
+    expect(
+      (await inTx((tx) => listStaffRoles(tx, v.cfg))).map(({ name, colour }) => [name, colour]),
+    ).toEqual([["Waiter", "yellow"]]);
   });
 
   it("updates a role's name and colour, keeping its own name free to itself", async () => {
