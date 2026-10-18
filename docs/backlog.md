@@ -4206,11 +4206,11 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   chooser; the browser draws them. Left open by C42 (#837, the setup wizard in Spanish and
   English).
 
-- **English-only till entry pages, OPEN, unqueued (A379 source audit).** The development device
-  chooser (`apps/till/src/screens/till-device-chooser.ts`) contains fixed English headings and
-  actions, and the certificate trust instructions (`apps/till/src/main.ts`) have fixed English
-  prose. Reproduce in Spanish before deciding their translation scope; this branch changes the
-  standard selling tabs only.
+- **A830. Translate the till's certificate trust page (owner, 2026-10-17; left open by A379's
+  source audit).** The page a device shows before it trusts the box's certificate
+  (`trustInstructions`, `apps/till/src/main.ts`) is fixed English. Give it Spanish and the venue's
+  other interface languages. The development device chooser stays English on purpose. Done when a
+  test shows the page in Spanish.
 
 - **Restaurant menus are “carta” in the Spanish dashboard, module, setup and till wording** (owner
   decision 2026-09-29; C55 #858, C56 #901). Account and row-action menus keep “menú”.
@@ -4226,11 +4226,14 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 **Left open, for the owner, by A477 (#1530, delete windows in the present tense):**
 
-- **The prep station delete window (#1521) uses its own present-tense words**: "Trabajo que
-  termina", "Settings removed" / "Ajustes eliminados", and a loading line in the conditional
-  ("…would change…" / "…cambiaría…"), where the device, printer and card reader windows say "Work
-  that ends" / "Trabajo que finaliza", "Settings that are removed" / "Configuración que se elimina"
-  and "Checking what changes…". Owner to say whether it should match.
+- **A831. The prep station and staff role delete windows take the device windows' words (owner,
+  2026-10-17).** Both say "Trabajo que termina", "Settings removed" / "Ajustes eliminados" and a
+  loading line in the conditional ("…would change…" / "…cambiaría…") (`prep.delete_*` in
+  `packages/venue-service/src/dashboard/strings.ts`, `staffing.role.delete_*` in
+  `packages/staffing/src/dashboard/strings.ts`). Use the device, printer and card reader windows'
+  "Work that ends" / "Trabajo que finaliza", "Settings that are removed" / "Configuración que se
+  elimina" and "Checking what changes…", in English and in Spanish. Done when both windows' three
+  lines read as the device window's do, in both languages.
 
 - **Future-tense lines outside the delete windows were left alone**: the Remove-standby
   explanation (`servers.remove_explanation`, "It will be marked removed…"), the Spanish variant
