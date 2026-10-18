@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { resized } from "./till-table-order-screen.test-helpers.js";
 import { LitElement, html } from "lit";
@@ -39,7 +39,10 @@ class ServeLeaveApp extends LitElement {
 }
 customElements.define("serve-leave-test-app", ServeLeaveApp);
 beforeEach(() => setLocale("en"));
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  vi.restoreAllMocks();
+});
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
@@ -244,15 +247,39 @@ it("changing the shown bill aborts an old serving question without a command", a
   expect(app.commands).toEqual([]);
 });
 it("a clean asynchronous Back cannot dismiss a replacement serving choice", async () => {
-  const { screen, dialog } = await mount();
-  await click(screen, "[data-open-drawer]");
+  const { app, screen, dialog } = await mount();
+  const realRequest = app.leave.coordinator.request.bind(app.leave.coordinator);
+  let release!: () => void;
+  const answer = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.spyOn(app.leave.coordinator, "request").mockImplementationOnce(async (request) => {
+    const outcome = await realRequest(request);
+    await answer;
+    return outcome;
+  });
+  const close = vi.spyOn(dialog, "requestClose");
   screen.shadowRoot!.querySelector<HTMLElement>("[data-serve-dismiss]")!.click();
-  screen.shadowRoot!.querySelector<HTMLElement>('[data-serve-row="dish"]')!.click();
+  expect(close).toHaveBeenCalledExactlyOnceWith("cancel");
+  const panel = screen.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  panel.dispatchEvent(
+    new CustomEvent("sent-line-info", {
+      detail: { lineId: "dish", workingOrderId: "wo-4", kind: "fired" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await screen.updateComplete;
+  const info = screen.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
+  await info.updateComplete;
+  await userEvent.click(info.querySelector<HTMLElement>("[data-sent-line-serve]")!);
+  release();
+  expect(await close.mock.results[0]!.value).toBe(false);
   await screen.updateComplete;
   await dialog.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 30));
   expect(dialog.open).toBe(true);
   expect(count(screen)).toBe("2");
+  expect(app.commands).toEqual([]);
 });
 
 it("an untouched count closes directly without warning or command", async () => {

@@ -642,6 +642,7 @@ export class TillSentOrders extends LitElement {
           : html`<wt-button
               variant="secondary"
               data-reminder-unsnooze
+              aria-label=${`${t("table.reminder_clear_snooze")} · ${groupName(group)}`}
               ?disabled=${this.busy}
               @click=${() => this.#groupCommand("unsnooze-group", group.id)}
               >${t("table.reminder_clear_snooze")}</wt-button

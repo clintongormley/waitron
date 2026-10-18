@@ -2280,10 +2280,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   another bill. Focused checks cover the recorded allergen kind in both languages, implied diets,
   unreviewed dishes and replacing a snapshot. The companion's text uses the normal text token
   against its sunken background; the unfolded panel has phone/desktop accessibility checks in both
-  themes. The serving dialog's leave checks now enter through Sent, except the immediate clean-Back
-  reopen check, which keeps its legacy trigger until its replacement exercises the same timing.
-  The old Current orders, To serve and Served drawer lists still need their remaining checks moved
-  to Sent before removal. Sent's Comp now opens one reason-first window on the feature branch.
+  themes. All serving-dialog leave checks now enter through Sent. The clean-Back race delays the
+  real leave answer while a replacement Sent choice opens, then checks that the old answer cannot
+  close it. Serving quantities, Undo, reminder timing and snooze checks now exercise Sent. Its
+  reminder is the only one shown when you open the bill drawer; the drawer's reminder renderer and
+  clock are removed on the feature branch. The station menu uses the sent read when no editable
+  bill-line copy exists, including a presented bill, while retained controls still refuse changed
+  status, preparation and editing authority. Focused checks retain the service payloads and
+  accessible dish/group labels. The old Current orders, To serve and Served drawer lists still
+  need their remaining checks moved to Sent before removal. Sent's Comp now opens one reason-first
+  window on the feature branch.
   You choose the whole dish with its extras or one priced extra, then Free, % or € from the
   reason's allowed actions. A whole dish starts at all units and accepts a count from one to its
   quantity; a weighed dish or one extra is covered whole. The preview and approval still use the
