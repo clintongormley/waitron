@@ -9,6 +9,7 @@ import {
   row,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
+import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
@@ -73,5 +74,25 @@ it.each(["held", "fired"] as const)(
       state === "held" ? { groupId: "group" } : { items: [{ lineId: "dish", quantity: "1" }] },
     ]);
     expect(commands[0]!.bubbles && commands[0]!.composed).toBe(true);
+  },
+);
+
+it.each([null, "fired-group"])(
+  "opens the drawer without offering the legacy Send action for group %s",
+  async (groupId) => {
+    const line = { ...storedDish, groupId, firedAt: null, state: "queued" as const };
+    const { el } = await mount({
+      orderId: "wo-4",
+      lines: [line],
+      groups: groupId === null ? [] : [orderGroup(groupId, 1, "fired")],
+    });
+    const commands: CustomEvent[] = [];
+    el.addEventListener("send-lines", (event) => commands.push(event as CustomEvent));
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await el.updateComplete;
+    const drawer = el.shadowRoot!.querySelector("[data-drawer]")!;
+    expect(drawer.textContent).toContain("Recorded dish");
+    expect(drawer.querySelector("[data-send-line]")).toBeNull();
+    expect(commands).toEqual([]);
   },
 );

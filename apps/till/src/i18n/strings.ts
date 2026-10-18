@@ -1013,7 +1013,6 @@ export const en = {
   "table.move_new_group": "New group",
   "table.split_group_line": "Split quantity",
   // Per-line kitchen actions
-  "table.send_line": "Send",
   "table.recall_line": "Recall",
   "table.void_line": "Void…",
   "table.cancel_line": "Cancel",
@@ -2580,7 +2579,6 @@ export const es: Record<StringKey, string> = {
   "table.move_line": "Mover a…",
   "table.move_new_group": "Grupo nuevo",
   "table.split_group_line": "Separar cantidad",
-  "table.send_line": "Enviar",
   "table.recall_line": "Retirar",
   "table.void_line": "Cancelar…",
   "table.cancel_line": "Cancelar",

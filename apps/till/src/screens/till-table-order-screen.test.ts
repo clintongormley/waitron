@@ -2493,7 +2493,7 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
-  it("keeps recorded courses read-only while a direct send retains the shown bill observation", async () => {
+  it("keeps recorded courses read-only without offering the legacy Send command", async () => {
     const expectedEdit = { billId: "wo-4", editorVersion: 7, draftId: "draft-4", draftRevision: 3 };
     const { el } = await mount({
       lines: [heldLine],
@@ -2508,8 +2508,8 @@ describe("till-table-order-screen", () => {
     el.addEventListener("send-lines", (e) => sent.push(e as CustomEvent));
     expect(el.shadowRoot!.querySelector('[data-line-course="3"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-sent-course]")!.textContent!.trim()).toBe("Postres");
-    el.shadowRoot!.querySelector<HTMLElement>('[data-send-line="3"]')!.click();
-    expect(sent[0]!.detail).toEqual({ lineNos: [3], expectedEdit });
+    expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
+    expect(sent).toEqual([]);
     expect(changed).toEqual([]);
   });
 
@@ -2761,31 +2761,60 @@ describe("till-table-order-screen", () => {
       expect(parseFloat(child.fontSize)).toBeLessThan(parseFloat(dish.fontSize));
     });
 
-    it("shows Send on a HELD line and emits send-lines { lineNos: [lineNo] }", async () => {
-      // heldLine: firedAt null ⇒ HELD ⇒ the Send action (release it to the kitchen).
+    it("fires a held dish through Sent More without a duplicate drawer Send", async () => {
       const { el } = await mount({ lines: [heldLine], courses });
       await openDrawer(el);
-      const send = el.shadowRoot!.querySelector<HTMLElement>('[data-send-line="3"]');
-      expect(send).not.toBeNull();
-      // A held line is neither recallable nor cancellable — it is not fired yet.
+      expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
       expect(await recallControl(el, 3)).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-cancel-line="3"]')).toBeNull();
+      cleanupWidgets();
 
+      const grouped = { ...heldLine, groupId: "g-held" };
+      const native = await mount({
+        orderId: "wo-4",
+        lines: [grouped],
+        courses,
+        groups: [orderGroup("g-held", "held")],
+        currentOrders: current({
+          groups: [
+            currentGroup("g-held", 1, "held", [
+              currentRow(grouped.id, "Café", grouped.quantity, {
+                lineNo: 3,
+                courseId: "postres",
+                firedAt: null,
+                released: false,
+                netAmount: "1.50",
+                kitchen: {
+                  stationId: null,
+                  movable: false,
+                  state: "queued",
+                  firedAt: null,
+                  awayAt: null,
+                },
+              }),
+            ]),
+          ],
+          ungrouped: [],
+          reminder: null,
+        }),
+      });
       let captured: CustomEvent | undefined;
-      el.addEventListener("send-lines", (e) => (captured = e as CustomEvent));
-      send!.click();
+      const legacy: CustomEvent[] = [];
+      native.el.addEventListener("fire-held-line", (e) => (captured = e as CustomEvent));
+      native.el.addEventListener("send-lines", (e) => legacy.push(e as CustomEvent));
+      await openSentDish(native.el, grouped.id, "held");
+      await openSentMore(native.el);
+      await userEvent.click(
+        native.el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-fire]")!,
+      );
       expect(captured).toBeInstanceOf(CustomEvent);
       expect(captured!.composed).toBe(true);
       expect(captured!.bubbles).toBe(true);
-      expect(captured!.detail).toEqual({ lineNos: [3], expectedEdit: null });
+      expect(captured!.detail).toEqual({ lineId: "line-3" });
+      expect(legacy).toEqual([]);
     });
 
     it("renders NO Send on a PARENT line with no ticket item (firedAt null, state null)", async () => {
-      // A moved/merged line or an openTab-initial line: a real dish (productId set) that was re-inserted
-      // or opened WITHOUT firing, so it carries no LIVE ticket item (firedAt null AND state null). Its
-      // null firedAt alone would fall into the HELD/Send branch, but sendLines matches no ticket item and
-      // no-ops, so the button would be dead — the `state !== null` guard suppresses it. (Contrast heldLine
-      // above: firedAt null but state "queued" ⇒ a real held item ⇒ Send still shows.)
       const ticketlessParent: TabLine = { ...heldLine, lineNo: 4, state: null };
       const { el } = await mount({ lines: [ticketlessParent], courses });
       await openDrawer(el);
@@ -2840,19 +2869,45 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-drawer] [data-group-fire="g-held"]')).toBeNull();
     });
 
-    it("offers Send on a recalled line whose group has fired", async () => {
+    it("sends a recalled source through New order when its old group has fired", async () => {
       const recalled: TabLine = {
         ...heldLine,
         groupId: "g-fired",
         sentAt: "2026-08-20T09:59:00.000Z",
       };
       const { el } = await mount({
+        orderId: "wo-4",
         lines: [recalled],
         groups: [orderGroup("g-fired", "fired")],
         courses,
       });
       await openDrawer(el);
-      expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
+      const draft = grid(el).store;
+      draft.appendLines([
+        {
+          product: cafe,
+          quantity: "1.000",
+          courseId: "postres",
+          draftLineId: "recalled-cafe",
+          source: { line: recalled, extras: [], netAmount: "1.50" },
+          place: { kind: "fire" },
+        },
+      ]);
+      await el.updateComplete;
+      const submitted = (await submitDraft(el, "send-all"))!;
+      expect(submitted.detail.lines).toEqual([]);
+      expect(submitted.detail.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
+      expect(
+        submitted.detail.sent.map((line: OrderLine) => ({
+          sourceLineId: line.source?.line.id,
+          quantity: line.quantity,
+          groupId: line.source?.line.groupId,
+          netAmount: line.source?.netAmount,
+        })),
+      ).toEqual([
+        { sourceLineId: "line-3", quantity: "1.000", groupId: "g-fired", netAmount: "1.50" },
+      ]);
     });
 
     it("shows Recall on a FIRED, queued line and emits recall-lines { lineNos: [lineNo] }", async () => {
@@ -3175,17 +3230,16 @@ describe("till-table-order-screen", () => {
       const { el } = await mountLines([recalledLine, noRouteLine, unreleasedNoRouteLine]);
       await openDrawer(el);
       expect(lineAction(el, "change", 6)).toBeNull();
-      // A recalled line is held again, so it can still be sent.
-      expect(lineAction(el, "send", 6)).not.toBeNull();
+      expect(lineAction(el, "send", 6)).toBeNull();
       expect(lineAction(el, "change", 7)).toBeNull();
       expect(lineAction(el, "change", 8)).toBeNull();
     });
 
-    it("offers Cancel on a recalled line beside Send without direct Change", async () => {
+    it("offers Cancel on a recalled line without direct Send or Change", async () => {
       const { el } = await mountLines([recalledLine]);
       await openDrawer(el);
       expect(lineAction(el, "cancel", 6)).not.toBeNull();
-      expect(lineAction(el, "send", 6)).not.toBeNull();
+      expect(lineAction(el, "send", 6)).toBeNull();
       expect(lineAction(el, "change", 6)).toBeNull();
     });
 
@@ -3214,7 +3268,7 @@ describe("till-table-order-screen", () => {
       await openDrawer(el);
       expect(lineAction(el, "change", 11)).toBeNull();
       expect(lineAction(el, "change", 12)).toBeNull();
-      expect(lineAction(el, "send", 12)).not.toBeNull();
+      expect(lineAction(el, "send", 12)).toBeNull();
     });
 
     it("offers no Change on a line whose product the till does not have", async () => {

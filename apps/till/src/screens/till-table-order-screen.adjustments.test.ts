@@ -293,7 +293,7 @@ describe("till-table-order-screen: cancelling a dish", () => {
   it("offers no Cancel on an extra whose dish offers none", async () => {
     const held = { ...pizza, sentAt: null, firedAt: null };
     const el = await mountScreen({ lines: [held, olives] });
-    expect(el.shadowRoot!.querySelector('[data-send-line="2"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-send-line="2"]')).toBeNull();
     expect(cancelOf(el, 2)).toBeNull();
     expect(cancelOf(el, 3)).toBeNull();
     expect(action(el, "comp", 3)).not.toBeNull();

@@ -73,7 +73,9 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
       expect(drawer.querySelector('[data-group-line="stored-dish"]')!.textContent).toContain(
         "Recorded dish",
       );
-      expect(drawer.querySelector("[data-recall-line], [data-move-station]")).toBeNull();
+      expect(
+        drawer.querySelector("[data-recall-line], [data-move-station], [data-send-line]"),
+      ).toBeNull();
       expect(q("[data-move-dialog]")).toBeNull();
       await expectNoA11yViolations(host);
       await page.screenshot({
@@ -105,11 +107,16 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
       await more.updateComplete;
       await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
       expect(q("[data-sent-line-recall]").checkVisibility()).toBe(true);
+      expect(q("[data-sent-line-fire]").checkVisibility()).toBe(true);
       expect(
         q("[data-sent-line-dialog]").querySelector("[data-move-line], [data-split-group-line]"),
       ).toBeNull();
       await expectNoA11yViolations(host);
       const dialog = q("[data-sent-line-dialog]");
+      expect(window.innerWidth).toBe(width);
+      await page.screenshot({
+        path: `__screenshots__/a773-retired-send-menu-${locale}-${theme}-${width}.png`,
+      });
       const closed = new Promise((resolve) =>
         dialog.addEventListener("wt-close", resolve, { once: true }),
       );

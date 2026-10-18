@@ -121,7 +121,7 @@ import type {
 } from "../api/client.js";
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
-import { heldGroupIds, inHeldGroup, sendsAlone } from "../state/held-groups.js";
+import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
 import { itemCount, type DraftEntry, type DraftGroup } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import type { Place } from "../state/draft-place.js";
@@ -1927,7 +1927,6 @@ export class TillTableOrderScreen extends LitElement {
   #payStore?: TabPayStore;
   /** Memoised so a render triggered by a draft change does not recompute every line's gross. */
   #lineGrossByLineNo = new Map<number, Decimal>();
-  /** Built with {@link groups}, so each line's Send check is not a scan. */
   #heldGroupIds?: ReadonlySet<string>;
   /** The party's bill on screen, when {@link bills} lists it. */
   #shownBill: PartyBill | undefined;
@@ -2191,9 +2190,6 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Every sent line with a ticket item, a fired one, and every dish in a held group, a no-route one
-   * included: whatever else a line offers, cancelling it always has a button. A held line outside a
-   * group keeps Send alone. An extra without its own ticket item follows its dish. */
   #canCancel(line: TabLine): boolean {
     if (this.#isChild(line) && line.state === null) {
       const dish = this.#lineByNo.get(line.parentLineNo!);
@@ -2209,19 +2205,6 @@ export class TillTableOrderScreen extends LitElement {
     const name = this.#adjustName(line);
     const label = (key: StringKey) => `${t(key)} · ${name}`;
     const actions: TemplateResult[] = [];
-    if (sendsAlone(line, this.#heldGroupIds!))
-      actions.push(
-        html`<wt-button
-          class="line-send"
-          size="sm"
-          variant="primary"
-          data-send-line=${line.lineNo}
-          aria-label=${label("table.send_line")}
-          @click=${() => this.#sendLine(line.lineNo)}
-        >
-          ${t("table.send_line")}
-        </wt-button>`,
-      );
     if (this.#canCancel(line))
       actions.push(
         html`<wt-button
@@ -2312,19 +2295,6 @@ export class TillTableOrderScreen extends LitElement {
 
   #lineTotal(line: TabLine): TemplateResult {
     return lineTotal(listedGross(line), this.#lineGross(line));
-  }
-
-  #sendLine(lineNo: number): void {
-    this.dispatchEvent(
-      new CustomEvent("send-lines", {
-        detail: {
-          lineNos: [lineNo],
-          expectedEdit: this.billEdit === null ? null : { ...this.billEdit },
-        },
-        bubbles: true,
-        composed: true,
-      }),
-    );
   }
 
   #recallLine(lineNo: number): void {

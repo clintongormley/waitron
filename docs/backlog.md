@@ -2225,7 +2225,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   without duplicate drawer buttons. The drawer's direct Change editor is removed on the branch;
   note, option and extra edits now use the recalled dish's New order window. Its screen checks
   retain recorded source and price checks, including retired choices and weighed extras.
-  The duplicate lists and other old row strips remain to be retired. On the feature branch, a table's open unsent line window closes when editing
+  The drawer's per-line Send is also removed on the branch; a held dish is fired from Sent's
+  line window, and a recalled dish sends through New order with its saved source. App/API checks
+  retain the old direct command's requests and refusals. The duplicate lists and other old row
+  strips remain to be retired. Cancellation still follows the earlier picture-03 implementation
+  on this unlanded branch; the owner's Q43 changes need A758's revised design before integration.
+  On the feature branch, a table's open unsent line window closes when editing
   becomes locked, so taking the bill back cannot revive its old confirmation. Focused browser
   checks cover fresh and recalled notes, an ordinary availability refresh and reopening after
   takeover. Recalling a dish and editing its note also checks the exact autosaved source reference
