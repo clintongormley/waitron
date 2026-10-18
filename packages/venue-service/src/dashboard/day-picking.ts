@@ -85,6 +85,11 @@ export class DayPicker implements ReactiveController {
     return this.#run;
   }
 
+  /** A pointer drag, or a long press then a drag, is under way: the run is still being picked. */
+  get dragging(): boolean {
+    return this.#gesture !== null && (this.#gesture.dragging || this.#gesture.movedSinceHold);
+  }
+
   get focusDate(): LocalDate | null {
     return this.#focus;
   }
@@ -285,6 +290,7 @@ export class DayPicker implements ReactiveController {
     const gesture = this.#gesture;
     if (gesture === null) return;
     this.#gesture = null;
+    if (gesture.dragging || gesture.movedSinceHold) this.#host.requestUpdate();
     clearTimeout(gesture.timer);
     releasePointer(gesture.grid, gesture.pointerId);
     gesture.grid.removeEventListener("touchmove", gesture.stopScroll);

@@ -566,4 +566,41 @@ describe("DayPicker", () => {
     expect(host.opened).toEqual([[day(15), run(15, 15)]]);
     expect(host.ranged).toEqual([]);
   });
+
+  it("says a drag is under way only while one is", async () => {
+    const host = await mount();
+    const seen: boolean[] = [];
+    host.onPicked = () => seen.push(host.picker.dragging);
+    await commands.mouseDrag([sel(10), sel(11), sel(12)]);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every(Boolean)).toBe(true);
+    expect(host.picker.dragging).toBe(false);
+
+    seen.length = 0;
+    await userEvent.click(button(host, 20));
+    await userEvent.dblClick(button(host, 22));
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.some(Boolean)).toBe(false);
+    expect(host.picker.dragging).toBe(false);
+
+    host.onPicked = (picked) => {
+      seen.push(host.picker.dragging);
+      if (picked?.to === day(13)) host.allowPicking = false;
+    };
+    seen.length = 0;
+    await commands.mouseDrag([sel(10), sel(11), sel(12), sel(13), sel(14)]);
+    host.allowPicking = true;
+    expect(seen.some(Boolean)).toBe(true);
+    expect(host.picker.dragging).toBe(false);
+
+    host.onPicked = () => seen.push(host.picker.dragging);
+    seen.length = 0;
+    await commands.touchGesture({ at: sel(25), holdMs: 400 });
+    expect(seen).toEqual([false]);
+
+    seen.length = 0;
+    await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(17) });
+    expect(seen.some(Boolean)).toBe(true);
+    expect(host.picker.dragging).toBe(false);
+  });
 });

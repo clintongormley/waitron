@@ -54,6 +54,25 @@ function keepAdded(el: AddDatesCalendar): void {
 const sel = (date: LocalDate) => `add-dates-calendar td[data-date="${date}"] > button`;
 const marked = (el: AddDatesCalendar) =>
   [...root(el).querySelectorAll<HTMLElement>("td[data-picked]")].map((cell) => cell.dataset.date);
+/** Each set of dates drawn marked while `during` runs, with how many adds had been sent by then. */
+async function watchMarks(
+  el: AddDatesCalendar,
+  sent: LocalDate[][],
+  during: () => Promise<unknown>,
+): Promise<{ marked: string; sent: number }[]> {
+  const seen: { marked: string; sent: number }[] = [];
+  const observer = new MutationObserver(() =>
+    seen.push({ marked: marked(el).join(), sent: sent.length }),
+  );
+  observer.observe(root(el), { subtree: true, attributeFilter: ["data-picked"] });
+  try {
+    await during();
+    await el.updateComplete;
+  } finally {
+    observer.disconnect();
+  }
+  return seen;
+}
 async function shiftClick(el: AddDatesCalendar, date: LocalDate) {
   day(el, date).dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
   await el.updateComplete;
@@ -165,6 +184,52 @@ describe("Add-dates calendar", () => {
     ).toBe(true);
     expect(sent).toEqual([["2026-12-09", "2026-12-10", "2026-12-11", "2026-12-12"]]);
     expect(marked(el)).toEqual([]);
+  });
+
+  it("a drag repeating the last run is drawn marked until its release", async () => {
+    const el = await mount();
+    const sent = added(el);
+    const drag = () =>
+      commands.mouseDrag([sel("2026-12-09"), sel("2026-12-10"), sel("2026-12-12")]);
+    await drag();
+    expect(sent).toHaveLength(1);
+    const seen = await watchMarks(el, sent, drag);
+    expect(seen).toContainEqual({
+      marked: "2026-12-09,2026-12-10,2026-12-11,2026-12-12",
+      sent: 1,
+    });
+    expect(sent).toHaveLength(2);
+    expect(marked(el)).toEqual([]);
+  });
+
+  it("a drag back onto its first date is drawn marking that date", async () => {
+    const el = await mount();
+    const sent = added(el);
+    const seen = await watchMarks(el, sent, () =>
+      commands.mouseDrag([sel("2026-12-09"), sel("2026-12-11"), sel("2026-12-09")]),
+    );
+    expect(seen).toContainEqual({ marked: "2026-12-09", sent: 0 });
+    expect(sent).toEqual([["2026-12-09"]]);
+    expect(marked(el)).toEqual([]);
+  });
+
+  it("a shift-double-click inside a dragged run leaves nothing marked", async () => {
+    const el = await mount();
+    await commands.mouseDrag([sel("2026-12-09"), sel("2026-12-12")]);
+    await el.updateComplete;
+    expect(marked(el)).toEqual([]);
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.dblClick(day(el, "2026-12-10"));
+    await userEvent.keyboard("{/Shift}");
+    await el.updateComplete;
+    expect(marked(el)).toEqual([]);
+  });
+
+  it("names the holder of a held date reached by a shift-click", async () => {
+    const el = await mount({ taken: new Map([["2026-12-25", "Christmas"]]) });
+    day(el, "2026-12-20").click();
+    await shiftClick(el, "2026-12-25");
+    expect(text(testId(el, "held"))).toBe("Christmas holds this date.");
   });
 
   it("a touch drag adds the run and does not scroll the page", async () => {

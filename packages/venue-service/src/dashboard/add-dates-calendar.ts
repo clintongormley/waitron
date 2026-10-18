@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { HOURS_RANGE_MAX_DAYS, type LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
-import { DayPicker, type DayRun } from "./day-picking.js";
+import { DayPicker } from "./day-picking.js";
 import { format, formatLongDate, formatMonthName, formatWeekday } from "./hours-view.js";
 import { t } from "./strings.js";
 
@@ -175,10 +175,6 @@ export class AddDatesCalendar extends LitElement {
     if (fresh.length) this.#emit<AddDates>("add-dates", { dates: fresh });
   }
 
-  /** The last run a gesture added; a run the picker holds that is not this one is still being
-   *  picked, so it is drawn marked. */
-  #rangedRun: DayRun | null = null;
-
   #picker = new DayPicker(this, {
     button: (date) => this.renderRoot.querySelector<HTMLElement>(`td[data-date="${date}"] button`),
     canPick: () => true,
@@ -189,10 +185,8 @@ export class AddDatesCalendar extends LitElement {
       if (this.selected.includes(date)) this.#emit<RemoveDates>("remove-dates", { dates: [date] });
       else this.#add([date]);
     },
-    /** A refused run keeps its first date, so a nearer last date can follow. */
     ranged: (run) => {
-      this.#rangedRun = run;
-      this.requestUpdate();
+      this.pointed = this.#picker.focusDate ?? run.to;
       const dates: LocalDate[] = [];
       for (let date = run.from; date <= run.to; date = addDays(date, 1)) {
         if (dates.length === HOURS_RANGE_MAX_DAYS) {
@@ -205,15 +199,6 @@ export class AddDatesCalendar extends LitElement {
       this.#add(dates);
     },
   });
-
-  #marking(): boolean {
-    const run = this.#picker.run;
-    return (
-      run !== null &&
-      run.from !== run.to &&
-      (run.from !== this.#rangedRun?.from || run.to !== this.#rangedRun.to)
-    );
-  }
 
   override render() {
     if (!this.month) return nothing;
@@ -246,7 +231,7 @@ export class AddDatesCalendar extends LitElement {
       cells.slice(row * 7, row * 7 + 7),
     );
     const chosen = new Set(this.selected);
-    const marking = this.#marking();
+    const marking = this.#picker.dragging;
     const holder = dates.includes(this.pointed ?? "") ? this.taken.get(this.pointed!) : undefined;
     return html`<div class="head">
         ${step(-1, "previous-month", "month.previous", "‹")}
