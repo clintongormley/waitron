@@ -128,22 +128,19 @@ accepts exactly this:
   `[text](modifiers.md)` or `[text](modifiers.md#lists)`.
 
 The characters `<`, `>`, `&` and the quotes are escaped wherever they appear, so a placeholder such
-as `**<department> receipt logo**` reads as text. A shape outside the subset makes `renderGuide` throw
-an error naming the line: a table row starting with `|`, a fence, a quote, a `*` or `+` list, a numbered list, a nested
-list, an indented line, a rule, a level-3 heading, a second title, formatting inside a heading, an
-image, a link to anything but another guide, a lone `*`, a backslash, an HTML comment, an HTML
-entity and an address in angle brackets (every refusal is a `fail(…)` call in that file). Measured
-2026-10-18 by calling `renderGuide` from `node`: a table row starting with `|`, a fence, `1. one`, `### Sub` and a link
-to `https://example.com` were each refused with their line number; `<b>hi</b>` rendered as
-`&lt;b&gt;hi&lt;/b&gt;`; and `[m](modifiers.md#lists)` rendered as `<a href="modifiers#lists">`. A
-link is written relative, so it stays in the reader's language.
+as `**<department> receipt logo**` reads as text. The renderer also refuses the shapes it checks
+for, each a `fail(…)` or `failAt(…)` call in that file, throwing an error that names the line.
+Measured 2026-10-19 by calling `renderGuide` from `node`: a table row starting with `|`, `1. one`,
+`### Sub`, a link to `https://example.com` and an unclosed `**` were each refused with their line
+number; `<b>hi</b>` rendered as `&lt;b&gt;hi&lt;/b&gt;`; and `[m](modifiers.md#lists)` rendered as
+`<a href="modifiers#lists">m</a>`. A link is written relative, so it stays in the reader's
+language.
 
-The refusals keep the shapes listed above from reaching a box: `apps/server/src/guide-content.test.ts`
-renders every page, so a guide edit that uses one fails `apps/server`'s tests in CI. Nothing else is
-refused. A table written without a leading `|`, `~~strike~~` and `<img src=x>` are shown as
-written, and `__bold__` comes out as emphasis around `_bold_` (measured 2026-10-19 with the same
-`node` call), so no test catches them: someone has to read the page.
-If a refused shape reached a box anyway, the route answers its own 500 page and logs `guide.render_failed`, without
+`apps/server/src/guide-content.test.ts` renders every page, so a guide edit that uses a refused
+shape fails `apps/server`'s tests in CI. The renderer lets other shapes through. In the same
+measurement, a table written without a leading `|` was joined into one paragraph, `~~strike~~` and
+`<img src=x>` were shown as written, and `__bold__` came out as emphasis around `_bold_`, so no test
+catches those: someone has to read the page. If a refused shape reached a box anyway, the route answers its own 500 page and logs `guide.render_failed`, without
 the guide's words.
 
 ### Section ids and twins

@@ -864,15 +864,15 @@ menus: the delete route calls only the list's own remove (`mountListSurface`,
 `apps/server/src/catalogue-api.ts`; `deleteOptionList`, `packages/catalogue/src/options.ts`, has no
 publish), and the till's offers come from the published menu document, where a deleted list's
 options count as unavailable (`labelAvailable`, `packages/catalogue/src/menu-document.ts`). Measured
-with temporary cases in `apps/server/src/working-order.test.ts` and `order-groups.test.ts`, since
-reverted:
+with temporary cases in `apps/server/src/working-order.test.ts`, `order-groups.test.ts` and
+`tabs.test.ts`, since reverted:
 
 - With an options list deleted and the menus not republished, the till cannot add a dish that
   carries it (`options.label_required`), and saving a change to a parked order that keeps such a
   dish on it is refused the same way. On a table's order, a new round (`submitGroups`) and a
-  quantity change to one line (`updateOrderLine`) still succeed, and only another such dish with
-  the old answer is refused; but an edit of a table's order that kept such a dish, already sent to
-  the kitchen, and added a line (a probe in `apps/server/src/tabs.test.ts`) was refused
+  quantity change to one line (`updateOrderLine`) still succeed, and another such dish with the
+  old answer is refused. A save of the whole order that kept such a dish, already sent to the
+  kitchen, and added a line (a probe in `apps/server/src/tabs.test.ts`) was refused
   `options.label_required`.
 - With an options list and an extras list both deleted and the menus republished, raising the
   quantity of a table's dish that still carries an extra from the deleted list is refused
