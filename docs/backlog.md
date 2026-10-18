@@ -335,8 +335,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   dashboard controls and full installed journeys remain open. The interrupted page now offers
   password recovery first and confirmed Start again second. Browser checks cover a new tab,
   refused or late answers, uncheckable passwords and missing or uncertain databases. Recovered
-  abandoned or partly activated attempts stay on the recovery page. Exact Finish, password-led
-  recovery with a missing database and interrupted workspace selection still need their UI journeys.
+  abandoned or partly activated attempts stay on the recovery page. The Finish interface now
+  re-enters the original certificate and email settings through the dedicated resolution route.
+  Mounted-browser checks and the existing real HTTPS route suites run separately; the complete
+  installed browser-to-server journey remains open. Password-led retirement with a missing
+  database and interrupted workspace selection still need their UI journeys.
   The exact approved standby wrapper and hour-admission dispatch are implemented. Real-database
   checks refuse the original box's same-hour code and accept the next hour without an advance
   reservation. The branch prints the selected code in first setup and accepts reported codes

@@ -933,7 +933,9 @@ export class SetupApp extends LitElement {
       this.firstOwnerError = () => initialOwnerStrings[setupLocale()].scope;
       destination = "first-owner";
     }
-    if (this.#firstSession && destination === "review" && !this.firstReady)
+    if (this.firstFinishing && destination === "fiscal-test") destination = "email";
+    if (destination === "first-owner") this.firstFinishing = false;
+    if (this.#firstSession && destination === "review" && !this.firstReady && !this.firstFinishing)
       destination = "first-setup";
     ++this.#cloudRecoveryAttempt;
     this.cloudRecoveryBusy = false;
@@ -994,6 +996,7 @@ export class SetupApp extends LitElement {
   @state() private firstOwnerPassword = "";
   @state() private firstPasswordAttempted = false;
   @state() private firstReady = false;
+  @state() private firstFinishing = false;
   @state() private firstOfferings: { module: string; version: string }[] = [];
   @state() private firstInspection?: FirstSetupInspection;
   @state() private firstRestartConfirm = false;
@@ -1047,6 +1050,7 @@ export class SetupApp extends LitElement {
     this.#rootBaseline = structuredClone(this.draft);
     this.#rootScope?.commit(this.#rootBaseline);
     this.firstReady = false;
+    this.firstFinishing = false;
     this.#firstReplacing = false;
   }
   async #claimFirstSetup(): Promise<void> {
@@ -1119,7 +1123,14 @@ export class SetupApp extends LitElement {
     try {
       const session = await this.#openFirstSession();
       if (!current()) return;
-      if (!session.state) await session.recover(this.#firstResolutionSnapshot(), password);
+      if (
+        session.state &&
+        ["activation-started", "committed", "publication"].includes(session.state.status)
+      ) {
+        this.firstInspection = await this.api.inspectFirstSetupResolution();
+        if (!current()) return;
+        await session.recover(this.#firstResolutionSnapshot(), password);
+      } else if (!session.state) await session.recover(this.#firstResolutionSnapshot(), password);
       else await session.resume(password);
       if (!current()) return;
       this.#acceptFirstIdentity();
@@ -1250,9 +1261,27 @@ export class SetupApp extends LitElement {
     this.screen = "admin";
   }
 
+  #startFinishFirstSetup(): void {
+    const session = this.#firstSession;
+    if (
+      !session ||
+      session.recoveryRequired ||
+      this.firstOwnerBusy ||
+      !["activation-started", "committed", "publication"].includes(session.state?.status ?? "")
+    )
+      return;
+    this.firstFinishing = true;
+    this.firstOwnerError = undefined;
+    this.#afterFirstOwner();
+  }
+
   async #onProvisionRequested(event: CustomEvent): Promise<void> {
     event.stopPropagation();
-    if (this.#firstSession && (!this.firstReady || this.#firstSession.recoveryRequired)) {
+    if (this.firstFinishing && this.screen !== "review") return;
+    if (
+      this.#firstSession &&
+      ((!this.firstReady && !this.firstFinishing) || this.#firstSession.recoveryRequired)
+    ) {
       this.firstReady = false;
       this.screen = "first-owner";
       return;
@@ -1264,28 +1293,47 @@ export class SetupApp extends LitElement {
     this.#registerRoot();
     const submitted = structuredClone(this.draft);
     const generation = this.#rootGeneration;
+    const firstGeneration = this.#firstGeneration;
+    const finishing = this.firstFinishing;
     this.screen = "provisioning";
     try {
       const result = await (this.#firstSession
-        ? this.#firstSession.provision(
-            {
+        ? this.firstFinishing
+          ? this.#firstSession.finish({
               mode: "live",
               aeatCert: assembleBody(submitted).aeatCert,
               email: submitted.email as ProvisionBody["email"],
-            },
-            currentLocale(),
-          )
+            })
+          : this.#firstSession.provision(
+              {
+                mode: "live",
+                aeatCert: assembleBody(submitted).aeatCert,
+                email: submitted.email as ProvisionBody["email"],
+              },
+              currentLocale(),
+            )
         : this.#localeChosen
           ? this.api.provision(assembleBody(submitted), currentLocale())
           : this.api.provision(assembleBody(submitted)));
-      if (!this.isConnected || generation !== this.#rootGeneration) return;
+      if (
+        !this.isConnected ||
+        generation !== this.#rootGeneration ||
+        (finishing && firstGeneration !== this.#firstGeneration)
+      )
+        return;
       this.#rootBaseline = submitted;
       this.#rootScope?.commit(submitted);
       this.openingHours = result.openingHours;
       this.screen = "done";
     } catch (error) {
-      if (!this.isConnected || generation !== this.#rootGeneration) return;
+      if (
+        !this.isConnected ||
+        generation !== this.#rootGeneration ||
+        (finishing && firstGeneration !== this.#firstGeneration)
+      )
+        return;
       if (this.#firstSession) {
+        this.firstFinishing = false;
         this.firstReady = false;
         this.firstOwnerError = this.#describeFirstError(error);
         this.screen = "first-owner";
@@ -1972,7 +2020,7 @@ export class SetupApp extends LitElement {
       ${inspection?.password === "uncheckable" ? html`<p>${t.uncheckable}</p>` : nothing}
       ${this.firstOwnerBusy ? html`<p role="status">${t.waiting}</p>` : nothing}
       ${
-        !terminal &&
+        (!terminal || this.#firstSession?.recoveryRequired) &&
         !this.firstOwnerBusy &&
         !this.firstRestarting &&
         (state !== undefined || inspection?.password === "checkable")
@@ -2063,6 +2111,20 @@ export class SetupApp extends LitElement {
       ${state?.status === "abandoned" ? html`<p>${t.retired}</p>` : nothing}
       ${state?.consumptionIntent && terminal && state.status !== "complete" ? html`<p>${t.consumed}</p>` : nothing}
       ${state?.status === "complete" ? html`<p>${t.complete}</p>` : nothing}
+      ${
+        state &&
+        ["activation-started", "committed", "publication"].includes(state.status) &&
+        !this.#firstSession?.recoveryRequired
+          ? html`<p>${t.finishHelp}</p>
+              <wt-button
+                data-test="finish-setup"
+                variant="primary"
+                ?disabled=${this.firstOwnerBusy}
+                @click=${() => this.#startFinishFirstSetup()}
+                >${t.finish}</wt-button
+              >`
+          : nothing
+      }
       ${
         !terminal && !inspection && !state && !this.firstOwnerBusy
           ? html`<wt-form-actions .error=${this.firstOwnerError?.() ?? t.error}></wt-form-actions>`
@@ -2164,10 +2226,11 @@ export class SetupApp extends LitElement {
         return html`<setup-email-screen
           data-test="screen-email"
           .email=${this.draft.email}
+          .publicationOnly=${this.firstFinishing}
           .adminEmail=${this.draft.venue?.admin?.email ?? ""}
           .api=${firstSession === undefined ? this.api : { runEmailTest: (email: EmailSettingsDraft) => firstSession.runEmailTest(email) }}
           .errorMessage=${this.emailError?.()}
-          .backScreen=${this.draft.venue?.location?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
+          .backScreen=${this.firstFinishing ? (this.draft.venue?.location?.fiscalTerritory === "ES-common" ? "cert" : "first-owner") : this.draft.venue?.location?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
         ></setup-email-screen>`;
       case "mode":
         return html`<setup-mode-screen
@@ -2209,6 +2272,7 @@ export class SetupApp extends LitElement {
         return html`<setup-review-screen
           data-test="screen-review"
           .usesAllocation=${this.#firstSession !== undefined}
+          .finishing=${this.firstFinishing}
           .backScreen=${this.draft.mode === "live" && !this.developmentMode ? "email" : "venue"}
           .draft=${this.draft}
           .errorMessage=${this.reviewError?.()}

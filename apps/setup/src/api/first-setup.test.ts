@@ -220,3 +220,31 @@ it("requests key reissue with the original password and current owner without an
     },
   ]);
 });
+
+it("finishes through the dedicated resolution endpoint with the exact recovered owner and snapshot", async () => {
+  const { api, requests } = transport();
+  const snapshot = { inspectionId: "a".repeat(64), revision: 7, ownerGeneration: 2 };
+  const publication = {
+    mode: "live" as const,
+    email: {
+      server: "smtp.example.test",
+      port: 465,
+      encryption: "tls" as const,
+      user: "",
+      password: "",
+      from: "venue@example.test",
+    },
+  };
+  await api.finishFirstSetup(owner, snapshot, publication);
+  expect(requests).toEqual([
+    {
+      url: "https://box.test/setup-api/first-setup/resolution/finish",
+      init: {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ ...snapshot, publication }),
+      },
+    },
+  ]);
+});

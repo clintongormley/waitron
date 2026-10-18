@@ -520,6 +520,22 @@ export class SetupApi {
     return this.#request("/setup-api/first-setup/resolution/start-again", "POST", snapshot);
   }
 
+  finishFirstSetup(
+    owner: FirstSetupOwner,
+    snapshot: FirstSetupResolutionSnapshot,
+    publication: Omit<FirstSetupProvisionBody, "firstSetup">,
+  ): Promise<ProvisionResult> {
+    return this.#request(
+      "/setup-api/first-setup/resolution/finish",
+      "POST",
+      {
+        ...snapshot,
+        publication,
+      },
+      firstSetupHeaders(owner),
+    );
+  }
+
   reconfirmFirstSetup(
     owner: FirstSetupOwner,
     password: string,

@@ -1746,3 +1746,55 @@ A first proposed conflicting-read omission started from an already failing candi
 as unqualified evidence. The final receipt starts from a passing baseline. That reconnect defect
 needed both inspection and preserving the recovery screen after the conflict; its initial partial
 fix still failed the regression case. No failure is waived.
+
+
+## Exact publication Finish interface, 2026-10-18
+
+Authority: the hour-code plan Task 9 and Task 5, and the retained repair plan Task 6
+require original-password recovery, the same publication settings and publication-only Finish.
+The later hour design removes the outside-register requirement. This checkpoint connects the
+mounted setup app to the existing `/resolution/finish` route; it changes no server or fiscal writer.
+
+No existing assertion or fixture value changes. `apps/setup/src/api/first-setup.test.ts` gains one
+transport case after its unchanged original body. New session, app, email-mode and accessibility
+files test Finish. The complete original-test byte audit is in the local receipt folder. The
+ordinary certificate, email, review, interrupted ownership and session suites also run unchanged.
+
+The new publication-only mode reuses certificate/email field checks without sending readiness or
+email-test requests. The session rereads the inspection, checks its revision/generation and sends
+the same settings to the dedicated route. A refused write returns to password recovery. The server
+still owns the exact committed-result/digest check; a local status alone does not establish that a
+commit exists. Browser fixtures are synthetic, while the existing HTTPS Finish suites separately
+exercise actual boot and database paths. They are not a combined installed browser journey.
+
+Early new-test failures included an ownership wait that observed an intermediate render, a native
+button text check that missed its assigned slot, a locale import omission, and a navigation event
+sent outside the app's listener. Those failures remain in the logs and are not passing evidence.
+The first late-page deletion control passed because the new test awaited only the transport
+instead of the entire session operation. The test now awaits that operation; the final control
+fails its page assertion and restores to a passing baseline. All these edits are to new cases.
+
+Keep every earlier changed-check inventory for the eventual single PR. The manager dashboard,
+missing-database retirement, interrupted workspace selection, full installed acceptance and
+whole-branch delivery gates remain open. Local commands, counts, installed controls and mounted
+EN/ES light/dark 390/1280 captures are retained under
+`~/waitron-campaign-e/receipts/a679-finish-ui-20261018`.
+
+
+Observed verification for this checkpoint: setup's complete 94-file suite passes 1,758 cases,
+with 98.04% statements, 95.89% branches, 99.22% functions and 99.49% lines. After the final
+visual fixture correction, its 32 accessibility/view cases pass again. The final source has no
+additional production change after that coverage run. The existing two HTTPS Finish suites pass
+43 cases; the unchanged golden/immutability pair passes 20. Two selected root suites pass 36.
+Setup types, changed-source lint, formatting, whitespace and the browser build pass. The build's
+size warning is retained. No existing test body changes among 3,016 starting test paths; the single
+API file has an unchanged original prefix and an appended transport case.
+
+The separately installed complete candidate passes 35 focused cases before and after four
+omissions. Snapshot revision, dedicated route, readiness bypass and late-page omissions fail
+1, 1, 6 and 1 assertions respectively. The final late-page case awaits the session promise;
+its original transport-only version is explicitly unqualified. The first screenshot helper could
+not import Pillow; the retained final images use the repository's installed Sharp. The visual
+fixture initially accessed a private draft property; it now sends the existing patch event.
+The long review captures use a 2,200-pixel viewport height so the phone-width footer is visible;
+the other states use 1,200. These remain mounted-source views, not installed-server acceptance.

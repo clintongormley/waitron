@@ -8,6 +8,10 @@ export const initialOwnerStrings = {
     resumeHelp: "Enter the administrator password you chose during setup.",
     interrupted: "First setup was interrupted",
     uncheckable: "This box cannot check the original setup password. Keep its files for recovery.",
+    finish: "Finish setup",
+    finishReview: "Check the saved details.",
+    finishEmail: "Re-enter the email settings used for this setup.",
+    finishHelp: "Re-enter the certificate and email settings used for this setup.",
     startAgain: "Start again",
     startAgainHelp:
       "Keep the old attempt and its files, and begin in a new workspace. Previously selected installation codes stay used.",
@@ -37,6 +41,11 @@ export const initialOwnerStrings = {
     interrupted: "La configuración inicial se interrumpió",
     uncheckable:
       "Este equipo no puede comprobar la contraseña original. Conserva sus archivos para recuperarlo.",
+    finish: "Finalizar configuración",
+    finishReview: "Comprueba los datos guardados.",
+    finishEmail: "Vuelve a introducir los ajustes de correo usados en esta configuración.",
+    finishHelp:
+      "Vuelve a introducir el certificado y los ajustes de correo usados en esta configuración.",
     startAgain: "Empezar de nuevo",
     startAgainHelp:
       "Conserva el intento anterior y sus archivos, y empieza en un espacio nuevo. Los códigos de instalación ya elegidos siguen usados.",

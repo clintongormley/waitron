@@ -7,6 +7,7 @@ import { errorStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
 import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
 import type { DeepPartial, Screen } from "../setup-app.js";
+import { initialOwnerStrings } from "./initial-owner-strings.js";
 import { countryName } from "../country-name.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -99,6 +100,7 @@ export class SetupReviewScreen extends LitElement {
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
   @property({ type: Boolean }) usesAllocation = false;
+  @property({ type: Boolean }) finishing = false;
 
   @property() backScreen: "venue" | "email" = "venue";
   @property() errorMessage?: string;
@@ -123,13 +125,17 @@ export class SetupReviewScreen extends LitElement {
     return html`<section class="group" data-group=${id} aria-labelledby=${`group-${id}`}>
       <div class="group-header">
         <h2 id=${`group-${id}`}>${t(title)}</h2>
-        <wt-button
-          variant="ghost"
-          data-test="edit"
-          aria-label=${`${t("review.edit")} ${t(title)}`}
-          @click=${() => dispatchSetupGoto(this, edit)}
-          >${t("review.edit")}</wt-button
-        >
+        ${
+          this.finishing
+            ? nothing
+            : html`<wt-button
+                variant="ghost"
+                data-test="edit"
+                aria-label=${`${t("review.edit")} ${t(title)}`}
+                @click=${() => dispatchSetupGoto(this, edit)}
+                >${t("review.edit")}</wt-button
+              >`
+        }
       </div>
       <p class="group-help">${t(help)}</p>
       <dl>${rows}</dl>
@@ -145,9 +151,10 @@ export class SetupReviewScreen extends LitElement {
       .join(" ");
     const displayName = venue?.admin?.displayName;
     const mode = this.draft.mode;
+    const finish = initialOwnerStrings[currentLocale().startsWith("es") ? "es" : "en"];
     return html`
-      <h1>${t("review.heading")}</h1>
-      <p>${t("review.intro")}</p>
+      <h1>${this.finishing ? finish.finish : t("review.heading")}</h1>
+      <p>${this.finishing ? finish.finishReview : t("review.intro")}</p>
       <div class="mode">
         ${modePill(mode, "mode-badge")}
         ${mode === "demo" ? html`<p data-test="demo-defaults">${t("review.demo_defaults")}</p>` : nothing}
@@ -229,7 +236,7 @@ export class SetupReviewScreen extends LitElement {
           variant="primary"
           data-test="provision"
           @click=${() => dispatchProvisionRequested(this)}
-          >${t("review.provision")}</wt-button
+          >${this.finishing ? finish.finish : t("review.provision")}</wt-button
         >
       </wt-form-actions>
     `;

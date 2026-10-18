@@ -521,6 +521,42 @@ export class FirstSetupSession {
       return result;
     });
   }
+  finish(settings: Omit<FirstSetupProvisionBody, "firstSetup">) {
+    return this.#run(async (current) => {
+      if (
+        !this.#state ||
+        !["activation-started", "committed", "publication"].includes(this.#state.status)
+      )
+        failure("setup.attempt_conflict");
+      const owner = this.#owner();
+      try {
+        const inspection = await this.#api.inspectFirstSetupResolution();
+        current();
+        if (
+          inspection.pair !== "valid" ||
+          inspection.database !== "occupied" ||
+          inspection.password !== "checkable" ||
+          !/^[a-f0-9]{64}$/.test(inspection.inspectionId) ||
+          inspection.revision !== owner.revision ||
+          inspection.ownerGeneration !== owner.ownerGeneration
+        )
+          failure("setup.attempt_conflict");
+        const result = await this.#api.finishFirstSetup(
+          owner,
+          {
+            inspectionId: inspection.inspectionId,
+            revision: owner.revision,
+            ownerGeneration: owner.ownerGeneration,
+          },
+          settings,
+        );
+        current();
+        return result;
+      } finally {
+        this.#needsRefresh = true;
+      }
+    });
+  }
   runFiscalTest(settings: Omit<FirstSetupProvisionBody, "firstSetup">) {
     return this.#run(async (current) => {
       const owner = this.#owner();
