@@ -1217,37 +1217,6 @@ Left open by W97 (#1311), found in its review and not fixed on the branch:
   last today. Edit and Duplicate fail with a read error when the departments and zones read
   fails, and its lists do not update while the editor is open.
 
-## Owner questions, each with the default built (answer when convenient)
-
-Left open by W100 (#1332), the [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md):
-
-- **Removed: staff can no longer switch a device's printing off.** The till's "No printer"
-  choice is gone and the dashboard's empty choice now means Use default, so a device is without
-  a printer, reader or drawer only when its profile's default is None (owner question Q1
-  below).
-- **Not shown: whether equipment is disconnected.** The till says an item is switched off when
-  a printer is disabled or a reader is disabled or unpaired; nothing stores whether a printer or
-  reader is online (Q7).
-- Owner questions, each with the default built. **Answered 2026-10-07: the owner kept every
-  default** ("Ok", keep every default; lane C's questions file, 2026-10-07 ~08:50):
-  - Q1. A device cannot override its profile's default with "none" — owner question, default
-    built.
-  - Q2. A card reader is never shared by several devices at once; every reader has one holder —
-    owner question, default built.
-  - Q3. A payment stuck "attempting" (started, outcome unknown) after a crash keeps its reader
-    busy until the sweep or a manager resolves it — owner question, default built.
-  - Q4. QR labels are decoded with the `jsqr` package, not the browser's own decoder — owner
-    question, default built.
-  - Q5. Card readers have no location, which does not matter while a venue has one location —
-    owner question, default built.
-  - Q6. "One payment in progress per reader" is not a database rule: the checks stop another
-    device, not the holding device starting two payments at once — owner question, default
-    built.
-  - Q7. Disconnected equipment is not shown (above) — owner question, default built.
-  - Also as built: a till's equipment list (`GET /api/device/equipment`) needs only a joined
-    device, not a signed-in person, so a locked till can see who holds an item on another
-    device (staff names are already public through `/api/staff`).
-
 ## Table states and signals (A267)
 
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
@@ -1505,6 +1474,29 @@ while 4 and 5 needed moving, so Leave it here only makes it last until the next 
 whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
+
+### Device equipment defaults (W100, #1332; owner kept every default, 2026-10-07)
+
+From the [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md).
+The owner's answer, 2026-10-07 ~08:50 (lane C's questions file): "Ok", keep every default.
+
+- **Staff cannot switch a device's printing off.** The till's "No printer" choice is gone and the
+  dashboard's empty choice means Use default, so a device is without a printer, reader or drawer
+  only when its profile's default is None (Q1).
+- Q1. A device cannot override its profile's default with "none".
+- Q2. A card reader is never shared by several devices at once; every reader has one holder.
+- Q3. A payment stuck "attempting" (started, outcome unknown) after a crash keeps its reader busy
+  until the sweep or a manager resolves it.
+- Q4. QR labels are decoded with the `jsqr` package, not the browser's own decoder.
+- Q5. Card readers have no location, which does not matter while a venue has one location.
+- Q6. "One payment in progress per reader" is not a database rule: the checks stop another device,
+  not the holding device starting two payments at once.
+- Q7. Disconnected equipment is not shown: the till says an item is switched off when a printer is
+  disabled or a reader is disabled or unpaired; nothing stores whether a printer or reader is
+  online.
+- Also as built: a till's equipment list (`GET /api/device/equipment`) needs only a joined device,
+  not a signed-in person, so a locked till can see who holds an item on another device (staff
+  names are already public through `/api/staff`).
 
 ### Device zones and period menu memory (A740)
 

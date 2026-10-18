@@ -124,7 +124,7 @@ Picture: `mockups/a846-held-card-payments/01-record-what-was-done.png` (also `-d
   WASM. Also here: restoring `stripe_on_device` (Tap-to-Pay). Redsys and
   bank terminals are parked; Bizum research is under _Later and parked_.
   _2026-10-07: the printed QR sticker and the dropdown landed with W100 (#1332;
-  its open points are in [till.md](till.md#owner-questions-each-with-the-default-built-answer-when-convenient)).
+  its owner questions were answered 2026-10-07, every default kept: [till.md](till.md#device-equipment-defaults-w100-1332-owner-kept-every-default-2026-10-07)).
   One difference from the decision
   above: a card reader now has one holding device at a time, and a scan or a confirmed choice from
   the dropdown moves it to the waiter's device. NFC (W102) and Tap-to-Pay are still open._

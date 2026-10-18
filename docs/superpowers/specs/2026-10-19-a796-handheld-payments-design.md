@@ -74,11 +74,16 @@ hand.
   `apps/server/src/till-api.ts:329-334`). A device cannot opt out of its profile's default (W100's
   Q1, kept by the owner on 2026-10-07; `docs/backlog/till.md`).
 - **What the server remembers.** The phone's explicit choice (`device_card_readers`) outlives the
-  holding: disabling the device releases the reader but keeps the choice, and re-enabling takes it
-  back if free (`device-delete.ts:183`, `:201`; only deleting the device clears it, `:205`). A
-  takeover clears the losing phone's choice (`device-readers.ts:319-328`), and a profile move lets go
-  of a reader the new profile does not list (`settleDevice`). No "last reader used" survives a
-  takeover (`git grep -n -i "lastReader\|last_reader\|recentReader" -- apps packages`, no hits).
+  holding: disabling the device releases the reader but keeps the choice (`device-delete.ts:183`),
+  and re-enabling takes it back if free, and otherwise puts the device on Use default
+  (`apps/server/src/device.ts:117-119`; `settleDeviceReader`); only deleting the device clears it
+  (`device-delete.ts:205`). A takeover clears the losing phone's choice
+  (`device-readers.ts:319-328`), and a profile move lets go of a reader the new profile does not list
+  (`settleDevice`). No record of the last reader a phone _held_ survives a takeover
+  (`git grep -n -i "lastReader\|last_reader\|recentReader" -- apps packages`, no hits). The
+  `payments` rows keep the reader each payment was charged on (`payments.reader_id`,
+  `packages/payments/src/schema/payments.ts:60`, written at `packages/payments/src/store.ts:93`),
+  which is not the same as the last one picked up.
 - **Not shown:** whether a reader is reachable, or its battery; the battery only raises a dashboard
   alert (`apps/server/src/alert-sources.ts:706-717`).
 
@@ -130,25 +135,33 @@ hand.
   idempotency key per bill payment (`packages/payments-stripe/src/provider.ts:167-168`). A526 (#1579,
   `c7200b024`) added the matching check for presented orders (`refusePlacedPaymentInFlight`,
   `apps/server/src/till-sale.ts:1392`).
-- **Live defect (read, not run): a second guest's identical payment can be answered with the
-  first's.** The resend id is keyed on the bill plus the confirmed request (`submissionFor`,
-  `bill-payment.ts:144-150`), and an unanswered submission is kept until an answer comes
-  (`unansweredAfter`, `:173-177`; set at `till-app.ts:12130`). So: guest 1's "Aportar 20,00 €" by
-  card gets no answer (Wi-Fi drop) but is in fact charged; guest 2 then asks for the same 20,00 € by
-  card; the phone reuses guest 1's id, the server finds guest 1's payment with the same fingerprint
-  and replays it (`bill-payments.ts:1050-1055`). Guest 2's card is never asked, and the dialog says
-  "Pago cobrado". Equal shares escape it, because the people-left count changes the request. Fixed
+- **Live defect (read, not run): the next identical bill payment can be answered with the
+  unanswered one.** After a bill payment gets no answer, the till keeps its submission id keyed on
+  the bill and the confirmed request (`submissionFor`, `bill-payment.ts:144-150`, key
+  `JSON.stringify([billId, confirmation])` at `:149`). The confirmation carries only the request —
+  the way paid, the amount or lines, the method, the reader, what is applied and the tip — nothing
+  that names the guest. The kept submission changes only when a send ends (`unansweredAfter`,
+  `:173-177`; set at `till-app.ts:12130`, the one write besides its declaration at `:2640`): closing
+  the dialog, going back, reopening it or logging out keep it. So the next identical payment on that
+  bill from this phone reuses the id: a contribution of the same amount, the same units of the same
+  line, or the same cash handed over, by any method. The server replays the first payment
+  (`beginBillPayment`, `bill-payments.ts:1050-1055`): the second guest's payment is never recorded (a card is never asked), and
+  the dialog shows the first payment's state — "Pago cobrado" once it was charged, "El pago con
+  tarjeta sigue en curso…" while it is pending. An equal share escapes only when the number of people
+  left is lowered, because that number is part of the request (`bill-pay-dialog.ts:711-712`). Fixed
   here by default 7; logged in the backlog as its own entry, because it is live today.
 - **That id lives only in the page's memory** (`till-app.ts:2640`). An app-driven reload waits for
   it (`till-app.ts:1410-1422`); a phone that kills the browser loses it.
-- **A reader that stops answering.** SumUp's reader, the deli's, is polled up to 120 times a second
-  apart (`packages/payments-sumup/src/provider.ts:34-38`; Stripe's 60, `payments-stripe/src/provider.ts:65-66`),
-  under the phone's own 150-second limit. An unanswered payment stays pending, its amount reserved;
+- **A reader that stops answering.** SumUp's reader, the deli's, is polled up to 120 times, a second
+  apart, each poll a request to SumUp (`packages/payments-sumup/src/provider.ts:34-38`, `:266-276`;
+  Stripe's 60, `payments-stripe/src/provider.ts:65-66`); the phone stops waiting after 150 seconds
+  (`TABLE_REQUEST_LIMIT_MS`, `apps/till/src/state/draft-sync.ts:78`), which can come first. An unanswered payment stays pending, its amount reserved;
   the bill payment loop re-checks pending payments every minute and files the ones the provider
   reports charged (`apps/server/src/bill-payments-loop.ts:95-145`; `BILL_PENDING_RECHECK_MS`,
   `apps/server/src/boot.ts:498`; A764, #1818, for Stripe). The phone shows "El pago con tarjeta
   sigue en curso…" (`bill_pay.card_pending`) and **never re-reads by itself**: only on opening the
-  dialog, after an answer or after a refusal (`till-app.ts:12053`, `:12194`, `:12233`).
+  dialog, after an answer, after a refusal or after a refund (`till-app.ts:12053`, `:12194`,
+  `:12233`, `:12426`).
 - **A reader taken mid-payment.** For a bill payment the holder is checked twice: in
   `resolvePayReader`'s own transaction before anything is written (`till-api.ts:346`), and again in
   `insertAttempting` (`packages/payments/src/store.ts:163`) after the pending bill payment row has
@@ -159,15 +172,21 @@ hand.
 
 ### 2.4 Receipts, cash and the drawer
 
-- **The receipt prints on the paying phone's receipt printer**, automatically where the department
-  prints receipts automatically (`apps/server/src/receipt-print.ts:274-278`; the invoice is filed
-  under the paying device, `bill-payments.ts:1259-1260`). That printer is the phone's own choice or
+- **The receipt prints on the receipt printer of the phone that took the last payment**
+  (`bill-payments.ts:1259-1260`), automatically where the bill's zone, or else its department, prints
+  receipts automatically (`apps/server/src/receipt-print.ts:274-278`; `zoneReceiptMode ??
+  departmentReceiptMode`, `packages/venue-service/src/operations.ts:614`). A presented bill whose
+  invoice was already issued prints nothing on payment, on either path: only issuing an invoice
+  queues a receipt (`enqueueSaleReceipt` at `till-sale.ts:1023`, `:1633`, `:1798`; none in
+  `finalizeSettle` or collect's settle branch). That printer is the phone's own choice or
   its profile's default, or a portable printer it holds; **with none, nothing prints**, and
   provisioning seeds no printer (`git grep -n -i printer -- packages/provisioning/src ':!*.test.ts'`,
   no hits). The automatic print checks no profile action; `print-receipt` gates only explicit
-  prints, reprints and deliveries (`grep -n '"print-receipt"' apps/server/src/*.ts`). Another device
-  can reprint a sale on its own printer (`POST /api/transactions/:saleId/reprint`,
-  `apps/server/src/transaction-receipt-api.ts:43-68`).
+  prints, reprints and deliveries (`grep -n '"print-receipt"' apps/server/src/*.ts`). A reprint
+  prints on the requesting device's printer and needs that device's `print-receipt`, a receipt
+  printer, and the person's zones (`POST /api/transactions/:saleId/reprint`,
+  `apps/server/src/transaction-receipt-api.ts:43-68`). The till has no "nothing printed" message
+  today.
 - **No digital receipt for a simplified invoice.** Email exists only for full invoices
   (`apps/server/src/invoice-delivery-actions.ts:136`).
 - **A card on a connected reader never opens the drawer** (`takeReaderBillPayment`,
@@ -242,8 +261,8 @@ phone holds Lector 2.
   stays for a manager on the dashboard, as today.
 - **The phone loses Wi-Fi mid-payment** (picture 8, right). The card carries on, because the server
   drives the reader. Until an answer comes the sheet offers only **Comprobar de nuevo**, which resends
-  under the same id; no new payment can be started on that bill from this phone, which closes the
-  defect in §2.3 (default 7). If the browser was killed and the id lost, the reopened sheet shows the
+  under the same id; no new payment of any way or method can be started on that bill from this
+  phone, which closes the defect in §2.3 (default 7). If the browser was killed and the id lost, the reopened sheet shows the
   payment "En curso" with its amount reserved, and asks "Hay un pago con tarjeta en curso en esta
   cuenta. ¿Cobrar otro?" before another card on the same bill. The server is unchanged here: the
   owner kept W100's Q6 default (no rule against the holding phone starting two).
@@ -284,7 +303,8 @@ reset rather than migrated (`CLAUDE.md` §3). Nothing in payment handling change
 `packages/identity/src/permissions.ts:45`). The device's profile needs the action for the method, as
 the route-to-action map at the top of `apps/server/src/till-api.profile-actions.test.ts` records:
 row `:87`, bill payments — `take-cash` / `hand-keyed-card-payment` / `integrated-card-payment`; row
-`:75`, `POST /api/pay` — `integrated-card-payment`; row `:86`, collect — `take-cash` /
+`:75`, `POST /api/pay` — `integrated-card-payment`, then `take-orders` (both checked,
+`till-api.ts:1691-1692`); row `:86`, collect — `take-cash` /
 `hand-keyed-card-payment`; rows `:101-102`, `print-receipt` for a print or reprint. Picking up a
 reader needs no action (`:136-137`, "choosing equipment is not printing, paying or opening the
 drawer"). No drawer action is involved.
@@ -356,26 +376,34 @@ are given.
 5. **Takeover rules stay as built**: scan takes, list asks, busy refuses (W100, kept by the owner
    2026-10-07).
 6. **Pick-up happens inside the sheet**, and the remembered reader is the last one this phone held,
-   kept on the phone, shown first and labelled, never selected. The server's own record of the
-   phone's choice is not enough: a takeover clears it (`device-readers.ts:319-328`). Hardware
-   decisions O4: "The handheld should remember the last reader used, but only as a convenience".
-7. **While a payment is unanswered the sheet offers only "Comprobar de nuevo"** (same id), and before
-   a second card on a bill with a card in progress it asks first. This closes the §2.3 defect on the
+   kept on the phone, shown first and labelled, never selected. The server's record of the phone's
+   choice is not enough, because a takeover clears it (`device-readers.ts:319-328`); and the reader
+   of this phone's last payment (`payments.reader_id`) is not either, because a waiter picks a
+   reader up before charging on it, and may pick one up and hand it on without charging. "Last
+   held" is the fact O4 names: "The handheld should remember the last reader used, but only as a
+   convenience". Kept on the phone, it needs no server change.
+7. **While a bill payment of any way or method is unanswered, the sheet offers only "Comprobar de
+   nuevo"** (same id) for that bill — no new payment, and the kept id is dropped only when an answer
+   comes — and before a second card on a bill with a card in progress it asks first. This closes the §2.3 defect on the
    phone. **The server is unchanged**: W100's Q6 default ("app-level checks stop OTHER devices, not
    the holder starting two at once") was kept by the owner on 2026-10-07 ("Ok", keep every default;
    lane C's questions file, 2026-10-07 ~08:50).
 8. **An uncertain payment re-reads itself** every 5 seconds while the sheet shows it, and says not to
    take the same guest's money another way.
-9. **No Cancel while the card is at the reader**: no route cancels a bill payment at the reader today.
+9. **No Cancel while the card is at the reader**: no route cancels a card at a real reader today (the
+   only cancel route, `POST /api/demo-reader/cancel`, is the simulator's pretend reader, mounted only
+   for it, `till-api.ts:1178`, `:1220`).
 10. **"Cobrar al siguiente"** after a share, keeping the way chosen.
 11. **Settled: the table closes only on Cerrar mesa**, now a big button on the paid screen. Service
     design §8 (owner-approved 2026-09-26): "Paying does not by itself free an occupied table. By
     default, **Finish table** closes the visit." Once built, it first runs A758's check (D12, owner
     answer Q40, 2026-10-18): "Finish table warns about dishes not served and offers 'Cancel and
     refund' or 'Cancel, no refund'".
-12. **Receipts keep today's rules**: the paying phone's receipt printer, automatic where the department
-    prints automatically; with no printer the paid screen says none printed and that another device
-    can reprint it. No digital receipt.
+12. **Receipts keep today's printing rules**: on paying, the paying phone's receipt printer prints
+    automatically where the bill's zone (or its department) prints automatically; a presented bill
+    whose invoice was already issued prints nothing on payment. New: with nothing printed, the paid
+    screen says so, and that a device whose profile may print receipts can reprint it. No digital
+    receipt.
 13. **Tips: A793's seam only.**
 14. **Whether the sheet sits at the foot of the screen** (as drawn) or stays a centred dialog is left
     to the plan; it is the shared `wt-dialog` either way.
@@ -400,14 +428,20 @@ are given.
 **Q1. How often should the phone ask which reader is in the waiter's hand — on the first card of each
 bill, or before every card?**
 Example: Mesa 4, three guests, 62,40 €, split three ways. Ana confirms Lector 2 for the first guest's
-20,80 €. A minute later the second guest pays. Your 2026-09-18 note says a remembered reader "goes
-stale between bills"; within one bill it is the same reader in the same hand.
+20,80 €. A minute later the second guest pays. Usually Lector 2 is still in Ana's hand at the table,
+but not always: if Ana put it down to fetch the change and Marc took it to Mesa 9 without scanning
+it, Ana's phone still holds Lector 2, and charging it would show 20,80 € to Marc's guest (§4).
 - (a) **First card of each bill** (picture 4): the second and third guests' cards go straight to
   Lector 2, still named on the screen with Cambiar beside it; the next table's first card asks again.
-- (b) **Every card** (picture 5): the same question three times for Mesa 4.
+  One tap per bill; the rarer case of the reader changing hands in the middle of a bill is left to
+  the waiter reading the reader's name on the screen.
+- (b) **Every card** (picture 5): the question before each guest's card, three times for Mesa 4. It
+  closes that case too, at one tap per guest.
 
-Recommended: **(a)** — it guards the moment the reader can have changed hands (between bills) without
-an extra tap per guest, in keeping with "straight to work".
+Recommended: **(a)** — the reader is most likely to have changed hands between bills, when it goes
+back to the bar or to another waiter; within a bill it usually stays at one table, and the name on the
+button is still in front of the waiter. "Straight to work" argues against a tap per guest. Choose (b)
+if readers are often passed between waiters during service.
 
 ## 10. Provenance
 

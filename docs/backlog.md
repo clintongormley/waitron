@@ -3032,9 +3032,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     and "Who can sign in" could become widgets of their own.
 
 - **Loose ends left by W100 (#1332).**
-  - Owner questions, each with the default built (answer when convenient). Removed: staff can no
-    longer switch a device's printing off. Not shown: whether equipment is disconnected.
-    [Detail](backlog/till.md#owner-questions-each-with-the-default-built-answer-when-convenient)
+  - Its owner questions were answered 2026-10-07: every default kept (staff cannot switch a
+    device's printing off; disconnected equipment is not shown).
+    [Decision](backlog/till.md#device-equipment-defaults-w100-1332-owner-kept-every-default-2026-10-07)
   - If the till's last 15-second check said a reader was busy and that payment has since finished,
     picking it skips "Take it?" and the server refuses it as held, so staff pick again. Found by
     reading, not run.
@@ -3692,15 +3692,16 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   ([native app capabilities](superpowers/specs/2026-08-30-native-app-capabilities.md), N1/N2).
   [Detail](backlog/payments.md#slice-2--the-handheld-nfcqr-link)
 
-- **A second guest's identical bill payment can be answered with the first guest's** (read, not
-  run; found by A796's review). After a card bill payment gets no answer, the till keeps its
-  submission id keyed on the bill and the confirmed request (`submissionFor`,
-  `apps/till/src/state/bill-payment.ts`), so a second guest's identical "Aportar" of the same amount
-  reuses it and the server replays the first payment (`beginBillPayment`,
-  `apps/server/src/bill-payments.ts`): the second card is never asked, and the dialog says "Pago
-  cobrado". Equal shares escape it. Fix: while a payment is unanswered, offer only the resend (A796
-  design, default 7). First write the failing till case: an unanswered contribution, then an
-  identical one for the next guest.
+- **The next identical bill payment can be answered with an unanswered one** (read, not run; found
+  by A796's review). After a bill payment gets no answer, the till keeps its submission id keyed on
+  the bill and the confirmed request (`submissionFor`, `apps/till/src/state/bill-payment.ts`), so
+  the next identical payment on that bill from this phone reuses it. That covers a contribution of
+  the same amount, the same units of the same line, or the same cash handed over. The server then
+  replays the first payment (`beginBillPayment`, `apps/server/src/bill-payments.ts`): the second
+  guest's payment is never recorded (a card is never asked), and the dialog shows the first payment's state ("Pago cobrado" once
+  it was charged). An equal share escapes only when the number of people left is lowered. Fix:
+  while a payment is unanswered, offer only the resend (A796 design, default 7). First write the
+  failing till case: an unanswered contribution, then an identical one for the next guest.
 
 - **Loose ends left by W102 (NFC and equipment labels).**
   - **Check NFC pick-up on the box's address.** On the OnePlus 13, grant NFC at
