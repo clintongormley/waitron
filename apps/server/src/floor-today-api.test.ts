@@ -17,6 +17,8 @@ import {
   floorZones,
   locations,
   partyTables,
+  ticketItems,
+  workingOrders,
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
@@ -30,6 +32,7 @@ import {
 import { readLayout, saveLayout } from "./floor-plan.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { resetZone } from "./floor-today-store.js";
+import { placeGroups } from "./order-groups.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 
@@ -37,6 +40,8 @@ import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import {
   inTx,
+  OPERATOR,
+  pricedInZone,
   revisionOf,
   setupPartyVenue,
   tableRow,
@@ -1554,5 +1559,257 @@ describe("Reset to … plan", () => {
     const record = await recordOf(d.zoneId);
     expect(record).toMatchObject({ businessDay: "2026-10-12", setId: d.dinner });
     expect(record!.occurrence).not.toBeNull();
+  });
+});
+
+describe("Update layout", () => {
+  /** Venue times are Madrid's; Lunch runs 12:00-15:00 and Dinner 20:00-23:00. */
+  const LUNCH = new Date("2026-10-12T13:00:00+02:00");
+  const AFTER_LUNCH = new Date("2026-10-12T16:20:00+02:00");
+
+  /**
+   * The owner's example: Standard stands 1, 3, 4, 5 and 9 at 0-80 and leaves 4+5 off; Dinner
+   * stands 1 at 100, 3 at 120, 4+5 at 140 and 9 at 160. Read at Lunch, so Standard is recorded.
+   */
+  async function ownersExample() {
+    fixedAt = LUNCH;
+    const tag = randomUUID().slice(0, 6);
+    const s = await standardAndDinner(
+      v,
+      LUNCH,
+      [
+        { key: "one", label: `1 ${tag}` },
+        { key: "three", label: `3 ${tag}` },
+        { key: "four", label: `4 ${tag}` },
+        { key: "five", label: `5 ${tag}` },
+        { key: "joined", label: `4+5 ${tag}`, partKeys: ["four", "five"] },
+        { key: "nine", label: `9 ${tag}` },
+      ],
+      {
+        standard: { one: 0, three: 20, four: 40, five: 60, joined: null, nine: 80 },
+        dinner: { one: 100, three: 120, four: null, five: null, joined: 140, nine: 160 },
+      },
+    );
+    expect((await send("GET", "/api/tables/state")).status).toBe(200);
+    return s;
+  }
+
+  async function offered(zoneId: string) {
+    const zones = (await (await send("GET", "/api/zones")).json()) as {
+      id: string;
+      layoutDue: { setId: string; revision: number; periodName: string | null } | null;
+    }[];
+    return zones.find((zone) => zone.id === zoneId)!.layoutDue;
+  }
+
+  async function updateLayout(zoneId: string, body: unknown): Promise<Response> {
+    return send(
+      "POST",
+      `/api/zones/${zoneId}/today/update-layout`,
+      await withZoneRevision(v, zoneId, body),
+    );
+  }
+
+  async function recordOf(zoneId: string) {
+    const [row] = await inTx(v, (tx) =>
+      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
+    );
+    return row;
+  }
+
+  const layoutChanged = (zoneId: string) => ({
+    status: 409,
+    body: { error: { code: "floor_today.layout_changed", params: { zoneId } } },
+  });
+
+  it("applies the offered layout and records it", async () => {
+    const { d, live } = await ownersExample();
+    expect(await recordOf(d.zoneId)).toMatchObject({ setId: d.standard });
+    await expectRevision(v, today(live("nine"), "take-off"), d.zoneId);
+    const partyId = await seatAt(live("three"));
+    fixedAt = AFTER_LUNCH;
+    const offer = (await offered(d.zoneId))!;
+    expect(offer).toMatchObject({ setId: d.dinner, periodName: "Dinner" });
+
+    await expectRevision(
+      v,
+      updateLayout(d.zoneId, { setId: offer.setId, layoutRevision: offer.revision }),
+      d.zoneId,
+    );
+
+    expect(await todayRow(v, live("one"))).toMatchObject({ x: 100 });
+    expect(await todayRow(v, live("joined"))).toMatchObject({ x: 140, takenOff: false });
+    expect(await inService(live("joined"))).toBe(true);
+    expect(await todayRow(v, live("four"))).toMatchObject({ x: null });
+    expect(await todayRow(v, live("five"))).toMatchObject({ x: null });
+    expect(await todayRow(v, live("nine"))).toMatchObject({ x: 160, takenOff: true });
+    expect(await todayRow(v, live("three"))).toMatchObject({ x: 20 });
+    expect(await recordOf(d.zoneId)).toMatchObject({
+      setId: d.dinner,
+      layoutRevision: offer.revision,
+      occurrence: JSON.stringify([d.departmentId, "2026-10-12", d.dinnerPeriod, "20:00"]),
+    });
+    expect(await offered(d.zoneId)).toBeNull();
+
+    await finish(partyId);
+    expect(await floorToday(live("three"))).toMatchObject({
+      placement: { x: 20 },
+      needsMoving: true,
+    });
+  });
+
+  it("refuses a layout no longer due, and writes nothing", async () => {
+    const { d } = await ownersExample();
+    fixedAt = AFTER_LUNCH;
+    const offer = (await offered(d.zoneId))!;
+    const from = (await zoneRevisionOf(v, d.zoneId))!;
+    const before = await everything();
+    const record = await recordOf(d.zoneId);
+
+    for (const sent of [
+      { setId: d.standard, layoutRevision: offer.revision },
+      { setId: d.dinner, layoutRevision: offer.revision + 1 },
+      { setId: randomUUID(), layoutRevision: offer.revision },
+    ]) {
+      expect(await refusal(updateLayout(d.zoneId, sent))).toEqual(layoutChanged(d.zoneId));
+    }
+
+    expect(await everything()).toEqual(before);
+    expect(await recordOf(d.zoneId)).toEqual(record);
+    expect(await zoneRevisionOf(v, d.zoneId)).toBe(from);
+  });
+
+  it("checks the room first: a stale revision is out of date though the layout also changed", async () => {
+    const { d } = await ownersExample();
+    fixedAt = AFTER_LUNCH;
+    const from = (await zoneRevisionOf(v, d.zoneId))!;
+
+    expect(
+      await refusal(
+        updateLayout(d.zoneId, { zoneRevision: from - 1, setId: d.standard, layoutRevision: 0 }),
+      ),
+    ).toEqual({
+      status: 409,
+      body: {
+        error: { code: "floor_today.out_of_date", params: { zoneId: d.zoneId, revision: from } },
+      },
+    });
+    expect(await zoneRevisionOf(v, d.zoneId)).toBe(from);
+  });
+
+  it("refuses a malformed body", async () => {
+    const { d } = await ownersExample();
+    for (const [body, field] of [
+      [{ setId: "nope", layoutRevision: 0 }, "setId"],
+      [{ layoutRevision: 0 }, "setId"],
+      [{ setId: d.dinner, layoutRevision: -1 }, "layoutRevision"],
+      [{ setId: d.dinner, layoutRevision: 1.5 }, "layoutRevision"],
+      [{ setId: d.dinner }, "layoutRevision"],
+    ] as const) {
+      const answer = await refusal(updateLayout(d.zoneId, body));
+      expect(answer.status, JSON.stringify(body)).toBe(400);
+      expect(answer.body, JSON.stringify(body)).toMatchObject({ error: { params: { field } } });
+    }
+  });
+
+  it("keeps a party's table, bills and tickets", async () => {
+    const { d, live } = await ownersExample();
+    const partyId = await seatAt(live("three"));
+    const burger = await pricedInZone(v, d.zoneId, "Burger", "12.00");
+    await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [{ lines: [{ menuItemId: burger, quantity: "1" }], release: "fire" }],
+        operatorId: OPERATOR,
+      }),
+    );
+    const kept = async () => ({
+      parties: await inTx(v, (tx) =>
+        tx.select().from(partyTables).where(eq(partyTables.partyId, partyId)),
+      ),
+      bills: await inTx(v, (tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.partyId, partyId)),
+      ),
+      tickets: await inTx(v, (tx) => tx.select().from(ticketItems).orderBy(asc(ticketItems.id))),
+    });
+    const before = await kept();
+    expect(before.parties).toHaveLength(1);
+    expect(before.bills.length).toBeGreaterThan(0);
+    expect(before.tickets.length).toBeGreaterThan(0);
+    // pricedInZone serves the burger through an all-day period; it picks Dinner's set here.
+    await inTx(v, (tx) =>
+      tx
+        .update(menuPeriods)
+        .set({ floorPlanSetId: d.dinner })
+        .where(eq(menuPeriods.departmentId, d.departmentId)),
+    );
+    fixedAt = AFTER_LUNCH;
+    const offer = (await offered(d.zoneId))!;
+    expect(offer).toMatchObject({ setId: d.dinner });
+
+    await expectRevision(
+      v,
+      updateLayout(d.zoneId, { setId: offer.setId, layoutRevision: offer.revision }),
+      d.zoneId,
+    );
+
+    expect(await kept()).toEqual(before);
+    expect(await todayRow(v, live("three"))).toMatchObject({ x: 20 });
+  });
+
+  /**
+   * 4 and 5 stand at 40 and 60 with 4+5 off in both sets; Dinner moves 5 to 160, and `spare`
+   * stands at 0. At Lunch 5 is taken off and guests sit at 4, so Update layout leaves the group
+   * waiting for them.
+   */
+  async function waitingGroup() {
+    fixedAt = LUNCH;
+    const tag = randomUUID().slice(0, 6);
+    const s = await standardAndDinner(
+      v,
+      LUNCH,
+      [
+        { key: "four", label: `4 ${tag}` },
+        { key: "five", label: `5 ${tag}` },
+        { key: "joined", label: `4+5 ${tag}`, partKeys: ["four", "five"] },
+        { key: "spare", label: `S ${tag}` },
+      ],
+      {
+        standard: { four: 40, five: 60, joined: null, spare: 0 },
+        dinner: { four: 40, five: 160, joined: null, spare: 0 },
+      },
+    );
+    const { d, live } = s;
+    expect((await send("GET", "/api/tables/state")).status).toBe(200);
+    await expectRevision(v, today(live("five"), "take-off"), d.zoneId);
+    const partyId = await seatAt(live("four"));
+    fixedAt = AFTER_LUNCH;
+    const offer = (await offered(d.zoneId))!;
+    await expectRevision(
+      v,
+      updateLayout(d.zoneId, { setId: offer.setId, layoutRevision: offer.revision }),
+      d.zoneId,
+    );
+    expect(await todayRow(v, live("five"))).toMatchObject({ x: 60, takenOff: true });
+    return { ...s, partyId };
+  }
+
+  it("keeps a taken-off table that waits with its joined group off when the group applies later", async () => {
+    const { live, partyId } = await waitingGroup();
+
+    await finish(partyId);
+
+    expect(await floorToday(live("four"))).toMatchObject({ needsMoving: false });
+    expect(await todayRow(v, live("five"))).toMatchObject({ x: 160, takenOff: true });
+  });
+
+  it("applies a waiting taken-off table later though a table stands at its new place", async () => {
+    const { live, partyId } = await waitingGroup();
+    await expectRevision(v, today(live("spare"), "move", { x: 160, y: 0 }));
+
+    await finish(partyId);
+
+    expect(await floorToday(live("four"))).toMatchObject({ needsMoving: false });
+    expect(await todayRow(v, live("five"))).toMatchObject({ x: 160, takenOff: true });
+    expect(await todayRow(v, live("spare"))).toMatchObject({ x: 160 });
   });
 });

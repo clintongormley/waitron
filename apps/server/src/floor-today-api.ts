@@ -24,6 +24,7 @@ import {
   seatsToday,
   takeOffToday,
   todayBusinessDay,
+  updateLayout,
 } from "./floor-today-store.js";
 import { plannedZones } from "./floor-layout-due.js";
 import { writeMerge } from "./floor-today-merges.js";
@@ -243,11 +244,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       const sent = await resetRevision(c);
       const revision = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ zoneId }]);
-        const [zone] = await tx
-          .select({ active: floorZones.active })
-          .from(floorZones)
-          .where(and(eq(floorZones.id, zoneId), eq(floorZones.locationId, deps.cfg.locationId)));
-        if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
+        const active = await zoneActive(tx, deps.cfg, zoneId);
         const now = deps.clock.now().instant;
         await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
@@ -255,7 +252,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         else if (await hasTodayRow(tx, deps.cfg.locationId, zoneId)) {
           throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
         }
-        if (!zone.active) return from;
+        if (!active) return from;
         const onto = await recordedOnto(tx, deps.cfg, zoneId, now);
         if (onto === null) return from;
         return (
@@ -266,6 +263,43 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       return c.json({ zoneId, revision });
     }),
   );
+
+  app.post("/api/zones/:id/today/update-layout", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
+      const zoneId = id.toLowerCase();
+      const body = await bodyOf(c);
+      const sent = requiredRevision(body);
+      if (typeof body.setId !== "string" || !isUuid(body.setId)) throw invalid("setId");
+      const layout = {
+        setId: body.setId.toLowerCase(),
+        layoutRevision: whole(body.layoutRevision, "layoutRevision", 0, Number.MAX_SAFE_INTEGER),
+      };
+      const revision = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ zoneId }]);
+        const active = await zoneActive(tx, deps.cfg, zoneId);
+        const now = deps.clock.now().instant;
+        await ensureToday(tx, deps.cfg, removals, now);
+        const from = await roomRevision(tx, zoneId);
+        refuseStale(zoneId, sent, from);
+        if (!active) return from;
+        return updateLayout(tx, deps.cfg, removals, zoneId, now, layout);
+      });
+      return c.json({ zoneId, revision });
+    }),
+  );
+}
+
+/** Whether the venue's zone is enabled; refuses `zone.not_found` for none. */
+async function zoneActive(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<boolean> {
+  const [zone] = await tx
+    .select({ active: floorZones.active })
+    .from(floorZones)
+    .where(and(eq(floorZones.id, zoneId), eq(floorZones.locationId, cfg.locationId)));
+  if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
+  return zone.active;
 }
 
 /**

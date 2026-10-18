@@ -749,9 +749,7 @@ describe("building today's plan from a zone's master plan", () => {
         .set({ pending: true, placed: false, remove: false })
         .where(eq(floorResetTables.tableId, t1)),
     );
-    await inTx(v, (tx) =>
-      catchUpZone(tx, v.cfg, NONE, z, NOW, { inReset: true, keepTakenOff: false }),
-    );
+    await inTx(v, (tx) => catchUpZone(tx, v.cfg, NONE, z, NOW, { inReset: true }));
 
     expect(await todayRow(u1)).toMatchObject({ x: 30, y: 40, rotation: 90 });
     expect(await mergeMembersIn(z)).toEqual([]);

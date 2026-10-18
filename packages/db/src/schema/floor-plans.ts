@@ -241,6 +241,8 @@ export const floorResetTables = table(
     // Today's row has been set from the target; a pending row then waits only for its name.
     placed: flag("placed").notNull().default(false),
     readyToMove: flag("ready_to_move").notNull().default(false),
+    // Applying the row leaves today's table taken off when it still is (Update layout copies it).
+    takenOff: flag("taken_off").notNull().default(false),
   },
   (t) => [
     unique("floor_reset_tables_table_key").on(t.tableId),

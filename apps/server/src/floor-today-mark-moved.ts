@@ -130,7 +130,6 @@ export async function markMoved(
 
   await catchUpZone(tx, cfg, removals, zoneId, now, {
     inReset: false,
-    keepTakenOff: false,
     carry: new Set(group.map(({ row }) => row.id)),
   });
   if (await tableNeedsMoving(tx, tableId))

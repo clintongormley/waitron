@@ -145,6 +145,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/tables/:id/today/reset                        | table; body parts      | refuses .../today/reset (table), (part)              |
  * | POST /api/tables/:id/today/name                         | table                  | refuses POST /api/tables/:id/today/name              |
  * | POST /api/zones/:id/today/reset                         | path zone              | refuses POST /api/zones/:id/today/reset              |
+ * | POST /api/zones/:id/today/update-layout                 | path zone              | refuses POST /api/zones/:id/today/update-layout      |
  * | POST /api/parties/:id/finish                            | party                  | refuses POST /api/parties/:id/finish                 |
  * | POST /api/parties/:id/bill-request                      | party                  | refuses POST /api/parties/:id/bill-request           |
  * | PUT  /api/parties/:id/name                              | party                  | refuses PUT /api/parties/:id/name                    |
@@ -882,6 +883,13 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/zones/${x.deliTables}/today/reset`,
     () => ({ zoneRevision: 0 }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/zones/:id/today/update-layout",
+    "POST",
+    (x) => `/api/zones/${x.deliTables}/today/update-layout`,
+    () => ({ zoneRevision: 0, setId: randomUUID(), layoutRevision: 0 }),
     deliTableZone,
   ],
   [

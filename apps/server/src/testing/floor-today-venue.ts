@@ -438,7 +438,7 @@ export async function withFloorRevision(
 ): Promise<unknown> {
   const table = /^\/api\/tables\/([^/]+)\/today\//.exec(path)?.[1];
   if (table !== undefined) return withRevision(v, table, body);
-  const zone = /^\/api\/zones\/([^/]+)\/today\/reset$/.exec(path)?.[1];
+  const zone = /^\/api\/zones\/([^/]+)\/today\/(?:reset|update-layout)$/.exec(path)?.[1];
   return zone === undefined ? body : withZoneRevision(v, zone, body);
 }
 

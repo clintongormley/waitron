@@ -127,7 +127,7 @@ export async function resetZone(
   onto: ResetOnto | "due",
   { keepTakenOff = false }: { keepTakenOff?: boolean } = {},
 ): Promise<number | null> {
-  const options: CatchUp = { inReset: true, keepTakenOff };
+  const options: ResetOptions = { keepTakenOff };
   await requireZone(tx, cfg, zoneId);
   const day = await todayBusinessDay(tx, cfg, now);
   if (day === null) return null;
@@ -139,6 +139,43 @@ export async function resetZone(
   const due = dueOnto(states.get(zoneId)!);
   if (due === null) return null;
   return resetZoneFor(tx, cfg, removals, zoneId, day, now, due, rows.get(zoneId), options);
+}
+
+/**
+ * Update layout: resets the zone onto the layout due at `now`, keeping taken-off tables off, when
+ * it is the one `sent` names; refuses `floor_today.layout_changed` otherwise. Answers the room's
+ * new revision.
+ */
+export async function updateLayout(
+  tx: Transaction,
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+  zoneId: string,
+  now: Date,
+  sent: { setId: string; layoutRevision: number },
+): Promise<number> {
+  const day = await todayBusinessDay(tx, cfg, now);
+  const { states, rows } = await zoneLayoutsOn(tx, cfg, [zoneId], now, day);
+  const due = states.get(zoneId)!.due;
+  if (
+    day === null ||
+    due === null ||
+    due.setId !== sent.setId ||
+    due.revision !== sent.layoutRevision
+  ) {
+    throw new AppError("floor_today.layout_changed", { zoneId });
+  }
+  return resetZoneFor(
+    tx,
+    cfg,
+    removals,
+    zoneId,
+    day,
+    now,
+    { setId: due.setId, occurrence: due.occurrence },
+    rows.get(zoneId),
+    { keepTakenOff: true },
+  );
 }
 
 function dueOnto(state: ZoneLayoutState): ResetOnto | null {
@@ -157,6 +194,11 @@ async function layoutRowOf(
   return row;
 }
 
+interface ResetOptions {
+  /** Each reset row copies whether its table is taken off today, rather than clearing it. */
+  keepTakenOff: boolean;
+}
+
 /** Answers the room's new revision. */
 async function resetZoneFor(
   tx: Transaction,
@@ -167,7 +209,7 @@ async function resetZoneFor(
   now: Date,
   onto: ResetOnto,
   layout: LayoutRow | undefined,
-  options: CatchUp,
+  { keepTakenOff }: ResetOptions,
 ): Promise<number> {
   const [today] = await tx
     .select({ id: floorTodayZones.id, revision: floorTodayZones.revision })
@@ -211,6 +253,7 @@ async function resetZoneFor(
       ),
     );
   await tx.delete(floorResetTables).where(eq(floorResetTables.zoneId, zoneId));
+  const takenOff = keepTakenOff ? await takenOffIn(tx, live) : new Set<string>();
   if (targets.length > 0) {
     const written = await tx
       .insert(floorResetTables)
@@ -222,13 +265,34 @@ async function resetZoneFor(
           ...targetRow(target),
           remove: target.remove,
           pending: true,
+          takenOff: target.tableId !== null && takenOff.has(target.tableId),
         })),
       )
       .returning({ id: floorResetTables.id, planTableId: floorResetTables.planTableId });
     await copyParts(tx, zoneId, written);
   }
-  await catchUpZone(tx, cfg, removals, zoneId, now, options);
+  await catchUpZone(tx, cfg, removals, zoneId, now, { inReset: true });
   return revision;
+}
+
+async function takenOffIn(
+  tx: Transaction,
+  tables: readonly { id: string }[],
+): Promise<Set<string>> {
+  if (tables.length === 0) return new Set();
+  const rows = await tx
+    .select({ tableId: floorTodayTables.tableId })
+    .from(floorTodayTables)
+    .where(
+      and(
+        inArray(
+          floorTodayTables.tableId,
+          tables.map((table) => table.id),
+        ),
+        eq(floorTodayTables.takenOff, true),
+      ),
+    );
+  return new Set(rows.map((row) => row.tableId));
 }
 
 /** Skips a joined table more than one live table follows: its parts would join two copied tables. */
@@ -276,8 +340,6 @@ function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
 export interface CatchUp {
   /** The catch-up runs inside a reset of the zone. */
   inReset: boolean;
-  /** A table taken off today stays off at its new place. */
-  keepTakenOff: boolean;
   /** Marked reset rows Mark moved applies though their tables move. */
   carry?: ReadonlySet<string>;
 }
@@ -289,7 +351,7 @@ export async function catchUpZone(
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
-  options: CatchUp = { inReset: false, keepTakenOff: false },
+  options: CatchUp = { inReset: false },
 ): Promise<void> {
   while (await catchUpPass(tx, cfg, removals, zoneId, now, options));
 }
@@ -305,7 +367,7 @@ async function catchUpPass(
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
-  { inReset, keepTakenOff, carry = new Set() }: CatchUp,
+  { inReset, carry = new Set() }: CatchUp,
 ): Promise<boolean> {
   const zoneRows = await tx
     .select({
@@ -512,7 +574,7 @@ async function catchUpPass(
         continue;
       }
       // A taken-off table that stays off at its new place is put down on nothing.
-      const keepOff = keepTakenOff || row.readyToMove;
+      const keepOff = row.takenOff || row.readyToMove;
       if (keepOff && todayRows.get(target.tableId!)?.takenOff === true) continue;
       offMoving.push({ tableId: target.tableId!, from: null, to: target.placement });
     }
@@ -625,9 +687,9 @@ async function catchUpPass(
     if (rowOf.get(target)!.placed) continue;
     placedNow.add(target);
     await leaveMerges(tx, [tableId]);
-    // A marked row's table taken off now stays off at its new place (owner ruling: staff took it
-    // off after the reset).
-    const keepOff = keepTakenOff || rowOf.get(target)!.readyToMove;
+    // A table still taken off stays off at its new place when its row says so, or when the row was
+    // marked, as staff then took it off after the reset (owner ruling).
+    const keepOff = rowOf.get(target)!.takenOff || rowOf.get(target)!.readyToMove;
     const columns = todayColumns(target, keepOff && todayRows.get(tableId)?.takenOff === true);
     await tx
       .insert(floorTodayTables)
@@ -912,7 +974,6 @@ export async function ensureToday(
       const onto = dueOnto(layouts.states.get(zoneId)!);
       if (layout !== undefined && onto !== null) {
         await resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout, {
-          inReset: true,
           keepTakenOff: false,
         });
       }
@@ -981,9 +1042,9 @@ export function catchUpDue(zoneId: SQLWrapper): SQL {
 
 /**
  * catchUpPass's rule for a row it would put down off the map, in SQL: the row is not yet placed,
- * has a place, its table is not drawn (and is not a marked one taken off, which stays off), and a
- * table drawn in the zone stands in that place: not out of service in a joined table, not needing
- * moving, and not a pending member of a joined group holding the row, which moves with it.
+ * has a place, its table is not drawn (and is not a taken-off one its row or its mark keeps off),
+ * and a table drawn in the zone stands in that place: not out of service in a joined table, not
+ * needing moving, and not a pending member of a joined group holding the row, which moves with it.
  */
 function placeTaken(r: typeof dueRow | typeof dueMember): SQL {
   const own = sql.identifier("place_own");
@@ -1004,7 +1065,7 @@ function placeTaken(r: typeof dueRow | typeof dueMember): SQL {
       where ${col(own, "table_id")} = ${r.tableId}
         and (
           (${col(own, "x")} is not null and ${col(own, "taken_off")} = 0)
-          or (${r.readyToMove} = 1 and ${col(own, "taken_off")} = 1)
+          or ((${r.readyToMove} = 1 or ${r.takenOff} = 1) and ${col(own, "taken_off")} = 1)
         )
     )
     and exists (
