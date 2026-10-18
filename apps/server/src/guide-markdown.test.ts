@@ -163,6 +163,16 @@ describe("renderGuide", () => {
     );
   });
 
+  it.each([
+    ["on its own", (n: number) => `${"_a ".repeat(n)}b${"_".repeat(n)}`],
+    ["inside bold", (n: number) => `**${"_a ".repeat(n)}b${"_".repeat(n)}**`],
+  ])("refuses deeply nested emphasis %s quickly, naming the line", (_name, nested) => {
+    const started = performance.now();
+
+    expect(() => render(`# T\n\n${nested(8000)}\n`)).toThrow("line 3: emphasis inside emphasis");
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("shortens a long refused line in the message", () => {
     const row = `| ${"a".repeat(100)} |`;
 
@@ -289,6 +299,15 @@ describe("renderGuide", () => {
     ["emphasis in a heading", "# T\n\n## An _em_ one {#e}\n", 3, "formatting in a heading"],
     ["bold in the title", "# The **T**\n", 1, "formatting in a heading"],
     ["an id on the title", "# T {#x}\n", 1, "an id on the title"],
+    ["emphasis inside emphasis", "# T\n\nx _a _b__ c\n", 3, "emphasis inside emphasis"],
+    ["emphasis inside emphasis inside bold", "# T\n\n**_a _b__**\n", 3, "emphasis inside emphasis"],
+    ["a second id in a heading", "# T\n\n## A {#x} {#y}\n", 3, "a second {#"],
+    [
+      "a mail address in angle brackets without a scheme",
+      "# T\n\nwrite to <a@b.es>\n",
+      3,
+      "an address in angle brackets",
+    ],
     ["a link with no text", "# T\n\n[](products.md)\n", 3, "a link with no text"],
   ])("refuses %s", (_name, markdown, line, found) => {
     expect(() => render(markdown)).toThrow(`line ${line}: `);

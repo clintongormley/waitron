@@ -20,7 +20,6 @@ const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
 const NUMBERED_ITEM = /^\d+[.)] /;
 const RULE_OR_UNDERLINE = /^(?:-+|=+|\*+|_+)$/;
 const HTML_ENTITY = /&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);/y;
-const LETTER = /[A-Za-z]/;
 
 interface SourceLine {
   text: string;
@@ -122,7 +121,12 @@ function linkTarget(context: InlineContext, target: string, offset: number): str
   return id === undefined ? page : `${page}#${id}`;
 }
 
-function renderInline(context: InlineContext, from: number, to: number): string {
+function renderInline(
+  context: InlineContext,
+  from: number,
+  to: number,
+  inEmphasis: boolean,
+): string {
   const { text } = context;
   let out = "";
   let index = from;
@@ -137,7 +141,7 @@ function renderInline(context: InlineContext, from: number, to: number): string 
       if (text[index + 1] !== "*") failAt(context, index, "a single * that is not part of **");
       const close = findBefore(text, "**", index + 2, to);
       if (close === -1) failAt(context, index, "an unclosed **");
-      out += `<strong>${renderInline(context, index + 2, close)}</strong>`;
+      out += `<strong>${renderInline(context, index + 2, close, inEmphasis)}</strong>`;
       index = close + 2;
     } else if (character === "!" && text[index + 1] === "[") {
       failAt(context, index, "an image");
@@ -149,15 +153,16 @@ function renderInline(context: InlineContext, from: number, to: number): string 
       if (end === -1) failAt(context, index, "a link whose target is not closed with )");
       if (close === index + 1) failAt(context, index, "a link with no text");
       const href = linkTarget(context, text.slice(close + 2, end), index);
-      out += `<a href="${escapeHtml(href)}">${renderInline(context, index + 1, close)}</a>`;
+      out += `<a href="${escapeHtml(href)}">${renderInline(context, index + 1, close, inEmphasis)}</a>`;
       index = end + 1;
     } else if (character === "_" && !insideWord(text, index)) {
+      if (inEmphasis) failAt(context, index, "emphasis inside emphasis");
       const opens =
         (index === from || text[index - 1] === " " || text[index - 1] === "(") &&
         text[index + 1] !== " ";
       const close = opens ? closingEmphasis(text, index + 1, to) : -1;
       if (close === -1) failAt(context, index, "an _ that is neither inside a word nor emphasis");
-      out += `<em>${renderInline(context, index + 1, close)}</em>`;
+      out += `<em>${renderInline(context, index + 1, close, true)}</em>`;
       index = close + 1;
     } else {
       out += escapeHtml(character);
@@ -180,7 +185,7 @@ function renderLines(
     text += lineText;
   }
   const context: InlineContext = { text, starts, pages, links };
-  return renderInline(context, 0, text.length);
+  return renderInline(context, 0, text.length, false);
 }
 
 function refuseSourceShapes(text: string, line: number): void {
@@ -193,13 +198,12 @@ function refuseSourceShapes(text: string, line: number): void {
   // An address cannot hold a space, so stopping at one keeps `<included menu>` as text and
   // keeps the scan linear: each stretch is read once, up to the next `<`.
   for (let index = text.indexOf("<"); index !== -1; index = text.indexOf("<", index + 1)) {
-    if (!LETTER.test(text[index + 1] ?? "")) continue;
-    let sawColon = false;
+    let looksLikeAddress = false;
     for (let at = index + 1; at < text.length; at++) {
       const character = text[at];
-      if (character === ">" && sawColon) fail(line, "an address in angle brackets");
+      if (character === ">" && looksLikeAddress) fail(line, "an address in angle brackets");
       if (character === " " || character === ">" || character === "<") break;
-      sawColon ||= character === ":";
+      looksLikeAddress ||= character === ":" || character === "@";
     }
   }
 }
@@ -269,6 +273,7 @@ export function renderGuide(markdown: string, pages: readonly string[]): Rendere
       }
       const id = rest.slice(open + 2, -1);
       const heading = rest.slice(0, open).trim();
+      if (heading.includes("{#")) fail(line, `a second {# in a heading: ${shown(text)}`);
       if (heading === "") fail(line, "a level-2 heading with no text");
       refuseHeadingFormatting(heading, line);
       if (!SECTION_ID.test(id))
