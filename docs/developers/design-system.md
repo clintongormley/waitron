@@ -2220,7 +2220,9 @@ department is open." beside Save. A zone's day on which its department is closed
 zones' closures that day to the new hours. One draft holds every department and zone of the season,
 so the picker keeps edits; Save stays quiet until the draft changes, writes the edited weeks in one
 request, and closes the painter, back to the view it was opened over. Paint made while the save is
-in flight keeps the painter open, unsaved, and a save answered after a newer painter has opened
+in flight keeps the painter open, unsaved, and so does an edit the save did not send that a refresh
+drops while the save is out because its department or zone was removed or made inactive, with the
+notice that says so; a save answered after a newer painter has opened
 neither closes nor marks the newer one. ‹ › ask first
 when there are edits. A refusal keeps the painter open: one that names a department or zone
 switches the picker to it, marks the day's heading and is told beside Save, and one for a zone
@@ -4316,8 +4318,7 @@ Opening hours' Year.
   Month, to the same people; a station's day draws one row per department that sends it dishes, a
   day none of them sends on reads "No orders" once in place of its rows, and a week whose station
   times have not arrived draws no days.
-- **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month, and the dates of the
-  special-day editor's Add dates month (`add-dates-calendar.ts`). A
+- **Picking days.** `DayPicker` (`day-picking.ts`) picks the days of the Year and the Month. A
   click picks one day and opens its day box, dragging over days picks the run between them, and
   Shift-click picks the run from the day picked first to the day clicked. A double-click opens the special-day editor: on the picked run when the
   day double-clicked is inside it, otherwise on that day alone, and on a stored special day's date

@@ -21,7 +21,8 @@ import "./errors.js";
 
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 
-/** The clock and each serving zone's department, as a week save read them in its transaction. */
+/** The clock and the departments of the zones a save read, as it read them in its transaction,
+ *  handed to its `afterWrite`. */
 export interface ServingRead {
   clock: BusinessDayClock;
   departmentOf: ReadonlyMap<string, string>;

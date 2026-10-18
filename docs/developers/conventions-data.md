@@ -622,9 +622,8 @@ route), `zoneId` and `weekday`; the special-day routes with `special_day.invalid
 `outside_hours`, naming `field` (`zonePaint.<i>.ranges.<k>`), `zoneId` and `date`, skipping a date
 Closed all day. A configuration import refuses the same as `setup.request_invalid` with field
 `zone_day_ranges` (`validateSeasonWeeks`, `configuration-transfer.ts`). The writers themselves do
-not check: the season-week and closed-week routes pass the check to `saveSeasonWeeks` and
-`replaceZoneClosedWeek` as their `afterWrite` hook, and the special-day routes call it after
-`saveSpecialDay`.
+not check: the season-week, closed-week and special-day routes pass the check to
+`saveSeasonWeeks`, `replaceZoneClosedWeek` and `saveSpecialDay` as their `afterWrite` hook.
 
 ### Seasons and season weeks
 
@@ -774,8 +773,9 @@ A configuration transfer carries both tables under the importing venue's locatio
 the field, a bundle the writer could not have stored: two special-day dates on one date; a
 special-day day row with a season or a weekday; paint off the quarter-hour or overlapping; paint at a time the clocks skip, a repeating date checked at its
 next occurrence from the venue's date of the bundle's `createdAt`; a period end offset
-reaching the next day; and, since A723, a zone's Closed paint outside its department's hours on
-that date (field `zone_day_ranges`), which `saveSpecialDay` itself would store. The cases are under "special days in a configuration bundle" in
+reaching the next day; and a zone's Closed paint outside its department's hours on that date
+(field `zone_day_ranges`), which the special-day routes refuse though `saveSpecialDay` alone would
+store it. The cases are under "special days in a configuration bundle" in
 `packages/venue-service/src/configuration-transfer.test.ts` and "special days in a configuration
 transfer" in `apps/server/src/configuration-transfer.test.ts`.
 

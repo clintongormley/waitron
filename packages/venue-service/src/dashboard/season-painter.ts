@@ -202,7 +202,7 @@ export class SeasonPainter extends LitElement {
   /** Replaced whenever a save's answer would land on a draft it no longer belongs to. */
   private generation = {};
   /** The weeks the save in flight sent, and whether a refresh since dropped an edit it did not
-   *  send: that save is then not clean, as the special-day editor's is not. */
+   *  send: that save is then not clean. */
   private inFlight?: { sent: Draft; dropped: boolean };
   private scope?: DraftScope<Draft>;
   private coordinator?: LeaveCoordinator;
