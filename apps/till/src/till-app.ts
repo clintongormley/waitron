@@ -814,6 +814,18 @@ interface AskedBill {
   session: number;
 }
 
+interface BillComposition {
+  api: TillApi;
+  session: number;
+  visit: number;
+  sync: DraftSync | undefined;
+  sent: Sent;
+  partyId: string;
+  billId: string;
+  revisions: BillRevisions;
+  expectedEdits: BillEditExpected[];
+}
+
 interface CancellingItem {
   id: number;
   partyId: string;
@@ -12444,17 +12456,67 @@ export class TillApp extends LitElement {
     await this.#loadPartyBills();
   }
 
+  #billComposition(billIds: string[]): BillComposition | null {
+    const party = this.orderParty;
+    const billId = this.activeTabId;
+    if (party === null || billId === undefined) return null;
+    const expectedEdits: BillEditExpected[] = [];
+    for (const id of [...new Set(billIds)].sort()) {
+      const edit = this.#billChoiceEdit(id);
+      if (edit === null) return null;
+      expectedEdits.push(edit);
+    }
+    return {
+      api: this.api,
+      session: this.#operatorSession,
+      visit: this.#orderVisit,
+      sync: this.#draftSync,
+      sent: this.#sentNow(),
+      partyId: party.id,
+      billId,
+      revisions: this.#billRevisions(),
+      expectedEdits,
+    };
+  }
+
+  #billCompositionCurrent(asked: BillComposition): boolean {
+    return (
+      this.api === asked.api &&
+      this.#operatorSession === asked.session &&
+      this.#draftSync === asked.sync &&
+      !this.#hasLeftParty(asked.partyId, asked.sent) &&
+      this.orderParty?.id === asked.partyId &&
+      this.activeTabId === asked.billId
+    );
+  }
+
+  #billCompositionUnchanged(asked: BillComposition): boolean {
+    if (!this.#billCompositionCurrent(asked) || this.#orderVisit !== asked.visit) return false;
+    if (asked.expectedEdits.every((edit) => this.#billChoiceCurrent(edit))) return true;
+    this.errorKey = { code: "draft.out_of_date" };
+    return false;
+  }
+
   async #onMergeBills(event: Event): Promise<void> {
     const { fromBillId } = (event as CustomEvent<{ fromBillId: string }>).detail;
     if (this.activeTabId === undefined) return;
     this.errorKey = undefined;
+    const asked = this.#billComposition([this.activeTabId, fromBillId]);
+    if (asked === null) return;
     try {
-      await this.api.mergeBills(this.activeTabId, fromBillId, this.#billRevisions());
+      await asked.api.mergeBills(asked.billId, fromBillId, {
+        ...asked.revisions,
+        expectedEdits: asked.expectedEdits,
+      });
     } catch (error) {
+      if (!this.#billCompositionCurrent(asked)) return;
       await this.#onBillPairRefusal(error);
+      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }
+    if (!this.#billCompositionCurrent(asked)) return;
     await this.#reloadOrder();
+    if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
   async #askDifferentPeople(proceed: () => Promise<void>): Promise<boolean> {
@@ -12499,44 +12561,63 @@ export class TillApp extends LitElement {
     await pending.proceed();
   }
 
-  async #onTransferLines(event: Event, confirmed = false): Promise<void> {
+  async #onTransferLines(event: Event, confirmed?: BillComposition): Promise<void> {
     const { toBillId, transfers } = (
       event as CustomEvent<{ toBillId: string; transfers: TabTransfer[] }>
     ).detail;
     if (this.activeTabId === undefined || transfers.length === 0) return;
-    if (!confirmed && (await this.#askDifferentPeople(() => this.#onTransferLines(event, true))))
+    const asked = confirmed ?? this.#billComposition([this.activeTabId, toBillId]);
+    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
+    if (
+      confirmed === undefined &&
+      (await this.#askDifferentPeople(() => this.#onTransferLines(event, asked)))
+    )
       return;
+    if (!this.#billCompositionUnchanged(asked)) return;
     this.errorKey = undefined;
     try {
-      await this.api.transferItems(this.activeTabId, toBillId, transfers, this.#billRevisions());
+      await asked.api.transferItems(asked.billId, toBillId, transfers, {
+        ...asked.revisions,
+        expectedEdits: asked.expectedEdits,
+      });
     } catch (error) {
+      if (!this.#billCompositionCurrent(asked)) return;
       await this.#onBillPairRefusal(error);
+      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }
+    if (!this.#billCompositionCurrent(asked)) return;
     await this.#reloadOrder();
+    if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
-  /** Put the chosen items on a new bill of the party, and show that bill unless the waiter has left
-   * the party since ({@link #hasLeftParty}). */
-  async #onSplitLines(event: Event, confirmed = false): Promise<void> {
+  async #onSplitLines(event: Event, confirmed?: BillComposition): Promise<void> {
     const { transfers } = (event as CustomEvent<{ transfers: TabTransfer[] }>).detail;
-    const billId = this.activeTabId;
-    const partyId = this.orderParty?.id;
-    if (billId === undefined) return;
-    if (!confirmed && (await this.#askDifferentPeople(() => this.#onSplitLines(event, true))))
+    if (this.activeTabId === undefined) return;
+    const asked = confirmed ?? this.#billComposition([this.activeTabId]);
+    if (asked === null || !this.#billCompositionUnchanged(asked)) return;
+    if (
+      confirmed === undefined &&
+      (await this.#askDifferentPeople(() => this.#onSplitLines(event, asked)))
+    )
       return;
-    const sent = this.#sentNow();
+    if (!this.#billCompositionUnchanged(asked)) return;
     this.errorKey = undefined;
     try {
-      const split = await this.api.splitBill(billId, transfers, this.#billRevisions());
-      if (this.#hasLeftParty(partyId, sent)) return;
+      const split = await asked.api.splitBill(asked.billId, transfers, {
+        ...asked.revisions,
+        expectedEdit: asked.expectedEdits[0]!,
+      });
+      if (!this.#billCompositionCurrent(asked)) return;
       this.activeTabId = split.billId;
     } catch (error) {
+      if (!this.#billCompositionCurrent(asked)) return;
       const code = (error as { code?: string }).code;
       if (code === "tab.transfer_modifier_line") this.errorKey = "table.split_modifier_error";
       else if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
       else if (isBillMoneyRefusal(error)) await this.#onBillMoneyRefusal(error);
       else await this.#onTableRefusal(error);
+      if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
       return;
     }
     await this.#reloadOrder();

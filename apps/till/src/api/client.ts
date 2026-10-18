@@ -4560,7 +4560,7 @@ export class TillApi {
   splitBill(
     billId: string,
     transfers: readonly TabTransfer[],
-    revisions: BillRevisions,
+    revisions: BillRevisions & { expectedEdit: BillEditExpected },
   ): Promise<{ billId: string }> {
     return this.#request(`/api/bills/${billId}/split`, "POST", { transfers, ...revisions });
   }
@@ -4573,7 +4573,7 @@ export class TillApi {
   async mergeBills(
     intoBillId: string,
     fromBillId: string,
-    revisions: BillRevisions,
+    revisions: BillRevisions & { expectedEdits: BillEditExpected[] },
   ): Promise<void> {
     await this.#request<void>(`/api/bills/${intoBillId}/merge`, "POST", {
       fromBillId,
@@ -4590,7 +4590,7 @@ export class TillApi {
     fromBillId: string,
     toBillId: string,
     transfers: readonly TabTransfer[],
-    revisions: BillRevisions,
+    revisions: BillRevisions & { expectedEdits: BillEditExpected[] },
   ): Promise<void> {
     await this.#request<void>(`/api/bills/${fromBillId}/transfer`, "POST", {
       toBillId,

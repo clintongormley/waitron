@@ -409,6 +409,7 @@ async function openMesa(el: TillApp, tableId = "t4"): Promise<TillTableOrderScre
 beforeEach(() => {
   setLocale("en");
   drafts = draftServer();
+  for (const billId of ["wo-7", "wo-9"]) drafts.bills.add(billId);
 });
 afterEach(cleanupWidgets);
 
@@ -729,6 +730,12 @@ describe("till-app: the party's bills and Finish table", () => {
       [],
       { method: "cash", amount: "30.00" },
       "wo-check",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
     );
   });
 
@@ -3560,7 +3567,13 @@ describe("till-app: paying a bill by its state", () => {
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "30.00" });
     await flush(el);
 
-    expect(api.collectOrder).toHaveBeenCalledWith("wo-check", { method: "cash", amount: "30.00" });
+    expect(api.collectOrder).toHaveBeenCalledWith(
+      "wo-check",
+      { method: "cash", amount: "30.00" },
+      undefined,
+      undefined,
+      { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+    );
     expect(api.recordSale).not.toHaveBeenCalled();
     emit(el.shadowRoot!.querySelector("till-ticket-view")!, "new-sale");
     await flush(el);
@@ -3596,8 +3609,20 @@ describe("till-app: paying a bill by its state", () => {
     await flush(el);
 
     expect(collectOrder.mock.calls).toEqual([
-      ["wo-check", { method: "cash", amount: "30.00" }],
-      ["wo-check", { method: "cash", amount: "30.00" }],
+      [
+        "wo-check",
+        { method: "cash", amount: "30.00" },
+        undefined,
+        undefined,
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
+      [
+        "wo-check",
+        { method: "cash", amount: "30.00" },
+        undefined,
+        undefined,
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     ]);
     expect(api.recordSale).not.toHaveBeenCalled();
   });
@@ -3690,7 +3715,17 @@ describe("till-app: paying a bill by its state", () => {
     emit(order, "pay-tab", { method: "cash", amount: "14.00" });
     await flush(el);
 
-    expect(api.recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "14.00" }, "wo-4");
+    expect(api.recordSale).toHaveBeenCalledWith(
+      [],
+      { method: "cash", amount: "14.00" },
+      "wo-4",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+    );
     expect(banner(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
   });
 });
@@ -3793,19 +3828,50 @@ describe("till-app: every table move sends the party revision it last read", () 
       "merge-bills",
       { fromBillId: "wo-check" },
       "mergeBills",
-      ["wo-4", "wo-check", { expectedPartyRevision: 3, partyId: "v1" }],
+      [
+        "wo-4",
+        "wo-check",
+        {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        },
+      ],
     ],
     [
       "transfer-lines",
       { toBillId: "wo-check", transfers: [{ lineNo: 1 }] },
       "transferItems",
-      ["wo-4", "wo-check", [{ lineNo: 1 }], { expectedPartyRevision: 3, partyId: "v1" }],
+      [
+        "wo-4",
+        "wo-check",
+        [{ lineNo: 1 }],
+        {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        },
+      ],
     ],
     [
       "split-lines",
       { transfers: [{ lineNo: 1 }] },
       "splitBill",
-      ["wo-4", [{ lineNo: 1 }], { expectedPartyRevision: 3, partyId: "v1" }],
+      [
+        "wo-4",
+        [{ lineNo: 1 }],
+        {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        },
+      ],
     ],
   ] as const)("%s sends the party revision it last read", async (type, detail, method, args) => {
     const { el } = await mountApp();
@@ -3872,6 +3938,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
     });
     expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
   });
@@ -3891,6 +3958,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
     });
   });
 
@@ -3927,6 +3995,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
     });
   });
 
@@ -3963,6 +4032,10 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.transferItems).toHaveBeenCalledWith("wo-4", "wo-check", [{ lineNo: 1 }], {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
   });
@@ -8187,4 +8260,139 @@ describe("one held dish Fire now app command", () => {
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
     expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
   });
+});
+
+describe("till-app: bill composition editing observations", () => {
+  const edits = [
+    { billId: "wo-4", editorVersion: 7, draftId: null, draftRevision: null },
+    { billId: "wo-check", editorVersion: 3, draftId: null, draftRevision: null },
+  ];
+  const commands = [
+    { event: "merge-bills", detail: { fromBillId: "wo-check" }, method: "mergeBills" },
+    {
+      event: "transfer-lines",
+      detail: { toBillId: "wo-check", transfers: [{ lineNo: 1 }] },
+      method: "transferItems",
+    },
+    { event: "split-lines", detail: { transfers: [{ lineNo: 1 }] }, method: "splitBill" },
+  ] as const;
+
+  function observations(missing?: string) {
+    return vi.fn(async () => ({
+      drafts: [],
+      billEdits: [...edits, { ...edits[0]!, billId: "unrelated", editorVersion: 99 }]
+        .filter((edit) => edit.billId !== missing)
+        .reverse()
+        .map((edit) => ({ ...edit, editorId: null, editorName: null })),
+    }));
+  }
+
+  it.each(commands)("$method sends only the affected bill observations", async (command) => {
+    const { el } = await mountApp({ listDrafts: observations() });
+    const order = await openMesa(el);
+    emit(order, command.event, command.detail);
+    await flush(el);
+    const call = vi.mocked(api[command.method]).mock.calls[0]!;
+    expect(call.at(-1)).toEqual({
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      ...(command.method === "splitBill" ? { expectedEdit: edits[0] } : { expectedEdits: edits }),
+    });
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  for (const outcome of ["success", "refusal"] as const) {
+    it.each(commands)("$method refreshes editing metadata after " + outcome, async (command) => {
+      const listDrafts = observations();
+      const sending = vi.fn(async () => {
+        if (outcome === "refusal") throw { code: "bill.presented" };
+        return { billId: "wo-check" };
+      });
+      const { el } = await mountApp({ listDrafts, [command.method]: sending });
+      const order = await openMesa(el);
+      const reads = listDrafts.mock.calls.length;
+      emit(order, command.event, command.detail);
+      await flush(el, 5);
+      expect(sending).toHaveBeenCalledOnce();
+      expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    });
+  }
+
+  it.each(commands)("$method refuses a missing affected observation", async (command) => {
+    const missing = command.method === "splitBill" ? "wo-4" : "wo-check";
+    const { el } = await mountApp({ listDrafts: observations(missing) });
+    const order = await openMesa(el);
+    emit(order, command.event, command.detail);
+    await flush(el);
+    expect(api[command.method]).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(commands.filter((command) => command.method !== "mergeBills"))(
+    "$method keeps the shown observation while the different-people confirmation is open",
+    async (command) => {
+      let newer = false;
+      const read = observations();
+      const listDrafts = vi.fn(async () => {
+        const answer = await read();
+        if (newer) answer.billEdits.find((edit) => edit.billId === "wo-4")!.editorVersion = 8;
+        return answer;
+      });
+      const { el } = await mountApp({
+        listDrafts,
+        getPartyBills: vi.fn().mockResolvedValue([{ ...tabBill, total: "3500.00" }, checkBill]),
+      });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).not.toBeNull();
+      newer = true;
+      const reads = listDrafts.mock.calls.length;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      await flush(el);
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>(
+          "[data-confirm-different-people] [data-confirm]",
+        )!,
+      );
+      await flush(el);
+      expect(api[command.method]).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+
+  for (const outcome of ["success", "refusal"] as const) {
+    it.each(commands)("$method ignores a replaced API's late " + outcome, async (command) => {
+      let resolve!: (value: { billId: string }) => void;
+      let reject!: (reason: unknown) => void;
+      const pending = new Promise<{ billId: string }>((yes, no) => {
+        resolve = yes;
+        reject = no;
+      });
+      const sending = vi.fn(() => pending);
+      const { el } = await mountApp({ listDrafts: observations(), [command.method]: sending });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await expect.poll(() => sending.mock.calls.length).toBe(1);
+      const replacement = stubApi();
+      el.api = replacement;
+      await flush(el);
+      const error = banner(el)?.textContent ?? null;
+      const active = tableOrder(el)?.orderId ?? null;
+      const tables = vi.mocked(replacement.getTablesState).mock.calls.length;
+      const bills = vi.mocked(replacement.getPartyBills).mock.calls.length;
+      if (outcome === "success") resolve({ billId: "wo-check" });
+      else reject({ code: "bill.presented" });
+      await pending.catch(() => undefined);
+      await flush(el, 5);
+      expect(banner(el)?.textContent ?? null).toEqual(error);
+      expect(tableOrder(el)?.orderId ?? null).toBe(active);
+      expect(replacement.getTablesState).toHaveBeenCalledTimes(tables);
+      expect(replacement.getPartyBills).toHaveBeenCalledTimes(bills);
+    });
+  }
 });

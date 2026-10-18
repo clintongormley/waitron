@@ -3091,7 +3091,12 @@ describe("TillApi", () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 
     await expect(
-      new TillApi("", fetchStub).mergeBills("wo-into", "wo-from", {}),
+      new TillApi("", fetchStub).mergeBills("wo-into", "wo-from", {
+        expectedEdits: [
+          { billId: "wo-from", editorVersion: 0, draftId: null, draftRevision: null },
+          { billId: "wo-into", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
+      }),
     ).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -3100,7 +3105,13 @@ describe("TillApi", () => {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fromBillId: "wo-from" }),
+        body: JSON.stringify({
+          fromBillId: "wo-from",
+          expectedEdits: [
+            { billId: "wo-from", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-into", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        }),
       }),
     );
   });
@@ -3113,7 +3124,12 @@ describe("TillApi", () => {
         "wo-src",
         "wo-dst",
         [{ lineNo: 1 }, { lineNo: 2, quantity: "1.000" }],
-        {},
+        {
+          expectedEdits: [
+            { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        },
       ),
     ).resolves.toBeUndefined();
 
@@ -3126,6 +3142,10 @@ describe("TillApi", () => {
         body: JSON.stringify({
           toBillId: "wo-dst",
           transfers: [{ lineNo: 1 }, { lineNo: 2, quantity: "1.000" }],
+          expectedEdits: [
+            { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         }),
       }),
     );
@@ -3134,7 +3154,9 @@ describe("TillApi", () => {
   it("splitBill POSTs the chosen lines to the bill's /split route and answers the new bill's id", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ billId: "wo-new" }));
 
-    const result = await new TillApi("", fetchStub).splitBill("wo-7", [{ lineNo: 1 }], {});
+    const result = await new TillApi("", fetchStub).splitBill("wo-7", [{ lineNo: 1 }], {
+      expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+    });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/bills/wo-7/split",
@@ -3142,7 +3164,10 @@ describe("TillApi", () => {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ transfers: [{ lineNo: 1 }] }),
+        body: JSON.stringify({
+          transfers: [{ lineNo: 1 }],
+          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        }),
       }),
     );
     expect(result).toEqual({ billId: "wo-new" });
@@ -3159,7 +3184,12 @@ describe("TillApi", () => {
       );
 
     await expect(
-      new TillApi("", fetchStub).mergeBills("wo-into", "wo-from", {}),
+      new TillApi("", fetchStub).mergeBills("wo-into", "wo-from", {
+        expectedEdits: [
+          { billId: "wo-from", editorVersion: 0, draftId: null, draftRevision: null },
+          { billId: "wo-into", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
+      }),
     ).rejects.toMatchObject({ code: "bill.presented", workingOrderId: "wo-from" });
   });
 
@@ -4222,9 +4252,24 @@ describe("TillApi: a seated party", () => {
     [
       "mergeBills",
       (api: TillApi) =>
-        api.mergeBills("wo-into", "wo-from", { expectedPartyRevision: 3, partyId: "v1" }),
+        api.mergeBills("wo-into", "wo-from", {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdits: [
+            { billId: "wo-from", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-into", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        }),
       "/api/bills/wo-into/merge",
-      { fromBillId: "wo-from", expectedPartyRevision: 3, partyId: "v1" },
+      {
+        fromBillId: "wo-from",
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        expectedEdits: [
+          { billId: "wo-from", editorVersion: 0, draftId: null, draftRevision: null },
+          { billId: "wo-into", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
+      },
     ],
     [
       "transferItems",
@@ -4232,16 +4277,38 @@ describe("TillApi: a seated party", () => {
         api.transferItems("wo-src", "wo-dst", [{ lineNo: 1 }], {
           expectedPartyRevision: 3,
           partyId: "v1",
+          expectedEdits: [
+            { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         }),
       "/api/bills/wo-src/transfer",
-      { toBillId: "wo-dst", transfers: [{ lineNo: 1 }], expectedPartyRevision: 3, partyId: "v1" },
+      {
+        toBillId: "wo-dst",
+        transfers: [{ lineNo: 1 }],
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        expectedEdits: [
+          { billId: "wo-dst", editorVersion: 0, draftId: null, draftRevision: null },
+          { billId: "wo-src", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
+      },
     ],
     [
       "splitBill",
       (api: TillApi) =>
-        api.splitBill("wo-7", [{ lineNo: 1 }], { expectedPartyRevision: 3, partyId: "v1" }),
+        api.splitBill("wo-7", [{ lineNo: 1 }], {
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        }),
       "/api/bills/wo-7/split",
-      { transfers: [{ lineNo: 1 }], expectedPartyRevision: 3, partyId: "v1" },
+      {
+        transfers: [{ lineNo: 1 }],
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      },
     ],
   ] as const)("%s sends the party revisions it was given", async (_name, call, path, body) => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ billId: "c1" }));

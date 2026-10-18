@@ -430,6 +430,7 @@ beforeEach(() => {
   setLocale("en");
   drafts = draftServer();
   drafts.bills.add("wo-5");
+  drafts.bills.add("wo-9");
 });
 afterEach(cleanupWidgets);
 
