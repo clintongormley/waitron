@@ -130,6 +130,43 @@ test("wt-number-stepper: stretched to its column by --wt-stepper-field-width: 10
   expect(field.getBoundingClientRect().width).toBe(400);
 });
 
+// Each of these makes the stepper's own box wider than its field box.
+test.each([
+  ["a grid parent", "display: grid", "", ""],
+  ["a flex column", "display: flex; flex-direction: column", "", ""],
+  ["a grid parent, right to left", "display: grid", "", "rtl"],
+  [
+    "a flex column, stretched",
+    "display: flex; flex-direction: column",
+    'style="--wt-stepper-field-width: 100%"',
+    "",
+  ],
+  [
+    "a block parent, beside a long error",
+    "",
+    'error="Please enter a number greater than zero"',
+    "",
+  ],
+])(
+  "wt-number-stepper in %s: with help on the badge hangs over the field's top trailing corner",
+  async (_, parentStyle, attributes, dir) => {
+    const parent = await mount(
+      `<div dir="${dir || "ltr"}" style="${parentStyle}; width: 400px; margin-block-start: 40px">` +
+        `<wt-number-stepper label="Guests" name="guests" ${attributes}>${badgeMarkup("help-mode")}</wt-number-stepper>` +
+        "</div>",
+    );
+    const el = parent.querySelector<Updating>("wt-number-stepper")!;
+    const tooltip = el.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
+    await tooltip.updateComplete;
+    await el.updateComplete;
+    await turnHelp(true, tooltip, el);
+    const field = el
+      .shadowRoot!.querySelector<HTMLElement>("[part=field]")!
+      .getBoundingClientRect();
+    expectCentreAt(badgeButton(tooltip), dir === "rtl" ? field.left : field.right, field.top);
+  },
+);
+
 function badgeButton(tooltip: WtHelpTooltip): HTMLButtonElement {
   return tooltip.shadowRoot!.querySelector("button")!;
 }
