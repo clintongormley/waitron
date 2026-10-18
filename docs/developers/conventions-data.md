@@ -613,6 +613,19 @@ possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks prof
 Pricing still reads static offer membership; zone closures do not change recorded prices.
 `working-order.ts` performs the zone check when adding lines, separately from its offer read.
 
+**2026-10-18, A723.** A zone may be closed only while its department is open. The routes refuse a
+closed range the request writes outside its department's hours, read in the same transaction
+after the write (`packages/venue-service/src/zone-closure-hours.ts`): `PUT …/seasons/:seasonId/weeks`
+and `PUT …/zones/:zoneId/closed-week` with `zone_closed_time.invalid`, reason `outside_hours`,
+naming `field` (`zones.<i>.days.<j>.ranges.<k>`, or `days.<j>.ranges.<k>` on the closed-week
+route), `zoneId` and `weekday`; the special-day routes with `special_day.invalid`, reason
+`outside_hours`, naming `field` (`zonePaint.<i>.ranges.<k>`), `zoneId` and `date`, skipping a date
+Closed all day. A configuration import refuses the same as `setup.request_invalid` with field
+`zone_day_ranges` (`validateSeasonWeeks`, `configuration-transfer.ts`). The writers themselves do
+not check: the season-week and closed-week routes pass the check to `saveSeasonWeeks` and
+`replaceZoneClosedWeek` as their `afterWrite` hook, and the special-day routes call it after
+`saveSpecialDay`.
+
 ### Seasons and season weeks
 
 **2026-10-12, A506-1.** `seasons` holds a location's seasons, each a name and an `MM-DD` start;

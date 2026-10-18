@@ -4228,8 +4228,9 @@ it or malformed is ignored, so the day opens on its first date alone), and
 `/view/special-day/special-day/<id>` for a stored one, where `/date/<yyyy-mm-dd>` adds that date to
 its draft as an unsaved change; Back or Forward to the same day with another date asks first when
 the draft has changes, and then opens the stored day again with that date. It opens over the view it was opened from, or the Year on a direct
-load, and closing it returns there; a new day saved takes its own day's address without a new
-history entry. An old `/view/date/date/<yyyy-mm-dd>` address is replaced by the month of that date,
+load, and closing it returns there. A save with nothing left unsaved closes it, back there; a new
+day whose save leaves it open (paint made, or dropped, while the save was out) takes its own day's
+address without a new history entry. An old `/view/date/date/<yyyy-mm-dd>` address is replaced by the month of that date,
 and `/view/date` with no date or a bad one by the month view. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 Opening hours' Year.

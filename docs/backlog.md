@@ -1467,15 +1467,15 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Unticking a special date's "Closed all day" brings back its zone paint unchecked** — left open
   by A723. [Detail](backlog/service-periods.md#unticking-a-special-dates-closed-all-day-brings-back-its-zone-paint-unchecked)
 
-- **Moving or deleting a season can leave a special date's zone closure outside its new hours** —
-  left open by A723; nothing checks it. [Detail](backlog/service-periods.md#moving-or-deleting-a-season-can-leave-a-special-dates-zone-closure-outside-its-new-hours)
+- **A change to a department's season week can leave a special date's zone closure outside its
+  new hours** — left open by A723; nothing checks it. [Detail](backlog/service-periods.md#a-change-to-a-departments-season-week-can-leave-a-special-dates-zone-closure-outside-its-new-hours)
 
 - **A yearly special day's zone paint is checked against its stored date only** — left open by
   A723, not against each later year's weekday and season. [Detail](backlog/service-periods.md#a-yearly-special-days-zone-paint-is-checked-against-its-stored-date-only)
 
-- **`opening.follow_week` and `menu.normal_week` have no reader** — left open by A723: both
-  strings, English and Spanish, are in `packages/venue-service/src/dashboard/strings.ts` and
-  nothing reads them; delete them or use them.
+- **`opening.follow_week` and `menu.normal_week` have no reader** — found during A723; it
+  predates A723. Both strings, English and Spanish, are in
+  `packages/venue-service/src/dashboard/strings.ts` and nothing reads them; delete them or use them.
 
 - **A special day whose dates have different changeovers is cut on the first date's changeover** —
   left open by A723; the server checks each date on its own and can refuse. [Detail](backlog/service-periods.md#a-special-day-whose-dates-have-different-changeovers-is-cut-on-the-first-dates-changeover)
