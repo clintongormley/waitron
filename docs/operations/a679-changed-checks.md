@@ -1292,3 +1292,46 @@ No protected writer, restore hook, fiscal assertion, production SQL, schema, gua
 Raw receipts, including RED runs and installed omission controls, stay in the lane's
 `receipts/a679-http-recovery-20261018` directory. Carry this inventory and every earlier section
 into the final pull request's Changed test checks section.
+
+
+## Selected-backup PDF and printed-key fields (2026-10-18)
+
+No existing test body, fixture or assertion changes in this checkpoint. Three new suites add
+17 module behavior cases, four accessibility cases covering both viewport widths, and four generic
+setup cases. The module owns PDF parsing, scope/name matching and printed-key decoding; the
+setup form uses its browser contribution and forwards the resulting secret.
+
+- `packages/fiscal-verifactu/src/setup/recovery-key.browser.test.ts` enters values extracted from
+  the actual generated PDF through native inner controls. It covers lowercase/grouping/look-alikes,
+  exact secret output, wrong PDF scope/node/name, attachment-free manual fallback, oversize refusal,
+  interrupted reads, native clearing, discarded drafts and the first edit after reattachment.
+- `packages/fiscal-verifactu/src/setup/recovery-key.a11y.browser.test.ts` covers empty, invalid and
+  imported states in EN/ES, light/dark and 390/1280 px. The imported state uses the native picker.
+- `apps/setup/src/screens/recovery-key-fields.test.ts` checks module mounting, decoded credential
+  forwarding, Clear, field-specific request refusal and required credentials on a fiscal selection.
+  Its printed fixture was independently calculated with Python base32 and SHA-256; the expected
+  raw secret is literal. Existing generic cases without a fiscal selection retain their checks.
+
+Seven installed omission controls remove PDF matching, late-read checks, the file-size check,
+parent-to-child clearing, mandatory fiscal credentials, reconnect registration and the printed
+checksum refusal. Each produces the intended assertion failure and passes again after restoration.
+The two new behavior suites then pass all 17 and four cases in that independently frozen-installed
+checkout. These checks establish field decoding and forwarding, not authentication against a real
+selected backup through the complete browser/server flow.
+
+The setup compiler initially followed key-document types through the module root into Node-only
+store types. The three type imports now use the existing browser-safe operation-authority path.
+TypeScript's emitted JavaScript is byte-identical for `paper-register-protocol.ts`,
+`paper-protocol.ts` and `allocation-operator.ts` before/after those import changes.
+The PDF reader loads on file import. The setup build emits a separate reader chunk and worker;
+its chunk-size warning remains. No dependency or licence input changes.
+
+Receipts are in `receipts/a679-recovery-fields-20261018` under the local lane folder: RED logs,
+counted browser checks, type/lint/build/guard logs, `controls.json`, `type-only-emit.json` and eight
+inspected screenshots. The unedited golden/immutability pair passes 20 cases. No protected writer,
+restore hook, production SQL, schema, guard or rule changes.
+
+Task 9 remains incomplete: replace the pasted-operation workflow with authenticated interactive
+hour preparation, finish the real first-setup/reissue flow and interruption ordering. Task 8's
+exact protected-wrapper permission and Tasks 10–12 remain separate gates. The provisioning coverage
+gate and owner acceptance of actual generated PDFs remain open; no readiness or landing is claimed.

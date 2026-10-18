@@ -1,4 +1,4 @@
-import type { OperationOperator } from "@waitron/module";
+import type { OperationOperator } from "@waitron/module/src/operation-authority.js";
 
 function text(value: unknown): value is string {
   return (

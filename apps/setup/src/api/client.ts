@@ -179,6 +179,12 @@ export interface CloudRecoveryView {
 }
 
 export interface RecoveryBackupPreview {
+  readonly fiscalSelection?: {
+    readonly module: string;
+    readonly country: string;
+    readonly fiscalTerritory: string;
+    readonly timeZone: string;
+  };
   readonly activationSourceId?: string;
   sourceId: string;
   createdAt: string;

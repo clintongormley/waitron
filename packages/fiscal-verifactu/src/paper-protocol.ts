@@ -1,6 +1,6 @@
 import { isAllocatedSeries, isInstallationIdentity } from "./allocation-identity.js";
 import { parseAllocationOperator } from "./allocation-operator.js";
-import type { OperationOperator } from "@waitron/module";
+import type { OperationOperator } from "@waitron/module/src/operation-authority.js";
 
 export interface PaperAllocation {
   readonly version: 1;

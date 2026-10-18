@@ -329,6 +329,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the PDF keeps only the recovery key. Protected-code and fiscal-assertion restrictions remain.
   Owner acceptance is viewing real generated EN/ES PDFs through Drive; automated
   recovery-field entry checks remain the driver’s work. Preserve existing branch work.
+  The selected module now supplies PDF/manual key fields. Local Chromium checks enter rendered
+  grouped/lowercase/look-alike values, forward the decoded secret and clear native fields;
+  mismatched PDFs and stale reads refuse. Interactive recovery-hour selection and key reissue
+  still need wiring, followed by installed end-to-end qualification.
   Hour codec, module admission and clock units pass locally, with source timestamps embedded
   by the Node bundler. History enumeration, durable selection and the shared host store have focused
   local checks. Certificate-free owned preproduction readiness and publication have focused checks;

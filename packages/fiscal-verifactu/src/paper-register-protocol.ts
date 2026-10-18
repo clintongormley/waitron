@@ -60,7 +60,7 @@ export interface DeclaredReservation {
   readonly kind: "reserve";
   readonly allocation: import("./paper-protocol.js").PaperAllocation;
   readonly recipientVenueId: string;
-  readonly binding: import("@waitron/module").OperationBinding;
+  readonly binding: import("@waitron/module/src/operation-authority.js").OperationBinding;
   readonly reservedAt: string;
 }
 export interface DeclaredConsumption {
@@ -68,7 +68,7 @@ export interface DeclaredConsumption {
   readonly allocationId: string;
   readonly reservationDigest: string;
   readonly eventId: string;
-  readonly operatorId: import("@waitron/module").OperationOperator;
+  readonly operatorId: import("@waitron/module/src/operation-authority.js").OperationOperator;
   readonly sourceId: string;
   readonly targetNodeId: string;
   readonly incidentEvidence: string;
@@ -124,13 +124,13 @@ export interface KnownRegisterEvidence extends RegisterPosition {
   readonly currentHead: RegisterHead | null;
   readonly retainedHeads: readonly RegisterHead[];
   readonly originals: readonly PublicOriginal[];
-  readonly retiredBindings: readonly import("@waitron/module").OperationBinding[];
+  readonly retiredBindings: readonly import("@waitron/module/src/operation-authority.js").OperationBinding[];
   readonly history?: DeclaredRegisterHistory;
 }
 export interface DeclaredRegisterOccupied {
   readonly allocation: import("./paper-protocol.js").PaperAllocation;
   readonly recipientVenueId: string;
-  readonly binding: import("@waitron/module").OperationBinding;
+  readonly binding: import("@waitron/module/src/operation-authority.js").OperationBinding;
   readonly state: "reserved" | "consumed" | "retired" | "abandoned" | "uncertain";
 }
 export interface RegisterProjection extends RegisterPosition {
@@ -142,7 +142,7 @@ export interface RegisterProjection extends RegisterPosition {
   readonly pBurnFloor: number;
   readonly occupied: readonly DeclaredRegisterOccupied[];
   readonly originals: readonly PublicOriginal[];
-  readonly retiredBindings: readonly import("@waitron/module").OperationBinding[];
+  readonly retiredBindings: readonly import("@waitron/module/src/operation-authority.js").OperationBinding[];
   readonly nextS: number | null;
   readonly nextP: number | null;
   readonly completeHistory: boolean;
