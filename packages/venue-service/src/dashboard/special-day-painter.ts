@@ -1038,7 +1038,9 @@ export class SpecialDayPainter extends LitElement {
       .find((department) => department.id === id)
       ?.periods.find((entry) => entry.id === params.periodId);
     const reason =
-      params.reason === "end_offset" || params.reason === "clock_skips"
+      params.reason === "end_offset" ||
+      params.reason === "clock_skips" ||
+      params.reason === "outside_hours"
         ? refusalReason("special_day.invalid", params.reason, period)
         : t("opening.check_day");
     const name = ownerName(this.model, owner);
@@ -1243,6 +1245,63 @@ export class SpecialDayPainter extends LitElement {
     cutover: string;
     underlay: ReadonlyMap<string, Paint[]>;
   };
+  /** For a zone, each date not closed all day whose season day is known, mapped to its
+   *  department's open blocks that date: the season's hours with the draft's paint laid over. */
+  private closedWithin(department: Department, cutover: string) {
+    const painted = this.draft.paint.get(departmentKey(department.id));
+    const shut = this.closedDates();
+    const memo = this.withinMemo;
+    if (
+      memo?.days === this.seasonDays &&
+      memo.painted === painted &&
+      memo.shut === shut &&
+      memo.departmentId === department.id &&
+      memo.cutover === cutover
+    )
+      return memo.within;
+    const within = new Map<string, Paint[]>();
+    for (const [date, day] of this.seasonDays) {
+      if (shut.has(date)) continue;
+      const season = day.departments.find(({ departmentId }) => departmentId === department.id);
+      if (!season) continue;
+      within.set(date, layerPaint(season.ranges, painted?.get(date) ?? [], cutover));
+    }
+    this.withinMemo = {
+      days: this.seasonDays,
+      painted,
+      shut,
+      departmentId: department.id,
+      cutover,
+      within,
+    };
+    return within;
+  }
+  private behind?: {
+    within: ReadonlyMap<string, readonly Paint[]>;
+    label: string;
+    map: ReadonlyMap<string, string>;
+  };
+  private closedBehind(
+    department: Department,
+    within: ReadonlyMap<string, readonly Paint[]>,
+  ): ReadonlyMap<string, string> {
+    const label = format("painter.department_closed", { department: department.name });
+    if (this.behind?.within !== within || this.behind.label !== label)
+      this.behind = {
+        within,
+        label,
+        map: new Map([...within].filter(([, open]) => !open.length).map(([date]) => [date, label])),
+      };
+    return this.behind.map;
+  }
+  private withinMemo?: {
+    days: ReadonlyMap<LocalDate, SeasonDay>;
+    painted: ReadonlyMap<LocalDate, Paint[]> | undefined;
+    shut: ReadonlySet<LocalDate>;
+    departmentId: string;
+    cutover: string;
+    within: ReadonlyMap<string, Paint[]>;
+  };
 
   private picker(department: Department, zone: Department["zones"][number] | undefined) {
     return html`<wt-combobox
@@ -1335,6 +1394,7 @@ export class SpecialDayPainter extends LitElement {
       ? [...department.periods, { id: ZONE_OPEN, name: t("special.open"), colour: "green" }]
       : department.periods;
     const stopped = this.loading || this.loadFailed || this.offered !== undefined;
+    const within = zone ? this.closedWithin(department, cutover) : undefined;
     return html`${notices}${
       this.readOnly
         ? nothing
@@ -1358,6 +1418,8 @@ export class SpecialDayPainter extends LitElement {
             .columns=${this.columns()}
             .days=${this.draft.paint.get(owner) ?? NOTHING_BY_KEY}
             .underlay=${this.underlay(department, zone?.id, cutover)}
+            .closedWithin=${within}
+            .closedBehind=${within ? this.closedBehind(department, within) : NOTHING_BY_KEY}
             .periods=${periods}
             .chosen=${chosen}
             .closedErases=${false}
@@ -1367,6 +1429,11 @@ export class SpecialDayPainter extends LitElement {
             .readOnly=${this.readOnly || stopped}
             .columnErrors=${columnErrors(owner)}
             @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(owner, event)}
+            @paint-outside=${(event: Event) => {
+              event.stopPropagation();
+              this.refused = undefined;
+              this.notice = t("opening.closed_outside");
+            }}
             >${ticks}</paint-grid
           >`
     }`;

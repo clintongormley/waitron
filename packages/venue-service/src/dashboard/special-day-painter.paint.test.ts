@@ -875,3 +875,73 @@ describe("a period deleted with a replacement before the stored day is read agai
     expectSaveOffered(painter);
   });
 });
+
+describe("a zone's Closed inside its department's hours", () => {
+  const restaurantOnly: SpecialDayAnswers["season"] = () => ({
+    ranges: [dinner("20:00", "23:30")],
+  });
+  const column = (el: SpecialDayPainter, date: string) =>
+    grid(el).shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${date}"]`)!;
+
+  it("a zone's Closed stroke keeps only the times its department is open on that date", async () => {
+    const { painter } = await mount({ season: restaurantOnly });
+    await pick(painter, "zone:z2");
+    await drag(painter, DEC_15, at("19:00"), at("21:00"));
+    expect(grid(painter).days.get(DEC_15)).toEqual([closed("20:00", "21:00")]);
+  });
+
+  it("Open paint is not cut", async () => {
+    const { painter } = await mount({ season: restaurantOnly });
+    await pick(painter, "zone:z2");
+    chip(painter, "paint-open").click();
+    await settle(painter);
+    await drag(painter, DEC_15, at("17:00"), at("21:00"));
+    expect(grid(painter).days.get(DEC_15)).toEqual([
+      { periodId: "open", startsAt: "17:00", endsAt: "21:00" },
+    ]);
+  });
+
+  it("a stroke wholly outside says why beside Save", async () => {
+    const { painter, writes } = await mount({ season: restaurantOnly });
+    await pick(painter, "zone:z2");
+    await drag(painter, DEC_15, at("12:00"), at("14:00"));
+    expect(grid(painter).days.get(DEC_15) ?? []).toEqual([]);
+    expect(saveButton(painter).disabled).toBe(true);
+    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+    expect(writes).toEqual([]);
+  });
+
+  it("a date whose department has no hours shows '<department> closed all day' behind the zone's paint", async () => {
+    const { painter } = await mount({
+      season: (date) => (date === DEC_15 ? {} : { ranges: [dinner("20:00", "23:30")] }),
+    });
+    expect(column(painter, DEC_15).querySelector(".all-closed.behind")).toBeNull();
+    await pick(painter, "zone:z2");
+    expect(column(painter, DEC_15).querySelector(".all-closed.behind")!.textContent!.trim()).toBe(
+      "Restaurant closed all day",
+    );
+    expect(column(painter, DEC_14).querySelector(".all-closed.behind")).toBeNull();
+    expect(column(painter, DEC_25).querySelector(".all-closed.behind")).toBeNull();
+    expect(column(painter, DEC_25).querySelector(".all-closed")!.textContent!.trim()).toBe(
+      "Closed all day",
+    );
+    await drag(painter, DEC_15, at("20:00"), at("21:00"));
+    expect(grid(painter).days.get(DEC_15) ?? []).toEqual([]);
+    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+  });
+
+  it("a painter render that changes nothing hands a zone's grid the same hours and labels", async () => {
+    const { painter } = await mount({
+      season: (date) => (date === DEC_15 ? {} : { ranges: [dinner("20:00", "23:30")] }),
+    });
+    await pick(painter, "zone:z2");
+    const within = grid(painter).closedWithin;
+    const behind = grid(painter).closedBehind;
+    expect(within?.size).toBe(2);
+    expect(behind.size).toBe(1);
+    painter.requestUpdate();
+    await settle(painter);
+    expect(grid(painter).closedWithin).toBe(within);
+    expect(grid(painter).closedBehind).toBe(behind);
+  });
+});
