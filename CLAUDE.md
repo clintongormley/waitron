@@ -135,22 +135,19 @@ hook, or how tests are scheduled:
   name — reads text, not the Vitest config. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
-  mutation**, depending on the package's coverage settings and Stryker `mutate` list; a test file is
-  measured by neither. Cost: `packages/db`'s branch coverage fell below its bar.
+  mutation**, depending on the package's coverage settings and Stryker `mutate` list. Cost: `packages/db`'s branch coverage fell below its bar.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
-- **No front-end bundle is built by a pull request that changed no image input**
-  (`isImageInputPath`, `scripts/changed-scope.mjs`), and wherever one is built nothing opens it, so
-  a bundle that renders nothing passes anyway.
+- **No front-end bundle is built by a pull request that changed no image input**, and wherever one
+  is built nothing opens it, so a bundle that renders nothing passes anyway.
 - **esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.** Every
-  Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out of all of them, and the
-  box image copies sharp into `/app/node_modules`. Guards: `scripts/deploy-image-env.test.ts` and bundle-smoke (weaker than their names:
-  read text, with bundle-smoke limited to `dist/server.js`), and image-smoke's sharp step.
+  Node bundle is built by `scripts/bundle-node.mjs`. Guards: `scripts/deploy-image-env.test.ts` and
+  bundle-smoke (weaker than their names: read text, with bundle-smoke limited to `dist/server.js`),
+  and image-smoke's sharp step.
   Detail: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Two pushes to `main` must never share a CI concurrency group.** Cost: a code merge that got NO
-  run at all, so check after a merge that its own run exists. Publishing asks
-  `scripts/main-tag-guard.sh` before moving `:main`. Guards: `scripts/ci-workflow.test.mjs` (reads
-  ci.yml alone, as TEXT) and `scripts/main-tag-guard.test.mjs`.
+  run at all, so check after a merge that its own run exists. Guards: `scripts/ci-workflow.test.mjs`
+  (reads ci.yml alone, as TEXT) and `scripts/main-tag-guard.test.mjs`.
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
   cheap enough to leave ungated.
 - **The GHA cache is a shared per-repository budget, evicted least-recently-used.** Name the entries
@@ -163,14 +160,14 @@ hook, or how tests are scheduled:
   runs under an outer `timeout`, and is retried when it stalls or exits non-zero**. A workflow's
   `playwright install --with-deps` runs apt too, so it takes the same outer `timeout`. Cost: main run 37771042263's image smoke hit its 15-minute limit. Guards: the apt-wait and `--with-deps` cases in `scripts/ci-workflow.test.mjs`
   and the apt-wait cases in `scripts/deploy-image-env.test.ts`, weaker than their names — they read
-  text and do not check the retries; the `apt_get` wrapper cases in `scripts/waitron-sh.test.mjs` run
-  waitron.sh's retries under stubs. Receipt:
+  text and do not check the retries — and the `apt_get` wrapper cases in
+  `scripts/waitron-sh.test.mjs`. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-apt-wait-is-bounded).
-- **Every pnpm setup in a workflow runs `scripts/ci-setup-pnpm.sh` — each attempt under `timeout`,
-  three attempts, then fail — never `pnpm/action-setup`, whose self-installer has no time limit of its own.**
-  Cost: main run 38799624567's `test-dashboard (2)` sat 260 s in it. Guards: the pnpm-setup cases in
+- **Every pnpm setup in a workflow runs `scripts/ci-setup-pnpm.sh`, never `pnpm/action-setup`,
+  whose self-installer has no time limit of its own.** Cost: main run 38799624567's
+  `test-dashboard (2)` sat 260 s in it. Guards: the pnpm-setup cases in
   `scripts/ci-workflow.test.mjs`, weaker than their names — they read text — and
-  `scripts/ci-setup-pnpm.test.mjs`, which runs the script under a stubbed npm. Receipt:
+  `scripts/ci-setup-pnpm.test.mjs`. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.
@@ -196,21 +193,19 @@ hook, or how tests are scheduled:
   SESSION's browser run when free memory is well above 15% (owner decision 2026-09-24), never beside
   a backgrounded whole-workspace `pnpm -r test:coverage`. Chromium's launch depends on a Codex
   seat's PERMISSIONS, not on Codex.
-- **A migration can fail on a box that already has a trigger naming what it changes.**
-  `applyMigrations` removes the change feed first for that reason; a rebuild of a table another
-  set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
+- **A migration can fail on a box that already has a trigger naming what it changes.** A rebuild
+  of a table another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
   than its name — its rows are synthetic and counted, not compared, and it installs today's
   change-feed list, and today's append-only list less the tables the previous step lacked, at every
   step. Cost: an earlier bricked box that was wiped, and a box that failed three starts on
   2026-09-26. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#a-migration-can-fail-on-a-database-that-already-carries-earlier-migrations-and-what-boot-installed-after-them).
-- **The upgrade test makes its scratch directory under `scratchParent()` (`scripts/scratch-dir.mjs`),
-  which picks `/dev/shm` when it exists, because every commit waits for the disk.** Cost: it timed
-  out in CI five times. Nothing guards it. Receipt:
+- **The upgrade test makes its scratch directory under `scratchParent()`
+  (`scripts/scratch-dir.mjs`).** Cost: it timed out in CI five times. Nothing guards it. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 - **The CI steps that run the stream loop and pause tests and each `test-venue-service` shard set
-  `TMPDIR=/dev/shm`, in CI only.** Cost: the pause test failed its bound; a venue-service shard hit its 10-minute limit.
-  The disk explanation for the shard is an inference. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
+  `TMPDIR=/dev/shm`, in CI only.** Cost: the pause test failed its bound; a venue-service shard
+  hit its 10-minute limit. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
   `ci.yml` as text and never reads the steps' test files. Receipts:
   [testing-guide.md](docs/developers/testing-guide.md), "In CI their temporary files are in memory",
   and [ci-and-gates.md](docs/developers/ci-and-gates.md#the-venue-service-shards-keep-their-test-databases-in-memory).
