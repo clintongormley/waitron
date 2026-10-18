@@ -127,6 +127,49 @@ export async function markMoved(
 }
 
 /**
+ * Leaves a table that needs moving, and every row of a pending joined group holding it, as today's
+ * map has it until the next reset rewrites the rows. A row with no table is ended rather than
+ * marked placed, because the catch-up makes such a table without reading `placed`.
+ */
+export async function leaveHere(
+  tx: Transaction,
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+  tableId: string,
+  now: Date,
+): Promise<void> {
+  const zoneId = await zoneOfTable(tx, cfg, tableId);
+  if (!(await tableNeedsMoving(tx, tableId))) return;
+  const [own] = await tx
+    .select({ id: floorResetTables.id })
+    .from(floorResetTables)
+    .where(and(eq(floorResetTables.tableId, tableId), eq(floorResetTables.pending, true)));
+  const groupIds = [
+    ...new Set([own!.id, ...(await pendingGroupRows(tx, [own!.id])).map((member) => member.id)]),
+  ];
+  const group = await tx
+    .select({
+      id: floorResetTables.id,
+      tableId: floorResetTables.tableId,
+      label: floorResetTables.label,
+      tableLabel: diningTables.label,
+    })
+    .from(floorResetTables)
+    .leftJoin(diningTables, eq(diningTables.id, floorResetTables.tableId))
+    .where(inArray(floorResetTables.id, groupIds));
+  for (const row of group) {
+    const state =
+      row.tableId === null
+        ? { pending: false, readyToMove: false }
+        : row.label === row.tableLabel
+          ? { pending: false, readyToMove: false, placed: true }
+          : { placed: true, readyToMove: false };
+    await tx.update(floorResetTables).set(state).where(eq(floorResetTables.id, row.id));
+  }
+  await catchUpZone(tx, cfg, removals, zoneId, now, { inReset: false });
+}
+
+/**
  * Throws what still holds back the group of `tables`, which Mark moved could not apply: food on
  * its way, a party, a table needing clearing or a module's refusal to let a table go, at one of
  * them or at a table tied to them by today's merges and splits or a pending joined group, as the
