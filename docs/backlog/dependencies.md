@@ -48,8 +48,8 @@ installed code, and only their number is stale.
   PR #1179 was closed), and must also check whether #766's stored Dependabot ignore of
   `@vitest/browser-playwright` 5.x holds that package back, and clear it if so
   (`docs/developers/workflow-guide.md` → Dependabot pull requests). Whether Dependabot obeys
-  A779's ignore stays open until its next Vitest-family pull request shows it (owner, 2026-10-17:
-  #1179 moved only `vitest`, not the `@vitest/*` packages, so it does not answer this).
+  A779's ignore stays open until its next Vitest-family pull request shows it (owner, 2026-10-17).
+  #1179, opened before A779's ignore, moved only `vitest`, so it answers neither.
 
 ## Whether a declared floor follows the installed version is undecided — one decision for every manifest
 

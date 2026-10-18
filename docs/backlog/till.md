@@ -929,9 +929,8 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     to a table; and a database built on purpose with a delivery table in another location now
     names the order by its own label — no product path creates that state, and whether every
     existing venue database is free of it was not checked.
-  - **Task 9 (#874, dishes arriving in a party get a kitchen group).** **A plan default the owner
-    may overturn (P16):** spec §15's "leaves with them outside any group" is read as the side the
-    bill leaves; the receiving party groups the dishes. Left by C78's review: the earliest fire
+  - **Task 9 (#874, dishes arriving in a party get a kitchen group).** P16 is kept (owner,
+    2026-10-17; recorded in kitchen.md's Decisions). Left by C78's review: the earliest fire
     time is picked by comparing the stored times as text, right only while every writer stores the
     same `toISOString()` form (every writer found uses `nowIso()`; not proven for all); and a dish
     recalled and fired again carries its new fire time but its old group's firer. Left by C80
@@ -940,7 +939,8 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     it lists, while a move keeps it in its own held group; and when a round is SENT,
     `working-order.ts` picks its earliest course without checking whether it is active, so with a
     switched-off course the send path and the move path can file a dish with no course under
-    different courses (owner, 2026-09-29: not queued).
+    different courses. Owner, 2026-10-17: such a dish is a dish with no course (Fire now, listed
+    first), whether sent or moved; relayed to lane G for A773, whose spec does not cover it yet.
     **2026-10-10 update:** A435 step 5's retained metadata now gives saved drafts their recorded
     course section and fired lines their recorded label, including when the active list is empty.
     The earlier C80 reading above is historical; the move/send comparison remains unverified here.

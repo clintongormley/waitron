@@ -1744,7 +1744,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   problems).** [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
   - A party finished while its food is still on the pass keeps its cards there with no group
     button that works (each is refused `party.not_open`): the owner's answer (2026-10-17, the
-    waiter clears them with Void, choosing refund or no refund) is part of A758.
+    waiter clears them with Void, choosing refund or no refund) was relayed to lane C as an
+    addition to A758.
   - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
     `*** HOLD CANCELLED ***` print in English.
   - A switched-off printer's printing problem keeps showing until the printer is switched on and a
@@ -1777,8 +1778,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Today every table load makes a second request, `GET /api/parties/:id/print-problems`, beside
   `GET /api/parties/:id/groups` (`apps/server/src/till-api.ts`). Fold the printing problems into the
   groups read and drop the second request; the exact-body assertion in
-  `apps/server/src/till-api.groups.test.ts` changes with it. Done when a table load makes one
-  request. Which held groups the kitchen and pass screens offer Fire on is A773's.
+  `apps/server/src/till-api.groups.test.ts` changes with it. Done when a table load no longer
+  calls `GET /api/parties/:id/print-problems` and the printing problems arrive in the groups read.
+  Which held groups the kitchen and pass screens offer Fire on is A773's.
 
 - **Loose ends left by service Task 6 (#761, HOLD tickets in advance).**
   [Detail](backlog/kitchen.md#task-6-761-hold-tickets-in-advance)
@@ -4233,7 +4235,7 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   `packages/venue-service/src/dashboard/strings.ts`, `staffing.role.delete_*` in
   `packages/staffing/src/dashboard/strings.ts`). Use the device, printer and card reader windows'
   "Work that ends" / "Trabajo que finaliza", "Settings that are removed" / "Configuración que se
-  elimina" and "Checking what changes…", in English and in Spanish. Done when both windows' three
+  elimina" and "Checking what changes…" / "Comprobando qué cambia…". Done when both windows' three
   lines read as the device window's do, in both languages.
 
 - **Future-tense lines outside the delete windows were left alone**: the Remove-standby
@@ -5463,10 +5465,11 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   behind by the Stryker upgrade (#447, 2026-09-19). Stryker 10.0.0's release notes mention neither
   issue, and nothing here was run under Vitest 5, so the question is untouched rather than resolved.
   The retry removes the Vitest-major ignore in `.github/dependabot.yml` (A779; the Vitest 5 PR #1179
-  is closed). Whether Dependabot obeys that ignore stays open until its next Vitest-family pull
-  request shows it (owner, 2026-10-17: #1179 moved only `vitest`, so it does not answer this); then
-  close the question (workflow-guide → Dependabot pull requests) — left open by Dependabot's
-  switch-on (#760, 2026-09-27).
+  is closed). Closing #766 stored an ignore of `@vitest/browser-playwright` 5.x; #1179 moved only
+  `vitest`, so it did not show whether Dependabot obeys it. Owner, 2026-10-17: keep this open until
+  Dependabot's next Vitest-family pull request shows whether A779's ignore holds, then close it
+  (workflow-guide → Dependabot pull requests) — left open by Dependabot's switch-on (#760,
+  2026-09-27).
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
 - **Bundled npm notices stop at a module-type-only package manifest.** Running
@@ -5497,9 +5500,11 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
   Left behind by the esbuild upgrade (#439, 2026-09-19).
 
 - **A844. Resolve one copy of `@types/node` (owner, 2026-10-17; left by #441).** `@types/qrcode`
-  sits on 26.6.2, everything else on 26.6.5, so `apps/dashboard` reports a duplicate `NonSharedBuffer`
-  under `--skipLibCheck false`. Make the workspace resolve one copy, show those errors are gone with
-  library checking on, then delete this entry.
+  sits on 26.6.2 and every other 26.x user on 26.6.5 (`@types/ssh2` separately holds 18.19.130,
+  since it asks for `^18.11.18`), so `apps/dashboard` under `--skipLibCheck false` reports duplicate
+  identifiers (`NonSharedBuffer` among them) in both 26.6.x copies. Make the workspace resolve one
+  26.x copy, show those duplicate-identifier errors are gone with library checking on
+  (drizzle-orm's own errors there are not this entry's), then delete this entry.
 
 - **Loose ends left by the Node types upgrade (#441, 2026-09-19).**
   - **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** One

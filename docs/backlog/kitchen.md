@@ -17,7 +17,8 @@ list does not exist.
 - **Task 5 (#750, kitchen, pass and table screen by group; printing problems).** Left open:
   - A party finished while its food is still on the pass keeps its cards there with no group
     button that works (each is refused `party.not_open`): the owner's answer (2026-10-17, the
-    waiter clears them with Void, choosing refund or no refund) is part of A758.
+    waiter clears them with Void, choosing refund or no refund) was relayed to lane C as an
+    addition to A758.
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
   - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
     `*** HOLD CANCELLED ***` print in English. Since B11g the extra-cancel slip's header word and
@@ -396,14 +397,16 @@ native column drop and compares every recorded table value except the retired co
 
 - **A whole-order kitchen-note change prints one slip per printer and raises one notice per
   station (owner, 2026-10-17).** The slip lists the affected dishes, and the cook acknowledges the
-  notice once per station, replacing A743's default of a slip and a notice per dish. Built as A807.
+  notice once per station, replacing A743's default of a slip and a notice per dish. To be built
+  as A807.
 
 - **Dishes that arrive in a party get a kitchen group at the receiving party (P16, owner,
   2026-10-17: kept).** Spec §15's "leaves with them outside any group" is read as the side the bill
   leaves; the receiving party groups the dishes (the table actions plan's Task 9, #874).
 
 - **A dish whose course is switched off is treated as a dish with no course (C80, owner,
-  2026-10-17)**: Fire now, listed first, whether it was sent or moved. A773 carries it.
+  2026-10-17)**: Fire now, listed first, whether it was sent or moved. Relayed to lane G for A773;
+  A773's spec does not cover it yet.
 
 - **A doneness answer prints as an indented `+` sub-line on the kitchen ticket (owner,
   2026-10-17: fine as built).**
