@@ -118,19 +118,6 @@ each says whether it was seen in a run or only read in the code:
   the move to the review screen (`#onAdvance` in `setup-app.ts`) was read, not run. Whether the
   server ever refuses Demo's fixed series codes is not established.
 
-## In Demo with a draft country that has no venue-setup pack
-
-**Demo gaps on the setup wizard's venue screen, as they stand after C47s (#840), left unfixed** —
-each says whether it was seen in a run or only read in the code:
-
-- _In Demo with a draft country that has no venue-setup pack_, the screen says from the start that
-  Demo's invoice settings have not loaded, even when they have (the unknown country names no filing
-  module to take a description from), and Next only moves focus to that sentence. When the draft
-  carries an operation description but no tax ID, a press puts "Enter the tax ID. Choose one or two
-  invoice languages." above Next, ahead of the generic sentence — two fields Demo does not show.
-  _(C113, #1014: the language sentence now reads "Choose the receipt language."; this case was
-  not run again.)_ Seen in a throwaway test on 2026-09-29, since deleted; nothing pins it.
-
 ## In Demo, a local check that fails only on a field Demo hides
 
 **Demo gaps on the setup wizard's venue screen, as they stand after C47s (#840), left unfixed** —
@@ -299,6 +286,10 @@ It comes after the Demo bar (A246, W36) and A238, whose device and profile model
   `packages/fiscal-verifactu/src/submission-alerts.ts`; why it fires for Demo was not traced.
 
 ## Decisions and deliberate limits
+
+**DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country
+pack.** A country without one is not offered at all, so no venue is set up against settings no pack
+supplies. The build is A833 in `docs/backlog.md`.
 
 **DECIDED (owner, 2026-09-29): the mode screen's certificate note stays as built** (C40, #833) — it
 shows only on the path where the wizard skipped the connection question, and the question is not

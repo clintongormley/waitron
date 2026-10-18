@@ -489,13 +489,18 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     one sentence for all three, as the command line does.
   - The first, unconfirmed attempt downloads the whole copy only to show whose it is, and the
     confirmed attempt downloads it again; the HTTP request stays open for the whole download.
-  - Walked in the browser test harness against a stubbed server, not yet on a running box.
+  - Walked in the browser test harness against a stubbed server, not yet on a running box. Walk it
+    on the box after 2 November: back up a test venue to a real bucket, wipe it, and restore it
+    through setup.
   - After an archive restore or a Cloud restore the final screen does not show the device steps the
     bucket rebuild's shows (`rebuilt` is set only on the bucket path,
     `apps/setup/src/setup-app.ts`), although the first start re-issues the certificate for this
     machine's addresses after an archive restore too.
-  - After a refused Cloud restore the owner has to tick the Cloud screen's "old server and
-    surviving peers are stopped" confirmation again.
+
+- **A832. Check whether a refused Cloud restore clears the "old server is stopped" tick.** Left
+  open by #646. One browser run: refuse a Cloud restore and look at the Cloud screen's "old server
+  and surviving peers are stopped" confirmation. If the tick clears, keep it ticked after a
+  refusal; if it already stays ticked, delete this entry.
 
 - **The name-constrained-CA model does NOT protect a personal Android phone** (spike 2026-09-08): a
   user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
@@ -535,8 +540,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     certificate through Windows', macOS' or Firefox's own certificate store while reading the new
     guidance, so the instructions are unverified against the thing they describe. The Spanish
     steps name Chrome, macOS and Firefox menus from memory ("Gestionar certificados importados de
-    Windows", "Acceso a Llaveros", "Sus certificados"…), and the FNMT links still open FNMT's
-    English pages; check them on real Spanish systems at the same time (left open by C42, #837).
+    Windows", "Acceso a Llaveros", "Sus certificados"…), and the FNMT links open FNMT's English
+    pages but for macOS's (A834); check them on real Spanish systems at the same time (left open by
+    C42, #837).
     [Detail](backlog/setup.md#the-certificate-export-help-has-never-been-followed-on-a-real-machine)
   - Switching setup mode does not clean up what the server already holds. If someone fills in
     Demo, Prepare or Live far enough that the server has stored part of that answer and then
@@ -559,12 +565,23 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   - In Demo, a server refusal of a field Demo hides can only be retried unchanged. Whether the
     server ever refuses Demo's fixed series codes is not established.
     [Detail](backlog/setup.md#in-demo-a-server-refusal-of-a-field-demo-hides-can-only-be-retried-unchanged)
-  - In Demo with a draft country that has no venue-setup pack. Seen in a throwaway test on
-    2026-09-29, since deleted; nothing pins it.
-    [Detail](backlog/setup.md#in-demo-with-a-draft-country-that-has-no-venue-setup-pack)
   - In Demo, a local check that fails only on a field Demo hides. All of this was read in the code,
     not run; whether a real draft can reach that state has not been tested.
     [Detail](backlog/setup.md#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
+
+- **A833. Setup, and the demo, start only for a country that has a country pack** (owner decision,
+  2026-10-17). The country choice offers only countries with a pack (Spain today); a country without
+  one is not offered at all, so the venue screen's "Demo's invoice settings have not loaded" case
+  cannot arise. The venue screen's list already reads `VENUE_SETUP_COUNTRY_PACKS`
+  (`apps/setup/src/screens/venue-screen.ts`, read, not run), but a draft can still carry a country
+  with no pack, which is how C47s (#840) reached that sentence. Done when no draft or request can
+  bring a country without a pack into setup, and a test that tries one fails before the change.
+
+- **A834. Point the certificate export help's macOS link at FNMT's English page.** In
+  `apps/setup/src/certificate-export-help.ts` the macOS guide's link opens FNMT's Basque `/eu/`
+  page, while the Windows and Firefox links open `/en/`. Change it to `/en/`, or to the person's
+  language where FNMT has a page in it. Done when each of the three links has been opened and shows
+  the right language.
 
 - **A missing configuration export on the setup wizard's live-source screen gets no red ring.** The
   backup restore screen's file input draws one (A523); `live-source-screen.ts` marks its file input
@@ -591,9 +608,13 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   W108 (#1276, the demo venue's names and tax ID come from the country pack).
 
 - **Still open from W109-5's Barcelona look (2026-10-07):** product groups and prep stations
-  stay English under Spanish staff-facing dish names (the plan's known limit). Stored practice sales
-  cannot be reprinted or looked up on the till: both look a sale up through its till order, which a
-  practice sale does not have (the look's reading, not checked against the code).
+  stay English under Spanish staff-facing dish names (the plan's known limit).
+
+- **A835. Check whether the demo's stored practice sales can be reprinted and looked up on the
+  till.** W109-5's Barcelona look read that both look a sale up through its till order, which a
+  practice sale does not have; nobody checked it against the code. One run on the demo: if it is
+  real, seed those sales with till orders like real sales so reprint and look-up work; if both
+  already work, delete this entry.
 
 - **The demo’s Catalan and Galician text needs a speaker’s check** (W109-3, #1321,
   owner decision 4, 2026-10-06). A speaker of each
