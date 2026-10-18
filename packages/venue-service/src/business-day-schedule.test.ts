@@ -1,5 +1,7 @@
 import { readZoneKeepOpenState } from "./operations.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
+import { saveSeasonWeeks } from "./season-weeks.js";
+import { deletePeriod } from "./period-delete.js";
 import { saveSpecialDay } from "./special-days.js";
 import {
   replaceMenuWeek,
@@ -824,6 +826,206 @@ describe("a waiting change checks the hours written while it waits", () => {
         ],
       },
     });
+    expect(await stored(v)).toEqual([]);
+  });
+  const storedZone = (v: Awaited<ReturnType<typeof fixture>>) =>
+    withTransaction(suite.db, async (tx) =>
+      (
+        await tx
+          .select({
+            weekday: zoneDays.weekday,
+            startsAt: zoneDayRanges.startsAt,
+            endsAt: zoneDayRanges.endsAt,
+          })
+          .from(zoneDayRanges)
+          .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
+          .where(eq(zoneDays.zoneId, v.zoneId!))
+      )
+        .map((row) => `${row.weekday} ${row.startsAt}-${row.endsAt}`)
+        .sort(),
+    );
+  const writeZoneWeek = (
+    v: Awaited<ReturnType<typeof fixture>>,
+    ranges: { startsAt: string; endsAt: string }[],
+  ) =>
+    withTransaction(suite.db, (tx) =>
+      replaceZoneClosedWeek(
+        tx,
+        v.cfg,
+        v.zoneId!,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          ranges: weekday === 6 ? ranges : [],
+        })),
+        1,
+        at,
+      ),
+    );
+  const writeSeasonWeek = (
+    v: Awaited<ReturnType<typeof fixture>>,
+    weekday: number,
+    ranges: { startsAt: string; endsAt: string }[],
+  ) =>
+    withTransaction(suite.db, (tx) =>
+      saveSeasonWeeks(
+        tx,
+        v.cfg,
+        v.seasonId,
+        {
+          departments: [
+            { departmentId: v.departmentId, days: weekOf(v.periodId, weekday, ranges) },
+          ],
+        },
+        at,
+        1,
+      ),
+    );
+  /** A second department, "Bar", with one period holding raw ranges on `weekday`. */
+  const otherDepartment = (
+    v: Awaited<ReturnType<typeof fixture>>,
+    weekday: number,
+    ranges: { startsAt: string; endsAt: string }[],
+  ) =>
+    withTransaction(suite.db, async (tx) => {
+      const departmentId = randomUUID();
+      await tx.insert(departments).values({
+        id: departmentId,
+        locationId: v.cfg.locationId,
+        name: "Bar",
+        tradingName: "Bar",
+      });
+      const menuId = randomUUID();
+      await tx.insert(catalogues).values({ id: menuId, name: "Bar menu" });
+      const periodId = randomUUID();
+      await tx.insert(menuPeriods).values({ id: periodId, departmentId, menuId, name: "Bar" });
+      await seasonDay(tx, { departmentId, seasonId: v.seasonId, weekday, periodId, ranges });
+      return { departmentId, periodId };
+    });
+
+  it("refuses a zone closed week crossing the waiting start, naming the zone, and writes nothing", async () => {
+    const v = await fixture([], { zone: true });
+    await waiting(v);
+    await expect(writeZoneWeek(v, [range("22:00", "04:30")])).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            zoneId: v.zoneId,
+            zoneName: "Zone",
+            weekday: 6,
+            startsAt: "22:00",
+            endsAt: "04:30",
+            reason: "range",
+          }),
+        ],
+      },
+    });
+    expect(await storedZone(v)).toEqual([]);
+    await expect(writeZoneWeek(v, [range("12:00", "13:00")])).resolves.toBeUndefined();
+    expect(await storedZone(v)).toEqual(["6 12:00:00-13:00:00"]);
+  });
+  it("refuses a season week crossing the waiting start, writing nothing, and stores one that fits", async () => {
+    const v = await fixture([]);
+    await waiting(v);
+    await expect(writeSeasonWeek(v, 6, [range("21:00", "04:30")])).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            departmentId: v.departmentId,
+            weekday: 6,
+            startsAt: "21:00",
+            endsAt: "04:30",
+            reason: "range",
+          }),
+        ],
+      },
+    });
+    expect(await stored(v)).toEqual([]);
+    await expect(writeSeasonWeek(v, 3, [range("09:00", "17:00")])).resolves.toBeUndefined();
+    expect(await stored(v)).toEqual(["3 09:00:00-17:00:00"]);
+  });
+  it("refuses a clean season week while another department holds a clash, naming that department", async () => {
+    const v = await fixture([]);
+    const bar = await otherDepartment(v, 6, [range("21:00", "04:30")]);
+    await waiting(v);
+    await expect(writeSeasonWeek(v, 3, [range("09:00", "17:00")])).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            departmentId: bar.departmentId,
+            departmentName: "Bar",
+            periodId: bar.periodId,
+            weekday: 6,
+            startsAt: "21:00",
+            endsAt: "04:30",
+            reason: "range",
+          }),
+        ],
+      },
+    });
+    expect(await stored(v)).toEqual([]);
+  });
+  it("refuses deleting a period while another of its department's periods clashes, and deletes the clashing one", async () => {
+    const v = await fixture([]);
+    await withTransaction(suite.db, (tx) =>
+      seasonDay(tx, { ...v, weekday: 6, ranges: [range("21:00", "04:30")] }),
+    );
+    const otherPeriod = randomUUID();
+    await withTransaction(suite.db, async (tx) => {
+      const [period] = await tx
+        .select({ menuId: menuPeriods.menuId })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, v.periodId));
+      await tx.insert(menuPeriods).values({
+        id: otherPeriod,
+        departmentId: v.departmentId,
+        menuId: period!.menuId,
+        name: "Brunch",
+      });
+    });
+    await waiting(v);
+    const periodsLeft = () =>
+      withTransaction(suite.db, async (tx) =>
+        (
+          await tx
+            .select({ id: menuPeriods.id })
+            .from(menuPeriods)
+            .where(eq(menuPeriods.departmentId, v.departmentId))
+        )
+          .map((row) => row.id)
+          .sort(),
+      );
+    const remove = (periodId: string) =>
+      withTransaction(suite.db, (tx) => deletePeriod(tx, v.cfg, periodId, null, at, 1));
+    await expect(remove(otherPeriod)).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            periodId: v.periodId,
+            weekday: 6,
+            startsAt: "21:00",
+            endsAt: "04:30",
+            reason: "range",
+          }),
+        ],
+      },
+    });
+    expect(await periodsLeft()).toEqual([v.periodId, otherPeriod].sort());
+    await expect(remove(v.periodId)).resolves.toBeUndefined();
+    expect(await periodsLeft()).toEqual([otherPeriod]);
     expect(await stored(v)).toEqual([]);
   });
 });

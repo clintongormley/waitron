@@ -4,6 +4,7 @@ import { readLocationClock } from "@waitron/reporting";
 import { AppError, cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
+  assertWaitingChangeFits,
   readBusinessDayScheduleRevision,
 } from "./business-day-schedule.js";
 import { resolveDepartmentDays } from "./day-resolver.js";
@@ -24,6 +25,7 @@ import {
 import { departments } from "./schema/service.js";
 import { joinTouching } from "./season-weeks.js";
 import { rangeSpan, serviceMomentAt } from "./service-day.js";
+import { settledClock } from "./service-day-context.js";
 import "./errors.js";
 
 export interface PaintedIn {
@@ -250,12 +252,18 @@ export async function deletePeriod(
       .where(eq(periodExtensions.periodId, periodId));
   }
   await tx.delete(menuPeriods).where(eq(menuPeriods.id, periodId));
-  const clash = await departmentEndOffsetClash(tx, cfg, period.departmentId, clock);
+  const clash = await departmentEndOffsetClash(
+    tx,
+    cfg,
+    period.departmentId,
+    settledClock(clock, at),
+  );
   if (clash !== null)
     invalidTimetable(replacementId === null ? "periodId" : "replacementPeriodId", {
       reason: "end_offset",
       ...clash,
     });
+  await assertWaitingChangeFits(tx, cfg, at, clock);
 }
 
 async function fitExtensionsToReplacement(

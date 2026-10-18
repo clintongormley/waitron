@@ -39,6 +39,8 @@ import {
   kitchenCourses,
   kitchenStations,
   locations,
+  locationBusinessDaySettings,
+  locationDayCutoverChanges,
   sales,
   withTransaction,
   workingOrderLines,
@@ -293,6 +295,52 @@ describe("new department service periods", () => {
       (await db.execute(sql`select id from menu_periods where department_id = ${empty.id}`)).rows,
     ).toEqual([]);
   });
+  it.each([
+    ["21:00", "refuses", 1],
+    ["03:00", "accepts", 0],
+  ] as const)(
+    "with a %s start waiting, %s a new department whose default week would clash with it",
+    async (dayCutover, _, refusals) => {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
+      try {
+        const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
+        const id = brandLocationId(await seedLocation(`Waiting ${randomUUID()}`));
+        await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
+        await db.insert(locationBusinessDaySettings).values({ locationId: id, revision: 1 });
+        await db.insert(locationDayCutoverChanges).values({
+          locationId: id,
+          effectiveBusinessDay: "2026-11-04",
+          dayCutover: `${dayCutover}:00`,
+        });
+        const create = scoped((tx) =>
+          createDepartment(tx, { locationId: id }, { name: "Terrace", orderStart: "counter" }),
+        );
+        if (refusals === 0) await expect(create).resolves.toMatchObject({ name: "Terrace" });
+        else
+          await expect(create).rejects.toMatchObject({
+            code: "hours.clock_change_conflict",
+            params: {
+              dayCutover: "21:00",
+              conflictCount: 5,
+              conflicts: expect.arrayContaining([
+                expect.objectContaining({
+                  departmentName: "Terrace",
+                  startsAt: "09:00",
+                  endsAt: "17:00",
+                  reason: "endpoint_day",
+                }),
+              ]),
+            },
+          });
+        const rows = await db.execute(
+          sql`select name from departments where location_id = ${id} and name = 'Terrace'`,
+        );
+        expect(rows.rows).toHaveLength(1 - refusals);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 });
 
 let db: Database;
