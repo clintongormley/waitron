@@ -33,7 +33,9 @@ export function languageWindow(
 
 const rowKey = (row: Pick<TranslationItem, "kind" | "id">) => JSON.stringify([row.kind, row.id]);
 
-function editorHref(row: TranslationItem): string {
+export function translationEditorHref(
+  row: Pick<TranslationItem, "kind" | "id" | "parent">,
+): string {
   const id = encodeURIComponent(row.id);
   const parent = encodeURIComponent(row.parent?.id ?? "");
   switch (row.kind) {
@@ -235,7 +237,7 @@ export class ContentTranslationWindow extends LitElement {
         >
           <p class="name">${row.parent ? `${row.parent.name} › ${row.name}` : row.name}</p>
           <a
-            href=${editorHref(row)}
+            href=${translationEditorHref(row)}
             aria-label=${fill("content_gaps.open_named", { name: row.name })}
             @click=${(event: MouseEvent) => {
               if ((row.kind !== "product" && row.kind !== "variant") || leftToBrowser(event))

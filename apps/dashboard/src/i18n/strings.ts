@@ -636,6 +636,12 @@ export const en = {
   "translations.previous": "Previous",
   "translations.next": "Next",
   "translations.page": "Page {page} of {pages}",
+  "suggestions.waiting_fixes": "Review {count} waiting fixes and notes",
+  "suggestions.fixes_filter":
+    "Missing in is now All names, showing items with waiting fixes and notes.",
+  "suggestions.fix_capacity":
+    "Your batch already has 100 fields. Save or unstage a field before using this fix.",
+  "suggestions.use_fix": "Use fix",
   "suggestions.suggested": "Suggested",
   "suggestions.discard": "Discard suggestion",
   "suggestions.discard_named": "Discard suggestion for {name}",
@@ -3683,6 +3689,12 @@ export const es: Record<StringKey, string> = {
   "translations.previous": "Anterior",
   "translations.next": "Siguiente",
   "translations.page": "Página {page} de {pages}",
+  "suggestions.waiting_fixes": "Revisar {count} correcciones y notas pendientes",
+  "suggestions.fixes_filter":
+    "Falta en muestra ahora Todos los nombres, con los artículos que tienen correcciones y notas pendientes.",
+  "suggestions.fix_capacity":
+    "El lote ya tiene 100 campos. Guarda o retira un campo antes de usar esta corrección.",
+  "suggestions.use_fix": "Usar corrección",
   "suggestions.suggested": "Sugerido",
   "suggestions.discard": "Descartar sugerencia",
   "suggestions.discard_named": "Descartar sugerencia de {name}",

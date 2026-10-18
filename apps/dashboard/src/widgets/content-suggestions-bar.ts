@@ -55,6 +55,8 @@ export class ContentSuggestionsBar extends LitElement {
   /** The last press was answered with no run: nothing was left to send. */
   @property({ attribute: false }) nothing = false;
   @property({ attribute: false }) cloudOrigin: string | null = null;
+  @property({ type: Number }) waitingFixes = 0;
+  @property({ type: Boolean }) reviewDisabled = false;
 
   #ready(): boolean {
     return this.service === "on" && !this.busy && !runActive(this.run);
@@ -127,6 +129,23 @@ export class ContentSuggestionsBar extends LitElement {
     const ready = this.#ready();
     return html`<div class="bar">
       <div class="lines">${this.#lines()} ${formMessage(this.error)}</div>
+      ${
+        this.waitingFixes > 0
+          ? html`<wt-button
+              data-test="review-fixes"
+              variant=${this.reviewDisabled ? "secondary" : "primary"}
+              ?disabled=${this.reviewDisabled}
+              @click=${(event: MouseEvent) => {
+                event.stopPropagation();
+                if (!this.reviewDisabled)
+                  this.dispatchEvent(
+                    new CustomEvent("review-fixes", { bubbles: true, composed: true }),
+                  );
+              }}
+              >${fill("suggestions.waiting_fixes", { count: String(this.waitingFixes) })}</wt-button
+            >`
+          : nothing
+      }
       <wt-button
         data-test="translate-all"
         variant=${ready || this.busy ? "primary" : "secondary"}

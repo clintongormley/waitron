@@ -1165,8 +1165,15 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   with Keep restricted to an enabled language and an eligible target under the same owner.
   Replace and Discard remove only the chosen field. Local validation and exact field refusals
   reveal the staged page and language, then focus that native field. Explicit conflict review of
-  an uncertain batch, suggestion notes/Discard/Use fix and the remaining legacy-suite migration
-  are still open. The client accepts projected multilingual
+  an uncertain batch and the remaining legacy-suite migration are still open. Suggestion panels
+  now show borrowed values, spelling fixes, placeholder notes and stale evidence. Use fix rereads
+  the selected cell and its suggestion page before staging the correction with the current token;
+  personal text and deliberate clears win, and a full batch leaves the fix waiting. Per-suggestion
+  Discard waits before Save, removes only its borrowed draft and suppresses the deleted id across
+  reopening. Waiting-fix review explicitly selects All names; choosing Missing in again clears
+  that narrower filter. Product links on a shown suggestion use the guarded editor event. Editor
+  links for notes whose item is outside the current page, the remaining original dialog suites and
+  explicit uncertain-batch conflict review still need integration and validation. The client accepts projected multilingual
   queries and one whole cell batch on the language-free routes; its legacy call signatures and
   public DTOs remain to be retired with the remaining editor tests and consumers. Regional
   completeness notes wrap in full, with the row actions reachable at phone and desktop widths.

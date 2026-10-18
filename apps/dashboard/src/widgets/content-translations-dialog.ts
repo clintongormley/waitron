@@ -1,5 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { repeat } from "lit/directives/repeat.js";
+import type { ContentSuggestionView } from "@waitron/catalogue/src/content-suggestion-types.js";
 import { languageDisplayName, type ContentLanguages } from "@waitron/shared";
 import { QueryController } from "@waitron/dashboard-kit";
 import {
@@ -27,12 +29,14 @@ import { TRANSLATION_GAP_KINDS } from "@waitron/catalogue/src/content-translatio
 import type { DashboardApi, SuggestionRunView } from "../api/client.js";
 import { QUERY_DEPENDENCIES } from "../api/live-queries.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { leftToBrowser } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { sameValue } from "./product-editor-model.js";
 import { TranslationDrafts, type ReviewChoice } from "./content-translations-model.js";
 import { TranslationPages, type TranslationSelection } from "./content-translations-pages.js";
 import {
   ContentTranslationWindow,
+  translationEditorHref,
   type TranslationWindowChange,
 } from "./content-translations-window.js";
 import { runActive, type SuggestionService } from "./content-suggestions-bar.js";
@@ -72,6 +76,12 @@ export class ContentTranslationsDialog extends LitElement {
         padding-block: var(--wt-space-3);
         border-block-end: var(--wt-field-line-width) solid var(--wt-color-border);
       }
+      .review a {
+        display: inline-flex;
+        align-items: center;
+        min-block-size: var(--wt-tap-min);
+        color: var(--wt-color-primary-text);
+      }
       .review dd {
         margin-inline: 0;
         margin-block-end: var(--wt-space-3);
@@ -110,8 +120,12 @@ export class ContentTranslationsDialog extends LitElement {
   @state() private suggestionRun: SuggestionRunView | null = null;
   @state() private cloudOrigin: string | null = null;
   @state() private suggestionBusy = false;
+  @state() private suggestionAction = "";
+  @state() private staleSuggestions = new Set<string>();
+  readonly #discardedSuggestions = new Set<string>();
   @state() private suggestionError = "";
   @state() private nothingMissing = false;
+  @state() private fixesFilter = false;
   #nothingSaw: SuggestionRunView | null = null;
   #suggestionReads = 0;
   #runReplacedAt = 0;
@@ -178,10 +192,12 @@ export class ContentTranslationsDialog extends LitElement {
       this.suggestionRun = null;
       this.suggestionBusy = false;
       this.suggestionError = "";
+      this.staleSuggestions = new Set();
       this.nothingMissing = false;
       this.search = "";
       this.kind = "";
       this.staged = false;
+      this.fixesFilter = false;
       this.anchor = this.language;
       this.missing = this.language;
       if (this.open) void this.#open();
@@ -299,6 +315,7 @@ export class ContentTranslationsDialog extends LitElement {
   }
   #snapshot(suggestionSequence?: number): void {
     const reader = this.reader!;
+    for (const id of this.#discardedSuggestions) reader.drafts.discardSuggestion(id);
     this.readError = reader.readError ? t("content_gaps.load_error") : "";
     if (reader.suggestions) {
       this.service = reader.suggestions.service;
@@ -342,6 +359,7 @@ export class ContentTranslationsDialog extends LitElement {
     this.requestUpdate();
   }
   #notifyDraft(): void {
+    this.#window()?.requestUpdate();
     const personal = JSON.stringify(this.reader?.drafts.personalSubmission());
     if (personal === this.#personal) return;
     this.#personal = personal;
@@ -369,6 +387,7 @@ export class ContentTranslationsDialog extends LitElement {
     if (
       !reader ||
       this.busy ||
+      this.suggestionAction ||
       this.loading ||
       this.reading ||
       this.#state().unchanged ||
@@ -498,6 +517,212 @@ export class ContentTranslationsDialog extends LitElement {
         </section>`;
       });
   }
+  #openProduct(row: TranslationRef): void {
+    const proceed = () => {
+      this.dispatchEvent(
+        new CustomEvent("wt-edit-product", {
+          detail: { productId: row.id },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    };
+    if (this.#leave) void this.#leave.request({ scopes: [this], reason: "navigation", proceed });
+    else proceed();
+  }
+  #suggestionCurrent(generation: number, reader: TranslationPages, api: DashboardApi): boolean {
+    return (
+      generation === this.#generation &&
+      this.reader === reader &&
+      this.api === api &&
+      this.open &&
+      this.isConnected
+    );
+  }
+  async #useFix(view: ContentSuggestionView): Promise<void> {
+    const reader = this.reader;
+    if (
+      !reader ||
+      !view.cell ||
+      !view.fix ||
+      view.stale ||
+      this.busy ||
+      this.reading ||
+      this.uncertain ||
+      this.suggestionAction
+    )
+      return;
+    const generation = this.#generation,
+      api = this.api;
+    const current = () => this.#suggestionCurrent(generation, reader, api);
+    const query = reader.suggestionQuery;
+    this.suggestionAction = view.id;
+    this.suggestionError = "";
+    try {
+      const client = api.background ?? api;
+      const page = await client.getContentTranslationCells([view.cell]);
+      if (!current()) return;
+      const latest = await client.getContentSuggestions({
+        ...query,
+        ...(query.after === undefined ? {} : { configuration: page.configuration }),
+      });
+      if (!current()) return;
+      if (reader.page?.configuration !== page.configuration) {
+        await reader.select({});
+        if (!current()) return;
+      }
+      const fresh = page.cells.find(
+        (cell) => translationCellKey(cell) === translationCellKey(view.cell!),
+      );
+      const checked = latest.suggestions.find((suggestion) => suggestion.id === view.id);
+      if (
+        !fresh ||
+        latest.configuration !== page.configuration ||
+        reader.page?.configuration !== page.configuration ||
+        !checked ||
+        !sameValue(checked.fix, view.fix) ||
+        !sameValue(checked.cell, view.cell)
+      ) {
+        this.staleSuggestions = new Set([...this.staleSuggestions, view.id]);
+        return;
+      }
+      reader.receiveCells(page);
+      const outcome = reader.drafts.useFix(checked, fresh);
+      if (outcome === "stale") this.staleSuggestions = new Set([...this.staleSuggestions, view.id]);
+      if (outcome === "full") this.suggestionError = t("suggestions.fix_capacity");
+      this.#notifyDraft();
+      this.requestUpdate();
+    } catch (error) {
+      if (current()) this.suggestionError = codeMessage(codeOf(error));
+    } finally {
+      this.suggestionAction = "";
+    }
+  }
+  async #discardSuggestion(view: ContentSuggestionView): Promise<void> {
+    if (this.busy || this.uncertain || this.suggestionAction) return;
+    const generation = this.#generation,
+      api = this.api;
+    this.suggestionAction = view.id;
+    this.suggestionError = "";
+    try {
+      await api.discardContentSuggestion(view.id);
+      this.#discardedSuggestions.add(view.id);
+      this.reader?.drafts.discardSuggestion(view.id);
+      this.#notifyDraft();
+      this.requestUpdate();
+    } catch (error) {
+      if (generation === this.#generation && this.open && this.isConnected && this.api === api)
+        this.suggestionError = codeMessage(codeOf(error));
+    } finally {
+      this.suggestionAction = "";
+    }
+  }
+  #suggestionNotes() {
+    const reader = this.reader;
+    if (!reader?.suggestions) return nothing;
+    return repeat(
+      reader.suggestions.suggestions.filter((view) => !this.#discardedSuggestions.has(view.id)),
+      (view) => view.id,
+      (view) => {
+        const row = reader.page?.rows.find(
+          (row) => row.kind === view.kind && row.id === view.itemId,
+        );
+        const name =
+          row?.name ??
+          reader.drafts.current(
+            view.cell ?? {
+              kind: view.kind,
+              id: view.itemId,
+              language: view.language ?? "",
+              field: "name",
+            },
+          )?.staffText ??
+          view.itemId;
+        const origin = view.cell ? reader.drafts.origin(view.cell) : null;
+        const stale =
+          view.stale || this.staleSuggestions.has(view.id) || (!!view.fix && origin === "personal");
+        const canFix =
+          !!view.cell &&
+          !!view.fix &&
+          view.fix.field === view.cell.language &&
+          view.cell.field === "name" &&
+          !!view.expected &&
+          !stale &&
+          origin !== "personal" &&
+          origin !== "fix";
+        const locked = this.busy || this.uncertain !== null || !!this.suggestionAction;
+        return html`<section
+          class="review"
+          data-suggestion=${view.id}
+          role="group"
+          aria-label=${name}
+        >
+          <p>${name}${view.language ? ` · ${this.#name(view.language)}` : ""}</p>
+          ${origin === "suggested" ? html`<p>${t("suggestions.suggested")}</p>` : nothing}
+          ${view.placeholder ? html`<p>${t("suggestions.placeholder")}</p>` : nothing}
+          ${
+            view.fix
+              ? html`<p>
+                  ${
+                    view.fix.field === "internal"
+                      ? fill("suggestions.fix_internal", {
+                          wrong: view.fix.wrong,
+                          right: view.fix.right,
+                        })
+                      : fill("suggestions.fix_language", {
+                          language: this.#name(view.fix.field),
+                          wrong: view.fix.wrong,
+                          right: view.fix.right,
+                        })
+                  }
+                </p>`
+              : nothing
+          }
+          ${stale ? html`<p role="status">${t("suggestions.stale")}</p>` : nothing}
+          <div class="review-actions">
+            ${
+              row
+                ? html`<a
+                    href=${translationEditorHref(row)}
+                    @click=${(event: MouseEvent) => {
+                      if (
+                        (row.kind !== "product" && row.kind !== "variant") ||
+                        leftToBrowser(event)
+                      )
+                        return;
+                      event.preventDefault();
+                      this.#openProduct(row);
+                    }}
+                    >${t("content_gaps.open")}</a
+                  >`
+                : nothing
+            }
+            ${
+              view.fix && view.cell
+                ? html`<wt-button
+                    data-test="use-fix"
+                    variant=${canFix ? "primary" : "secondary"}
+                    ?disabled=${locked || this.reading || !canFix}
+                    ?loading=${this.suggestionAction === view.id}
+                    @click=${() => void this.#useFix(view)}
+                    >${t("suggestions.use_fix")}</wt-button
+                  >`
+                : nothing
+            }
+            <wt-button
+              data-test="discard-suggestion"
+              variant="secondary"
+              ?disabled=${locked}
+              ?loading=${this.suggestionAction === view.id}
+              aria-label=${fill("suggestions.discard_named", { name })}
+              @click=${() => void this.#discardSuggestion(view)}
+              >${t("suggestions.discard")}</wt-button
+            >
+          </div>
+        </section>`;
+      },
+    );
+  }
   async #startRun(): Promise<void> {
     if (this.suggestionBusy || this.service !== "on" || runActive(this.suggestionRun)) return;
     const generation = this.#generation;
@@ -573,6 +798,16 @@ export class ContentTranslationsDialog extends LitElement {
         .busy=${this.suggestionBusy}
         .error=${this.suggestionError || (reader?.suggestionError ? codeMessage(codeOf(reader.suggestionError)) : "")}
         .nothing=${this.nothingMissing}
+        .waitingFixes=${reader?.suggestions?.waitingFixes ?? 0}
+        .reviewDisabled=${locked || this.reading || Boolean(this.suggestionAction)}
+        @review-fixes=${(event: Event) => {
+          event.stopPropagation();
+          if (locked || this.reading || this.suggestionAction) return;
+          this.missing = "all";
+          this.staged = false;
+          this.fixesFilter = true;
+          void this.#select({ missing: { mode: "all" }, waitingFixes: true, staged: false });
+        }}
         .cloudOrigin=${this.cloudOrigin}
         @translate-all=${(event: Event) => {
           event.stopPropagation();
@@ -609,6 +844,7 @@ export class ContentTranslationsDialog extends LitElement {
                   ],
                   (value) => {
                     this.missing = value;
+                    this.fixesFilter = false;
                     this.staged = false;
                     const missing: MissingIn =
                       value === "any"
@@ -616,7 +852,7 @@ export class ContentTranslationsDialog extends LitElement {
                         : value === "all"
                           ? { mode: "all" }
                           : { mode: "language", language: value };
-                    void this.#select({ missing, staged: false });
+                    void this.#select({ missing, waitingFixes: undefined, staged: false });
                   },
                 )}
                 ${this.#filter(
@@ -665,6 +901,7 @@ export class ContentTranslationsDialog extends LitElement {
                   },
                 )}
               </div>
+              ${this.fixesFilter ? html`<p role="status" data-test="fixes-filter-notice">${t("suggestions.fixes_filter")}</p>` : nothing}
               <div class="counts">
                 <span data-test="edited-count"
                   >${fill("translations.edited", { count: String(count) })}</span
@@ -703,25 +940,14 @@ export class ContentTranslationsDialog extends LitElement {
                 @translation-change=${this.#change}
                 @translation-open=${(event: CustomEvent<{ row: TranslationRef }>) => {
                   event.stopPropagation();
-                  const proceed = () => {
-                    this.dispatchEvent(
-                      new CustomEvent("wt-edit-product", {
-                        detail: { productId: event.detail.row.id },
-                        bubbles: true,
-                        composed: true,
-                      }),
-                    );
-                  };
-                  if (this.#leave)
-                    void this.#leave.request({ scopes: [this], reason: "navigation", proceed });
-                  else proceed();
+                  this.#openProduct(event.detail.row);
                 }}
                 @translation-focus=${(event: CustomEvent<{ cell: TranslationCellRef | null }>) => {
                   event.stopPropagation();
                   reader.focus(event.detail.cell);
                 }}
               ></dashboard-content-translation-window>
-              ${this.#reviews()}
+              ${this.#reviews()} ${this.#suggestionNotes()}
               ${reader.page?.rows.length === 0 ? html`<p data-test="complete">${fill("content_gaps.complete", { language: languageDisplayName(this.language, currentLocale(), false) })}</p>` : nothing}
               <div class="pages">
                 <wt-button
@@ -758,7 +984,7 @@ export class ContentTranslationsDialog extends LitElement {
         <wt-button
           data-test="save"
           variant=${action.variant}
-          ?disabled=${action.unchanged || this.loading || this.busy || this.reading || count > 100 || Boolean(this.#window()?.hasRejectedEdits) || (!this.uncertain && this.attempted && faults.some((fault) => !this.refused.includes(fault)))}
+          ?disabled=${action.unchanged || this.loading || this.busy || Boolean(this.suggestionAction) || this.reading || count > 100 || Boolean(this.#window()?.hasRejectedEdits) || (!this.uncertain && this.attempted && faults.some((fault) => !this.refused.includes(fault)))}
           @click=${() => void this.#save()}
           >${t(this.uncertain ? "translations.retry_batch" : "translations.save")}</wt-button
         >

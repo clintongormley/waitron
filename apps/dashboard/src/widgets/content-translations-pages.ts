@@ -94,6 +94,7 @@ export class TranslationPages {
   #opening = 0;
   #itemSequence = 0;
   #suggestionSequence = 0;
+  #suggestionAfter: string | undefined;
   #position = 0;
   #cursors: (string | undefined)[] = [undefined];
   constructor(
@@ -110,6 +111,33 @@ export class TranslationPages {
       ? this.initial
       : this.#config.defaultLanguage;
     return { missing: { mode: "language", language }, anchor: language };
+  }
+  get suggestionQuery(): ContentSuggestionQuery {
+    return this.#suggestionAfter === undefined
+      ? this.#selection.waitingFixes
+        ? { fixesOnly: true }
+        : {}
+      : {
+          after: this.#suggestionAfter,
+          configuration: this.suggestions?.configuration,
+          ...(this.#selection.waitingFixes ? { fixesOnly: true } : {}),
+        };
+  }
+  receiveCells(page: TranslationCellPage): void {
+    if (!this.page || page.configuration !== this.page.configuration)
+      throw new Error("Translation cells changed configuration");
+    const retained = this.drafts.staged().flatMap((ref) => {
+      const cell = this.drafts.current(ref);
+      return cell ? [cell] : [];
+    });
+    const values = new Map(
+      [...this.page.rows.flatMap((row) => row.cells), ...retained, ...page.cells].map((cell) => [
+        translationCellKey(cell),
+        cell,
+      ]),
+    );
+    this.drafts.receive({ ...page, cells: [...values.values()] });
+    this.page = updatedPage(this.page, page.cells);
   }
   get hiddenCount(): number {
     const shown = new Set(
@@ -202,10 +230,12 @@ export class TranslationPages {
   }
   async select(selection: Partial<TranslationSelection>): Promise<void> {
     if (!this.#active) return;
+    const wasFixes = this.#selection.waitingFixes === true;
     this.#selection = { ...this.#selection, ...structuredClone(selection) };
     if (this.#selection.missing.mode !== "all") delete this.#selection.waitingFixes;
     this.#cursors = [undefined];
     await this.#readItems(0);
+    if (wasFixes !== (this.#selection.waitingFixes === true)) await this.refreshSuggestions();
   }
   async reveal(cell: TranslationCellRef): Promise<void> {
     if (!this.#active) return;
@@ -339,6 +369,7 @@ export class TranslationPages {
         this.drafts.receive({ ...refreshed, cells: [...values.values()] });
         this.page = updatedPage(this.page, refreshed.cells);
       }
+      this.#suggestionAfter = after;
       this.suggestions = page;
       this.suggestionError = null;
       this.drafts.suggest(page.suggestions);
@@ -355,6 +386,7 @@ export class TranslationPages {
       const page = await this.api.suggestions({
         after: previous.next,
         configuration: previous.configuration,
+        ...(this.#selection.waitingFixes ? { fixesOnly: true } : {}),
       });
       if (current()) await this.#applySuggestions(page, previous.next, current);
     } catch (error) {
@@ -366,7 +398,9 @@ export class TranslationPages {
     const sequence = ++this.#suggestionSequence;
     const current = () => this.#active && sequence === this.#suggestionSequence;
     try {
-      const page = await this.api.suggestions({});
+      const page = await this.api.suggestions(
+        this.#selection.waitingFixes ? { fixesOnly: true } : {},
+      );
       if (current()) await this.#applySuggestions(page, undefined, current);
     } catch (error) {
       if (current()) this.suggestionError = error;
