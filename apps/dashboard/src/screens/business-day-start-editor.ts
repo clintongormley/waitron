@@ -147,7 +147,6 @@ export class BusinessDayStartEditor extends LitElement {
     if (!today) return [];
     return model.clock.cutoverChanges
       .filter((change) => change.effectiveBusinessDay > today)
-      .sort((a, b) => (a.effectiveBusinessDay < b.effectiveBusinessDay ? -1 : 1))
       .map((change) => ({
         effectiveBusinessDay: change.effectiveBusinessDay,
         dayCutover: change.dayCutover.slice(0, 5),

@@ -6,7 +6,7 @@ import {
   type BusinessDayClock,
   type CutoverChange,
 } from "@waitron/shared";
-import { localTimeOccurrences, offsetMinutes } from "@waitron/venue-service";
+import { addDays, localTimeOccurrences, offsetMinutes } from "@waitron/venue-service";
 
 export type BusinessDayStartPlan = {
   today: string;
@@ -16,12 +16,6 @@ export type BusinessDayStartPlan = {
   before: BusinessDayClock;
   candidate: BusinessDayClock;
 };
-
-function addDays(day: string, count: number): string {
-  const date = new Date(`${day}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + count);
-  return date.toISOString().slice(0, 10);
-}
 
 function withStart(clock: BusinessDayClock, day: string, dayCutover: string): BusinessDayClock {
   if (cutoverForBusinessDay(clock, day) === dayCutover) return clock;

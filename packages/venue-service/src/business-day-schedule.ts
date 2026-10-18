@@ -583,9 +583,7 @@ export async function assertWaitingChangeFits(
 ): Promise<void> {
   const clock = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
   let settled = settledClock(clock, at);
-  const waiting = clock.cutoverChanges
-    .filter((change) => !settled.cutoverChanges.includes(change))
-    .sort((a, b) => a.effectiveBusinessDay.localeCompare(b.effectiveBusinessDay));
+  const waiting = clock.cutoverChanges.filter((change) => !settled.cutoverChanges.includes(change));
   for (const change of waiting) {
     const next = { ...settled, cutoverChanges: [...settled.cutoverChanges, change] };
     const result = await businessDayClockConflicts(
