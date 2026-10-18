@@ -327,5 +327,12 @@ declare module "@waitron/shared" {
      * lives here because it names the fiscal concept. No params: a plain on/off fact.
      */
     "fiscal.awaiting_certificate": Record<string, never>;
+
+    /** `installCertificate` (./certificate-install.ts): another install changed the vault after the
+     * dialog read the card. */
+    "fiscal.certificate_changed": Record<string, never>;
+
+    /** `installCertificate`: a malformed request body. Names the field, never its value. */
+    "fiscal.certificate_request_invalid": { field: string };
   }
 }
