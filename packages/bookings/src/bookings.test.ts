@@ -954,4 +954,33 @@ describe("books table 4 while today's recorded layout stands it", () => {
     await scoped(cfg, (tx) => updateBooking(tx, cfg, id, { tableId: live.t4 }));
     expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.tableId).toBe(live.t4);
   });
+
+  it("judges an edit that changes only the date against the booking's table", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const { live } = await inside(cfg.locationId);
+    const { id } = await book(cfg, createdBy, TODAY, live.t4);
+    await expect(
+      scoped(cfg, (tx) => updateBooking(tx, cfg, id, { bookingDate: TOMORROW })),
+    ).rejects.toMatchObject(inJoined(live.t4));
+    const stored = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
+    expect(stored).toMatchObject({ bookingDate: TODAY, tableId: live.t4 });
+    await scoped(cfg, (tx) => updateBooking(tx, cfg, id, { bookingDate: TODAY, notes: "window" }));
+    expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.notes).toBe("window");
+  });
+
+  it("moves a booking with no table to any date", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    await inside(cfg.locationId);
+    const { id } = await scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: TODAY,
+        bookingTime: "20:00",
+        partySize: 4,
+        contactName: "García",
+        createdBy,
+      }),
+    );
+    await scoped(cfg, (tx) => updateBooking(tx, cfg, id, { bookingDate: TOMORROW }));
+    expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.bookingDate).toBe(TOMORROW);
+  });
 });

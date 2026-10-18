@@ -130,20 +130,24 @@ export async function updateBooking(
   if (patch.partySize !== undefined && patch.partySize <= 0) {
     throw new AppError("booking.invalid", { partySize: patch.partySize });
   }
-  if (patch.tableId !== undefined && patch.tableId !== null) {
-    const [stored] =
-      patch.bookingDate === undefined
-        ? await tx
-            .select({ bookingDate: bookings.bookingDate })
-            .from(bookings)
-            .where(eq(bookings.id, id))
-        : [];
-    await requireActiveTable(
-      tx,
-      cfg.locationId,
-      patch.tableId,
-      patch.bookingDate ?? stored?.bookingDate ?? null,
-    );
+  const tableChanges = patch.tableId !== undefined && patch.tableId !== null;
+  if (tableChanges || patch.bookingDate !== undefined) {
+    const [stored] = await tx
+      .select({ bookingDate: bookings.bookingDate, tableId: bookings.tableId })
+      .from(bookings)
+      .where(eq(bookings.id, id));
+    // Whether a table may be booked depends on the date, so a new date re-judges the kept table.
+    const tableId = patch.tableId === undefined ? (stored?.tableId ?? null) : patch.tableId;
+    const dateChanges =
+      patch.bookingDate !== undefined && patch.bookingDate !== stored?.bookingDate;
+    if (tableId !== null && (tableChanges || dateChanges)) {
+      await requireActiveTable(
+        tx,
+        cfg.locationId,
+        tableId,
+        patch.bookingDate ?? stored?.bookingDate ?? null,
+      );
+    }
   }
   const updated = await tx
     .update(bookings)
