@@ -105,18 +105,20 @@ export async function resetZone(
   zoneId: string,
   now: Date,
   onto: ResetOnto | "due",
+  { keepTakenOff = false }: { keepTakenOff?: boolean } = {},
 ): Promise<number | null> {
+  const options: CatchUp = { inReset: true, keepTakenOff };
   await requireZone(tx, cfg, zoneId);
   const day = await todayBusinessDay(tx, cfg, now);
   if (day === null) return null;
   if (onto !== "due") {
     const layout = await layoutRowOf(tx, onto.setId, zoneId);
-    return resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout);
+    return resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout, options);
   }
   const { states, rows } = await zoneLayoutsOn(tx, cfg, [zoneId], now, day);
   const due = dueOnto(states.get(zoneId)!);
   if (due === null) return null;
-  return resetZoneFor(tx, cfg, removals, zoneId, day, now, due, rows.get(zoneId));
+  return resetZoneFor(tx, cfg, removals, zoneId, day, now, due, rows.get(zoneId), options);
 }
 
 function dueOnto(state: ZoneLayoutState): ResetOnto | null {
@@ -145,6 +147,7 @@ async function resetZoneFor(
   now: Date,
   onto: ResetOnto,
   layout: LayoutRow | undefined,
+  options: CatchUp,
 ): Promise<number> {
   const [today] = await tx
     .select({ id: floorTodayZones.id, revision: floorTodayZones.revision })
@@ -204,7 +207,7 @@ async function resetZoneFor(
       .returning({ id: floorResetTables.id, planTableId: floorResetTables.planTableId });
     await copyParts(tx, zoneId, written);
   }
-  await catchUpZone(tx, cfg, removals, zoneId, now);
+  await catchUpZone(tx, cfg, removals, zoneId, now, options);
   return revision;
 }
 
@@ -249,6 +252,13 @@ function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
     .where(and(eq(diningTables.locationId, cfg.locationId), eq(diningTables.zoneId, zoneId)));
 }
 
+export interface CatchUp {
+  /** The catch-up runs inside a reset of the zone. */
+  inReset: boolean;
+  /** A table taken off today stays off at its new place. */
+  keepTakenOff: boolean;
+}
+
 /** Applies the zone's PENDING reset rows that can be applied now, repeating while a pass changes something. */
 export async function catchUpZone(
   tx: Transaction,
@@ -256,8 +266,9 @@ export async function catchUpZone(
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
+  options: CatchUp = { inReset: false, keepTakenOff: false },
 ): Promise<void> {
-  while (await catchUpPass(tx, cfg, removals, zoneId, now));
+  while (await catchUpPass(tx, cfg, removals, zoneId, now, options));
 }
 
 /** One pass; true when a reset row stopped being pending, which can free a name for the next. */
@@ -267,14 +278,24 @@ async function catchUpPass(
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
+  { keepTakenOff }: CatchUp,
 ): Promise<boolean> {
   const zoneRows = await tx
-    .select({ zoneId: floorZones.id, row: getTableColumns(floorResetTables) })
+    .select({
+      zoneId: floorZones.id,
+      row: getTableColumns(floorResetTables),
+      partTableId: partReset.tableId,
+    })
     .from(floorZones)
     .leftJoin(
       floorResetTables,
       and(eq(floorResetTables.zoneId, floorZones.id), eq(floorResetTables.pending, true)),
     )
+    .leftJoin(
+      floorResetTableParts,
+      eq(floorResetTableParts.joinedResetTableId, floorResetTables.id),
+    )
+    .leftJoin(partReset, eq(partReset.id, floorResetTableParts.partResetTableId))
     .where(
       and(
         eq(floorZones.id, zoneId),
@@ -283,7 +304,16 @@ async function catchUpPass(
       ),
     );
   if (zoneRows.length === 0) throw new AppError("zone.not_found", { zoneId });
-  const rows = zoneRows.flatMap(({ row }) => (row === null ? [] : [row]));
+  // A pending joined row's group: once the joined table's row is applied, the group no longer waits.
+  const groupOf = new Map<string, string[]>();
+  const byId = new Map<string, NonNullable<(typeof zoneRows)[number]["row"]>>();
+  for (const { row, partTableId } of zoneRows) {
+    if (row === null) continue;
+    byId.set(row.id, row);
+    if (row.tableId === null || partTableId === null) continue;
+    groupOf.set(row.tableId, [...(groupOf.get(row.tableId) ?? [row.tableId]), partTableId]);
+  }
+  const rows = [...byId.values()];
   if (rows.length === 0) return false;
   const rowOf = new Map<Target, (typeof rows)[number]>();
   for (const row of rows) {
@@ -305,6 +335,7 @@ async function catchUpPass(
       id: diningTables.id,
       label: diningTables.label,
       zoneId: diningTables.zoneId,
+      needsClearingSince: diningTables.needsClearingSince,
       splitOffFrom: floorTodaySplitParts.joinedTableId,
     })
     .from(diningTables)
@@ -317,13 +348,17 @@ async function catchUpPass(
   const ids = inZone.map((table) => table.id);
   const inZoneIds = new Set(ids);
   const held = new Set((await holdersOf(tx, ids)).keys());
-  const withToday = new Set(
+  const takenOffToday = new Map(
     (
       await tx
-        .select({ tableId: floorTodayTables.tableId })
+        .select({ tableId: floorTodayTables.tableId, takenOff: floorTodayTables.takenOff })
         .from(floorTodayTables)
         .where(inArray(floorTodayTables.tableId, ids))
-    ).map((row) => row.tableId),
+    ).map((row) => [row.tableId, row.takenOff]),
+  );
+  const withToday = new Set(takenOffToday.keys());
+  const clearing = new Set(
+    inZone.flatMap((table) => (table.needsClearingSince === null ? [] : [table.id])),
   );
   const refused = new Set(
     (
@@ -338,14 +373,20 @@ async function catchUpPass(
       )
     ).keys(),
   );
-  const waiting = new Set([...held, ...refused]);
+  const waiting = new Set([...held, ...refused, ...clearing]);
   const merges = await mergesOf(tx, ids);
   const merged = new Set(merges.map((m) => m.tableId));
   const foodComing = await foodComingTo(
     tx,
     inZone.flatMap((table) => (table.splitOffFrom === null ? [] : [table.id, table.splitOffFrom])),
   );
-  const { mergedWithHeld, splitBusy } = waitingTogether(inZone, merges, waiting, foodComing);
+  const { mergedWithHeld, splitBusy, joinedBusy } = waitingTogether(
+    inZone,
+    merges,
+    [...groupOf.values()],
+    waiting,
+    foodComing,
+  );
   const removing = new Set(targets.filter((target) => target.remove).map((t) => t.tableId));
   const tied = await tablesTied(
     tx,
@@ -360,6 +401,8 @@ async function catchUpPass(
     hasToday: withToday.has(table.id),
     mergedWithHeld: mergedWithHeld.has(table.id),
     splitWithBusy: splitBusy.has(table.id),
+    clearing: clearing.has(table.id),
+    joinedWithWaiting: joinedBusy.has(table.id),
   }));
 
   const plan = planReset({ targets, live, takenElsewhere });
@@ -399,7 +442,9 @@ async function catchUpPass(
       })
       .returning({ id: diningTables.id });
     createdIds.set(target, created!.id);
-    await tx.insert(floorTodayTables).values({ tableId: created!.id, ...todayColumns(target) });
+    await tx
+      .insert(floorTodayTables)
+      .values({ tableId: created!.id, ...todayColumns(target, false) });
   }
   const placedNow = new Set<Target>();
   for (const { target, label } of plan.apply) {
@@ -409,17 +454,20 @@ async function catchUpPass(
     if (rowOf.get(target)!.placed) continue;
     placedNow.add(target);
     await leaveMerges(tx, [tableId]);
+    const columns = todayColumns(target, keepTakenOff && takenOffToday.get(tableId) === true);
     await tx
       .insert(floorTodayTables)
-      .values({ tableId, ...todayColumns(target) })
-      .onConflictDoUpdate({ target: floorTodayTables.tableId, set: todayColumns(target) });
+      .values({ tableId, ...columns })
+      .onConflictDoUpdate({ target: floorTodayTables.tableId, set: columns });
   }
   for (const target of plan.seed) {
-    await tx.insert(floorTodayTables).values({ tableId: target.tableId!, ...todayColumns(target) });
+    await tx
+      .insert(floorTodayTables)
+      .values({ tableId: target.tableId!, ...todayColumns(target, false) });
   }
   const putBack = [...placedNow].map((target) => target.tableId!);
   if (putBack.length > 0) {
-    // A part the copied plan no longer joins to it keeps its mark.
+    // A part the copied plan no longer joins to it keeps its today's name.
     const takenBack = tx
       .select({ id: floorTodaySplitParts.partTableId })
       .from(floorTodaySplitParts)
@@ -433,10 +481,6 @@ async function catchUpPass(
         ),
       )
       .where(inArray(floorTodaySplitParts.joinedTableId, putBack));
-    await tx
-      .update(diningTables)
-      .set({ needsClearingSince: null })
-      .where(inArray(diningTables.id, takenBack));
     await tx
       .update(floorTodayTables)
       .set({ name: null })
@@ -464,12 +508,12 @@ async function catchUpPass(
   return changed;
 }
 
-function todayColumns(target: Target) {
+function todayColumns(target: Target, takenOff: boolean) {
   return {
     seats: target.seats,
     fixed: target.fixed,
     ...placementColumns(target.placement),
-    takenOff: false,
+    takenOff,
     name: null,
   };
 }
@@ -527,25 +571,26 @@ function mergesOf(
 }
 
 /**
- * Grows `waiting` until it is closed under both ties: a merge with a waiting table waits whole, and
- * so does a split group with a waiting member or a member in `foodComing`. Applying any table of
- * either would move a waiting table or one food is on its way to.
+ * Grows `waiting` until it is closed under every tie: a merge with a waiting table waits whole, so
+ * does a split group with a waiting member or a member in `foodComing`, and so does a joined group
+ * of the reset with a waiting member. Applying any table of one would move a waiting table or one
+ * food is on its way to.
  */
 function waitingTogether(
   tables: readonly { id: string; splitOffFrom: string | null }[],
   merges: readonly { joinId: string; tableId: string }[],
+  joinedGroups: readonly (readonly string[])[],
   waiting: ReadonlySet<string>,
   foodComing: ReadonlySet<string>,
-): { mergedWithHeld: Set<string>; splitBusy: Set<string> } {
+): { mergedWithHeld: Set<string>; splitBusy: Set<string>; joinedBusy: Set<string> } {
   let all = new Set(waiting);
   for (;;) {
     const mergedWithHeld = mergedWith(merges, all);
-    const splitBusy = busySplitGroups(
-      tables,
-      (id) => all.has(id) || mergedWithHeld.has(id) || foodComing.has(id),
-    );
-    const grown = new Set([...all, ...mergedWithHeld, ...splitBusy]);
-    if (grown.size === all.size) return { mergedWithHeld, splitBusy };
+    const busy = (id: string) => all.has(id) || mergedWithHeld.has(id) || foodComing.has(id);
+    const splitBusy = busySplitGroups(tables, busy);
+    const joinedBusy = new Set(joinedGroups.filter((group) => group.some(busy)).flat());
+    const grown = new Set([...all, ...mergedWithHeld, ...splitBusy, ...joinedBusy]);
+    if (grown.size === all.size) return { mergedWithHeld, splitBusy, joinedBusy };
     all = grown;
   }
 }
@@ -619,7 +664,10 @@ export async function ensureToday(
       const layout = layouts.rows.get(zoneId);
       const onto = dueOnto(layouts.states.get(zoneId)!);
       if (layout !== undefined && onto !== null) {
-        await resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout);
+        await resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout, {
+          inReset: true,
+          keepTakenOff: false,
+        });
       }
     } else await catchUpZone(tx, cfg, removals, zoneId, now);
   }

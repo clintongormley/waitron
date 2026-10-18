@@ -6,6 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  floorResetTables,
   floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
@@ -18,7 +19,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
-import { resetZone } from "./floor-today-store.js";
+import { resetZone, type ResetOnto } from "./floor-today-store.js";
 import { holdersOf, memberTables } from "./parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -35,6 +36,7 @@ import {
 import {
   expectRevision,
   mergeOf,
+  setsDepartment,
   tableServiceZone,
   withFloorRevision,
   zoneRevisionOf,
@@ -955,5 +957,208 @@ describe("a joined table the reset leaves in one of today's groups", () => {
     expect(await revisionOf(v, z.partyId)).toBe(revision);
     expect(await mergeOf(v, z.long)).toEqual(group);
     expect(await splitRowsOf(z.long)).toEqual([]);
+  });
+});
+
+const MARKED = "2026-10-10T11:00:00.000Z";
+
+const markNeedsClearing = (tableId: string) =>
+  inTx(v, (tx) =>
+    tx.update(diningTables).set({ needsClearingSince: MARKED }).where(eq(diningTables.id, tableId)),
+  );
+
+async function resetRowOf(tableId: string) {
+  const [row] = await inTx(v, (tx) =>
+    tx
+      .select({ pending: floorResetTables.pending, placed: floorResetTables.placed })
+      .from(floorResetTables)
+      .where(eq(floorResetTables.tableId, tableId)),
+  );
+  return row;
+}
+
+/**
+ * A department with Standard and Dinner holding the same tables, `placedIn` naming each table's
+ * place in each; answers the live tables by key and a reset onto either set.
+ */
+async function standardAndDinner(
+  tables: { key: string; label: string; partKeys?: string[] }[],
+  placedIn: { standard: Record<string, number | null>; dinner: Record<string, number | null> },
+) {
+  const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
+  const saveSet = async (setId: string, entries: Entry[]) => {
+    const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId: d.zoneId }));
+    return inTx(v, (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        { setId, zoneId: d.zoneId },
+        { revision: plan.revision, tables: entries },
+        NOW,
+      ),
+    );
+  };
+  const at = (x: number | null | undefined) => (x == null ? null : place(x, 0));
+  const { ids } = await saveSet(
+    d.standard,
+    tables.map((t) =>
+      entry(t.key, t.label, {
+        placement: at(placedIn.standard[t.key]),
+        partKeys: t.partKeys ?? [],
+      }),
+    ),
+  );
+  const standard = await inTx(v, (tx) =>
+    readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
+  );
+  const keyOf = new Map(Object.entries(ids).map(([key, id]) => [id, key]));
+  await saveSet(
+    d.dinner,
+    standard.tables.map((t) => ({
+      id: t.id,
+      key: t.id,
+      label: t.label,
+      seats: t.seats,
+      fixed: t.fixed,
+      placement: at(placedIn.dinner[keyOf.get(t.id)!]),
+      partKeys: t.partIds,
+    })),
+  );
+  const live = (key: string) => standard.tables.find((t) => t.id === ids[key])!.liveTableId!;
+  const onto = (setId: string, options?: { keepTakenOff: boolean }) =>
+    inTx(v, (tx) =>
+      resetZone(
+        tx,
+        v.cfg,
+        REMOVALS,
+        d.zoneId,
+        NOW,
+        { setId, occurrence: null } satisfies ResetOnto,
+        options,
+      ),
+    );
+  return { d, live, onto };
+}
+
+/** 4 and 5 stand in Standard and 4+5 is off; Dinner stands 4+5 and leaves 4 and 5 off. */
+async function fourAndFive() {
+  const s = await standardAndDinner(
+    [
+      { key: "t4", label: fresh("4") },
+      { key: "t5", label: fresh("5") },
+      { key: "t45", label: fresh("4+5"), partKeys: ["t4", "t5"] },
+    ],
+    { standard: { t4: 0, t5: 20, t45: null }, dinner: { t4: null, t5: null, t45: 0 } },
+  );
+  return { ...s, t4: s.live("t4"), t5: s.live("t5"), t45: s.live("t45") };
+}
+
+describe("the reset waiting rules", () => {
+  it("a free table needing clearing stays where it is at Reset to saved plan", async () => {
+    const { zoneId, tableId } = await plannedTable(fresh("Wiped"));
+    await reset(zoneId);
+    await moveToday(tableId, 30);
+    await markNeedsClearing(tableId);
+
+    await reset(zoneId);
+
+    expect(await todayRow(tableId)).toMatchObject({ x: 30 });
+    expect(await resetRowOf(tableId)).toEqual({ pending: true, placed: false });
+    expect((await tableRow(v, tableId)).needsClearingSince).toBe(MARKED);
+  });
+
+  it("the zone reset no longer clears needs clearing on split-off tables it takes back", async () => {
+    const zoneId = await zone();
+    const [long, c3, c4] = [fresh("Long"), fresh("Counter 3"), fresh("Counter 4")];
+    const { ids } = await save(zoneId, 0, [
+      entry("c3", c3, { placement: null }),
+      entry("c4", c4, { placement: null }),
+      entry("long", long, { placement: place(0, 20), partKeys: ["c3", "c4"] }),
+    ]);
+    await reset(zoneId);
+    const liveOf = await liveIdsOf(zoneId, ids);
+    const [t3, t4, tLong] = [liveOf("c3"), liveOf("c4"), liveOf("long")];
+    await expectRevision(
+      v,
+      send("POST", `/api/tables/${tLong}/today/split-off`, { partIds: [t4], seats: 2 }),
+    );
+    await markNeedsClearing(t4);
+    const split = await splitRowsOf(tLong);
+    expect(split).toEqual(sorted(t3, t4));
+    const before = await todayRows([tLong, t3, t4]);
+
+    await reset(zoneId);
+
+    expect((await tableRow(v, t4)).needsClearingSince).toBe(MARKED);
+    expect(await splitRowsOf(tLong)).toEqual(split);
+    expect(await todayRows([tLong, t3, t4])).toEqual(before);
+    expect(await resetRowOf(tLong)).toEqual({ pending: true, placed: false });
+  });
+
+  it("taking 4 into 4+5 waits while 4 has guests", async () => {
+    const z = await fourAndFive();
+    await z.onto(z.d.standard);
+    await seatAt(z.t4);
+    const before = await todayRows([z.t4, z.t5, z.t45]);
+    expect(before.map((row) => row?.x)).toEqual([0, 20, null]);
+
+    await z.onto(z.d.dinner);
+
+    expect(await todayRows([z.t4, z.t5, z.t45])).toEqual(before);
+    const joined = await readJoined();
+    expect(joined.get(z.t4)).toBeNull();
+    expect(joined.get(z.t5)).toBeNull();
+    await seatAt(z.t5);
+  });
+
+  it("4+5 with guests waits joined under a layout that leaves it off", async () => {
+    const z = await fourAndFive();
+    await z.onto(z.d.dinner);
+    await seatAt(z.t45);
+    const longBefore = await todayRow(z.t45);
+    expect(longBefore).toMatchObject({ x: 0 });
+
+    await z.onto(z.d.standard);
+
+    expect(await todayRow(z.t45)).toEqual(longBefore);
+    for (const part of [z.t4, z.t5]) {
+      expect(await resetRowOf(part)).toEqual({ pending: true, placed: false });
+      expect(await todayRow(part)).toMatchObject({ x: null });
+      expect(await refusal(send("POST", `/api/tables/${part}/seat`, {}))).toEqual({
+        status: 409,
+        body: { error: { code: "table.in_joined_table", params: { tableId: part } } },
+      });
+    }
+  });
+
+  /** Table 9 stands at 0 in Standard and at 40 in Dinner, and is taken off today under Standard. */
+  async function nineTakenOff() {
+    const s = await standardAndDinner([{ key: "t9", label: fresh("9") }], {
+      standard: { t9: 0 },
+      dinner: { t9: 40 },
+    });
+    await s.onto(s.d.standard);
+    const t9 = s.live("t9");
+    await inTx(v, (tx) =>
+      tx.update(floorTodayTables).set({ takenOff: true }).where(eq(floorTodayTables.tableId, t9)),
+    );
+    return { ...s, t9 };
+  }
+
+  it("a reset with keepTakenOff keeps table 9 off at its new place", async () => {
+    const z = await nineTakenOff();
+
+    await z.onto(z.d.dinner, { keepTakenOff: true });
+
+    expect(await todayRow(z.t9)).toMatchObject({ x: 40, takenOff: true });
+  });
+
+  it("a reset without keepTakenOff puts table 9 back at its new place", async () => {
+    const z = await nineTakenOff();
+
+    await z.onto(z.d.dinner);
+
+    expect(await todayRow(z.t9)).toMatchObject({ x: 40, takenOff: false });
   });
 });

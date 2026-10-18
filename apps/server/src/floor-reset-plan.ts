@@ -36,6 +36,10 @@ export interface LiveTable {
   mergedWithHeld: boolean;
   /** It is in a split group, a joined table and the parts split off it today, one of whose members waits or has food on its way. */
   splitWithBusy: boolean;
+  /** It needs clearing, so it waits as a held table does, but is never seeded (spec decision 10). */
+  clearing: boolean;
+  /** It is in a joined group of the reset, a joined table and its parts, with a waiting member (plan decision 8). */
+  joinedWithWaiting: boolean;
 }
 
 export interface ResetPlan {
@@ -81,7 +85,12 @@ export function planReset(input: {
       fixedInUse.add(target.label);
     } else if (
       table &&
-      (table.held || table.refused || table.mergedWithHeld || table.splitWithBusy)
+      (table.held ||
+        table.refused ||
+        table.clearing ||
+        table.mergedWithHeld ||
+        table.splitWithBusy ||
+        table.joinedWithWaiting)
     ) {
       plan.pending.push(target);
       if (table.held && !table.hasToday) plan.seed.push(target);

@@ -20,6 +20,8 @@ const l = (id: string, label: string, over: Partial<LiveTable> = {}): LiveTable 
   hasToday: true,
   mergedWithHeld: false,
   splitWithBusy: false,
+  clearing: false,
+  joinedWithWaiting: false,
   ...over,
 });
 const none = new Set<string>();
@@ -53,6 +55,31 @@ describe("planReset", () => {
     expect(plan.apply).toEqual([{ target: t("b", "T2"), label: "T2" }]);
     expect(plan.pending).toEqual([t("a", "T1")]);
     expect(plan.seed).toEqual([]);
+  });
+
+  it("a table that needs clearing waits", () => {
+    const plan = planReset({
+      targets: [t("a", "T1", { label: "T9" }), t("b", "T2")],
+      live: [l("a", "T1", { clearing: true }), l("b", "T2")],
+      takenElsewhere: none,
+    });
+    expect(plan.apply).toEqual([{ target: t("b", "T2"), label: "T2" }]);
+    expect(plan.pending).toEqual([t("a", "T1", { label: "T9" })]);
+    expect(plan.seed).toEqual([]);
+  });
+
+  it("a joined group waits whole", () => {
+    const plan = planReset({
+      targets: [t("a", "4"), t("b", "5"), t("c", "4+5")],
+      live: [
+        l("a", "4", { held: true, tied: true, joinedWithWaiting: true }),
+        l("b", "5", { joinedWithWaiting: true }),
+        l("c", "4+5", { joinedWithWaiting: true }),
+      ],
+      takenElsewhere: none,
+    });
+    expect(plan.apply).toEqual([]);
+    expect(plan.pending.map((x) => x.tableId)).toEqual(["a", "b", "c"]);
   });
 
   it("seeds a seated table that has no today's row, keeping its name", () => {
