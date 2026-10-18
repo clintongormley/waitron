@@ -528,7 +528,36 @@ describe("the till's table-state answer says what needs moving", () => {
     expect(states.get(t45)!.today).toMatchObject({ needsMoving: true, placement: { x: 0 } });
     for (const part of [t4, t5]) {
       expect(states.get(part)!.today.placement).toBeNull();
+      expect(states.get(part)!.today.needsMoving).toBe(false);
       expect((await todayRow(v, part))!.x).toBeNull();
     }
+  });
+
+  it("a member of a marked group whose own change is seats only (seats changed today) reads false", async () => {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    const s = await standardAndDinner(
+      v,
+      NOW,
+      [
+        { key: "t4", label: fresh("4") },
+        { key: "t5", label: fresh("5") },
+        { key: "t45", label: fresh("4+5"), partKeys: ["t4", "t5"] },
+      ],
+      { standard: { t4: 0, t5: 20, t45: null }, dinner: { t4: 0, t5: 40, t45: null } },
+    );
+    await s.onto(s.d.standard);
+    const [t4, t5, t45] = [s.live("t4"), s.live("t5"), s.live("t45")];
+    await inTx(v, (tx) =>
+      tx.update(floorTodayTables).set({ seats: 2 }).where(eq(floorTodayTables.tableId, t4)),
+    );
+    await seatAndFinishAcross(t4, () => s.onto(s.d.dinner));
+
+    await catchUp();
+
+    expect(await readyToMoveOf(t4)).toBe(true);
+    const states = await read();
+    expect(states.get(t5)!.today.needsMoving).toBe(true);
+    expect(states.get(t4)!.today).toMatchObject({ needsMoving: false, seats: 2 });
+    expect(states.get(t45)!.today.needsMoving).toBe(false);
   });
 });

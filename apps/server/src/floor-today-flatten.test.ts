@@ -4,6 +4,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodaySplitParts,
@@ -478,5 +479,14 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     expect(after.split).toEqual(before.split);
     expect(after.joins).toEqual(before.joins);
     expect(after.joinTables).toEqual(before.joinTables);
+    const marked = await inTx(v, (tx) =>
+      tx
+        .select({ tableId: floorResetTables.tableId })
+        .from(floorResetTables)
+        .where(and(eq(floorResetTables.zoneId, zoneId), eq(floorResetTables.readyToMove, true))),
+    );
+    expect(marked.map((row) => row.tableId).sort()).toEqual(
+      [table.long!, table.bar!, ...counters(table).map(([id]) => id)].sort(),
+    );
   });
 });

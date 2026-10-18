@@ -26,7 +26,7 @@ import type {
   SaleLineClassification,
   TableSignal,
 } from "@waitron/shared";
-import type { Placement } from "./floor-reset-plan.js";
+import { movesTable, type Placement } from "./floor-reset-plan.js";
 import { placementOf } from "./floor-today-store.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
@@ -7843,6 +7843,12 @@ async function readTodayTables(
       name: floorTodayTables.name,
       joinName: floorTodayJoins.name,
       readyToMove: floorResetTables.readyToMove,
+      targetX: floorResetTables.x,
+      targetY: floorResetTables.y,
+      targetWidth: floorResetTables.width,
+      targetHeight: floorResetTables.height,
+      targetShape: floorResetTables.shape,
+      targetRotation: floorResetTables.rotation,
     })
     .from(floorTodayTables)
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
@@ -7923,7 +7929,27 @@ async function readTodayTables(
         zoneRevision: row.zoneRevision ?? 0,
         name: row.name,
         joinName: row.joinName,
-        needsMoving: row.readyToMove === true,
+        // A group is marked whole; a member shows it only when its own change moves it.
+        needsMoving:
+          row.readyToMove === true &&
+          movesTable(
+            {
+              placement: placementOf(row),
+              takenOff: row.takenOff,
+              inMerge: row.joinId !== null,
+              splitOff: splitOffFrom.has(row.tableId),
+            },
+            {
+              placement: placementOf({
+                x: row.targetX,
+                y: row.targetY,
+                width: row.targetWidth,
+                height: row.targetHeight,
+                shape: row.targetShape,
+                rotation: row.targetRotation,
+              }),
+            },
+          ),
       },
     ]),
   );

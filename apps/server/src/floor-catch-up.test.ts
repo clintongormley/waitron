@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -10,6 +10,7 @@ import {
   floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
+  floorZones,
   joinedTableApart,
   locations,
   withTransaction,
@@ -19,7 +20,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
-import { resetZone } from "./floor-today-store.js";
+import { catchUpDue, resetZone } from "./floor-today-store.js";
 import { resetTable } from "./floor-today-reset-table.js";
 import { splitOff } from "./floor-today-split-group.js";
 import { writeMerge } from "./floor-today-merges.js";
@@ -1312,5 +1313,44 @@ describe("a table that frees up after a reset needs moving", () => {
     expect(await mergeOf(v, bar)).toBeNull();
     expect(await readyOf(t3)).toEqual({ pending: true, readyToMove: true });
     expect(await todayRow(t3)).toMatchObject({ x: 60 });
+  });
+
+  it("a marked table taken off the map goes to its new place by itself, still off", async () => {
+    await clearingWorkflow(false);
+    const z = await threeSeatedAcrossDinner();
+    await finish(z.partyId);
+    expect((await readStates()).get(z.t3)!.today.needsMoving).toBe(true);
+
+    await expectRevision(v, send("POST", `/api/tables/${z.t3}/today/take-off`, {}));
+    const states = await readStates();
+
+    expect(await readyOf(z.t3)).toEqual({ pending: false, readyToMove: false });
+    expect(await todayRow(z.t3)).toMatchObject({ x: 40, takenOff: true });
+    expect(states.get(z.t3)!.today.needsMoving).toBe(false);
+  });
+
+  it("a room whose only waiting rows still need moving is not caught up again", async () => {
+    await clearingWorkflow(false);
+    const z = await threeSeatedAcrossDinner();
+    const due = async () =>
+      (
+        await inTx(v, (tx) =>
+          tx
+            .select({ id: floorZones.id })
+            .from(floorZones)
+            .where(and(eq(floorZones.id, z.d.zoneId), catchUpDue(floorZones.id))),
+        )
+      ).length;
+    expect(await due()).toBe(1);
+
+    await finish(z.partyId);
+    await readStates();
+    expect(await readyOf(z.t3)).toEqual({ pending: true, readyToMove: true });
+    expect(await due()).toBe(0);
+
+    await inTx(v, (tx) =>
+      tx.update(floorTodayTables).set({ takenOff: true }).where(eq(floorTodayTables.tableId, z.t3)),
+    );
+    expect(await due()).toBe(1);
   });
 });

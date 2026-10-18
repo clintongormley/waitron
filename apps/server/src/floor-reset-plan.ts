@@ -150,7 +150,7 @@ export function movesTable(
     inMerge: boolean;
     splitOff: boolean;
   } | null,
-  target: Target,
+  target: { placement: Placement | null },
 ): boolean {
   if (today === null || today.placement === null || today.takenOff) return false;
   if (today.inMerge || today.splitOff || target.placement === null) return true;
