@@ -1516,3 +1516,121 @@ test("a grid taken off the page and put back still marks the side with hidden co
   host.style.width = "880px";
   await expect.poll(() => overflow(el)).toBe("end");
 });
+
+const shut = (startsAt: string, endsAt: string): Paint => ({ periodId: null, startsAt, endsAt });
+async function zoneGrid(
+  days: Record<string, Paint[]>,
+  closedWithin: Record<string, Paint[]>,
+  chosen: string | null = null,
+) {
+  const el = await grid(days, { chosen, closedErases: false });
+  el.closedWithin = new Map(Object.entries(closedWithin));
+  await el.updateComplete;
+  return el;
+}
+
+test("with closedWithin, a Closed stroke keeps only what lies in the column's hours", async () => {
+  const el = await zoneGrid(
+    { mon: [], thu: [] },
+    {
+      mon: [{ periodId: "dinner", startsAt: "19:30", endsAt: "02:00" }],
+      thu: [
+        { periodId: "lunch", startsAt: "13:00", endsAt: "16:00" },
+        { periodId: "dinner", startsAt: "16:00", endsAt: "23:00" },
+      ],
+    },
+  );
+  const seen = changes(el);
+  await drag(el, "mon", 1050, 1260);
+  await drag(el, "thu", 540, 660);
+  expect(seen).toEqual([
+    { key: "mon", day: [shut("23:30", "02:00")] },
+    { key: "thu", day: [shut("15:00", "17:00")] },
+  ]);
+});
+
+test("a stroke wholly outside the hours emits nothing", async () => {
+  const el = await zoneGrid(
+    { mon: [shut("20:00", "21:00")] },
+    { mon: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
+  );
+  const seen = changes(el);
+  await drag(el, "mon", 120, 240);
+  expect(seen).toEqual([]);
+});
+
+test("a block changed to Closed and a day copied to another column are cut to that column's hours", async () => {
+  const el = await zoneGrid(
+    { mon: [lunch], tue: [], thu: [shut("13:00", "16:00")] },
+    {
+      mon: [{ periodId: "lunch", startsAt: "14:00", endsAt: "15:00" }],
+      tue: [{ periodId: "dinner", startsAt: "15:00", endsAt: "17:00" }],
+    },
+  );
+  const seen = changes(el);
+  await userEvent.click(block(el, "mon"));
+  await userEvent.click(menuButton(el, "Closed"));
+  expect(seen).toEqual([{ key: "mon", day: [shut("14:00", "15:00")] }]);
+  await openChooser(el, "thu");
+  await userEvent.click(choice(el, "tue"));
+  await el.updateComplete;
+  await userEvent.click(chooserButton(el, "Copy"));
+  await el.updateComplete;
+  expect(seen.at(-1)).toEqual({ key: "tue", day: [shut("15:00", "16:00")] });
+});
+
+test("Open paint (a period id) is not cut, and a column closedWithin does not name is not bounded", async () => {
+  const el = await zoneGrid(
+    { mon: [], thu: [] },
+    { thu: [{ periodId: "lunch", startsAt: "13:00", endsAt: "16:00" }] },
+    "dinner",
+  );
+  const seen = changes(el);
+  await drag(el, "thu", 840, 1050);
+  expect(seen).toEqual([
+    { key: "thu", day: [{ periodId: "dinner", startsAt: "20:00", endsAt: "23:30" }] },
+  ]);
+  el.chosen = null;
+  await el.updateComplete;
+  await drag(el, "mon", 120, 240);
+  expect(seen.at(-1)).toEqual({ key: "mon", day: [shut("08:00", "10:00")] });
+});
+
+test("a Closed stroke wholly outside the column's hours sends paint-outside with its column, and a stroke that keeps something does not", async () => {
+  const el = await zoneGrid(
+    { mon: [] },
+    { mon: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
+  );
+  const outside: { key: string }[] = [];
+  el.addEventListener("paint-outside", (event) => outside.push(event.detail));
+  const seen = changes(el);
+  await drag(el, "mon", 120, 240);
+  expect(outside).toEqual([{ key: "mon" }]);
+  expect(seen).toEqual([]);
+  await drag(el, "mon", 840, 1050);
+  expect(outside).toHaveLength(1);
+  expect(seen).toEqual([{ key: "mon", day: [shut("20:00", "23:00")] }]);
+});
+
+test("closedBehind draws its label across the whole day behind the column's paint, which stays drawn and clickable, and a stroke there still runs", async () => {
+  const stored = shut("15:00", "17:00");
+  const el = await grid({ mon: [], thu: [stored] }, { chosen: null, closedErases: false });
+  el.closedBehind = new Map([["thu", "Restaurant closed all day"]]);
+  await el.updateComplete;
+  const day = el.shadowRoot!.querySelector<HTMLElement>('.day[data-column="thu"]')!;
+  const behind = day.querySelector<HTMLElement>(".all-closed")!;
+  expect(behind.textContent!.trim()).toBe("Restaurant closed all day");
+  expect(behind.getBoundingClientRect().height).toBeCloseTo(day.getBoundingClientRect().height, 0);
+  expect(getComputedStyle(behind).pointerEvents).toBe("none");
+  expect(el.shadowRoot!.querySelector('.day[data-column="mon"] .all-closed')).toBeNull();
+  const box = block(el, "thu").getBoundingClientRect();
+  expect(el.shadowRoot!.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)).toBe(
+    block(el, "thu"),
+  );
+  await userEvent.click(block(el, "thu"));
+  expect(menu(el).matches(":popover-open")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  const seen = changes(el);
+  await drag(el, "thu", 120, 240);
+  expect(seen).toEqual([{ key: "thu", day: [shut("08:00", "10:00"), stored] }]);
+});
