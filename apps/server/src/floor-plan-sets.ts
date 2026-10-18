@@ -166,18 +166,25 @@ async function readLayouts(
               plans.map((plan) => plan.id),
             ),
           );
-  const tableCounts = new Map(
-    zoneIds.map((zoneId) => [zoneId, tables.filter((t) => t.zoneId === zoneId).length]),
+  const tablesOf = new Map<string, { id: string; partOf: string | null }[]>(
+    zoneIds.map((zoneId) => [zoneId, []]),
   );
+  for (const t of tables) tablesOf.get(t.zoneId)?.push({ id: t.id, partOf: t.partOf });
+  const planOf = new Map(plans.map((plan) => [`${plan.setId}:${plan.zoneId}`, plan]));
+  const placedOf = new Map<string, Set<string>>();
+  for (const row of places) {
+    const placed = placedOf.get(row.planId);
+    if (placed === undefined) placedOf.set(row.planId, new Set([row.tableId]));
+    else placed.add(row.tableId);
+  }
+  const tableCounts = new Map(zoneIds.map((zoneId) => [zoneId, tablesOf.get(zoneId)!.length]));
   const layouts = setIds.flatMap((setId) =>
     zoneIds.map((zoneId) => {
-      const plan = plans.find((row) => row.setId === setId && row.zoneId === zoneId);
-      const placed = new Set(
-        places.filter((row) => row.planId === plan?.id).map((row) => row.tableId),
-      );
+      const plan = planOf.get(`${setId}:${zoneId}`);
+      const placed = (plan === undefined ? undefined : placedOf.get(plan.id)) ?? new Set<string>();
       const counts = layoutCounts(
-        tables
-          .filter((t) => t.zoneId === zoneId)
+        tablesOf
+          .get(zoneId)!
           .map((t) => ({ id: t.id, placed: placed.has(t.id), partOf: t.partOf })),
       );
       return { setId, zoneId, revision: plan?.revision ?? 0, ...counts };
