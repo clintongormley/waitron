@@ -16,6 +16,7 @@ import {
 import type { Season } from "./season-rules.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { rangeSpan, type ClosedRange, type ServiceRange } from "./service-day.js";
+import type { ServingRead } from "./zone-closure-hours.js";
 import { readServiceZones, stageZoneClosedWeek } from "./zone-closed-times.js";
 import "./errors.js";
 
@@ -302,7 +303,8 @@ async function within<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
 }
 
 /** Every listed department week and zone week of one season, under one revision check; each
- *  department's end offsets are checked once every week is written. */
+ *  department's end offsets are checked once every week is written, then `afterWrite` runs with
+ *  the clock and zones this save read. */
 export async function saveSeasonWeeks(
   tx: Transaction,
   cfg: VenueScope,
@@ -316,6 +318,7 @@ export async function saveSeasonWeeks(
   },
   at: Date,
   expectedClockRevision: number,
+  afterWrite?: (read: ServingRead) => Promise<void>,
 ): Promise<void> {
   const season = (await seasonsNaming(tx, cfg, seasonId)).own;
   const clock = await readLocationClock(tx, cfg.locationId);
@@ -340,10 +343,11 @@ export async function saveSeasonWeeks(
     });
   }
   const zoneEntries = input.zones ?? [];
-  const serving =
+  const serving = new Map(
     zoneEntries.length === 0
-      ? new Set<string>()
-      : new Set((await readServiceZones(tx, cfg)).map((zone) => zone.id));
+      ? []
+      : (await readServiceZones(tx, cfg)).map((zone) => [zone.id, zone.departmentId] as const),
+  );
   const zoneSeasonWeeks = await readZoneSeasonWeeks(
     tx,
     cfg,
@@ -370,4 +374,5 @@ export async function saveSeasonWeeks(
   );
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
   await assertWeekEndOffsets(tx, cfg, clock, departmentWeeks);
+  await afterWrite?.({ clock, departmentOf: serving });
 }

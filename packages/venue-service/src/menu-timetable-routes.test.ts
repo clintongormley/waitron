@@ -1048,6 +1048,31 @@ describe("the season weeks route", () => {
     expect(await r.model()).toEqual(before);
   });
 
+  it("names a refused closure on a later zone by that zone's place in the request", async () => {
+    const r = await routed();
+    const before = await r.model();
+    await answers(
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        ...body(r),
+        zones: [
+          { zoneId: r.barra, days: closedWeek(closed) },
+          { zoneId: r.mostrador, days: closedWeek(closed) },
+        ],
+      }),
+      400,
+      {
+        code: "zone_closed_time.invalid",
+        params: {
+          field: "zones.1.days.1.ranges.0",
+          reason: "outside_hours",
+          zoneId: r.mostrador,
+          weekday: 1,
+        },
+      },
+    );
+    expect(await r.model()).toEqual(before);
+  });
+
   it("checks the zone against the department week the same request sends", async () => {
     const r = await routed();
     expect(restaurantOf(await r.model(), r).seasonWeeks).toEqual(

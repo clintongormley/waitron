@@ -1,43 +1,54 @@
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError } from "@waitron/shared";
+import { AppError, type BusinessDayClock } from "@waitron/shared";
 import { resolveDepartmentsDays } from "./day-resolver.js";
 import type { LocalDate } from "./hours-types.js";
+import type { ClosedWeekDay } from "./menu-timetable-types.js";
 import type { VenueScope } from "./operations.js";
 import { readDepartmentSeasonWeeks } from "./season-weeks.js";
-import type { ClosedRange } from "./service-day.js";
 import { serviceDayContext } from "./service-day-context.js";
 import { readServiceZones } from "./zone-closed-times.js";
 import { closureOutsideHours } from "./zone-own-hours.js";
 import "./errors.js";
 
+/** The clock and each serving zone's department, as `saveSeasonWeeks` read them in this
+ *  transaction. */
+export interface ServingRead {
+  clock: BusinessDayClock;
+  departmentOf: ReadonlyMap<string, string>;
+}
+
 /** After a season-week write, inside its transaction: each listed zone's closures against its
  *  department's week in `seasonId` as now stored. `field` is the request path up to `days.`
- *  ("" or "zones.<i>."). */
+ *  ("" or "zones.<i>."). Without `read`, the clock and the zones are read here. */
 export async function assertSeasonClosuresInHours(
   tx: Transaction,
   cfg: VenueScope,
   seasonId: string,
-  zones: readonly {
-    zoneId: string;
-    field: string;
-    days: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
-  }[],
+  zones: readonly { zoneId: string; field: string; days: readonly ClosedWeekDay[] }[],
+  read?: ServingRead,
 ): Promise<void> {
   if (zones.length === 0) return;
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const departmentOf = new Map(
-    (await readServiceZones(tx, cfg)).map((zone) => [zone.id, zone.departmentId]),
-  );
+  const { clock, departmentOf } = read ?? {
+    clock: await readLocationClock(tx, cfg.locationId),
+    departmentOf: new Map(
+      (await readServiceZones(tx, cfg)).map((zone) => [zone.id, zone.departmentId]),
+    ),
+  };
+  const department = (zoneId: string) => {
+    const id = departmentOf.get(zoneId);
+    if (id === undefined) throw new AppError("service_zone.not_found", { zoneId });
+    return id;
+  };
   const weeks = await readDepartmentSeasonWeeks(
     tx,
     cfg,
-    [...new Set(zones.map((zone) => departmentOf.get(zone.zoneId)!))],
+    [...new Set(zones.map((zone) => department(zone.zoneId)))],
     clock.dayCutover,
   );
   const day = { dayCutover: clock.dayCutover, endMinute: 1440 };
   for (const { zoneId, field, days } of zones) {
-    const week = weeks.get(departmentOf.get(zoneId)!)?.get(seasonId);
+    const week = weeks.get(department(zoneId))?.get(seasonId);
     for (const [j, { weekday, ranges }] of days.entries()) {
       const k = closureOutsideHours(week?.[weekday] ?? [], ranges, day);
       if (k !== -1)

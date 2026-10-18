@@ -61,7 +61,7 @@ import {
   type CalendarColour,
   type LocalDate,
 } from "./hours-types.js";
-import type { MenuWeekDay } from "./menu-timetable-types.js";
+import type { ClosedWeekDay, MenuWeekDay } from "./menu-timetable-types.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { MANAGE_VENUE_SERVICE } from "./permissions.js";
 import {
@@ -351,7 +351,6 @@ import {
 import { saveSeasons, seasonDeleteImpact } from "./seasons.js";
 import type { SeasonChange, SeasonEntry } from "./season-rules.js";
 import { saveSeasonWeeks } from "./season-weeks.js";
-import type { ClosedRange } from "./service-day.js";
 
 /** A comma list of one to `SEASON_DAYS_MAX_DATES` dates whose years `parseCalendarYear` accepts,
  *  or null. */
@@ -1308,6 +1307,10 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           const departments = requireWeekList(body.departments, "departments", "departmentId");
           const zones = requireWeekList(body.zones, "zones", "zoneId");
           const revision = requireClockRevision(body);
+          const zoneWeeks = zones?.map(({ id, days }) => ({
+            zoneId: id,
+            days: days as readonly ClosedWeekDay[],
+          }));
           await saveSeasonWeeks(
             tx,
             ctx.cfg,
@@ -1317,23 +1320,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
                 departmentId: id,
                 days: days as readonly MenuWeekDay[],
               })),
-              zones: zones?.map(({ id, days }) => ({
-                zoneId: id,
-                days: days as readonly { weekday: number; ranges: readonly ClosedRange[] }[],
-              })),
+              zones: zoneWeeks,
             },
             new Date(),
             revision,
-          );
-          await assertSeasonClosuresInHours(
-            tx,
-            ctx.cfg,
-            seasonId,
-            (zones ?? []).map(({ id, days }, i) => ({
-              zoneId: id,
-              field: `zones.${i}.`,
-              days: days as readonly { weekday: number; ranges: readonly ClosedRange[] }[],
-            })),
+            (read) =>
+              assertSeasonClosuresInHours(
+                tx,
+                ctx.cfg,
+                seasonId,
+                (zoneWeeks ?? []).map((zone, i) => ({ ...zone, field: `zones.${i}.` })),
+                read,
+              ),
           );
         });
         return c.body(null, 204);
@@ -1361,7 +1359,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             {
               zoneId,
               field: "",
-              days: body.days as readonly { weekday: number; ranges: readonly ClosedRange[] }[],
+              days: body.days as readonly ClosedWeekDay[],
             },
           ]);
         });

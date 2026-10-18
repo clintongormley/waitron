@@ -186,4 +186,35 @@ describe("assertSeasonClosuresInHours", () => {
       params: { field: "days.1.ranges.0", reason: "outside_hours", zoneId: v.barra, weekday: 1 },
     });
   });
+
+  it("names a refused range by its place in the request when the days come out of weekday order", async () => {
+    const v = await venue();
+    const days = closedMonday([{ startsAt: "11:00", endsAt: "13:00" }]).reverse();
+    expect(
+      await refusal(() =>
+        withTransaction(db, (tx) =>
+          assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
+            { zoneId: v.barra, field: "", days },
+          ]),
+        ),
+      ),
+    ).toEqual({
+      code: "zone_closed_time.invalid",
+      params: { field: "days.5.ranges.0", reason: "outside_hours", zoneId: v.barra, weekday: 1 },
+    });
+  });
+
+  it("refuses a zone that serves no department with service_zone.not_found", async () => {
+    const v = await venue();
+    const zoneId = randomUUID();
+    expect(
+      await refusal(() =>
+        withTransaction(db, (tx) =>
+          assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
+            { zoneId, field: "", days: closedMonday([]) },
+          ]),
+        ),
+      ),
+    ).toEqual({ code: "service_zone.not_found", params: { zoneId } });
+  });
 });
