@@ -443,6 +443,7 @@ describe("till-floor-screen: a table that needs moving", () => {
     refuse();
     await pending.catch(() => {});
     await settle(el);
+    expect(refusal(el)).not.toBeNull();
     const stale = offer(el);
     if (stale !== null) {
       await userEvent.click(stale);

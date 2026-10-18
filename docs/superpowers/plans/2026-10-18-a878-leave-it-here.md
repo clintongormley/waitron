@@ -190,7 +190,7 @@ The owner confirms or overrides these when reviewing the plan; each names the de
    put down on another.
 
    > Built differently (2026-10-18, Task 3's fix round): Back takes the table out of its merge
-   > first and exempts only the table itself, so it also refuses landing on a partner of the merge
+   > first and exempts no merge partner, so it also refuses landing on a partner of the merge
    > it left (conventions-data.md, Back to its saved place). This supersedes the merge-partner
    > exemption here, in Task 3 Step 3 and in Task 7 Step 2.
 8. **On the till, Back's `table.place_taken` refusal shows the code's own words**, "Another table
@@ -594,6 +594,9 @@ the write was Back.
   `canChangeToday` holds, and `this.tables` has that table with `needsMovingToday`. Any other
   refusal then hides it without anyone resetting the offer. Its click runs `#leaveHere`, which
   also sets `leaveOffer` to null.
+
+  > Built differently (2026-10-18, finish-branch fix): the offer looks in the room on screen
+  > (`#zone.visible`), not `this.tables`.
 - [ ] **Step 4: Run the floor screen's files and typecheck** as in Task 4 Step 4, and
   `pnpm format:check`.
 - [ ] **Step 5: Commit** (`git commit -s`).

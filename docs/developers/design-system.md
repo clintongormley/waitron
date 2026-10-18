@@ -880,7 +880,7 @@ clearing question keeps its secondary Cancel. On a device that cannot change tod
 Leave it here nor Mark moved is shown. When Mark moved, or Back to its saved place on a table that
 needs moving, is refused `table.new_place_taken`, a small secondary Leave it here button for the
 table pressed sits under the refusal line, as wide as its words, for as long as that refusal is
-shown and the table still needs moving.
+shown and the table still needs moving, and only in the table's own room.
 
 `wt-floor-map` draws the till's tables for a zone, fitted to its box: the tables' crop (two squares
 past them) is scaled to fit and centred, with no grid lines. Its size is its parent's choice; the

@@ -2626,8 +2626,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A883. Back to its saved place's `table.place_taken` refusal does not name the tables
   (2026-10-18).** The till shows the code's own words ("Another table is in its place. Move it,
-  then try again"), while its other floor refusals that carry table ids name them. A sentence naming
-  both tables needs new words in English and Spanish from the owner. Left open by A878.
+  then try again"), while Reset table's refusal under the same code names both
+  (`#namedRefusal`). A sentence naming both tables needs new words in English and Spanish from the
+  owner. Left open by A878.
 
 - **A859. Floor plans and the till's layout banner: looks left to the owner (2026-10-18).** A504's
   look passes kept five things as built, as judgement calls.

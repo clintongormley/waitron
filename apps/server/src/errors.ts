@@ -393,7 +393,7 @@ declare module "@waitron/shared" {
     "table.needs_clearing": { tableId: string };
     /**
      * The table's reset row waits for Mark moved, so no party may be seated at it, moved to it or
-     * joined to it, and it may not be merged, until it is marked moved or left where it stands (Leave it here).
+     * joined to it, and it may not be merged.
      */
     "table.needs_moving": { tableId: string };
     /**
