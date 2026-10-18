@@ -2256,8 +2256,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The Sent component now has standalone browser checks for folds, prices, serving quantities,
   shared held-group Fire and reminders. A native press stays in place when a due banner arrives,
   and a long press opens line information without serving. It is not yet connected to the table
-  screen. That integration, Undo feedback, conditional sent-line actions and held-dish Finish
-  resolution remain open. Its
+  screen. The app now offers a five-second Undo only after a serve command answers successfully,
+  retaining that command's exact line ids and quantities. Another accepted serve replaces the receipt;
+  leaving the bill, changing server or signing out removes its authority. A failed refresh keeps
+  the accepted receipt, while a refused serve shows no success notice. Focused app checks cover
+  those cases and a native Undo in both languages, themes and phone/desktop widths. The table's
+  Sent integration, conditional sent-line actions and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
   target recovery. Single-dish Fire now's command/API/client work is qualified on the feature

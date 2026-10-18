@@ -1,14 +1,16 @@
+import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import {
   adjustmentStubs,
   cancelThroughDialog,
   cleanupWidgets,
+  expectNoA11yViolations,
   draftServer,
   mountWidget,
   servedMenus,
@@ -7293,6 +7295,312 @@ describe("till-app: Current orders", () => {
 
     expect(tableOrder(el)!.currentOrdersUnread).toBe(false);
     expect(tableOrder(el)!.currentOrders).toEqual(orders);
+  });
+
+  it("offers Undo only after serving succeeds and reverses the exact confirmed quantities", async () => {
+    let accept!: (answer: { revision: number }) => void;
+    const markServed = vi.fn(
+      () =>
+        new Promise<{ revision: number }>((resolve) => {
+          accept = resolve;
+        }),
+    );
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(orders),
+      markServed,
+    });
+    const order = await openMesa(el);
+    const items = [{ lineId: "line-1", quantity: "0.5" }];
+    const notice = () => el.shadowRoot!.querySelector<WtToast>("[data-served-toast]");
+
+    emit(order, "serve-lines", { items });
+    await flush(el);
+    expect(markServed).toHaveBeenCalledOnce();
+    expect(notice()?.open ?? false).toBe(false);
+    // The caller's array is not the command receipt.
+    items[0]!.quantity = "9";
+    accept({ revision: 4 });
+    await flush(el);
+
+    expect(notice()?.open).toBe(true);
+    expect(notice()?.message).toContain("Vino");
+    notice()!.querySelector<HTMLElement>("[data-undo-served]")!.click();
+    await flush(el);
+    expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      [{ lineId: "line-1", quantity: "0.5" }],
+      { submissionId: expect.any(String), expectedPartyRevision: 4 },
+    );
+    expect(notice()?.open ?? false).toBe(false);
+  });
+
+  describe("serve Undo", () => {
+    const notice = (el: TillApp) => el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+    const undo = (el: TillApp) => notice(el).querySelector<HTMLElement>("[data-undo-served]")!;
+    const items = [{ lineId: "line-1", quantity: "1" }];
+    async function served(over: Record<string, unknown> = {}) {
+      const { el, host } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue(orders),
+        ...over,
+      });
+      const order = await openMesa(el);
+      emit(order, "serve-lines", { items });
+      await flush(el);
+      expect(notice(el).open).toBe(true);
+      return { el, order, host };
+    }
+
+    it("never offers success feedback for a refused serve", async () => {
+      const { el } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue(orders),
+        markServed: vi
+          .fn()
+          .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 4 }),
+      });
+      const order = await openMesa(el);
+      emit(order, "serve-lines", { items });
+      await flush(el);
+      expect(api.markServed).toHaveBeenCalledOnce();
+      expect(notice(el).open).toBe(false);
+      expect(banner(el)?.textContent).toContain(t("party.changed").replace("{table}", "4"));
+      expect(api.unmarkServed).not.toHaveBeenCalled();
+    });
+
+    it("preserves the accepted receipt when its refresh fails", async () => {
+      const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(orders) });
+      const order = await openMesa(el);
+      vi.mocked(api.readCurrentOrders).mockRejectedValue(new TypeError("offline"));
+      emit(order, "serve-lines", { items });
+      await flush(el);
+      expect(api.markServed).toHaveBeenCalledOnce();
+      expect(tableOrder(el)!.currentOrdersUnread).toBe(true);
+      expect(notice(el).open).toBe(true);
+      undo(el).click();
+      await flush(el);
+      expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith("v1", items, {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 4,
+      });
+    });
+
+    it("undoes a multi-line command once and cannot reuse its retained button", async () => {
+      const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(orders) });
+      const order = await openMesa(el);
+      const all = [
+        { lineId: "line-1", quantity: "0.5" },
+        { lineId: "line-9", quantity: "2" },
+      ];
+      emit(order, "serve-lines", { items: all });
+      await flush(el);
+      expect(notice(el).open).toBe(true);
+      const button = undo(el);
+      button.click();
+      button.click();
+      await flush(el);
+      button.click();
+      await flush(el);
+      expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith("v1", all, {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 4,
+      });
+      expect(notice(el).open).toBe(false);
+    });
+
+    it("retains a refused Undo for retry while the receipt is still current", async () => {
+      const unmarkServed = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1", revision: 5 })
+        .mockResolvedValue({ revision: 6 });
+      const { el } = await served({ unmarkServed });
+      undo(el).click();
+      await flush(el);
+      expect(unmarkServed).toHaveBeenCalledOnce();
+      expect(notice(el).open).toBe(true);
+      expect(banner(el)?.textContent).toContain(t("party.changed").replace("{table}", "4"));
+      undo(el).click();
+      await flush(el);
+      expect(unmarkServed).toHaveBeenCalledTimes(2);
+      expect(notice(el).open).toBe(false);
+    });
+
+    it("expires after five seconds, including a stale button held beyond the deadline", async () => {
+      vi.useFakeTimers();
+      try {
+        const { el } = await served();
+        const button = undo(el);
+        await vi.advanceTimersByTimeAsync(4_999);
+        await el.updateComplete;
+        expect(notice(el).open).toBe(true);
+        await vi.advanceTimersByTimeAsync(1);
+        await el.updateComplete;
+        expect(notice(el).open).toBe(false);
+        button.click();
+        await flush(el);
+        expect(api.unmarkServed).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("a later accepted serve replaces both the command and the deadline", async () => {
+      vi.useFakeTimers();
+      try {
+        const { el, order } = await served();
+        const old = undo(el);
+        await vi.advanceTimersByTimeAsync(3_000);
+        emit(order, "serve-lines", { items: [{ lineId: "line-1", quantity: "0.25" }] });
+        await flush(el);
+        old.click();
+        await flush(el);
+        expect(api.unmarkServed).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(2_000);
+        await el.updateComplete;
+        expect(notice(el).open).toBe(true);
+        undo(el).click();
+        await flush(el);
+        expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          [{ lineId: "line-1", quantity: "0.25" }],
+          {
+            submissionId: expect.any(String),
+            expectedPartyRevision: 4,
+          },
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it.each(["floor", "bill", "api", "detach"] as const)(
+      "cannot undo after leaving through %s",
+      async (where) => {
+        const { el, order } = await served();
+        const button = undo(el);
+        const original = api;
+        if (where === "floor") emit(order, "back-to-floor");
+        else if (where === "bill") emit(order, "take-payment", { workingOrderId: "wo-check" });
+        else if (where === "api") el.api = stubApi();
+        else el.remove();
+        await flush(el);
+        button.click();
+        await flush(el);
+        expect(original.unmarkServed).not.toHaveBeenCalled();
+        expect(notice(el).open).toBe(false);
+      },
+    );
+
+    it.each(["floor", "bill", "api", "logout", "detach"] as const)(
+      "does not publish a late successful serve after %s",
+      async (where) => {
+        let accept!: (answer: { revision: number }) => void;
+        const markServed = vi.fn(
+          () =>
+            new Promise<{ revision: number }>((resolve) => {
+              accept = resolve;
+            }),
+        );
+        const { el } = await mountApp({
+          readCurrentOrders: vi.fn().mockResolvedValue(orders),
+          markServed,
+        });
+        const order = await openMesa(el);
+        emit(order, "serve-lines", { items });
+        await flush(el);
+        expect(markServed).toHaveBeenCalledOnce();
+        if (where === "floor") emit(order, "back-to-floor");
+        else if (where === "bill") emit(order, "take-payment", { workingOrderId: "wo-check" });
+        else if (where === "api") el.api = stubApi();
+        else if (where === "logout") emit(order, "logout");
+        else el.remove();
+        await flush(el);
+        accept({ revision: 44 });
+        await flush(el);
+        expect(notice(el).open).toBe(false);
+        expect(order.party?.revision).not.toBe(44);
+      },
+    );
+
+    it("cannot undo through an API replaced during its pre-command wait", async () => {
+      const { el } = await served();
+      const original = api;
+      undo(el).click();
+      const replacement = stubApi();
+      el.api = replacement;
+      await flush(el);
+      expect(original.unmarkServed).not.toHaveBeenCalled();
+      expect(replacement.unmarkServed).not.toHaveBeenCalled();
+      expect(notice(el).open).toBe(false);
+    });
+
+    it("closing its success notice dismisses Undo without changing service", async () => {
+      const { el } = await served();
+      const button = undo(el);
+      notice(el).shadowRoot!.querySelector<HTMLButtonElement>(".close")!.click();
+      await flush(el);
+      expect(notice(el).open).toBe(false);
+      button.click();
+      await flush(el);
+      expect(api.unmarkServed).not.toHaveBeenCalled();
+    });
+
+    describe.each(["light", "dark"] as const)("accessibility in %s", (theme) => {
+      it.each([
+        ["en", 390],
+        ["es", 390],
+        ["en", 1280],
+        ["es", 1280],
+      ] as const)("uses readable controls and a native Undo in %s at %s", async (locale, width) => {
+        const oldWidth = innerWidth,
+          oldHeight = innerHeight;
+        await page.viewport(width, 844);
+        try {
+          const { el, host } = await served();
+          host.setAttribute("data-theme", theme);
+          document.body.style.background = getComputedStyle(host).backgroundColor;
+          document.documentElement.style.background = getComputedStyle(host).backgroundColor;
+          setLocale(locale);
+          await flush(el);
+          const toast = notice(el);
+          await toast.updateComplete;
+          const button = undo(el);
+          const native = button.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+          const close = toast.shadowRoot!.querySelector<HTMLButtonElement>(".close")!;
+          expect(innerWidth).toBe(width);
+          expect(close.getAttribute("aria-label")).toBe(locale === "es" ? "Cerrar" : "Close");
+          await expect.element(native).toHaveAccessibleName(locale === "es" ? "Deshacer" : "Undo");
+          expect(toast.message).toBe(locale === "es" ? "Vino · Servido" : "Vino · Served");
+          const rect = toast.getBoundingClientRect();
+          expect(rect.left).toBeGreaterThanOrEqual(0);
+          expect(rect.right).toBeLessThanOrEqual(width);
+          expect(native.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+          expect(native.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+          await expectNoA11yViolations(toast);
+          await userEvent.click(native);
+          await flush(el);
+          expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith("v1", items, {
+            submissionId: expect.any(String),
+            expectedPartyRevision: 4,
+          });
+          expect(notice(el).open).toBe(false);
+        } finally {
+          setLocale("en");
+          await page.viewport(oldWidth, oldHeight);
+        }
+      });
+    });
+
+    it("does not serve through an API replaced during the pre-command wait", async () => {
+      const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(orders) });
+      const order = await openMesa(el);
+      const original = api;
+      emit(order, "serve-lines", { items });
+      const replacement = stubApi();
+      el.api = replacement;
+      await flush(el);
+      expect(original.markServed).not.toHaveBeenCalled();
+      expect(replacement.markServed).not.toHaveBeenCalled();
+      expect(notice(el).open).toBe(false);
+    });
   });
 
   it("moves a held row on another open bill of the party from Current orders", async () => {

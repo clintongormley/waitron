@@ -1099,6 +1099,17 @@ interface BillChange {
   line: string;
 }
 
+interface ServedCommand {
+  api: TillApi;
+  partyId: string;
+  billId: string;
+  visit: number;
+  session: number;
+  expiresAt: number;
+  items: ServeLinesDetail["items"];
+  names: string[];
+}
+
 /** When a table action was sent: its operator session, and how many table opens had begun. */
 interface Sent {
   session: number;
@@ -1884,6 +1895,8 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    clearTimeout(this.#servedTimer);
+    this.servedCommand = null;
     this.#closeDeviceZones();
     this.deviceSettingsOpen = false;
     this.#closeTenderRefund();
@@ -2699,6 +2712,8 @@ export class TillApp extends LitElement {
   @state() private errorKey?: CounterError;
   /** What a complete submission of a draft did, said once the till is back on the floor. */
   @state() private submittedNotice: string | null = null;
+  @state() private servedCommand: ServedCommand | null = null;
+  #servedTimer?: ReturnType<typeof setTimeout>;
   /**
    * Authorizers for an open cash-drawer override; `undefined` means the dialog is closed, and a possibly
    * empty array opens it.
@@ -10360,11 +10375,11 @@ export class TillApp extends LitElement {
     this.errorKey = lineWriteError(error);
   }
 
-  /** A command on the party's held groups, sent with the revision the party was shown at; then the
-   * order and its groups are read again. A press while one is running is dropped: it would carry the
-   * revision the running one is about to move on. */
-  async #onGroupCommand(send: (party: TableParty) => Promise<unknown>): Promise<void> {
-    if (this.groupCommandBusy) return;
+  async #onGroupCommand(
+    send: (party: TableParty) => Promise<unknown>,
+    current: () => boolean = () => true,
+  ): Promise<void> {
+    if (this.groupCommandBusy || !current()) return;
     this.groupCommandBusy = true;
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
@@ -10374,7 +10389,8 @@ export class TillApp extends LitElement {
       if (
         !(await this.#flushPartyKitchenNote()) ||
         visit !== this.#orderVisit ||
-        session !== this.#operatorSession
+        session !== this.#operatorSession ||
+        !current()
       )
         return;
       const party = this.orderParty;
@@ -10385,36 +10401,37 @@ export class TillApp extends LitElement {
       try {
         await send(party);
       } catch (error) {
-        await this.#onReleaseRefusal(error);
+        if (current()) await this.#onReleaseRefusal(error);
         return;
       }
-      await this.#loadTabLines();
+      if (current()) await this.#loadTabLines();
     } finally {
       this.groupCommandBusy = false;
     }
   }
 
-  /** One request on the party under a submission id of its own, at `revision`. The answer's revision
-   * is noted, so a later command carries it, and returned for a next request in the same command. */
   async #partyRequest(
     party: TableParty,
     revision: number,
     request: (command: GroupCommand) => Promise<{ revision: number }>,
+    current: () => boolean = () => true,
   ): Promise<number> {
     const answer = await request({
       submissionId: crypto.randomUUID(),
       expectedPartyRevision: revision,
     });
-    this.#notePartyRevision(party.id, answer.revision);
+    if (current()) this.#notePartyRevision(party.id, answer.revision);
     return answer.revision;
   }
 
-  /** A group command of one request, at the revision the party was shown at. */
   async #onGroupRequest(
     request: (party: TableParty, command: GroupCommand) => Promise<{ revision: number }>,
+    current: () => boolean = () => true,
   ): Promise<void> {
-    await this.#onGroupCommand((party) =>
-      this.#partyRequest(party, party.revision, (command) => request(party, command)),
+    await this.#onGroupCommand(
+      (party) =>
+        this.#partyRequest(party, party.revision, (command) => request(party, command), current),
+      current,
     );
   }
 
@@ -10616,13 +10633,26 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Serving, its undo and a reminder's snooze and its clearing are commands on the party whose
-   * order is open; with no order open they send nothing. */
   async #onServiceRequest(
     request: (party: TableParty, command: GroupCommand) => Promise<{ revision: number }>,
   ): Promise<void> {
-    if (this.activeTabId === undefined) return;
-    await this.#onGroupRequest(request);
+    const api = this.api;
+    const billId = this.activeTabId;
+    const partyId = this.orderParty?.id;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    if (billId === undefined) return;
+    await this.#onGroupRequest(
+      request,
+      () =>
+        this.isConnected &&
+        api === this.api &&
+        billId === this.activeTabId &&
+        partyId === this.orderParty?.id &&
+        visit === this.#orderVisit &&
+        session === this.#operatorSession &&
+        this.#orderScreenShown(),
+    );
   }
 
   /** Records or takes back the party's bill request, then reads the floor, which carries it. A
@@ -10661,8 +10691,78 @@ export class TillApp extends LitElement {
   }
 
   async #onServeLines(event: Event): Promise<void> {
-    const { items } = (event as CustomEvent<ServeLinesDetail>).detail;
-    await this.#onServiceRequest((party, command) => this.api.markServed(party.id, items, command));
+    const items = (event as CustomEvent<ServeLinesDetail>).detail.items.map((item) => ({
+      ...item,
+    }));
+    const api = this.api;
+    const billId = this.activeTabId;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    const rows = [
+      ...(this.currentOrders?.ungrouped ?? []),
+      ...(this.currentOrders?.groups.flatMap((group) => group.rows) ?? []),
+    ];
+    const names = items.flatMap(({ lineId }) => {
+      const row = rows.find((row) => row.lineId === lineId);
+      return row ? [row.name] : [];
+    });
+    await this.#onServiceRequest(async (party, command) => {
+      const answer = await api.markServed(party.id, items, command);
+      if (
+        this.isConnected &&
+        api === this.api &&
+        billId !== undefined &&
+        billId === this.activeTabId &&
+        party.id === this.orderParty?.id &&
+        visit === this.#orderVisit &&
+        session === this.#operatorSession &&
+        this.#orderScreenShown() &&
+        items.length > 0
+      ) {
+        clearTimeout(this.#servedTimer);
+        this.servedCommand = {
+          api,
+          partyId: party.id,
+          billId,
+          visit,
+          session,
+          expiresAt: Date.now() + 5_000,
+          items,
+          names,
+        };
+        this.#servedTimer = setTimeout(() => {
+          this.servedCommand = null;
+        }, 5_000);
+      }
+      return answer;
+    });
+  }
+
+  #currentServedCommand(): ServedCommand | null {
+    const served = this.servedCommand;
+    return served &&
+      this.isConnected &&
+      served.api === this.api &&
+      served.billId === this.activeTabId &&
+      served.partyId === this.orderParty?.id &&
+      served.visit === this.#orderVisit &&
+      served.session === this.#operatorSession &&
+      this.#orderScreenShown() &&
+      Date.now() < served.expiresAt
+      ? served
+      : null;
+  }
+
+  async #undoServed(served: ServedCommand): Promise<void> {
+    if (this.groupCommandBusy || this.#currentServedCommand() !== served) return;
+    await this.#onServiceRequest(async (party, command) => {
+      const answer = await served.api.unmarkServed(party.id, served.items, command);
+      if (this.servedCommand === served) {
+        clearTimeout(this.#servedTimer);
+        this.servedCommand = null;
+      }
+      return answer;
+    });
   }
 
   async #onUnserveLines(event: Event): Promise<void> {
@@ -15094,6 +15194,7 @@ export class TillApp extends LitElement {
 
   override render() {
     const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
+    const served = this.#currentServedCommand();
     const errorMessage = this.errorKey
       ? errorText(
           this.errorKey,
@@ -15373,11 +15474,39 @@ export class TillApp extends LitElement {
           class="submitted-toast"
           data-submitted-toast
           tone="info"
-          .open=${this.submittedNotice !== null}
+          .open=${this.submittedNotice !== null && served === null}
           .message=${this.submittedNotice ?? ""}
           close-label=${t("table.submitted_close")}
           @wt-close=${() => (this.submittedNotice = null)}
         ></wt-toast>
+        <wt-toast
+          class="submitted-toast"
+          data-served-toast
+          .duration=${0}
+          .open=${served !== null}
+          .message=${served === null ? "" : [...served.names, t("table.row_served")].join(" · ")}
+          close-label=${t("table.submitted_close")}
+          @wt-close=${() => {
+            this.servedCommand = null;
+            clearTimeout(this.#servedTimer);
+          }}
+        >
+          ${
+            served === null
+              ? nothing
+              : keyed(
+                  served,
+                  html`<wt-button
+                    slot="action"
+                    variant="secondary"
+                    data-undo-served
+                    ?disabled=${this.groupCommandBusy}
+                    @click=${() => void this.#undoServed(served)}
+                    >${t("expo.undo")}</wt-button
+                  >`,
+                )
+          }
+        </wt-toast>
         <till-make-now .items=${this.makeNow} @dismiss=${this.#dismissMakeNow}></till-make-now>
         <wt-toast
           class="equipment-toast"
