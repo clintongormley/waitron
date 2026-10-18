@@ -32,6 +32,77 @@ const CHOICES_USED_BY_MANY: readonly ColourChoice[] = CHOICES.map((choice) => ({
   ),
 }));
 
+const SIXTEEN_NAMES: readonly [string, string, string][] = [
+  ["red", "Red", "Rojo"],
+  ["orange", "Orange", "Naranja"],
+  ["amber", "Amber", "Ámbar"],
+  ["yellow", "Yellow", "Amarillo"],
+  ["lime", "Lime", "Lima"],
+  ["green", "Green", "Verde"],
+  ["teal", "Teal", "Turquesa"],
+  ["cyan", "Cyan", "Cian"],
+  ["sky", "Sky", "Celeste"],
+  ["blue", "Blue", "Azul"],
+  ["indigo", "Indigo", "Índigo"],
+  ["purple", "Purple", "Morado"],
+  ["magenta", "Magenta", "Magenta"],
+  ["pink", "Pink", "Rosa"],
+  ["brown", "Brown", "Marrón"],
+  ["grey", "Grey", "Gris"],
+];
+
+const SIXTEEN_USED_BY = {
+  en: { amber: ["Lunch", "Bar"], red: ["Dinner"] },
+  es: { amber: ["Comida", "Bar"], red: ["Cena"] },
+} as const;
+
+function sixteen(language: "en" | "es"): ColourChoice[] {
+  const usedBy: Partial<Record<string, readonly string[]>> = SIXTEEN_USED_BY[language];
+  return SIXTEEN_NAMES.map(([value, en, es]) => ({
+    value,
+    label: language === "en" ? en : es,
+    fill: `var(--wt-color-palette-${value})`,
+    ...(usedBy[value] ? { usedBy: usedBy[value] } : {}),
+  }));
+}
+
+/** The sixteen, in the mock-up's 398px dialog field, at most the window's width. */
+async function mountSixteen(choices: readonly ColourChoice[] = sixteen("en"), value = "blue") {
+  const mounted = await mountChooser(`name="colour" label="Colour" value="${value}"`);
+  mounted.el.style.cssText = "width: 398px; max-width: 100%";
+  mounted.el.choices = choices;
+  await mounted.el.updateComplete;
+  return mounted;
+}
+
+/** The number of tracks in the panel's radio group. */
+function columns(el: WtColourChooser): number {
+  const group = el.shadowRoot!.querySelector<HTMLElement>('[role="radiogroup"]')!;
+  return getComputedStyle(group).gridTemplateColumns.split(" ").length;
+}
+
+/** The lines a tile's colour name is drawn on: the distinct tops of its text's boxes. */
+function nameLines(tile: HTMLElement): number {
+  const range = document.createRange();
+  range.selectNodeContents(tile.querySelector(".colour-name")!);
+  return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+}
+
+function expectNamesOnOneLine(tiles: HTMLElement[]): void {
+  for (const tile of tiles) expect(nameLines(tile), tile.dataset.value).toBe(1);
+}
+
+async function atViewport(width: number, height: number, body: () => Promise<void>) {
+  const [oldWidth, oldHeight] = [innerWidth, innerHeight];
+  await page.viewport(width, height);
+  try {
+    expect(window.innerWidth).toBe(width);
+    await body();
+  } finally {
+    await page.viewport(oldWidth, oldHeight);
+  }
+}
+
 async function mountChooser(attributes = 'name="colour" label="Colour" value="blue"') {
   host?.remove();
   const el = (await mount(
@@ -729,6 +800,123 @@ describe("position", () => {
   });
 });
 
+describe("columns", () => {
+  for (const language of ["en", "es"] as const) {
+    test(`at 1280px, the sixteen in ${language} sit in four columns, each name on one line`, async () => {
+      await atViewport(1280, 800, async () => {
+        const { el, tiles } = await mountSixteen(sixteen(language));
+        await openByClick(el);
+        expect(columns(el)).toBe(4);
+        const tops = tiles().map((tile) => Math.round(tile.getBoundingClientRect().top));
+        expect(new Set(tops.slice(0, 4)).size).toBe(1);
+        expect(tops[4]).toBeGreaterThan(tops[0]!);
+        expectNamesOnOneLine(tiles());
+      });
+    });
+
+    test(`at 390px, the sixteen in ${language} sit in two columns, each name on one line`, async () => {
+      await atViewport(390, 844, async () => {
+        const { el, tiles } = await mountSixteen(sixteen(language));
+        await openByClick(el);
+        expect(columns(el)).toBe(2);
+        expectNamesOnOneLine(tiles());
+      });
+    });
+  }
+
+  test("opened at 1280px, closed, and reopened at 390px, the panel has two columns", async () => {
+    await atViewport(1280, 800, async () => {
+      const { el, panel, tiles } = await mountSixteen();
+      await openByClick(el);
+      expect(columns(el)).toBe(4);
+      el.hide();
+      await vi.waitFor(() => expect(panel.matches(":popover-open")).toBe(false));
+      await page.viewport(390, 844);
+      expect(window.innerWidth).toBe(390);
+      await openByClick(el);
+      expect(columns(el)).toBe(2);
+      expectNamesOnOneLine(tiles());
+    });
+  });
+
+  test("shrinking the window to 390px while open goes to two columns inside the window, and widening it again goes back to four", async () => {
+    await atViewport(1280, 800, async () => {
+      const { el, panel, tiles } = await mountSixteen();
+      el.style.cssText = "position: fixed; right: 8px; top: 80px; width: 160px";
+      await openByClick(el);
+      expect(columns(el)).toBe(4);
+      await page.viewport(390, 844);
+      expect(window.innerWidth).toBe(390);
+      await vi.waitFor(() => {
+        expect(columns(el)).toBe(2);
+        const box = panel.getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+      });
+      expectNamesOnOneLine(tiles());
+      await page.viewport(1280, 800);
+      expect(window.innerWidth).toBe(1280);
+      await vi.waitFor(() => expect(columns(el)).toBe(4));
+      expectNamesOnOneLine(tiles());
+    });
+  });
+
+  test("at one width, one-letter names sit in four columns where the real names need two", async () => {
+    await atViewport(480, 800, async () => {
+      const { el, tiles } = await mountSixteen();
+      await openByClick(el);
+      expect(columns(el)).toBe(2);
+      expectNamesOnOneLine(tiles());
+      el.hide();
+      el.choices = sixteen("en").map((choice) => ({ ...choice, label: choice.label[0]! }));
+      await el.updateComplete;
+      await openByClick(el);
+      expect(columns(el)).toBe(4);
+      expectNamesOnOneLine(tiles());
+    });
+  });
+
+  test("at 1280px, a long list of names under each colour does not take the panel to two columns", async () => {
+    await atViewport(1280, 800, async () => {
+      const { el, tiles } = await mountSixteen(
+        sixteen("en").map((choice) => ({
+          ...choice,
+          usedBy: Array.from({ length: 20 }, (_, i) => `Restaurant department number ${i}`),
+        })),
+      );
+      await openByClick(el);
+      expect(columns(el)).toBe(4);
+      expectNamesOnOneLine(tiles());
+    });
+  });
+
+  test("at 1280px, arrows move through the list, not across the rows of four", async () => {
+    await atViewport(1280, 800, async () => {
+      const { el, root, tile } = await mountSixteen(sixteen("en"), "yellow");
+      const events = hostSetsValue(el);
+      await openByClick(el);
+      expect(columns(el)).toBe(4);
+      const steps: [string, string, string][] = [
+        ["yellow", "{ArrowRight}", "lime"],
+        ["red", "{ArrowDown}", "orange"],
+        ["lime", "{ArrowUp}", "yellow"],
+      ];
+      for (const [from, key, to] of steps) {
+        if (el.value !== from) {
+          el.value = from;
+          await el.updateComplete;
+          tile(from).focus();
+        }
+        await vi.waitFor(() => expect(root.activeElement).toBe(tile(from)));
+        events.length = 0;
+        await userEvent.keyboard(key);
+        expect(events.map((event) => event.detail)).toEqual([{ value: to }]);
+        await vi.waitFor(() => expect(root.activeElement).toBe(tile(to)));
+      }
+    });
+  });
+});
+
 describe("keys that the chooser prevents", () => {
   test("arrow, Home and End presses in the panel are prevented, including a move onto the chosen colour", async () => {
     const { el, panel } = await mountChooser();
@@ -917,6 +1105,20 @@ describe("tokens", () => {
     expect(tiles()).toHaveLength(CHOICES.length);
     for (const tile of tiles())
       expect(tile.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+  });
+});
+
+describe("tokens, in four columns", () => {
+  test("--wt-space-2 sets the gaps between the tiles", async () => {
+    await atViewport(1280, 800, async () => {
+      const { el } = await mountSixteen();
+      host.style.setProperty("--wt-space-2", "11px");
+      await openByClick(el);
+      expect(columns(el)).toBe(4);
+      const group = el.shadowRoot!.querySelector<HTMLElement>('[role="radiogroup"]')!;
+      expect(getComputedStyle(group).columnGap).toBe("11px");
+      expect(getComputedStyle(group).rowGap).toBe("11px");
+    });
   });
 });
 

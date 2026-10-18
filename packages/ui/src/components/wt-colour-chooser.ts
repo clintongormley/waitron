@@ -17,6 +17,12 @@ export interface ColourChoice {
   usedBy?: readonly string[];
 }
 
+function lineCount(element: Element): number {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+}
+
 /** A form field showing the chosen colour, which opens a panel of colour tiles. */
 @customElement("wt-colour-chooser")
 export class WtColourChooser extends LitElement {
@@ -88,6 +94,10 @@ export class WtColourChooser extends LitElement {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: var(--wt-space-2);
+      }
+
+      [role="radiogroup"][data-columns="4"] {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
       }
 
       .tile {
@@ -208,6 +218,11 @@ export class WtColourChooser extends LitElement {
     popup.style.minWidth = `${anchor.width}px`;
     popup.style.maxWidth = `${innerWidth - 16}px`;
     popup.style.maxHeight = `${innerHeight - 16}px`;
+    // Four columns while every colour name fits on one line at the width allowed, else two.
+    const group = popup.querySelector<HTMLElement>('[role="radiogroup"]')!;
+    group.dataset.columns = "4";
+    if ([...group.querySelectorAll(".colour-name")].some((name) => lineCount(name) > 1))
+      group.dataset.columns = "2";
     const box = popup.getBoundingClientRect();
     const maxLeft = Math.max(0, innerWidth - box.width - 8);
     popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
