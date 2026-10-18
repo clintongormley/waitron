@@ -1228,7 +1228,8 @@ Left open by W100 (#1332), the [equipment plan](../superpowers/plans/2026-10-04-
 - **Not shown: whether equipment is disconnected.** The till says an item is switched off when
   a printer is disabled or a reader is disabled or unpaired; nothing stores whether a printer or
   reader is online (Q7).
-- Owner questions, each with the default built (answer when convenient):
+- Owner questions, each with the default built. **Answered 2026-10-07: the owner kept every
+  default** ("Ok", keep every default; lane C's questions file, 2026-10-07 ~08:50):
   - Q1. A device cannot override its profile's default with "none" — owner question, default
     built.
   - Q2. A card reader is never shared by several devices at once; every reader has one holder —
