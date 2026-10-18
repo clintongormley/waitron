@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   buildMenuDocument,
@@ -858,6 +858,11 @@ describe("zone closed-time routes", () => {
 });
 
 it("accepts a fitting week, refuses a clashing one and a stale one while a change waits", async () => {
+  // The route reads the real clock; the stored change must still be waiting whatever today is.
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   const r = await routed();
   await scoped(async (tx) => {
     await tx

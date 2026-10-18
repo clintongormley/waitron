@@ -139,7 +139,7 @@ rows are owner stops or need marking in the PR.
 | 6 | `business-day-schedule.test.ts:396-409` (assertions `:404-405`) | two overlapping raw ranges both `range` → both `overlap` (count 2 unchanged). Confirmed by Task 6; no other existing assertion changed |
 | 7a | `business-day-schedule.test.ts:430-467` | `hours.clock_change_pending` while waiting → resolves while waiting; stale revision still `hours.clock_changed`; bad revisions unchanged |
 | 7a, 7b, 8 | `business-day-schedule.test.ts:489-561` | each writer refused `hours.clock_change_pending` → each writer accepts a non-clashing time edit while waiting, and refuses a clashing one with `hours.clock_change_conflict` (exact params) and nothing written |
-| 8 | `packages/venue-service/src/menu-timetable-routes.test.ts:852-873` | route answers 409 pending → route accepts 09:00–14:00 (200) and refuses 06:00–08:00 with 409 `hours.clock_change_conflict` (exact params); stale case unchanged |
+| 8 (done in 7a) | `packages/venue-service/src/menu-timetable-routes.test.ts:852-873` | route answers 409 pending → route accepts 09:00–14:00 (204) and refuses 06:00–08:00 with 409 `hours.clock_change_conflict` (exact params); stale case unchanged |
 | 10 | `packages/venue-service/src/dashboard/seasons-window.test.ts:705-706`, `season-painter.save.test.ts:543`, `periods-list.delete.test.ts:405`, `period-delete-dialog.test.ts:252,312` | "Cancel the pending business-day change…" for the pending code → the clash sentence for `hours.clock_change_conflict` |
 | 11 | `business-day-schedule.test.ts:640-657` | annual 07:00–07:00 refused "against every retained start" → accepted under the start in force (07:00), and an annual range crossing 07:00 refused |
 | 13 | `apps/dashboard/src/screens/business-day-start-editor.test.ts:222-241,473-509` | Replace/Cancel/locked/"Editable until"/"Scheduled change" rows → "Starts at" always, one "New start" row per waiting change with when and day length, Change start only |
@@ -177,12 +177,12 @@ Task 7a confirmed the plan's 7a row, took the 7a part of the 7a/7b/8 row, and to
 
 | File:line (base `373b96623`) | Before → after | Why |
 | --- | --- | --- |
-| `packages/venue-service/src/business-day-schedule.test.ts:430-467` ("refuses time writes while pending…", renamed "allows time writes while a change waits…") | `guard("time", 1)` rejects `{ code: "hours.clock_change_pending", params: { effectiveBusinessDay: E } }` → resolves; every other assertion (metadata, stale `hours.clock_changed`, activation, cancellation, bad revisions) unchanged | design rule 5: the guard keeps only its revision check |
-| `business-day-schedule.test.ts:497-505` (special-day menu paint, 07:00 waiting) | `paintDate(… "2026-12-25" …)` rejects pending → `paintDate(… "2026-12-26" …)` resolves | the pending refusal is gone; the date moves because the fixture already holds a special day on 12-25, so a second one is refused `special_day.date_taken` — the base never reached that check. Task 8 adds the clashing refusal |
-| `business-day-schedule.test.ts:506-516` (menu week, 07:00 waiting) | Wed 09:00–17:00 at revision 1 rejects pending → resolves; the empty-week (revision 0) check moved before it, assertion unchanged | the week now fits the waiting start; after it is stored the empty week is a time change, so revision 0 would answer `hours.clock_changed` |
-| `business-day-schedule.test.ts:518-536` (period offsets) | `endOffsetMinutes: 1` at revision 1 rejects pending → resolves; the name/colour/offset-0 update (revision 0) moved before it, assertion unchanged | same ordering reason |
-| `business-day-schedule.test.ts:537-561` (zone week and zone date) | both reject pending → both resolve; the zone date moves 12-25 → 12-26 | as above; Task 7b and 8 add the clashing refusals |
-| `packages/venue-service/src/menu-timetable-routes.test.ts:852-873` (Task 8's row, taken here because 7a's `replaceMenuWeek` change makes the old assertion fail) | `PUT …/menu-week` 09:00–14:00 rev 1 → 409 `{ code: "hours.clock_change_pending", params: { effectiveBusinessDay: "2026-11-04" } }` → 204; added: 06:00–08:00 rev 1 → 409 by `toEqual` `{ code: "hours.clock_change_conflict", params: { dayCutover: "07:00", startsAt: "2026-11-04T06:00:00.000Z", conflictCount: 1, conflicts: [{ departmentId, departmentName "Restaurant", periodId, periodName "Mañanas", seasonId, seasonName "Autumn", weekday 1, startsAt "06:00", endsAt "08:00", rangeIndex 0, reason "range" }] } }` and the model's departments unchanged; stale case (rev 0 → 409 `hours.clock_changed`) unchanged, moved first | the route now accepts a fitting week and names the clash |
+| `packages/venue-service/src/business-day-schedule.test.ts:431-466` (case "refuses time writes while pending, allows metadata, …" renamed "allows time writes while a change waits, allows metadata, …"; assertion `:445-448`) | `guard("time", 1)` rejects `{ code: "hours.clock_change_pending", params: { effectiveBusinessDay: E } }` → resolves; every other assertion (metadata, stale `hours.clock_changed`, activation, cancellation, bad revisions) unchanged | design rule 5: the guard keeps only its revision check |
+| `business-day-schedule.test.ts:500-506` (describe "pending guards every time writer" renamed "every time writer stays open while a change waits"; case "guards normal and special-day menu ranges but accepts an equivalent week" renamed "accepts normal and special-day menu ranges and an equivalent week"; special-day paint `:503-505`) | `paintDate(… "2026-12-25" …)` rejects pending → `paintDate(… "2026-12-26" …)` resolves | the pending refusal is gone; the date moves because the fixture already holds a special day on 12-25, so a second one is refused `special_day.date_taken` — the base never reached that check. Task 8 adds the clashing refusal |
+| `business-day-schedule.test.ts:507-517` (same case: week `:510-512`, empty week `:514-517`) | Wed 09:00–17:00 at revision 1 rejects pending → resolves; the empty-week (revision 0) check moved before it, assertion unchanged | the week now fits the waiting start; after it is stored the empty week is a time change, so revision 0 would answer `hours.clock_changed` |
+| `business-day-schedule.test.ts:518-538` (case "guards offsets but accepts names, colours and equivalent offsets" renamed "accepts offsets, names, colours and equivalent offsets"; offset `:521-525`, metadata `:526-537`) | `endOffsetMinutes: 1` at revision 1 rejects pending → resolves; the name/colour/offset-0 update (revision 0) moved before it, assertion unchanged | same ordering reason |
+| `business-day-schedule.test.ts:539-560` (case "guards zone closed weeks and dates" renamed "accepts zone closed weeks and dates"; zone week `:542-556`, zone date `:557-559`) | both reject pending → both resolve; the zone date moves 12-25 → 12-26 | as above; Task 7b and 8 add the clashing refusals |
+| `packages/venue-service/src/menu-timetable-routes.test.ts:852-873` (case "returns the pending and stale clock refusals through real hours routes" renamed "accepts a fitting week, refuses a clashing one and a stale one while a change waits"; it now fakes `Date` at `2026-11-02T12:00Z`, since the route reads the clock and the stored change is dated 2026-11-04; Task 8's row, taken here because 7a's `replaceMenuWeek` change makes the old assertion fail) | `PUT …/menu-week` 09:00–14:00 rev 1 → 409 `{ code: "hours.clock_change_pending", params: { effectiveBusinessDay: "2026-11-04" } }` → 204; added: 06:00–08:00 rev 1 → 409 by `toEqual` `{ code: "hours.clock_change_conflict", params: { dayCutover: "07:00", startsAt: "2026-11-04T06:00:00.000Z", conflictCount: 1, conflicts: [{ departmentId, departmentName "Restaurant", periodId, periodName "Mañanas", seasonId, seasonName "Autumn", weekday 1, startsAt "06:00", endsAt "08:00", rangeIndex 0, reason "range" }] } }` and the model's departments unchanged; stale case (rev 0 → 409 `hours.clock_changed`) unchanged, moved first | the route now accepts a fitting week and names the clash |
 
 No other existing assertion failed (`pnpm exec vitest run --project node` in `packages/venue-service`: `Tests  2510 passed (2510)`).
 
@@ -529,7 +529,7 @@ settled clock), test `business-day-schedule.test.ts`, `operations.test.ts` (the 
 **Files:** `packages/venue-service/src/special-days.ts` (`saveSpecialDay` :1035, `deleteSpecialDay`
 :1196, `cutoversFor` :585-588, `checkScheduleAfterWrite` calls at `:1190` and `:1206`), `seasons.ts`
 (`saveSeasons` :79, `checkScheduleAfterSeasonWrite` :71-74), tests `business-day-schedule.test.ts`,
-`special-days.test.ts`, `seasons.test.ts`, `menu-timetable-routes.test.ts:852-873`.
+`special-days.test.ts`, `seasons.test.ts`. (`menu-timetable-routes.test.ts:852-873` was changed in Task 7a, because 7a's `replaceMenuWeek` change made it fail.)
 
 **Decisions:** `cutoversFor`: a repeating day parses under the settled clock's starts (Task 11
 narrows them); a one-off date parses under its own date's start on the SETTLED clock, so a one-off
@@ -544,9 +544,11 @@ argument and receive `settledClock(clock, at)` (both writers have `at`: `saveSea
   day holding a raw clash → accepted; of another while one exists → refused. `saveSeasons` adding a
   season while a raw clash exists → refused (the copy carries the clash), nothing written; with none
   → accepted. Last-orders under the waiting start alone, through `saveSeasons` and through
-  `saveSpecialDay` (H3: Fri 04:00–06:00, offset +30) → `hours.clock_change_conflict`, not
-  `season.invalid` / `special_day.invalid` `end_offset`. Route (running list): `PUT …/menu-week`
-  09:00–14:00 → 200; 06:00–08:00 with a waiting 07:00 → 409 with exact params
+  `saveSpecialDay` (H3, with Task 7a's values: 01:00–03:00 followed by 03:00–04:00 on the next
+  day, offset +30, 03:00 waiting; the earlier Fri 04:00–06:00 cannot be written under the 05:00
+  start in force) → `hours.clock_change_conflict`, not
+  `season.invalid` / `special_day.invalid` `end_offset`. Route (running list, done in Task 7a):
+  `PUT …/menu-week` 09:00–14:00 → 204; 06:00–08:00 with a waiting 07:00 → 409 with exact params
   (`startsAt: "2026-11-04T06:00:00.000Z"`).
 - [ ] **Step 2–4:** fail; implement; pass
   `pnpm --filter @waitron/venue-service exec vitest run src/business-day-schedule.test.ts src/special-days.test.ts src/seasons.test.ts src/menu-timetable-routes.test.ts src/hours-routes.test.ts`.

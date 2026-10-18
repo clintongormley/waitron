@@ -728,6 +728,53 @@ describe("a waiting change checks the hours written while it waits", () => {
     });
     expect(await offsetOf(v)).toBe(0);
   });
+  it("checks a changed offset's last orders under the starts in force, leaving the waiting one to the after-write check", async () => {
+    const v = await fixture([]);
+    await withTransaction(suite.db, async (tx) => {
+      await seasonDay(tx, { ...v, weekday: 5, ranges: [range("01:00", "03:00")] });
+      await seasonDay(tx, { ...v, weekday: 6, ranges: [range("03:00", "04:00")] });
+    });
+    await waiting(v);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        updateMenuPeriod(tx, v.cfg, v.periodId, { endOffsetMinutes: 30 }, 1, at),
+      ),
+    ).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 2,
+        conflicts: [
+          expect.objectContaining({
+            weekday: 5,
+            startsAt: "01:00",
+            endsAt: "03:00",
+            reason: "sending_cutoff",
+          }),
+          expect.objectContaining({
+            weekday: 6,
+            startsAt: "03:00",
+            endsAt: "04:00",
+            reason: "endpoint_day",
+          }),
+        ],
+      },
+    });
+    expect(await offsetOf(v)).toBe(0);
+  });
+  it("accepts a period rename beside a stored range that clashes with the waiting start", async () => {
+    const v = await fixture([]);
+    await withTransaction(suite.db, (tx) =>
+      seasonDay(tx, { ...v, weekday: 6, ranges: [range("21:00", "04:30")] }),
+    );
+    await waiting(v);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        updateMenuPeriod(tx, v.cfg, v.periodId, { name: "Late" }, 0, at),
+      ),
+    ).resolves.toBeUndefined();
+  });
   it("creates a period with an offset and no ranges while a change waits", async () => {
     const v = await fixture([]);
     await waiting(v);
