@@ -8077,7 +8077,7 @@ describe("mounted public department dialogs", () => {
     expect((find(app, 'wt-input[name="name"]') as WtInput).value).toBe("Restaurant");
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
-  it("the real receipt link opens the Receipts tab of its department with no question and keeps a Settings draft", async () => {
+  it("an address naming the Receipts tab opens it with no question and keeps a Details draft", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1", [
       "venue_service.manage",
       "venue.view",

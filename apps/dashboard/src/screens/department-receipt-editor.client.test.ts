@@ -48,7 +48,7 @@ async function mount() {
     },
   };
 }
-it("a host-selected dialog reads the initial model actively and its live refresh passively", async () => {
+it("the host-supplied editor reads the initial model actively and its live refresh passively", async () => {
   const { el, fetchImpl, liveData, activity } = await mount();
   await expect
     .poll(() => fetchImpl.mock.calls.some(([path]) => path.endsWith("receipt-preview")))
@@ -63,7 +63,7 @@ it("a host-selected dialog reads the initial model actively and its live refresh
   expect(new Headers(reads[1]![1].headers).get("x-waitron-live")).toBe("1");
   expect(activity.mock.calls.filter(([path]) => path.endsWith("/bar/receipt"))).toHaveLength(1);
 });
-it("a live policy and receipt read preserves the host-selected dialog's authored dirty draft", async () => {
+it("a live policy and receipt read preserves the host-supplied editor's authored dirty draft", async () => {
   const { el, fetchImpl, liveData, changeModel } = await mount();
   await editReceipt(el, "email", "draft@example.com");
   changeModel({
@@ -83,7 +83,7 @@ it("a live policy and receipt read preserves the host-selected dialog's authored
   ).toBe(false);
   expect(receiptSave(el).disabled).toBe(false);
 });
-it("the host-selected dialog writes the exact model envelope through the real client and stays with Save quiet", async () => {
+it("the host-supplied editor writes the exact model envelope through the real client and stays with Save quiet", async () => {
   const { el, fetchImpl } = await mount();
   await editReceipt(el, "email", "  counter@example.com  ");
   const saved = vi.fn();

@@ -30,8 +30,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 
 import type {
-  DepartmentReceiptModel as DepartmentReceiptDialogModel,
-  DepartmentReceiptClient as DepartmentReceiptDialogApi,
+  DepartmentReceiptModel,
+  DepartmentReceiptClient,
 } from "../api/department-receipts.js";
 function comparableReceipt(value: DepartmentReceiptWrite): DepartmentReceiptWrite {
   return {
@@ -88,7 +88,7 @@ export class DepartmentReceiptEditor extends LitElement {
       }
     `,
   ];
-  @property({ attribute: false }) api!: DepartmentReceiptDialogApi;
+  @property({ attribute: false }) api!: DepartmentReceiptClient;
   @property({ attribute: false }) subject?: { id: string; name: string };
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (!changed.has("subject")) return;
@@ -106,7 +106,7 @@ export class DepartmentReceiptEditor extends LitElement {
   @property({ type: Boolean }) canManagePolicy = true;
   @property({ type: Boolean }) requiresDescription = true;
   @state() private department: { id: string; name: string } | null = null;
-  @state() private model?: DepartmentReceiptDialogModel;
+  @state() private model?: DepartmentReceiptModel;
   @state() private draft: DepartmentReceiptWrite = {
     receipt: {},
     policy: { receiptPrintMode: "auto", printTradingName: true },
@@ -282,7 +282,7 @@ export class DepartmentReceiptEditor extends LitElement {
       )
       .catch(() => {});
   }
-  #adoptUntouched(model: DepartmentReceiptDialogModel): void {
+  #adoptUntouched(model: DepartmentReceiptModel): void {
     const current = comparableReceipt(this.#body());
     const baseline = comparableReceipt(this.#baseline!);
     const next = comparableReceipt({ receipt: model.receipt, policy: model.policy });

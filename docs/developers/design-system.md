@@ -4761,10 +4761,9 @@ Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`. Departments always opens its list
 at `/manage/venue-operations`. A department opens at
-`/manage/venue-operations/department/<id>` in its edit dialog; its Service and Transfers tabs add
-`/view/service` and `/view/transfers`, a zone editor adds `/view/zones/zone/<id>` and the receipt
-editor adds `/view/receipt`. The list stays beneath
-these dialogs. Closing one returns to the list; a removed subject closes its editor.
+`/manage/venue-operations/department/<id>` in its edit dialog; its Service, Receipts and Transfers tabs add
+`/view/service`, `/view/receipt` and `/view/transfers`, and a zone editor adds
+`/view/zones/zone/<id>`. The list stays beneath these dialogs. Closing one returns to the list; a removed subject closes its editor.
 Old top-level tab addresses are replaced with the list URL. Venue settings
 (`/manage/venue-settings`) starts with `venue-details`, followed by `tables`,
 `adjustment-reasons` and `kitchen`; a tab

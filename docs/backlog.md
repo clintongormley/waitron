@@ -5573,7 +5573,8 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 
 - **The relocated independent department preview needs a load investigation.** The retired
   `receipts-screen.defaults.test.ts` case failed once during A463 and was not reproduced.
-  A493 moves this behavior into the receipt dialog's language-independent preview cases.
+  A493 moves this behavior into the department receipt editor's language-independent preview cases
+  (`apps/dashboard/src/screens/department-receipt-editor.preview.test.ts`).
   Reproduce that flow under load before assigning a cause; its retirement does not establish
   that the original failure is fixed.
 

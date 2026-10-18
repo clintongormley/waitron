@@ -78,10 +78,10 @@ class ReceiptEditorHost extends LitElement {
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
 }
-customElements.define("receipt-editor-fixture-host", ReceiptEditorHost);
+customElements.define("receipt-editor-test-host", ReceiptEditorHost);
 export async function mountReceiptEditor(api = receiptApi(), theme: "light" | "dark" = "light") {
   const { el: app, host } = await mountWidget<ReceiptEditorHost>(
-    "receipt-editor-fixture-host",
+    "receipt-editor-test-host",
     { api },
     theme,
   );
