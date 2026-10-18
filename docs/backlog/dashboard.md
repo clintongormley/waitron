@@ -1092,8 +1092,31 @@ help about anything you want very quickly."
   pictures in [mockups/a582-help-mode/](mockups/a582-help-mode/). It settles the open points above.
   The owner approved it on 2026-10-18 with one change: on a till or handheld there is no Help row
   in More, because the "?" stays in the bar at the top right at every width. With help on, an open
-  menu shows a blue "?" beside each option that has help. Being built in lane C, slice 1 on branch
-  `feat/a582-1-help-badge`.
+  menu shows a blue "?" beside each option that has help.
+- **Slice 1 landed (#1846, 2026-10-18).** `packages/ui` has the help switch's state
+  (`packages/ui/src/help-mode.ts`), `wt-help-tooltip`'s `mode="help-mode"` badge (hidden while help
+  is off, hanging over its box's top trailing corner while on), and `help` slots on
+  `wt-price-input`, `wt-number-stepper`, `wt-file-input`, `wt-disclosure`, `wt-dialog` and
+  `wt-modal`. Nothing turns help on yet and no existing "?" uses the new mode, so every "?" still
+  shows as before. Plan: [2026-10-18-a582-1-help-badge.md](../superpowers/plans/2026-10-18-a582-1-help-badge.md).
+- **Remaining slices** (design §8): **2** the dashboard — the banner switch, the "?" beside options
+  in the account menu and `wt-row-actions` menus (design §3.3), `help` on table columns and tabs,
+  the dashboard's five existing "?" switched to `mode="help-mode"` in the same PR, and Products as
+  the first screen with help; **3** guide pages served by the box (EN and ES; a new unauthenticated
+  route, FULL review); **4** tills and handhelds — the bar switch that never leaves the bar (at phone
+  width the language chooser leaves first), the till's More and person menus, badges on Counter,
+  Floor and Order, the guide sheet, off on lock or a change of person; **5** kitchen screens and
+  monitors — the corner switch, off after two minutes without a touch.
+- **Slice 2 must also:** give SumUp's "?" a positioned wrapper before switching it — it sits loose
+  beside a label, not in a field's `help` slot (`packages/payments-sumup/src/dashboard/sumup-connect-form.ts`,
+  around line 245); find room for the switch in the dashboard banner at phone width (design §3.1:
+  a 52 px stand-in shrank the logo below the 60 px a test requires at 360 px); and add a guard that
+  every `wt-help-tooltip` outside `apps/setup` carries `mode="help-mode"`, so a new "?" cannot stay
+  always visible by accident.
+- **Slice 4 must also:** fit the till's 32 px badge target, which hangs 16 px past its box — that
+  overflows `wt-modal`'s 12 px side padding at phone width (the body scrolls sideways: the 390 px
+  case in `packages/ui/src/components/wt-help-tooltip.slots.test.ts` shows it with the 32 px
+  control) and reaches 4 px above `wt-disclosure`'s 12 px top padding.
 - **Relation to A237.** The standing rule (owner 2026-10-03) makes a short explanation the field's
   hint, never a "?" button. Help mode fits beside it: hints stay where they are, and help mode is the
   place for the longer explanation. Decided with the design (owner, 2026-10-18; design §7): the
