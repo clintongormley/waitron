@@ -97,10 +97,10 @@ products before you confirm. Deleting cannot be undone.
 changes nothing on an open order by itself: an extras pick is its own order line, and an options
 answer is stored as the wording that was chosen. Each published menu keeps the list until you
 publish that menu again. For an options list this matters, because its options are gone: until you
-publish, the till cannot add a dish that carried the list, or change that dish on an open order. So
-publish your menus again straight after deleting an options list. After that, the next change made
-to an open order takes off any extra picked from a deleted list, and its charge with it, and drops
-any answer to a deleted options list.
+publish, the till cannot add a dish that carried the list, or make any change to an open order with
+that dish on it. So publish your menus again straight after deleting an options list. After that,
+the next change made to an open order takes off any extra picked from a deleted list, and its charge
+with it, and drops any answer to a deleted options list.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from
 that one product's Modifiers section.
