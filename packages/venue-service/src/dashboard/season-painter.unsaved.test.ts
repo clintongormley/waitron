@@ -11,6 +11,8 @@ import {
   painterModel,
   pick,
   settle,
+  slot,
+  withDays,
 } from "../testing/season-painter-fixture.js";
 import "./season-painter.js";
 
@@ -37,8 +39,9 @@ afterEach(() => {
   app?.remove();
   setLocale("en");
 });
-async function mount() {
+async function mount(model = painterModel()) {
   app = document.createElement("season-painter-leave-app") as PainterApp;
+  app.model = model;
   applyTokens(app);
   document.body.append(app);
   await app.updateComplete;
@@ -46,6 +49,8 @@ async function mount() {
   await settle(painter);
   return painter;
 }
+/** The painter model with Restaurant open on Thursday 06:00–12:00, so Terrace may close then. */
+const thursdayOpen = () => withDays(painterModel(), "d1", { 4: [slot("p1", "06:00", "12:00")] });
 const question = () =>
   app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>("wt-unsaved-changes")!;
 async function choose(decision: "keep" | "discard") {
@@ -139,12 +144,12 @@ it("after ✕ and Discard, the next save sends the clock revision the model now 
 });
 
 it("Discard clears a removal notice and a refused save's message", async () => {
-  const painter = await mount();
+  const painter = await mount(thursdayOpen());
   await pick(painter, "zone:z2");
   await drag(painter, "4", 0, 3 * 60);
   await pick(painter, "d1");
   await paintWednesday(painter);
-  const next = painterModel();
+  const next = thursdayOpen();
   const restaurant = next.departments[0]!;
   app.model = {
     ...next,

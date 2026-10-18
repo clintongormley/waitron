@@ -12,7 +12,9 @@ import {
   painterModel,
   pick,
   settle,
+  slot,
   withBar,
+  withDays,
   type Write,
 } from "../testing/season-painter-fixture.js";
 import "./season-painter.js";
@@ -41,6 +43,13 @@ async function mount(options: Partial<Pick<SeasonPainter, "zoneId" | "seasonId" 
   await grid(painter).updateComplete;
   return { painter, writes };
 }
+/** The painter model with Restaurant open 06:00–12:00 on the given weekdays, so a zone may close then. */
+const openOn = (...weekdays: number[]) =>
+  withDays(
+    painterModel(),
+    "d1",
+    Object.fromEntries(weekdays.map((weekday) => [weekday, [slot("p1", "06:00", "12:00")]])),
+  );
 const picker = (el: SeasonPainter) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=department]")!;
 const chip = (el: SeasonPainter, test: string) =>
@@ -172,8 +181,56 @@ it("a department paints its periods with Closed erasing; a zone paints Closed ov
   expect(chip(painter, "paint-closed")!.getAttribute("aria-pressed")).toBe("true");
 });
 
-it("keeps the draft across the picker: Restaurant's paint is still there after Terrace", async () => {
+it("a zone's Closed stroke keeps only the times its department is open", async () => {
+  const { painter } = await mount({
+    model: withDays(painterModel(), "d1", { 5: [slot("p2", "19:30", "02:00")] }),
+  });
+  await pick(painter, "zone:z2");
+  await drag(painter, "5", 17.5 * 60, 21 * 60);
+  expect(grid(painter).days.get("5")).toEqual([
+    { periodId: null, startsAt: "23:30", endsAt: "02:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: [], zones: ["z2"] });
+});
+
+it("a zone stroke on a day its department is closed paints nothing, leaves Save quiet and says 'A zone can only close while its department is open.' beside Save", async () => {
   const { painter } = await mount();
+  await pick(painter, "zone:z2");
+  await drag(painter, "3", 0, 3 * 60);
+  expect(grid(painter).days.get("3")).toEqual([]);
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+  expect(frame(painter).dirty).toBe(false);
+  expect(
+    frame(painter).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save]",
+    )!.disabled,
+  ).toBe(true);
+  expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+});
+
+it("a zone's day with its department closed shows 'Restaurant closed all day' behind its paint", async () => {
+  const { painter } = await mount();
+  const column = (key: string) =>
+    grid(painter).shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${key}"]`)!;
+  expect(grid(painter).closedBehind.size).toBe(0);
+  expect(column("3").querySelector(".all-closed.behind")).toBeNull();
+  await pick(painter, "zone:z2");
+  expect(column("3").querySelector(".all-closed.behind")!.textContent!.trim()).toBe(
+    "Restaurant closed all day",
+  );
+  expect(column("3").querySelector(".block")).toBeNull();
+  expect(column("2").querySelector(".all-closed.behind")!.textContent!.trim()).toBe(
+    "Restaurant closed all day",
+  );
+  expect(grid(painter).days.get("2")).toEqual([
+    { periodId: null, startsAt: "15:00", endsAt: "17:00" },
+  ]);
+  expect(column("2").querySelectorAll(".block.closed")).toHaveLength(1);
+  expect(column("1").querySelector(".all-closed.behind")).toBeNull();
+});
+
+it("keeps the draft across the picker: Restaurant's paint is still there after Terrace", async () => {
+  const { painter } = await mount({ model: openOn(4) });
   chip(painter, "paint-p2")!.click();
   await settle(painter);
   expect(chip(painter, "paint-p2")!.getAttribute("aria-pressed")).toBe("true");
@@ -222,11 +279,11 @@ it("a live model refresh takes the untouched days of an edited week and reseeds 
 });
 
 it("a live model refresh on an edited zone week takes another day's change and keeps the painted day", async () => {
-  const { painter } = await mount({ zoneId: "z2" });
+  const { painter } = await mount({ zoneId: "z2", model: openOn(4) });
   await drag(painter, "4", 0, 3 * 60);
   const closedMorning = [{ periodId: null, startsAt: "06:00", endsAt: "09:00" }];
   expect(grid(painter).days.get("4")).toEqual(closedMorning);
-  const next = painterModel();
+  const next = openOn(4);
   const terrace = next.departments[0]!.zones[1]!.seasonWeeks[1]!.week;
   (terrace[5]!.ranges as unknown[]).push({ startsAt: "10:00", endsAt: "11:00" });
   (terrace[4]!.ranges as unknown[]).push({ startsAt: "20:00", endsAt: "22:00" });
@@ -564,12 +621,12 @@ it("a refresh that removes the open season drops its edits, says so beside Save 
 });
 
 it("a refresh that removes an edited zone drops only that zone's edits, with a notice", async () => {
-  const { painter } = await mount();
+  const { painter } = await mount({ model: openOn(4) });
   await drag(painter, "3", 7 * 60, 9 * 60);
   await pick(painter, "zone:z2");
   await drag(painter, "4", 0, 3 * 60);
   await pick(painter, "d1");
-  const next = painterModel();
+  const next = openOn(4);
   const restaurant = next.departments[0]!;
   painter.model = {
     ...next,
@@ -864,14 +921,14 @@ it("at 1280×900 the week's seven days fit side by side, with no edge faded", as
 });
 
 it("a refresh that removes two edited zones names both in one notice", async () => {
-  const { painter } = await mount();
+  const { painter } = await mount({ model: openOn(3, 4) });
   await pick(painter, "zone:z1");
   await drag(painter, "3", 0, 3 * 60);
   await pick(painter, "zone:z2");
   await drag(painter, "4", 0, 3 * 60);
   await pick(painter, "d1");
   expect(painter.edited()).toEqual({ departments: [], zones: ["z1", "z2"] });
-  const next = painterModel();
+  const next = openOn(3, 4);
   painter.model = {
     ...next,
     departments: [{ ...next.departments[0]!, zones: [] }, ...next.departments.slice(1)],

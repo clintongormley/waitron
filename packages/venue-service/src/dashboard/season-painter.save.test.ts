@@ -12,7 +12,9 @@ import {
   pick,
   readNumbers,
   settle,
+  slot,
   withBar,
+  withDays,
   type Write,
 } from "../testing/season-painter-fixture.js";
 import "./season-painter.js";
@@ -60,6 +62,8 @@ async function save(el: SeasonPainter, writes: Write[]) {
   await expect.poll(() => frame(el).busy).toBe(false);
   await settle(el);
 }
+/** The painter model with Restaurant open on Thursday 06:00–12:00, so Terrace may close then. */
+const thursdayOpen = () => withDays(withBar(), "d1", { 4: [slot("p1", "06:00", "12:00")] });
 /** Restaurant's Wednesday gets Dinner 20:00–23:00; Terrace's Thursday is closed 06:00–09:00. */
 async function paintRestaurantAndTerrace(el: SeasonPainter) {
   button(el, "paint-p2").click();
@@ -72,7 +76,7 @@ const empty = (weekday: number) => ({ weekday, slots: [] });
 const open = (weekday: number) => ({ weekday, ranges: [] });
 
 it("saves exactly the edited department and zone in one request, then is clean and rereads", async () => {
-  const { painter, writes, reread } = await mount();
+  const { painter, writes, reread } = await mount(thursdayOpen());
   await paintRestaurantAndTerrace(painter);
   await save(painter, writes);
   expect(writes).toEqual([
@@ -87,7 +91,7 @@ it("saves exactly the edited department and zone in one request, then is clean a
               { weekday: 1, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }] },
               empty(2),
               { weekday: 3, slots: [{ periodId: "p2", startsAt: "20:00", endsAt: "23:00" }] },
-              empty(4),
+              { weekday: 4, slots: [{ periodId: "p1", startsAt: "06:00", endsAt: "12:00" }] },
               empty(5),
               empty(6),
               empty(0),
@@ -147,7 +151,7 @@ it("a refresh that stores what the draft painted leaves it clean on the model's 
 });
 
 it("a refusal naming no field shows beside Save only, keeps the draft, and a retry saves", async () => {
-  const { painter, writes, reread } = await mount(withBar(), [
+  const { painter, writes, reread } = await mount(thursdayOpen(), [
     { code: "season.not_found", params: { seasonId: "winter" } },
   ]);
   await paintRestaurantAndTerrace(painter);
@@ -220,7 +224,7 @@ it("an end-offset refusal naming no period of the department keeps the unnamed w
 });
 
 it("a zone refusal on a day shows that zone and marks its heading; the next save clears it", async () => {
-  const { painter, writes } = await mount(withBar(), [
+  const { painter, writes } = await mount(thursdayOpen(), [
     {
       code: "zone_closed_time.invalid",
       params: { field: "zones.0.days.4.ranges" },
@@ -242,8 +246,28 @@ it("a zone refusal on a day shows that zone and marks its heading; the next save
   expect(frame(painter).dirty).toBe(false);
 });
 
+it("an outside_hours refusal shows the zone, marks the day and says why", async () => {
+  const { painter, writes } = await mount(thursdayOpen(), [
+    {
+      code: "zone_closed_time.invalid",
+      params: { field: "zones.0.days.3.ranges.0", reason: "outside_hours" },
+    },
+  ]);
+  await pick(painter, "zone:z2");
+  await drag(painter, "4", 0, 3 * 60);
+  await pick(painter, "d1");
+  await save(painter, writes);
+  const message = "A zone can only close while its department is open.";
+  expect(
+    painter.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=department]")!
+      .value,
+  ).toBe("zone:z2");
+  expect([...grid(painter).columnErrors]).toEqual([["4", message]]);
+  expect(frame(painter).refusal).toBe(`Terrace, Thursday: ${message}`);
+});
+
 it("a Save refusal replaces a removal notice, and a save clears one", async () => {
-  const { painter, writes } = await mount(withBar(), [{ code: "hours.clock_changed" }]);
+  const { painter, writes } = await mount(thursdayOpen(), [{ code: "hours.clock_changed" }]);
   await paintRestaurantAndTerrace(painter);
   await pick(painter, "d1");
   const next = withBar();
@@ -265,7 +289,7 @@ it("a Save refusal replaces a removal notice, and a save clears one", async () =
 });
 
 it("a removal notice clears when the picker changes", async () => {
-  const { painter } = await mount();
+  const { painter } = await mount(thursdayOpen());
   await pick(painter, "zone:z2");
   await drag(painter, "4", 0, 3 * 60);
   await pick(painter, "d1");
@@ -724,7 +748,7 @@ it.each([
   async ({ gone, edit, refresh, refusal, reason }) => {
     let refuse!: (error: unknown) => void;
     const late = new Promise((_, reject) => (refuse = reject));
-    const { painter, writes, navigations } = await mount(withBar(), [late]);
+    const { painter, writes, navigations } = await mount(thursdayOpen(), [late]);
     await edit(painter);
     await pick(painter, "d1");
     navigations.length = 0;
@@ -750,7 +774,7 @@ it.each([
 it("a save that lands after its edited zone was removed leaves nothing to save", async () => {
   let succeed!: () => void;
   const late = new Promise<void>((resolve) => (succeed = resolve));
-  const { painter, writes, reread } = await mount(withBar(), [late]);
+  const { painter, writes, reread } = await mount(thursdayOpen(), [late]);
   await pick(painter, "zone:z2");
   await drag(painter, "4", 0, 3 * 60);
   await pick(painter, "d1");
@@ -769,28 +793,6 @@ it("a save that lands after its edited zone was removed leaves nothing to save",
   expect(frame(painter).refusal).toBe("Terrace was removed; its changes were dropped.");
 });
 
-type Slot = { periodId: string; startsAt: string; endsAt: string };
-/** `model` with the given days of one department's week in one season replaced. */
-function withDays(
-  model: OpeningHoursModel,
-  departmentId: string,
-  days: Record<number, Slot[]>,
-  seasonId = "winter",
-): OpeningHoursModel {
-  const season = model.departments
-    .find(({ id }) => id === departmentId)!
-    .seasonWeeks.find((week) => week.seasonId === seasonId)!;
-  season.week = season.week.map(({ weekday, slots }) => ({
-    weekday,
-    slots: days[weekday] ?? slots,
-  }));
-  return model;
-}
-const slot = (periodId: string, startsAt: string, endsAt: string): Slot => ({
-  periodId,
-  startsAt,
-  endsAt,
-});
 const mondayLunch = [slot("p1", "13:00", "16:00")];
 const mondayDinner = [slot("p2", "18:00", "21:00")];
 const earlyWednesday = [slot("p1", "07:00", "09:00")];

@@ -603,6 +603,18 @@ export class SeasonPainter extends LitElement {
       }}
     ></wt-combobox>`;
   }
+  /** The weekdays the department's draft leaves closed, labelled as closed behind a zone's paint. */
+  private closedBehind(
+    department: Department,
+    week: ReadonlyMap<string, readonly Paint[]>,
+  ): ReadonlyMap<string, string> {
+    const label = format("painter.department_closed", { department: department.name });
+    return new Map(
+      WEEK_DISPLAY_ORDER.filter((weekday) => !(week.get(String(weekday)) ?? []).length).map(
+        (weekday) => [String(weekday), label],
+      ),
+    );
+  }
   private paintRow(department: Department, chosen: string | null, zoned: boolean) {
     return paintRow({
       slot: "row",
@@ -639,6 +651,9 @@ export class SeasonPainter extends LitElement {
     const zone = this.zone(department);
     const key = zone ? zoneKey(zone.id) : departmentKey(department.id);
     const chosen = this.effectiveChosen(department, zone !== undefined);
+    const underlay = zone
+      ? (this.draft.get(departmentKey(department.id)) ?? NOTHING_BY_KEY)
+      : NOTHING_BY_KEY;
     return html`<painter-frame
         .open=${this.open}
         .heading=${format("painter.week", { season: season.name })}
@@ -668,7 +683,9 @@ export class SeasonPainter extends LitElement {
           .target=${`${this.seasonId}/${key}`}
           .columns=${this.columns()}
           .days=${this.draft.get(key) ?? NOTHING_BY_KEY}
-          .underlay=${zone ? (this.draft.get(departmentKey(department.id)) ?? NOTHING_BY_KEY) : NOTHING_BY_KEY}
+          .underlay=${underlay}
+          .closedWithin=${zone ? underlay : undefined}
+          .closedBehind=${zone ? this.closedBehind(department, underlay) : NOTHING_BY_KEY}
           .periods=${department.periods}
           .chosen=${chosen}
           .cutover=${this.model.dayCutover}
@@ -681,6 +698,10 @@ export class SeasonPainter extends LitElement {
               : NOTHING_BY_KEY
           }
           @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(key, event)}
+          @paint-outside=${(event: Event) => {
+            event.stopPropagation();
+            this.notice = t("opening.closed_outside");
+          }}
         ></paint-grid>
       </painter-frame>
       ${this.periods.render()}`;

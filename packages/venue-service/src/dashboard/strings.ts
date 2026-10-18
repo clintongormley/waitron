@@ -153,6 +153,7 @@ const en = {
   "opening.zone_placeholder": "{name}: closed times",
   "opening.follow_week": "Follow the standard week",
   "opening.closed_invalid": "These closed times overlap or are not in 15-minute steps.",
+  "opening.closed_outside": "A zone can only close while its department is open.",
   "opening.check_day": "Check this day's time ranges and periods.",
   "opening.range_heading": "Time range",
   "opening.add_period": "Add period…",
@@ -180,6 +181,7 @@ const en = {
   "paint.copy": "Copy",
   "paint.clear": "Clear",
   "painter.week": "{season}: standard week",
+  "painter.department_closed": "{department} closed all day",
   "painter.week_covers":
     "Every week from {from} to {to} opens these hours, except on special days.",
   "painter.previous_season": "Previous season",
@@ -995,6 +997,7 @@ const es: Record<keyof typeof en, string> = {
   "opening.zone_placeholder": "{name}: horarios de cierre",
   "opening.follow_week": "Seguir la semana estándar",
   "opening.closed_invalid": "Estas horas de cierre se solapan o no van de 15 en 15 minutos.",
+  "opening.closed_outside": "Una zona solo puede cerrar mientras su departamento está abierto.",
   "opening.check_day": "Revisa las franjas horarias y los periodos de este día.",
   "opening.range_heading": "Franja horaria",
   "opening.add_period": "Añadir periodo…",
@@ -1022,6 +1025,7 @@ const es: Record<keyof typeof en, string> = {
   "paint.copy": "Copiar",
   "paint.clear": "Vaciar",
   "painter.week": "{season}: semana estándar",
+  "painter.department_closed": "{department} cerrado todo el día",
   "painter.week_covers":
     "Cada semana del {from} al {to} abre con este horario, salvo los días especiales.",
   "painter.previous_season": "Temporada anterior",
