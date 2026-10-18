@@ -714,6 +714,10 @@ declare module "@waitron/shared" {
     "floor_plan.out_of_date": { zoneId: string; revision: number };
     /** A master-plan save's entry is out of range; `field` is its path, such as `tables.0.seats`. */
     "floor_plan.invalid": { field: string };
+    /** No floor plan set with this id among the venue's active departments' sets. */
+    "floor_plan_set.not_found": { setId: string };
+    /** A floor plan set request names something the set cannot take; `field` names it. */
+    "floor_plan_set.invalid": { field: string };
     /**
      * The till's read of today's room is older than the room: `revision` is the room's revision
      * after this request's catch-up, which the refusal rolls back with everything else; a caller

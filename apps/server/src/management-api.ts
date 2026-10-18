@@ -114,7 +114,9 @@ import {
 import { parseProfileKitchenScreens } from "./device.js";
 import type { NarrowedDevice, TableRemoval } from "@waitron/module";
 import {
+  readLayout,
   readZonePlan,
+  saveLayout,
   saveZonePlan,
   zonesWithPlacedTables,
   type ZonePlanSave,
@@ -286,6 +288,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.booked": 409,
   "floor_plan.out_of_date": 409,
   "floor_plan.invalid": 400,
+  "floor_plan_set.not_found": 404,
+  "floor_plan_set.invalid": 400,
   "station.not_found": 404,
   "station.name_taken": 409,
   "station.is_default": 409,
@@ -325,6 +329,11 @@ function requireStatusId(id: string): string {
 
 function requireZoneId(id: string): string {
   if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
+  return id;
+}
+
+function requireSetId(id: string): string {
+  if (!isUuid(id)) throw new AppError("floor_plan_set.not_found", { setId: id });
   return id;
 }
 
@@ -1682,6 +1691,35 @@ export function mountManagementApi(
       const now = new Date();
       const saved = await withVenueAuth(deps, sessionId, (tx) =>
         saveZonePlan(tx, cfg, deps.tableRemovals ?? [], id, input, now),
+      );
+      return c.json(saved);
+    }),
+  );
+
+  app.get("/management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const at = {
+        setId: requireSetId(c.req.param("setId")),
+        zoneId: requireZoneId(c.req.param("zoneId")),
+      };
+      const cfg = requireVenueCfg(deps);
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => readLayout(tx, cfg, at)));
+    }),
+  );
+
+  app.put("/management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const at = {
+        setId: requireSetId(c.req.param("setId")),
+        zoneId: requireZoneId(c.req.param("zoneId")),
+      };
+      const cfg = requireVenueCfg(deps);
+      const input = parseZonePlanSave(await readJsonBody<unknown>(c));
+      const now = new Date();
+      const saved = await withVenueAuth(deps, sessionId, (tx) =>
+        saveLayout(tx, cfg, deps.tableRemovals ?? [], at, input, now),
       );
       return c.json(saved);
     }),

@@ -87,6 +87,8 @@ declare module "@waitron/shared" {
     "menu_period.name_taken": { departmentId: string; name: string };
     /** Another of the department's floor plan sets already has `name`. */
     "floor_plan_set.name_taken": { departmentId: string; name: string };
+    /** No floor plan set with this id among the venue's active departments' sets. */
+    "floor_plan_set.not_found": { setId: string };
     "menu_timetable.invalid": {
       field: string;
       periodId?: string;

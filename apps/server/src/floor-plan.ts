@@ -1,4 +1,4 @@
-import { and, asc, eq, getTableColumns, inArray, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   diningTables,
@@ -13,10 +13,11 @@ import {
   newId,
   type Transaction,
 } from "@waitron/db";
-import type { TableRemoval } from "@waitron/module";
+import type { FloorPlanSetSummary, TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
 import { placementColumns, placementOf, resetZone, spareLabels } from "./floor-today-store.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { refusedByAModule } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -34,12 +35,28 @@ export interface PlanTable {
   partIds: string[];
 }
 
+export interface LayoutRef {
+  setId: string;
+  zoneId: string;
+}
+
 export interface ZonePlan {
   zoneId: string;
-  /** 0 when the zone has no master plan. */
+  setId: string;
+  setName: string;
+  /** 0 when the set has no layout of the zone yet. */
   revision: number;
   savedAt: string | null;
   tables: PlanTable[];
+}
+
+/** The zone-only editor's answer, read from the zone's set-less plan. */
+export type SetlessZonePlan = Omit<ZonePlan, "setId" | "setName">;
+
+/** A layout of a zone: a set's, or the zone's set-less plan when `setId` is null. */
+interface PlanAt {
+  zoneId: string;
+  setId: string | null;
 }
 
 export interface ZonePlanSave {
@@ -71,12 +88,30 @@ export async function requireZone(tx: Transaction, cfg: TillConfig, zoneId: stri
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
 }
 
-async function planOf(tx: Transaction, zoneId: string) {
+async function planOf(tx: Transaction, at: PlanAt) {
   const [plan] = await tx
     .select({ id: floorPlans.id, revision: floorPlans.revision, savedAt: floorPlans.savedAt })
     .from(floorPlans)
-    .where(eq(floorPlans.zoneId, zoneId));
+    .where(
+      and(
+        eq(floorPlans.zoneId, at.zoneId),
+        at.setId === null ? isNull(floorPlans.setId) : eq(floorPlans.setId, at.setId),
+      ),
+    );
   return plan;
+}
+
+/** The set, refused when it is unknown or its department does not hold the zone. */
+async function requireSetOf(
+  tx: Transaction,
+  cfg: TillConfig,
+  at: LayoutRef,
+): Promise<FloorPlanSetSummary> {
+  const [set] = await VENUE_SERVICE.readFloorPlanSets(tx, cfg, { setIds: [at.setId] });
+  if (set === undefined) throw new AppError("floor_plan_set.not_found", { setId: at.setId });
+  if (!set.zoneIds.includes(at.zoneId))
+    throw new AppError("floor_plan_set.invalid", { field: "zoneId" });
+  return set;
 }
 
 type MasterRow = typeof floorPlanTables.$inferSelect;
@@ -168,45 +203,64 @@ async function followersOf(tx: Transaction, masterIds: string[]): Promise<Map<st
   return new Map(rows.map((row) => [row.planTableId!, row.id]));
 }
 
+async function planTables(tx: Transaction, masters: LayoutTable[]): Promise<PlanTable[]> {
+  const followers = await followersOf(
+    tx,
+    masters.map((m) => m.id),
+  );
+  const byJoined = new Map<string, string[]>();
+  for (const m of masters) {
+    if (m.partOf === null) continue;
+    const parts = byJoined.get(m.partOf);
+    if (parts === undefined) byJoined.set(m.partOf, [m.id]);
+    else parts.push(m.id);
+  }
+  const placedIds = new Set(masters.flatMap((m) => (m.placement === null ? [] : [m.id])));
+  return masters.map((master) => ({
+    id: master.id,
+    liveTableId: followers.get(master.id) ?? null,
+    label: master.label,
+    seats: master.seats,
+    fixed: master.fixed,
+    // A part's place in a layout that places its joined table reads as off, so a change of
+    // parts saved in another set never leaves this layout invalid.
+    placement: master.partOf !== null && placedIds.has(master.partOf) ? null : master.placement,
+    keptSize: master.keptSize,
+    partIds: byJoined.get(master.id) ?? [],
+  }));
+}
+
 export async function readZonePlan(
   tx: Transaction,
   cfg: TillConfig,
   zoneId: string,
-): Promise<ZonePlan> {
+): Promise<SetlessZonePlan> {
   await requireZone(tx, cfg, zoneId);
-  const plan = await planOf(tx, zoneId);
-  const tables: PlanTable[] = [];
-  if (plan !== undefined) {
-    const masters = await layoutTables(tx, zoneId, plan.id);
-    const followers = await followersOf(
-      tx,
-      masters.map((m) => m.id),
-    );
-    const byJoined = new Map<string, string[]>();
-    for (const m of masters) {
-      if (m.partOf === null) continue;
-      const parts = byJoined.get(m.partOf);
-      if (parts === undefined) byJoined.set(m.partOf, [m.id]);
-      else parts.push(m.id);
-    }
-    for (const master of masters) {
-      tables.push({
-        id: master.id,
-        liveTableId: followers.get(master.id) ?? null,
-        label: master.label,
-        seats: master.seats,
-        fixed: master.fixed,
-        placement: master.placement,
-        keptSize: master.keptSize,
-        partIds: byJoined.get(master.id) ?? [],
-      });
-    }
-  }
+  const plan = await planOf(tx, { zoneId, setId: null });
   return {
     zoneId,
     revision: plan?.revision ?? 0,
     savedAt: plan?.savedAt ?? null,
-    tables,
+    tables: plan === undefined ? [] : await planTables(tx, await layoutTables(tx, zoneId, plan.id)),
+  };
+}
+
+/** A set's layout of a zone; with no layout row yet, the zone's tables all off, at revision 0. */
+export async function readLayout(
+  tx: Transaction,
+  cfg: TillConfig,
+  at: LayoutRef,
+): Promise<ZonePlan> {
+  await requireZone(tx, cfg, at.zoneId);
+  const set = await requireSetOf(tx, cfg, at);
+  const plan = await planOf(tx, at);
+  return {
+    zoneId: at.zoneId,
+    setId: at.setId,
+    setName: set.name,
+    revision: plan?.revision ?? 0,
+    savedAt: plan?.savedAt ?? null,
+    tables: await planTables(tx, await layoutTables(tx, at.zoneId, plan?.id ?? null)),
   };
 }
 
@@ -289,7 +343,7 @@ function checkParts(tables: ZonePlanSave["tables"]): void {
     for (const key of table.partKeys) {
       const part = byKey.get(key);
       if (part === undefined) throw invalid(at);
-      if (part.placement !== null) throw invalid(at);
+      if (part.placement !== null && table.placement !== null) throw invalid(at);
       if (part.partKeys.length > 0) throw invalid(at);
       if (claimed.has(key)) throw invalid(at);
       claimed.add(key);
@@ -317,6 +371,8 @@ interface CheckedZonePlanSave {
   /** The plan's tables, by label. */
   masters: LayoutTable[];
   tables: ZonePlanSave["tables"];
+  /** The saved set's department; null for the zone's set-less plan. */
+  departmentId: string | null;
 }
 
 export async function checkZonePlanSave(
@@ -327,24 +383,29 @@ export async function checkZonePlanSave(
   input: ZonePlanSave,
   now: Date = new Date(),
 ): Promise<void> {
-  await checkSave(tx, cfg, removals, zoneId, input, now);
+  await checkSave(tx, cfg, removals, { zoneId, setId: null }, input, now);
 }
 
 async function checkSave(
   tx: Transaction,
   cfg: TillConfig,
   removals: readonly TableRemoval[],
-  zoneId: string,
+  at: PlanAt,
   input: ZonePlanSave,
   now: Date,
 ): Promise<CheckedZonePlanSave> {
+  const { zoneId, setId } = at;
   await requireZone(tx, cfg, zoneId);
-  const plan = await planOf(tx, zoneId);
+  const departmentId =
+    setId === null ? null : (await requireSetOf(tx, cfg, { zoneId, setId })).departmentId;
+  const plan = await planOf(tx, at);
   const revision = plan?.revision ?? 0;
   if (input.revision !== revision) {
     throw new AppError("floor_plan.out_of_date", { zoneId, revision });
   }
-  const masters = plan === undefined ? [] : await layoutTables(tx, zoneId, plan.id);
+  // A set's layout shares the zone's tables, so it holds them all even before its first save.
+  const masters =
+    plan === undefined && setId === null ? [] : await layoutTables(tx, zoneId, plan?.id ?? null);
   const masterIds = new Set(masters.map((m) => m.id));
   const followers = await followersOf(tx, [
     ...new Set([...masterIds, ...input.tables.flatMap((t) => t.id ?? [])]),
@@ -372,7 +433,7 @@ async function checkSave(
     const refusal = refusals.get(liveId);
     if (refusal !== undefined) throw refusal;
   }
-  return { plan, masters, tables };
+  return { plan, masters, tables, departmentId };
 }
 
 function masterColumns(table: ZonePlanSave["tables"][number]) {
@@ -391,14 +452,76 @@ export async function saveZonePlan(
   input: ZonePlanSave,
   now: Date = new Date(),
 ): Promise<{ revision: number; ids: Record<string, string> }> {
-  const checked = await checkSave(tx, cfg, removals, zoneId, input, now);
+  const checked = await checkSave(tx, cfg, removals, { zoneId, setId: null }, input, now);
+  const saved = await writeSave(tx, { zoneId, setId: null }, checked, now);
+  const [today] = await tx
+    .select({ id: floorTodayZones.id })
+    .from(floorTodayZones)
+    .where(eq(floorTodayZones.zoneId, zoneId));
+  if (today === undefined) await resetZone(tx, cfg, removals, zoneId, now);
+  return { revision: saved.revision, ids: saved.ids };
+}
+
+/**
+ * Writes a checked save to a set's layout. A save that changes the zone's shared tables moves
+ * the revision of every layout of the zone in the set's department, writing the missing ones,
+ * so an editor open on another set cannot save a stale table list over it.
+ */
+export async function saveLayout(
+  tx: Transaction,
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+  at: LayoutRef,
+  input: ZonePlanSave,
+  now: Date = new Date(),
+): Promise<{ revision: number; ids: Record<string, string> }> {
+  const checked = await checkSave(tx, cfg, removals, at, input, now);
+  const saved = await writeSave(tx, at, checked, now);
+  if (saved.shared) {
+    const sets = await VENUE_SERVICE.readFloorPlanSets(tx, cfg, {
+      departmentId: checked.departmentId!,
+    });
+    const others = sets.map((s) => s.setId).filter((id) => id !== at.setId);
+    if (others.length > 0) {
+      const existing = await tx
+        .select({ setId: floorPlans.setId })
+        .from(floorPlans)
+        .where(and(eq(floorPlans.zoneId, at.zoneId), inArray(floorPlans.setId, others)));
+      await tx
+        .update(floorPlans)
+        .set({ revision: sql`${floorPlans.revision} + 1` })
+        .where(and(eq(floorPlans.zoneId, at.zoneId), inArray(floorPlans.setId, others)));
+      const held = new Set(existing.map((row) => row.setId));
+      const missing = others.filter((id) => !held.has(id));
+      if (missing.length > 0) {
+        await tx.insert(floorPlans).values(
+          missing.map((setId) => ({
+            zoneId: at.zoneId,
+            setId,
+            revision: 1,
+            savedAt: now.toISOString(),
+          })),
+        );
+      }
+    }
+  }
+  return { revision: saved.revision, ids: saved.ids };
+}
+
+async function writeSave(
+  tx: Transaction,
+  at: PlanAt,
+  checked: CheckedZonePlanSave,
+  now: Date,
+): Promise<{ revision: number; ids: Record<string, string>; shared: boolean }> {
+  const { zoneId, setId } = at;
   const { masters, tables } = checked;
   const savedAt = now.toISOString();
   let plan = checked.plan;
   if (plan === undefined) {
     [plan] = await tx
       .insert(floorPlans)
-      .values({ zoneId, revision: 0, savedAt })
+      .values({ zoneId, setId, revision: 0, savedAt })
       .returning({ id: floorPlans.id, revision: floorPlans.revision, savedAt: floorPlans.savedAt });
   }
   const planId = plan!.id;
@@ -414,10 +537,14 @@ export async function saveZonePlan(
           .where(eq(floorPlanTables.zoneId, zoneId)),
       ),
     );
-  await tx.delete(floorPlanPlacements).where(eq(floorPlanPlacements.planId, planId));
-
   const kept = new Set(tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
   const deleted = masters.filter((m) => !kept.has(m.id)).map((m) => m.id);
+  // A deleted table may stand in another set's layout of the zone too.
+  await tx
+    .delete(floorPlanPlacements)
+    .where(
+      or(eq(floorPlanPlacements.planId, planId), inArray(floorPlanPlacements.planTableId, deleted)),
+    );
   const masterOf = new Map(masters.map((m) => [m.id, m]));
   const leaving = tables.flatMap((t) =>
     t.id !== undefined && t.placement === null && masterOf.get(t.id)!.placement !== null
@@ -516,10 +643,32 @@ export async function saveZonePlan(
   const revision = plan!.revision + 1;
   await tx.update(floorPlans).set({ revision, savedAt }).where(eq(floorPlans.id, planId));
 
-  const [today] = await tx
-    .select({ id: floorTodayZones.id })
-    .from(floorTodayZones)
-    .where(eq(floorTodayZones.zoneId, zoneId));
-  if (today === undefined) await resetZone(tx, cfg, removals, zoneId, now);
-  return { revision, ids: Object.fromEntries(ids) };
+  return { revision, ids: Object.fromEntries(ids), shared: changedShared(masters, tables, ids) };
+}
+
+/** Whether the save added, deleted or renamed a table, or changed its seats, "Moveable" or parts. */
+function changedShared(
+  masters: LayoutTable[],
+  tables: ZonePlanSave["tables"],
+  ids: Map<string, string>,
+): boolean {
+  if (tables.length !== masters.length || tables.some((t) => t.id === undefined)) return true;
+  const masterOf = new Map(masters.map((m) => [m.id, m]));
+  for (const table of tables) {
+    const master = masterOf.get(table.id!)!;
+    if (
+      master.label !== table.label.trim() ||
+      master.seats !== table.seats ||
+      master.fixed !== table.fixed
+    ) {
+      return true;
+    }
+  }
+  const before = new Set(
+    masters.flatMap((m) => (m.partOf === null ? [] : [`${m.id}>${m.partOf}`])),
+  );
+  const after = tables.flatMap((t) =>
+    t.partKeys.map((key) => `${ids.get(key)!}>${ids.get(t.key)!}`),
+  );
+  return after.length !== before.size || after.some((link) => !before.has(link));
 }
