@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { BOOKINGS_TABLE_REMOVAL, bookings } from "@waitron/bookings";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -29,6 +29,7 @@ import { defaultLayout } from "./testing/floor-sets.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { finishTable, leaveTables } from "./parties.js";
+import { combineParties } from "./table-actions.js";
 import { removeLiveTables, tablesTied } from "./table-removal.js";
 import {
   billRow,
@@ -357,6 +358,123 @@ describe("removing a live table the master no longer has", () => {
 
     expect(await tableExists(t1!)).toBe(false);
     expect(await resetRowOf(t1!)).toBeUndefined();
+  });
+});
+
+describe("what a removed table's delete waits on", () => {
+  const LETS_GO: Record<string, string> = {
+    "bookings.table_id": "BOOKINGS_TABLE_REMOVAL.release, passed only while bookings is on (A838)",
+    "floor_reset_tables.table_id": "removeLiveTables deletes it",
+    "floor_today_join_tables.table_id": "leaveMerges",
+    "floor_today_split_parts.joined_table_id": "deleteWithItsSplit",
+    "floor_today_split_parts.part_table_id": "deleteWithItsSplit",
+    "floor_today_tables.table_id": "removeLiveTables deletes it",
+    "party_tables.table_id": "closePartyTables when the party closes; an open party ties the table",
+    "working_orders.delivery_table_id": "releaseDeliveries",
+  };
+
+  /**
+   * Weaker than its name: it reads declared foreign keys only, so an id kept in a column with no
+   * key, in JSON or in text is not seen, and neither is a key a set outside the manifest adds; and
+   * it never checks that the step named runs, or does what its string says.
+   */
+  it("names, for every column pointing at a table, what lets go of it", async () => {
+    const rows = await inTx(
+      v,
+      async (tx) =>
+        await tx.all<{ name: string; column: string }>(
+          sql`select m.name, p."from" as "column" from sqlite_master m, pragma_foreign_key_list(m.name) p where m.type = 'table' and p."table" = 'dining_tables'`,
+        ),
+    );
+    const named = Object.fromEntries(
+      rows
+        .map((row) => `${row.name}.${row.column}`)
+        .sort()
+        .map((key) => [key, LETS_GO[key] ?? "nothing lets go of it"]),
+    );
+
+    expect(named).toEqual(LETS_GO);
+  });
+
+  it.each(["leave", "join"] as const)(
+    "removes a table whose party was combined into another (tables %s)",
+    async (tables) => {
+      const {
+        zoneId,
+        ids: [from, into],
+      } = await plannedZone(`Combined from ${tables}`, `Combined into ${tables}`);
+      const ana = await seat(v, from!);
+      const luis = await seat(v, into!);
+      await inTx(v, (tx) =>
+        combineParties(tx, v.cfg, {
+          from: ana.partyId,
+          into: luis.partyId,
+          bills: "merge",
+          tables,
+          operatorId: OPERATOR,
+        }),
+      );
+      await finish(luis.partyId);
+      await deleteFromMaster(from!);
+
+      await reset(zoneId);
+
+      expect(await tableExists(from!)).toBe(false);
+      expect(await resetRowOf(from!)).toBeUndefined();
+      await catchUp(zoneId);
+      expect(await pendingOf(zoneId)).toEqual([]);
+    },
+  );
+
+  it("removes a table named by bookings no module refuses, keeping its name on each", async () => {
+    const {
+      zoneId,
+      ids: [t1],
+    } = await plannedZone("Booked once");
+    const kept = [
+      ["completed", "2026-10-10"],
+      ["no_show", "2026-10-10"],
+      ["cancelled", "2026-10-12"],
+      ["seated", "2026-10-10"],
+      ["booked", "2026-10-09"],
+    ] as const;
+    const ids = await inTx(v, async (tx) => {
+      const out: string[] = [];
+      for (const [status, bookingDate] of kept) {
+        const [row] = await tx
+          .insert(bookings)
+          .values({
+            locationId: v.cfg.locationId,
+            tableId: t1!,
+            bookingDate,
+            bookingTime: "20:00",
+            partySize: 2,
+            contactName: "Ana",
+            createdBy: randomUUID(),
+            status,
+          })
+          .returning({ id: bookings.id });
+        out.push(row!.id);
+      }
+      return out;
+    });
+    await deleteFromMaster(t1!);
+
+    await reset(zoneId, [BOOKINGS_TABLE_REMOVAL]);
+
+    expect(await tableExists(t1!)).toBe(false);
+    expect(await resetRowOf(t1!)).toBeUndefined();
+    const after = await inTx(v, (tx) =>
+      tx
+        .select({ id: bookings.id, tableId: bookings.tableId, tableLabel: bookings.tableLabel })
+        .from(bookings)
+        .where(inArray(bookings.id, ids)),
+    );
+    expect(after).toHaveLength(kept.length);
+    for (const row of after)
+      expect(row).toMatchObject({ tableId: null, tableLabel: "Booked once" });
+    await catchUp(zoneId, [BOOKINGS_TABLE_REMOVAL]);
+    expect(await pendingOf(zoneId)).toEqual([]);
   });
 });
 
