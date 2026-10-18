@@ -852,6 +852,31 @@ describe("till-floor-screen: Reset table names tables by today's names", () => {
     );
   });
 
+  it.each(["en", "es"])(
+    "in %s, says Back's place-taken refusal in the code's own words, offering nothing",
+    async (locale) => {
+      setLocale(locale);
+      const api = { ...stubApi(), backToSavedToday: vi.fn<TillApi["backToSavedToday"]>() };
+      api.backToSavedToday.mockRejectedValueOnce({
+        code: "table.place_taken",
+        status: 409,
+        tableId: "t3",
+        standingId: "t4",
+      });
+      const el = await mount([table("t3", "3", 10), table("t4", "4", 30)], api);
+      send(el.shadowRoot!.querySelector("wt-floor-map")!, "wt-table-details", { tableId: "t3" });
+      await el.updateComplete;
+      const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
+      await sheet.updateComplete;
+      sheet.shadowRoot!.querySelector<HTMLElement>('[data-today-action="back"]')!.click();
+      await settle(el);
+
+      expect(api.backToSavedToday).toHaveBeenCalledExactlyOnceWith("t3", 0);
+      expect(floorRefusal(el)).toBe(codeMessage("table.place_taken", locale));
+      expect(el.shadowRoot!.querySelector("[data-leave-here-offer]")).toBeNull();
+    },
+  );
+
   it("names the renamed joined table a table was split off from", async () => {
     const api = { ...stubApi(), backToSavedToday: vi.fn<TillApi["backToSavedToday"]>() };
     let refuse!: (refusal: unknown) => void;

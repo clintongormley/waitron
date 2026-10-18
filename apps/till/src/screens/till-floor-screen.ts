@@ -636,6 +636,8 @@ export class TillFloorScreen extends LitElement {
   @state() private details: { tableId: string } | null = null;
   /** The floor's last refusal, in its code's words. */
   @state() private refusal: string | null = null;
+  /** Drawn only while `refusal` still reads `message` and the table still needs moving. */
+  @state() private leaveOffer: { tableId: string; message: string } | null = null;
   /** A merge's seats, or Change seats, waiting for the seats prompt. */
   @state() private askingSeats: {
     heading: string;
@@ -929,22 +931,46 @@ export class TillFloorScreen extends LitElement {
   }
 
   #markMoved(table: TableState): void {
-    this.#sendTodayAction(table, (api, sent) => api.markMovedToday(table.id, sent));
+    this.#sendTodayAction(table, (api, sent) => api.markMovedToday(table.id, sent), {
+      tableId: table.id,
+    });
   }
 
   #leaveHere(table: TableState): void {
+    this.leaveOffer = null;
     this.#sendTodayAction(table, (api, sent) => api.leaveHereToday(table.id, sent));
   }
 
   #sendTodayAction(
     table: TableState,
     call: (api: TillApi, revision: number) => Promise<FloorAnswer>,
+    written?: { tableId: string },
   ): void {
     this.moving = null;
     const api = this.api;
     if (api === undefined || !this.tables.some((current) => current.id === table.id)) return;
     this.refusal = null;
-    void this.#settle(this.#send(this.#revision(table.zoneId), (sent) => call(api, sent)));
+    void this.#settle(
+      this.#send(this.#revision(table.zoneId), (sent) => call(api, sent)),
+      undefined,
+      undefined,
+      written,
+    );
+  }
+
+  #leaveHereOffer(): TemplateResult | typeof nothing {
+    const offer = this.leaveOffer;
+    if (offer === null || offer.message !== this.refusal || !this.canChangeToday) return nothing;
+    const table = this.tables.find((each) => each.id === offer.tableId);
+    if (table === undefined || !needsMovingToday(table)) return nothing;
+    return html`<wt-button
+      data-leave-here-offer
+      size="sm"
+      variant="secondary"
+      @click=${() => this.#leaveHere(table)}
+    >
+      ${t("floor.leave_here")}
+    </wt-button>`;
   }
 
   #emit(type: string, detail: unknown): void {
@@ -1109,7 +1135,12 @@ export class TillFloorScreen extends LitElement {
         this.renaming = this.#renameOpening(table);
         return;
       case "back":
-        send((sent) => api.backToSavedToday(table.id, sent));
+        void this.#settle(
+          this.#send(revision, (sent) => api.backToSavedToday(table.id, sent)),
+          undefined,
+          undefined,
+          { tableId: table.id, back: true },
+        );
         return;
       case "take-off":
         send((sent) => api.takeOffToday(table.id, sent));
@@ -1264,13 +1295,22 @@ export class TillFloorScreen extends LitElement {
     call: Promise<FloorAnswer | null>,
     asks: (refused: { code?: string; field?: unknown }) => boolean = () => false,
     refresh?: FloorRefreshDetail,
+    written?: { tableId: string; back?: true },
   ): Promise<void> {
     try {
       this.#carry(await call);
     } catch (cause) {
       const refused = (cause ?? {}) as Refused;
       if (asks(refused)) return;
-      this.refusal = this.#refusalText(refused);
+      const refusal =
+        written?.back === true && refused.code === "table.place_taken"
+          ? codeMessage("table.place_taken")
+          : this.#refusalText(refused);
+      this.refusal = refusal;
+      this.leaveOffer =
+        written !== undefined && refused.code === "table.new_place_taken"
+          ? { tableId: written.tableId, message: refusal }
+          : null;
       this.#setPending(null);
     }
     this.#requestFloorRefresh(refresh);
@@ -1951,6 +1991,7 @@ export class TillFloorScreen extends LitElement {
                 </p>`
         }
         ${this.refusal === null ? nothing : html`<p data-floor-refusal role="status">${this.refusal}</p>`}
+        ${this.#leaveHereOffer()}
         ${(() => {
           const zone = this.zones.find((z) => z.id === activeKey);
           return zone?.closesAt

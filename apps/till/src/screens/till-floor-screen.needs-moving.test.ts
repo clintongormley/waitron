@@ -65,6 +65,9 @@ function stubApi() {
       Promise.resolve({ zoneId: "z1", revision: 7 }),
     ),
     mergeToday: vi.fn<TillApi["mergeToday"]>(() => Promise.resolve({ zoneId: "z1", revision: 7 })),
+    backToSavedToday: vi.fn<TillApi["backToSavedToday"]>(() =>
+      Promise.resolve({ zoneId: "z1", revision: 7 }),
+    ),
   };
 }
 
@@ -90,6 +93,8 @@ const footer = (el: TillFloorScreen) =>
   [...moveDialog(el)!.querySelectorAll('wt-button[slot="footer"]')].map((button) =>
     button.textContent!.trim(),
   );
+const offer = (el: TillFloorScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-leave-here-offer]");
 const card = (el: TillFloorScreen, id: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-table="${id}"]`)!;
 
@@ -110,6 +115,23 @@ async function tap(el: TillFloorScreen, tableId: string): Promise<void> {
 async function toList(el: TillFloorScreen): Promise<void> {
   await toggleFloorView(el);
 }
+
+async function pressBack(el: TillFloorScreen, tableId: string): Promise<void> {
+  send(mapOf(el), "wt-table-details", { tableId });
+  await el.updateComplete;
+  const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
+  await sheet.updateComplete;
+  sheet.shadowRoot!.querySelector<HTMLElement>('[data-today-action="back"]')!.click();
+  await settle(el);
+}
+
+async function refuseMarkMoved(el: TillFloorScreen): Promise<void> {
+  await tap(el, "t3");
+  moveDialog(el)!.querySelector<HTMLElement>("[data-mark-moved]")!.click();
+  await settle(el);
+}
+
+const newPlaceTaken = { code: "table.new_place_taken", tableId: "t3", standingId: "t4" };
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -255,6 +277,106 @@ describe("till-floor-screen: a table that needs moving", () => {
     await settle(el);
 
     expect(refusal(el)).toBe("Ventana is standing in 3's new place. Move Ventana first.");
+    expect(offer(el)!.textContent!.trim()).toBe("Leave it here");
+
+    offer(el)!.click();
+    await settle(el);
+    expect(api.leaveHereToday).toHaveBeenCalledExactlyOnceWith("t3", 6);
+    expect(refusal(el)).toBeNull();
+    expect(offer(el)).toBeNull();
+  });
+
+  it("offers Leave it here in Spanish", async () => {
+    setLocale("es");
+    const api = stubApi();
+    api.markMovedToday.mockRejectedValue(newPlaceTaken);
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await refuseMarkMoved(el);
+
+    expect(offer(el)!.textContent!.trim()).toBe("Dejar aquí");
+  });
+
+  it("offers Leave it here when the list card's Mark moved is refused", async () => {
+    const api = stubApi();
+    api.markMovedToday.mockRejectedValue(newPlaceTaken);
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await toList(el);
+    card(el, "t3").querySelector<HTMLElement>("[data-mark-moved]")!.click();
+    await settle(el);
+
+    expect(refusal(el)).toBe("4 is standing in 3's new place. Move 4 first.");
+    offer(el)!.click();
+    await settle(el);
+    expect(api.leaveHereToday).toHaveBeenCalledExactlyOnceWith("t3", 6);
+  });
+
+  it("offers Leave it here when Back to its saved place is refused for the table that needs moving", async () => {
+    const api = stubApi();
+    api.backToSavedToday.mockRejectedValue(newPlaceTaken);
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await pressBack(el, "t3");
+
+    expect(api.backToSavedToday).toHaveBeenCalledExactlyOnceWith("t3", 6);
+    expect(refusal(el)).toBe("4 is standing in 3's new place. Move 4 first.");
+    offer(el)!.click();
+    await settle(el);
+    expect(api.leaveHereToday).toHaveBeenCalledExactlyOnceWith("t3", 6);
+    expect(offer(el)).toBeNull();
+  });
+
+  it("leaves the table pressed, not a part the refusal names", async () => {
+    const api = stubApi();
+    api.markMovedToday.mockRejectedValue({ ...newPlaceTaken, tableId: "t9" });
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await refuseMarkMoved(el);
+
+    offer(el)!.click();
+    await settle(el);
+    expect(api.leaveHereToday).toHaveBeenCalledExactlyOnceWith("t3", 6);
+  });
+
+  it("offers nothing for other refusals", async () => {
+    const api = stubApi();
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    for (const code of ["table.booked", "tab.already_open"]) {
+      api.markMovedToday.mockRejectedValueOnce({ code, tableId: "t4" });
+      await refuseMarkMoved(el);
+      expect(refusal(el)).not.toBeNull();
+      expect(offer(el)).toBeNull();
+    }
+  });
+
+  it("drops the offer once another refusal replaces it", async () => {
+    const api = stubApi();
+    api.markMovedToday.mockRejectedValue(newPlaceTaken);
+    api.mergeToday.mockRejectedValueOnce({ code: "table.needs_moving", tableId: "t3" });
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await refuseMarkMoved(el);
+    expect(offer(el)).not.toBeNull();
+
+    send(mapOf(el), "wt-table-drag-end", { tableId: "t4", x: 30, y: 3, targetId: "t3" });
+    await settle(el);
+    expect(refusal(el)).toBe("Table 3 needs moving. Mark it moved first.");
+    expect(offer(el)).toBeNull();
+  });
+
+  it("drops the offer once a read no longer has the table needing moving, or the device can no longer change today's plan", async () => {
+    const api = stubApi();
+    api.markMovedToday.mockRejectedValue(newPlaceTaken);
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await refuseMarkMoved(el);
+    expect(offer(el)).not.toBeNull();
+    el.tables = [planned("t3", 12), planned("t4", 30)];
+    await el.updateComplete;
+    expect(offer(el)).toBeNull();
+
+    cleanupWidgets();
+    const fresh = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await refuseMarkMoved(fresh);
+    expect(offer(fresh)).not.toBeNull();
+    fresh.canChangeToday = false;
+    await fresh.updateComplete;
+    expect(offer(fresh)).toBeNull();
   });
 
   it("names both tables in Spanish", async () => {
