@@ -141,6 +141,7 @@ export interface DraftSyncOptions {
   onRefused: (code: string, ownerName?: string) => void;
   /** The server's draft has replaced what the store held. */
   onReplaced?: () => void;
+  onSaved?: () => void;
   /** How long one read or save may stay out before it is cut off. */
   requestLimitMs: number;
   candidates?: Map<string, RetainedDraftCandidate>;
@@ -794,6 +795,7 @@ export class DraftSync {
     } else if (sameLines(lines, saved.lines)) this.#keep(saved);
     else this.#show(saved);
     this.#lockAuthority();
+    this.#options.onSaved?.();
     return "saved";
   }
 

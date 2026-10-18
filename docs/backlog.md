@@ -2228,8 +2228,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   prices and group still match. Folding clears a partial selection; a fully selected family stays
   selected. Recalled source identities remain separate. After a station check, New order retains
   the station warning when you go back from the preview. You can choose an offered station or
-  remove that dish there. Automatic routing checks and moving these details into the line window
-  remain open. This is an intermediate panel step:
+  remove that dish there. A saved revision now starts a station check after 400 ms on both till
+  and handheld layouts, before you press Send. A new edit, bill, editor version or API invalidates
+  the old answer; an unanswered check retains the last warning. Moving these details into the
+  line window remains open. This is an intermediate panel step:
   direct Send all/selected Fire, removal of the old
   destination/preview controls, the Sent panel and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through

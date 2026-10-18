@@ -1330,6 +1330,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The revision {@link lines} was read at. */
   @property({ attribute: false }) revision = 0;
   @property({ attribute: false }) billEdit: BillEditExpected | null = null;
+  @property({ attribute: false }) routingRevision: number | null = null;
   @property({ attribute: false }) billEdits: readonly BillEditExpected[] = [];
   /** The venue's setting. When off, the server refuses to change or recall a sent line that has a
    * ticket item, so those lines offer Cancel instead. */
@@ -1556,6 +1557,8 @@ export class TillTableOrderScreen extends LitElement {
     const store = this.#draftStore;
     if (this.#watchedDraft !== undefined && this.#watchedDraft.store === store) return;
     this.#watchedDraft?.stop();
+    this.#cancelAutomaticRouting();
+    this.#routingChecked = undefined;
     this.#selected = new WeakSet();
     this.#routingRows = new WeakMap();
     this.draftMoveStore = null;
@@ -1571,6 +1574,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchedDraft = {
       store,
       stop: store.subscribe(() => {
+        this.#cancelAutomaticRouting();
         if (store.sending) this.draftMoveStore = null;
         if (store.editsLocked) {
           this.draftMoveStore = null;
@@ -1647,6 +1651,8 @@ export class TillTableOrderScreen extends LitElement {
     this.#actionScope?.dispose();
     this.#actionScope = undefined;
     this.#actionLeave = undefined;
+    this.#cancelAutomaticRouting();
+    this.#routingChecked = undefined;
     this.#watchedDraft?.stop();
     this.#watchedDraft = undefined;
     this.#resizing?.disconnect();
@@ -1721,6 +1727,87 @@ export class TillTableOrderScreen extends LitElement {
     } else {
       this.#dismissPreview();
     }
+  }
+
+  #routingTimer?: ReturnType<typeof setTimeout>;
+  #routingChecked?: string;
+  #automaticRouting?: {
+    checkId: number;
+    store: WorkingOrderStore;
+    sent: readonly OrderLine[];
+    key: string;
+    api: TillApi | undefined;
+  };
+
+  #routingKey(): string | undefined {
+    const edit = this.billEdit;
+    if (
+      this.routingRevision === null ||
+      edit === null ||
+      edit.billId !== this.orderId ||
+      edit.draftId === null ||
+      edit.draftRevision !== this.routingRevision
+    )
+      return undefined;
+    return JSON.stringify([edit.billId, edit.editorVersion, edit.draftId, edit.draftRevision]);
+  }
+
+  #cancelAutomaticRouting(): void {
+    clearTimeout(this.#routingTimer);
+    this.#routingTimer = undefined;
+    this.#automaticRouting = undefined;
+  }
+
+  #automaticRoutingCurrent(): boolean {
+    const check = this.#automaticRouting;
+    return (
+      check !== undefined &&
+      this.isConnected &&
+      check.store === this.#draftStore &&
+      check.key === this.#routingKey() &&
+      check.api === this.api &&
+      !check.store.sending &&
+      !check.store.editsLocked &&
+      !this.groupCommandBusy &&
+      this.pendingDraft === null &&
+      check.sent.length === check.store.lines.length &&
+      check.sent.every((line, index) => line === check.store.lines[index])
+    );
+  }
+
+  #watchAutomaticRouting(): void {
+    const store = this.#draftStore;
+    const key = this.#routingKey();
+    if (
+      !this.isConnected ||
+      store === null ||
+      store.lineCount === 0 ||
+      key === undefined ||
+      store.sending ||
+      store.editsLocked ||
+      this.groupCommandBusy ||
+      this.pendingDraft !== null
+    ) {
+      this.#cancelAutomaticRouting();
+      return;
+    }
+    if (this.#routingChecked === key || this.#automaticRouting?.key === key) return;
+    this.#cancelAutomaticRouting();
+    const check = { checkId: ++this.#checkId, store, sent: [...store.lines], key, api: this.api };
+    this.#automaticRouting = check;
+    this.#routingTimer = setTimeout(() => {
+      this.#routingTimer = undefined;
+      if (!this.#automaticRoutingCurrent()) return;
+      this.#routingChecked = key;
+      this.dispatchEvent(
+        new CustomEvent("check-dead-ends", {
+          detail: { sent: check.sent, checkId: check.checkId, automatic: true },
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+    }, 400);
   }
 
   #checkId = 0;
@@ -1842,6 +1929,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The app clears its offer on this event, so a screen mounted later (a handheld's Order tab coming
    * back) does not open it again. Taken even when the line is gone, for the same reason. */
   override updated(): void {
+    this.#watchAutomaticRouting();
     this.#watchReminder();
     if (!this.#offerTaken) return;
     this.#offerTaken = false;
@@ -1961,6 +2049,7 @@ export class TillTableOrderScreen extends LitElement {
     check = true,
     deadEnds?: PendingDraft["deadEnds"],
   ): void {
+    this.#cancelAutomaticRouting();
     this.#previewOpening++;
     this.#previewScope?.dispose();
     this.#previewScope = undefined;
@@ -2039,11 +2128,31 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   currentDeadEndsCheck(checkId: number): boolean {
+    if (this.#automaticRouting?.checkId === checkId) return this.#automaticRoutingCurrent();
     return this.pendingDraft !== null && this.#checkId === checkId;
   }
 
   answerDeadEnds(sent: readonly OrderLine[], answer?: DeadEndAnswer, checkId?: number): void {
     if (checkId !== undefined && !this.currentDeadEndsCheck(checkId)) return;
+    const automatic = this.#automaticRouting;
+    if (automatic !== undefined && automatic.checkId === checkId) {
+      if (answer === undefined) return;
+      const rows = answer.deadEnds.flatMap((row) => {
+        const line = automatic.sent[Number(row.key)];
+        return line === undefined ? [] : [[line, row] as const];
+      });
+      for (const line of automatic.sent) this.#routingRows.delete(line);
+      for (const [line, row] of rows) {
+        if (
+          line.makeAt !== undefined &&
+          !answer.stations.some((station) => station.id === line.makeAt)
+        )
+          automatic.store.setLineMakeAt(automatic.store.lines.indexOf(line), undefined);
+        this.#routingRows.set(line, { row, stations: answer.stations });
+      }
+      this.requestUpdate();
+      return;
+    }
     const pending = this.pendingDraft;
     if (
       pending === null ||

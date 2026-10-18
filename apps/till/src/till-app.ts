@@ -9515,6 +9515,9 @@ export class TillApp extends LitElement {
         lines.map((line) =>
           fromDraftLine(line, this.#tableOffers.byId, this.#tableOffers.versions),
         ),
+      onSaved: () => {
+        if (sync === this.#draftSync) this.requestUpdate();
+      },
       onReplaced: () => {
         if (sync !== this.#draftSync) return;
         this.#draftRefreshDue = true;
@@ -10132,17 +10135,34 @@ export class TillApp extends LitElement {
     this.#returnToFloor();
   }
 
+  #draftRoutingRevision(store: WorkingOrderStore | null): number | null {
+    const sync = this.#draftSync;
+    if (
+      !this.#draftReady ||
+      sync === undefined ||
+      store !== sync.store ||
+      sync.saving ||
+      sync.draftId === null ||
+      sync.lineIds(sync.store.lines.map((_, index) => index)) === null
+    )
+      return null;
+    return sync.revision;
+  }
+
   async #onCheckDeadEnds(event: Event): Promise<void> {
     event.preventDefault();
-    const { sent, checkId } = (
-      event as CustomEvent<{ sent: readonly OrderLine[]; checkId: number }>
-    ).detail;
+    const {
+      sent,
+      checkId,
+      automatic = false,
+    } = (event as CustomEvent<{ sent: readonly OrderLine[]; checkId: number; automatic?: boolean }>)
+      .detail;
     const screen = event
       .composedPath()
       .find((node) => node instanceof HTMLElement && node.tagName === "TILL-TABLE-ORDER-SCREEN") as
       TillTableOrderScreen | undefined;
     if (screen === undefined) return;
-    this.#previewSaveOutcome = undefined;
+    if (!automatic) this.#previewSaveOutcome = undefined;
     const sync = this.#draftSync;
     const party = this.orderParty;
     if (sync === undefined || party === null) {
@@ -10150,9 +10170,23 @@ export class TillApp extends LitElement {
       return;
     }
     const session = this.#operatorSession;
+    const api = this.api;
+    const draftId = sync.draftId;
+    const revision = sync.revision;
+    const current = () =>
+      session === this.#operatorSession &&
+      api === this.api &&
+      sync === this.#draftSync &&
+      party.id === this.orderParty?.id &&
+      screen.currentDeadEndsCheck(checkId) &&
+      sync.draftId === draftId &&
+      sync.revision === revision &&
+      this.#draftRoutingRevision(sync.store) === revision &&
+      !sync.store.editsLocked;
+    if (automatic && !current()) return;
     const request = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const saved = await sync.flush(request.signal);
+      const saved = automatic ? "saved" : await sync.flush(request.signal);
       if (saved !== "saved") {
         if (
           (saved === "failed" || saved.refused !== "session.required") &&
@@ -10164,6 +10198,7 @@ export class TillApp extends LitElement {
           this.#previewSaveOutcome = { sent, outcome: saved };
         return;
       }
+      if (automatic && !current()) return;
       const positions = sent.map((line) => sync.store.lines.indexOf(line));
       const ids = positions.includes(-1) ? null : sync.lineIds(positions);
       if (ids === null || sync.draftId === null) return;
@@ -10172,14 +10207,14 @@ export class TillApp extends LitElement {
       let answer: DeadEndAnswer | undefined;
       try {
         answer = await Promise.race([
-          this.api.askDraftDeadEnds(party.id, sync.draftId, ids, { signal: question.signal }),
+          api.askDraftDeadEnds(party.id, sync.draftId, ids, { signal: question.signal }),
           pause(question.signal).then(() => undefined),
         ]);
       } finally {
         question.done();
       }
       if (answer === undefined) return;
-      if (session !== this.#operatorSession) return;
+      if (session !== this.#operatorSession || (automatic && !current())) return;
       const byId = new Map(ids.map((id, index) => [id, index]));
       screen.answerDeadEnds(
         sent,
@@ -14774,6 +14809,7 @@ export class TillApp extends LitElement {
       .orderId=${this.activeTabId}
       .billEdits=${this.#tableBillEdits()}
       .billEdit=${this.#draftReady ? (this.#draftSync?.expectedEdit ?? null) : null}
+      .routingRevision=${this.#draftRoutingRevision(draft)}
       .draftStore=${draft}
       .otherDrafts=${this.#otherDrafts(draft)}
       .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
@@ -14905,6 +14941,7 @@ export class TillApp extends LitElement {
           .orderId=${this.activeTabId}
           .billEdits=${this.#tableBillEdits()}
           .billEdit=${this.#draftReady ? (this.#draftSync?.expectedEdit ?? null) : null}
+          .routingRevision=${this.#draftRoutingRevision(draft)}
           .draftStore=${draft}
           .otherDrafts=${this.#otherDrafts(draft)}
           .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}

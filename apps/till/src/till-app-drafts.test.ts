@@ -8989,3 +8989,50 @@ describe("held-line move editing authority", () => {
     },
   );
 });
+
+describe("automatic saved-draft routing", () => {
+  it.each(["till", "phone-portrait"] as const)(
+    "checks the %s's saved lines and shows routing warnings before Send",
+    async (formFactor) => {
+      const askDraftDeadEnds = vi.fn(async (_partyId: string, _draftId: string, ids: string[]) => ({
+        sends: true,
+        deadEnds: [
+          {
+            key: ids[0]!,
+            name: "Beer",
+            quantity: "1",
+            stationId: "bar",
+            stationName: "Bar",
+            why: "closed",
+          },
+        ],
+        stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+      }));
+      const { el } = await mountApp({
+        askDraftDeadEnds,
+        getTill: vi.fn().mockResolvedValue(till(formFactor)),
+      });
+      await openMesa(el);
+      await tap(el, "Beer");
+      await expect.poll(() => askDraftDeadEnds.mock.calls.length, { timeout: 2000 }).toBe(1);
+      const saved = server.drafts[0]!;
+      expect(askDraftDeadEnds).toHaveBeenCalledWith(
+        "v1",
+        saved.id,
+        [saved.lines[0]!.id],
+        expect.any(Object),
+      );
+      await expect
+        .poll(() => tableOrder(el)!.shadowRoot!.querySelector("[data-draft-routing-warning]"))
+        .not.toBeNull();
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.submitDraft).not.toHaveBeenCalled();
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(
+        tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+          "[data-draft-preview]",
+        )!.open,
+      ).toBe(false);
+    },
+  );
+});
