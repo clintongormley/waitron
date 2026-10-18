@@ -306,9 +306,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   structured message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1).
   [Detail](backlog/fiscal.md#when-the-business-e-invoicing-regime-starts)
 
-- **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — WAITS ON ASESOR Q42
-  (2026-10-06). **No design or build until the asesor answers and the owner decides.**
-  [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
+- **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — DESIGN NOW (owner,
+  2026-10-17). Design from the research's answer to Q42: the invoice is issued at the meal, and the
+  bill stays open as "awaiting transfer" until someone marks it paid; no proforma first for a
+  consumer. The design goes back to the owner with one short confirmation question for the asesor
+  attached, before any build.
+  [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
 - **A679. First Live setup: one page and one recovery PDF.** Complete the existing First Live setup
   branch through the [hour-code implementation plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
@@ -352,10 +355,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   an accept or a different-code refusal. A manual release remains Task 8.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
-- **Still open after W41s-3c (#1304)** — in AEAT's preproduction environment two runs of shuffled
-  envíos of up to 1,000 records each got their replies back in the order sent; production is not
-  measured. And no run against real AEAT has shown that a cancellation's reply line names the
-  cancelled invoice.
+- **Still open after W41s-3c (#1304)** — no run against real AEAT has shown that a cancellation's
+  reply line names the cancelled invoice.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the
@@ -388,10 +389,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   zero, file one; whether AEAT accepts it was not tested. Left open by service Task 17 (#991, a
   table that leaves without paying).
 
+- **A845. The cancel of an invoiced bill checks the permission before its payment refusals**
+  (owner decision, 2026-10-17). Like the drawer, refund and unpaid-departure routes, the cancel
+  answers "not permitted", with the PIN checked and counted, before any payment refusal. Move the
+  check, and prove both orders by running them: no permission and a payment held answers "not
+  permitted"; permission and a payment held answers the payment refusal. Then correct the C126
+  detail's "neither checked nor counted" sentence. FULL review (auth and permissions, fiscal path).
+  [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
+
 - **Loose ends left by C126 (cancelling an order whose invoice was issued credits it, #1030).**
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
-  - **For the owner, from B33's review: the cancel checks the permission after its payment
-    refusals.** Moving it earlier changes who gets which refusal; not decided.
   - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.** Every
     role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and `cash.drawer`, so
     its cases cannot tell which of those it reads.

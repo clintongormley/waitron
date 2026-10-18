@@ -214,14 +214,18 @@ campaign's current queue order; this landing does not start another fiscal item.
 
 Found by A231d's research. [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.php?id=BOE-A-2026-20587) (BOE núm. 247, 5 October 2026) «entrará en vigor el día siguiente al de su publicación en el «Boletín Oficial del Estado», dándose inicio al cómputo de los plazos» of [RD 238/2026](https://www.boe.es/buscar/act.php?id=BOE-A-2026-7295)'s fourth final provision: «Doce meses después» for businesses whose turnover is over €8 million, and «Veinticuatro meses después, para el resto de los empresarios y profesionales». So from about October 2027, or October 2028 for smaller businesses, an invoice to a Spanish business must be a structured message, and a PDF alone is not enough (the design's register, RD 238/2026 art. 7.1). The exact end day of each period, and whether a restaurant's F1s to businesses fall inside the regime, are asked as [Q45](../compliance/asesor-questions.md#q45-when-does-structured-business-invoicing-reach-a-restaurants-full-invoices-added-2026-10-07). Researched 2026-10-07 in the watcher session; the fetched texts were not kept in the repository.
 
-## A275. Invoice a bill paid later by transfer (full or simplified invoice) — WAITS ON ASESOR Q42 (2026-10-06)
+## A275. Invoice a bill paid later by transfer (full or simplified invoice) — DESIGN NOW (2026-10-17)
 
 The owner, 2026-10-06: a large bill (their example, €5,000) is rarely paid on the spot; the customer
 gets the invoice and pays later, for instance by bank transfer — or, as the owner has seen in Italy,
 gets a proforma and the invoice only once the money arrives. [Q42](../compliance/asesor-questions.md#q42-a-bill-paid-later-by-bank-transfer--invoice-now-or-a-proforma-and-the-invoice-on-payment-added-2026-10-06)
 asks the asesor whether both are lawful and which is recommended, for full invoices (F1, A231) and
-simplified invoices (F2) alike, with non-payment and deposits. **No design or build until the asesor
-answers and the owner decides.**
+simplified invoices (F2) alike, with non-payment and deposits. The research recorded in
+`docs/compliance/asesor-questions.md` (section 1.10) answers it: invoicing now and being paid later
+is lawful; a proforma first and the invoice on payment is not, for a consumer. **Owner, 2026-10-17:
+start the design now** from that answer — the invoice is issued at the meal, and the bill stays open
+as "awaiting transfer" until it is marked paid. The design returns to the owner with one short
+confirmation question for the asesor attached, before any build.
 
 Already built, to reuse: filing an order's invoice with no payment (`issueUnpaidInvoice`,
 `apps/server/src/working-order.ts`); the amount due on each issued invoice (`apps/server/src/sale-due.ts`);
@@ -710,10 +714,7 @@ reply's line count (`lineasEnRespuesta`) on its alert, and the reply's lines are
 warning `fiscal.respuesta_descuadrada` on the sale of the envío's first record, with the envío's
 record ids and its CSV. The dashboard's sentence does not show those lines; `readOpenAlerts`
 (`apps/server/src/alerts.ts`), behind `GET /management-api/alerts`, returns them in the alert's
-params. **Still open:** in AEAT's preproduction environment two runs of shuffled envíos of up to
-1,000 records each got their replies back in the order sent (verifactu #138's probe, recorded in
-[Q43](../compliance/asesor-questions.md)); production is not measured, and the question stays with the
-asesor. A line AEAT moves away from
+params. A line AEAT moves away from
 its record's position is never applied, so that record stays unknown and is retried unless an
 earlier record on its chain is on hold, while records whose line is still at their position are
 applied as usual. A record whose line AEAT moved in every reply it was sent in would never be
@@ -723,7 +724,7 @@ acceptance. One option for the owner, not built: after a mismatch, send
 each unknown record again in an envío of its own. An incident is not stored while one with the same
 code for the same sale is open, so while a `fiscal.respuesta_descuadrada` is open for a sale, a later
 mismatched reply to an envío whose first record belongs to the same sale (that record again, or the
-sale's cancellation) keeps none of its lines. And no run
+sale's cancellation) keeps none of its lines. **Still open:** no run
 against real AEAT has shown that a cancellation's reply line names the cancelled invoice (the schema
 types the line's `IDFactura` with the plain field names, and the library's fake echoes the cancelled
 invoice there). If AEAT named a different invoice on that line, the cancellation would come back
@@ -762,13 +763,12 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   an R5 corrective invoice, by differences, for the whole invoice. The PIN override is B33
   (#1041). The owner dropped the dashboard Orders screen's "Invoice not credited" mark
   (2026-10-02 ~12:05): such a bill is to show as Cancelled with its credit note. Open:
-  - **For the owner, from B33's review: the cancel checks the permission after its payment
-    refusals.** A bill holding a payment, or with a card payment in flight, is refused for that
-    before `sale.rectify` or an override is looked at — the order C126 built, which B33 kept. So
-    someone without the permission is told about the payment rather than "not permitted", and a
-    PIN sent with that request is neither checked nor counted. The drawer, refund and
-    unpaid-departure routes check the permission first. Moving it earlier changes who gets which
-    refusal; not decided.
+  - **A845: the cancel checks the permission after its payment refusals** (owner decision
+    2026-10-17: permission first; the job is A845 in `docs/backlog.md`). A bill holding a payment,
+    or with a card payment in flight, is refused for that before `sale.rectify` or an override is
+    looked at — the order C126 built, which B33 kept. So someone without the permission is told
+    about the payment rather than "not permitted", and a PIN sent with that request is neither
+    checked nor counted. The drawer, refund and unpaid-departure routes check the permission first.
   - **B32 (the till offers "Cancel and credit"; owner, 2026-10-02 ~12:05) — landed as #1055.**
     The dialog's dismiss button reads "Keep the bill" ("Mantener la cuenta"), not the
     shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
@@ -912,6 +912,10 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   every Veri\*Factu sale, correction and substitution path — never a quiet redefinition of `zero`.
 
 ## Decisions and deliberate limits
+
+- **Owner decision 2026-10-17: cancelling an invoiced bill checks the permission first**, as the
+  drawer, refund and unpaid-departure routes do: "not permitted" (with the PIN checked and counted)
+  comes before any payment refusal. The build is A845.
 
 - **A741, owner decision 2026-10-15: one large-bill limit of €3,000** (#1774). A sale of exactly
   €3,000.00 is accepted and one of €3,000.01 refused (`simplifiedInvoiceLimit`,
