@@ -98,6 +98,37 @@ describe("VenueServiceApi", () => {
     ).toEqual([["/management-api/zones/z1", "PATCH", { name: "Garden room" }]]);
   });
 
+  it("adds, renames and copies a floor plan set through the set routes", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ setId: "s1" }, 201))
+      .mockResolvedValueOnce(jsonResponse({ setId: "s2" }, 201))
+      .mockResolvedValueOnce(jsonResponse(undefined, 204))
+      .mockResolvedValueOnce(jsonResponse({ setId: "s3" }, 201));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    expect(await api.createFloorPlanSet({ departmentId: "d1", name: "Standard" })).toEqual({
+      setId: "s1",
+    });
+    expect(
+      await api.createFloorPlanSet({ departmentId: "d1", name: "Dinner", fromSetId: "s1" }),
+    ).toEqual({ setId: "s2" });
+    await api.renameFloorPlanSet("s2", "Evening");
+    expect(await api.copyFloorPlanSet("s2", "Party")).toEqual({ setId: "s3" });
+    const base = "/management-api/venue-service/floor-plan-sets";
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      [base, "POST", { departmentId: "d1", name: "Standard" }],
+      [base, "POST", { departmentId: "d1", name: "Dinner", fromSetId: "s1" }],
+      [`${base}/s2`, "PATCH", { name: "Evening" }],
+      [`${base}/s2/copy`, "POST", { name: "Party" }],
+    ]);
+  });
+
   it("writes one department field and clears one zone override", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));

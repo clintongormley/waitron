@@ -229,6 +229,28 @@ export class VenueServiceApi {
     );
   }
 
+  /** A department's first set takes no `fromSetId`; a later one starts as a copy of it. */
+  createFloorPlanSet(input: {
+    departmentId: string;
+    name: string;
+    fromSetId?: string;
+  }): Promise<{ setId: string }> {
+    return this.request(FLOOR_PLAN_SETS, "POST", input);
+  }
+
+  renameFloorPlanSet(setId: string, name: string): Promise<void> {
+    return this.request(`${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}`, "PATCH", { name });
+  }
+
+  copyFloorPlanSet(setId: string, name: string): Promise<{ setId: string }> {
+    return this.request(`${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}/copy`, "POST", { name });
+  }
+
+  /** After a set write, so the page shows it even when the change feed delivers nothing. */
+  rereadFloorPlanSets(): void {
+    this.#watches.reread(QUERY_DEPENDENCIES["floor-plan-sets"]);
+  }
+
   get background(): VenueServiceApi {
     return new VenueServiceApi(this.request, this.liveData, true);
   }

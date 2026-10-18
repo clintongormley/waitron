@@ -1,13 +1,21 @@
 import { LitElement, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import type { VenueServiceApi } from "./client.js";
+import type {
+  FloorPlanSetDialog,
+  FloorPlanSetMode,
+  FloorPlanSetSave,
+} from "./floor-plan-set-dialog.js";
+import "./floor-plan-set-dialog.js";
 import { format } from "./hours-view.js";
 import { PERIOD_COLOUR_TOKENS } from "./period-colour-styles.js";
+import { refusalOf } from "./refusal.js";
 import { t } from "./strings.js";
 
 type Department = FloorPlanSetsModel["departments"][number];
@@ -36,10 +44,10 @@ const swatchColours = unsafeCSS(
     .join("\n"),
 );
 
-/** Every active department's floor plan sets, and under each set its department's zones, as one
- *  flat table in the model's order: the department and set rows sit flush left, as the mock-up
- *  draws them, which a tree's indent would not. Cell markup lives in the table's shadow root, so
- *  it is styled through parts. */
+/** Every active department's floor plan sets, and under each set its department's zones, as an
+ *  always-open tree, so a screen reader hears each row's level; the tree's indent and arrow space
+ *  are taken out so department and set rows sit flush left, as the mock-up draws them. Cell markup
+ *  lives in the table's shadow root, so it is styled through parts. */
 @customElement("dashboard-floor-plans-screen")
 export class FloorPlansScreen extends LitElement {
   static override styles = [
@@ -60,6 +68,12 @@ export class FloorPlansScreen extends LitElement {
       h1 {
         margin: 0;
         font-size: var(--wt-font-size-xl);
+      }
+      wt-data-table {
+        --tree-arrow-width: 0px;
+      }
+      wt-data-table::part(tree-cell) {
+        padding-inline-start: 0;
       }
       wt-data-table::part(department-cell) {
         background: var(--wt-color-bg);
@@ -127,6 +141,8 @@ export class FloorPlansScreen extends LitElement {
   @property({ type: Boolean }) readOnly = false;
   @state() private model?: FloorPlanSetsModel;
   @state() private readError = "";
+  @state() private editing?: { mode: FloorPlanSetMode; set?: { id: string; name: string } };
+  @state() private busy = false;
   private detach?: () => void;
 
   override connectedCallback() {
@@ -226,11 +242,72 @@ export class FloorPlansScreen extends LitElement {
 
   private actionsCell(row: Row) {
     if (row.kind !== "set") return nothing;
+    const set = { id: row.set.id, name: row.set.name };
     return html`<wt-row-actions
       data-set-id=${row.set.id}
       label=${`${row.set.name}: ${t("venue.actions")}`}
       align="end"
-    ></wt-row-actions>`;
+    >
+      <wt-button variant="secondary" data-test="rename-set" @click=${() => this.edit("rename", set)}
+        >${t("floor_plans.rename")}</wt-button
+      >
+      <wt-button variant="secondary" data-test="copy-set" @click=${() => this.edit("copy", set)}
+        >${t("floor_plans.copy")}</wt-button
+      >
+    </wt-row-actions>`;
+  }
+
+  private edit(mode: FloorPlanSetMode, set?: { id: string; name: string }) {
+    if (this.readOnly || !this.model || this.editing) return;
+    this.editing = { mode, set };
+  }
+
+  private async save(event: CustomEvent<FloorPlanSetSave>) {
+    event.stopPropagation();
+    const editing = this.editing;
+    const dialog = event.currentTarget as FloorPlanSetDialog;
+    if (!editing || this.busy || !this.isConnected) return;
+    const detail = event.detail;
+    this.busy = true;
+    dialog.refusal = undefined;
+    try {
+      if (detail.mode === "add")
+        await this.api.createFloorPlanSet({
+          departmentId: detail.departmentId,
+          name: detail.name,
+          ...(detail.fromSetId === undefined ? {} : { fromSetId: detail.fromSetId }),
+        });
+      else if (detail.mode === "rename")
+        await this.api.renameFloorPlanSet(detail.setId, detail.name);
+      else await this.api.copyFloorPlanSet(detail.setId, detail.name);
+    } catch (error) {
+      if (this.editing === editing) dialog.refusal = refusalOf(error);
+      return;
+    } finally {
+      this.busy = false;
+    }
+    if (this.editing === editing && dialog.commitSubmitted()) this.editing = undefined;
+    this.api.rereadFloorPlanSets();
+  }
+
+  private renderDialog() {
+    const editing = this.editing;
+    if (!editing || !this.model) return nothing;
+    return keyed(
+      editing,
+      html`<dashboard-floor-plan-set-dialog
+        .open=${true}
+        .busy=${this.busy}
+        .mode=${editing.mode}
+        .set=${editing.set}
+        .departments=${this.model.departments}
+        @floor-plan-set-save=${(event: CustomEvent<FloorPlanSetSave>) => void this.save(event)}
+        @floor-plan-set-close=${(event: Event) => {
+          event.stopPropagation();
+          if (this.editing === editing && !this.busy) this.editing = undefined;
+        }}
+      ></dashboard-floor-plan-set-dialog>`,
+    );
   }
 
   override render() {
@@ -259,7 +336,11 @@ export class FloorPlansScreen extends LitElement {
         ${
           this.readOnly
             ? nothing
-            : html`<wt-button data-test="add-set" variant="secondary" ?disabled=${!model}
+            : html`<wt-button
+                data-test="add-set"
+                variant="secondary"
+                ?disabled=${!model}
+                @click=${() => this.edit("add")}
                 >${t("floor_plans.add_set")}</wt-button
               >`
         }
@@ -276,9 +357,17 @@ export class FloorPlansScreen extends LitElement {
                 .columns=${columns}
                 .rows=${this.rows(model)}
                 .rowKey=${(row: Row) => row.key}
+                .rowParent=${(row: Row) =>
+                  row.kind === "set"
+                    ? `department:${row.department.id}`
+                    : row.kind === "zone"
+                      ? `set:${row.set.id}`
+                      : null}
+                .rowCollapsible=${() => false}
                 .rowCellParts=${(row: Row) => (row.kind === "department" ? "department-cell" : "")}
               ></wt-data-table>`
-      }`;
+      }
+      ${this.readOnly ? nothing : this.renderDialog()}`;
   }
 }
 

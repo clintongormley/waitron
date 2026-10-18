@@ -166,8 +166,8 @@ async function readLayouts(
           .from(floorPlans)
           .where(
             or(
-              ...[...zonesOfSet].map(([setId, zoneIds]) =>
-                and(eq(floorPlans.setId, setId), inArray(floorPlans.zoneId, zoneIds)),
+              ...[...zonesOfSet].map(([setId, setZoneIds]) =>
+                and(eq(floorPlans.setId, setId), inArray(floorPlans.zoneId, setZoneIds)),
               ),
             ),
           );

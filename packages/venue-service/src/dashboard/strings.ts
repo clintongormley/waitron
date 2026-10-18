@@ -860,6 +860,16 @@ const en = {
   "floor_plans.no_sets": "No sets yet",
   "floor_plans.zone_layout": "{zone} · {set}",
   "floor_plans.load_error": "Floor plans could not be loaded. It will be tried again.",
+  "floor_plans.add_heading": "Add set",
+  "floor_plans.rename": "Rename…",
+  "floor_plans.copy": "Copy…",
+  "floor_plans.rename_heading": "Rename {set}",
+  "floor_plans.copy_heading": "Copy {set}",
+  "floor_plans.name": "Name",
+  "floor_plans.start_from": "Start from",
+  "floor_plans.start_from_required": "Choose a set to start from.",
+  "floor_plans.name_taken": "Another set of this department already has this name.",
+  "floor_plans.set_gone": "This set no longer exists.",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -1746,6 +1756,16 @@ const es: Record<keyof typeof en, string> = {
   "floor_plans.no_sets": "Aún no hay conjuntos",
   "floor_plans.zone_layout": "{zone} · {set}",
   "floor_plans.load_error": "No se pudieron cargar los planos de sala. Se volverá a intentar.",
+  "floor_plans.add_heading": "Añadir conjunto",
+  "floor_plans.rename": "Renombrar…",
+  "floor_plans.copy": "Copiar…",
+  "floor_plans.rename_heading": "Renombrar {set}",
+  "floor_plans.copy_heading": "Copiar {set}",
+  "floor_plans.name": "Nombre",
+  "floor_plans.start_from": "A partir de",
+  "floor_plans.start_from_required": "Elige un conjunto del que partir.",
+  "floor_plans.name_taken": "Otro conjunto de este departamento ya tiene este nombre.",
+  "floor_plans.set_gone": "Este conjunto ya no existe.",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };

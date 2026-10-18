@@ -14,11 +14,27 @@ afterEach(() => {
   setLocale("en");
 });
 
+type Write = { path: string; method: string; body: unknown };
 async function mountScreen(
-  options: { readOnly?: boolean; model?: FloorPlanSetsModel } = {},
-): Promise<{ screen: FloorPlansScreen; table: WtDataTable<unknown>; paths: string[] }> {
+  options: {
+    readOnly?: boolean;
+    model?: FloorPlanSetsModel;
+    /** Answers a write; a throw is the request's refusal. */
+    write?: (write: Write) => unknown;
+  } = {},
+): Promise<{
+  screen: FloorPlansScreen;
+  table: WtDataTable<unknown>;
+  paths: string[];
+  writes: Write[];
+}> {
   const paths: string[] = [];
-  const request = (async (path: string, _method: string, _body: unknown, init?: unknown) => {
+  const writes: Write[] = [];
+  const request = (async (path: string, method: string, body: unknown, init?: unknown) => {
+    if (method !== "GET") {
+      writes.push({ path, method, body });
+      return options.write?.({ path, method, body });
+    }
     paths.push(`${path} ${JSON.stringify(init ?? {})}`);
     return options.model ?? casaMarina();
   }) as DashboardRequest;
@@ -31,7 +47,7 @@ async function mountScreen(
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
   const table = screen.shadowRoot!.querySelector("wt-data-table") as WtDataTable<unknown>;
   await table.updateComplete;
-  return { screen, table, paths };
+  return { screen, table, paths, writes };
 }
 
 function cell(table: WtDataTable<unknown>, rowKey: string, column: string) {
@@ -201,4 +217,131 @@ it("speaks Spanish", async () => {
   expect(
     cell(table, "set:dinner", "actions").querySelector("wt-row-actions")!.getAttribute("label"),
   ).toBe("Dinner: Acciones");
+});
+
+it("tells a screen reader each zone sits under its set, and each set under its department", async () => {
+  const { table } = await mountScreen();
+  const level = (key: string) =>
+    table.shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!.getAttribute("aria-level");
+  expect(level("department:restaurant")).toBe("1");
+  expect(level("set:dinner")).toBe("2");
+  expect(level("zone:dinner:terrace")).toBe("3");
+  expect(level("department:deli")).toBe("1");
+  expect(table.shadowRoot!.querySelector(".tree-toggle, .expand-all")).toBeNull();
+});
+
+const menuItems = (table: WtDataTable<unknown>, setKey: string) => [
+  ...cell(table, setKey, "actions").querySelectorAll<HTMLElementTagNameMap["wt-button"]>(
+    "wt-row-actions wt-button",
+  ),
+];
+const dialogOf = (screen: FloorPlansScreen) =>
+  screen.shadowRoot!.querySelector("dashboard-floor-plan-set-dialog");
+async function fill(screen: FloorPlansScreen, name: string, value: string) {
+  const dialog = dialogOf(screen)!;
+  dialog
+    .shadowRoot!.querySelector(`[name=${name}]`)!
+    .dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+  await dialog.updateComplete;
+}
+async function saveDialog(screen: FloorPlansScreen) {
+  dialogOf(screen)!.shadowRoot!.querySelector<HTMLElement>("[data-test=save-set]")!.click();
+}
+
+it("offers Rename… and Copy… on each set row", async () => {
+  const { table } = await mountScreen();
+  expect(menuItems(table, "set:standard").map((item) => text(item))).toEqual(["Rename…", "Copy…"]);
+  expect(menuItems(table, "set:dinner").map((item) => text(item))).toEqual(["Rename…", "Copy…"]);
+});
+
+it("+ Add set for a department with no set sends no fromSetId, then reads the page again", async () => {
+  const { screen, paths, writes } = await mountScreen({ write: () => ({ setId: "new" }) });
+  expect(dialogOf(screen)).toBeNull();
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=add-set]")!.click();
+  await screen.updateComplete;
+  expect(dialogOf(screen)!.mode).toBe("add");
+  await fill(screen, "departmentId", "deli");
+  expect(dialogOf(screen)!.shadowRoot!.querySelector("[name=fromSetId]")).toBeNull();
+  await fill(screen, "name", "Standard");
+  await saveDialog(screen);
+  await expect.poll(() => dialogOf(screen)).toBeNull();
+  expect(writes).toEqual([
+    {
+      path: "/management-api/venue-service/floor-plan-sets",
+      method: "POST",
+      body: { departmentId: "deli", name: "Standard" },
+    },
+  ]);
+  await expect.poll(() => paths.length).toBe(2);
+});
+
+it("+ Add set for Restaurant starts from its default set", async () => {
+  const { screen, writes } = await mountScreen({ write: () => ({ setId: "new" }) });
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=add-set]")!.click();
+  await screen.updateComplete;
+  await fill(screen, "departmentId", "restaurant");
+  const from =
+    dialogOf(screen)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=fromSetId]",
+    )!;
+  expect(from.value).toBe("standard");
+  await fill(screen, "name", "Brunch");
+  await saveDialog(screen);
+  await expect.poll(() => dialogOf(screen)).toBeNull();
+  expect(writes.map(({ body }) => body)).toEqual([
+    { departmentId: "restaurant", name: "Brunch", fromSetId: "standard" },
+  ]);
+});
+
+it("Rename… and Copy… send the set's routes", async () => {
+  const { screen, table, writes } = await mountScreen({ write: () => ({ setId: "new" }) });
+  menuItems(table, "set:dinner")[0]!.click();
+  await screen.updateComplete;
+  expect(dialogOf(screen)!.mode).toBe("rename");
+  await fill(screen, "name", "Evening");
+  await saveDialog(screen);
+  await expect.poll(() => dialogOf(screen)).toBeNull();
+  menuItems(table, "set:dinner")[1]!.click();
+  await screen.updateComplete;
+  expect(dialogOf(screen)!.mode).toBe("copy");
+  await fill(screen, "name", "Party");
+  await saveDialog(screen);
+  await expect.poll(() => dialogOf(screen)).toBeNull();
+  expect(writes).toEqual([
+    {
+      path: "/management-api/venue-service/floor-plan-sets/dinner",
+      method: "PATCH",
+      body: { name: "Evening" },
+    },
+    {
+      path: "/management-api/venue-service/floor-plan-sets/dinner/copy",
+      method: "POST",
+      body: { name: "Party" },
+    },
+  ]);
+});
+
+it("keeps the dialog open and marks Name when the name is taken", async () => {
+  const { screen, table } = await mountScreen({
+    write: () => {
+      throw Object.assign(new Error("taken"), {
+        code: "floor_plan_set.name_taken",
+        params: { departmentId: "restaurant", name: "Standard" },
+      });
+    },
+  });
+  menuItems(table, "set:dinner")[1]!.click();
+  await screen.updateComplete;
+  await fill(screen, "name", "Standard");
+  await saveDialog(screen);
+  const dialog = dialogOf(screen)!;
+  await expect
+    .poll(
+      () =>
+        dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.error,
+    )
+    .toBe("Another set of this department already has this name.");
+  expect(dialog.busy).toBe(false);
 });
