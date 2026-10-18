@@ -46,9 +46,12 @@ function cutSeason<T extends ClosedRange>(
   clock: BusinessDayClock,
   day: LocalDate,
   cut: CalendarCut | undefined,
+  painted: boolean,
 ): readonly T[] {
   if (cut === undefined) return ranges;
   const own = serviceDayWallContext(clock, day);
+  // The paint layer works on one 1440-minute day and skips a range crossing its changeover.
+  if (painted) own.endMinute = Math.min(own.endMinute, 1440);
   return ranges.flatMap((range) => cutToOwnDay(range, own, cut.anchor) ?? []);
 }
 
@@ -235,6 +238,7 @@ export async function resolveDepartmentsDays(
         clock,
         day,
         cut,
+        special != null,
       );
       const ranges = special
         ? special.closedAllDay
@@ -288,6 +292,7 @@ export async function resolveZoneClosedDays(
         clock,
         day,
         cut,
+        special != null,
       );
       const ranges = special
         ? special.closedAllDay

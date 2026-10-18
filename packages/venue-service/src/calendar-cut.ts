@@ -22,7 +22,7 @@ function fits(range: ClosedRange, cutover: string): boolean {
   return start < end;
 }
 
-/** A weekly range as a past day whose own start differs from `anchor` draws it: one that misfits
+/** A weekly range as a day whose own start differs from `anchor` draws it: one that misfits
  *  the day's start but fits `anchor` is placed by `anchor` and cut at the day's ends; null when
  *  nothing of it is left. Any other range is returned as given. */
 export function cutToOwnDay<T extends ClosedRange>(

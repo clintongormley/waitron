@@ -840,7 +840,7 @@ describe("the season days read", () => {
 describe("a past day's range that misfits its own start", () => {
   const AFTER_RETURN = new Date("2026-11-02T12:00:00Z");
   /** 05:00, then 03:00 from 2026-10-21, then 05:00 again from 2026-10-28, with Sala's dinner
-   *  stored at 22:00–04:30 on Saturdays after the start came back to 05:00, and Terrace closed
+   *  stored at 22:00–04:30 on Tuesdays and Saturdays after the start came back to 05:00, and Terrace closed
    *  23:00–04:00 then. */
   async function lateSaturday() {
     const { cfg } = await venue([]);
@@ -872,7 +872,10 @@ describe("a past day's range that misfits its own start", () => {
         sala,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
-          slots: weekday === 6 ? [{ periodId: dinner, startsAt: "22:00", endsAt: "04:30" }] : [],
+          slots:
+            weekday === 2 || weekday === 6
+              ? [{ periodId: dinner, startsAt: "22:00", endsAt: "04:30" }]
+              : [],
         })),
         AFTER_RETURN,
         1,
@@ -961,16 +964,21 @@ describe("a past day's range that misfits its own start", () => {
         {
           name: "Feria",
           repeatsYearly: false,
-          dates: [{ date: "2026-10-24", closedAllDay: false }],
+          dates: [
+            { date: "2026-10-24", closedAllDay: false },
+            // The last day starting at 03:00, 1560 minutes long.
+            { date: "2026-10-27", closedAllDay: false },
+          ],
         },
         AFTER_RETURN,
         1,
       ),
     );
     const year = await run((tx) => readOpeningHoursYear(tx, v.cfg, 2026, AFTER_RETURN));
-    expect(year.days.find((day) => day.date === "2026-10-24")).toMatchObject({
-      tone: "special_day",
-      closed: false,
-    });
+    for (const date of ["2026-10-24", "2026-10-27"])
+      expect(year.days.find((day) => day.date === date)).toMatchObject({
+        tone: "special_day",
+        closed: false,
+      });
   });
 });
