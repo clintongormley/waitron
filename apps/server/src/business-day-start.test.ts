@@ -706,7 +706,7 @@ describe("the preview chooses the changeover itself", () => {
       },
     });
   });
-  it("keeps a waiting change whose changeover has passed and takes effect one changeover later", async () => {
+  it("leaves tonight's waiting change in place and takes the following changeover once the new start has passed today", async () => {
     await inTx((tx) =>
       tx.insert(locationDayCutoverChanges).values({
         locationId: venue.cfg.locationId,
@@ -722,6 +722,51 @@ describe("the preview chooses the changeover itself", () => {
       endAt: "2026-10-22T08:00:00.000Z",
     });
     expect((await clockRows()).changes).toHaveLength(1);
+  });
+  describe("while tonight's 21:00 change waits, it is measured from the start in force", () => {
+    let departmentId: string;
+    beforeEach(async () => {
+      at = new Date("2026-10-20T20:00:00Z");
+      departmentId = (await authorRange("06:00", "20:00", { everySeason: true })).department.id;
+      await inTx((tx) =>
+        tx.insert(locationDayCutoverChanges).values({
+          locationId: venue.cfg.locationId,
+          effectiveBusinessDay: "2026-10-21",
+          dayCutover: "21:00:00",
+        }),
+      );
+    });
+    async function conflictsFor(dayCutover: string) {
+      const query = new URLSearchParams({ dayCutover, expectedClockRevision: "0" });
+      const response = await request("GET", `/business-day-start/preview?${query}`);
+      expect(response.status).toBe(200);
+      return (await response.json()) as {
+        conflictCount: number;
+        conflicts: { departmentId: string; startsAt: string; reason: string }[];
+      };
+    }
+    it("a replacing 23:00 clashes with a 06:00 range, as a move from 05:00 would", async () => {
+      const body = await conflictsFor("23:00");
+      expect(body.conflictCount).toBe(12);
+      expect(body.conflicts).toContainEqual(
+        expect.objectContaining({ departmentId, startsAt: "06:00", reason: "endpoint_day" }),
+      );
+    });
+    it("going back to 05:00 clashes with nothing", async () => {
+      expect(await conflictsFor("05:00")).toMatchObject({ conflictCount: 0, conflicts: [] });
+    });
+    it("refuses an order opened after 05:00 tomorrow, which the start in force puts in the moved day", async () => {
+      await inTx((tx) => createOpenOrder(tx, venue.cfg, randomUUID(), [], null));
+      await suite.db.execute(
+        sql`update working_orders set opened_at = '2026-10-21T10:00:00.000Z' where location_id = ${venue.cfg.locationId}`,
+      );
+      const query = new URLSearchParams({ dayCutover: "23:00", expectedClockRevision: "0" });
+      const response = await request("GET", `/business-day-start/preview?${query}`);
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "venue.business_day_locked", params: { reason: "future_history" } },
+      });
+    });
   });
 });
 
