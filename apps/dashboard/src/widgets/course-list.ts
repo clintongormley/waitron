@@ -221,7 +221,12 @@ export class CourseList extends LitElement {
     target?.focus();
   }
 
-  #focusName(id: string): Promise<void> {
+  async #focusName(id: string): Promise<void> {
+    if (id === NEW && !this.showAddButton) {
+      await this.updateComplete;
+      this.dispatchEvent(new Event("focus-add-course", { bubbles: true, composed: true }));
+      return;
+    }
     return this.#focus(id === NEW ? '[data-test="add-course"]' : `[data-test="name-${id}"]`);
   }
 
@@ -592,7 +597,7 @@ export class CourseList extends LitElement {
         : nothing
     }
     ${
-      this.readOnly
+      this.readOnly || !this.showAddButton
         ? nothing
         : html`<div class="add">
             <wt-button variant="secondary" data-test="add-course" @click=${() => void this.#add()}
@@ -601,6 +606,12 @@ export class CourseList extends LitElement {
           </div>`
     }
     ${this.#deleteDialog()}`;
+  }
+
+  @property({ type: Boolean }) showAddButton = true;
+
+  startAdding(): void {
+    void this.#add();
   }
 }
 

@@ -15,7 +15,6 @@ import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "../widgets/course-list.js";
 import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { BumpMode, DashboardApi, FireControl, KitchenTimingDefaults } from "../api/client.js";
@@ -46,8 +45,10 @@ export class KitchenScreen extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
-        margin-top: var(--wt-space-6);
         color: var(--wt-color-text);
+      }
+      .bump + .bump {
+        margin-top: var(--wt-space-6);
       }
       .bump-options {
         display: flex;
@@ -418,11 +419,6 @@ export class KitchenScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <section data-test="courses-panel">
-        <h2 class="panel-title">${t("kitchen.courses_title")}</h2>
-        <dashboard-course-list .api=${this.api} .readOnly=${this.readOnly}></dashboard-course-list>
-      </section>
-
       <section class="bump" role="group" aria-label=${t("kitchen.bump_mode")}>
         <span class="panel-title">${t("kitchen.bump_mode")}</span>
         <div class="bump-options">

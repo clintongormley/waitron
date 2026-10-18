@@ -151,8 +151,8 @@ See [A773's spec §7](../superpowers/specs/2026-10-16-a773-courses-and-groups-de
 were drawn on is [here](https://claude.ai/artifact/GKV4JTKfn1hpbxxoskbpBT) (owner's account only).
 After A725, which changes the same station editor.
 
-Every setting on Venue settings' Kitchen tab is stored once for the venue today: the courses; bump
-mode and fire control on `locations` (`packages/db/src/schema/tenants.ts:84-85`); late flags in
+Every setting on Venue settings' Kitchen tab is stored once for the venue today: bump mode and
+fire control on `locations` (`packages/db/src/schema/tenants.ts:84-85`); late flags in
 `kitchen_timing_defaults`, which a station may override in `kitchen_station_timing`
 (`packages/db/src/schema/kitchen-timing.ts`); and `service_settings`
 (`packages/venue-service/src/schema/settings.ts`) — `edit_sent_lines`, `kitchen_ticket_grouping`,
@@ -160,9 +160,7 @@ mode and fire control on `locations` (`packages/db/src/schema/tenants.ts:84-85`)
 `clearing_workflow`, which is A757's. Moving them to departments and stations is a migration; before
 go-live nothing is carried forward.
 
-1. **Courses get their own page under Products and menus**, because products name them: a list with
-   drag handles, Add course, and Delete in each row's menu (courses already delete through
-   `wt-delete-dialog`).
+1. Courses page: now recorded under [Decisions](#a756-point-1-courses-have-their-own-page-under-products-and-menus-owner-2026-10-16).
 2. **The department dialog becomes tabbed — Details, Service, Receipts, Transfers.** Details,
    Service (with its "Orders and payment" section) and Transfers landed in A756's first pull
    request (#1852). Still left: the Receipts tab, into which receipt editing
@@ -247,6 +245,12 @@ this section once A773 covers it. The reading below is what A773 has to change.
   further. Decide: should extras keep their earlier choice, as the dish does?
 
 ## Decisions and deliberate limits
+
+### A756 point 1. Courses have their own page under Products and menus (owner, 2026-10-16)
+
+Courses get their own page under Products and menus, because products name them: a list with drag
+handles, Add course, and Delete in each row's menu (courses already delete through
+`wt-delete-dialog`).
 
 ### A725. Prep stations: up the sidebar, no Times tab or drag handles, colours that differ, a clearer station editor
 

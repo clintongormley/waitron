@@ -2831,9 +2831,6 @@ describe("dashboard-app", () => {
           createdAt: "2026-10-01T00:00:00Z",
         },
       ]),
-      listCourses: vi
-        .fn()
-        .mockResolvedValue([{ id: "c1", name: "Starters", displayOrder: 0, active: true }]),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
     await flush(el);
@@ -2858,11 +2855,89 @@ describe("dashboard-app", () => {
     await flush(el);
     const kitchen = settings.shadowRoot!.querySelector<HTMLElement>("dashboard-kitchen-screen")!;
     await vi.waitFor(() =>
-      expect(kitchen.shadowRoot!.querySelector("dashboard-course-list")).not.toBeNull(),
+      expect(kitchen.shadowRoot!.querySelector("section.bump")).not.toBeNull(),
     );
     expect(kitchen.shadowRoot!.querySelector("[data-test=bump-line]")).toBeNull();
     expect(kitchen.shadowRoot!.querySelector("[data-test=fire-waiter]")).toBeNull();
-    const courses = kitchen.shadowRoot!.querySelector<HTMLElement>("dashboard-course-list")!;
+  });
+
+  it("Products and menus lists Courses after Modifiers to someone with venue.view", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.view"] }),
+      }),
+    });
+    await flush(el);
+    const item = navItem(el, "courses")!;
+    expect(item.textContent!.trim()).toBe(t("nav.courses"));
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-menu")!;
+    const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
+    expect(order).toEqual([
+      "nav-catalogue",
+      "nav-menus",
+      "nav-modifiers",
+      "nav-courses",
+      "nav-units",
+    ]);
+  });
+
+  it("hides Courses without venue.view", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.configure"] }),
+      }),
+    });
+    await flush(el);
+    expect(navItem(el, "modifiers")).toBeTruthy();
+    expect(navItem(el, "courses")).toBeNull();
+  });
+
+  it("/manage/courses opens the Courses page", async () => {
+    history.replaceState(null, "", "/manage/courses");
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, permissions: ["venue.view", "venue.configure"] }),
+      listCourses: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false },
+        ]),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    const page = el.shadowRoot!.querySelector<
+      HTMLElement & { api?: DashboardApi; readOnly?: boolean }
+    >("dashboard-courses-screen")!;
+    expect(page).not.toBeNull();
+    expect(page.api).toBe(api);
+    expect(page.readOnly).toBe(false);
+    expect(location.pathname).toBe("/manage/courses");
+    const courses = page.shadowRoot!.querySelector<HTMLElement>("dashboard-course-list")!;
+    await vi.waitFor(() =>
+      expect(courses.shadowRoot!.querySelector("[data-test=name-c1]")).not.toBeNull(),
+    );
+  });
+
+  it("a supervisor sees Courses read-only", async () => {
+    history.replaceState(null, "", "/manage/courses");
+    const supervisor = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        role: "supervisor",
+        permissions: ["venue.view"],
+        modules: [],
+      }),
+      listCourses: vi
+        .fn()
+        .mockResolvedValue([{ id: "c1", name: "Starters", displayOrder: 0, active: true }]),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: supervisor });
+    await flush(el);
+    const page = el.shadowRoot!.querySelector<HTMLElement>("dashboard-courses-screen")!;
+    expect(page).not.toBeNull();
+    expect(page.shadowRoot!.querySelector("[data-test=add-course]")).toBeNull();
+    const courses = page.shadowRoot!.querySelector<HTMLElement>("dashboard-course-list")!;
     await vi.waitFor(() => expect(courses.shadowRoot!.textContent).toContain("Starters"));
     expect(courses.shadowRoot!.querySelector("[data-test=add-course]")).toBeNull();
     expect(courses.shadowRoot!.querySelector("[data-test=name-c1]")).toBeNull();

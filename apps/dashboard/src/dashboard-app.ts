@@ -75,6 +75,7 @@ import "./screens/catalogue-screen.js";
 import "./screens/modifiers-screen.js";
 import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
+import "./screens/courses-screen.js";
 import "./screens/department-receipt-dialog.js";
 import "./screens/venue-details-panel.js";
 import "./screens/venue-defaults-panel.js";
@@ -127,6 +128,7 @@ const CORE_SCREENS = [
   "catalogue",
   "modifiers",
   "menus",
+  "courses",
   "units",
   "content-languages",
   "venue-settings",
@@ -241,6 +243,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "catalogue", labelKey: "nav.catalogue" },
       { screen: "menus", labelKey: "nav.menus", requiresManager: true },
       { screen: "modifiers", labelKey: "nav.modifiers", requiresManager: true },
+      { screen: "courses", labelKey: "nav.courses", requiresPermission: "venue.view" },
       { screen: "units", labelKey: "nav.units" },
     ],
   },
@@ -2519,6 +2522,11 @@ export class DashboardApp extends LitElement {
         ></dashboard-catalogue-screen>`;
       case "units":
         return html`<dashboard-units-screen .api=${this.api}></dashboard-units-screen>`;
+      case "courses":
+        return html`<dashboard-courses-screen
+          .api=${this.api}
+          .readOnly=${!this.#sessionPermissions.includes("venue.configure")}
+        ></dashboard-courses-screen>`;
       case "content-languages":
         return html`<dashboard-content-languages-screen
           .api=${this.api}
