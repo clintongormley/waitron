@@ -90,6 +90,9 @@ export class TillSentOrders extends LitElement {
         border: 0;
         text-align: start;
       }
+      .panel-title {
+        flex-shrink: 0;
+      }
       .summary {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -699,7 +702,7 @@ export class TillSentOrders extends LitElement {
             this.expanded = !this.expanded;
           }}
         >
-          <span
+          <span class="panel-title"
             >${t("table.sent_title")}${model.attention ? html` <span class="mark" data-sent-attention>!</span>` : nothing}</span
           >
           <span class="summary">${summary}</span

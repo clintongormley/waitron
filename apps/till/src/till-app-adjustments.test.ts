@@ -10,10 +10,14 @@ import {
   cleanupWidgets,
   draftServer,
   mountWidget,
+  expectNoA11yViolations,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { DraftStore } from "./state/draft-sync.js";
+import { lineAdjustTarget } from "./state/adjust-target.js";
+import { openSentMore } from "./screens/till-table-order-screen.sent.test-helpers.js";
+import { current, row } from "./screens/till-table-order-screen.current-orders.test-helpers.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -36,9 +40,6 @@ import type {
   TillSaleResult,
   ZoneOfferCatalogue,
 } from "./api/client.js";
-
-// The till's cancel, give-away and discount flow through the app: reasons, the preview, approval
-// and the refusals (service plan Task 11, part B). The API is stubbed at the client boundary.
 
 const zone: FloorZone = {
   id: "z1",
@@ -300,9 +301,14 @@ const inDialog = (el: TillApp, selector: string) =>
 const bottomMessage = (el: TillApp) =>
   dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error;
 
-async function openMesa4(el: TillApp): Promise<TillTableOrderScreen> {
+async function openMesa4(el: TillApp, locale?: string): Promise<TillTableOrderScreen> {
   await flush(el);
-  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+  emit(lock(el)!, "logged-in", {
+    personId: "p1",
+    displayName: "Ana",
+    permissions: [],
+    ...(locale === undefined ? {} : { locale }),
+  });
   await flush(el);
   emit(shell(el), "screen-select", { screen: "floor" });
   await flush(el);
@@ -326,9 +332,22 @@ async function chooseReason(el: TillApp, name: string): Promise<void> {
   await press(el, radio);
 }
 
+async function requestComp(el: TillApp, order: TillTableOrderScreen, lineNo = 1) {
+  const line = order.lines.find((line) => line.lineNo === lineNo)!;
+  const parent = order.lines.find((dish) => dish.lineNo === line.parentLineNo);
+  const name =
+    parent === undefined
+      ? line.name!
+      : t("table.extra_of")
+          .replace("{extra}", () => line.name!)
+          .replace("{dish}", () => parent.name!);
+  emit(order, "adjust", { kind: "comp", target: lineAdjustTarget(line, order.lines, name) });
+  await flush(el);
+}
+
 /** Opens Give away on the wine, chooses Complaint and presses Continue. */
 async function previewComp(el: TillApp, order: TillTableOrderScreen): Promise<void> {
-  await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+  await requestComp(el, order, 1);
   await chooseReason(el, "Complaint");
   await press(el, inDialog(el, "[data-adjust-continue]"));
 }
@@ -365,7 +384,11 @@ beforeEach(() => {
   setLocale("en");
   drafts = draftServer();
 });
-afterEach(cleanupWidgets);
+afterEach(async () => {
+  cleanupWidgets();
+  setLocale("en");
+  await page.viewport(1280, 900);
+});
 
 describe("till-app: giving away a dish", () => {
   it("offers only the reasons that allow it, shows what comes off, then applies it and reads the bill again", async () => {
@@ -380,7 +403,7 @@ describe("till-app: giving away a dish", () => {
     const { el } = await mountApp({ getTabLines });
     const order = await openMesa4(el);
 
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, order, 1);
     expect(api.listAdjustmentReasons).toHaveBeenCalledOnce();
     const names = [
       ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="reason"]'),
@@ -435,7 +458,7 @@ describe("till-app: giving away a dish", () => {
       listAdjustmentReasons: vi.fn().mockResolvedValue([mistake]),
     });
     const order = await openMesa4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, order, 1);
     expect(inDialog(el, "[data-no-reasons]").textContent!.trim()).toBe(t("adjust.no_reasons"));
   });
 
@@ -444,7 +467,7 @@ describe("till-app: giving away a dish", () => {
       listAdjustmentReasons: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
     const order = await openMesa4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, order, 1);
     expect(dialog(el)).toBeNull();
     expect(banner(el)!.textContent).toBe(t("adjust.reasons_error"));
   });
@@ -812,9 +835,8 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     const reasons = deferred<AdjustmentReason[]>();
     const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => reasons.promise) });
     const order = await openMesa4(el);
-    const comp = order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!;
-    await press(el, comp);
-    await press(el, comp);
+    await requestComp(el, order);
+    await requestComp(el, order);
     reasons.resolve([complaint]);
     await flush(el);
     expect(api.listAdjustmentReasons).toHaveBeenCalledOnce();
@@ -825,7 +847,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     const reasons = deferred<AdjustmentReason[]>();
     const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => reasons.promise) });
     const order = await openMesa4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, order, 1);
     emit(tableOrder(el), "logout");
     await flush(el);
     reasons.resolve([complaint]);
@@ -837,7 +859,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     const answer = deferred<AdjustmentPreview>();
     const { el } = await mountApp({ previewAdjustment: vi.fn(() => answer.promise) });
     const order = await openMesa4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, order, 1);
     await chooseReason(el, "Complaint");
     const choice = { action: "comp", reasonId: "r-complaint", note: null };
     emit(dialog(el)!, "adjust-preview", choice);
@@ -959,7 +981,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     await flush(el);
     const reopened = tableOrder(el);
     await press(el, reopened.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
-    await press(el, reopened.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, reopened, 1);
     answer.resolve({ adjustmentIds: ["a-1"], revision: 7, party: null });
     await flush(el);
 
@@ -1024,7 +1046,7 @@ describe("till-app: what is confirmed is what was previewed (review fix I1)", ()
       ),
     });
     const order = await openMesa4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, order, 1);
     await chooseReason(el, "Complaint");
     await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
     await press(el, inDialog(el, "[data-adjust-continue]"));
@@ -1260,7 +1282,7 @@ describe("till-app: cancelling a dish", () => {
         });
       const { el } = await mountApp({ getTabLines });
       const order = await openMesa4(el);
-      await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+      await requestComp(el, order, 1);
       await chooseReason(el, "Complaint");
       await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
       await press(el, inDialog(el, "[data-adjust-continue]"));
@@ -1279,13 +1301,13 @@ describe("till-app: cancelling a dish", () => {
         false,
         true,
       ]);
-      expect(rows[3]!.querySelector("[data-comp-line]")!.getAttribute("aria-label")).toBe(
-        `${t("table.comp_line")} · Cheese (with Wine)`,
-      );
+      expect(rows[3]!.querySelector(".name")!.textContent).toContain("Cheese");
       expect(rows[3]!.querySelector(".line-total s")!.textContent).toBe(
         formatMoney("1.00", currentLocale()),
       );
       expect(rows[1]!.querySelector(".line-total s")).toBeNull();
+      await requestComp(el, order, 4);
+      expect(dialog(el)!.target!.name).toBe("Cheese (with Wine)");
     });
 
     it("cancels an extra of a dish being made as coming off the bill with the kitchen told, not as binned", async () => {
@@ -1306,7 +1328,7 @@ describe("till-app: cancelling a dish", () => {
     it("gives away an extra on its own, sending no quantity", async () => {
       const { el } = await mountPair();
       const order = await openMesa4(el);
-      await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="2"]')!);
+      await requestComp(el, order, 2);
       expect(dialog(el)!.shadowRoot!.querySelector("[data-quantity]")).toBeNull();
       await chooseReason(el, "Complaint");
       await press(el, inDialog(el, "[data-adjust-continue]"));
@@ -2802,7 +2824,7 @@ describe("table adjustments retain bill editing authority", () => {
       listDrafts: vi.fn().mockResolvedValue({ drafts: [], billEdits: [] }),
     });
     const order = await openMesa4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, order, 1);
     expect(dialog(el)).toBeNull();
     expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
     expect(api.previewAdjustment).not.toHaveBeenCalled();
@@ -2816,7 +2838,7 @@ describe("table adjustments retain bill editing authority", () => {
     });
     const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => promise) });
     const order = await openMesa4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, order, 1);
     el.api = stubApi();
     await flush(el);
     resolve([complaint]);
@@ -2845,7 +2867,7 @@ describe("table adjustment editing recovery", () => {
       previewAdjustment: vi.fn().mockRejectedValue({ code: "draft.taken_over" }),
     });
     const order = await openMesa4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, order, 1);
     await chooseReason(el, "Complaint");
     drafts.listDrafts.mockClear();
     await press(el, inDialog(el, "[data-adjust-continue]"));
@@ -2953,7 +2975,7 @@ describe("table adjustment reason-read identity", () => {
     });
     const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => promise) });
     const order = await openMesa4(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await requestComp(el, order, 1);
     const replacement = stubApi();
     el.api = replacement;
     await flush(el);
@@ -2966,58 +2988,148 @@ describe("table adjustment reason-read identity", () => {
   });
 });
 
-it("combined Comp previews and applies one whole extra through the existing financial seam", async () => {
-  const { el } = await mountApp();
-  const order = await openMesa4(el);
-  emit(order, "adjust", {
-    kind: "comp",
-    combined: true,
-    target: {
-      lineId: "line-1",
-      name: "Wine",
-      quantity: "3",
-      total: "36.00",
-      unitTotal: "12.00",
-      extras: [
-        {
-          lineId: "extra",
-          name: "Cheese",
-          quantity: "3",
-          total: "6.00",
-          unitTotal: null,
-          extra: true,
-        },
-      ],
-    },
-  });
-  await flush(el);
-  expect(dialog(el)?.combined).toBe(true);
-  await press(el, inDialog(el, 'input[name="reason"][value="r-complaint"]'));
-  await press(el, inDialog(el, 'input[name="adjustTarget"][value="extra"]'));
-  await press(el, inDialog(el, "[data-adjust-continue]"));
-  expect(api.previewAdjustment).toHaveBeenCalledWith(
-    "wo-4",
-    expect.objectContaining({
-      lineId: "extra",
-      action: "comp",
-      reasonId: "r-complaint",
-      expectedRevision: 6,
-    }),
-  );
-  expect(vi.mocked(api.previewAdjustment).mock.calls[0]![1]).not.toHaveProperty("quantity");
-  await press(el, inDialog(el, "[data-adjust-confirm]"));
-  expect(api.applyAdjustment).toHaveBeenCalledWith(
-    "wo-4",
-    expect.objectContaining({
-      lineId: "extra",
-      action: "comp",
-      reasonId: "r-complaint",
-      expectedRevision: 6,
-    }),
-    expect.any(Object),
-  );
-  expect(dialog(el)).toBeNull();
-});
+it.each([
+  ["en", "light", 390],
+  ["en", "light", 1280],
+  ["en", "dark", 390],
+  ["en", "dark", 1280],
+  ["es", "light", 390],
+  ["es", "light", 1280],
+  ["es", "dark", 390],
+  ["es", "dark", 1280],
+] as const)(
+  "combined Comp previews and applies one whole extra through the existing financial seam (%s, %s, %i)",
+  async (locale, theme, width) => {
+    await page.viewport(width, 1100);
+    setLocale(locale);
+    const extra: TabLine = {
+      ...wine,
+      id: "extra",
+      lineNo: 2,
+      parentLineNo: 1,
+      name: "Cheese",
+      quantity: "3.000",
+      unitPriceGross: "2.00",
+      state: null,
+    };
+    const { el, host } = await mountApp({
+      listStations: vi.fn().mockResolvedValue([]),
+      getPartyBills: vi.fn().mockResolvedValue([{ ...bill, total: "36.00", outstanding: "36.00" }]),
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([
+          { ...mesa4, tabTotal: "36.00", party: { ...party, outstanding: "36.00" } },
+        ]),
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...wine, quantity: "3.000", unitPriceGross: "10.00" }, extra],
+        revision: 6,
+        editSentLines: true,
+      }),
+      readCurrentOrders: vi.fn().mockResolvedValue(
+        current({
+          groups: [],
+          reminder: null,
+          ungrouped: [
+            row("line-1", "Wine", "3.000", {
+              netAmount: "30.00",
+              extras: [
+                {
+                  lineId: "extra",
+                  name: "Cheese",
+                  quantity: "3.000",
+                  unitPriceGross: "2.00",
+                  priceQuantity: "1.000",
+                  netAmount: "6.00",
+                },
+              ],
+            }),
+          ],
+        }),
+      ),
+    });
+    host.dataset.theme = theme;
+    host.style.width = "100%";
+    const order = await openMesa4(el, locale === "es" ? "es-ES" : "en-GB");
+    expect(currentLocale().startsWith(locale)).toBe(true);
+    const drawer = order.shadowRoot!.querySelector<HTMLElement>("[data-drawer]")!;
+    expect(drawer.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
+    expect(window.innerWidth).toBe(width);
+    await page.screenshot({
+      element: drawer,
+      path: `__screenshots__/a773-comp-drawer-${locale}-${theme}-${width}.png`,
+    });
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await order.updateComplete;
+    if (width < 1280) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
+      await order.updateComplete;
+    }
+    const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+    await panel.updateComplete;
+    const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
+    const title = document.createRange();
+    title.selectNodeContents(toggle.firstElementChild!);
+    expect(title.getClientRects(), "the Sent heading stays on one line").toHaveLength(1);
+    if (toggle.getAttribute("aria-expanded") === "false") {
+      await userEvent.click(toggle);
+      await panel.updateComplete;
+    }
+    await userEvent.click(
+      panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="line-1"]')!,
+    );
+    await order.updateComplete;
+    await openSentMore(order);
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-comp]")!);
+    await flush(el);
+    expect(dialog(el)?.combined).toBe(true);
+    await press(el, inDialog(el, 'input[name="reason"][value="r-complaint"]'));
+    await press(el, inDialog(el, 'input[name="adjustTarget"][value="extra"]'));
+    expect(dialog(el)!.target!.total).toBe("36.00");
+    expect(dialog(el)!.target!.extras).toEqual([
+      {
+        lineId: "extra",
+        name: locale === "es" ? "Cheese (con Wine)" : "Cheese (with Wine)",
+        quantity: "3",
+        total: "6.00",
+        unitTotal: null,
+        started: false,
+        extra: true,
+        kitchenTold: true,
+      },
+    ]);
+    expect(inDialog(el, 'input[name="adjustTarget"][value="extra"]')).toHaveProperty(
+      "checked",
+      true,
+    );
+    await expectNoA11yViolations(host);
+    await page.screenshot({
+      path: `__screenshots__/a773-comp-native-${locale}-${theme}-${width}.png`,
+    });
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+    expect(api.previewAdjustment).toHaveBeenCalledWith(
+      "wo-4",
+      expect.objectContaining({
+        lineId: "extra",
+        action: "comp",
+        reasonId: "r-complaint",
+        expectedRevision: 6,
+      }),
+    );
+    expect(vi.mocked(api.previewAdjustment).mock.calls[0]![1]).not.toHaveProperty("quantity");
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(api.applyAdjustment).toHaveBeenCalledWith(
+      "wo-4",
+      expect.objectContaining({
+        lineId: "extra",
+        action: "comp",
+        reasonId: "r-complaint",
+        expectedRevision: 6,
+      }),
+      expect.any(Object),
+    );
+    expect(dialog(el)).toBeNull();
+  },
+);
 
 it("a combined amount refusal returns to its amount field and permits correction", async () => {
   const { el } = await mountApp({

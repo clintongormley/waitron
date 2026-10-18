@@ -80,7 +80,6 @@ import {
 import { billName, owing, paidInPart, shownBills } from "../state/bill-state.js";
 import { receiptLanguageLabel, shownReceiptLanguage } from "../widgets/receipt-language.js";
 import {
-  LINE_ADJUSTMENTS,
   billGross,
   isStarted,
   lineAdjustTarget,
@@ -2200,7 +2199,6 @@ export class TillTableOrderScreen extends LitElement {
     return isStarted(line) || queued;
   }
 
-  /** An extras row offers only Cancel, Give away and Discount, which take it on its own. */
   #lineActions(line: TabLine): TemplateResult | typeof nothing {
     const name = this.#adjustName(line);
     const label = (key: StringKey) => `${t(key)} · ${name}`;
@@ -2218,7 +2216,6 @@ export class TillTableOrderScreen extends LitElement {
           ${t("table.cancel_line")}
         </wt-button>`,
       );
-    actions.push(...this.#adjustActions(line));
     return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
   }
 
@@ -2226,26 +2223,6 @@ export class TillTableOrderScreen extends LitElement {
   #adjustable(): boolean {
     return (
       this.party !== null && (this.#shownBill === undefined || this.#shownBill.status === "open")
-    );
-  }
-
-  /** Give away and Discount on a dish, which cover its extras, and on an extra alone. */
-  #adjustActions(line: TabLine): TemplateResult[] {
-    if (!this.#adjustable()) return [];
-    const name = this.#adjustName(line);
-    return LINE_ADJUSTMENTS.map(
-      ({ kind, label }) =>
-        html`<wt-button
-          class="line-adjust"
-          size="sm"
-          variant="secondary"
-          data-comp-line=${kind === "comp" ? line.lineNo : nothing}
-          data-discount-line=${kind === "discount" ? line.lineNo : nothing}
-          aria-label=${`${t(label)} · ${name}`}
-          @click=${() => this.#adjust(kind, this.#lineTarget(line))}
-        >
-          ${t(label)}
-        </wt-button>`,
     );
   }
 
@@ -4285,12 +4262,6 @@ export class TillTableOrderScreen extends LitElement {
     </li>`;
   }
 
-  /** A served dish can still be given away or discounted. */
-  #servedActions(line: TabLine): TemplateResult | typeof nothing {
-    const actions = this.#adjustActions(line);
-    return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
-  }
-
   #servedSection(): TemplateResult {
     const served = this.#served();
     return html`<section class="served">
@@ -4306,7 +4277,7 @@ export class TillTableOrderScreen extends LitElement {
                       >${this.#nameForLine(line)}${this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
                     >
                     <span class="qty">${this.#displayQty(line.quantity)}</span>
-                    ${this.#lineTotal(line)} ${this.#servedActions(line)}
+                    ${this.#lineTotal(line)}
                   </li>`,
               )}
             </ul>`
