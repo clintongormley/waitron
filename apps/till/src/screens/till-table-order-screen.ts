@@ -253,6 +253,14 @@ interface ActionDraft {
 export interface MoveBillDetail {
   to: { tableId: string; seated: SeatedRead } | { counter: true };
   bills: BillChoiceDetail["bills"];
+  prompt?: object;
+}
+
+export interface TableRelocationOpenDetail {
+  verb: TableVerb;
+  table: TableState | null;
+  prompt: object;
+  ready: () => void;
 }
 
 export interface SplitTableDetail {
@@ -1339,7 +1347,9 @@ export class TillTableOrderScreen extends LitElement {
   /** The table Split a table takes away, once chosen. */
   @state() private splitTableId: string | null = null;
   /** A move or join to a table another party holds, waiting for the bill choice. */
-  @state() private billChoice: { verb: TableVerb; table: TableState } | null = null;
+  @state() private billChoice: { verb: TableVerb; table: TableState; prompt?: object } | null =
+    null;
+  #relocationPrompt: object | null = null;
   /** The party-name dialog, while open: the name it starts from and a refusal beside the field. */
   @state() private naming: { value: string; refusal: string } | null = null;
   @state() private counting: { value: string; refusal: string } | null = null;
@@ -4612,6 +4622,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #closeActions(): void {
+    this.#relocationPrompt = null;
     this.#retireActions();
     this.actionStep = "closed";
     this.actionVerb = null;
@@ -4628,6 +4639,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #chooseVerb(verb: ActionVerb): void {
+    this.#relocationPrompt = null;
     this.actionVerb = verb;
     if (verb === "split") {
       this.splitQuantities = new Map();
@@ -4637,37 +4649,66 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchActions();
   }
 
-  /** A table another party holds asks about the bills first; any other goes at once. */
+  #prepareRelocation(
+    verb: TableVerb,
+    table: TableState | null,
+    proceed: (prompt: object) => void,
+  ): void {
+    const prompt = {};
+    this.#relocationPrompt = prompt;
+    const ready = () => {
+      if (!this.isConnected || this.#relocationPrompt !== prompt || this.actionVerb !== verb)
+        return;
+      proceed(prompt);
+    };
+    const opening = new CustomEvent<TableRelocationOpenDetail>("table-relocation-open", {
+      detail: { verb, table, prompt, ready },
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    if (this.dispatchEvent(opening)) ready();
+  }
+
   #pickTable(table: TableState): void {
     const verb: TableVerb =
       this.actionVerb === "move" || this.actionVerb === "move-bill" ? this.actionVerb : "join";
-    const other = table.party !== null && table.party.id !== this.party?.id;
-    if (other) {
-      this.billChoice = { verb, table };
-      return;
-    }
-    this.#sendTableAction(verb, table, "merge");
+    this.#prepareRelocation(verb, table, (prompt) => {
+      const other = table.party !== null && table.party.id !== this.party?.id;
+      if (other) this.billChoice = { verb, table, prompt };
+      else this.#sendTableAction(verb, table, "merge", prompt);
+    });
   }
 
-  /** `table` as the picker showed it: Move this bill sends who was seated there. */
-  #sendTableAction(verb: TableVerb, table: TableState, bills: BillChoiceDetail["bills"]): void {
+  #sendTableAction(
+    verb: TableVerb,
+    table: TableState,
+    bills: BillChoiceDetail["bills"],
+    prompt?: object,
+  ): void {
     const tableId = table.id;
-    if (verb === "move") this.#dispatch("move-guests", { toTableId: tableId, bills });
+    const observation = prompt === undefined ? {} : { prompt };
+    if (verb === "move")
+      this.#dispatch("move-guests", { toTableId: tableId, bills, ...observation });
     else if (verb === "move-bill")
       this.#dispatch("move-bill", {
         to: { tableId, seated: seatedRead(table) },
         bills,
+        ...observation,
       } satisfies MoveBillDetail);
-    else this.#dispatch("join-tables", { tableId, bills });
+    else this.#dispatch("join-tables", { tableId, bills, ...observation });
     this.#closeActions();
   }
 
   #moveBillToCounter(): void {
-    this.#dispatch("move-bill", {
-      to: { counter: true },
-      bills: "merge",
-    } satisfies MoveBillDetail);
-    this.#closeActions();
+    this.#prepareRelocation("move-bill", null, (prompt) => {
+      this.#dispatch("move-bill", {
+        to: { counter: true },
+        bills: "merge",
+        prompt,
+      } satisfies MoveBillDetail);
+      this.#closeActions();
+    });
   }
 
   #onBillChoice(event: Event): void {
@@ -4675,7 +4716,7 @@ export class TillTableOrderScreen extends LitElement {
     const choice = this.billChoice;
     if (choice === null) return;
     const { bills } = (event as CustomEvent<BillChoiceDetail>).detail;
-    this.#sendTableAction(choice.verb, choice.table, bills);
+    this.#sendTableAction(choice.verb, choice.table, bills, choice.prompt);
   }
 
   #billChoiceDialog(): TemplateResult | typeof nothing {

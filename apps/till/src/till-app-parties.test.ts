@@ -271,7 +271,11 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     seatTable: vi
       .fn()
       .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
-    getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
+    getPartyBills: vi.fn(async (partyId: string) =>
+      partyId === "v7" || partyId === "v9"
+        ? [{ ...tabBill, partyId, workingOrderId: partyId === "v7" ? "wo-7" : "wo-9" }]
+        : [tabBill, checkBill],
+    ),
     finishTable: vi.fn().mockResolvedValue({ state: "closed" }),
     markTableCleared: vi.fn().mockResolvedValue(undefined),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
@@ -297,7 +301,13 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     reprint: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     ...adjustmentStubs(),
-    listDrafts: drafts.listDrafts,
+    listDrafts: vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      const billId = partyId === "v7" ? "wo-7" : partyId === "v9" ? "wo-9" : null;
+      return billId === null
+        ? snapshot
+        : { ...snapshot, billEdits: snapshot.billEdits.filter((edit) => edit.billId === billId) };
+    }),
     saveDraft: drafts.saveDraft,
     submitDraft: drafts.submitDraft,
     ...overrides,
@@ -473,6 +483,7 @@ describe("till-app: seating a party", () => {
     expect(api.joinTables).toHaveBeenCalledWith("v-new", "t4", "merge", {
       expectedPartyRevision: 0,
       otherPartyId: null,
+      expectedEdits: [],
     });
   });
 
@@ -1993,6 +2004,10 @@ describe("till-app: table actions on the party", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(vi.mocked(api.getTablesState).mock.calls.length).toBeGreaterThan(readsBefore);
     expect(tableOrder(el)!.party).toEqual(atNine.party);
@@ -2022,6 +2037,11 @@ describe("till-app: table actions on the party", () => {
       expectedPartyRevision: 3,
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(tableOrder(el)!.party).toEqual(combined.party);
     expect(tableOrder(el)!.orderId).toBe("wo-7");
@@ -2090,11 +2110,20 @@ describe("till-app: table actions on the party", () => {
     expect(api.joinTables).toHaveBeenNthCalledWith(1, "v1", "t9", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(api.joinTables).toHaveBeenNthCalledWith(2, "v1", "t7", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(banner(el)!.textContent).toContain(t("table.bills_kept_separate"));
     expect(tableOrder(el)!.orderId).toBe("wo-4");
@@ -2111,7 +2140,13 @@ describe("till-app: table actions on the party", () => {
     emit(order, "move-guests", { toTableId: "t5", bills: "merge" });
     await flush(el);
 
-    expect(api.moveGuests).toHaveBeenCalledWith("v1", "t5", "merge", { expectedPartyRevision: 3 });
+    expect(api.moveGuests).toHaveBeenCalledWith("v1", "t5", "merge", {
+      expectedPartyRevision: 3,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
+    });
   });
 
   it("splits a table off with the chosen bill, or none, and stays with the party at its other table", async () => {
@@ -3239,7 +3274,13 @@ describe("till-app: moving a bill", () => {
       "wo-check",
       { counter: { zoneId: zone.id } },
       "separate",
-      { expectedPartyRevision: 3, partyId: "v1" },
+      {
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        expectedEdits: [
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
+      },
     );
   });
 
@@ -3255,6 +3296,7 @@ describe("till-app: moving a bill", () => {
     expect(api.moveBill).toHaveBeenCalledWith("wo-4", { counter: { zoneId: null } }, "merge", {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
     });
   });
 
@@ -3376,6 +3418,7 @@ describe("till-app: moving a bill", () => {
       expectedPartyRevision: 3,
       partyId: "v1",
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
     });
     expect(tableOrder(el)!.party).toEqual(mesa4.party);
     expect(tableOrder(el)!.orderId).toBe("wo-4");
@@ -3400,6 +3443,10 @@ describe("till-app: moving a bill", () => {
       partyId: "v1",
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
     expect(banner(el)!.textContent).toContain(t("table.bills_kept_separate"));
   });
@@ -3425,6 +3472,10 @@ describe("till-app: moving a bill", () => {
       partyId: "v1",
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -3820,13 +3871,37 @@ describe("till-app: every table move sends the party revision it last read", () 
       "move-guests",
       { toTableId: "t9", bills: "merge" },
       "moveGuests",
-      ["v1", "t9", "merge", { expectedPartyRevision: 3, otherPartyId: null }],
+      [
+        "v1",
+        "t9",
+        "merge",
+        {
+          expectedPartyRevision: 3,
+          otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        },
+      ],
     ],
     [
       "join-tables",
       { tableId: "t9", bills: "merge" },
       "joinTables",
-      ["v1", "t9", "merge", { expectedPartyRevision: 3, otherPartyId: null }],
+      [
+        "v1",
+        "t9",
+        "merge",
+        {
+          expectedPartyRevision: 3,
+          otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
+        },
+      ],
     ],
   ] as const)("%s", async (type, detail, method, args) => {
     const { el } = await mountApp();
@@ -4059,7 +4134,11 @@ describe("till-app: every table move sends the party revision it last read", () 
 
   it("leaves an unpaid split-off bill listed when the waiter leaves it and comes back, and merges nothing (decision 8)", async () => {
     const { el } = await mountApp({
-      getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
+      getPartyBills: vi.fn(async (partyId: string) =>
+        partyId === "v7" || partyId === "v9"
+          ? [{ ...tabBill, partyId, workingOrderId: partyId === "v7" ? "wo-7" : "wo-9" }]
+          : [tabBill, checkBill],
+      ),
     });
     const order = await openMesa(el);
     emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
@@ -4083,6 +4162,7 @@ describe("till-app: every table move sends the party revision it last read", () 
   });
 
   it("moves a party whose tab has been paid, from the paid tab", async () => {
+    drafts.bills.add("wo-paid");
     const paid = seated(
       { hasOpenTab: false, tabLineCount: undefined, tabTotal: undefined },
       { outstanding: "0.00", mainBillId: null },
@@ -4106,6 +4186,7 @@ describe("till-app: every table move sends the party revision it last read", () 
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-paid", editorVersion: 0, draftId: null, draftRevision: null }],
     });
     expect(banner(el)).toBeNull();
   });
@@ -4527,6 +4608,10 @@ describe("till-app: another device changed the table first", () => {
     expect(moveGuests).toHaveBeenLastCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 5,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -4857,7 +4942,11 @@ describe("till-app: the order's groups", () => {
   it("sends the round to the bill chosen in Send to after a refresh shows that bill presented", async () => {
     let finish!: (value: unknown) => void;
     const { el } = await mountApp({
-      getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
+      getPartyBills: vi.fn(async (partyId: string) =>
+        partyId === "v7" || partyId === "v9"
+          ? [{ ...tabBill, partyId, workingOrderId: partyId === "v7" ? "wo-7" : "wo-9" }]
+          : [tabBill, checkBill],
+      ),
       updateOrderLine: vi.fn(
         () =>
           new Promise((resolve) => {
@@ -4910,6 +4999,10 @@ describe("till-app: the order's groups", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 4,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -4999,6 +5092,10 @@ describe("till-app: the order's groups", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 4,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 1, draftId: "draft-1", draftRevision: 1 },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -5029,6 +5126,7 @@ describe("till-app: the order's groups", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v7", "t9", "merge", {
       expectedPartyRevision: 9,
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
     });
   });
 
@@ -5134,6 +5232,10 @@ describe("till-app: the order's groups", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 4,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 1, draftId: "draft-1", draftRevision: 1 },
+      ],
     });
   });
 
@@ -5259,6 +5361,10 @@ describe("till-app: the order's groups", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
       expectedPartyRevision: 5,
       otherPartyId: null,
+      expectedEdits: [
+        { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -5466,6 +5572,10 @@ describe("till-app: the order's groups", () => {
       expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
         expectedPartyRevision: 4,
         otherPartyId: null,
+        expectedEdits: [
+          { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
       });
     });
 
@@ -5562,6 +5672,10 @@ describe("till-app: the order's groups", () => {
         expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
           expectedPartyRevision: 5,
           otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
       },
     );
@@ -5633,6 +5747,10 @@ describe("till-app: the order's groups", () => {
       expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
         expectedPartyRevision: 4,
         otherPartyId: null,
+        expectedEdits: [
+          { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
       });
     });
 
@@ -5672,6 +5790,10 @@ describe("till-app: the order's groups", () => {
       expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
         expectedPartyRevision: 4,
         otherPartyId: null,
+        expectedEdits: [
+          { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+          { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+        ],
       });
     });
 
@@ -6068,6 +6190,10 @@ describe("till-app: the order's groups", () => {
         expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
           expectedPartyRevision: 4,
           otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
       });
 
@@ -6123,6 +6249,10 @@ describe("till-app: the order's groups", () => {
           expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
             expectedPartyRevision: 4,
             otherPartyId: null,
+            expectedEdits: [
+              { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+              { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+            ],
           });
         },
       );
@@ -6155,6 +6285,10 @@ describe("till-app: the order's groups", () => {
         expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
           expectedPartyRevision: 4,
           otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 3, draftId: "draft-4", draftRevision: 1 },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
       });
 
@@ -6174,6 +6308,10 @@ describe("till-app: the order's groups", () => {
         expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
           expectedPartyRevision: 3,
           otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
       });
     });
@@ -8748,4 +8886,275 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
     expect(original.splitTable).not.toHaveBeenCalled();
     expect(replacement.splitTable).not.toHaveBeenCalled();
   });
+});
+
+describe("till-app: table relocation editing observations", () => {
+  const sourceEdits = [
+    { billId: "wo-4", editorVersion: 7, draftId: null, draftRevision: null },
+    { billId: "wo-check", editorVersion: 3, draftId: null, draftRevision: null },
+  ];
+  const destinationEdits = [
+    { billId: "wo-7", editorVersion: 5, draftId: null, draftRevision: null },
+    { billId: "wo-empty", editorVersion: 2, draftId: null, draftRevision: null },
+  ];
+  const commands = [
+    { event: "move-guests", method: "moveGuests", detail: { toTableId: "t7", bills: "separate" } },
+    { event: "join-tables", method: "joinTables", detail: { tableId: "t7", bills: "separate" } },
+    {
+      event: "move-bill",
+      method: "moveBill",
+      detail: { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills: "separate" },
+    },
+  ] as const;
+
+  function observations(missing?: string) {
+    return vi.fn(async (partyId: string) => ({
+      drafts: [],
+      billEdits: (partyId === "v7"
+        ? destinationEdits
+        : [
+            ...sourceEdits,
+            { billId: "unrelated", editorVersion: 99, draftId: null, draftRevision: null },
+          ]
+      )
+        .filter((edit) => edit.billId !== missing)
+        .reverse()
+        .map((edit) => ({ ...edit, editorId: null, editorName: null })),
+    }));
+  }
+
+  it.each(commands)(
+    "$method includes the complete affected set, including empty destinations",
+    async (command) => {
+      const listDrafts = observations();
+      const { el } = await mountApp({ listDrafts });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await flush(el, 6);
+      expect(api[command.method]).toHaveBeenCalledOnce();
+      expect(vi.mocked(api[command.method]).mock.calls[0]!.at(-1)).toEqual({
+        expectedPartyRevision: 3,
+        ...(command.method === "moveBill" ? { partyId: "v1" } : {}),
+        otherPartyId: "v7",
+        expectedOtherPartyRevision: 9,
+        expectedEdits:
+          command.method === "moveBill"
+            ? [sourceEdits[0], ...destinationEdits]
+            : [sourceEdits[0], destinationEdits[0], sourceEdits[1], destinationEdits[1]],
+      });
+      expect(listDrafts).toHaveBeenCalledWith("v7");
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(commands)("$method refuses missing source metadata", async (command) => {
+    const { el } = await mountApp({ listDrafts: observations("wo-4") });
+    const order = await openMesa(el);
+    emit(order, command.event, command.detail);
+    await flush(el, 6);
+    expect(api[command.method]).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(commands)(
+    "$method refuses an unreadable destination without sending",
+    async (command) => {
+      const read = observations();
+      const { el } = await mountApp({
+        listDrafts: vi.fn(async (partyId: string) => {
+          if (partyId === "v7") throw new Error("offline");
+          return read(partyId);
+        }),
+      });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await flush(el, 6);
+      expect(api[command.method]).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(t("table.reread_failed"));
+    },
+  );
+
+  it("Move bill to the counter sends only that bill's observation", async () => {
+    const { el } = await mountApp({ listDrafts: observations() });
+    const order = await openMesa(el);
+    emit(order, "move-bill", { to: { counter: true }, bills: "separate" });
+    await flush(el, 6);
+    expect(api.moveBill).toHaveBeenCalledWith("wo-4", { counter: { zoneId: "z1" } }, "separate", {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      expectedEdits: [sourceEdits[0]],
+    });
+  });
+
+  for (const outcome of ["success", "refusal"] as const) {
+    it.each(commands)("$method ignores a replaced API's late " + outcome, async (command) => {
+      let resolve!: (value: object) => void;
+      let reject!: (reason: unknown) => void;
+      const pending = new Promise<object>((yes, no) => {
+        resolve = yes;
+        reject = no;
+      });
+      const sending = vi.fn(() => pending);
+      const { el } = await mountApp({ listDrafts: observations(), [command.method]: sending });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await expect.poll(() => sending.mock.calls.length).toBe(1);
+      const original = api;
+      const replacement = stubApi({ listDrafts: observations() });
+      el.api = replacement;
+      await flush(el, 6);
+      const floorReads = vi.mocked(replacement.getTablesState).mock.calls.length;
+      const billReads = vi.mocked(replacement.getPartyBills).mock.calls.length;
+      if (outcome === "success")
+        resolve({ partyId: "v7", billId: "wo-7", mainBillId: "wo-7", merged: false });
+      else reject({ code: "draft.taken_over" });
+      await pending.catch(() => undefined);
+      await flush(el, 6);
+      expect(original[command.method]).toHaveBeenCalledOnce();
+      expect(replacement.getTablesState).toHaveBeenCalledTimes(floorReads);
+      expect(replacement.getPartyBills).toHaveBeenCalledTimes(billReads);
+      expect(tableOrder(el)?.orderId).toBe("wo-4");
+      expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("draft.taken_over"));
+    });
+  }
+  async function relocationPrompt(el: TillApp, verb: string) {
+    const order = tableOrder(el)!;
+    if (order.shadowRoot!.querySelector("[data-move-split]") === null) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+      await flush(el);
+    }
+    for (const selector of ["[data-move-split]", `[data-action="${verb}"]`, '[data-target="t7"]']) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>(selector)!);
+      await flush(el);
+    }
+    const dialog = order.shadowRoot!.querySelector("till-bill-choice-dialog")!;
+    expect(dialog).not.toBeNull();
+    await dialog.updateComplete;
+    return dialog;
+  }
+
+  const verbs = [
+    { verb: "move", method: "moveGuests" },
+    { verb: "join", method: "joinTables" },
+    { verb: "move-bill", method: "moveBill" },
+  ] as const;
+
+  it.each(verbs)(
+    "$method keeps its source observation while the bill choice is open",
+    async ({ verb, method }) => {
+      let changed = false;
+      const read = observations();
+      const listDrafts = vi.fn(async (partyId: string) => {
+        const snapshot = await read(partyId);
+        if (changed && partyId === "v1")
+          snapshot.billEdits.find((edit) => edit.billId === "wo-4")!.editorVersion = 8;
+        return snapshot;
+      });
+      const { el } = await mountApp({ listDrafts });
+      await openMesa(el);
+      const dialog = await relocationPrompt(el, verb);
+      changed = true;
+      window.dispatchEvent(new Event("focus"));
+      await flush(el, 6);
+      emit(dialog, "bill-choice-confirm", { bills: "separate" });
+      await flush(el, 6);
+      expect(api[method]).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+    },
+  );
+
+  it.each(verbs)(
+    "$method sends the destination observation read before opening the bill choice",
+    async ({ verb, method }) => {
+      const listDrafts = observations();
+      let readsAtSend = -1;
+      const sending = vi.fn(async () => {
+        readsAtSend = listDrafts.mock.calls.filter(([id]) => id === "v7").length;
+        return { partyId: "v1", billId: "wo-7", mainBillId: "wo-4", merged: false };
+      });
+      const { el } = await mountApp({ listDrafts, [method]: sending });
+      await openMesa(el);
+      const dialog = await relocationPrompt(el, verb);
+      expect(listDrafts).toHaveBeenCalledWith("v7");
+      const reads = listDrafts.mock.calls.filter(([id]) => id === "v7").length;
+      emit(dialog, "bill-choice-confirm", { bills: "separate" });
+      await flush(el, 6);
+      expect(api[method]).toHaveBeenCalledOnce();
+      expect(readsAtSend).toBe(reads);
+      expect(vi.mocked(api[method]).mock.calls[0]!.at(-1)).toMatchObject({
+        expectedEdits:
+          method === "moveBill"
+            ? [sourceEdits[0], ...destinationEdits]
+            : [sourceEdits[0], destinationEdits[0], sourceEdits[1], destinationEdits[1]],
+      });
+    },
+  );
+  for (const code of ["draft.taken_over", "draft.out_of_date"] as const) {
+    it.each(commands)(
+      "$method preserves the " + code + " refusal and refreshes editing metadata",
+      async (command) => {
+        const listDrafts = observations();
+        const sending = vi.fn().mockRejectedValue({ code });
+        const { el } = await mountApp({ listDrafts, [command.method]: sending });
+        const order = await openMesa(el);
+        const reads = listDrafts.mock.calls.filter(([id]) => id === "v1").length;
+        emit(order, command.event, command.detail);
+        await flush(el, 6);
+        expect(sending).toHaveBeenCalledOnce();
+        expect(banner(el)?.textContent).toContain(codeMessage(code));
+        expect(listDrafts.mock.calls.filter(([id]) => id === "v1").length).toBeGreaterThan(reads);
+        expect(drafts.saveDraft).not.toHaveBeenCalled();
+        expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+      },
+    );
+  }
+
+  it.each(commands)(
+    "$method cannot send after switching bill while reading the destination",
+    async (command) => {
+      const read = observations();
+      let resolve!: () => void;
+      const pending = new Promise<void>((done) => {
+        resolve = done;
+      });
+      let started = false;
+      const listDrafts = vi.fn(async (partyId: string) => {
+        if (partyId === "v7") {
+          started = true;
+          await pending;
+        }
+        return read(partyId);
+      });
+      const { el } = await mountApp({ listDrafts });
+      const order = await openMesa(el);
+      emit(order, command.event, command.detail);
+      await expect.poll(() => started).toBe(true);
+      emit(order, "take-payment", { workingOrderId: "wo-check" });
+      await flush(el, 6);
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+      resolve();
+      await pending;
+      await flush(el, 6);
+      expect(api[command.method]).not.toHaveBeenCalled();
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+    },
+  );
+
+  for (const refused of [null, undefined]) {
+    it.each(commands)(
+      "$method preserves a generic relocation refusal for " + String(refused),
+      async (command) => {
+        const { el } = await mountApp({
+          listDrafts: observations(),
+          [command.method]: vi.fn().mockRejectedValue(refused),
+        });
+        const order = await openMesa(el);
+        emit(order, command.event, command.detail);
+        await flush(el, 6);
+        expect(api[command.method]).toHaveBeenCalledOnce();
+        expect(banner(el)?.textContent).toContain(t("table.error"));
+      },
+    );
+  }
 });

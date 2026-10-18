@@ -231,10 +231,11 @@ import type { StringKey } from "./i18n/strings.js";
 import { TillHeldOrders, type MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
-import { otherPartyRead, shownTableNames } from "./widgets/table-targets.js";
+import { otherPartyRead, shownTableNames, type SeatedRead } from "./widgets/table-targets.js";
 import type {
   BillPayDetail,
   MoveBillDetail,
+  TableRelocationOpenDetail,
   SplitRefusal,
   SplitTableDetail,
 } from "./screens/till-table-order-screen.js";
@@ -298,9 +299,7 @@ import type {
   OriginalReceiptPrint,
   PartyBill,
   TableActionResult,
-  TableActionRevisions,
   BillRevisions,
-  MoveBillRevisions,
   MoveBillResult,
   TillZoneMenu,
   ZoneOfferCatalogue,
@@ -824,6 +823,12 @@ interface BillComposition {
   billId: string;
   revisions: BillRevisions;
   expectedEdits: BillEditExpected[];
+}
+
+interface TableRelocation {
+  source: BillComposition;
+  expectedEdits: BillEditExpected[];
+  target: SeatedRead;
 }
 
 interface CancellingItem {
@@ -9277,6 +9282,7 @@ export class TillApp extends LitElement {
     this.tabGroups = partyGroups ?? [];
     this.#groupsUnread = partyGroups === null;
     this.#groupsReadFor = partyId;
+    this.requestUpdate();
     this.printProblems = partyProblems;
     this.currentOrders = partyOrders;
     this.currentOrdersUnread = partyId !== null && partyOrders === null;
@@ -9860,13 +9866,6 @@ export class TillApp extends LitElement {
     } catch {
       if (read === this.#billBalanceRead) this.billBalance = null;
     }
-  }
-
-  /** What a move or join sends of the parties read: the open party's revision, and what the floor
-   * showed at the target table — another party and its revision, or null when it read free. */
-  #tableActionRevisions(party: TableParty, tableId: string): TableActionRevisions {
-    const seated = this.tables.find((table) => table.id === tableId)?.party ?? null;
-    return { expectedPartyRevision: party.revision, ...otherPartyRead(seated, party.id) };
   }
 
   /** The party the open bill was read under, for a bill action. */
@@ -12140,34 +12139,44 @@ export class TillApp extends LitElement {
     }
   }
 
-  /**
-   * The guests move off all their tables to the one chosen, which becomes {@link activeTableId}. At a
-   * table another party held, they are now that party: the screen follows them to its main bill, or
-   * the bill {@link billToOpen} picks, and says so when bills asked to merge stayed apart. Once the
-   * floor is read again after the answer, none of this happens if the waiter has left the party
-   * ({@link #hasLeftParty}); and nothing is said about bills kept apart, then or later, once the
-   * waiter has left the order and either has not come back to it or a table open is under way
-   * ({@link #leftSince}).
-   */
   async #onMoveGuests(event: Event): Promise<void> {
-    const { toTableId, bills } = (
-      event as CustomEvent<{ toTableId: string; bills: "merge" | "separate" }>
+    const { toTableId, bills, prompt } = (
+      event as CustomEvent<{ toTableId: string; bills: "merge" | "separate"; prompt?: object }>
     ).detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
     const visit = this.#orderVisit;
     this.errorKey = undefined;
-    const revisions = this.#tableActionRevisions(party, toTableId);
+    const asked = await (prompt === undefined
+      ? this.#relocationEdits(
+          this.partyBills.map((bill) => bill.workingOrderId),
+          this.tables.find((table) => table.id === toTableId)?.party ?? null,
+        )
+      : this.#relocationPrompts.get(prompt));
+    if (asked == null || !this.#billCompositionUnchanged(asked.source)) return;
+    const revisions = {
+      expectedPartyRevision: asked.source.revisions.expectedPartyRevision!,
+      ...otherPartyRead(asked.target, asked.source.partyId),
+      expectedEdits: asked.expectedEdits,
+    };
+    const live = () =>
+      this.api === asked.source.api &&
+      this.#operatorSession === asked.source.session &&
+      !this.#hasLeftParty(asked.source.partyId, asked.source.sent);
     let result: TableActionResult;
     try {
-      result = await this.api.moveGuests(party.id, toTableId, bills, revisions);
+      result = await asked.source.api.moveGuests(party.id, toTableId, bills, revisions);
     } catch (error) {
-      await this.#onTableRefusal(error);
+      if (!live()) return;
+      await this.#onRelocationRefusal(error, live);
       return;
     }
+    if (!live()) return;
+    await this.#refreshBillDraft();
+    if (!live()) return;
     await this.#reloadTables();
-    if (this.#hasLeftParty(party.id, sent)) return;
+    if (!live()) return;
     this.activeTableId = toTableId;
     this.#rememberOrderParty();
     const followed = this.orderParty?.id;
@@ -12184,25 +12193,24 @@ export class TillApp extends LitElement {
     this.#sayBillsKeptApart(revisions, bills, result);
   }
 
-  /**
-   * The bill on screen moves whole to another table or to the counter, in the zone the counter's
-   * orders are made in. The screen stays with this party, on its main bill or {@link billToOpen}'s,
-   * and goes back to the floor when the party has no bill left. A failed read of the floor after the
-   * move keeps the last floor and the party on screen. Once the waiter has left the bill, the move
-   * opens no other bill, does not go back to the floor and says nothing about bills kept apart.
-   */
   async #onMoveBill(event: Event): Promise<void> {
-    const { to, bills } = (event as CustomEvent<MoveBillDetail>).detail;
+    const { to, bills, prompt } = (event as CustomEvent<MoveBillDetail>).detail;
     const billId = this.activeTabId;
     const party = this.orderParty;
     if (billId === undefined || party === null) return;
     const visit = this.#orderVisit;
     this.errorKey = undefined;
     const toTable = "tableId" in to;
-    const revisions: MoveBillRevisions = {
-      ...this.#billRevisions(),
-      ...(toTable ? otherPartyRead(to.seated, party.id) : {}),
+    const asked = await (prompt === undefined
+      ? this.#relocationEdits([billId], toTable ? to.seated : null)
+      : this.#relocationPrompts.get(prompt));
+    if (asked == null || !this.#billCompositionUnchanged(asked.source)) return;
+    const revisions = {
+      ...asked.source.revisions,
+      ...(toTable ? otherPartyRead(asked.target, asked.source.partyId) : {}),
+      expectedEdits: asked.expectedEdits,
     };
+    const live = () => this.#billCompositionCurrent(asked.source);
     let result: MoveBillResult | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
@@ -12210,7 +12218,8 @@ export class TillApp extends LitElement {
           ? this.tables.find((table) => table.id === to.tableId)?.zoneId
           : this.counterServiceZoneId;
         if (!(await this.#askStoredDeadEnds(billId, zoneId || undefined))) return;
-        result = await this.api.moveBill(
+        if (!this.#billCompositionUnchanged(asked.source)) return;
+        result = await asked.source.api.moveBill(
           billId,
           toTable
             ? { tableId: to.tableId }
@@ -12220,16 +12229,22 @@ export class TillApp extends LitElement {
         );
         break;
       } catch (error) {
-        if (attempt === 0 && (error as { code?: string }).code === "station.no_replacement")
+        if (!live()) return;
+        if (
+          attempt === 0 &&
+          (error as { code?: string } | undefined)?.code === "station.no_replacement"
+        )
           continue;
-        await this.#onTableRefusal(error);
+        await this.#onRelocationRefusal(error, live);
         return;
       }
     }
-    if (result === undefined) return;
+    if (result === undefined || !live()) return;
+    await this.#refreshBillDraft();
+    if (!live()) return;
     if (!toTable) void this.#refreshAfterWrite("held", "refresh.held_after_move");
     const floorRead = await this.#refreshFloor();
-    if (this.#hasLeftOrder(billId, visit)) return;
+    if (!live() || this.#hasLeftOrder(billId, visit)) return;
     if (floorRead) this.#rememberOrderParty();
     const { bills: read } = await this.#loadPartyBills();
     if (this.#hasLeftOrder(billId, visit)) return;
@@ -12297,29 +12312,42 @@ export class TillApp extends LitElement {
     await this.#refreshAfterWrite("held", "refresh.held_after_move");
   }
 
-  /** The chosen table joins the party; a party seated there joins it with all its tables. If the
-   * waiter has left the party ({@link #hasLeftParty}) by the time the server answers, nothing is
-   * read or said; nothing is said about bills kept apart, then or later, once the waiter has left
-   * the order and either has not come back to it or a table open is under way
-   * ({@link #leftSince}). */
   async #onJoinTables(event: Event): Promise<void> {
-    const { tableId, bills } = (
-      event as CustomEvent<{ tableId: string; bills: "merge" | "separate" }>
+    const { tableId, bills, prompt } = (
+      event as CustomEvent<{ tableId: string; bills: "merge" | "separate"; prompt?: object }>
     ).detail;
     const party = this.orderParty;
     if (party === null) return;
     const sent = this.#sentNow();
     const visit = this.#orderVisit;
     this.errorKey = undefined;
-    const revisions = this.#tableActionRevisions(party, tableId);
+    const asked = await (prompt === undefined
+      ? this.#relocationEdits(
+          this.partyBills.map((bill) => bill.workingOrderId),
+          this.tables.find((table) => table.id === tableId)?.party ?? null,
+        )
+      : this.#relocationPrompts.get(prompt));
+    if (asked == null || !this.#billCompositionUnchanged(asked.source)) return;
+    const revisions = {
+      expectedPartyRevision: asked.source.revisions.expectedPartyRevision!,
+      ...otherPartyRead(asked.target, asked.source.partyId),
+      expectedEdits: asked.expectedEdits,
+    };
+    const live = () =>
+      this.api === asked.source.api &&
+      this.#operatorSession === asked.source.session &&
+      !this.#hasLeftParty(asked.source.partyId, asked.source.sent);
     let result: TableActionResult;
     try {
-      result = await this.api.joinTables(party.id, tableId, bills, revisions);
+      result = await asked.source.api.joinTables(party.id, tableId, bills, revisions);
     } catch (error) {
-      await this.#onTableRefusal(error);
+      if (!live()) return;
+      await this.#onRelocationRefusal(error, live);
       return;
     }
-    if (this.#hasLeftParty(party.id, sent)) return;
+    if (!live()) return;
+    await this.#refreshBillDraft();
+    if (!live()) return;
     await this.#reloadOrder();
     if (this.#hasLeftParty(result.partyId, sent) || this.#leftSince(visit)) return;
     this.#sayBillsKeptApart(revisions, bills, result);
@@ -12485,6 +12513,65 @@ export class TillApp extends LitElement {
   async #onBillMoneyRefusal(error: unknown): Promise<void> {
     this.errorKey = billWriteError(error);
     await this.#loadPartyBills();
+  }
+
+  async #onRelocationRefusal(error: unknown, live: () => boolean): Promise<void> {
+    if (!live()) return;
+    const code = (error as { code?: string } | undefined)?.code;
+    if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
+    else await this.#onTableRefusal(error, live);
+    if (live()) await this.#refreshBillDraft();
+  }
+
+  readonly #relocationPrompts = new WeakMap<object, Promise<TableRelocation | null>>();
+
+  async #onRelocationOpen(event: Event): Promise<void> {
+    event.preventDefault();
+    const { verb, table, prompt, ready } = (event as CustomEvent<TableRelocationOpenDetail>).detail;
+    const ids =
+      verb === "move-bill"
+        ? this.activeTabId === undefined
+          ? []
+          : [this.activeTabId]
+        : this.partyBills.map((bill) => bill.workingOrderId);
+    const pending = this.#relocationEdits(ids, table?.party ?? null);
+    this.#relocationPrompts.set(prompt, pending);
+    const asked = await pending;
+    if (asked !== null && this.#billCompositionUnchanged(asked.source)) ready();
+  }
+
+  async #relocationEdits(
+    sourceIds: string[],
+    target: SeatedRead = null,
+  ): Promise<TableRelocation | null> {
+    const source = this.#billComposition(sourceIds);
+    if (source === null) return null;
+    let destination: BillEditExpected[] = [];
+    if (target !== undefined && target !== null && target.id !== source.partyId) {
+      try {
+        const snapshot = await source.api.listDrafts(target.id);
+        destination = snapshot.billEdits.map(
+          ({ billId, editorVersion, draftId, draftRevision }) => ({
+            billId,
+            editorVersion,
+            draftId,
+            draftRevision,
+          }),
+        );
+      } catch {
+        if (this.#billCompositionCurrent(source)) this.errorKey = "table.reread_failed";
+        return null;
+      }
+    }
+    if (!this.#billCompositionUnchanged(source)) return null;
+    const expectedEdits = [...source.expectedEdits, ...destination].sort((a, b) =>
+      a.billId < b.billId ? -1 : a.billId > b.billId ? 1 : 0,
+    );
+    if (new Set(expectedEdits.map((edit) => edit.billId)).size !== expectedEdits.length) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return null;
+    }
+    return { source, expectedEdits, target };
   }
 
   #billComposition(billIds: string[]): BillComposition | null {
@@ -14825,6 +14912,7 @@ export class TillApp extends LitElement {
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
+        @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#onMoveGuests(event)}
         @move-bill=${(event: Event) => void this.#onMoveBill(event)}
         @move-held-order-open=${() => {

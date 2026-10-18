@@ -3877,8 +3877,8 @@ describe("till-table-order-screen", () => {
         await el.updateComplete;
 
         expect(moved).toEqual([
-          { to: { counter: true }, bills: "merge" },
-          { to: { tableId: "t9", seated: null }, bills: "merge" },
+          { to: { counter: true }, bills: "merge", prompt: expect.any(Object) },
+          { to: { tableId: "t9", seated: null }, bills: "merge", prompt: expect.any(Object) },
         ]);
         expect(billChoice(el)).toBeNull();
       });
@@ -3901,7 +3901,11 @@ describe("till-table-order-screen", () => {
         await el.updateComplete;
 
         expect(moved).toEqual([
-          { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills: "separate" },
+          {
+            to: { tableId: "t7", seated: { id: "v7", revision: 9 } },
+            bills: "separate",
+            prompt: expect.any(Object),
+          },
         ]);
         expect(billChoice(el)).toBeNull();
       });
@@ -3937,7 +3941,11 @@ describe("till-table-order-screen", () => {
         await el.updateComplete;
 
         expect(moved).toEqual([
-          { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills: "merge" },
+          {
+            to: { tableId: "t7", seated: { id: "v7", revision: 9 } },
+            bills: "merge",
+            prompt: expect.any(Object),
+          },
         ]);
       });
 
@@ -4042,7 +4050,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="t9"]');
       await el.updateComplete;
 
-      expect(moved).toEqual([{ toTableId: "t9", bills: "merge" }]);
+      expect(moved).toEqual([{ toTableId: "t9", bills: "merge", prompt: expect.any(Object) }]);
       expect(billChoice(el)).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
@@ -4073,7 +4081,7 @@ describe("till-table-order-screen", () => {
       );
       await el.updateComplete;
 
-      expect(moved).toEqual([{ toTableId: "t7", bills: "separate" }]);
+      expect(moved).toEqual([{ toTableId: "t7", bills: "separate", prompt: expect.any(Object) }]);
       expect(billChoice(el)).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
@@ -4130,8 +4138,8 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       expect(joined).toEqual([
-        { tableId: "t9", bills: "merge" },
-        { tableId: "t7", bills: "merge" },
+        { tableId: "t9", bills: "merge", prompt: expect.any(Object) },
+        { tableId: "t7", bills: "merge", prompt: expect.any(Object) },
       ]);
     });
 
@@ -4152,7 +4160,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="t5"]');
       await el.updateComplete;
       expect(billChoice(el)).toBeNull();
-      expect(moved).toEqual([{ toTableId: "t5", bills: "merge" }]);
+      expect(moved).toEqual([{ toTableId: "t5", bills: "merge", prompt: expect.any(Object) }]);
     });
 
     it("Join a table offers only tables in the party's service zone; Move guests still offers every zone", async () => {
