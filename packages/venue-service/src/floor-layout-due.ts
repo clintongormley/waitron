@@ -1,9 +1,12 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { DueFloorLayout } from "@waitron/module";
+import type { BusinessDayClock, LocationId } from "@waitron/shared";
 import { readLocationClock } from "@waitron/reporting";
-import type { LocationId } from "@waitron/shared";
-import { departmentDay, serviceRuns } from "./menu-timetable.js";
+import { readDayPlan, resolveDepartmentsDays } from "./day-resolver.js";
+import { serviceRuns } from "./menu-timetable.js";
+import { wireTime } from "./operations.js";
+import { periodExtensions } from "./schema/period-extensions.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
@@ -11,6 +14,7 @@ import {
   rangeSpanInDay,
   serviceMomentAt,
   withExtension,
+  type ServiceMoment,
   type ServiceRange,
 } from "./service-day.js";
 import { serviceDayContext, type ServiceDayContext } from "./service-day-context.js";
@@ -151,48 +155,92 @@ export async function dueFloorLayouts(
     .where(inArray(departmentFloorPlanSets.departmentId, departmentIds));
   const withSets = departmentIds.filter((id) => sets.some((set) => set.departmentId === id));
   if (withSets.length === 0) return result;
-  const periodSets = await tx
-    .select({ id: menuPeriods.id, setId: menuPeriods.floorPlanSetId })
+  const periods = await tx
+    .select({ id: menuPeriods.id, name: menuPeriods.name, setId: menuPeriods.floorPlanSetId })
     .from(menuPeriods)
     .where(inArray(menuPeriods.departmentId, withSets));
-  const setOfPeriod = new Map(periodSets.map((row) => [row.id, row.setId]));
+  const periodOf = new Map(periods.map((row) => [row.id, row]));
   const clock = await readLocationClock(tx, cfg.locationId);
   const moment = serviceMomentAt(at, clock);
-  const today =
-    moment === null ? null : { moment, context: serviceDayContext(clock, moment.businessDay) };
+  const today = moment === null ? null : await dueDays(tx, cfg, withSets, moment, clock);
   for (const departmentId of withSets) {
     const own = sets.filter((set) => set.departmentId === departmentId);
     const fallback = own.find((set) => set.isDefault);
-    const day =
-      today === null ? null : await departmentDay(tx, cfg, departmentId, today.moment, clock);
     for (const { zoneId, recordedOccurrence } of zones) {
       if (departmentOf.get(zoneId) !== departmentId) continue;
       const run =
-        today === null || day === null
+        today === null
           ? null
           : dueRun({
-              day: {
-                painted: day.ranges,
-                extension: day.extension,
-                runs: serviceRuns(
-                  withExtension(day.ranges, day.extension, today.context.dayCutover),
-                ),
-              },
+              day: today.days.get(departmentId)!,
               minute: today.moment.minute,
               context: today.context,
               recorded: recordedRun(recordedOccurrence, departmentId, today.moment.businessDay),
             });
-      const chosen = run === null ? undefined : setOfPeriod.get(run.periodId);
-      const set = own.find((entry) => entry.setId === chosen) ?? fallback;
+      const period = run === null ? undefined : periodOf.get(run.periodId);
+      const set = own.find((entry) => entry.setId === period?.setId) ?? fallback;
       result.set(zoneId, {
         setId: set?.setId ?? null,
         setName: set?.name ?? null,
         occurrence:
           run === null ? null : occurrenceKey(departmentId, today!.moment.businessDay, run),
-        periodName:
-          run === null ? null : day!.periods.find((period) => period.id === run.periodId)!.name,
+        periodName: period?.name ?? null,
       });
     }
   }
   return result;
+}
+
+/** Each department's painted day, keep open and runs on `moment`'s business day, read in one
+ *  statement per table whatever the number of departments. */
+async function dueDays(
+  tx: Transaction,
+  cfg: { locationId: LocationId },
+  departmentIds: readonly string[],
+  moment: ServiceMoment,
+  clock: BusinessDayClock,
+): Promise<{ moment: ServiceMoment; context: ServiceDayContext; days: Map<string, DueDay> }> {
+  const { businessDay } = moment;
+  const context = serviceDayContext(clock, businessDay);
+  const resolved = await resolveDepartmentsDays(
+    tx,
+    cfg,
+    departmentIds,
+    [businessDay],
+    clock,
+    await readDayPlan(tx, cfg, [businessDay]),
+  );
+  const extensions = await tx
+    .select({
+      departmentId: periodExtensions.departmentId,
+      periodId: periodExtensions.periodId,
+      startsAt: periodExtensions.startsAt,
+      endsAt: periodExtensions.endsAt,
+    })
+    .from(periodExtensions)
+    .where(
+      and(
+        inArray(periodExtensions.departmentId, [...departmentIds]),
+        eq(periodExtensions.businessDay, businessDay),
+      ),
+    );
+  const days = new Map<string, DueDay>();
+  for (const departmentId of departmentIds) {
+    const painted = resolved.get(departmentId)!.get(businessDay)!.ranges;
+    const row = extensions.find((entry) => entry.departmentId === departmentId);
+    const extension =
+      row === undefined
+        ? null
+        : {
+            periodId: row.periodId,
+            startsAt: wireTime(row.startsAt),
+            endsAt: wireTime(row.endsAt),
+          };
+    days.set(departmentId, {
+      painted,
+      extension,
+      runs: serviceRuns(withExtension(painted, extension, context.dayCutover)),
+    });
+  }
+  return { moment, context, days };
 }

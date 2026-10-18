@@ -18,6 +18,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
+import { periodExtensions } from "./schema/period-extensions.js";
 import { VENUE_SERVICE } from "./service.js";
 
 const suite = useVenueDb({
@@ -166,6 +167,31 @@ describe("which floor layout is due", () => {
     expect(layouts.get(f.zones.dining)).toMatchObject({
       setId: f.dinnerSet,
       occurrence: dinnerKey,
+    });
+  });
+
+  it("follows the recorded run a keep open pushed later", async () => {
+    const f = await fixture();
+    await run((tx) =>
+      tx.insert(periodExtensions).values({
+        departmentId: f.restaurant,
+        businessDay: FRIDAY,
+        periodId: f.lunch,
+        startsAt: "15:00:00",
+        endsAt: "21:00:00",
+      }),
+    );
+    const layouts = await due(
+      f,
+      [f.zones.dining],
+      at("21:30"),
+      key(f.restaurant, FRIDAY, f.dinner, "20:00"),
+    );
+    expect(layouts.get(f.zones.dining)).toEqual({
+      setId: f.dinnerSet,
+      setName: "Dinner",
+      occurrence: key(f.restaurant, FRIDAY, f.dinner, "21:00"),
+      periodName: "Dinner",
     });
   });
 
