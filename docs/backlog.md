@@ -4958,15 +4958,10 @@ the tree. What remains, largest first:
   failover at all.** Read the residuals as requirements for what failover is rebuilt INTO, not as
   descriptions of code that exists today. Open, among them: a cut-off primary keeps streaming, into
   its own copy (owner, 2026-09-24); a standby checks a promotion against the primary's key (owner,
-  2026-09-26); mirror fidelity, which the detail does not cover; and
+  2026-09-26); and
   [provider cancellation ownership](backlog/payments.md#decisions-and-deliberate-limits) before
   enabling a second venue node (A764).
   [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
-
-- **A stale worktree:** `feat/h2-fiscal-record-sync` (spec and plan dated 2026-09-04, uncommitted
-  changes in `packages/sync`) was designed on the application outbox that #280 deleted, and the
-  replication it was rewritten against went too; the `ledger` classification of the fiscal tables
-  survives both. Remove it once the owner confirms nothing in its uncommitted diff is wanted.
 
 **Cloud integration and SQLite work.**
 
@@ -5050,10 +5045,7 @@ the tree. What remains, largest first:
     [Detail](backlog/replication-cloud.md#a-restored-box-whose-cloud-peer-does-not-answer-during-its-first-start-signs-the-next-term-and-removes-the-marker)
   - The pointer's term is taken without checking its signature, as the supervisor already does, so
     whoever can write the bucket can push a restored box's term up (never down).
-  - A marker left on a fenced box survives `waitron-rejoin`, which wipes the database and removes
-    only `trading.env` from the state folder (`apps/server/src/rejoin-command.ts`), so the first
-    start runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin
-    should clear it is the owner's call.
+  - A marker left on a fenced box survives `waitron-rejoin`: A836 below.
   - A sell-only local secondary that is not fenced runs the first start and signs the next term.
   - The restored membership row's check (`assertRestoredMembershipValid`, #678) trusts the keys the
     restored copy holds.
@@ -5068,6 +5060,13 @@ the tree. What remains, largest first:
   - A mirror that deferred its first start and is then promoted without a restart
     (`promoteMirrorToPrimary`) keeps the bucket copy held, reading off with the reason
     `first_start_pending` and raising no alert, until the box next starts. From reading, not a run.
+
+- **A836. `waitron-rejoin` clears a restore marker left on a fenced box (owner, 2026-10-17).**
+  Today the rejoin wipes the database and removes only `trading.env` from the state folder
+  (`apps/server/src/rejoin-command.ts`), so the restored first start runs whenever that box next
+  starts trading unfenced and not as a mirror. Make the rejoin clear the marker too. Done when a
+  test shows a rejoined box does not run the restored first start. Left open by SQLite slice 2
+  Task 9a (#630).
 
 - **If a later slice moves `local` tables into `node.db`** (slice 2's design reserved it for slice
   5), that slice decides again how the drain crosses the two files: SQLite refuses a trigger body
