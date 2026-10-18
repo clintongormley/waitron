@@ -357,8 +357,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   also completes publication-only Finish after a real database commit and an interrupted identity
   publication. A new browser session rejects a wrong password, accepts the original password,
   re-enters the saved certificate/email settings and reaches trading after restart. The fiscal
-  rows, counters, hour journal and staged key retain their values. Complete backup restore and
-  promotion remain separate acceptance work.
+  rows, counters, hour journal and staged key retain their values. Installed Chrome also exercises
+  archive, bucket and Cloud recovery through the built wizard, native key fields, real HTTPS,
+  staged requests and reconstructed placement. The bucket preview now offers business confirmation
+  before the first Restore request. Changes to the kit, environment or reviewed copy clear it.
+  Synthetic external services and source-host execution qualify these local checks; installed
+  admission/promotion and the remaining entry, coverage and retirement gates stay open.
   The restore command refuses an outstanding claim; provisioning refuses a
   changed series request without opening its database. These checks do not qualify a complete
   archive/bucket/Cloud restore or replace the remaining installed recovery journeys.

@@ -2187,3 +2187,46 @@ migration, guard, fiscal writer or earlier assertion changes in this checkpoint.
 archive/bucket/Cloud recovery, remaining admission/promotion acceptance, old policy-suite and
 coverage gaps, active protocol retirement, current-main integration, owner PDF viewing approval
 and the final installed reviews/current-head CI remain separate A679 gates.
+
+
+## Native recovery and bucket confirmation, 2026-10-18
+
+The built wizard's bucket preview previously showed the business without offering its confirmation
+checkbox. The local installed EN/ES probe reached hour selection, then timed out waiting for that
+checkbox. Five new source-browser cases failed with the expected missing-control assertion before
+implementation. `SetupRecoveryCopy` now publishes its validated preview and its invalidation;
+the bucket screen uses that snapshot for the existing business confirmation. Re-review, API changes
+and selection changes clear the answer. Two further source cases caught the old answer escaping
+when kit/environment changed and Restore was clicked before rendering. Those edits now clear it
+synchronously. The server still validates the selected business before placement.
+
+Changed existing test checks: `apps/setup/src/screens/recovery-allocation.test.ts`, “forwards the
+selected %s copy's credentials”, gains only the bucket fixture's missing confirmation interaction.
+The old operation, key and expectation expressions remain unchanged. No existing fiscal assertion,
+protected writer, SQL, migration, guard or configuration changes. The new
+`restore-bucket-preview-venue.test.ts` checks confirmation before submission, selection/API/review
+invalidation, late responses and edits before rendering. Source verification ran all 12 surrounding
+browser files: 157 cases passed, including existing accessibility cases in both themes. Five
+independent installed omissions failed assertions; all five restored eight-case runs passed.
+
+Local receipts are in `~/waitron-campaign-e/receipts/a679-recovery-qualification-20261018/`.
+The installed native probe runs in an independent frozen-installed checkout. It navigates actual
+built EN/ES wizard pages over HTTPS, enters the matching grouped lowercase key and check through
+native controls, selects an hour, confirms the bucket business, stages each archive/bucket/Cloud
+source and runs reconstructed placement after closing the listener. Fixtures contain two real sale
+records, one with an accepted synthetic AEAT filing receipt and one pending. Historical sale,
+line, tender, settlement, record and filing rows retain their values; retired counters remain
+125/123/123, fresh series use the selected hour, and a second staged run does nothing. The 24
+selected-state views cover both languages, themes and phone/desktop widths. These are local
+receipts, not committed browser CI coverage. The host runs installed source, not `dist/server.js`;
+remote bucket copying, Cloud replies/download and internet time are synthetic boundaries. This
+check does not boot restored trading or exercise an actual Cloud account/S3 service.
+
+The unmodified seven-file server selection passed 129 cases and the entire recovery-host file
+passed 127. Protected golden/immutability checks passed 20. A separate retained-policy reproduction
+still fails four cases across `first-fiscal-launch.test.ts` and `first-fiscal-delivery.test.ts`
+(28 pass): two `malformed_allocation` launch refusals, the CLI's `initial_input_invalid`, and the
+kept-document host's `outside_confirmation_missing`. Those failures remain gates. Other earlier
+failures/coverage gaps, remaining installed admission/promotion and entry qualification, active
+protocol retirement, full prose/current-main reconciliation, owner PDF viewing approval, both
+final Claude reviews and current-head CI remain required before landing.

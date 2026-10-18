@@ -107,6 +107,7 @@ export class SetupRecoveryCopy extends LitElement {
     this.#attempt += 1;
     this.preview = undefined;
     this.#previewCurrent = undefined;
+    this.#notifyPreview();
     this.error = undefined;
     this.busy = false;
     this.#notifyRefusal();
@@ -132,6 +133,15 @@ export class SetupRecoveryCopy extends LitElement {
     this.dispatchEvent(
       new CustomEvent("preview-refusal", {
         detail: { field, cause },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+  #notifyPreview(): void {
+    this.dispatchEvent(
+      new CustomEvent("recovery-preview", {
+        detail: { preview: this.preview },
         bubbles: true,
         composed: true,
       }),
@@ -170,6 +180,7 @@ export class SetupRecoveryCopy extends LitElement {
     this.busy = true;
     this.error = undefined;
     this.preview = undefined;
+    this.#notifyPreview();
     this.#notifyRefusal();
     try {
       const preview =
@@ -181,6 +192,7 @@ export class SetupRecoveryCopy extends LitElement {
       if (current()) {
         this.preview = preview;
         this.#previewCurrent = current;
+        this.#notifyPreview();
       }
     } catch (cause) {
       if (current()) {
