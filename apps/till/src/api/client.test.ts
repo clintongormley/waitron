@@ -2969,22 +2969,38 @@ describe("TillApi", () => {
     const fetchStub = vi.fn(async () => jsonResponse(answer));
     const api = new TillApi("", fetchStub);
 
-    await expect(api.splitTable("v1", "tbl-5", "wo-check", 3)).resolves.toEqual(answer);
-    await api.splitTable("v1", "tbl-5", null, 4);
+    await expect(
+      api.splitTable("v1", "tbl-5", "wo-check", 3, [
+        { billId: "wo-check", editorVersion: 2, draftId: null, draftRevision: null },
+      ]),
+    ).resolves.toEqual(answer);
+    await api.splitTable("v1", "tbl-5", null, 4, []);
 
     expect(fetchStub).toHaveBeenNthCalledWith(
       1,
       "/api/parties/v1/split-table",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ tableId: "tbl-5", billId: "wo-check", expectedPartyRevision: 3 }),
+        body: JSON.stringify({
+          tableId: "tbl-5",
+          billId: "wo-check",
+          expectedPartyRevision: 3,
+          expectedEdits: [
+            { billId: "wo-check", editorVersion: 2, draftId: null, draftRevision: null },
+          ],
+        }),
       }),
     );
     expect(fetchStub).toHaveBeenNthCalledWith(
       2,
       "/api/parties/v1/split-table",
       expect.objectContaining({
-        body: JSON.stringify({ tableId: "tbl-5", billId: null, expectedPartyRevision: 4 }),
+        body: JSON.stringify({
+          tableId: "tbl-5",
+          billId: null,
+          expectedPartyRevision: 4,
+          expectedEdits: [],
+        }),
       }),
     );
   });
@@ -2993,7 +3009,7 @@ describe("TillApi", () => {
     const fetchStub = vi.fn(async () => jsonResponse({ partyId: "v-new", mainBillId: null }));
     const api = new TillApi("", fetchStub);
 
-    await api.splitTable("v1", "tbl-4", null, 3, { staying: 3, leaving: null });
+    await api.splitTable("v1", "tbl-4", null, 3, [], { staying: 3, leaving: null });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/split-table",
@@ -3002,6 +3018,7 @@ describe("TillApi", () => {
           tableId: "tbl-4",
           billId: null,
           expectedPartyRevision: 3,
+          expectedEdits: [],
           guests: { staying: 3, leaving: null },
         }),
       }),

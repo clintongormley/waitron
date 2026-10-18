@@ -12335,26 +12335,28 @@ export class TillApp extends LitElement {
       this.errorKey = "table.bills_kept_separate";
   }
 
-  /**
-   * The table leaves the party with the chosen bill, or none, and a new party starts there. The
-   * screen stays with this party: at another of its tables when the open one left, and on its main
-   * bill when the bill on screen left with the table. With no main bill, the party's bills are read
-   * and {@link billToOpen} picks one, unless the waiter has left the party ({@link #hasLeftParty})
-   * by the time they answer. A refusal of one side's count goes back to the screen's guests window
-   * under that side's field, unless the waiter has left the party since; any other is said on the
-   * banner.
-   */
   async #onSplitTable(event: Event): Promise<void> {
     const { tableId, billId, guests } = (event as CustomEvent<SplitTableDetail>).detail;
     const party = this.orderParty;
     if (party === null) return;
-    const sent = this.#sentNow();
+    const asked = this.#billComposition(billId === null ? [] : [billId]);
+    if (asked === null) return;
+    const live = () => this.#billCompositionCurrent(asked);
+    const sent = asked.sent;
     const visit = this.#orderVisit;
     this.errorKey = undefined;
     this.splitRefusal = null;
     try {
-      await this.api.splitTable(party.id, tableId, billId, party.revision, guests);
+      await asked.api.splitTable(
+        party.id,
+        tableId,
+        billId,
+        party.revision,
+        asked.expectedEdits,
+        guests,
+      );
     } catch (error) {
+      if (!live()) return;
       const refused = error as { code?: string; field?: string } | undefined;
       const side = refusedSplitSide(refused);
       if (side !== undefined) {
@@ -12369,23 +12371,34 @@ export class TillApp extends LitElement {
           };
         return;
       }
-      await this.#onTableRefusal(error);
+      if (refused?.code === "draft.out_of_date" || refused?.code === "draft.taken_over")
+        this.errorKey = { code: refused.code };
+      else await this.#onTableRefusal(error, live);
+      if (live()) await this.#refreshBillDraft();
       return;
     }
+    if (!live()) return;
     if (this.activeTableId === tableId)
       this.activeTableId = party.tableIds.find((id) => id !== tableId);
     await this.#reloadTables();
+    if (!live()) return;
     this.#rememberOrderParty();
     if (billId !== null && this.activeTabId === billId) {
       const main = this.orderParty?.mainBillId ?? null;
       if (main !== null) this.activeTabId = main;
       else {
         const { bills: read } = await this.#loadPartyBills();
-        if (this.#hasLeftParty(party.id, sent)) return;
+        if (!live()) return;
         this.activeTabId = billToOpen(read ?? []);
       }
     }
     await this.#loadLinesAndBills();
+    if (
+      this.api === asked.api &&
+      asked.session === this.#operatorSession &&
+      !this.#hasLeftParty(party.id, sent)
+    )
+      await this.#refreshBillDraft();
   }
 
   /** A refusal of the name itself goes back to the screen's field, unless the waiter has left the

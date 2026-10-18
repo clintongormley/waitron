@@ -2137,12 +2137,19 @@ describe("till-app: table actions on the party", () => {
     emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
     await flush(el);
 
-    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", "wo-check", 3, guests);
+    expect(api.splitTable).toHaveBeenCalledWith(
+      "v1",
+      "t5",
+      "wo-check",
+      3,
+      [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
+      guests,
+    );
     expect(tableOrder(el)!.party).toEqual(afterSplit[0]!.party);
 
     emit(tableOrder(el)!, "split-table", { tableId: "t4", billId: null, guests });
     await flush(el);
-    expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", null, 4, guests);
+    expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", null, 4, [], guests);
   });
 
   it("passes the guests the waiter gave each side of a split to the split", async () => {
@@ -2174,7 +2181,10 @@ describe("till-app: table actions on the party", () => {
     });
     await flush(el);
 
-    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", null, 3, { staying: 3, leaving: 2 });
+    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", null, 3, [], {
+      staying: 3,
+      leaving: 2,
+    });
     expect(tableOrder(el)!.party?.guestCount).toBe(3);
   });
 
@@ -2198,7 +2208,14 @@ describe("till-app: table actions on the party", () => {
         emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
         await flush(el);
 
-        expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", "wo-check", 3, guests);
+        expect(api.splitTable).toHaveBeenCalledWith(
+          "v1",
+          "t5",
+          "wo-check",
+          3,
+          [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
+          guests,
+        );
         expect(tableOrder(el)!.splitRefusal).toEqual({
           tableId: "t5",
           billId: "wo-check",
@@ -8394,5 +8411,126 @@ describe("till-app: bill composition editing observations", () => {
       expect(replacement.getTablesState).toHaveBeenCalledTimes(tables);
       expect(replacement.getPartyBills).toHaveBeenCalledTimes(bills);
     });
+  }
+});
+
+describe("till-app: split-table editing observations", () => {
+  const edit = { billId: "wo-check", editorVersion: 5, draftId: null, draftRevision: null };
+  const guests = { staying: 2, leaving: 1 };
+  const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+  const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+
+  function observations(missing = false) {
+    return vi.fn(async () => ({
+      drafts: [],
+      billEdits: [
+        { billId: "wo-4", editorVersion: 8, draftId: null, draftRevision: null },
+        ...(missing ? [] : [edit]),
+      ].map((value) => ({ ...value, editorId: null, editorName: null })),
+    }));
+  }
+
+  it.each(["wo-check", null])("sends exactly the moved bill observation for %s", async (billId) => {
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+      listDrafts: observations(),
+    });
+    emit(await openMesa(el), "split-table", { tableId: "t5", billId, guests });
+    await flush(el);
+    expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      "t5",
+      billId,
+      3,
+      billId === null ? [] : [edit],
+      guests,
+    );
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it("refuses to move a bill whose editing observation is missing", async () => {
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+      listDrafts: observations(true),
+    });
+    emit(await openMesa(el), "split-table", { tableId: "t5", billId: "wo-check", guests });
+    await flush(el);
+    expect(api.splitTable).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(["success", "refusal"])("refreshes bill editing metadata after %s", async (outcome) => {
+    const listDrafts = observations();
+    const splitTable = vi.fn(async () => {
+      if (outcome === "refusal") throw { code: "draft.out_of_date" };
+      return { partyId: "v-split", mainBillId: "wo-check" };
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+      listDrafts,
+      splitTable,
+    });
+    const order = await openMesa(el);
+    const reads = listDrafts.mock.calls.length;
+    emit(order, "split-table", { tableId: "t5", billId: "wo-check", guests });
+    await flush(el, 5);
+    expect(splitTable).toHaveBeenCalledOnce();
+    expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
+    if (outcome === "refusal")
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  for (const change of ["API", "bill", "party"] as const) {
+    it.each(["success", "refusal", "guest refusal"])(
+      "ignores a late %s after changing " + change,
+      async (outcome) => {
+        const pending = held();
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5, mesa7]),
+          listDrafts: observations(),
+          splitTable: pending.call,
+        });
+        emit(await openMesa(el), "split-table", { tableId: "t5", billId: "wo-check", guests });
+        await expect.poll(() => pending.call.mock.calls.length).toBe(1);
+        let current = api;
+        if (change === "API") {
+          current = stubApi();
+          el.api = current;
+        } else if (change === "bill") {
+          emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+        } else {
+          emit(tableOrder(el)!, "back-to-floor");
+          await flush(el);
+          emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+        }
+        await flush(el);
+        const before = {
+          bill: tableOrder(el)?.orderId,
+          party: tableOrder(el)?.party?.id,
+          error: banner(el)?.textContent ?? null,
+          splitRefusal: tableOrder(el)?.splitRefusal,
+          tables: vi.mocked(current.getTablesState).mock.calls.length,
+          bills: vi.mocked(current.getPartyBills).mock.calls.length,
+        };
+        if (outcome === "success")
+          pending.answer.settle({ partyId: "v-split", mainBillId: "wo-check" });
+        else
+          pending.answer.refuse(
+            outcome === "guest refusal"
+              ? { code: "management.request_invalid", field: "guests.leaving" }
+              : { code: "draft.out_of_date" },
+          );
+        await flush(el, 5);
+        expect({
+          bill: tableOrder(el)?.orderId,
+          party: tableOrder(el)?.party?.id,
+          error: banner(el)?.textContent ?? null,
+          splitRefusal: tableOrder(el)?.splitRefusal,
+          tables: vi.mocked(current.getTablesState).mock.calls.length,
+          bills: vi.mocked(current.getPartyBills).mock.calls.length,
+        }).toEqual(before);
+      },
+    );
   }
 });

@@ -4513,6 +4513,7 @@ export class TillApi {
     tableId: string,
     billId: string | null,
     expectedPartyRevision: number,
+    expectedEdits: BillEditExpected[],
     guests?: { staying: number | null; leaving: number | null },
   ): Promise<{
     partyId: string;
@@ -4523,6 +4524,7 @@ export class TillApi {
       tableId,
       billId,
       expectedPartyRevision,
+      expectedEdits,
       ...(guests === undefined ? {} : { guests }),
     });
   }
