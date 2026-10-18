@@ -173,6 +173,7 @@ import { createAccountEmailSender } from "./account-email.js";
 import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
+import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
@@ -211,7 +212,7 @@ import { mountSetup } from "./setup-api.js";
 import { readSetupOpeningHours } from "./setup-opening-hours.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
-import { runFiscalDrain } from "./onboarding-policy.js";
+import { fiscalDrainEnabled, runFiscalDrain } from "./onboarding-policy.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
 import { releaseStalePaymentAttempts } from "./till-sale.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
@@ -1801,6 +1802,22 @@ async function bootServer(
     );
   }
   mountEmailSettingsApi(app, { db, ring, config }, log);
+  if (enabledFiscal.certificate !== undefined) {
+    mountFiscalCertificateApi(
+      app,
+      {
+        db,
+        ring,
+        seat: enabledFiscal.certificate,
+        nodeId: till.nodeId,
+        locationId: till.locationId,
+        environment: config.environment,
+        filing: () => fiscalDrainEnabled(config) && holders.singletonRole.current === "primary",
+        now,
+      },
+      log,
+    );
+  }
   mountEmailInboxApi(
     app,
     {
