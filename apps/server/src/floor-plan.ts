@@ -201,19 +201,30 @@ async function planTables(tx: Transaction, masters: LayoutTable[]): Promise<Plan
     if (parts === undefined) byJoined.set(m.partOf, [m.id]);
     else parts.push(m.id);
   }
-  const placedIds = new Set(masters.flatMap((m) => (m.placement === null ? [] : [m.id])));
-  return masters.map((master) => ({
+  return placedAsRead(masters).map((master) => ({
     id: master.id,
     liveTableId: followers.get(master.id) ?? null,
     label: master.label,
     seats: master.seats,
     fixed: master.fixed,
-    // A part's place in a layout that places its joined table reads as off, so a change of
-    // parts saved in another set never leaves this layout invalid.
-    placement: master.partOf !== null && placedIds.has(master.partOf) ? null : master.placement,
+    placement: master.placement,
     keptSize: master.keptSize,
     partIds: byJoined.get(master.id) ?? [],
   }));
+}
+
+/**
+ * The layout's tables with each place as the layout reads it: a part's place in a layout that
+ * places its joined table reads as off, so a change of parts saved in another set never leaves
+ * this layout invalid.
+ */
+export function placedAsRead(masters: readonly LayoutTable[]): LayoutTable[] {
+  const placedIds = new Set(masters.flatMap((m) => (m.placement === null ? [] : [m.id])));
+  return masters.map((master) =>
+    master.partOf !== null && placedIds.has(master.partOf)
+      ? { ...master, placement: null }
+      : master,
+  );
 }
 
 /** A set's layout of a zone; with no layout row yet, the zone's tables all off, at revision 0. */

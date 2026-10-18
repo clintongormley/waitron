@@ -1,4 +1,4 @@
-import { layoutTables, requireZone } from "./floor-plan.js";
+import { layoutTables, placedAsRead, requireZone } from "./floor-plan.js";
 import {
   and,
   eq,
@@ -241,7 +241,7 @@ async function resetZoneFor(
     await tx.update(floorTodayZones).set(record).where(eq(floorTodayZones.id, today.id));
   }
 
-  const master = await layoutTables(tx, zoneId, layout?.id ?? null);
+  const master = placedAsRead(await layoutTables(tx, zoneId, layout?.id ?? null));
   const live = await zoneTables(tx, cfg, zoneId);
   const targets = targetsFromMaster(
     master.map((row) => ({

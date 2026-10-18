@@ -1,13 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorPlanPlacements, floorPlans, floorPlanSets, floorPlanTables } from "@waitron/db";
+import {
+  floorPlanPlacements,
+  floorPlans,
+  floorPlanSets,
+  floorPlanTables,
+  floorTodayTables,
+  joinedOutOfService,
+} from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { createDepartment, createServiceZone, linkFloorPlanSet } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { takeOffToday } from "./floor-today-store.js";
+import { standardAndDinner } from "./testing/floor-today-venue.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import "./errors.js";
 
@@ -296,6 +305,49 @@ describe("a set's layout of a zone", () => {
 
     expect(dinner.tables.find((t) => t.id === ids.four)!.placement).toBeNull();
     expect(dinner.tables.find((t) => t.id === ids.joined)!.placement).toEqual(PLACE);
+  });
+
+  it("a reset reads a part as off where its layout places its joined table, so taking the joined table off leaves the part off and joined", async () => {
+    const s = await standardAndDinner(
+      v,
+      NOW,
+      [
+        { key: "a", label: fresh("A") },
+        { key: "b", label: fresh("B") },
+        { key: "c", label: fresh("C") },
+        { key: "ab", label: fresh("A+B"), partKeys: ["a", "b"] },
+      ],
+      {
+        standard: { a: 0, b: 20, c: 50, ab: null },
+        dinner: { a: null, b: null, c: 50, ab: 0 },
+      },
+    );
+    const standard = await read(s.d.standard, s.d.zoneId);
+    const [a, c, ab] = ["a", "c", "ab"].map((key) => s.live(key));
+    const masterOf = new Map(standard.tables.map((t) => [t.liveTableId, t.id]));
+    await save(s.d.standard, s.d.zoneId, {
+      revision: standard.revision,
+      tables: asSaved(standard).map((t) =>
+        t.id === masterOf.get(ab) ? { ...t, partKeys: [masterOf.get(a)!, masterOf.get(c)!] } : t,
+      ),
+    });
+    expect(
+      (await read(s.d.dinner, s.d.zoneId)).tables.find((t) => t.liveTableId === c)!.placement,
+    ).toBeNull();
+
+    await s.onto(s.d.dinner);
+    await inTx(v, (tx) => takeOffToday(tx, v.cfg, ab));
+
+    const [row] = await inTx(v, (tx) =>
+      tx
+        .select({
+          x: floorTodayTables.x,
+          joined: sql<number>`${joinedOutOfService(floorTodayTables.tableId)}`,
+        })
+        .from(floorTodayTables)
+        .where(eq(floorTodayTables.tableId, c)),
+    );
+    expect(row).toEqual({ x: null, joined: 1 });
   });
 
   it("refuses a zone outside the set's department", async () => {
