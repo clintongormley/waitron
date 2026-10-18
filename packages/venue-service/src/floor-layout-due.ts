@@ -201,7 +201,17 @@ export async function dueFloorLayouts(
   const day = serviceDayOf(prepared);
   const clock = day?.clock ?? (await readLocationClock(tx, cfg.locationId));
   const moment = momentAt(at, clock, day);
-  const today = moment === null ? null : await dueDays(tx, cfg, withSets, moment, clock, day?.plan);
+  const today =
+    moment === null
+      ? null
+      : await dueDays(
+          tx,
+          cfg,
+          withSets,
+          moment,
+          clock,
+          day?.moment?.businessDay === moment.businessDay ? day.plan : undefined,
+        );
   for (const departmentId of withSets) {
     const own = sets.filter((set) => set.departmentId === departmentId);
     const fallback = own.find((set) => set.isDefault);

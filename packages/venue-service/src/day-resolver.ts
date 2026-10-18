@@ -95,7 +95,7 @@ export async function readServiceDayPlan(
   return serviceDayAt(tx, cfg, at, -1);
 }
 
-/** The clock and the plan of the business day `at` falls in, for the reads at `at` that take it. */
+/** The clock and the plan of the business day `at` falls in, for the reads that take it. */
 export async function readServiceDay(
   tx: Transaction,
   cfg: VenueScope,

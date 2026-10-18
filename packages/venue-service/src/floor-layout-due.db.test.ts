@@ -447,7 +447,7 @@ describe("which floor layout is due", () => {
     });
   });
 
-  it("works the moment out afresh when handed a day read at another instant", async () => {
+  it("works the moment out afresh when handed a day read at another instant of the same business day", async () => {
     const f = await fixture();
     const layouts = await run(async (tx) =>
       dueOnly(
@@ -461,5 +461,26 @@ describe("which floor layout is due", () => {
       ),
     );
     expect(layouts.get(f.zones.dining)).toMatchObject({ setId: f.standard, periodName: "Lunch" });
+  });
+
+  it("reads the day afresh when handed a day read for another business day", async () => {
+    const f = await fixture();
+    const layouts = await run(async (tx) =>
+      dueOnly(
+        await VENUE_SERVICE.dueFloorLayouts(
+          tx,
+          f.cfg,
+          [{ zoneId: f.zones.dining, recordedOccurrence: null }],
+          at("14:00", SUNDAY),
+          await VENUE_SERVICE.readServiceDay(tx, f.cfg, at("16:00")),
+        ),
+      ),
+    );
+    expect(layouts.get(f.zones.dining)).toEqual({
+      setId: f.standard,
+      setName: "Standard",
+      occurrence: null,
+      periodName: null,
+    });
   });
 });

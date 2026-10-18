@@ -666,8 +666,9 @@ export interface ZoneFloorLayout {
 }
 
 declare const preparedServiceDay: unique symbol;
-/** The venue clock and day plan at one instant, read once by `readServiceDay` for the reads at
- *  that instant that take it; only venue-service reads what it holds. */
+/** The venue clock and the plan of the business day one instant falls in, read once by
+ *  `readServiceDay` for the reads that take it; a read for another business day reuses only the
+ *  clock. Only venue-service reads what it holds. */
 export interface PreparedServiceDay {
   /** Null when the clock names no business day at that instant. */
   readonly businessDay: string | null;

@@ -219,7 +219,7 @@ export async function zoneClosureDays(
     zoneIds,
     [moment.businessDay],
     clock,
-    prepared?.plan,
+    prepared?.moment?.businessDay === moment.businessDay ? prepared.plan : undefined,
   );
   const extensions =
     closures.size === 0
