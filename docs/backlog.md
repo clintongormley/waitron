@@ -722,6 +722,16 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   reproduce with the Linux fonts before choosing a change. The Printers tab's shorter label
   was the separate A434 ruling.
 
+- **A884. Deleting an options or extras list leaves it on the published menus until they are
+  republished.** Until then the till cannot add a dish carrying a deleted options list, nor save a
+  parked order holding one (`options.label_required`); after a republish, a table's dish carrying an
+  extra from a deleted list cannot have its quantity raised (`extras.invalid`).
+  [Detail](backlog/catalogue.md#a884-deleting-an-options-or-extras-list-leaves-it-on-the-published-menus-until-they-are-republished)
+
+- **A885. Say that lines already on an open order keep their VAT class after a republish.** The
+  VAT help and the Products guide say only that a class change reaches the tills at the next
+  publish. [Detail](backlog/catalogue.md#a885-say-that-lines-already-on-an-open-order-keep-their-vat-class-after-a-republish)
+
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
 
@@ -3873,7 +3883,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   help on table columns and tabs, in `packages/ui`); its dashboard half landed (#1851: the
   "?" in the banner, help on Products and in two menus, the five existing "?" shown only in help
   mode, and, by the owner's answer B to Q41, the language choices in the account menu when signed
-  in). Next: slices 3–5, in the design's §8 order. On the dashboard and on every device — tills, handhelds, and probably the
+  in). Slice 3 landed (#NNNN: the box serves the guides at `/help/<en|es>/<page>`, in English and
+  Spanish, and three Products badges link to their sections). Next: slices 4–5, in the design's §8
+  order. On the dashboard and on every device — tills, handhelds, and probably the
   kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
   on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows
   the help or opens its page in the documentation. Nothing changes on the page while it is off.
@@ -4425,6 +4437,17 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
+
+- **A887. The English guides say "parked order" where the till says "Hold" and "Held orders".**
+  The Spanish guides and till agree on "aparcar". Decide one English word.
+  [Detail](backlog/languages.md#a887-the-english-guides-say-parked-order-where-the-till-says-hold-and-held-orders)
+
+- **A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads.** The
+  image library says "Disabled product" where the product screens say "Archived", the Spanish
+  `product.refusal_menus` and `folders.delete_off_menus` say "menús" where the dashboard says
+  "cartas", and
+  `product.disable_warning` and `product.disabled_badge` are unused.
+  [Detail](backlog/languages.md#a886-dashboard-wording-disabled-product-menús-and-two-strings-nothing-reads)
 
 - **The dashboard's locale lookup reads inherited properties** (A626 review, 2026-10-14).
   `pickLocale` in `packages/dashboard-kit/src/i18n.ts`, re-exported by the dashboard's

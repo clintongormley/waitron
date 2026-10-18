@@ -260,6 +260,14 @@ called weaker than its name, the topic file lists what it does not see.
 - **A `wt-help-tooltip` outside the setup wizard carries `mode="help-mode"`**, so it shows only while
   help is on (owner, 2026-10-18, A582 design §7). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads
   literals as text; what it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
+- **The user guides live in `apps/server/src/guide/<language>/`, and the box serves them at
+  `/help/<language>/<page>`.** A change to a screen updates its guide in English and, where a twin
+  exists, Spanish; every section heading carries a `{#id}` both languages share, and a dashboard
+  link goes through `apps/dashboard/src/help-guide.ts`. Guards: `apps/server/src/guide-content.test.ts`
+  and `scripts/guide-links.test.ts`, both weaker than their names — the first checks that the guides
+  render and that their ids, links and twins' ids match, never that a guide or its twin says what
+  the screen does or was updated with it; the second reads the dashboard's source as text. See
+  [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Before treating a numeric field as whole numbers, follow its checks and wire conversion and
   try a fraction.** Cost: A284 almost skipped a logout timer because its comment said whole minutes;
   receipt: [conventions-ui.md](docs/developers/conventions-ui.md).

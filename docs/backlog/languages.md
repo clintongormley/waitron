@@ -64,3 +64,29 @@ their full text.
   (`pnpm --filter @waitron/dashboard-kit exec vitest run src/a626-driver-probe.test.ts`,
   1 passed). Whether a real dashboard caller admits those locales is unverified.
   **Next:** check own locale keys, test the English fallback and trace the callers.
+
+## A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads
+
+Found while checking the guides for A582 slice 3. One clean-up of the dashboard's strings:
+
+- The image library marks a use by an inactive product "Disabled product" ("Producto
+  deshabilitado"; `image.disabled_product`, `packages/media/src/dashboard/strings.ts`, drawn in
+  `packages/media/src/dashboard/image-library.ts`), where the product screens say "Archived"
+  (`product.archived_badge`).
+- The Spanish `product.refusal_menus` (`apps/dashboard/src/i18n/strings.ts`) is "Menús", and
+  `folders.delete_off_menus` says "menús", where the dashboard's other Spanish strings call a menu a
+  "carta" (the neighbouring `product.off_menus` and `folders.off_menus_unknown` among them).
+- `product.disable_warning` and `product.disabled_badge` are declared in English and Spanish, and no
+  other file under `apps/` or `packages/` names them (grep, 2026-10-18); the last change to their
+  use was A435's first step (#1464, products and variants archived for good). Delete them.
+
+Done when the three are changed and the dashboard's strings tests pass.
+
+## A887. The English guides say "parked order" where the till says "Hold" and "Held orders"
+
+Found while checking the guides for A582 slice 3. `apps/server/src/guide/en/products.md` and
+`modifiers.md` call an order set aside on the till a "parked order", while the till's English
+buttons and list say **Hold** and **Held orders** (`action.hold`, `held.title`,
+`apps/till/src/i18n/strings.ts`). The Spanish matches: the till says **Aparcar** and **Pedidos
+aparcados**, and the Spanish guides use the same word. Decide one English word, and make the guides and
+the till use it. Done when the English guides and the till's English strings say the same word.
