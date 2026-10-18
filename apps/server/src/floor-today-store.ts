@@ -616,7 +616,14 @@ async function catchUpPass(
       return place === null ? [] : [{ tableId, place, own: own(tableId) }];
     });
     const newly = [...blockedMoves({ moving: drawnMoving, staying: [...staying, ...keptPlaces] })];
-    const newlyOff = [...blockedMoves({ moving: offMoving, staying })];
+    // On a later read a blocked drawn table is marked, as every drawn table that would move is,
+    // and a table that needs moving blocks no table off the map (spec §7.5, No lock).
+    const newlyOff = [
+      ...blockedMoves({
+        moving: offMoving,
+        staying: inReset ? [...staying, ...keptPlaces] : staying,
+      }),
+    ];
     const createIds = new Set(plan.create.map((target) => rowOf.get(target)!.id));
     const before = blocked.size + blockedCreates.size;
     for (const id of [...newly, ...newlyOff])

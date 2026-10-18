@@ -1731,4 +1731,34 @@ describe("no reset puts a table down on another", () => {
     expect(await todayRow(z.t6)).toMatchObject({ x: 40 });
     expect(await readyOf(z.t6)).toEqual({ pending: false, readyToMove: false });
   });
+
+  it.each(["Reset to … plan", "Update layout"])(
+    "%s keeps a stored table off behind a table the reset keeps in place; a later read puts it down there, as that table needs moving (spec §7.5, No lock)",
+    async (path) => {
+      await clearingWorkflow(false);
+      const s = await standardAndDinner(
+        [
+          { key: "a", label: fresh("A") },
+          { key: "b", label: fresh("B") },
+          { key: "c", label: fresh("C") },
+        ],
+        { standard: { a: 0, b: 40, c: null }, dinner: { a: 40, b: 80, c: 0 } },
+      );
+      await s.onto(s.d.standard);
+      const [a, b, c] = [s.live("a"), s.live("b"), s.live("c")];
+      await seatAt(b);
+
+      if (path === "Update layout") await s.update(s.d.dinner);
+      else await s.onto(s.d.dinner);
+
+      expect(await todayRows([a, b, c])).toMatchObject([{ x: 0 }, { x: 40 }, { x: null }]);
+      expect(await readyOf(a)).toEqual({ pending: true, readyToMove: true });
+      expect(await readyOf(c)).toEqual({ pending: true, readyToMove: false });
+
+      await readStates();
+
+      expect(await todayRows([a, c])).toMatchObject([{ x: 0 }, { x: 0, takenOff: false }]);
+      expect(await readyOf(c)).toEqual({ pending: false, readyToMove: false });
+    },
+  );
 });
