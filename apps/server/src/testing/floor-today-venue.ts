@@ -27,6 +27,7 @@ import {
 } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "../floor-plan.js";
 import { defaultLayout } from "./floor-sets.js";
+import { resetZone, type ResetOnto } from "../floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
 import { inTx, type PartyVenue } from "./party-venue.js";
 
@@ -217,6 +218,76 @@ export async function setsDepartment(
       dinnerPeriod,
     };
   });
+}
+
+/**
+ * A department with Standard and Dinner holding the same tables, `placedIn` naming each table's
+ * place (x, at y 0, 8 by 8) in each; answers the live tables by key and a reset onto either set.
+ */
+export async function standardAndDinner(
+  v: PartyVenue,
+  now: Date,
+  tables: { key: string; label: string; partKeys?: string[] }[],
+  placedIn: { standard: Record<string, number | null>; dinner: Record<string, number | null> },
+) {
+  type Entry = ZonePlanSave["tables"][number];
+  const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
+  const saveSet = async (setId: string, entries: Entry[]) => {
+    const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId: d.zoneId }));
+    return inTx(v, (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        { setId, zoneId: d.zoneId },
+        { revision: plan.revision, tables: entries },
+        now,
+      ),
+    );
+  };
+  const at = (x: number | null | undefined) =>
+    x == null ? null : { x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 };
+  const { ids } = await saveSet(
+    d.standard,
+    tables.map((t) => ({
+      key: t.key,
+      label: t.label,
+      seats: 4,
+      fixed: false,
+      placement: at(placedIn.standard[t.key]),
+      partKeys: t.partKeys ?? [],
+    })),
+  );
+  const standard = await inTx(v, (tx) =>
+    readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
+  );
+  const keyOf = new Map(Object.entries(ids).map(([key, id]) => [id, key]));
+  await saveSet(
+    d.dinner,
+    standard.tables.map((t) => ({
+      id: t.id,
+      key: t.id,
+      label: t.label,
+      seats: t.seats,
+      fixed: t.fixed,
+      placement: at(placedIn.dinner[keyOf.get(t.id)!]),
+      partKeys: t.partIds,
+    })),
+  );
+  const live = (key: string) => standard.tables.find((t) => t.id === ids[key])!.liveTableId!;
+  const onto = (setId: string, options?: { keepTakenOff: boolean }) =>
+    inTx(v, (tx) =>
+      resetZone(
+        tx,
+        v.cfg,
+        REMOVALS,
+        d.zoneId,
+        now,
+        { setId, occurrence: null } satisfies ResetOnto,
+        options,
+      ),
+    );
+  return { d, live, onto };
 }
 
 /** Records `partTableId` as split off joined table `joinedTableId` today, as the split route will. */

@@ -19,7 +19,11 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
-import { resetZone, type ResetOnto } from "./floor-today-store.js";
+import { resetZone } from "./floor-today-store.js";
+import { resetTable } from "./floor-today-reset-table.js";
+import { splitOff } from "./floor-today-split-group.js";
+import { writeMerge } from "./floor-today-merges.js";
+import { writeClearingWorkflow } from "@waitron/venue-service";
 import { holdersOf, memberTables } from "./parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -36,7 +40,9 @@ import {
 import {
   expectRevision,
   mergeOf,
-  setsDepartment,
+  giveKeptSize,
+  plannedZone,
+  standardAndDinner as standardAndDinnerIn,
   tableServiceZone,
   withFloorRevision,
   zoneRevisionOf,
@@ -888,68 +894,11 @@ async function resetRowOf(tableId: string) {
   return row;
 }
 
-/**
- * A department with Standard and Dinner holding the same tables, `placedIn` naming each table's
- * place in each; answers the live tables by key and a reset onto either set.
- */
-async function standardAndDinner(
+function standardAndDinner(
   tables: { key: string; label: string; partKeys?: string[] }[],
   placedIn: { standard: Record<string, number | null>; dinner: Record<string, number | null> },
 ) {
-  const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
-  const saveSet = async (setId: string, entries: Entry[]) => {
-    const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId: d.zoneId }));
-    return inTx(v, (tx) =>
-      saveLayout(
-        tx,
-        v.cfg,
-        REMOVALS,
-        { setId, zoneId: d.zoneId },
-        { revision: plan.revision, tables: entries },
-        NOW,
-      ),
-    );
-  };
-  const at = (x: number | null | undefined) => (x == null ? null : place(x, 0));
-  const { ids } = await saveSet(
-    d.standard,
-    tables.map((t) =>
-      entry(t.key, t.label, {
-        placement: at(placedIn.standard[t.key]),
-        partKeys: t.partKeys ?? [],
-      }),
-    ),
-  );
-  const standard = await inTx(v, (tx) =>
-    readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
-  );
-  const keyOf = new Map(Object.entries(ids).map(([key, id]) => [id, key]));
-  await saveSet(
-    d.dinner,
-    standard.tables.map((t) => ({
-      id: t.id,
-      key: t.id,
-      label: t.label,
-      seats: t.seats,
-      fixed: t.fixed,
-      placement: at(placedIn.dinner[keyOf.get(t.id)!]),
-      partKeys: t.partIds,
-    })),
-  );
-  const live = (key: string) => standard.tables.find((t) => t.id === ids[key])!.liveTableId!;
-  const onto = (setId: string, options?: { keepTakenOff: boolean }) =>
-    inTx(v, (tx) =>
-      resetZone(
-        tx,
-        v.cfg,
-        REMOVALS,
-        d.zoneId,
-        NOW,
-        { setId, occurrence: null } satisfies ResetOnto,
-        options,
-      ),
-    );
-  return { d, live, onto };
+  return standardAndDinnerIn(v, NOW, tables, placedIn);
 }
 
 /** 4 and 5 stand in Standard and 4+5 is off; Dinner stands 4+5 and leaves 4 and 5 off. */
@@ -1124,5 +1073,236 @@ describe("the reset waiting rules", () => {
     await z.onto(z.d.dinner);
 
     expect(await todayRow(z.t9)).toMatchObject({ x: 40, takenOff: false });
+  });
+});
+
+async function readyOf(tableId: string) {
+  const [row] = await inTx(v, (tx) =>
+    tx
+      .select({ pending: floorResetTables.pending, readyToMove: floorResetTables.readyToMove })
+      .from(floorResetTables)
+      .where(eq(floorResetTables.tableId, tableId)),
+  );
+  return row;
+}
+
+/** The till's floor read, by table. */
+async function readStates() {
+  const answer = await send("GET", "/api/tables/state");
+  expect(answer.status).toBe(200);
+  const tables = (await answer.json()) as {
+    id: string;
+    label: string;
+    condition: string;
+    today: { needsMoving: boolean };
+  }[];
+  return new Map(tables.map((t) => [t.id, t]));
+}
+
+const clearingWorkflow = (on: boolean) => inTx(v, (tx) => writeClearingWorkflow(tx, on));
+
+/**
+ * Table 3 stands at 0 in Standard and 40 in Dinner, beside `more`; guests sit at 3 when the zone
+ * resets onto Dinner.
+ */
+async function threeSeatedAcrossDinner(
+  more: { key: string; standard: number | null; dinner: number | null; partKeys?: string[] }[] = [],
+) {
+  const s = await standardAndDinner(
+    [
+      { key: "t3", label: fresh("3") },
+      ...more.map((m) => ({ key: m.key, label: fresh(m.key), partKeys: m.partKeys })),
+    ],
+    {
+      standard: { t3: 0, ...Object.fromEntries(more.map((m) => [m.key, m.standard])) },
+      dinner: { t3: 40, ...Object.fromEntries(more.map((m) => [m.key, m.dinner])) },
+    },
+  );
+  await s.onto(s.d.standard);
+  const t3 = s.live("t3");
+  const partyId = await seatAt(t3);
+  await s.onto(s.d.dinner);
+  expect(await todayRow(t3)).toMatchObject({ x: 0 });
+  return { ...s, t3, partyId };
+}
+
+describe("a table that frees up after a reset needs moving", () => {
+  it("a table that frees up after a reset needs moving and stays put", async () => {
+    await clearingWorkflow(false);
+    const z = await threeSeatedAcrossDinner();
+
+    await finish(z.partyId);
+    const states = await readStates();
+
+    expect(await todayRow(z.t3)).toMatchObject({ x: 0 });
+    expect(await readyOf(z.t3)).toEqual({ pending: true, readyToMove: true });
+    expect(states.get(z.t3)!.today.needsMoving).toBe(true);
+    await readStates();
+    expect(await todayRow(z.t3)).toMatchObject({ x: 0 });
+  });
+
+  it("with clearing on, a table shows Needs clearing first and Needs moving once cleared", async () => {
+    await clearingWorkflow(true);
+    try {
+      const z = await threeSeatedAcrossDinner();
+
+      await finish(z.partyId);
+      const first = await readStates();
+      expect(await readyOf(z.t3)).toEqual({ pending: true, readyToMove: false });
+      expect(first.get(z.t3)).toMatchObject({
+        condition: "needs_clearing",
+        today: { needsMoving: false },
+      });
+
+      const cleared = await send("POST", `/api/tables/${z.t3}/cleared`, {});
+      expect(cleared.status).toBe(204);
+      const second = await readStates();
+
+      expect(await readyOf(z.t3)).toEqual({ pending: true, readyToMove: true });
+      expect(second.get(z.t3)!.today.needsMoving).toBe(true);
+      expect(await todayRow(z.t3)).toMatchObject({ x: 0 });
+    } finally {
+      await clearingWorkflow(false);
+    }
+  });
+
+  it("a seats-only change still applies by itself", async () => {
+    await clearingWorkflow(false);
+    const label = fresh("Seats");
+    const { zoneId, tableId, masterId, revision } = await plannedTable(label);
+    const partyId = await seatAt(tableId);
+    await save(zoneId, revision, [entry("t", label, { id: masterId, seats: 6 })]);
+    await reset(zoneId);
+    expect(await todayRow(tableId)).toMatchObject({ seats: 4 });
+
+    await finish(partyId);
+    const states = await readStates();
+
+    expect(await todayRow(tableId)).toMatchObject({ x: 0, seats: 6 });
+    expect(await readyOf(tableId)).toEqual({ pending: false, readyToMove: false });
+    expect(states.get(tableId)!.today.needsMoving).toBe(false);
+  });
+
+  it("a row waiting for its name still applies", async () => {
+    await clearingWorkflow(false);
+    const zoneId = await zone();
+    const [p, q, r] = [fresh("P"), fresh("Q"), fresh("R")];
+    const first = await save(zoneId, 0, [
+      entry("p", p, { placement: place(0, 0) }),
+      entry("q", q, { placement: place(20, 0) }),
+    ]);
+    const liveOf = await liveIdsOf(zoneId, first.ids);
+    const [tp, tq] = [liveOf("p"), liveOf("q")];
+    const partyId = await seatAt(tq);
+    await save(zoneId, first.revision, [
+      entry("p", q, { id: first.ids.p, placement: place(50, 0) }),
+      entry("q", r, { id: first.ids.q, placement: place(20, 0) }),
+    ]);
+    await reset(zoneId);
+    expect(await readyOf(tp)).toEqual({ pending: true, readyToMove: false });
+    await moveToday(tp, 30);
+
+    await finish(partyId);
+    await readStates();
+
+    expect((await tableRow(v, tp)).label).toBe(q);
+    expect((await tableRow(v, tq)).label).toBe(r);
+    expect(await todayRow(tp)).toMatchObject({ x: 30 });
+    expect(await readyOf(tp)).toEqual({ pending: false, readyToMove: false });
+  });
+
+  it("a table seated with no today's row is still seeded", async () => {
+    await clearingWorkflow(false);
+    const label = fresh("Unrowed seat");
+    const { zoneId, tableId, masterId, revision } = await plannedTable(label);
+    const partyId = await seatAt(tableId);
+    await inTx(v, (tx) => tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)));
+    await save(zoneId, revision, [entry("t", label, { id: masterId, placement: place(50, 0) })]);
+
+    await reset(zoneId);
+    expect(await todayRow(tableId)).toMatchObject({ x: 50, takenOff: false });
+
+    await finish(partyId);
+    await readStates();
+    expect(await todayRow(tableId)).toMatchObject({ x: 50 });
+    expect(await readyOf(tableId)).toEqual({ pending: false, readyToMove: false });
+  });
+
+  it("Reset table's catch-up marks another table, not moves it", async () => {
+    await clearingWorkflow(false);
+    const z = await threeSeatedAcrossDinner([
+      { key: "t4", standard: 60, dinner: null },
+      { key: "t5", standard: 80, dinner: null },
+      { key: "t6", standard: 100, dinner: null },
+      { key: "long", standard: null, dinner: 60, partKeys: ["t4", "t5", "t6"] },
+    ]);
+    const [t4, long] = [z.live("t4"), z.live("long")];
+    await inTx(v, (tx) =>
+      splitOff(tx, v.cfg, REMOVALS, NOW, { tableId: long, partIds: [t4], seats: 6 }),
+    );
+    await finish(z.partyId);
+    expect(await readyOf(z.t3)).toEqual({ pending: true, readyToMove: false });
+
+    await inTx(v, (tx) =>
+      resetTable(tx, v.cfg, REMOVALS, NOW, { tableId: long, partIds: [t4], seats: null }),
+    );
+
+    expect(await readyOf(z.t3)).toEqual({ pending: true, readyToMove: true });
+    expect(await todayRow(z.t3)).toMatchObject({ x: 0 });
+  });
+
+  it("Split's catch-up marks another table, not moves it", async () => {
+    await clearingWorkflow(false);
+    const z = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+        { key: "c4", label: "Counter 4", seats: 6, place: null },
+        { key: "c5", label: "Counter 5", seats: 4, place: null },
+        {
+          key: "long",
+          label: "Long table",
+          seats: 10,
+          place: { x: 10, y: 20, width: 6, height: 2 },
+          partKeys: ["c3", "c4", "c5"],
+        },
+        { key: "bar", label: "Bar", seats: 4, place: { x: 40, y: 0, width: 2, height: 2 } },
+        { key: "t3", label: "3", place: { x: 60, y: 0 } },
+      ],
+      NOW,
+    );
+    for (const key of ["c3", "c4", "c5"])
+      await giveKeptSize(v, z.master[key]!, { width: 2, height: 2 });
+    const [t3, long, bar] = [z.table.t3!, z.table.long!, z.table.bar!];
+    const partyId = await seatAt(t3);
+    const layout = await inTx(v, (tx) => defaultLayout(tx, v.cfg, z.zoneId));
+    const saved = await inTx(v, (tx) => readLayout(tx, v.cfg, layout));
+    await save(
+      z.zoneId,
+      saved.revision,
+      saved.tables.map((t) => ({
+        id: t.id,
+        key: t.id,
+        label: t.label,
+        seats: t.seats,
+        fixed: t.fixed,
+        placement: t.id === z.master.t3 ? place(80, 0) : t.placement,
+        partKeys: t.partIds,
+      })),
+    );
+    await reset(z.zoneId);
+    await inTx(v, (tx) =>
+      writeMerge(tx, v.cfg, { movingId: bar, targetId: long, side: "left", seats: 12, free: true }),
+    );
+    await finish(partyId);
+    expect(await readyOf(t3)).toEqual({ pending: true, readyToMove: false });
+
+    await inTx(v, (tx) =>
+      splitOff(tx, v.cfg, REMOVALS, NOW, { tableId: bar, partIds: [bar], seats: null }),
+    );
+
+    expect(await mergeOf(v, bar)).toBeNull();
+    expect(await readyOf(t3)).toEqual({ pending: true, readyToMove: true });
+    expect(await todayRow(t3)).toMatchObject({ x: 60 });
   });
 });

@@ -21,10 +21,12 @@ import type { TableRemoval } from "@waitron/module";
 import { readLocationClock, venueMomentAt } from "@waitron/reporting";
 import { AppError, NEW_TABLE_SIZE, groupStep } from "@waitron/shared";
 import {
+  movesTable,
   planReset,
   targetsFromMaster,
   type LiveTable,
   type Placement,
+  type ResetPlan,
   type Target,
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
@@ -272,14 +274,18 @@ export async function catchUpZone(
   while (await catchUpPass(tx, cfg, removals, zoneId, now, options));
 }
 
-/** One pass; true when a reset row stopped being pending, which can free a name for the next. */
+/**
+ * One pass; true when a reset row stopped being pending, which can free a name for the next, or
+ * when rows were marked ready to move. Outside a reset, a row whose table, or a table of its joined
+ * group, would move is marked rather than applied; marked rows wait for Mark moved.
+ */
 async function catchUpPass(
   tx: Transaction,
   cfg: TillConfig,
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
-  { keepTakenOff }: CatchUp,
+  { inReset, keepTakenOff }: CatchUp,
 ): Promise<boolean> {
   const zoneRows = await tx
     .select({
@@ -291,7 +297,11 @@ async function catchUpPass(
     .from(floorZones)
     .leftJoin(
       floorResetTables,
-      and(eq(floorResetTables.zoneId, floorZones.id), eq(floorResetTables.pending, true)),
+      and(
+        eq(floorResetTables.zoneId, floorZones.id),
+        eq(floorResetTables.pending, true),
+        eq(floorResetTables.readyToMove, false),
+      ),
     )
     .leftJoin(
       floorResetTableParts,
@@ -353,15 +363,15 @@ async function catchUpPass(
   const ids = inZone.map((table) => table.id);
   const inZoneIds = new Set(ids);
   const held = new Set((await holdersOf(tx, ids)).keys());
-  const takenOffToday = new Map(
+  const todayRows = new Map(
     (
       await tx
-        .select({ tableId: floorTodayTables.tableId, takenOff: floorTodayTables.takenOff })
+        .select(getTableColumns(floorTodayTables))
         .from(floorTodayTables)
         .where(inArray(floorTodayTables.tableId, ids))
-    ).map((row) => [row.tableId, row.takenOff]),
+    ).map((row) => [row.tableId, row]),
   );
-  const withToday = new Set(takenOffToday.keys());
+  const withToday = new Set(todayRows.keys());
   const clearing = new Set(
     inZone.flatMap((table) => (table.needsClearingSince === null ? [] : [table.id])),
   );
@@ -417,6 +427,32 @@ async function catchUpPass(
   );
   const plan = planReset({ targets, live, takenElsewhere, waitingToCreate });
 
+  if (!inReset) {
+    const splitOff = new Set(inZone.flatMap((t) => (t.splitOffFrom === null ? [] : [t.id])));
+    const moves = (target: Target) => {
+      const today = target.tableId === null ? undefined : todayRows.get(target.tableId);
+      return movesTable(
+        today === undefined
+          ? null
+          : {
+              placement: placementOf(today),
+              takenOff: today.takenOff,
+              inMerge: merged.has(today.tableId),
+              splitOff: splitOff.has(today.tableId),
+            },
+        target,
+      );
+    };
+    const marked = readyToMove(plan.apply, rowOf, [...groupOf.values()], moves);
+    if (marked.length > 0) {
+      await tx
+        .update(floorResetTables)
+        .set({ readyToMove: true })
+        .where(inArray(floorResetTables.id, marked));
+      return true;
+    }
+  }
+
   const kept = await removeLiveTables(tx, cfg, removals, plan.remove, now);
   // A table already hidden is skipped; a kept one was changed by its failed removal, so is not.
   for (const tableId of plan.hide) {
@@ -464,7 +500,7 @@ async function catchUpPass(
     if (rowOf.get(target)!.placed) continue;
     placedNow.add(target);
     await leaveMerges(tx, [tableId]);
-    const columns = todayColumns(target, keepTakenOff && takenOffToday.get(tableId) === true);
+    const columns = todayColumns(target, keepTakenOff && todayRows.get(tableId)?.takenOff === true);
     await tx
       .insert(floorTodayTables)
       .values({ tableId, ...columns })
@@ -516,6 +552,33 @@ async function catchUpPass(
       .where(eq(floorResetTables.id, row.id));
   }
   return changed;
+}
+
+/**
+ * The reset rows to mark ready to move: each applied row not yet placed whose table moves, with
+ * every row of a joined group (plan decision 8) holding one such row.
+ */
+function readyToMove(
+  apply: ResetPlan["apply"],
+  rowOf: ReadonlyMap<Target, { id: string; placed: boolean }>,
+  groups: readonly ResetGroup[],
+  moves: (target: Target) => boolean,
+): string[] {
+  const targetOf = new Map([...rowOf].map(([target, row]) => [row.id, target]));
+  const moving = (rowId: string) => {
+    const target = targetOf.get(rowId);
+    return target !== undefined && !rowOf.get(target)!.placed && moves(target);
+  };
+  const marked = new Set<string>();
+  for (const { target } of apply) {
+    const row = rowOf.get(target)!;
+    if (row.placed) continue;
+    const together = groups.filter((group) => group.rows.some((r) => r.id === row.id));
+    const members = new Set([row.id, ...together.flatMap((group) => group.rows.map((r) => r.id))]);
+    if (![...members].some(moving)) continue;
+    for (const id of members) if (targetOf.has(id)) marked.add(id);
+  }
+  return [...marked];
 }
 
 function todayColumns(target: Target, takenOff: boolean) {

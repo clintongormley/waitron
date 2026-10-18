@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type LiveTable, planReset, type Target, targetsFromMaster } from "./floor-reset-plan.js";
+import {
+  type LiveTable,
+  movesTable,
+  planReset,
+  type Target,
+  targetsFromMaster,
+} from "./floor-reset-plan.js";
 
 const t = (tableId: string | null, label: string, over: Partial<Target> = {}): Target => ({
   tableId,
@@ -330,5 +336,40 @@ describe("targetsFromMaster", () => {
         remove: true,
       },
     ]);
+  });
+});
+
+describe("movesTable", () => {
+  const at = (x: number) => ({ x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 });
+  const drawn = (
+    x: number,
+    over: { takenOff?: boolean; inMerge?: boolean; splitOff?: boolean } = {},
+  ) => ({
+    placement: at(x),
+    takenOff: false,
+    inMerge: false,
+    splitOff: false,
+    ...over,
+  });
+
+  it("is true for a new place, a new size, store, a table in a merge and a split-off table", () => {
+    expect(movesTable(drawn(0), t("a", "T1", { placement: at(20) }))).toBe(true);
+    expect(movesTable(drawn(0), t("a", "T1", { placement: { ...at(0), width: 10 } }))).toBe(true);
+    expect(movesTable(drawn(0), t("a", "T1", { placement: null }))).toBe(true);
+    expect(movesTable(drawn(0, { inMerge: true }), t("a", "T1", { placement: at(0) }))).toBe(true);
+    expect(movesTable(drawn(0, { splitOff: true }), t("a", "T1", { placement: at(0) }))).toBe(true);
+  });
+
+  it("is false for a seats-only change, a table not drawn and a taken-off table", () => {
+    expect(movesTable(drawn(0), t("a", "T1", { placement: at(0), seats: 8, fixed: true }))).toBe(
+      false,
+    );
+    expect(movesTable(null, t("a", "T1", { placement: at(20) }))).toBe(false);
+    expect(movesTable({ ...drawn(0), placement: null }, t("a", "T1", { placement: at(20) }))).toBe(
+      false,
+    );
+    expect(movesTable(drawn(0, { takenOff: true }), t("a", "T1", { placement: at(20) }))).toBe(
+      false,
+    );
   });
 });

@@ -4,21 +4,34 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodayTables,
   floorTodayZones,
   floorZones,
 } from "@waitron/db";
-import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
+import {
+  writeClearingWorkflow,
+  zoneSalePolicies,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { ensureToday } from "./floor-today-store.js";
 import { writeMerge } from "./floor-today-merges.js";
-import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { giveKeptSize, mergeOf, plannedZone } from "./testing/floor-today-venue.js";
+import { finishTable } from "./parties.js";
+import { inTx, OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import {
+  giveKeptSize,
+  mergeOf,
+  plannedZone,
+  standardAndDinner,
+  todayRow,
+  zoneRevisionOf,
+} from "./testing/floor-today-venue.js";
 import { listTablesWithState, type TableState } from "./working-order.js";
 import "./errors.js";
 
@@ -422,6 +435,96 @@ describe("the till's table-state answer carries today's names", () => {
     const members = ["bar", "c3", "c4", "c5"].map((key) => grouped.table[key]!);
     for (const member of members) {
       expect(states.get(member)!.today).toMatchObject({ name: null, joinName: groupName });
+    }
+  });
+});
+
+async function seatAndFinishAcross(tableId: string, reset: () => Promise<unknown>): Promise<void> {
+  const { partyId, revision } = await seat(v, tableId);
+  await reset();
+  await inTx(v, (tx) =>
+    finishTable(tx, { partyId, expectedPartyRevision: revision, operatorId: OPERATOR }),
+  );
+}
+
+const catchUp = () => inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, NOW));
+
+async function readyToMoveOf(tableId: string): Promise<boolean | undefined> {
+  const [row] = await inTx(v, (tx) =>
+    tx
+      .select({ readyToMove: floorResetTables.readyToMove })
+      .from(floorResetTables)
+      .where(eq(floorResetTables.tableId, tableId)),
+  );
+  return row?.readyToMove;
+}
+
+describe("the till's table-state answer says what needs moving", () => {
+  /** 3 stands at 0 in Standard and 40 in Dinner, 6 at 60 in both; guests at 3 leave after a reset onto Dinner. */
+  async function threeFreedAfterDinner() {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    const s = await standardAndDinner(
+      v,
+      NOW,
+      [
+        { key: "t3", label: fresh("3") },
+        { key: "t6", label: fresh("6") },
+      ],
+      { standard: { t3: 0, t6: 60 }, dinner: { t3: 40, t6: 60 } },
+    );
+    await s.onto(s.d.standard);
+    const [t3, t6] = [s.live("t3"), s.live("t6")];
+    await seatAndFinishAcross(t3, () => s.onto(s.d.dinner));
+    return { ...s, t3, t6 };
+  }
+
+  it("reports needsMoving", async () => {
+    const z = await threeFreedAfterDinner();
+    await catchUp();
+
+    const states = await read();
+    expect(states.get(z.t3)!.today).toMatchObject({
+      needsMoving: true,
+      placement: { x: 0 },
+    });
+    expect(states.get(z.t6)!.today.needsMoving).toBe(false);
+  });
+
+  it("marking moves the room's revision", async () => {
+    const z = await threeFreedAfterDinner();
+    const before = (await zoneRevisionOf(v, z.d.zoneId))!;
+
+    await catchUp();
+    expect(await readyToMoveOf(z.t3)).toBe(true);
+    expect(await zoneRevisionOf(v, z.d.zoneId)).toBe(before + 1);
+
+    await catchUp();
+    expect(await zoneRevisionOf(v, z.d.zoneId)).toBe(before + 1);
+  });
+
+  it("4+5 with guests is marked once free under a layout that leaves it off", async () => {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    const s = await standardAndDinner(
+      v,
+      NOW,
+      [
+        { key: "t4", label: fresh("4") },
+        { key: "t5", label: fresh("5") },
+        { key: "t45", label: fresh("4+5"), partKeys: ["t4", "t5"] },
+      ],
+      { standard: { t4: 0, t5: 20, t45: null }, dinner: { t4: null, t5: null, t45: 0 } },
+    );
+    await s.onto(s.d.dinner);
+    const [t4, t5, t45] = [s.live("t4"), s.live("t5"), s.live("t45")];
+    await seatAndFinishAcross(t45, () => s.onto(s.d.standard));
+
+    await catchUp();
+
+    const states = await read();
+    expect(states.get(t45)!.today).toMatchObject({ needsMoving: true, placement: { x: 0 } });
+    for (const part of [t4, t5]) {
+      expect(states.get(part)!.today.placement).toBeNull();
+      expect((await todayRow(v, part))!.x).toBeNull();
     }
   });
 });

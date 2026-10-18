@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   diningTables,
+  floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodaySplitParts,
@@ -86,12 +87,14 @@ export async function roomPrints(
       groupSeats: floorTodayJoins.seats,
       groupName: floorTodayJoins.name,
       splitOffFrom: floorTodaySplitParts.joinedTableId,
+      readyToMove: floorResetTables.readyToMove,
     })
     .from(diningTables)
     .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .leftJoin(floorTodaySplitParts, eq(floorTodaySplitParts.partTableId, diningTables.id))
+    .leftJoin(floorResetTables, eq(floorResetTables.tableId, diningTables.id))
     .where(
       and(eq(diningTables.locationId, cfg.locationId), inArray(diningTables.zoneId, [...zoneIds])),
     )

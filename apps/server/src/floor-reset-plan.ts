@@ -142,6 +142,29 @@ export function planReset(input: {
   return plan;
 }
 
+/** Whether applying `target` would carry a table drawn on today's map somewhere else (plan decision 10). */
+export function movesTable(
+  today: {
+    placement: Placement | null;
+    takenOff: boolean;
+    inMerge: boolean;
+    splitOff: boolean;
+  } | null,
+  target: Target,
+): boolean {
+  if (today === null || today.placement === null || today.takenOff) return false;
+  if (today.inMerge || today.splitOff || target.placement === null) return true;
+  const [from, to] = [today.placement, target.placement];
+  return (
+    from.x !== to.x ||
+    from.y !== to.y ||
+    from.width !== to.width ||
+    from.height !== to.height ||
+    from.shape !== to.shape ||
+    from.rotation !== to.rotation
+  );
+}
+
 export function targetsFromMaster(
   master: readonly {
     id: string;

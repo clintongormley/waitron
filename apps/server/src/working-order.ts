@@ -86,6 +86,7 @@ import {
   billPayments,
   devices,
   diningTables,
+  floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodayTables,
@@ -7584,6 +7585,8 @@ export interface TableToday {
   name: string | null;
   /** Its group's name for today; `null` outside a group or for the group's normal name. */
   joinName: string | null;
+  /** A reset left its change waiting for someone to move the table. */
+  needsMoving: boolean;
 }
 
 /** One row of the occupancy read-model. */
@@ -7839,9 +7842,11 @@ async function readTodayTables(
       zoneRevision: floorTodayZones.revision,
       name: floorTodayTables.name,
       joinName: floorTodayJoins.name,
+      readyToMove: floorResetTables.readyToMove,
     })
     .from(floorTodayTables)
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
+    .leftJoin(floorResetTables, eq(floorResetTables.tableId, floorTodayTables.tableId))
     .leftJoin(floorTodayZones, eq(floorTodayZones.zoneId, diningTables.zoneId))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
@@ -7918,6 +7923,7 @@ async function readTodayTables(
         zoneRevision: row.zoneRevision ?? 0,
         name: row.name,
         joinName: row.joinName,
+        needsMoving: row.readyToMove === true,
       },
     ]),
   );
