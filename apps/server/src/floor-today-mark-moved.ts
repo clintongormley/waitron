@@ -140,8 +140,8 @@ export async function markMoved(
 /**
  * Throws what still holds back the group of `tables`, which Mark moved could not apply: food on
  * its way, a party, a table needing clearing or a module's refusal to let a table go, at one of
- * them or at a table tied to them by today's merges and splits, as the catch-up's waiting rules
- * tie them. `table.needs_moving` is the answer when none of those is found.
+ * them or at a table tied to them by today's merges and splits or a pending joined group, as the
+ * catch-up's waiting rules (`waitingTogether`) tie them. `table.needs_moving` is the answer when none of those is found.
  */
 async function refuseHeldBack(
   tx: Transaction,
@@ -180,6 +180,7 @@ async function refuseHeldBack(
       tied.add(row.part);
       tied.add(row.joined);
     }
+    for (const id of await pendingGroupTables(tx, ids)) tied.add(id);
   }
   const ids = [tableId, ...[...tied].filter((id) => id !== tableId)];
   for (const id of ids) await refuseDeliveryPending(tx, id);
@@ -206,4 +207,43 @@ async function refuseHeldBack(
     if (refusal !== undefined) throw refusal;
   }
   throw new AppError("table.needs_moving", { tableId });
+}
+
+/** The tables of every pending joined group holding a pending reset row of one of `tableIds`. */
+async function pendingGroupTables(tx: Transaction, tableIds: readonly string[]): Promise<string[]> {
+  const rows = tx
+    .select({ id: floorResetTables.id })
+    .from(floorResetTables)
+    .where(
+      and(inArray(floorResetTables.tableId, [...tableIds]), eq(floorResetTables.pending, true)),
+    );
+  const links = await tx
+    .select({ joinedId: floorResetTableParts.joinedResetTableId })
+    .from(floorResetTableParts)
+    .innerJoin(
+      joinedRow,
+      and(eq(joinedRow.id, floorResetTableParts.joinedResetTableId), eq(joinedRow.pending, true)),
+    )
+    .where(
+      or(
+        inArray(floorResetTableParts.joinedResetTableId, rows),
+        inArray(floorResetTableParts.partResetTableId, rows),
+      ),
+    );
+  const joinedIds = [...new Set(links.map((link) => link.joinedId))];
+  if (joinedIds.length === 0) return [];
+  const parts = tx
+    .select({ id: floorResetTableParts.partResetTableId })
+    .from(floorResetTableParts)
+    .where(inArray(floorResetTableParts.joinedResetTableId, joinedIds));
+  const members = await tx
+    .select({ tableId: floorResetTables.tableId })
+    .from(floorResetTables)
+    .where(
+      and(
+        or(inArray(floorResetTables.id, joinedIds), inArray(floorResetTables.id, parts)),
+        eq(floorResetTables.pending, true),
+      ),
+    );
+  return members.flatMap((member) => (member.tableId === null ? [] : [member.tableId]));
 }

@@ -421,6 +421,86 @@ describe("Mark moved", () => {
     expect(await needsMoving(c4)).toBe(true);
   });
 
+  it("is refused while guests sit at a table of another waiting joined group tied to it by a merge", async () => {
+    const z = await plannedZone(
+      v,
+      [
+        { key: "c3", place: { x: 0, y: 0 } },
+        { key: "c4", place: { x: 20, y: 0 } },
+        { key: "c6", place: { x: 40, y: 0 } },
+        { key: "c9", place: null },
+      ],
+      NOW,
+    );
+    const [c3, c4, c6, c9] = [z.table.c3!, z.table.c4!, z.table.c6!, z.table.c9!];
+    await expectRevision(
+      v,
+      send("POST", `/api/tables/${c4}/today/merge`, { targetId: c6, side: "right", seats: 8 }),
+    );
+    const partyId = await seatAt(c3);
+    const at = (x: number) => ({
+      x,
+      y: 40,
+      width: 8,
+      height: 8,
+      shape: "rect" as const,
+      rotation: 0,
+    });
+    await inTx(v, async (tx) => {
+      const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+      const plan = await readLayout(tx, v.cfg, layout);
+      await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        layout,
+        {
+          revision: plan.revision,
+          tables: [
+            ...plan.tables.map((t) => ({
+              id: t.id,
+              key: t.id,
+              label: t.label,
+              seats: t.seats,
+              fixed: t.fixed,
+              placement: null,
+              partKeys: t.partIds,
+            })),
+            {
+              key: "long1",
+              label: fresh("Long1"),
+              seats: 8,
+              fixed: false,
+              placement: at(0),
+              partKeys: [z.master.c3!, z.master.c4!],
+            },
+            {
+              key: "long2",
+              label: fresh("Long2"),
+              seats: 8,
+              fixed: false,
+              placement: at(40),
+              partKeys: [z.master.c6!, z.master.c9!],
+            },
+          ],
+        },
+        NOW,
+      );
+      await resetZone(tx, v.cfg, REMOVALS, z.zoneId, NOW, "due");
+    });
+    await finish(partyId);
+    expect(await needsMoving(c4)).toBe(true);
+    await seatAt(c9);
+    const before = await everything();
+
+    expect(await refusal(markMoved(c4))).toEqual({
+      status: 409,
+      body: { error: { code: "tab.already_open", params: { tableId: c9 } } },
+    });
+
+    expect(await everything()).toEqual(before);
+  });
+
   it("Back to its saved place on a table that needs moving is Mark moved", async () => {
     const z = await threeNeedsMoving();
 
