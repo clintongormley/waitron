@@ -2833,7 +2833,9 @@ and downloads keep browser handling. Fragment-only form links keep their target'
 which owns any leave request. The dashboard catches a link click before the link's own handler
 sees it, so a link that handles a plain click itself (the product swatch that opens Edit in
 place) carries `data-own-click` to keep it, and a link with `aria-disabled="true"` is cancelled
-there and goes nowhere. The department receipt dialog protects its authored draft. A tab or
+there and goes nowhere. The department dialog's Receipts tab protects its authored draft: the
+receipt editor (`dashboard-department-receipt-editor`) takes a draft scope of its own, and closing
+the dialog asks one question covering it and the department form's draft. A tab or
 management-link departure asks about all outstanding drafts; Venue settings keeps receipt
 language separate from its other settings.
 
