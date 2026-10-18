@@ -1155,8 +1155,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   uses its original model until the coordinated editor replacement. The new field view projects
   bounded language windows, keeps a focused native field and cursor through row moves, exposes
   separate optional unit fields and retains rejected input until that field is resolved. Its
-  integration with the dialog's page reads, filters, staged selection and Save is still open;
-  no intermediate feature is ready to publish. Boot's configured-origin
+  integration with the dialog's page reads, filters, staged selection and Save is still open.
+  An unpublished page coordinator now reads one item page and one suggestion page per opening,
+  refreshes retained cells in requests of at most one hundred, retains hidden edits and focused
+  fields, and rejects closed, superseded or configuration-mismatched answers. Show staged pages
+  distinct items, and refreshed field placeholders share the model's current facts. The legacy
+  dialog does not yet consume this coordinator; its replacement, final client contracts and Save
+  integration remain open. No intermediate feature is ready to publish. Boot's configured-origin
   forwarding and obsolete callback cleanup wait for lane E. Automatic-translation review, future
   presentation and the remaining validation are unfinished.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
