@@ -5645,6 +5645,29 @@ describe("till-app: the order's groups", () => {
       await reopenDrawer(el);
     }
 
+    async function requestHeldMove(
+      el: TillApp,
+      lineId: string,
+      quantity: string,
+      target: { groupId: string } | "new",
+    ) {
+      const screen = tableOrder(el)!;
+      emit(screen, "move-group-line", {
+        lineId,
+        quantity,
+        target,
+        expectedEdits: screen.billEdit === null ? null : [{ ...screen.billEdit }],
+      });
+      await flush(el);
+    }
+    function requestHeldSplit(el: TillApp, quantity: string) {
+      emit(tableOrder(el)!, "split-group-line", {
+        lineId: "line-steak",
+        groupId: "g3",
+        quantity,
+      });
+    }
+
     const command = (revision: number) => ({
       submissionId: expect.any(String),
       expectedPartyRevision: revision,
@@ -5701,13 +5724,12 @@ describe("till-app: the order's groups", () => {
       ]);
     });
 
-    it("moves a whole line to another held group", async () => {
+    it("the retained move command moves a whole line to another held group", async () => {
       const server = editServer();
       const { el } = await mountApp(server);
       await openGroups(el);
 
-      await press(el, '[data-move-line="line-flan"]');
-      await press(el, '[data-move-target="g2"]');
+      await requestHeldMove(el, "line-flan", "1.000", { groupId: "g2" });
 
       expect(server.moveLinesToGroup.mock.calls).toEqual([
         [
@@ -5729,13 +5751,12 @@ describe("till-app: the order's groups", () => {
       ]);
     });
 
-    it("moves a whole line into a new held group at the end", async () => {
+    it("the retained move command moves a whole line into a new held group at the end", async () => {
       const server = editServer();
       const { el } = await mountApp(server);
       await openGroups(el);
 
-      await press(el, '[data-move-line="line-fish"]');
-      await press(el, '[data-move-target="new"]');
+      await requestHeldMove(el, "line-fish", "1.000", "new");
 
       expect(server.moveLinesToGroup.mock.calls).toEqual([
         [
@@ -5760,12 +5781,13 @@ describe("till-app: the order's groups", () => {
     });
 
     it.each([2, 3, 4])(
-      "splits Steak ×%s with one command and keeps the resulting rows separate",
+      "the retained split command splits Steak ×%s once and keeps the resulting rows separate",
       async (quantity) => {
         const server = editServer(`${quantity}.000`);
         const { el } = await mountApp(server);
         await openGroups(el);
-        await press(el, '[data-split-group-line="line-steak"]');
+        requestHeldSplit(el, `${quantity}.000`);
+        await flush(el);
         expect(server.splitHeldLineIntoUnits.mock.calls).toEqual([
           [
             "v1",
@@ -5813,7 +5835,8 @@ describe("till-app: the order's groups", () => {
       const { el } = await mountApp(server);
       await openGroups(el);
       const lineReads = server.getTabLines.mock.calls.length;
-      await press(el, '[data-split-group-line="line-steak"]');
+      requestHeldSplit(el, "4.000");
+      await flush(el);
       expect(split.mock.calls).toEqual([
         [
           "v1",
@@ -5892,7 +5915,8 @@ describe("till-app: the order's groups", () => {
       const { el } = await mountApp(server);
       await openGroups(el);
       const floorReads = server.getTablesState.mock.calls.length;
-      await press(el, '[data-split-group-line="line-steak"]');
+      requestHeldSplit(el, "4.000");
+      await flush(el);
       expect(split.mock.calls).toEqual([
         [
           "v1",
@@ -5932,7 +5956,8 @@ describe("till-app: the order's groups", () => {
       await openGroups(el);
       const floorReads = server.getTablesState.mock.calls.length;
       const lineReads = server.getTabLines.mock.calls.length;
-      await press(el, '[data-split-group-line="line-steak"]');
+      requestHeldSplit(el, "4.000");
+      await flush(el);
       expect(split.mock.calls).toEqual([
         [
           "v1",
@@ -5971,16 +5996,12 @@ describe("till-app: the order's groups", () => {
       ]);
     });
 
-    it("two presses of Split quantity in one turn split the line once, and show no message", async () => {
+    it("two retained split commands in one turn split the line once, and show no message", async () => {
       const server = editServer("3.000");
       const { el } = await mountApp(server);
       await openGroups(el);
-      const split = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>(
-        '[data-split-group-line="line-steak"]',
-      )!;
-
-      split.click();
-      split.click();
+      requestHeldSplit(el, "3.000");
+      requestHeldSplit(el, "3.000");
       await flush(el);
 
       expect(server.splitHeldLineIntoUnits.mock.calls).toEqual([
@@ -6054,8 +6075,8 @@ describe("till-app: the order's groups", () => {
             panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
               '[data-group-fire="g4"]',
             )!.disabled,
-            order.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-              '[data-move-line="line-flan"]',
+            panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+              '[data-sent-info="line-flan"]',
             )!.disabled,
           ];
         };
@@ -7902,7 +7923,7 @@ describe("till-app: Current orders", () => {
     });
   });
 
-  it("switches to a held dish's bill before moving it from Current orders", async () => {
+  it("the retained held-line command uses the source bill after switching to it", async () => {
     const heldOnCheck: CurrentOrders = {
       hasGroups: true,
       nextDisplayNumber: 2,
@@ -7979,11 +8000,13 @@ describe("till-app: Current orders", () => {
     order = tableOrder(el)!;
     expect(order.orderId).toBe("wo-check");
     const reads = vi.mocked(api.readCurrentOrders).mock.calls.length;
-    const move = order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="line-9"]');
-    expect(move).not.toBeNull();
-    await userEvent.click(move!);
-    await flush(el);
-    order.shadowRoot!.querySelector<HTMLElement>('[data-move-target="new"]')!.click();
+    expect(order.shadowRoot!.querySelector('[data-move-line="line-9"]')).toBeNull();
+    emit(order, "move-group-line", {
+      lineId: "line-9",
+      quantity: "1.000",
+      target: "new",
+      expectedEdits: [{ ...order.billEdit! }],
+    });
     await flush(el);
 
     expect(moveLinesToGroup).toHaveBeenCalledExactlyOnceWith(

@@ -9,6 +9,8 @@ import {
   openSentMore,
   sentPanelFor,
 } from "./till-table-order-screen.sent.test-helpers.js";
+import { DraftStore } from "../state/draft-sync.js";
+import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { TabLine, PartyBill } from "../api/client.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
@@ -483,7 +485,7 @@ describe("Current orders and Sent service", () => {
     expect(text(rowOf(el, "l-steak"))).toBe("Steak ×2");
     expect(all(el, "[data-split-group-line]").map((b) => b.dataset.splitGroupLine)).toEqual([]);
     expect(q(el, '[data-move-line="l-steak"]')).toBeNull();
-    expect(q(el, "[data-move-dialog]")!.hasAttribute("open")).toBe(false);
+    expect(q(el, "[data-move-dialog]")).toBeNull();
     expect(moves).toEqual([]);
     expect(splits).toEqual([]);
     const panel = await unfoldSent(el);
@@ -492,13 +494,15 @@ describe("Current orders and Sent service", () => {
     expect(companion.querySelector("button, wt-button, wt-row-actions, input")).toBeNull();
   });
 
-  it("the transitional drawer offers held-line controls only for its own open bill", async () => {
+  it("Sent keeps other bills as read-only companions and offers Recall only on this open bill", async () => {
     const held = { released: false, kitchen: null };
     const onCheck = row("l-check", "Steak", "2.000", { ...held, workingOrderId: "wo-check" });
     const onPaid = row("l-paid", "Steak", "2.000", { ...held, workingOrderId: "wo-paid" });
     const unlisted = row("l-unlisted", "Steak", "2.000", { ...held, workingOrderId: "wo-gone" });
     const onShown = row("l-shown", "Steak", "2.000", { ...held, workingOrderId: "wo-4" });
     const { el } = await mountCurrent({
+      editSentLines: true,
+      lines: [{ ...storedDish, id: "l-shown", name: "Steak", groupId: "g3" }],
       currentOrders: current({
         groups: [currentGroup("g3", 3, "held", [onCheck, onPaid, unlisted, onShown])],
       }),
@@ -506,10 +510,20 @@ describe("Current orders and Sent service", () => {
     });
     const offered = (selector: string, attribute: string) =>
       all(el, selector).map((button) => button.getAttribute(attribute));
-    // The bill on screen is open even when the party's bills have not been read.
-    expect(offered("[data-move-line]", "data-move-line")).toEqual(["l-shown"]);
-    expect(offered("[data-split-group-line]", "data-split-group-line")).toEqual(["l-shown"]);
+    expect(offered("[data-move-line]", "data-move-line")).toEqual([]);
+    expect(offered("[data-split-group-line]", "data-split-group-line")).toEqual([]);
     expect(text(rowOf(el, "l-paid"))).toBe("Steak ×2");
+    const panel = await unfoldSent(el);
+    expect(
+      [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-companion]")].map(
+        (row) => row.dataset.companion,
+      ),
+    ).toEqual(["l-check", "l-paid", "l-unlisted"]);
+    await openSentDish(el, "l-shown", "held");
+    await openSentMore(el);
+    const recalls = capture(el, "recall-lines");
+    await userEvent.click(q(el, "[data-sent-line-recall]")!);
+    expect(recalls.map((event) => event.detail)).toEqual([{ lineNos: [1] }]);
   });
 
   it("says the sent orders could not be read, where Sent would be", async () => {
@@ -787,7 +801,7 @@ describe("the release reminder in Sent", () => {
 });
 
 describe("held-line move editing observation", () => {
-  it("requires switching to the source bill and retains its observation from opening", async () => {
+  it("switches to the recalled source bill and refuses a local Move after its edit observation changes", async () => {
     const own = { billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null };
     const source = {
       billId: "wo-check",
@@ -812,23 +826,56 @@ describe("held-line move editing observation", () => {
       }),
     });
     const events = capture(el, "move-group-line");
+    const sends = capture(el, "submit-draft");
     expect(q(el, '[data-move-line="other-line"]')).toBeNull();
     el.orderId = "wo-check";
     el.billEdit = source;
+    const draft = new DraftStore();
+    draft.loadFrom("draft-check", [
+      {
+        product: {
+          id: "other-product",
+          name: "Other bill dish",
+          menuItemId: undefined,
+          pricingUnit: "each",
+          unitPrice: "2.00",
+          vatClass: "general",
+          category: null,
+          allergens: null,
+        },
+        quantity: "2.000",
+        place: { kind: "fire" },
+        source: {
+          line: {
+            ...storedDish,
+            id: "other-line",
+            name: "Other bill dish",
+            groupId: "g3",
+            unitPriceGross: "2.00",
+            listUnitPriceGross: undefined,
+          },
+          extras: [],
+          netAmount: "4.00",
+        },
+      },
+    ]);
+    el.draftStore = draft;
     await el.updateComplete;
-    const ownMove = q(el, '[data-move-line="other-line"]');
-    expect(ownMove, "switching to its open bill keeps the dish editable").not.toBeNull();
-    await userEvent.click(ownMove!);
+    await sentPanelFor(el);
+    const select = q(el, '[data-draft-select="0"]');
+    expect(select, "switching to its open bill keeps the recalled dish editable").not.toBeNull();
+    await userEvent.click(select!);
     await el.updateComplete;
+    await userEvent.click(q(el, "[data-draft-move]")!);
+    await el.updateComplete;
+    const target = q(el, '[data-draft-move-to="join:g4"]')!;
     el.billEdits = [own, { ...source, editorVersion: 9, draftRevision: 5 }];
-    await el.updateComplete;
-    q(el, '[data-move-target="g4"]')!.click();
-    expect(events[0]!.detail).toEqual({
-      lineId: "other-line",
-      quantity: "2.000",
-      target: { groupId: "g4" },
-      expectedEdits: [source],
-    });
-    expect(events[0]!.bubbles && events[0]!.composed).toBe(true);
+    el.billEdit = { ...source, editorVersion: 9, draftRevision: 5 };
+    target.click();
+    expect(draft.lines[0]!.place).toEqual({ kind: "fire" });
+    expect(draft.lines[0]!.quantity).toBe("2.000");
+    expect(draft.lines[0]!.source!.line.id).toBe("other-line");
+    expect(sends).toEqual([]);
+    expect(events).toEqual([]);
   });
 });

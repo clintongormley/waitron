@@ -3,6 +3,8 @@ import {
   currentGroup,
   row as currentRow,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
+import { DraftStore } from "../state/draft-sync.js";
+import { resized } from "./till-table-order-screen.test-helpers.js";
 import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -580,23 +582,35 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       return mounted;
     }
 
-    async function press(el: TillTableOrderScreen, selector: string): Promise<void> {
-      el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
-      await el.updateComplete;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await el.updateComplete;
-    }
-
     it("has no violations in the list, a fired group and held ones with every control", async () => {
       const { el, host } = await withGroups();
-      if (el.shadowRoot!.querySelector("[data-split-group-line]") === null)
-        throw new Error("the scan must include Split quantity");
+      expect(el.shadowRoot!.querySelector("[data-split-group-line], [data-move-line]")).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-group-line="line-1"]')).not.toBeNull();
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the Move to… picker", async () => {
+    it("has no violations in New order Move with a recalled source", async () => {
       const { el, host } = await withGroups();
-      await press(el, '[data-move-line="line-1"]');
+      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      const draft = new DraftStore();
+      draft.loadFrom("recalled", [
+        {
+          product: products[0]!,
+          quantity: "2.000",
+          place: { kind: "fire" },
+          source: { line: groupLines[0]!, extras: [], netAmount: "3.00" },
+        },
+      ]);
+      el.draftStore = draft;
+      el.style.width = "1280px";
+      await resized(el);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="0"]')!);
+      await el.updateComplete;
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-draft-move]")!);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-draft-move-dialog]")!.hasAttribute("open")).toBe(
+        true,
+      );
       await expectNoA11yViolations(host);
     });
 

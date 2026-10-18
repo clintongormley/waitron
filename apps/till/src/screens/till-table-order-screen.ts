@@ -99,7 +99,6 @@ import {
   isStarted,
   lineAdjustTarget,
   listedGross,
-  moreThanOneWholeUnit,
   tabLineGross,
 } from "../state/adjust-target.js";
 import { lineTotal, priceWasStyles } from "../widgets/price-was.js";
@@ -272,24 +271,6 @@ export interface SplitRefusal {
   prompt?: object;
 }
 
-/** A held row whose Move to… is open, on whichever bill of the party it sits. */
-interface MovePending {
-  expectedEdits: BillEditExpected[] | null;
-  lineId: string;
-  name: string;
-  quantity: string;
-  group: OrderGroup;
-}
-
-/** What a group's row offers while its group is held: Move always, Split only for `splits`. */
-interface HeldRow {
-  billId: string | undefined;
-  lineId: string;
-  name: string;
-  quantity: string;
-  splits: boolean;
-}
-
 interface DraftMoveOpening {
   scope: string;
   groups: string;
@@ -302,15 +283,6 @@ interface DraftMoveOpening {
 function composedParent(node: Element): Element | null {
   const root = node.getRootNode();
   return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
-}
-
-/** A held group as the picker names it: `index` is its place among the party's held groups. */
-function heldGroupLabel(group: OrderGroup, index: number): string {
-  return index === 0
-    ? t("table.held_next").replace("{summary}", () => group.summary)
-    : t("table.held_group")
-        .replace("{n}", () => groupNumberText(group))
-        .replace("{summary}", () => group.summary);
 }
 
 /** `fire-group`: a held group the waiter confirmed firing. */
@@ -939,13 +911,6 @@ export class TillTableOrderScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      .group-line-actions {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: var(--wt-space-2);
-      }
-
       .group-line-name {
         overflow-wrap: anywhere;
       }
@@ -985,10 +950,6 @@ export class TillTableOrderScreen extends LitElement {
 
       .row-what .group-line-name {
         overflow-wrap: break-word;
-      }
-
-      .current-row .group-line-actions {
-        margin-inline-start: auto;
       }
 
       .row-extra,
@@ -1319,8 +1280,6 @@ export class TillTableOrderScreen extends LitElement {
     billId: string | undefined;
     visit: number;
   };
-  /** The held line whose Move to… picker is open, with the group it is in. */
-  @state() private movePending: MovePending | null = null;
   /** A row whose Mark served, or its undo, asks how many; `count` is what is chosen so far. */
   @state() private servePending: { row: CurrentOrderRow; undo: boolean; count: Decimal } | null =
     null;
@@ -2007,7 +1966,6 @@ export class TillTableOrderScreen extends LitElement {
   /** Built with {@link lines}, for the held-groups list. */
   #lineById = new Map<string, TabLine>();
   #lineByNo = new Map<number, TabLine>();
-  #dishesWithExtras = new Set<number>();
 
   constructor() {
     super();
@@ -2049,14 +2007,12 @@ export class TillTableOrderScreen extends LitElement {
       );
       this.#lineById = new Map(this.lines.map((line) => [line.id, line]));
       this.#lineByNo = new Map(this.lines.map((line) => [line.lineNo, line]));
-      this.#dishesWithExtras = new Set(this.lines.flatMap((line) => line.parentLineNo ?? []));
     }
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
       this.#closeChange();
       this.fireGroupPending = null;
-      this.movePending = null;
       this.servePending = null;
       this.reviewing = false;
       this.#browsingScroll = undefined;
@@ -2749,10 +2705,9 @@ export class TillTableOrderScreen extends LitElement {
           }
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
-        ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#moveDialog()}
-        ${this.#serveDialog()} ${this.#changeEditor()} ${this.#takeOverDialog()}
-        ${this.#billChoiceDialog()} ${this.#nameDialog()} ${this.#guestsDialog()}
-        ${this.#splitGuestsDialog()}
+        ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#serveDialog()}
+        ${this.#changeEditor()} ${this.#takeOverDialog()} ${this.#billChoiceDialog()}
+        ${this.#nameDialog()} ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
       </section>
     `;
   }
@@ -4656,7 +4611,7 @@ export class TillTableOrderScreen extends LitElement {
       <ul class="group-lines">
         ${
           current === null
-            ? this.#billLinesOf(group).map((line) => this.#groupLine(line, isHeld ? group : null))
+            ? this.#billLinesOf(group).map((line) => this.#groupLine(line))
             : current.map((row) => this.#currentRow(row, isHeld ? group : null))
         }
       </ul>
@@ -4735,30 +4690,9 @@ export class TillTableOrderScreen extends LitElement {
                   })
                 : nothing
             }`
-          : row.workingOrderId !== this.orderId || !this.#billOpen(row.workingOrderId)
-            ? nothing
-            : this.#heldRowActions(
-                {
-                  billId: row.workingOrderId,
-                  lineId: row.lineId,
-                  name: row.name,
-                  quantity: row.quantity,
-                  splits:
-                    row.unitPrecision === 0 &&
-                    compareDecimal(decimal(row.quantity), decimal("1")) > 0 &&
-                    row.extras.length === 0,
-                },
-                held,
-              )
+          : nothing
       }
     </li>`;
-  }
-
-  /** A bill the party's bills name as open, or the bill on screen when they do not name it. Held
-   * work moves only between open bills: the server refuses a line on a paid one. */
-  #billOpen(workingOrderId: string): boolean {
-    const bill = this.bills.find((candidate) => candidate.workingOrderId === workingOrderId);
-    return bill === undefined ? workingOrderId === this.orderId : bill.status === "open";
   }
 
   /** What was recorded of a row, and nothing more: no kitchen item means no kitchen state. */
@@ -4947,134 +4881,14 @@ export class TillTableOrderScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  /** `group` is null for a fired group's line, which offers nothing. Split quantity is offered on a
-   * dish sold by the unit, of more than one, with no extras: the server refuses to split a dish with
-   * extras. */
-  #groupLine(line: TabLine, group: OrderGroup | null): TemplateResult {
+  #groupLine(line: TabLine): TemplateResult {
     const name = this.#nameForLine(line);
     return html`<li class="group-line" data-group-line=${line.id}>
       <span class="group-line-name"
         >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
       >
       ${this.#paidMark(line.lineNo, line.quantity)}
-      ${
-        group === null
-          ? nothing
-          : this.#heldRowActions(
-              {
-                billId: this.orderId,
-                lineId: line.id,
-                name,
-                quantity: line.quantity,
-                splits: moreThanOneWholeUnit(line) && !this.#dishesWithExtras.has(line.lineNo),
-              },
-              group,
-            )
-      }
     </li>`;
-  }
-
-  #heldRowActions(row: HeldRow, group: OrderGroup): TemplateResult {
-    const label = (key: StringKey) => `${t(key)} · ${row.name}`;
-    return html`<span class="group-line-actions">
-      <wt-button
-        variant="secondary"
-        data-move-line=${row.lineId}
-        aria-label=${label("table.move_line")}
-        ?disabled=${this.groupCommandBusy}
-        @click=${() =>
-          (this.movePending = {
-            lineId: row.lineId,
-            name: row.name,
-            quantity: row.quantity,
-            group,
-            expectedEdits: this.#moveLineEdits(row.billId),
-          })}
-      >
-        ${t("table.move_line")}
-      </wt-button>
-      ${
-        row.splits
-          ? html`<wt-button
-              variant="secondary"
-              data-split-group-line=${row.lineId}
-              aria-label=${label("table.split_group_line")}
-              ?disabled=${this.groupCommandBusy}
-              @click=${() =>
-                this.#dispatch("split-group-line", {
-                  lineId: row.lineId,
-                  groupId: group.id,
-                  quantity: row.quantity,
-                } satisfies SplitGroupLineDetail)}
-            >
-              ${t("table.split_group_line")}
-            </wt-button>`
-          : nothing
-      }
-    </span>`;
-  }
-
-  #moveLineEdits(billId: string | undefined): BillEditExpected[] | null {
-    const edit =
-      this.billEdits.find((edit) => edit.billId === billId) ??
-      (this.billEdit?.billId === billId ? this.billEdit : null);
-    return edit == null ? null : [{ ...edit }];
-  }
-
-  #moveTo(target: MoveGroupLineDetail["target"]): void {
-    const pending = this.movePending;
-    if (pending === null) return;
-    this.movePending = null;
-    this.#dispatch("move-group-line", {
-      lineId: pending.lineId,
-      quantity: pending.quantity,
-      target,
-      expectedEdits: pending.expectedEdits,
-    } satisfies MoveGroupLineDetail);
-  }
-
-  #moveDialog(): TemplateResult {
-    const pending = this.movePending;
-    const held = this.#heldInOrder;
-    return html`<wt-dialog
-      ${trackDialog()}
-      class="move-line-dialog"
-      data-move-dialog
-      .open=${pending !== null}
-      .heading=${t("table.move_line")}
-      @wt-close=${() => (this.movePending = null)}
-    >
-      ${
-        pending === null
-          ? nothing
-          : html`<p class="move-dish">${pending.name} ×${this.#displayQty(pending.quantity)}</p>
-              <div class="action-options">
-                ${held.map((group, index) =>
-                  group.id === pending.group.id
-                    ? nothing
-                    : html`<wt-button
-                        variant="secondary"
-                        data-move-target=${group.id}
-                        @click=${() => this.#moveTo({ groupId: group.id })}
-                      >
-                        ${heldGroupLabel(group, index)}
-                      </wt-button>`,
-                )}
-                <wt-button
-                  variant="secondary"
-                  data-move-target="new"
-                  @click=${() => this.#moveTo("new")}
-                >
-                  ${t("table.move_new_group")}
-                </wt-button>
-              </div>`
-      }
-      <div slot="footer" class="cancel-actions">
-        <wt-button variant="secondary" data-move-dismiss @click=${() => (this.movePending = null)}>
-          ${t("action.back")}
-        </wt-button>
-      </div>
-    </wt-dialog>`;
   }
 
   #requestFireGroup(group: OrderGroup): void {

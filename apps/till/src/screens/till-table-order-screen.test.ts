@@ -1515,6 +1515,50 @@ describe("till-table-order-screen", () => {
       return mounted;
     }
 
+    async function mountRecalledGroups(
+      chosen: TabLine[],
+      over: Partial<TillTableOrderScreen> = {},
+    ) {
+      const draft = new DraftStore();
+      draft.loadFrom(
+        "recalled",
+        chosen.map((line) => ({
+          product: {
+            ...products[0]!,
+            id: line.productId!,
+            name: line.name!,
+            pricingUnit: "each" as const,
+          },
+          quantity: line.quantity,
+          source: { line, extras: [], netAmount: grossOf(line.unitPriceGross, line.quantity) },
+          place: { kind: "fire" as const },
+        })),
+      );
+      const mounted = await mount({
+        lines: tabLines,
+        groups,
+        orderId: "wo-4",
+        ...over,
+        draftStore: draft,
+      });
+      mounted.el.style.width = "1280px";
+      await resized(mounted.el);
+      return { ...mounted, draft };
+    }
+    const recalledMoveDialog = (el: TillTableOrderScreen) =>
+      el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-move-dialog]")!;
+    async function openRecalledMove(el: TillTableOrderScreen, index = 0) {
+      for (const selected of el.shadowRoot!.querySelectorAll<HTMLElement>(
+        '[data-draft-select][aria-pressed="true"]',
+      )) {
+        await userEvent.click(selected);
+      }
+      await userEvent.click(control(el, `[data-draft-select="${index}"]`)!);
+      await el.updateComplete;
+      await userEvent.click(control(el, "[data-draft-move]")!);
+      await el.updateComplete;
+    }
+
     async function mountSentGroups(over: Partial<TillTableOrderScreen> = {}) {
       const lines = over.lines ?? tabLines;
       const known = over.groups ?? groups;
@@ -1711,60 +1755,61 @@ describe("till-table-order-screen", () => {
       expect(reorders[0]!.bubbles && reorders[0]!.composed).toBe(true);
     });
 
-    it("Move to… offers the other held groups and a new one, and moves the whole line", async () => {
-      const { el } = await mountGroups();
+    it("moves recalled whole lines in New order to held groups or a new group without a direct sent-line command", async () => {
+      const { el, draft } = await mountRecalledGroups([steak, fish]);
       const moves = capture(el, "move-group-line");
-      const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-        "[data-move-dialog]",
-      )!;
+      const sources = draft.lines.map((line) => line.source);
+      const dialog = recalledMoveDialog(el);
       expect(dialog.open).toBe(false);
-
-      control(el, '[data-move-line="l-steak"]')!.click();
-      await el.updateComplete;
+      await openRecalledMove(el);
       expect(dialog.open).toBe(true);
-      expect(text(dialog)).toContain("Steak ×2");
-      const targets = [...dialog.querySelectorAll<HTMLElement>("[data-move-target]")];
-      expect(targets.map((target) => target.dataset.moveTarget)).toEqual(["g3", "g5", "new"]);
-      expect(text(targets[0]!)).toBe("Next: 1 × Croquetas");
-      expect(text(targets[1]!)).toBe("Group 5: 1 × Flan");
-      expect(text(targets[2]!)).toBe(t("table.move_new_group"));
-      targets[1]!.click();
+      expect(text(control(el, '[data-draft-select="0"]')!)).toContain("Steak ×2");
+      const targets = [...dialog.querySelectorAll<HTMLElement>("[data-draft-move-to]")];
+      expect(targets.map((target) => target.dataset.draftMoveTo)).toEqual([
+        "fire",
+        "join:g3",
+        "join:g4",
+        "join:g5",
+        "new",
+      ]);
+      expect(text(targets[1]!)).toBe("Joins Group 3");
+      expect(text(targets[3]!)).toBe("Joins Group 5");
+      expect(text(targets[4]!)).toBe(`+ ${t("table.move_new_group")}`);
+      await userEvent.click(targets[3]!);
       await el.updateComplete;
       expect(dialog.open).toBe(false);
-
-      control(el, '[data-move-line="l-fish"]')!.click();
+      await openRecalledMove(el, 1);
+      await userEvent.click(dialog.querySelector<HTMLElement>('[data-draft-move-to="new"]')!);
       await el.updateComplete;
-      dialog.querySelector<HTMLElement>('[data-move-target="new"]')!.click();
-      await el.updateComplete;
-
-      expect(moves.map((event) => event.detail)).toEqual([
-        { lineId: "l-steak", quantity: "2.000", target: { groupId: "g5" }, expectedEdits: null },
-        { lineId: "l-fish", quantity: "1.000", target: "new", expectedEdits: null },
+      expect(draft.lines.map((line) => line.place)).toEqual([
+        { kind: "join", groupId: "g5" },
+        { kind: "new", slot: 1 },
       ]);
-      expect(moves[0]!.bubbles && moves[0]!.composed).toBe(true);
+      expect(draft.lines.map((line) => line.quantity)).toEqual(["2.000", "1.000"]);
+      expect(draft.lines.every((line, index) => line.source === sources[index])).toBe(true);
+      expect(moves).toEqual([]);
     });
 
-    it("names a Move to… target's contents as written, even when they hold $& or $'", async () => {
+    it("keeps a recalled dish's literal name while Move targets use stable group numbers", async () => {
       const odd = "1 × Tapa $& $'";
-      const { el } = await mountGroups({
+      const { el } = await mountRecalledGroups([{ ...steak, name: odd }], {
         groups: groups.map((row) => (row.id === "g5" ? { ...row, summary: odd } : row)),
       });
-      control(el, '[data-move-line="l-steak"]')!.click();
-      await el.updateComplete;
-      expect(text(control(el, '[data-move-target="g5"]')!)).toBe(`Group 5: ${odd}`);
+      await openRecalledMove(el);
+      expect(text(control(el, '[data-draft-select="0"]')!)).toContain(odd);
+      expect(text(control(el, '[data-draft-move-to="join:g5"]')!)).toBe("Joins Group 5");
     });
 
-    it("sends no move when Move to… is dismissed", async () => {
-      const { el } = await mountGroups();
+    it("dismisses New order Move without changing recalled sources or placement", async () => {
+      const { el, draft } = await mountRecalledGroups([flan]);
       const moves = capture(el, "move-group-line");
-      control(el, '[data-move-line="l-flan"]')!.click();
+      const before = structuredClone(draft.lines);
+      await openRecalledMove(el);
+      await userEvent.click(recalledMoveDialog(el).querySelector<HTMLElement>('[slot="footer"]')!);
       await el.updateComplete;
-      el.shadowRoot!.querySelector<HTMLElement>("[data-move-dismiss]")!.click();
-      await el.updateComplete;
-      expect(
-        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-move-dialog]")!.open,
-      ).toBe(false);
+      expect(recalledMoveDialog(el).open).toBe(false);
       expect(moves).toEqual([]);
+      expect(draft.lines).toEqual(before);
     });
 
     it("a held top-level line without a recorded unit precision has no Split quantity action", async () => {
@@ -1783,7 +1828,7 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-split-group-line="l-unknown"]')).toBeNull();
     });
 
-    it("offers Split quantity only on a held dish sold by the unit, of more than one, with no extras", async () => {
+    it("keeps sent dishes unsplit and asks for source splitting from recalled New order", async () => {
       const weighed = dishLine("l-ham", 7, "Ham", "1.500", "g5", { unitPrecision: 3 });
       const burger = dishLine("l-burger", 8, "Burger", "2.000", "g5");
       const cheese: TabLine = {
@@ -1803,16 +1848,20 @@ describe("till-table-order-screen", () => {
               : each,
         ),
       });
-      const splits = capture(el, "split-group-line");
-      const offered = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-split-group-line]")];
-      expect(offered.map((button) => button.dataset.splitGroupLine)).toEqual(["l-steak"]);
-
-      offered[0]!.click();
-
+      expect(el.shadowRoot!.querySelectorAll("[data-split-group-line]")).toHaveLength(0);
+      const recalled = await mountRecalledGroups([steak]);
+      const splits = capture(recalled.el, "split-draft-source");
+      const offered = [
+        ...recalled.el.shadowRoot!.querySelectorAll<HTMLElement>("[data-split-draft-line]"),
+      ];
+      expect(offered.map((button) => button.dataset.splitDraftLine)).toEqual(["0"]);
+      await userEvent.click(offered[0]!);
       expect(splits.map((event) => event.detail)).toEqual([
-        { lineId: "l-steak", groupId: "g4", quantity: "2.000" },
+        { store: recalled.draft, line: recalled.draft.lines[0] },
       ]);
       expect(splits[0]!.bubbles && splits[0]!.composed).toBe(true);
+      expect(recalled.draft.lines[0]!.quantity).toBe("2.000");
+      expect(recalled.draft.lines[0]!.source!.line).toEqual(steak);
     });
 
     it("disables every held group's controls while a group command is running, and enables them after", async () => {
@@ -1907,22 +1956,20 @@ describe("till-table-order-screen", () => {
       expect(fires.map((event) => event.detail)).toEqual([{ groupId: "g3" }]);
     });
 
-    it("moves once, and throws nothing, when a Move to… target is pressed twice in one turn", async () => {
-      const { el } = await mountGroups();
+    it("moves a recalled line once without throwing when a New order Move target is pressed twice", async () => {
+      const { el, draft } = await mountRecalledGroups([flan]);
       const moves = capture(el, "move-group-line");
-      control(el, '[data-move-line="l-flan"]')!.click();
-      await el.updateComplete;
-      const target = control(el, '[data-move-target="new"]')!;
-
+      await openRecalledMove(el);
+      const target = control(el, '[data-draft-move-to="new"]')!;
       const errors = errorsDuring(() => {
         target.click();
         target.click();
       });
-
       expect(errors).toEqual([]);
-      expect(moves.map((event) => event.detail)).toEqual([
-        { lineId: "l-flan", quantity: "1.000", target: "new", expectedEdits: null },
-      ]);
+      expect(moves.map((event) => event.detail)).toEqual([]);
+      expect(draft.lines).toHaveLength(1);
+      expect(draft.lines[0]!.place).toEqual({ kind: "new", slot: 1 });
+      expect(draft.lines[0]!.source!.line.id).toBe("l-flan");
     });
 
     it("fires nothing when the Fire confirmation is dismissed", async () => {
@@ -1987,21 +2034,25 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-send-all]")).toBeNull();
     });
 
-    it("closes an open Fire confirmation and Move to… picker when another order is shown", async () => {
+    it("closes Fire confirmation and New order Move when another order is shown", async () => {
+      const recalled = await mountRecalledGroups([flan]);
+      await openRecalledMove(recalled.el);
+      const move = recalledMoveDialog(recalled.el);
+      expect(move.open).toBe(true);
+      recalled.el.orderId = "wo-7";
+      await recalled.el.updateComplete;
+      expect(move.open).toBe(false);
+      expect(recalled.draft.lines[0]!.source!.line.id).toBe("l-flan");
       const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
-      await openDrawer(el);
-      const dialog = (name: string) =>
-        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(`[data-${name}-dialog]`)!;
       panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g3"]')!.click();
       await el.updateComplete;
-      control(el, '[data-move-line="l-flan"]')!.click();
-      await el.updateComplete;
-      expect([dialog("fire").open, dialog("move").open]).toEqual([true, true]);
-
+      const fire = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "[data-fire-dialog]",
+      )!;
+      expect(fire.open).toBe(true);
       el.orderId = "wo-7";
       await el.updateComplete;
-
-      expect([dialog("fire").open, dialog("move").open]).toEqual([false, false]);
+      expect([fire.open, move.open]).toEqual([false, false]);
     });
 
     it("offers Change and Cancel on a dish in a held group, whose Cancel asks the app to take it off the bill", async () => {

@@ -2220,7 +2220,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
   **A773-1**, the table screen's Sent/New order panel, remains unlanded. The branch's drawer
   no longer repeats the group Fire or serving controls: those commands use Sent and its line window.
-  The duplicate lists and the drawer's held-line Move/Split controls still need removal. On its feature branch,
+  The drawer's held-line Move/Split controls are also gone on that branch: recall a sent dish
+  into New order before moving or splitting it. The duplicate lists and old row strips remain to
+  be retired. On its feature branch,
   you can select an unsent group and use Move to to keep its saved placement or choose another
   group. Fire now, new groups and joins have separate headings; only mixed groups repeat course
   headings. A whole-unit quantity opens into individual lines from a full-height trailing chevron;

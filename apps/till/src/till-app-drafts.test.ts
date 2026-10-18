@@ -8980,16 +8980,15 @@ describe("held-line move editing authority", () => {
   }
 
   it.each([drillFormFactor, orderTabFormFactor])(
-    "carries only the moved source bill on the %s rendered screen",
+    "the retained move command carries only the source bill on the %s screen",
     async (formFactor) => {
       const write = vi.fn().mockResolvedValue({ revision: 4 });
       const { el, order } = await opening(write, formFactor);
       order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
       await flush(el);
       await chooseSourceBill(el, order);
-      order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="other-line"]')!.click();
-      await flush(el);
-      order.shadowRoot!.querySelector<HTMLElement>('[data-move-target="g4"]')!.click();
+      expect(order.shadowRoot!.querySelector('[data-move-line="other-line"]')).toBeNull();
+      emit(order, "move-group-line", detail());
       await flush(el, 6);
       expect(write).toHaveBeenCalledExactlyOnceWith(
         "v1",
@@ -9050,14 +9049,13 @@ describe("held-line move editing authority", () => {
     expect(api.takeOverDraft).not.toHaveBeenCalled();
   });
 
-  it("refuses a move whose source observation changed while its picker stayed open", async () => {
+  it("refuses a retained move command whose captured source observation changed", async () => {
     const write = vi.fn().mockResolvedValue({ revision: 4 });
     const { el, order } = await opening(write);
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
     await chooseSourceBill(el, order);
-    order.shadowRoot!.querySelector<HTMLElement>('[data-move-line="other-line"]')!.click();
-    await flush(el);
+    const opened = detail();
     const refreshed = await server.listDrafts("v1");
     api.listDrafts.mockResolvedValue({
       ...refreshed,
@@ -9067,7 +9065,7 @@ describe("held-line move editing authority", () => {
     });
     window.dispatchEvent(new Event("focus"));
     await flush(el, 6);
-    order.shadowRoot!.querySelector<HTMLElement>('[data-move-target="g4"]')!.click();
+    emit(order, "move-group-line", opened);
     await flush(el, 6);
     expect(write).not.toHaveBeenCalled();
     expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
