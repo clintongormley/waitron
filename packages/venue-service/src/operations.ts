@@ -96,7 +96,7 @@ export function wireTime(value: string): string {
 export async function listServiceZones(
   tx: Transaction,
   cfg: VenueScope,
-  options: { includeInactive?: boolean } = {},
+  options: { withActive?: boolean } = {},
 ) {
   const rows = await tx
     .select({
@@ -137,7 +137,7 @@ export async function listServiceZones(
         (zoneOrderStart ?? departmentOrderStart ?? "counter") === "table" ? "table_tab" : paidWhen;
       return {
         ...row,
-        ...(options.includeInactive ? { active } : {}),
+        ...(options.withActive ? { active } : {}),
         serviceMode,
       };
     },

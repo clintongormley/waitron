@@ -698,7 +698,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           departments: (await listDepartments(tx, ctx.cfg)).filter(
             (department) => department.active,
           ),
-          zones: await listServiceZones(tx, ctx.cfg),
+          zones: await listServiceZones(tx, ctx.cfg, { withActive: true }),
         }));
         return c.json(result);
       }),
@@ -711,7 +711,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           departments: (await listDepartments(tx, ctx.cfg)).filter(
             (department) => department.active,
           ),
-          zones: await listServiceZones(tx, ctx.cfg),
+          zones: await listServiceZones(tx, ctx.cfg, { withActive: true }),
           salePolicies: await listSalePolicies(tx, ctx.cfg),
           readiness: [
             ...(await listVenueReadiness(tx, ctx.cfg)),

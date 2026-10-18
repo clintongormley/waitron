@@ -265,18 +265,18 @@ describe("deleted service targets", () => {
     expect(await run((tx) => service.listDepartments(tx, f.cfg))).toEqual([
       expect.objectContaining({ id: f.live }),
     ]);
-    expect(
-      await run((tx) => service.listServiceZones(tx, f.cfg, { includeInactive: true })),
-    ).toEqual([expect.objectContaining({ id: f.liveZone })]);
+    expect(await run((tx) => service.listServiceZones(tx, f.cfg, { withActive: true }))).toEqual([
+      expect.objectContaining({ id: f.liveZone }),
+    ]);
     const model = await run((tx) => service.readOpeningHoursModel(tx, f.cfg, at));
     expect(model.departments.map((row) => row.id)).toEqual([f.live]);
     expect(model.departments.flatMap((row) => row.periods)).toEqual([]);
   });
   it("hides deleted zones from the service list with the old include flag", async () => {
     const f = await fixture();
-    expect(
-      await run((tx) => service.listServiceZones(tx, f.cfg, { includeInactive: true })),
-    ).toEqual([expect.objectContaining({ id: f.liveZone })]);
+    expect(await run((tx) => service.listServiceZones(tx, f.cfg, { withActive: true }))).toEqual([
+      expect.objectContaining({ id: f.liveZone }),
+    ]);
   });
   it("hides deleted departments from opening-hours configuration", async () => {
     const f = await fixture();

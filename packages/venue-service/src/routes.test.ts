@@ -1907,7 +1907,7 @@ describe("venue service management routes", () => {
       expect(zones).toContainEqual(
         expect.objectContaining({ id: fx.zoneId, departmentId: department.id }),
       );
-      for (const zone of zones) expect(zone).toMatchObject({ active: true });
+      for (const zone of zones) expect(zone, path).toMatchObject({ active: true });
     }
   });
 
