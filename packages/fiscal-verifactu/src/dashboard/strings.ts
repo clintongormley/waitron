@@ -31,6 +31,10 @@ const en = {
     "This certificate expires on {date}. Get the new one from FNMT before then.",
   "aeat_certificate.urgent":
     "This certificate expires in {days} days. After that, fiscal records wait until a new one is installed. Sales are not affected.",
+  "aeat_certificate.urgent_tomorrow":
+    "This certificate expires tomorrow at {time}. After that, fiscal records wait until a new one is installed. Sales are not affected.",
+  "aeat_certificate.urgent_today":
+    "This certificate expires today at {time}. After that, fiscal records wait until a new one is installed. Sales are not affected.",
   "aeat_certificate.expired":
     "This certificate expired on {date}. Sales continue, but fiscal records wait until you install a new one.",
   "aeat_certificate.installed_line":
@@ -73,6 +77,10 @@ const es: Record<AeatCertificateKey, string> = {
     "Este certificado caduca el {date}. Consigue el nuevo de la FNMT antes de esa fecha.",
   "aeat_certificate.urgent":
     "Este certificado caduca dentro de {days} días. Después, los registros fiscales esperan hasta que se instale uno nuevo. Las ventas no se ven afectadas.",
+  "aeat_certificate.urgent_tomorrow":
+    "Este certificado caduca mañana a las {time}. Después, los registros fiscales esperan hasta que se instale uno nuevo. Las ventas no se ven afectadas.",
+  "aeat_certificate.urgent_today":
+    "Este certificado caduca hoy a las {time}. Después, los registros fiscales esperan hasta que se instale uno nuevo. Las ventas no se ven afectadas.",
   "aeat_certificate.expired":
     "Este certificado caducó el {date}. Las ventas continúan, pero los registros fiscales esperan hasta que instales uno nuevo.",
   "aeat_certificate.installed_line":

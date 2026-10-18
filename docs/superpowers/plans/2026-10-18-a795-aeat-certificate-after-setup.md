@@ -140,7 +140,14 @@ Each is the conservative reading; the reviewer of the named task checks it.
 14. **Strings the design did not write**, both languages: the expired status line ("This
     certificate expired on {date}. Sales continue, but fiscal records wait until you install a new
     one." / "Este certificado caducó el {date}. Las ventas continúan, pero los registros fiscales
-    esperan hasta que instales uno nuevo."), "does not match the business" / "no coincide con el
+    esperan hasta que instales uno nuevo."), the red line on the last two days ("This certificate
+    expires tomorrow at {time}. After that, fiscal records wait until a new one is installed. Sales
+    are not affected." / "Este certificado caduca mañana a las {time}. Después, los registros
+    fiscales esperan hasta que se instale uno nuevo. Las ventas no se ven afectadas."; "This
+    certificate expires today at {time}. After that, fiscal records wait until a new one is
+    installed. Sales are not affected." / "Este certificado caduca hoy a las {time}. Después, los
+    registros fiscales esperan hasta que se instale uno nuevo. Las ventas no se ven afectadas."),
+    "does not match the business" / "no coincide con el
     negocio", the three step-3 guide sentences (decision 8), the request-error sentences (Task 8d)
     and the email wording (Task 10a).
 15. **"Last accepted filing"** counts an `envios` row in `aceptado` or `aceptado_con_errores` whose

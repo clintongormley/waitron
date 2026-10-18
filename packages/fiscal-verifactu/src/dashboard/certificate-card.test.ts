@@ -103,6 +103,9 @@ describe("dashboard-aeat-certificate-card", () => {
       "Last accepted filing": "18 Oct 2026, 13:02",
     });
     expect(card.shadowRoot!.querySelector("[data-test=certificate-status]")).toBeNull();
+    expect(
+      card.shadowRoot!.querySelector("dd[data-test=valid-until]")!.getAttribute("data-stage"),
+    ).toBeNull();
     expect(button(card)?.textContent?.trim()).toBe("Replace certificate");
     expect(button(card)?.getAttribute("variant")).toBe("secondary");
   });
@@ -145,6 +148,11 @@ describe("dashboard-aeat-certificate-card", () => {
         .getAttribute("data-stage"),
     ).toBe("warning");
     expect(rows(representative.card)["Valid until"]).toBe("1 Dec 2026 · 44 days left");
+    expect(
+      representative.card
+        .shadowRoot!.querySelector("dd[data-test=valid-until]")!
+        .getAttribute("data-stage"),
+    ).toBe("warning");
 
     const seal = await mount(async () => view({ ...amber, kind: "sello" }));
     expect(text(seal.card, "[data-test=certificate-status]")).toBe(
@@ -158,6 +166,9 @@ describe("dashboard-aeat-certificate-card", () => {
     );
     const status = card.shadowRoot!.querySelector("[data-test=certificate-status]")!;
     expect(status.getAttribute("data-stage")).toBe("urgent");
+    expect(
+      card.shadowRoot!.querySelector("dd[data-test=valid-until]")!.getAttribute("data-stage"),
+    ).toBe("urgent");
     expect(text(card, "[data-test=certificate-status]")).toBe(
       "This certificate expires in 14 days. After that, fiscal records wait until a new one is installed. Sales are not affected.",
     );
@@ -172,6 +183,9 @@ describe("dashboard-aeat-certificate-card", () => {
       "This certificate expired on 25 Oct 2026. Sales continue, but fiscal records wait until you install a new one.",
     );
     expect(rows(card)["Valid until"]).toBe("Expired on 25 Oct 2026");
+    expect(
+      card.shadowRoot!.querySelector("dd[data-test=valid-until]")!.getAttribute("data-stage"),
+    ).toBe("expired");
     expect(button(card)?.getAttribute("variant")).toBe("primary");
   });
 
@@ -188,6 +202,36 @@ describe("dashboard-aeat-certificate-card", () => {
       view({ validUntil, daysLeft: 0, stage: "urgent" }, { timeZone: "UTC" }),
     );
     expect(rows(utc.card)["Valid until"]).toBe("24 Oct 2026 · Expires today, 23:30");
+  });
+
+  it("says tomorrow and today, at the venue-zone time, in the red line on the last two days", async () => {
+    const validUntil = "2026-10-24T23:30:00.000Z";
+    const before = await mount(async () => view({ validUntil, daysLeft: 1, stage: "urgent" }));
+    expect(text(before.card, "[data-test=certificate-status]")).toBe(
+      "This certificate expires tomorrow at 01:30. After that, fiscal records wait until a new one is installed. Sales are not affected.",
+    );
+
+    const onTheDay = await mount(async () => view({ validUntil, daysLeft: 0, stage: "urgent" }));
+    expect(text(onTheDay.card, "[data-test=certificate-status]")).toBe(
+      "This certificate expires today at 01:30. After that, fiscal records wait until a new one is installed. Sales are not affected.",
+    );
+
+    const utc = await mount(async () =>
+      view({ validUntil, daysLeft: 0, stage: "urgent" }, { timeZone: "UTC" }),
+    );
+    expect(text(utc.card, "[data-test=certificate-status]")).toBe(
+      "This certificate expires today at 23:30. After that, fiscal records wait until a new one is installed. Sales are not affected.",
+    );
+
+    setLocale("es-ES");
+    const tomorrowEs = await mount(async () => view({ validUntil, daysLeft: 1, stage: "urgent" }));
+    expect(text(tomorrowEs.card, "[data-test=certificate-status]")).toBe(
+      "Este certificado caduca mañana a las 01:30. Después, los registros fiscales esperan hasta que se instale uno nuevo. Las ventas no se ven afectadas.",
+    );
+    const todayEs = await mount(async () => view({ validUntil, daysLeft: 0, stage: "urgent" }));
+    expect(text(todayEs.card, "[data-test=certificate-status]")).toBe(
+      "Este certificado caduca hoy a las 01:30. Después, los registros fiscales esperan hasta que se instale uno nuevo. Las ventas no se ven afectadas.",
+    );
   });
 
   it('shows "not shown on the certificate" and "—" when the certificate carries neither', async () => {

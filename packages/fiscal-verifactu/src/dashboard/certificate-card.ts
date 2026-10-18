@@ -53,7 +53,15 @@ function remaining(c: Installed, timeZone: string): string {
 function statusLine(c: Installed, timeZone: string): string {
   const date = day(c.validUntil, timeZone);
   if (c.stage === "expired") return t("aeat_certificate.expired", { date });
-  if (c.stage === "urgent") return t("aeat_certificate.urgent", { days: c.daysLeft });
+  if (c.stage === "urgent") {
+    if (c.daysLeft === 0) {
+      return t("aeat_certificate.urgent_today", { time: time(c.validUntil, timeZone) });
+    }
+    if (c.daysLeft === 1) {
+      return t("aeat_certificate.urgent_tomorrow", { time: time(c.validUntil, timeZone) });
+    }
+    return t("aeat_certificate.urgent", { days: c.daysLeft });
+  }
   return t(`aeat_certificate.warning_${c.kind}`, { date });
 }
 
