@@ -109,12 +109,12 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("till-floor-screen: a table that needs moving", () => {
-  it("is drawn in its old place, in its free colour, read as Needs moving", async () => {
+  it("is drawn in its old place, in the clearing colour, read as Needs moving", async () => {
     const el = await mount([moving("t3", 12), planned("t4", 30)]);
 
     const table = drawn(el, "t3");
     expect(table.placement.x).toBe(12);
-    expect(table.fill).toBe("free");
+    expect(table.fill).toBe("clearing");
     expect(table.description).toBe("Needs moving");
     expect(drawn(el, "t4").description).toBe(t("floor.free"));
   });

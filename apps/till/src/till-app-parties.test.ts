@@ -592,7 +592,7 @@ describe("till-app: seating a party", () => {
     emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: null });
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain(codeMessage("table.needs_moving"));
+    expect(banner(el)!.textContent).toContain("Table 9 needs moving. Mark it moved first.");
     expect(tableOrder(el)).toBeNull();
   });
 
