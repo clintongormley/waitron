@@ -661,3 +661,34 @@ it("marks a reminder due at its own deadline without waiting for another server 
   });
   expect(open(el)).toBe("false");
 });
+
+it("runs no age interval for an unread or folded Sent panel", async () => {
+  vi.useFakeTimers({
+    toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"],
+  });
+  try {
+    vi.setSystemTime(now);
+    const el = await mount(current([row("ready", { readyAt: at(59) })]), {
+      snapshot: null,
+      now: undefined,
+    });
+    expect(vi.getTimerCount()).toBe(0);
+    el.snapshot = {
+      scope: "visit-1",
+      billId: "b1",
+      current: current([row("ready", { readyAt: at(59) })]),
+    };
+    await el.updateComplete;
+    expect(find(el, "[data-fired-line=ready]").textContent).toContain("Ready 1 min");
+    await vi.advanceTimersByTimeAsync(60000);
+    await el.updateComplete;
+    expect(find(el, "[data-fired-line=ready]").textContent).toContain("Ready 2 min");
+    find(el, "[data-sent-toggle]").click();
+    await el.updateComplete;
+    expect(vi.getTimerCount()).toBe(0);
+    el.remove();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});

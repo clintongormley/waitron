@@ -14858,6 +14858,7 @@ export class TillApp extends LitElement {
       embedded
       .lines=${this.tabLines}
       .groups=${this.tabGroups}
+      .serviceVisit=${this.#orderVisit}
       .currentOrders=${this.currentOrders}
       .currentOrdersUnread=${this.currentOrdersUnread}
       .printProblems=${this.printProblems}
@@ -14990,6 +14991,7 @@ export class TillApp extends LitElement {
           slot="drill"
           .lines=${this.tabLines}
           .groups=${this.tabGroups}
+          .serviceVisit=${this.#orderVisit}
           .currentOrders=${this.currentOrders}
           .currentOrdersUnread=${this.currentOrdersUnread}
           .printProblems=${this.printProblems}

@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, Gestures, TickingClock } from "@waitron/ui";
+import { baseStyles, Gestures } from "@waitron/ui";
 import { addDecimal, decimal, formatMoney } from "@waitron/shared";
 import type { CurrentOrderRow, CurrentOrders } from "../api/client.js";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
@@ -93,12 +93,14 @@ export class TillSentOrders extends LitElement {
         gap: var(--wt-space-2);
         flex-wrap: wrap;
       }
+      h2,
       h3,
       h4,
       p {
         margin: 0;
         overflow-wrap: anywhere;
       }
+      h2,
       h3,
       h4 {
         font-size: var(--wt-font-size-md);
@@ -190,11 +192,11 @@ export class TillSentOrders extends LitElement {
   #pressed?: { slice: SentSlice; scope: string; billId: string; target: EventTarget };
   #suppressClick = false;
   #reminderTimer?: ReturnType<typeof setTimeout>;
+  #ageTimer?: ReturnType<typeof setTimeout>;
 
   constructor() {
     super();
     new LocaleChangeController(this);
-    new TickingClock(this);
   }
   override connectedCallback(): void {
     this.#opening = "";
@@ -232,6 +234,7 @@ export class TillSentOrders extends LitElement {
     this.#pressedModel = null;
     this.#pressedNow = undefined;
     clearTimeout(this.#reminderTimer);
+    clearTimeout(this.#ageTimer);
     super.disconnectedCallback();
   }
   protected override willUpdate(): void {
@@ -252,7 +255,10 @@ export class TillSentOrders extends LitElement {
   }
   protected override updated(): void {
     clearTimeout(this.#reminderTimer);
+    clearTimeout(this.#ageTimer);
     if (this.now !== undefined) return;
+    if (this.expanded && (this.#model()?.fired.length ?? 0) > 0)
+      this.#ageTimer = setTimeout(() => this.requestUpdate(), 20_000);
     const delay = reminderDueAt(this.#current()?.reminder) - Date.now();
     if (Number.isFinite(delay) && delay > 0)
       this.#reminderTimer = setTimeout(() => this.requestUpdate(), Math.min(delay, 2_147_483_647));
@@ -509,22 +515,24 @@ export class TillSentOrders extends LitElement {
       class="panel${model.attention ? " attention" : ""}${this.expanded ? " expanded" : ""}"
       data-sent-panel
     >
-      <button
-        type="button"
-        class="toggle"
-        data-sent-toggle
-        aria-expanded=${String(this.expanded)}
-        aria-controls="sent-content"
-        @click=${() => {
-          this.expanded = !this.expanded;
-        }}
-      >
-        <span
-          >${t("table.sent_title")}${model.attention ? html` <span class="mark" data-sent-attention>!</span>` : nothing}</span
+      <h2>
+        <button
+          type="button"
+          class="toggle"
+          data-sent-toggle
+          aria-expanded=${String(this.expanded)}
+          aria-controls="sent-content"
+          @click=${() => {
+            this.expanded = !this.expanded;
+          }}
         >
-        <span class="summary">${summary}</span
-        ><span aria-hidden="true">${this.expanded ? "▾" : "▸"}</span>
-      </button>
+          <span
+            >${t("table.sent_title")}${model.attention ? html` <span class="mark" data-sent-attention>!</span>` : nothing}</span
+          >
+          <span class="summary">${summary}</span
+          ><span aria-hidden="true">${this.expanded ? "▾" : "▸"}</span>
+        </button>
+      </h2>
       ${this.#reminder(model)}
       ${
         !this.expanded

@@ -1,3 +1,4 @@
+import type { TillSentOrders } from "./widgets/sent-orders.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
@@ -7332,6 +7333,117 @@ describe("till-app: Current orders", () => {
       { submissionId: expect.any(String), expectedPartyRevision: 4 },
     );
     expect(notice()?.open ?? false).toBe(false);
+  });
+
+  describe("native Sent panel integration", () => {
+    async function visiblePanel(order: TillTableOrderScreen): Promise<TillSentOrders> {
+      await order.updateComplete;
+      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      if (review?.checkVisibility()) {
+        await userEvent.click(review);
+        await order.updateComplete;
+      }
+      const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+      await panel.updateComplete;
+      const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;
+      if (toggle.getAttribute("aria-expanded") === "false") {
+        await userEvent.click(toggle);
+        await panel.updateComplete;
+      }
+      return panel;
+    }
+    it.each(["till", "phone-portrait"] as const)(
+      "a native %s row tap serves once and Undo sends that accepted quantity",
+      async (formFactor) => {
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+          readCurrentOrders: vi.fn().mockResolvedValue(orders),
+        });
+        const order = await openMesa(el);
+        const panel = await visiblePanel(order);
+        const target = panel.shadowRoot!.querySelector<HTMLElement>('[data-serve-line="line-1"]')!;
+        expect(target.checkVisibility()).toBe(true);
+        await userEvent.click(target);
+        await flush(el);
+        expect(api.markServed).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          [{ lineId: "line-1", quantity: "1" }],
+          { submissionId: expect.any(String), expectedPartyRevision: 3 },
+        );
+        const toast = el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+        expect(toast.open).toBe(true);
+        await userEvent.click(toast.querySelector<HTMLElement>("[data-undo-served]")!);
+        await flush(el);
+        expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith(
+          "v1",
+          [{ lineId: "line-1", quantity: "1" }],
+          { submissionId: expect.any(String), expectedPartyRevision: 4 },
+        );
+        expect(toast.open).toBe(false);
+      },
+    );
+    it("a held-group native Fire reaches the API only after its table confirmation", async () => {
+      const held = {
+        ...orders.groups[0]!,
+        id: "g2",
+        state: "held" as const,
+        firedAt: null,
+        rows: orders.groups[0]!.rows.map((row) => ({ ...row, released: false })),
+      };
+      const group: OrderGroup = { ...held, courseIds: [], lineIds: ["line-1"], summary: "Vino ×1" };
+      const { el } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue({ ...orders, reminder: null, groups: [held] }),
+        listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [group] }),
+      });
+      const order = await openMesa(el);
+      const panel = await visiblePanel(order);
+      await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
+      await panel.updateComplete;
+      await userEvent.click(
+        panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g2"]')!,
+      );
+      await flush(el);
+      expect(api.fireGroup).not.toHaveBeenCalled();
+      const dialog = order.shadowRoot!.querySelector<HTMLElement>("[data-fire-dialog]")!;
+      expect(dialog.hasAttribute("open")).toBe(true);
+      expect(dialog.textContent).toContain("Vino ×1");
+      await userEvent.click(dialog.querySelector<HTMLElement>("[data-fire-confirm]")!);
+      await flush(el);
+      expect(api.fireGroup).toHaveBeenCalledExactlyOnceWith("v1", "g2", {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+      });
+    });
+    it("reopens ready food on re-entering the same bill after it was manually folded", async () => {
+      const ready = {
+        ...orders,
+        reminder: null,
+        groups: orders.groups.map((group) => ({
+          ...group,
+          rows: group.rows.map((row) => ({ ...row, readyAt: "2026-09-28T20:14:00Z" })),
+        })),
+      };
+      const { el } = await mountApp({ readCurrentOrders: vi.fn().mockResolvedValue(ready) });
+      const first = await openMesa(el);
+      const panel = await visiblePanel(first);
+      await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
+      await panel.updateComplete;
+      expect(
+        panel.shadowRoot!.querySelector("[data-sent-toggle]")!.getAttribute("aria-expanded"),
+      ).toBe("false");
+      emit(first, "back-to-floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      const reopened = tableOrder(el)!;
+      await reopened.updateComplete;
+      const next = reopened.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+      await next.updateComplete;
+      expect(
+        next.shadowRoot!.querySelector("[data-sent-toggle]")!.getAttribute("aria-expanded"),
+      ).toBe("true");
+      expect(api.markServed).not.toHaveBeenCalled();
+    });
   });
 
   describe("serve Undo", () => {

@@ -31,6 +31,10 @@ import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { type ComboboxOption, baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
 import "../widgets/fired-ago.js";
+import "../widgets/sent-orders.js";
+import type { SentLineInfo } from "../widgets/sent-orders.js";
+import { sentPanel, type SentSlice } from "../state/sent-panel.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   addDecimal,
   compareDecimal,
@@ -1201,6 +1205,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) reprintSent: string[] = [];
   /** Injectable clock for a fired group's age; unset reads the ticking clock. */
   @property({ attribute: false }) now?: number;
+  @property({ type: Number }) serviceVisit = 0;
   @property() fireControl: FireControlMode = "waiter";
   @property() orderId?: string;
   @property() kitchenNote: string | null = null;
@@ -1240,6 +1245,13 @@ export class TillTableOrderScreen extends LitElement {
   /** The visible half of the app's guard against a second group command while one runs. */
   @property({ type: Boolean }) groupCommandBusy = false;
 
+  @state() private sentLinePending: {
+    info: SentLineInfo;
+    api: TillApi | undefined;
+    partyId: string | null;
+    billId: string | undefined;
+    visit: number;
+  } | null = null;
   @state() private drawerOpen = false;
   /** The screen is at least {@link DRAFT_SIDE_BY_SIDE_MIN_WIDTH} wide. */
   @state() private wide = false;
@@ -1266,11 +1278,24 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The held group whose Fire waits for confirmation. */
   @state() private fireGroupPending: OrderGroup | null = null;
+  #fireAuthority?: {
+    api: TillApi | undefined;
+    partyId: string | null;
+    billId: string | undefined;
+    visit: number;
+  };
   /** The held line whose Move to… picker is open, with the group it is in. */
   @state() private movePending: MovePending | null = null;
   /** A row whose Mark served, or its undo, asks how many; `count` is what is chosen so far. */
   @state() private servePending: { row: CurrentOrderRow; undo: boolean; count: Decimal } | null =
     null;
+
+  #serveAuthority?: {
+    api: TillApi | undefined;
+    partyId: string | null;
+    billId: string | undefined;
+    visit: number;
+  };
 
   readonly #serveId = {};
   #serveScope?: DraftScope<Decimal>;
@@ -1691,6 +1716,8 @@ export class TillTableOrderScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("draftStore")) this.#kitchenNoteVisit++;
+    if (this.sentLinePending !== null && this.#sentLine() === undefined)
+      this.sentLinePending = null;
     this.#watchDraft();
     if (this.takeOverSent !== null && this.takeOversAnswered !== this.takeOverSent) {
       this.#takeOverAnswered = this.takeOverPending?.id;
@@ -2488,12 +2515,13 @@ export class TillTableOrderScreen extends LitElement {
           }}
         ></till-order-kitchen-note>
         <div class="layout">
-          ${draft === null ? nothing : this.#ordering(draft)}
+          ${draft === null ? this.#sentOrders() : this.#ordering(draft)}
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
-        ${this.#fireGroupDialog()} ${this.#moveDialog()} ${this.#serveDialog()}
-        ${this.#changeEditor()} ${this.#takeOverDialog()} ${this.#billChoiceDialog()}
-        ${this.#nameDialog()} ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
+        ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#moveDialog()}
+        ${this.#serveDialog()} ${this.#changeEditor()} ${this.#takeOverDialog()}
+        ${this.#billChoiceDialog()} ${this.#nameDialog()} ${this.#guestsDialog()}
+        ${this.#splitGuestsDialog()}
       </section>
     `;
   }
@@ -2544,6 +2572,7 @@ export class TillTableOrderScreen extends LitElement {
         aria-labelledby="draft-title"
         ?hidden=${separate && !reviewing}
       >
+        ${this.#sentOrders()}
         <div class="draft-head">
           <h2 class="draft-title" id="draft-title" tabindex="-1">${t("table.draft_title")}</h2>
           ${
@@ -2561,6 +2590,153 @@ export class TillTableOrderScreen extends LitElement {
         ${this.#roundControl(draft)} ${this.#otherDraftPanels(draft)} ${this.#retainedDraftPanel()}
       </section>
     </div>`;
+  }
+
+  #sentOrders(): TemplateResult {
+    const billId = this.orderId ?? "";
+    const scope = JSON.stringify([this.serviceVisit, this.party?.id ?? null]);
+    const bills = shownBills(this.bills);
+    return html`<div data-sent-orders>
+      ${
+        this.currentOrdersUnread
+          ? html`<p role="status" data-sent-unread>${t("table.current_orders_unread")}</p>`
+          : nothing
+      }
+      <till-sent-orders
+        .scope=${scope}
+        .billId=${billId}
+        .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
+        .billLabels=${new Map(bills.map((bill, index) => [bill.workingOrderId, billName(this.party?.displayName ?? "", index)]))}
+        .busy=${this.busy || this.groupCommandBusy}
+        .now=${this.now}
+        @sent-line-info=${(event: CustomEvent<SentLineInfo>) => {
+          event.stopPropagation();
+          if (!this.isConnected || this.busy || this.groupCommandBusy) return;
+          this.sentLinePending = {
+            info: event.detail,
+            api: this.api,
+            partyId: this.party?.id ?? null,
+            billId: this.orderId,
+            visit: this.serviceVisit,
+          };
+        }}
+        @fire-group=${(event: CustomEvent<FireGroupDetail>) => {
+          event.stopPropagation();
+          if (this.busy || this.groupCommandBusy) return;
+          const group = this.#heldInOrder.find((group) => group.id === event.detail.groupId);
+          if (group !== undefined) this.#requestFireGroup(group);
+        }}
+      ></till-sent-orders>
+    </div>`;
+  }
+
+  #sentLine(): SentSlice | undefined {
+    const pending = this.sentLinePending;
+    if (
+      pending === null ||
+      this.currentOrders === null ||
+      this.currentOrdersUnread ||
+      pending.api !== this.api ||
+      pending.partyId !== (this.party?.id ?? null) ||
+      pending.billId !== this.orderId ||
+      pending.visit !== this.serviceVisit
+    )
+      return;
+    const model = sentPanel(this.currentOrders, this.orderId ?? "", this.now ?? Date.now());
+    return [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)].find(
+      (slice) =>
+        slice.row.lineId === pending.info.lineId &&
+        slice.kind === pending.info.kind &&
+        slice.row.workingOrderId === pending.info.workingOrderId,
+    );
+  }
+
+  #serveFromSentLine(pending: typeof this.sentLinePending, undo: boolean): void {
+    if (
+      pending === null ||
+      pending !== this.sentLinePending ||
+      !this.isConnected ||
+      this.busy ||
+      this.groupCommandBusy
+    )
+      return;
+    const slice = this.#sentLine();
+    if (
+      slice === undefined ||
+      slice.kind !== (undo ? "served" : "fired") ||
+      (undo && slice.row.billStatus !== "open")
+    )
+      return;
+    this.sentLinePending = null;
+    this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
+    this.#requestServe(slice.row, undo);
+  }
+
+  #sentLineDialog(): TemplateResult {
+    const pending = this.sentLinePending;
+    const slice = this.#sentLine();
+    const row = slice?.row;
+    const disabled = this.busy || this.groupCommandBusy;
+    const extraTotal =
+      row?.extras.reduce((sum, extra) => addDecimal(sum, decimal(extra.netAmount)), decimal("0")) ??
+      decimal("0");
+    const station = this.stations.find((station) => station.id === row?.kitchen?.stationId);
+    const status =
+      slice?.kind === "cancelled_charged"
+        ? t("table.cancelled_charged")
+        : slice?.kind === "held"
+          ? t("table.group_held")
+          : row === undefined
+            ? nothing
+            : this.#rowState(row);
+    return html`<wt-dialog
+      ${trackDialog()}
+      data-sent-line-dialog
+      .open=${row !== undefined}
+      .heading=${t("table.sent_info")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget && !(event.currentTarget as WtDialog).open)
+          this.sentLinePending = null;
+      }}
+    >
+      ${
+        row === undefined
+          ? nothing
+          : html`
+              <p class="move-dish">
+                ${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}
+              </p>
+              <div class="total-row">
+                <span>${row.name}</span
+                ><span class="amount" data-sent-line-amount
+                  >${formatMoney(subtractDecimal(decimal(row.netAmount), extraTotal), currentLocale())}</span
+                >
+              </div>
+              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${this.#displayQty(extra.quantity)}</span><span class="amount">${this.#money(extra.netAmount)}</span></div>`)}
+              ${row.note === null ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
+              <p data-sent-line-status>
+                ${station === undefined ? nothing : html`${station.name} · `}${status}
+              </p>
+              <div class="total-row">
+                <span>${t("label.total")}</span
+                ><span class="amount">${this.#money(row.netAmount)}</span>
+              </div>
+            `
+      }
+      <div slot="footer" class="cancel-actions">
+        <wt-button
+          variant="secondary"
+          data-sent-line-close
+          @click=${() => {
+            this.sentLinePending = null;
+          }}
+          >${t("table.submitted_close")}</wt-button
+        >
+        ${slice?.kind === "fired" ? html`<wt-button data-sent-line-serve variant=${disabled ? "secondary" : "primary"} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, false)}>${t("table.serve")}</wt-button>` : nothing}
+        ${slice?.kind === "served" && row?.billStatus === "open" ? html`<wt-row-actions label=${t("shell.more")}><wt-button variant="secondary" data-sent-line-unserve ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button></wt-row-actions>` : nothing}
+      </div>
+    </wt-dialog>`;
   }
 
   #retainedDraftPanel(): TemplateResult | typeof nothing {
@@ -3943,7 +4119,7 @@ export class TillTableOrderScreen extends LitElement {
                       data-group-fire=${group.id}
                       aria-label=${label("table.group_fire")}
                       ?disabled=${this.groupCommandBusy}
-                      @click=${() => (this.fireGroupPending = group)}
+                      @click=${() => this.#requestFireGroup(group)}
                     >
                       ${t("table.group_fire")}
                     </wt-button>`
@@ -4066,7 +4242,7 @@ export class TillTableOrderScreen extends LitElement {
                 data-reminder-fire
                 aria-label=${`${t("table.group_fire")} · ${name}`}
                 ?disabled=${this.groupCommandBusy}
-                @click=${() => (this.fireGroupPending = group)}
+                @click=${() => this.#requestFireGroup(group)}
               >
                 ${t("table.group_fire")}
               </wt-button>`
@@ -4200,11 +4376,27 @@ export class TillTableOrderScreen extends LitElement {
   /** The most a press can mark served (what is left), or take back (what is served). */
   #mostToServe(row: CurrentOrderRow, undo: boolean): Decimal {
     const served = decimal(row.servedQuantity);
-    return decimal(trimQuantity(undo ? served : subtractDecimal(decimal(row.quantity), served)));
+    return decimal(
+      trimQuantity(
+        undo
+          ? served
+          : subtractDecimal(
+              subtractDecimal(decimal(row.quantity), decimal(row.cancelledQuantity ?? "0")),
+              served,
+            ),
+      ),
+    );
   }
 
   /** More than one whole unit asks how many; anything else, a weighed dish included, goes whole. */
   #requestServe(row: CurrentOrderRow, undo: boolean): void {
+    if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
+    this.#serveAuthority = {
+      api: this.api,
+      partyId: this.party?.id ?? null,
+      billId: this.orderId,
+      visit: this.serviceVisit,
+    };
     const most = this.#mostToServe(row, undo);
     if (row.unitPrecision === 0 && compareDecimal(most, decimal("1")) > 0) {
       this.#serveOpening++;
@@ -4221,6 +4413,40 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #sendServe(row: CurrentOrderRow, undo: boolean, quantity: Decimal): void {
+    const authority = this.#serveAuthority;
+    this.#serveAuthority = undefined;
+    if (
+      authority === undefined ||
+      !this.isConnected ||
+      this.busy ||
+      this.groupCommandBusy ||
+      this.currentOrdersUnread
+    )
+      return;
+    if (
+      authority.api !== this.api ||
+      authority.partyId !== (this.party?.id ?? null) ||
+      authority.billId !== this.orderId ||
+      authority.visit !== this.serviceVisit
+    )
+      return;
+    const current =
+      this.currentOrders === null
+        ? undefined
+        : [
+            ...this.currentOrders.ungrouped,
+            ...this.currentOrders.groups.flatMap((group) => group.rows),
+          ].find(
+            (candidate) =>
+              candidate.lineId === row.lineId && candidate.workingOrderId === row.workingOrderId,
+          );
+    if (
+      current === undefined ||
+      (!undo && !current.released) ||
+      compareDecimal(quantity, decimal("0")) <= 0 ||
+      compareDecimal(quantity, this.#mostToServe(current, undo)) > 0
+    )
+      return;
     this.#dispatch(undo ? "unserve-lines" : "serve-lines", {
       items: [{ lineId: row.lineId, quantity: trimQuantity(quantity) }],
     } satisfies ServeLinesDetail);
@@ -4449,10 +4675,38 @@ export class TillTableOrderScreen extends LitElement {
     </wt-dialog>`;
   }
 
+  #requestFireGroup(group: OrderGroup): void {
+    if (!this.isConnected || this.busy || this.groupCommandBusy) return;
+    this.#fireAuthority = {
+      api: this.api,
+      partyId: this.party?.id ?? null,
+      billId: this.orderId,
+      visit: this.serviceVisit,
+    };
+    this.fireGroupPending = group;
+  }
+
   #confirmFireGroup(): void {
     const group = this.fireGroupPending;
-    if (group === null) return;
+    const authority = this.#fireAuthority;
     this.fireGroupPending = null;
+    this.#fireAuthority = undefined;
+    if (
+      group === null ||
+      authority === undefined ||
+      !this.isConnected ||
+      this.busy ||
+      this.groupCommandBusy
+    )
+      return;
+    if (
+      authority.api !== this.api ||
+      authority.partyId !== (this.party?.id ?? null) ||
+      authority.billId !== this.orderId ||
+      authority.visit !== this.serviceVisit
+    )
+      return;
+    if (!this.groups.some((current) => current.id === group.id && current.state === "held")) return;
     this.#dispatch("fire-group", { groupId: group.id } satisfies FireGroupDetail);
   }
 

@@ -2253,15 +2253,24 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   submission and count-summary helpers are removed on the feature branch. Retained-course
   recovery checks now read the current New order layout; live-label precedence, reused course
   names, blocked selections and empty sends have focused checks there.
-  The Sent component now has standalone browser checks for folds, prices, serving quantities,
-  shared held-group Fire and reminders. A native press stays in place when a due banner arrives,
-  and a long press opens line information without serving. It is not yet connected to the table
-  screen. The app now offers a five-second Undo only after a serve command answers successfully,
+  On the feature branch, Sent is now connected above New order on the table screen. A fired row's
+  tap serves its active remainder, and All served collects only this bill's fired rows. Held-group
+  Fire still asks for confirmation, including when the legacy setting gives firing to the kitchen
+  or pass. That confirmation uses the separate group read; a failed Current orders read does not
+  block an otherwise known held group. That confirmation refuses after its bill visit, server or
+  party changes. The information window shows recorded dish and extra prices, plus the note,
+  without editing them. Its partial-serving choice excludes charged cancellations. A quantity
+  confirmation sends nothing after a server or visit change, an unread service snapshot, or
+  another device serving the remainder. A served slice offers Not served through More when its
+  Current orders snapshot reports an open bill. Sent keeps its folds during passive reads, opens
+  for attention on a new visit, and stops its age timer while folded or unread. Focused browser checks
+  include native app serving and Undo, both languages and themes, and phone/desktop widths. The app offers five-second Undo only after a serve command succeeds,
   retaining that command's exact line ids and quantities. Another accepted serve replaces the receipt;
   leaving the bill, changing server or signing out removes its authority. A failed refresh keeps
-  the accepted receipt, while a refused serve shows no success notice. Focused app checks cover
-  those cases and a native Undo in both languages, themes and phone/desktop widths. The table's
-  Sent integration, conditional sent-line actions and held-dish Finish resolution remain open. Its
+  the accepted receipt, while a refused serve shows no success notice.
+  The old Current orders, To serve and Served drawer lists still need their remaining checks moved
+  to Sent before removal. The rest of the sent-line More actions, combined Comp window, held-heading
+  reorder and held-dish Finish resolution also remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
   target recovery. Single-dish Fire now's command/API/client work is qualified on the feature
