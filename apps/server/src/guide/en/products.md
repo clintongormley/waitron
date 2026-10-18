@@ -7,8 +7,8 @@ without copying its kitchen name, dietary declarations or choices.
 Open **Products** in the management dashboard and choose **Add product**. Give the product a name
 and enter its price. Its VAT starts on the class chosen as **VAT class for new products**, on the
 **Venue details** tab of **Venue settings**; change it here when this product is taxed differently.
-The tax label shows the same percentage that Waitron uses to calculate the sale. For a product with
-no VAT, choose **No tax (0%)**.
+For a product with no VAT, choose **No tax (0%)**. A change of VAT class reaches the tills when the
+menu is published again; until then they sell the product at the class the menu was published with.
 
 The editor keeps the fields you change often on screen and folds the rest away behind a heading that
 summarises what is inside it, so you can see at a glance which sections you have filled in. Open one
@@ -32,10 +32,11 @@ the **Pricing unit** window, which lists **Each** first and then your units, sor
 dashboard language. **Add unit** there creates a new unit without leaving the product.
 
 Once you choose a unit, the price is for one of that unit, and the field's label says so, such as
-**Price per kg**. At the till, a product sold by weight, or by a unit whose **Precision** allows
-decimal places, asks how much each time, to no more decimal places than the unit allows. Any other
-product sells one per tap. The receipt prints the quantity with the unit's abbreviation, such as
-0.35 kg. A product the till asks the quantity of cannot take extras.
+**Price per kg**. At the till, a product sold in one of the weight units Waitron provides (grams,
+kilograms or milligrams), or by a unit whose **Precision** allows decimal places, asks how much each
+time, to no more decimal places than the unit allows. Any other product sells one per tap. The
+receipt prints the quantity with the unit's abbreviation, such as 0.35 kg. A product the till asks
+the quantity of cannot take extras.
 
 ## Give a product up to three names {#names}
 
@@ -182,7 +183,8 @@ Under **Allergens**, choose each of the 14 allergens the dish contains, or
 **Contains none of the 14** once you have checked that it has none. Choosing
 **Cereals containing gluten** or **Nuts** opens a row of kinds beneath it, such as **Wheat** or
 **Almonds**: choose at least one. Choosing an allergen means the dish contains it; there is no
-separate “may contain” choice. Removing the last allergen returns the dish to not reviewed.
+separate “may contain” choice. Removing the last allergen returns a product to not reviewed, and a
+variant to its product's allergens.
 
 Under **Dietary**, choose any of **Vegan**, **Vegetarian**, **Halal**, **Kosher**, **No meat** and
 **No fish**. Vegan also ticks Vegetarian, No meat and No fish, and Vegetarian ticks No meat and No
