@@ -88,20 +88,20 @@ it("stepping seasons with edits asks first: Keep stays, Discard moves on with a 
   button(painter, "next-season").click();
   await choose("keep");
   await settle(painter);
-  expect(frame(painter).heading).toBe("Winter week");
+  expect(frame(painter).heading).toBe("Winter: standard week");
   expect(grid(painter).days.get("3")).toEqual([
     { periodId: "p2", startsAt: "20:00", endsAt: "23:00" },
   ]);
   button(painter, "next-season").click();
   await choose("discard");
   await settle(painter);
-  expect(frame(painter).heading).toBe("Spring week");
+  expect(frame(painter).heading).toBe("Spring: standard week");
   expect(grid(painter).days.get("3")).toEqual([]);
   expect(save(painter).disabled).toBe(true);
   button(painter, "previous-season").click();
   await settle(painter);
   expect(question().open).toBe(false);
-  expect(frame(painter).heading).toBe("Winter week");
+  expect(frame(painter).heading).toBe("Winter: standard week");
   expect(grid(painter).days.get("3")).toEqual([]);
 });
 

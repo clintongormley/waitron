@@ -33,7 +33,6 @@ import { paintRow, paintRowStyles } from "./paint-row.js";
 import {
   departmentOf,
   droppedNotice,
-  listOf,
   ownerName,
   refusalReason,
   removedPeriods,
@@ -159,7 +158,8 @@ export class SeasonPainter extends LitElement {
         container-type: size;
         --paint-grid-fill: calc(100cqb - var(--wt-tap-min) - 3px);
       }
-      .follows {
+      .covers {
+        margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -583,37 +583,25 @@ export class SeasonPainter extends LitElement {
   }
   private picker(department: Department) {
     const zone = this.zone(department);
-    const zones = department.zones.map(({ name }) => name);
-    const list = listOf(zones);
     return html`<wt-combobox
-        slot="picker"
-        name="department"
-        label=${t("painter.department")}
-        hide-label
-        search="never"
-        ?disabled=${this.saving}
-        .value=${zone ? `zone:${zone.id}` : department.id}
-        .options=${this.model.departments
-          .filter(({ active }) => active)
-          .flatMap((entry) => [
-            { value: entry.id, label: entry.name },
-            ...entry.zones.map(({ id, name }) => ({ value: `zone:${id}`, label: name, depth: 1 })),
-          ])}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.pick(event.detail.value);
-        }}
-      ></wt-combobox>
-      ${
-        zones.length
-          ? html`<span slot="picker" class="follows" data-test="follows"
-              >${format(zones.length === 1 ? "painter.zone_follows" : "painter.zones_follow", {
-                zones: list,
-                department: department.name,
-              })}</span
-            >`
-          : nothing
-      }`;
+      slot="picker"
+      name="department"
+      label=${t("painter.department")}
+      hide-label
+      search="never"
+      ?disabled=${this.saving}
+      .value=${zone ? `zone:${zone.id}` : department.id}
+      .options=${this.model.departments
+        .filter(({ active }) => active)
+        .flatMap((entry) => [
+          { value: entry.id, label: entry.name },
+          ...entry.zones.map(({ id, name }) => ({ value: `zone:${id}`, label: name, depth: 1 })),
+        ])}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.pick(event.detail.value);
+      }}
+    ></wt-combobox>`;
   }
   private paintRow(department: Department, chosen: string | null, zoned: boolean) {
     return paintRow({
@@ -669,6 +657,12 @@ export class SeasonPainter extends LitElement {
         }}
       >
         ${this.seasonChip()}${this.picker(department)} ${periodsLink()}
+        <p slot="row" class="covers" data-test="covers">
+          ${format("painter.week_covers", {
+            from: formatMonthDay(season.startsOn),
+            to: formatMonthDay(seasonLastDay(this.model.seasons, season.startsOn)),
+          })}
+        </p>
         ${this.readOnly ? nothing : this.paintRow(department, chosen, zone !== undefined)}
         <paint-grid
           .target=${`${this.seasonId}/${key}`}

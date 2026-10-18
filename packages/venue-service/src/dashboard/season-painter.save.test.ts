@@ -349,7 +349,7 @@ it("ignores a save's late refusal once the painter has stepped to another season
   expect(frame(painter).busy).toBe(true);
   button(painter, "next-season").click();
   await settle(painter);
-  expect(frame(painter).heading).toBe("Spring week");
+  expect(frame(painter).heading).toBe("Spring: standard week");
   expect(frame(painter).busy).toBe(false);
   refuse({ code: "hours.clock_changed" });
   await late.catch(() => undefined);
@@ -592,7 +592,7 @@ it("a paint made while a save is in flight is kept, and is still unsaved once th
 it("Save writes the season being painted, not the venue's current season", async () => {
   const { painter, writes, navigations } = await mount();
   button(painter, "next-season").click();
-  await expect.poll(() => frame(painter).heading).toBe("Spring week");
+  await expect.poll(() => frame(painter).heading).toBe("Spring: standard week");
   await settle(painter);
   expect(navigations).toEqual([{ seasonId: "spring", departmentId: "d1", zoneId: null }]);
   await drag(painter, "3", 7 * 60, 9 * 60);
