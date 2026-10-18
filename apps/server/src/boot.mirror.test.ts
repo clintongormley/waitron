@@ -517,6 +517,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       const trust = await fetch(`${base}/setup/trust`);
       expect(trust.status).toBe(200);
       expect(await trust.text()).toContain("to this Waitron server");
+      expect((await fetch(`${base}/help/en/products`)).status).toBe(200);
       expect((await fetch(`${base}/setup-api/discovery`)).status).toBe(404);
       const reset = await fetch(`${base}/setup-api/reset-incomplete-adopt`, {
         method: "POST",

@@ -225,6 +225,7 @@ import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./tr
 import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
+import { mountGuidePages } from "./guide-pages.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
@@ -926,7 +927,7 @@ async function bootServer(
   let cloudServing = () => false;
   mountCloudPublic(app, () => cloudServing());
 
-  // Help and certificate downloads precede every mode-specific gate and SPA catch-all.
+  // Help, guide pages and certificate downloads precede every mode-specific gate and SPA catch-all.
   // Machine discovery remains setup-only; the fallback CA does not certify operator TLS.
   mountDiscovery(
     app,
@@ -944,6 +945,7 @@ async function bootServer(
     },
     log,
   );
+  mountGuidePages(app, log);
 
   if (config.till === undefined) {
     // SETUP MODE — this box is bound to no venue. It serves only `/health` and the unauthenticated

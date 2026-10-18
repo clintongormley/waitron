@@ -22,6 +22,7 @@ for (const set of manifest) {
 }
 
 await cp(join(packageRoot, "src/assets"), join(distDir, "assets"), { recursive: true });
+await cp(join(packageRoot, "src/guide"), join(distDir, "guide"), { recursive: true });
 
 // The ESM bundle carries its own module type, so a `dist/` copied out alone does not depend on
 // finding apps/server/package.json above it or on Node's syntax detection.

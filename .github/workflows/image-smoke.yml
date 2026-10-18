@@ -187,6 +187,12 @@ jobs:
             | openssl x509 > leaf.pem
           openssl verify -CAfile ca.crt leaf.pem
 
+          code=$(curl -sk -o guide.html -w '%{http_code}' https://127.0.0.1/help/es/products)
+          [ "$code" = "200" ]
+          # A 200 alone would pass for an error page: the Spanish twin's section is what proves the files shipped.
+          grep -q 'id="variants"' guide.html
+          grep -q '<html lang="es">' guide.html
+
       - name: The box binds 443 as a non-root process, under host networking
         run: |
           set -euo pipefail
