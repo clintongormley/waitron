@@ -3630,12 +3630,14 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   before closing it"); change the rule in the same change.
   [Detail](backlog/dashboard.md#a657--cancel-leaves-without-asking)
 
-- **A625. A row menu wraps its two-word items after the window is resized to phone width.** Seen on
-  the Staff roles page (A585-1's look): after a desktop window was narrowed to 390 px, "Move up" and
-  "Move down" broke onto two centred lines and the menu touched the screen's edge; loaded directly at
-  390 px it was one line per item, three times out of three. Believed to be the shared
-  `wt-row-actions` popover, not that page; not yet reproduced on another screen. Screenshots kept
-  outside the repository (lane C, `a585-1-shots/11a-…`, `11b-…`, `11c-…`).
+- **A625. Check whether a row menu still wraps its two-word items after the window is resized to
+  phone width (owner, 2026-10-17: keep as a check).** Seen on the Staff roles page (A585-1's look):
+  after a desktop window was narrowed to 390 px, "Move up" and "Move down" broke onto two centred
+  lines and the menu touched the screen's edge; loaded directly at 390 px it was one line per item,
+  three times out of three. Believed to be the shared `wt-row-actions` popover. Done by one
+  real-browser run of that resize on `main`: if the items no longer wrap, delete this entry; if they
+  do, fix it. Screenshots kept outside the repository (lane C, `a585-1-shots/11a-…`, `11b-…`,
+  `11c-…`).
 
 - **A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)** —
   DESIGNED 2026-10-18, waiting for the owner's answer to one question
@@ -3645,12 +3647,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows
   the help or opens its page in the documentation. Nothing changes on the page while it is off.
   [Detail](backlog/dashboard.md#a582-help-mode-a--in-the-top-bar-marks-everything-that-has-help-owner-2026-10-13)
-
-- **A form's bottom message in a full-height dialog sits far above its buttons** (found by A507's
-  look, owner decision needed). A short form leaves a gap of about 150 px between the message and
-  the buttons (seen in the Prep stations station editor). Options: push the message to the bottom
-  of the body, or into the footer.
-  [Detail](backlog/dashboard.md#a-forms-bottom-message-in-a-full-height-dialog-sits-far-above-its-buttons)
 
 - **`wt-combobox` without a search box never exposes `aria-required`**, so a screen reader is not
   told a required dropdown is required. Found by A506-6's review: a probe showed `required` set gave
@@ -3679,12 +3675,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
     neither. By reading, not run: a tab already on sign-in (sent by the shared session deadline, or
     by a failed check on coming back into view) switches to the reset notice only when a later
     request is answered `node.reset`.
-  - `waitron.sh reset --all` deletes the box's own minted certificate (`deploy/waitron.sh`, the
-    `rm_volume waitron_state` branch; minted by `apps/server/src/box-secrets.ts`), so — by reading,
-    not run — a tab left open fails the certificate check, reports `connection.failed` on every
-    request and is never signed out, indistinguishable from the box being down. This holds only for
-    the minted certificate; when the operator supplies one through `WAITRON_TLS_*`, the box serves
-    that instead.
 
 - **Loose ends left by A501 (#1552).**
   - A dashboard tab on the Backup screen learns of a box reset late. Setup mode answers only
@@ -3757,9 +3747,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   till's `trimQuantity` removes trailing zeros without localising a fraction's decimal mark. These
   are readings, not browser reproductions; reproduce them before changing their displays.
 
-- **Dashboard at 1280 px: the overview's top-row cards have uneven heights.** Seen during A310's
-  look (2026-10-07), OPEN, unqueued — not checked against `main`. Screenshots:
-  `~/waitron-campaign-c/a310-shots/`.
+- **A828. Check the overview's top-row cards at 1280 px (owner, 2026-10-17: keep as a check).**
+  They had uneven heights in A310's look (2026-10-07), not checked against `main`. Done by one
+  browser look against `main` at 1280 px: if the cards are even, delete this entry; if uneven, fix
+  them. Screenshots: `~/waitron-campaign-c/a310-shots/`.
 
 - **Loose ends left by W79 (#1186, the Menus list).**
   - `docs/developers/design-system.md` still says a list's Add action goes in a menu beside the
@@ -3788,9 +3779,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
     toggles are hand-built icon buttons for the same reason.
   [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 
-- **Row menus in plain `<table>`s are unchecked at phone width.** None has a phone-width case and
-  none was measured.
-  [Detail](backlog/dashboard.md#row-menus-in-plain-tables-are-unchecked-at-phone-width)
+- **A827. Check that row menus in plain `<table>`s stay on screen at 390 px (owner, 2026-10-17).**
+  The 390 px cases in `variant-table.test.ts` and `option-list-form.test.ts` check only that a
+  row's menu sits on the first line of a wrapping name. Done when each widget has a case holding the
+  menu's right edge to the screen's, as the product editor's "keeps every variant row's menu on
+  screen at phone width" does.
+  [Detail](backlog/dashboard.md#a827-check-that-row-menus-in-plain-tables-stay-on-screen-at-390-px)
 
 - The reasons screen keeps its own copy of the role list and role names (C51 sorts its dropdowns by
   displayed name, with a separate seniority order for validation) and of the dashboard's
@@ -3829,13 +3823,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **The older collapse-only sidebar test still needs a useful assertion (C35, #822) — OPEN.**
   Find a collapse-only case that needs the app's correction before changing or retiring that test.
   [Detail](backlog/dashboard.md#the-older-collapse-only-sidebar-test-still-needs-a-useful-assertion-c35-822--open)
-
-- **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
-  what the section is for and what is in it, opened by the section's header. It was the answer to
-  C35's question about the header of the section you are on; A161 (#979) has since answered that
-  question another way — that header now collapses its section, as every other header does — so
-  whether this page is still wanted, and what would open it, is the owner's call.
-  [Detail](backlog/dashboard.md#every-dashboard-sidebar-section-gets-an-info-page--open-owner-2026-09-29)
 
 - **What C38 left as it was (a generated display name is the first given name and first surname,
   #827, owner decision 2026-09-28).** Left as they were, from #827's review: unlike the two staff
@@ -3953,7 +3940,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
   says so** (owner decision 2026-09-12). Still open: `wt-combobox` does not sort its options, and
-  `compareLabels`, now used by `wt-data-table`, passes no locale to its `Intl.Collator`.
+  `compareLabels` (`packages/shared/src/compare-labels.ts`, used by `wt-data-table`) sorts in the
+  browser's default language; it should sort in the signed-in person's chosen language (owner,
+  2026-10-17).
   [Detail](backlog/dashboard.md#dropdowns-sort-by-the-label-the-person-reads-with-intlcollator-a-list-in-a-lifecycle-order-says-so)
 
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
@@ -4156,12 +4145,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   borders, a category row's maker link and the prep stations screen remains unmeasured. Left open by
   A319 (hover contrast after A306, #1347).
 
-- **The two dropdown explanations on venue service's Kitchen panel in Venue settings ("Applies to
-  new kitchen tickets and to reprints." and the release reminder's) are now each dropdown's `hint`**
-  — left open by A178 (#1010 to #1019), seen while building, not changed; for the owner: which a
-  field that always holds a value never shows, so only screen readers read them while the
-  switches beside them keep visible lines.
-
 - **Text size after A179 (#988).** Open: page headings follow the Typography roles table in
   `docs/developers/design-system.md` (a page title at `--wt-font-size-xl`) only in part. **Phone
   check, the owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is widely
@@ -4174,10 +4157,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   list has its shadow cut off where the table ends.
   [Detail](backlog/dashboard.md#dragging-a-row-a180-994-and-1003--two-things-seen-left-as-they-were)
 
-- **The overview's top-sellers table can reach into its card's padding at desktop width** (12px into
-  the 17px padding, measured 2026-09-24 at 1280px). **Next action:** decide whether a long name
-  there may wrap mid-word.
-  [Detail](backlog/dashboard.md#the-overviews-top-sellers-table-can-reach-into-its-cards-padding-at-desktop-width)
+- **A829. Cut a long one-word name in the overview's top-sellers table with "…"** (owner,
+  2026-10-17: no mid-word break; the full name shows on hover, as A784 does for a holiday's name).
+  Today such a name, with five-digit figures, reaches 12px into the card's 17px padding (measured
+  2026-09-24 at 1280px).
+  [Detail](backlog/dashboard.md#a829-cut-a-long-one-word-name-in-the-overviews-top-sellers-table-with-)
 
 - **Two texts still use the old words.** A hint says "Create" (the Products screen's empty prompt,
   "Create a menu on the Menus screen…"), and the purchase dialog's edit heading reads "Edit

@@ -290,7 +290,9 @@ volume, which holds the certificate authority the phone already trusts and the b
 signed by it. Because that folder survives, a phone that has already been told to trust this box does
 not need to trust it again after a plain `reset`. `reset --all` throws `tls/` away too, so the box
 mints a brand-new certificate authority on its next boot and every phone has to go through the trust
-step again. Neither form touches `.env`, so if a branch install pinned an image there, the box comes
+step again. A dashboard or till tab left open across `reset --all` cannot reach the box until its
+device trusts the new certificate, so take that device through the trust step, then reload the tab.
+Neither form touches `.env`, so if a branch install pinned an image there, the box comes
 back on that same image. Only the data in the volumes is wiped, and that includes the venue's
 databases, because they live in the `state` volume.
 

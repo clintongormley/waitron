@@ -96,13 +96,16 @@ sessions on their next request); storage (a table in identity's own migration se
 classification entry — never an enum, CLAUDE.md §2); names (built-ins are translated from
 `roleName`, `apps/dashboard/src/i18n/domain.ts:135`, custom ones will not be).
 
-## Row menus in plain `<table>`s are unchecked at phone width
+## A827. Check that row menus in plain `<table>`s stay on screen at 390 px
 
-- **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
-  `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
-  not `wt-data-table`, so `pinned` does not reach them; `product-editor.ts` also contains both a
-  `<table>` and a row menu (found by grep, not read). None has a phone-width case and none was
-  measured.
+- **A827. Check that row menus in plain `<table>`s stay on screen at 390 px (owner,
+  2026-10-17).** `variant-table.ts` and `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a
+  `wt-row-actions` in a plain table, not `wt-data-table`, so `pinned` does not reach them;
+  `product-editor.ts` also contains both a `<table>` and a row menu (found by grep, not read). The
+  390 px cases in `variant-table.test.ts` and `option-list-form.test.ts` check only that a row's
+  menu sits on the first line of a wrapping name. Done when each of the three has a 390 px case
+  holding the row menu's right edge to the screen's, as `product-editor.test.ts`'s "keeps every
+  variant row's menu on screen at phone width" does for the variant table it draws.
 
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
@@ -130,15 +133,6 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   failed by 128px, while "keeps the clicked group header … when collapsing …" still passed.
   The older test and its existing assertions were retained. Find a collapse-only case that
   needs the app's correction before changing or retiring that test.
-
-## Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29)
-
-- **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
-  what the section is for and what is in it, opened by the section's header. It was the answer to
-  C35's question about the header of the section you are on; A161 (#979) has since answered that
-  question another way — that header now collapses its section, as every other header does — so
-  whether this page is still wanted, and what would open it, is the owner's call. If wanted, it
-  needs a spec: brainstorm what each section's page says.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
@@ -441,8 +435,12 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
   says so** (owner decision 2026-09-12). **`wt-select` is retired** (owner, 2026-10-02): `wt-combobox`
   is the one dropdown (A178b–f). Still open:
-  `wt-combobox` does not sort its options, and `compareLabels`, now used by `wt-data-table`,
-  passes no locale to its `Intl.Collator`.
+  `wt-combobox` does not sort its options, and `compareLabels`
+  (`packages/shared/src/compare-labels.ts`, used by `wt-data-table`) builds its `Intl.Collator`
+  with no language, so it sorts in the browser's default language. It should sort in the signed-in
+  person's chosen language (owner, 2026-10-17): the order differs, since Node's `Intl.Collator`
+  puts "Ñoquis" between "Nísperos" and "Nuez" in English, and after "Nuez", before "Olivas", in
+  Spanish.
 
 ## Shared database-backed table paging, search and sorting
 
@@ -885,15 +883,18 @@ wrapper each list puts round its table (`.table-wrap`, or `.wrap` in the variant
 `overflow-x: auto`). The canvas editor's tile drag stays as it is (owner choice, 2026-10-01); A182
 plans to retire the editor.
 
-## The overview's top-sellers table can reach into its card's padding at desktop width
+## A829. Cut a long one-word name in the overview's top-sellers table with "…"
 
 From **Variants as products (#511–#556) — what is left open.** How the model works is in
 [products.md](../developers/products.md), under _Variants_.
 
-- **The overview's top-sellers table can reach into its card's padding at desktop width** when a
-  variant has a long one-word name and the figures run to five digits (12px into the 17px padding,
-  measured 2026-09-24 at 1280px). **Next action:** decide whether a long name there may wrap
-  mid-word.
+- **A829. Cut a long one-word name in the overview's top-sellers table with "…".** Today the table
+  can reach into its card's padding at desktop width when a variant has a long one-word name and
+  the figures run to five digits (12px into the 17px padding, measured 2026-09-24 at 1280px). Owner,
+  2026-10-17: no mid-word break; cut the name with "…" and show the whole name on hover, as A784
+  (#1840) does for a day's name in the Calendar (the whole name in its `title`). Done when a test at
+  1280px holds the table inside the card's padding with such a name and checks the "…" and the
+  `title`.
 
 ## A541. A `wt-disclosure` reopened after an animated close snaps open with no animation
 
@@ -921,6 +922,18 @@ readable pages, showing their name and containing page. Page matches precede inn
 The approved scope is preserved in the [implementation plan](../superpowers/plans/2026-10-15-a727-page-search.md#approved-scope).
 Periods and Seasons are registered as `venue-service:periods` and `venue-service:seasons`, windows in the Calendar (the Periods window from A719, the Seasons window from A721). The Week is
 registered as `venue-service:week`, and the others register theirs when they exist.
+
+- **A form's bottom message in a full-height dialog goes in the footer, on its own line just above
+  the buttons, so it is always visible (owner, 2026-10-17).** Found by A507's look: a short form in
+  a full-height `wt-modal` left about 150 px between the message and the buttons (the Prep stations
+  station editor). Not built yet: `wt-dialog` still puts the message at the end of the body
+  (`packages/ui/src/components/wt-dialog.ts`), and design-system.md → Forms still says "in a
+  dialog, at the end of the dialog's body".
+
+- **The two dropdown explanations on venue service's Kitchen panel stay as hints (owner,
+  2026-10-17).** "Applies to new kitchen tickets and to reprints." and the release reminder's are
+  each dropdown's `hint` since A178 (#1010 to #1019); a field that always holds a value never shows
+  its hint, so only screen readers read them, while the switches beside them keep visible lines.
 
 - **A dialog's height is chosen separately from its width (A734, owner 2026-10-15).** `wt-modal`'s
   shorter height is a fixed medium one, not one that follows its content, so a dialog given it does
@@ -1043,7 +1056,8 @@ From A334 (#1416, held reorder drags scroll at the list edge):
 
 From A176 (an empty table shows a proper empty box, with the screen's Add button, #1033):
 
-- **The Payments screen's readers table gets no button**, because "Add reader" sits beside each
+- **The Payments screen's readers table gets no button** (kept as deliberate, owner, 2026-10-17),
+  because "Add reader" sits beside each
   connected provider (none, one or several), so there is no single Add to put there, and the list
   is pre-filtered by status; and the menu prices table on a menu's Price overrides tab gets none
   either, because its rows come from "Add products" on the Structure tab.
@@ -1140,20 +1154,6 @@ still asks, and a full page's own Cancel leaves without asking too.
 - **Scope.** The dashboard, till and setup shells share the controller, so all three follow.
   Update the rule's paragraph and the unsaved-changes tests that pin a question on Cancel; a test
   that asserts Cancel asks is now asserting the old rule.
-
-## A form's bottom message in a full-height dialog sits far above its buttons
-
-**A form's bottom message in a full-height dialog sits far above its buttons** (found by A507's
-look, owner decision needed). `wt-modal` keeps standard and wide dialogs at full height unless
-given `height="medium"` (`packages/ui/src/components/wt-modal.ts`, the `dialog` rule) and
-`wt-dialog` puts the form's message at the end of the body
-(`packages/ui/src/components/wt-dialog.ts:459`), so a short form leaves a gap of about
-150 px between the message and the buttons (seen in the Prep stations station editor; the same at
-main 8dcc265ae with a blank name). The Forms rule puts it "at the bottom of the form, above the
-buttons — in a dialog, at the end of the dialog's body" (design-system.md → Forms), and in a
-full-height dialog those are not the same place. Options: push the message to the bottom of the
-body, or into the footer. A medium-height modal (A734) shortens the gap but does not settle it, so
-this stays open.
 
 ## A refused early dashboard payment authorization may become allowed before the PIN transaction — UNVERIFIED (A530 review)
 
