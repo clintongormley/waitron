@@ -341,6 +341,8 @@ Branch `feat/a582-2-dashboard-help`, worktree
 None. Every existing test in `packages/ui` passes unedited. The new elements reflect no `disabled`,
 so `packages/ui/src/tap-target-and-focus.test.ts:42-58`'s exact interactive set does not change
 (read: the set is `wt-row-actions` plus every component reflecting `disabled`, `:31-36`).
+(2026-10-18, after review: `wt-help-switch` was added to that set by name, in the fix that closes a
+tab's help box when its badge scrolls out of view.)
 
 ---
 

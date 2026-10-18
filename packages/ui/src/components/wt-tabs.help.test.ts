@@ -137,6 +137,67 @@ test("a badge whose tab is scrolled out of view is hidden and cannot be focused"
   expect(el.shadowRoot!.activeElement).toBeNull();
 });
 
+test("a strip drawn with help already on starts with an out-of-view badge hidden", async () => {
+  setHelpMode(true);
+  const errors: string[] = [];
+  const onError = (event: ErrorEvent) => errors.push(event.message);
+  window.addEventListener("error", onError);
+  try {
+    const el = await setup(
+      [
+        { key: "status", label: "Status" },
+        { key: "menus", label: "Menus" },
+        { key: "routes", label: "Preparation routing", help },
+      ],
+      "200px",
+    );
+    await badgeOf(el).updateComplete;
+    await frame();
+    expect(badgeOf(el).hasAttribute("data-out-of-view")).toBe(true);
+    expect(getComputedStyle(badgeOf(el)).visibility).toBe("hidden");
+    expect(errors).toEqual([]);
+  } finally {
+    window.removeEventListener("error", onError);
+  }
+});
+
+test("an open badge scrolled out of view closes its box and hands focus to the selected tab", async () => {
+  const el = await setup(
+    [
+      { key: "status", label: "Status", help: { ...help, label: "Help: Status" } },
+      { key: "menus", label: "Menus" },
+      { key: "routes", label: "Preparation routing" },
+    ],
+    "220px",
+  );
+  await turnHelp(true, el);
+  await frame();
+  const badge = badgeOf(el);
+  const popup = badge.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await userEvent.click(page.elementLocator(badgeButton(el)));
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+  await badge.updateComplete;
+  expect(badgeButton(el).getAttribute("aria-expanded")).toBe("true");
+  expect(badge.shadowRoot!.activeElement).toBe(badgeButton(el));
+
+  const strip = stripOf(el);
+  strip.scrollLeft = strip.scrollWidth;
+  await vi.waitFor(() => expect(badge.hasAttribute("data-out-of-view")).toBe(true));
+  expect(popup.matches(":popover-open")).toBe(false);
+  await vi.waitFor(() => expect(badgeButton(el).getAttribute("aria-expanded")).toBe("false"));
+  expect(badge.shadowRoot!.activeElement).toBeNull();
+  expect(el.shadowRoot!.activeElement).toBe(tabs(el)[0]);
+  expect(strip.scrollLeft).toBeGreaterThan(0);
+
+  strip.scrollLeft = 0;
+  await vi.waitFor(() => expect(badge.hasAttribute("data-out-of-view")).toBe(false));
+  await frame();
+  await frame();
+  await badge.updateComplete;
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(badgeButton(el).getAttribute("aria-expanded")).toBe("false");
+});
+
 test("tapping the badge opens its box and does not select the tab", async () => {
   const el = await setup();
   await turnHelp(true, el);

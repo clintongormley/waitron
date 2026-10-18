@@ -146,6 +146,21 @@ test("turning help off closes an open box and stops watching for Escape", async 
   expect(escape.defaultPrevented).toBe(false);
 });
 
+test("hide() closes an open box, and does nothing before the first render", async () => {
+  const { badge } = await mountBadge();
+  await turnHelp(true, badge);
+  const { button, popup } = parts(badge);
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+
+  badge.hide();
+  expect(popup.matches(":popover-open")).toBe(false);
+  await vi.waitFor(() => expect(button.getAttribute("aria-expanded")).toBe("false"));
+
+  const bare = document.createElement("wt-help-tooltip");
+  expect(() => bare.hide()).not.toThrow();
+});
+
 test("always mode ignores the switch", async () => {
   const { span, badge } = await mountBadge('mode="always"');
   expect(badge.checkVisibility()).toBe(true);

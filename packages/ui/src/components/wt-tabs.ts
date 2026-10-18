@@ -5,6 +5,7 @@ import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import { HelpModeController } from "../help-mode.js";
 import "./wt-help-tooltip.js";
+import type { WtHelpTooltip } from "./wt-help-tooltip.js";
 
 export interface TabItem {
   key: string;
@@ -166,9 +167,10 @@ export class WtTabs extends LitElement {
     button.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
-  // Scrolls the strip and sets its fade width and overflow mark, none of which changes the size of
-  // the strip or the selected tab, so it needs no frame delay. A selected tab that changes size
-  // re-sizes the fade without scrolling, so a strip the reader scrolled stays put.
+  // Scrolls the strip, sets its fade width and overflow mark, and places the help badges, none of
+  // which changes the size of the strip or the selected tab, so it needs no frame delay. A selected
+  // tab that changes size re-sizes the fade without scrolling, so a strip the reader scrolled stays
+  // put.
   readonly #sizeObserver = new ResizeObserver((entries) => {
     let stripResized = false;
     let tabResized = false;
@@ -281,7 +283,7 @@ export class WtTabs extends LitElement {
 
   #placeBadges(): void {
     if (!this.#help.on) return;
-    const badges = this.renderRoot.querySelectorAll<HTMLElement>(".tab-row > wt-help-tooltip");
+    const badges = this.renderRoot.querySelectorAll<WtHelpTooltip>(".tab-row > wt-help-tooltip");
     if (badges.length === 0) return;
     const row = badges[0]!.parentElement!;
     const bar = row.querySelector<HTMLElement>('[role="tablist"]')!;
@@ -294,8 +296,19 @@ export class WtTabs extends LitElement {
       const x = rtl ? bounds.left : bounds.right;
       badge.style.left = `${x - rowBounds.left}px`;
       badge.style.top = `${bounds.top - rowBounds.top}px`;
-      badge.toggleAttribute("data-out-of-view", x < barBounds.left || x > barBounds.right);
+      const out = x < barBounds.left || x > barBounds.right;
+      if (out && !badge.hasAttribute("data-out-of-view")) this.#leaveView(badge);
+      badge.toggleAttribute("data-out-of-view", out);
     }
+  }
+
+  // A badge made invisible keeps its box open. Focus goes to the selected tab without scrolling, which
+  // would undo the reader's scroll.
+  #leaveView(badge: WtHelpTooltip): void {
+    badge.hide();
+    if (!badge.matches(":focus-within")) return;
+    const { tabs, index } = this.#selectedTab();
+    tabs[index]!.focus({ preventScroll: true });
   }
 
   override connectedCallback(): void {

@@ -877,6 +877,15 @@ describe("a help badge inside a menu row, and a menu that changes size", () => {
     expect(popup.matches(":popover-open")).toBe(false);
   });
 
+  it("a data-keep-open on the wt-row-actions element itself does not keep it open", async () => {
+    const { el, trigger, edit, popup } = await mountActions();
+    el.setAttribute("data-keep-open", "");
+    await userEvent.click(trigger);
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.click(edit);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
   it("an open menu that grows stays inside the window", async () => {
     await page.viewport(390, 800);
     const errors: string[] = [];
