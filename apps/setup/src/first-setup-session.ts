@@ -381,11 +381,80 @@ export class FirstSetupSession {
       return result.preparation;
     });
   }
-  candidates(module: string, proposal: unknown, password: string): Promise<void> {
-    return this.#change(module, async (owner) => {
+  stageNodeKey(module: string, password: string) {
+    return this.#run(async (current) => {
+      this.#module(module);
+      const owner = this.#owner();
       const { reconfirmation } = await this.#api.reconfirmFirstSetup(owner, password, "block-use");
-      if (this.#disposed) failure("setup.attempt_conflict");
-      return this.#api.firstSetupCandidates(owner, module, proposal, reconfirmation);
+      current();
+      const result = await this.#api.firstSetupNodeKey(owner, reconfirmation);
+      current();
+      if (
+        result.stage.nodeId !== this.#state!.nodeId ||
+        result.key.nodeId !== result.stage.nodeId ||
+        result.key.name !== result.stage.name
+      )
+        failure("setup.attempt_conflict");
+      return result;
+    });
+  }
+  registerRecoveryDocument(
+    module: string,
+    value: import("@waitron/module/src/setup-contract.js").InitialSetupRecoveryReference & {
+      statement: unknown;
+    },
+  ): Promise<void> {
+    return this.#run(async (current) => {
+      this.#module(module);
+      const result = await this.#api.firstSetupRecoveryDocument(this.#owner(), module, value);
+      current();
+      if (result.accepted !== true) failure("setup.attempt_conflict");
+    });
+  }
+  confirmRecoveryDocument(
+    module: string,
+    value: import("@waitron/module/src/setup-contract.js").InitialSetupRecoveryReference,
+    password: string,
+  ): Promise<void> {
+    return this.#run(async (current) => {
+      this.#module(module);
+      const owner = this.#owner();
+      const { reconfirmation } = await this.#api.reconfirmFirstSetup(owner, password, "activation");
+      current();
+      const result = await this.#api.firstSetupRecoveryDocumentKept(
+        owner,
+        module,
+        value,
+        reconfirmation,
+      );
+      current();
+      if (result.accepted !== true) failure("setup.attempt_conflict");
+    });
+  }
+  candidates(module: string, proposal: unknown, password: string): Promise<unknown> {
+    return this.#run(async (current) => {
+      this.#module(module);
+      const owner = this.#owner();
+      try {
+        const { reconfirmation } = await this.#api.reconfirmFirstSetup(
+          owner,
+          password,
+          "block-use",
+        );
+        current();
+        const result = await this.#api.firstSetupCandidates(
+          owner,
+          module,
+          proposal,
+          reconfirmation,
+        );
+        current();
+        this.#acceptState(result.state);
+        return result.preparation;
+      } catch (error) {
+        this.#needsRefresh = true;
+        throw error;
+      }
     });
   }
   importInput(module: string, input: unknown): Promise<void> {

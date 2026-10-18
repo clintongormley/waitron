@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { applyTokens } from "@waitron/ui";
+import { applyTokens, leaveCoordinatorFor } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { venue, initial, wizardApi } from "../test/first-setup-browser.js";
@@ -174,39 +174,57 @@ it("shows the duplicate-tab refusal without discarding the original owner's proo
 it("reads back a completed activation after a lost response and offers no second activation", async () => {
   let retained = { ...initial };
   const publicRequest = {
-    version: 1,
-    kind: "first-fiscal-setup",
-    attemptId: initial.attemptId,
-    binding: {
-      module: "fiscal-verifactu",
-      action: "setup",
-      eventId: "event",
-      sourceId: `first-setup:${initial.attemptId}`,
-      targetNodeId: initial.nodeId,
-    },
-    operatorId: initial.administratorId,
-    recipientVenueId: `first-setup:${initial.attemptId}`,
-    taxpayerNif: venue.taxId,
-    softwareId: "W1",
-    environment: "production",
-    requiredBases: [{ code: "A", purpose: "standard" }],
-    candidates: [{ installationIdentity: "S000001" }],
-    candidateDigest: "digest",
-  };
-  const allocation = {
-    allocation: {
-      allocationId: "allocation",
-      installationIdentity: "S000001",
-      series: [{ code: "A-S000001", purpose: "standard" }],
-      reservationEvidence: {
-        block: { payload: { custodianId: "Elena", generationId: "generation", blockId: "block" } },
-        consumption: { payload: {} },
+    kind: "waitron-hour-setup",
+    status: "selected",
+    identity: "06TH",
+    input: {
+      allocation: {
+        installationIdentity: "06TH",
+        series: [
+          { code: "A-06TH", purpose: "standard" },
+          { code: "FF-06TH", purpose: "full" },
+          { code: "R-06TH", purpose: "rectificative" },
+        ],
       },
     },
-    approval: { incidentEvidence: "ORIGINAL / 1" },
   };
+  const instant = Date.parse("2026-10-18T12:30:00Z");
   const { app, requests } = await mount({
     intercept(path, _body, headers) {
+      if (path.endsWith("/preparation"))
+        return Response.json({
+          state: retained,
+          preparation:
+            (_body as { proposal: { action: string } }).proposal.action === "clock-challenge"
+              ? { id: "challenge" }
+              : {
+                  id: "comparison",
+                  clock: {
+                    usable: ["box", "browser", "internet"].map((source) => ({
+                      source,
+                      lowerMs: instant,
+                      upperMs: instant,
+                    })),
+                    unavailable: [],
+                    disagreement: false,
+                    requiresConfirmation: false,
+                    boundaryWait: false,
+                    releaseBlocked: false,
+                    rangeBlocked: false,
+                  },
+                },
+        });
+      if (path.endsWith("/node-key"))
+        return Response.json({
+          stage: { stageId: "stage", nodeId: initial.nodeId, name: "Olivo key" },
+          key: {
+            nodeId: initial.nodeId,
+            name: "Olivo key",
+            secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+          },
+        });
+      if (path.endsWith("/recovery-document") || path.endsWith("/recovery-document-kept"))
+        return Response.json({ accepted: true });
       if (path.endsWith("/reconfirm")) return Response.json({ reconfirmation: "proof" });
       if (path.endsWith("/candidates")) {
         retained = {
@@ -263,14 +281,6 @@ it("reads back a completed activation after a lost response and offers no second
     );
     await (el as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   };
-  const file = async (test: string, value: unknown) => {
-    const control = module.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=${test}]`)!;
-    const data = new DataTransfer();
-    data.items.add(new File([JSON.stringify(value)], "public.json"));
-    control.files = data.files;
-    control.dispatchEvent(new Event("change"));
-    await module.updateComplete;
-  };
   const proof = async () => {
     await expect
       .poll(() => shell.shadowRoot!.querySelector("[data-test=owner-password]"))
@@ -278,36 +288,42 @@ it("reads back a completed activation after a lost response and offers no second
     await field(shell, "owner-password", venue.admin.password);
     await click(shell, "reconfirm");
   };
-  await click(module, "existing");
-  await field(module, "serials", "1");
-  await click(module, "candidates");
+  const hour = module.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    "vf-first-setup-hour",
+  )!;
+  await hour.updateComplete;
+  await expect
+    .poll(() => hour.shadowRoot!.querySelector("[data-test=clock-readings]"))
+    .not.toBeNull();
+  for (const selector of [
+    'input[name="setup-details-confirmed"]',
+    'input[name="taxpayer-hour"][value="no"]',
+  ])
+    await userEvent.click(hour.shadowRoot!.querySelector<HTMLInputElement>(selector)!);
+  await click(hour, "select");
   await proof();
   await expect
-    .poll(() => module.shadowRoot!.querySelector("[data-test=allocation-file]"))
+    .poll(() => hour.shadowRoot!.querySelector("[data-test=selected-hour]"))
     .not.toBeNull();
-  await file("allocation-file", allocation);
-  await click(module, "import");
-  await expect.poll(() => module.shadowRoot!.querySelector("[data-test=key-file]")).not.toBeNull();
-  await file("key-file", {
-    custodianId: "Elena",
-    publicKey: "PUBLIC-ONLY",
-    fingerprint: "a".repeat(64),
-  });
-  await field(module, "fingerprint", "a".repeat(64));
-  await click(module, "enrol");
-  await expect.poll(() => requests.some((r) => r.path.endsWith("/enrol"))).toBe(true);
-  await module.updateComplete;
-  for (const test of ["consulted", "consumed"]) {
-    module
-      .shadowRoot!.querySelector(`[data-test=${test}]`)!
-      .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
-  }
-  await field(module, "incident", "ORIGINAL / 1");
-  await click(module, "confirm");
+  expect(leaveCoordinatorFor(hour)!.isDirty([shell])).toBe(true);
+  await click(hour, "prepare-pdf");
+  await proof();
+  await expect
+    .poll(() => hour.shadowRoot!.querySelector("[data-test=download-pdf]"))
+    .not.toBeNull();
+  await userEvent.click(
+    hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!,
+  );
+  await click(hour, "kept");
   await proof();
   await expect
     .poll(() => shell.shadowRoot!.querySelector("[data-test=next]")?.hasAttribute("disabled"))
     .toBe(false);
+  expect(
+    requests.filter((r) => r.path.endsWith("/enrol") || r.path.endsWith("/current-master")),
+  ).toEqual([]);
+  expect(requests.filter((r) => r.path.endsWith("/recovery-document-kept"))).toHaveLength(1);
+  expect(leaveCoordinatorFor(hour)!.isDirty([shell])).toBe(false);
   await click(shell, "next");
   const review = await screen(app, "review");
   await click(review, "provision");

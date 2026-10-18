@@ -42,6 +42,7 @@ export class InitialSetupScreen extends LitElement {
   @state() private recovery = false;
   @state() private ready = new Set<string>();
   #generation = 0;
+  #draftRevision = 0;
   #resolve?: (value: string) => void;
   #reject?: (reason: unknown) => void;
   #scope?: DraftScope<string>;
@@ -122,13 +123,32 @@ export class InitialSetupScreen extends LitElement {
             return value.request;
           };
           const api: InitialSetupActions = {
+            stageNodeKey: () =>
+              run(async () => {
+                const password = await this.#password("block-use");
+                current();
+                return this.session.stageNodeKey(module, password);
+              }),
+            registerRecoveryDocument: (value) =>
+              run(() => this.session.registerRecoveryDocument(module, value)),
+            confirmRecoveryDocument: (value) =>
+              run(async () => {
+                const revision = this.#draftRevision;
+                const password = await this.#password("activation");
+                current();
+                await this.session.confirmRecoveryDocument(module, value, password);
+                current();
+                if (revision !== this.#draftRevision) return;
+                this.ready = new Set([...this.ready, module]);
+              }),
+            preparation: (proposal) => run(() => this.session.preparation(module, proposal)),
             candidates: (proposal) =>
               run(async () => {
                 const password = await this.#password("block-use");
                 current();
-                await this.session.candidates(module, proposal, password);
+                const pending = await this.session.candidates(module, proposal, password);
                 current();
-                return request();
+                return pending === undefined ? request() : pending;
               }),
             request: () => run(request),
             importInput: (input) => run(() => this.session.importInput(module, input)),
@@ -189,18 +209,12 @@ export class InitialSetupScreen extends LitElement {
       !this.recovery &&
       this.offerings.every(({ module }) => this.ready.has(module));
     return html`<h1>${t.heading}</h1>
-      <p>${t.outside}</p>
-      <a
-        href="/setup-assets/custodian-tool.html"
-        download="waitron-custodian-tool.html"
-        data-test="download-tool"
-        >${t.download}</a
-      >
       ${
         this.unavailable
           ? html`<p role="alert">${t.unavailable}</p>`
           : html`<section
               @initial-setup-changed=${() => {
+                ++this.#draftRevision;
                 this.ready = new Set();
               }}
             >

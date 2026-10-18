@@ -47,12 +47,15 @@ it("protects a nested module draft through the wizard's real leave coordinator",
     HTMLElement & { updateComplete: Promise<unknown> }
   >("vf-first-fiscal-screen")!;
   await module.updateComplete;
-  module.shadowRoot!.querySelector<HTMLElement>("[data-test=new]")!.click();
-  await module.updateComplete;
-  module
-    .shadowRoot!.querySelector("[data-test=serials]")!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "7, 8" } }));
-  await module.updateComplete;
+  const hour = module.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    "vf-first-setup-hour",
+  )!;
+  await hour.updateComplete;
+  const answer = hour.shadowRoot!.querySelector<HTMLInputElement>(
+    'input[name="taxpayer-hour"][value="yes"]',
+  )!;
+  await userEvent.click(answer);
+  await hour.updateComplete;
   expect(leaveCoordinatorFor(module)!.isDirty([shell])).toBe(true);
   const parent = module.parentElement!;
   module.remove();
@@ -73,9 +76,9 @@ it("protects a nested module draft through the wizard's real leave coordinator",
   await app.updateComplete;
   expect(app.shadowRoot!.querySelector("[data-test=screen-first-setup]")).not.toBeNull();
   expect(
-    (module.shadowRoot!.querySelector("[data-test=serials]") as HTMLElement & { value: string })
-      .value,
-  ).toBe("7, 8");
+    hour.shadowRoot!.querySelector<HTMLInputElement>('input[name="taxpayer-hour"][value="yes"]')!
+      .checked,
+  ).toBe(true);
   emit(app, "setup-goto", { screen: "email" });
   await expect.poll(() => warning.open).toBe(true);
   warning.dispatchEvent(

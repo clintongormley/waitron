@@ -1,5 +1,6 @@
 import "./recovery-key.js";
 import "./recovery-hour.js";
+import "./first-hour.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
@@ -364,6 +365,12 @@ export class FirstFiscalScreen extends LitElement {
     /></label>`;
   }
   override render() {
+    if (this.api?.preparation)
+      return html`<vf-first-setup-hour
+        .context=${this.context}
+        .api=${this.api}
+        .locale=${this.locale}
+      ></vf-first-setup-hour>`;
     const t = fiscalSetupStrings[this.locale];
     const serialInvalid = this.serialAttempted && !this.#serials();
     const fingerprintInvalid =

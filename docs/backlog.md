@@ -335,8 +335,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   proposals for validated archive, bucket and Cloud copies over HTTPS; focused tests carry clock
   comparisons across requests and exercise the real setup listener. The browser transport is
   connected to module-owned recovery hour and isolation controls. The final archive/Cloud requests
-  retain independent recovery context, and refusals clear it. First-setup/reissue UI and installed
-  complete journeys remain open.
+  retain independent recovery context, and refusals clear it. First setup now projects the owned
+  hour preparation into the combined country/place/time-zone review and generates a key-only PDF
+  for explicit kept confirmation. Browser checks use simulated endpoint responses; authorised
+  reissue, interrupted-page ordering and installed complete journeys remain open.
   Hour codec, module admission and clock units pass locally, with source timestamps embedded
   by the Node bundler. History enumeration, durable selection and the shared host store have focused
   local checks. Certificate-free owned preproduction readiness and publication have focused checks;

@@ -1393,3 +1393,33 @@ clearing, operation binding and clock blockers. Later qualification and this ste
 local ledger. First-setup/reissue UI, installed complete journeys, package coverage, actual
 generated-PDF owner acceptance and both final reviews remain open. Task 8’s exact protected
 wrapper question is unchanged and the proposed patch remains unapplied.
+
+
+## First-setup hour review and PDF controls (2026-10-18)
+
+Authority: the approved 2026-10-16 hour design and replacement implementation plan, Task 9.
+
+- `apps/setup/src/setup-app-first-fiscal.test.ts`: the completed-activation/lost-response journey
+  now selects an hour, imports the selected public input, prepares the real key-only PDF and
+  confirms it kept. Its former signed-paper fixture and enrolment assertion are replaced by the
+  hour fixture and assertions that no enrolment/current-master request is sent and exactly one
+  kept request is sent. The certificate, revision 4 provision body, one activation request, exact
+  completed read-back and no second activation assertions remain. The fixture adds clock,
+  transient-key and public-document endpoints. New checks keep the draft protected until kept.
+- `apps/setup/src/setup-app-first-fiscal.unsaved.test.ts`: the edited value becomes the taxpayer-wide
+  Yes answer, replacing the retired paper serials `7, 8`. Both dirty checks, removal/reinsertion,
+  the actual close-event wait, Keep, retained exact input and Discard navigation remain. The retained
+  value assertion now reads the native radio's checked state. No fiscal writer assertion changes.
+- New `screens/initial-setup-hour.test.ts` checks the owned clock action, preserved pending waits,
+  separate password proofs, public delivery bodies and late-kept readiness invalidation.
+- New fiscal `setup/first-hour.browser.test.ts` and its accessibility sibling exercise the real
+  contribution factory, Madrid/Canary local time, all three taxpayer answers, clock blockers/manual
+  confirmation, request retry, context replacement, exact frozen continuation and a non-authoritative
+  countdown. The real PDF renderer/reader checks the delivered key, public bindings and one reused
+  URL. Full backend browser journeys, authorised reissue and generated-PDF owner acceptance remain
+  separate qualification; these endpoint replies are synthetic.
+
+The first selected-draft check reproduced premature cleanup before PDF confirmation. The original
+nested dirty assertion also caught a missing scope-parent connection. The initial countdown check
+matched the target's ISO time even without a countdown; it is excluded as evidence. The corrected
+check reads only the countdown field and was observed failing before implementation.

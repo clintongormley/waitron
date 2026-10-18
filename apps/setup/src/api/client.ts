@@ -529,7 +529,7 @@ export class SetupApi {
     module: string,
     proposal: unknown,
     reconfirmation: string,
-  ): Promise<FirstSetupUpdate> {
+  ): Promise<FirstSetupUpdate & { preparation?: unknown }> {
     return this.#request(
       "/setup-api/first-setup/candidates",
       "POST",
@@ -538,6 +538,44 @@ export class SetupApi {
     );
   }
 
+  firstSetupNodeKey(
+    owner: FirstSetupOwner,
+    reconfirmation: string,
+  ): Promise<import("@waitron/module/src/setup-contract.js").InitialSetupNodeKey> {
+    return this.#request(
+      "/setup-api/first-setup/node-key",
+      "POST",
+      { reconfirmation },
+      firstSetupHeaders(owner),
+    );
+  }
+  firstSetupRecoveryDocument(
+    owner: FirstSetupOwner,
+    module: string,
+    reference: import("@waitron/module/src/setup-contract.js").InitialSetupRecoveryReference & {
+      statement: unknown;
+    },
+  ): Promise<{ accepted: true }> {
+    return this.#request(
+      "/setup-api/first-setup/recovery-document",
+      "POST",
+      { ...reference, module },
+      firstSetupHeaders(owner),
+    );
+  }
+  firstSetupRecoveryDocumentKept(
+    owner: FirstSetupOwner,
+    module: string,
+    reference: import("@waitron/module/src/setup-contract.js").InitialSetupRecoveryReference,
+    reconfirmation: string,
+  ): Promise<{ accepted: true }> {
+    return this.#request(
+      "/setup-api/first-setup/recovery-document-kept",
+      "POST",
+      { ...reference, module, kept: true, reconfirmation },
+      firstSetupHeaders(owner),
+    );
+  }
   firstSetupRequest(owner: FirstSetupOwner): Promise<FirstSetupPublicRequest> {
     return this.#request(
       "/setup-api/first-setup/request",

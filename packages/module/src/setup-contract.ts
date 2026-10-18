@@ -1,4 +1,20 @@
+export interface InitialSetupNodeKey {
+  stage: { stageId: string; nodeId: string; name: string };
+  key: { nodeId: string; name: string; secret: string };
+}
+export interface InitialSetupRecoveryReference {
+  stageId: string;
+  inputDigest: string;
+  bindingDigest: string;
+  documentDigest: string;
+}
 export interface InitialSetupActions {
+  stageNodeKey?(): Promise<InitialSetupNodeKey>;
+  registerRecoveryDocument?(
+    value: InitialSetupRecoveryReference & { statement: unknown },
+  ): Promise<void>;
+  confirmRecoveryDocument?(value: InitialSetupRecoveryReference): Promise<void>;
+  preparation?(proposal: unknown): Promise<unknown>;
   candidates(proposal: unknown): Promise<unknown>;
   request(): Promise<unknown>;
   importInput(input: unknown): Promise<unknown>;
