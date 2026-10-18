@@ -54,4 +54,16 @@ describe("MediaQueryController", () => {
     host.append(el);
     expect(el.narrow.matches).toBe(true);
   });
+
+  it("repaints its host on reconnect when the answer changed while it was away", async () => {
+    await viewport(800);
+    const { el, host } = await mountWidget<MediaQueryProbe>("media-query-probe", {});
+    expect(el.shadowRoot!.textContent).toBe("wide");
+
+    el.remove();
+    await viewport(400);
+    host.append(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).toBe("narrow");
+  });
 });

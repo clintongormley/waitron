@@ -20,7 +20,9 @@ export class MediaQueryController implements ReactiveController {
 
   hostConnected(): void {
     this.#list = window.matchMedia(this.#query);
+    const was = this.matches;
     this.matches = this.#list.matches;
+    if (was !== this.matches) this.#host.requestUpdate();
     this.#list.addEventListener("change", this.#onChange);
   }
 
