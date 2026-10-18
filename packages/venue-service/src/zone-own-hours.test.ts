@@ -179,6 +179,25 @@ describe("closureOutsideHours", () => {
     expect(closureOutsideHours(department, closures, day)).toBe(-1);
     expect(closuresInHours(department, closures, day)).toEqual([closure("15:00", "17:00")]);
   });
+
+  it("a closure across two touching periods listed out of day order is inside", () => {
+    const department = [closure("16:00", "23:00"), closure("13:00", "16:00")];
+    const closures = [closure("15:00", "17:00")];
+    expect(closureOutsideHours(department, closures, day)).toBe(-1);
+    expect(closuresInHours(department, closures, day)).toEqual([closure("15:00", "17:00")]);
+  });
+
+  it("a period inside another does not shorten the hours", () => {
+    const department = [closure("13:00", "23:00"), closure("14:00", "15:00")];
+    expect(closureOutsideHours(department, [closure("16:00", "22:00")], day)).toBe(-1);
+  });
+
+  it("a closure exactly the department's hours is inside and kept whole", () => {
+    const department = [closure("13:00", "16:00")];
+    const closures = [closure("13:00", "16:00")];
+    expect(closureOutsideHours(department, closures, day)).toBe(-1);
+    expect(closuresInHours(department, closures, day)).toEqual([closure("13:00", "16:00")]);
+  });
 });
 
 describe("closuresInHours", () => {
@@ -203,5 +222,25 @@ describe("closuresInHours", () => {
         day,
       ),
     ).toEqual([closure("14:00", "15:00"), closure("19:00", "20:00")]);
+  });
+
+  it("a closure past the end of two touching periods ends at the later period's end", () => {
+    expect(
+      closuresInHours(
+        [closure("13:00", "16:00"), closure("16:00", "23:00")],
+        [closure("22:00", "01:00")],
+        day,
+      ),
+    ).toEqual([closure("22:00", "23:00")]);
+  });
+
+  it("touching closures come back as one block", () => {
+    expect(
+      closuresInHours(
+        [closure("20:00", "02:00")],
+        [closure("21:00", "22:00"), closure("22:00", "23:00")],
+        day,
+      ),
+    ).toEqual([closure("21:00", "23:00")]);
   });
 });
