@@ -4,6 +4,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import {
   cleanupDepartmentEditors,
   mountDepartmentEditor,
+  selectDepartmentTab,
 } from "../testing/department-edit-fixture.js";
 import { cleanupZoneEditors, mountZoneEditor } from "../testing/zone-edit-fixture.js";
 
@@ -45,7 +46,48 @@ describe.each(["light", "dark"] as const)("department phone bounds (%s)", (theme
       const fields = form.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
       await fields.updateComplete;
       for (const field of form.shadowRoot!.querySelectorAll("wt-input")) inside(field, bounds);
+      await selectDepartmentTab(form, "service");
       for (const field of fields.shadowRoot!.querySelectorAll("wt-combobox, wt-switch"))
+        inside(field, bounds);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
+  it.each(["en", "es"] as const)("the Transfers tab's fields fit (%s)", async (locale) => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(390, 1100);
+      setLocale(locale);
+      const { el, form, modal } = await mountDepartmentEditor(undefined, theme);
+      el.model = structuredClone(el.model);
+      el.model.departments[1]!.name = "Delicatessen".repeat(20);
+      el.requestUpdate();
+      await el.updateComplete;
+      await form.updateComplete;
+      await selectDepartmentTab(form, "transfers");
+      expect(window.innerWidth).toBe(390);
+      const bounds = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(390);
+      inside(form.shadowRoot!.querySelector("wt-tabs")!, bounds);
+      const section = form.shadowRoot!.querySelector("[data-test=transfers-section]")!;
+      inside(section.querySelector("h2")!, bounds);
+      const destinations = [...section.querySelectorAll(".destination")];
+      expect(destinations).toHaveLength(1);
+      for (const destination of destinations) {
+        expect(destination.scrollWidth).toBeLessThanOrEqual(destination.clientWidth);
+        const text = document.createRange();
+        text.setStartAfter(destination.querySelector("input")!);
+        text.setEnd(destination, destination.childNodes.length);
+        expect(text.getClientRects().length).toBeGreaterThan(1);
+      }
+      for (const field of [
+        ...destinations,
+        section.querySelector("fieldset")!,
+        section.querySelector("wt-combobox")!,
+        ...form.shadowRoot!.querySelector("wt-form-actions")!.children,
+      ])
         inside(field, bounds);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
     } finally {

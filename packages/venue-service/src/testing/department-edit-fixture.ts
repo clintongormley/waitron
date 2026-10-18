@@ -6,6 +6,7 @@ import { page, userEvent } from "vitest/browser";
 import { VenueServiceApi } from "../dashboard/client.js";
 import { zonesModel } from "./department-zones-fixture.js";
 import "../dashboard/department-edit-dialog.js";
+import type { DepartmentTab } from "../dashboard/department-settings.js";
 
 class DepartmentEditHost extends LitElement {
   readonly leave = new LeaveController(this);
@@ -72,4 +73,17 @@ export function departmentSave(form: HTMLElementTagNameMap["department-settings"
   return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     "[data-test=save-editor]",
   )!;
+}
+export async function selectDepartmentTab(
+  form: HTMLElementTagNameMap["department-settings"],
+  tab: DepartmentTab,
+) {
+  await form.updateComplete;
+  const strip = form.shadowRoot!.querySelector("wt-tabs")!;
+  await strip.updateComplete;
+  await userEvent.click(
+    page.elementLocator(strip.shadowRoot!.querySelector(`[role=tab][data-key=${tab}]`)!),
+  );
+  await form.updateComplete;
+  await strip.updateComplete;
 }

@@ -1,5 +1,6 @@
 import { createRef, ref } from "lit/directives/ref.js";
 import type { OpeningHoursScreen } from "./opening-hours-screen.js";
+import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import { html } from "lit";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
 import { PrepStationsApi } from "./routing-client.js";
@@ -61,9 +62,12 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
   strings: VENUE_SERVICE_STRINGS,
   create(ctx) {
     const api = new VenueServiceApi(ctx.request, ctx.liveData);
+    const screen = createRef<VenueOperationsScreen>();
     return {
+      navigationScopes: (destination) => screen.value?.navigationScopes(destination),
       render: () =>
         html`<dashboard-venue-operations-screen
+          ${ref(screen)}
           .api=${api}
           .renderPanel=${ctx.renderPanel}
         ></dashboard-venue-operations-screen>`,

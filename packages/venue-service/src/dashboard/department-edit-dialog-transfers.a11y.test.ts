@@ -3,6 +3,7 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
+import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
 import "./department-edit-dialog.js";
 const model: VenueServiceView = {
   departments: [
@@ -160,6 +161,7 @@ describe.each(["light", "dark"] as const)("department-edit-dialog %s", (theme) =
       await expect
         .poll(() => settings.shadowRoot!.querySelector("[name=receivingProfileId]"))
         .not.toBeNull();
+    if (state === "transfers") await selectDepartmentTab(settings, "transfers");
     if (state === "refusal") {
       settings.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
         new CustomEvent("wt-change", {
@@ -178,6 +180,10 @@ describe.each(["light", "dark"] as const)("department-edit-dialog %s", (theme) =
         )
         .toContain("Correct the highlighted fields");
     }
+    if (state === "transfers" || state === "refusal")
+      expect(
+        settings.shadowRoot!.querySelector("[slot=transfers]")!.getBoundingClientRect().height,
+      ).toBeGreaterThan(0);
     await expectNoA11yViolations(host);
   });
 });

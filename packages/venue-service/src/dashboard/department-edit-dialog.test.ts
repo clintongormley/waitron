@@ -188,3 +188,15 @@ it.each(["en", "es"])(
     expect((writes[0]![2] as { name: string }).name).toBe("Reserved");
   },
 );
+it("passes its tab to the form, and a later tab moves the form there", async () => {
+  const { el, form } = await mount();
+  expect(el.tab).toBe("details");
+  el.tab = "service";
+  await el.updateComplete;
+  await form.updateComplete;
+  expect(form.tab).toBe("service");
+  el.tab = "details";
+  await el.updateComplete;
+  await form.updateComplete;
+  expect(form.tab).toBe("details");
+});

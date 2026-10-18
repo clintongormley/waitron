@@ -163,12 +163,14 @@ go-live nothing is carried forward.
 1. **Courses get their own page under Products and menus**, because products name them: a list with
    drag handles, Add course, and Delete in each row's menu (courses already delete through
    `wt-delete-dialog`).
-2. **The department dialog becomes tabbed — Details, Service, Receipts, Transfers.** Service gains
-   "Courses and the kitchen": who sends a held course to the kitchen (today's "Fire control":
-   Waiter, Kitchen or Expo) and the reminder to send the next course. A757 adds its optional table
-   states there. Receipt editing (`apps/dashboard/src/screens/department-receipt-dialog.ts`) moves
-   into the Receipts tab, and the departments table's Receipt link
-   (`packages/venue-service/src/dashboard/departments-list.ts:215-226`) goes.
+2. **The department dialog becomes tabbed — Details, Service, Receipts, Transfers.** Details,
+   Service (with its "Orders and payment" section) and Transfers landed in A756's first pull
+   request. Still left: the Receipts tab, into which receipt editing
+   (`apps/dashboard/src/screens/department-receipt-dialog.ts`) moves while the departments table's
+   Receipt link (`packages/venue-service/src/dashboard/departments-list.ts:215-226`) goes; and
+   Service's "Courses and the kitchen" section, holding the reminder to send the next course
+   (who sends a held course is dropped, per the A773 block above). A757 adds its optional table
+   states to Service.
 3. **Prep stations gets an "Every station" card**, and each setting on it can differ per station:
    late flags; done on the screen (today's bump mode: one item at a time or the whole ticket);
    identical dishes on a ticket; held courses (print in advance marked HOLD, or when sent); MOVED

@@ -9,12 +9,14 @@ import {
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
+  type TabItem,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-tabs.js";
 import "./service-settings-fields.js";
 import type { ServiceSettingsValue } from "./service-settings-fields.js";
 import type {
@@ -25,7 +27,22 @@ import type {
 } from "./client.js";
 import { t } from "./strings.js";
 
+export type DepartmentTab = "details" | "service" | "transfers";
+export function offeredDepartmentTabs(model?: VenueServiceView): DepartmentTab[] {
+  const transfers = (model?.departments.filter((d) => d.active).length ?? 0) >= 2;
+  return ["details", "service", ...(transfers ? (["transfers"] as const) : [])];
+}
 type Field = keyof DepartmentSettingsInput | "receivingProfileId" | "destinationDepartmentIds";
+const fieldTab: Record<Field, DepartmentTab> = {
+  name: "details",
+  tradingName: "details",
+  orderStart: "service",
+  paidWhen: "service",
+  collectionNumber: "service",
+  transfers: "transfers",
+  receivingProfileId: "transfers",
+  destinationDepartmentIds: "transfers",
+};
 const copy = (value: DepartmentSettingsInput): DepartmentSettingsInput => ({
   ...value,
   ...(value.transfers
@@ -59,7 +76,8 @@ export class DepartmentSettings extends LitElement {
         display: block;
         min-width: 0;
       }
-      .form {
+      .form,
+      .panel {
         display: grid;
         gap: var(--wt-space-5);
         max-width: var(--wt-form-max-width);
@@ -70,11 +88,13 @@ export class DepartmentSettings extends LitElement {
         min-width: 0;
       }
       h2,
+      h3,
       p {
         margin: 0;
         overflow-wrap: anywhere;
       }
-      h2 {
+      h2,
+      h3 {
         font-size: var(--wt-font-size-lg);
       }
       a {
@@ -117,6 +137,7 @@ export class DepartmentSettings extends LitElement {
   @property({ attribute: false }) model?: VenueServiceView;
   @property() departmentId = "";
   @property({ type: Boolean }) refreshing = false;
+  @property() tab: DepartmentTab = "details";
   @state() private draft?: DepartmentSettingsInput;
   @state() private busy = false;
   @state() private attempted = false;
@@ -152,9 +173,28 @@ export class DepartmentSettings extends LitElement {
     return this.model?.departments.find((d) => d.id === this.departmentId);
   }
   private get showsTransfers() {
-    return (this.model?.departments.filter((d) => d.active).length ?? 0) >= 2;
+    return offeredDepartmentTabs(this.model).includes("transfers");
+  }
+  get offeredTabs(): DepartmentTab[] {
+    return offeredDepartmentTabs(this.model);
+  }
+  private get shownErrors(): Partial<Record<Field, string>> {
+    return { ...(this.attempted ? this.errors : {}), ...this.refused };
+  }
+  private selectTab(tab: DepartmentTab, replace: boolean) {
+    this.tab = tab;
+    this.emit("department-tab-change", { tab, replace });
+  }
+  private showFirstInvalid() {
+    const marked = new Set(Object.keys(this.shownErrors).map((field) => fieldTab[field as Field]));
+    const first = this.offeredTabs.find((tab) => marked.has(tab));
+    if (first && first !== this.tab) this.selectTab(first, true);
+    void this.updateComplete.then(() => {
+      if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
+    });
   }
   protected override willUpdate() {
+    if (!this.offeredTabs.includes(this.tab)) this.tab = "details";
     const row = this.department;
     if (!row || !row.active) {
       this.scope?.dispose();
@@ -379,9 +419,7 @@ export class DepartmentSettings extends LitElement {
     }
     if (field) {
       this.refused = { [field]: message };
-      void this.updateComplete.then(() => {
-        if (this.isConnected) focusFirstInvalid(this.shadowRoot!);
-      });
+      this.showFirstInvalid();
     } else this.failure = t("venue.save_error");
   }
   private async save() {
@@ -399,7 +437,7 @@ export class DepartmentSettings extends LitElement {
     this.refused = {};
     this.failure = "";
     if (Object.keys(this.errors).length) {
-      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      this.showFirstInvalid();
       return;
     }
     if (!this.api) return;
@@ -505,12 +543,18 @@ export class DepartmentSettings extends LitElement {
     const row = this.department,
       draft = this.draft;
     if (!row || !row.active || !draft) return nothing;
-    const errors = { ...(this.attempted ? this.errors : {}), ...this.refused },
+    const errors = this.shownErrors,
       disabled = !row.active,
       state = saveActionState(this.scope);
     const serviceErrors: Partial<Record<keyof ServiceSettingsValue, string>> = {};
     for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
       if (errors[field]) serviceErrors[field] = errors[field];
+    const marked = new Set(Object.keys(errors).map((field) => fieldTab[field as Field]));
+    const tabs: TabItem[] = this.offeredTabs.map((key) => ({
+      key,
+      label: t(`venue.department_tab.${key}`),
+      ...(marked.has(key) ? { marked: t("venue.tab_needs_fixing") } : {}),
+    }));
     return html`<div
       class="form"
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-editor]"))}
@@ -520,121 +564,140 @@ export class DepartmentSettings extends LitElement {
           ? html`<p class="readonly">${t("venue.enable_department_settings")}</p> `
           : nothing
       }
-      <wt-input
-        name="name"
-        label=${t("venue.name")}
-        required
-        .value=${draft.name}
-        error=${errors.name ?? ""}
-        ?disabled=${disabled}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+      <wt-tabs
+        label=${t("venue.department")}
+        .items=${tabs}
+        .value=${this.tab}
+        @wt-tab-change=${(e: CustomEvent<{ value: DepartmentTab }>) => {
+          if (e.target !== e.currentTarget) return;
           e.stopPropagation();
-          this.changed("name", e.detail.value);
+          this.selectTab(e.detail.value, false);
         }}
-      ></wt-input>
+      >
+        <div class="panel" slot="details">
+          <wt-input
+            name="name"
+            label=${t("venue.name")}
+            required
+            .value=${draft.name}
+            error=${errors.name ?? ""}
+            ?disabled=${disabled}
+            @wt-change=${(e: CustomEvent<{ value: string }>) => {
+              e.stopPropagation();
+              this.changed("name", e.detail.value);
+            }}
+          ></wt-input>
 
-      <wt-input
-        name="tradingName"
-        label=${t("venue.trading_name")}
-        required
-        .value=${draft.tradingName}
-        error=${errors.tradingName ?? ""}
-        ?disabled=${disabled}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => {
-          e.stopPropagation();
-          this.changed("tradingName", e.detail.value);
-        }}
-      ></wt-input>
-
-      <section aria-label=${t("venue.service_settings")}>
-        <h2>${t("venue.service_settings")}</h2>
-        <dashboard-service-settings-fields
-          .value=${{ ...draft, receiptPrintMode: this.model!.salePolicies.departments.find((p) => p.departmentId === row.id)?.receiptPrintMode ?? "auto" }}
-          .showReceiptMode=${false}
-          .errors=${serviceErrors}
-          ?disabled=${disabled}
-          @service-settings-change=${(e: CustomEvent<{ value: ServiceSettingsValue }>) => {
-            e.stopPropagation();
-            for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
-              if (this.draft![field] !== e.detail.value[field])
-                this.changed(field, e.detail.value[field]);
-          }}
-        ></dashboard-service-settings-fields>
+          <wt-input
+            name="tradingName"
+            label=${t("venue.trading_name")}
+            required
+            .value=${draft.tradingName}
+            error=${errors.tradingName ?? ""}
+            ?disabled=${disabled}
+            @wt-change=${(e: CustomEvent<{ value: string }>) => {
+              e.stopPropagation();
+              this.changed("tradingName", e.detail.value);
+            }}
+          ></wt-input>
+        </div>
+        <div class="panel" slot="service">
+          <section aria-label=${t("venue.orders_and_payment")}>
+            <h3>${t("venue.orders_and_payment")}</h3>
+            <dashboard-service-settings-fields
+              .value=${{ ...draft, receiptPrintMode: this.model!.salePolicies.departments.find((p) => p.departmentId === row.id)?.receiptPrintMode ?? "auto" }}
+              .showReceiptMode=${false}
+              .errors=${serviceErrors}
+              ?disabled=${disabled}
+              @service-settings-change=${(e: CustomEvent<{ value: ServiceSettingsValue }>) => {
+                e.stopPropagation();
+                for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
+                  if (this.draft![field] !== e.detail.value[field])
+                    this.changed(field, e.detail.value[field]);
+              }}
+            ></dashboard-service-settings-fields>
+            ${
+              this.differing.length
+                ? html`<p data-test="zones-that-differ">
+                    ${t("venue.zones_that_differ")}:
+                    ${this.differing.map(
+                      ({ zone, labels }, index) =>
+                        html`${index ? ", " : nothing}<a
+                            data-own-click
+                            data-zone=${zone.id}
+                            href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/zones/zone/${encodeURIComponent(zone.id)}`}
+                            @click=${(e: MouseEvent) => {
+                              if (e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)
+                                return;
+                              e.preventDefault();
+                              this.emit("zone-change", { zoneId: zone.id });
+                            }}
+                            >${zone.name} (${labels.join(", ")})</a
+                          >`,
+                    )}
+                  </p>`
+                : nothing
+            }
+          </section>
+        </div>
         ${
-          this.differing.length
-            ? html`<p data-test="zones-that-differ">
-                ${t("venue.zones_that_differ")}:
-                ${this.differing.map(
-                  ({ zone, labels }, index) =>
-                    html`${index ? ", " : nothing}<a
-                        data-own-click
-                        data-zone=${zone.id}
-                        href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/zones/zone/${encodeURIComponent(zone.id)}`}
-                        @click=${(e: MouseEvent) => {
-                          if (e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-                          e.preventDefault();
-                          this.emit("zone-change", { zoneId: zone.id });
-                        }}
-                        >${zone.name} (${labels.join(", ")})</a
-                      >`,
-                )}
-              </p>`
+          this.showsTransfers
+            ? html`<div class="panel" slot="transfers">
+                <section data-test="transfers-section" aria-label=${t("venue.tab_transfers")}>
+                  <h2>${t("venue.tab_transfers")}</h2>
+                  ${
+                    this.transferFailure
+                      ? html`<p class="error" data-test="transfers-load-error" role="alert">
+                          ${this.transferFailure}
+                        </p>`
+                      : draft.transfers
+                        ? html` <fieldset ?disabled=${disabled}>
+                              <legend>${t("venue.transfer_destinations")}</legend>
+                              ${this.model!.departments.filter(
+                                (d) => d.active && d.id !== row.id,
+                              ).map(
+                                (d) =>
+                                  html`<label class="destination"
+                                    ><input
+                                      type="checkbox"
+                                      name=${`transferDestination-${d.id}`}
+                                      .checked=${draft.transfers!.destinationDepartmentIds.includes(d.id)}
+                                      @change=${(e: Event) => {
+                                        e.stopPropagation();
+                                        const checked = (e.target as HTMLInputElement).checked;
+                                        this.changed(
+                                          "destinationDepartmentIds",
+                                          checked
+                                            ? [...draft.transfers!.destinationDepartmentIds, d.id]
+                                            : draft.transfers!.destinationDepartmentIds.filter(
+                                                (id) => id !== d.id,
+                                              ),
+                                        );
+                                      }}
+                                    />${d.name}</label
+                                  >`,
+                              )}${errors.destinationDepartmentIds ? html`<p class="error" data-field-error="destinationDepartmentIds">${errors.destinationDepartmentIds}</p>` : nothing}
+                            </fieldset>
+                            <wt-combobox
+                              name="receivingProfileId"
+                              label=${t("venue.receiving_profile")}
+                              search="never"
+                              .options=${[{ value: "", label: t("venue.none") }, ...this.profiles.map((p) => ({ value: p.id, label: p.name })), ...(draft.transfers.receivingProfileId && !this.profiles.some((p) => p.id === draft.transfers!.receivingProfileId) ? [{ value: draft.transfers.receivingProfileId, label: t("venue.transfer_profile_unavailable") }] : [])]}
+                              .value=${draft.transfers.receivingProfileId ?? ""}
+                              error=${errors.receivingProfileId ?? ""}
+                              ?disabled=${disabled}
+                              @wt-change=${(e: CustomEvent<{ value: string }>) => {
+                                e.stopPropagation();
+                                this.changed("receivingProfileId", e.detail.value);
+                              }}
+                            ></wt-combobox>`
+                        : nothing
+                  }
+                </section>
+              </div>`
             : nothing
         }
-      </section>
-      ${
-        this.showsTransfers
-          ? html`<section data-test="transfers-section" aria-label=${t("venue.tab_transfers")}>
-              <h2>${t("venue.tab_transfers")}</h2>
-              ${
-                this.transferFailure
-                  ? html`<p class="error" data-test="transfers-load-error" role="alert">
-                      ${this.transferFailure}
-                    </p>`
-                  : draft.transfers
-                    ? html` <fieldset ?disabled=${disabled}>
-                          <legend>${t("venue.transfer_destinations")}</legend>
-                          ${this.model!.departments.filter((d) => d.active && d.id !== row.id).map(
-                            (d) =>
-                              html`<label class="destination"
-                                ><input
-                                  type="checkbox"
-                                  name=${`transferDestination-${d.id}`}
-                                  .checked=${draft.transfers!.destinationDepartmentIds.includes(d.id)}
-                                  @change=${(e: Event) => {
-                                    e.stopPropagation();
-                                    const checked = (e.target as HTMLInputElement).checked;
-                                    this.changed(
-                                      "destinationDepartmentIds",
-                                      checked
-                                        ? [...draft.transfers!.destinationDepartmentIds, d.id]
-                                        : draft.transfers!.destinationDepartmentIds.filter(
-                                            (id) => id !== d.id,
-                                          ),
-                                    );
-                                  }}
-                                />${d.name}</label
-                              >`,
-                          )}${errors.destinationDepartmentIds ? html`<p class="error" data-field-error="destinationDepartmentIds">${errors.destinationDepartmentIds}</p>` : nothing}
-                        </fieldset>
-                        <wt-combobox
-                          name="receivingProfileId"
-                          label=${t("venue.receiving_profile")}
-                          search="never"
-                          .options=${[{ value: "", label: t("venue.none") }, ...this.profiles.map((p) => ({ value: p.id, label: p.name })), ...(draft.transfers.receivingProfileId && !this.profiles.some((p) => p.id === draft.transfers!.receivingProfileId) ? [{ value: draft.transfers.receivingProfileId, label: t("venue.transfer_profile_unavailable") }] : [])]}
-                          .value=${draft.transfers.receivingProfileId ?? ""}
-                          error=${errors.receivingProfileId ?? ""}
-                          ?disabled=${disabled}
-                          @wt-change=${(e: CustomEvent<{ value: string }>) => {
-                            e.stopPropagation();
-                            this.changed("receivingProfileId", e.detail.value);
-                          }}
-                        ></wt-combobox>`
-                    : nothing
-              }
-            </section>`
-          : nothing
-      }
+      </wt-tabs>
       ${row.active ? html`<wt-form-actions .error=${[this.failure, Object.keys(errors).length ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
     </div>`;
   }

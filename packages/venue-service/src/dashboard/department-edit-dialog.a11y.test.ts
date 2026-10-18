@@ -6,6 +6,7 @@ import {
   mountDepartmentEditor,
   editDepartmentField,
   departmentSave,
+  selectDepartmentTab,
 } from "../testing/department-edit-fixture.js";
 afterEach(() => {
   cleanupDepartmentEditors();
@@ -49,5 +50,14 @@ describe.each(["light", "dark"] as const)("department editor accessibility in %s
     } finally {
       finish?.();
     }
+  });
+  it.each(["details", "service", "transfers"] as const)("the %s tab", async (tab) => {
+    setLocale("en");
+    const { form, modal, app } = await mountDepartmentEditor(undefined, theme);
+    await selectDepartmentTab(form, tab);
+    const panel = form.shadowRoot!.querySelector(`[slot=${tab}]`)!;
+    expect(panel.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(modal.open).toBe(true);
+    await expectNoA11yViolations(app);
   });
 });

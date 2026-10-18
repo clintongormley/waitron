@@ -6,6 +6,7 @@ import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import type { DepartmentSettings } from "./department-settings.js";
 import "./department-settings.js";
+import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
 const model: VenueServiceView = {
   departments: [
     {
@@ -1156,4 +1157,198 @@ it("department fields put trading name immediately after name and leave receipt 
   expect(service.shadowRoot!.querySelector('[name="receiptPrintMode"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[name="printTradingName"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="edit-receipt"]')).toBeNull();
+});
+function strip(el: DepartmentSettings) {
+  return el.shadowRoot!.querySelector("wt-tabs")!;
+}
+function shownPanel(el: DepartmentSettings) {
+  const panels = [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-tabs > [slot]")];
+  const shown = panels.filter((panel) => panel.checkVisibility());
+  expect(shown.length, "one panel shows").toBe(1);
+  return shown[0]!;
+}
+function tabEvents(el: DepartmentSettings) {
+  const events: unknown[] = [];
+  el.addEventListener("department-tab-change", (e) => events.push((e as CustomEvent).detail));
+  return events;
+}
+it("draws Details, Service and Transfers tabs with Details first and the name fields on it", async () => {
+  const { el } = await mount();
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.key)).toEqual(["details", "service", "transfers"]);
+  expect(strip(el).items.map((item) => item.label)).toEqual(["Details", "Service", "Transfers"]);
+  expect(strip(el).label).toBe("Department");
+  expect(el.tab).toBe("details");
+  expect(el.offeredTabs).toEqual(["details", "service", "transfers"]);
+  const panel = shownPanel(el);
+  expect(panel.querySelector("[name=name]")).not.toBeNull();
+  expect(panel.querySelector("[name=tradingName]")).not.toBeNull();
+  expect(panel.querySelector("dashboard-service-settings-fields")).toBeNull();
+  expect(panel.querySelector("[name=receivingProfileId]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-tabs wt-form-actions")).toBeNull();
+});
+it("the Service tab holds Orders and payment", async () => {
+  const { el } = await mount();
+  const events = tabEvents(el);
+  await selectDepartmentTab(el, "service");
+  expect(el.tab).toBe("service");
+  expect(events).toEqual([{ tab: "service", replace: false }]);
+  const panel = shownPanel(el);
+  const section = panel.querySelector("section")!;
+  expect(section.querySelector("h3")!.textContent!.trim()).toBe("Orders and payment");
+  expect(section.querySelector("dashboard-service-settings-fields")).not.toBeNull();
+  expect(section.querySelector("[data-test=zones-that-differ]")).not.toBeNull();
+  expect(panel.querySelector("[name=name]")).toBeNull();
+});
+it("names the tabs and the Orders and payment heading in Spanish", async () => {
+  setLocale("es");
+  const { el } = await mount();
+  await strip(el).updateComplete;
+  expect(strip(el).label).toBe("Departamento");
+  expect(strip(el).items.map((item) => item.label)).toEqual(["Datos", "Servicio", "Traslados"]);
+  expect(el.shadowRoot!.querySelector("[slot=service] h3")!.textContent!.trim()).toBe(
+    "Pedidos y cobro",
+  );
+});
+it("offers no Transfers tab with one active department", async () => {
+  const view = structuredClone(model);
+  view.departments[1]!.active = false;
+  const { el } = await mount(view);
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.key)).toEqual(["details", "service"]);
+  expect(el.offeredTabs).toEqual(["details", "service"]);
+});
+it("a draft typed on two tabs is sent by one Save", async () => {
+  const { el, writes } = await mount();
+  await change(el, "name", "Restaurant revised");
+  await selectDepartmentTab(el, "service");
+  el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.dispatchEvent(
+    new CustomEvent("service-settings-change", {
+      detail: {
+        value: {
+          orderStart: "counter",
+          paidWhen: "prepay",
+          collectionNumber: "none",
+          receiptPrintMode: "auto",
+        },
+      },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.path).toBe("/management-api/venue-service/departments/d1/settings");
+  expect(writes[0]!.body).toMatchObject({ name: "Restaurant revised", orderStart: "counter" });
+  await el.updateComplete;
+  expect(writes).toHaveLength(1);
+});
+it("Save with a blank name from the Service tab shows Details, marks it and focuses the name", async () => {
+  const { el, writes } = await mount();
+  await change(el, "name", "");
+  await selectDepartmentTab(el, "service");
+  const events = tabEvents(el);
+  save(el).click();
+  await expect.poll(() => el.tab).toBe("details");
+  expect(events).toEqual([{ tab: "details", replace: true }]);
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.marked)).toEqual([
+    "needs fixing",
+    undefined,
+    undefined,
+  ]);
+  expect(shownPanel(el).querySelector("[name=name]")).not.toBeNull();
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "name"));
+  expect(field(el, "name").shadowRoot!.activeElement).toBe(
+    field(el, "name").shadowRoot!.querySelector("input"),
+  );
+  expect(writes).toEqual([]);
+});
+it("a refusal naming a Transfers field shows the Transfers tab and marks it", async () => {
+  const { el } = await mount(structuredClone(model), {
+    code: "department_transfer.settings_invalid",
+    params: { field: "receivingProfileId" },
+  });
+  await change(el, "name", "Revised");
+  const events = tabEvents(el);
+  save(el).click();
+  await expect.poll(() => el.tab).toBe("transfers");
+  expect(events).toEqual([{ tab: "transfers", replace: true }]);
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.marked)).toEqual([
+    undefined,
+    undefined,
+    "needs fixing",
+  ]);
+  expect(shownPanel(el).querySelector("[name=receivingProfileId]")).not.toBeNull();
+  await expect
+    .poll(() => el.shadowRoot!.activeElement)
+    .toBe(el.shadowRoot!.querySelector("[name=receivingProfileId]"));
+});
+it("a refusal naming a Service field shows the Service tab, marks it and focuses the field", async () => {
+  const { el } = await mount(structuredClone(model), {
+    code: "management.request_invalid",
+    params: { field: "orderStart" },
+  });
+  await change(el, "name", "Revised");
+  const events = tabEvents(el);
+  save(el).click();
+  await expect.poll(() => el.tab).toBe("service");
+  expect(events).toEqual([{ tab: "service", replace: true }]);
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.marked)).toEqual([
+    undefined,
+    "needs fixing",
+    undefined,
+  ]);
+  const service = shownPanel(el).querySelector("dashboard-service-settings-fields")!;
+  expect(service).not.toBeNull();
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(service);
+  expect(service.shadowRoot!.activeElement).toBe(
+    service.shadowRoot!.querySelector("[name=orderStart]"),
+  );
+});
+it("a refusal landing while the name is blank marks Details and Transfers and shows Details", async () => {
+  const { el } = await mount();
+  let refuse!: () => void;
+  const refused = new Promise<void>((resolve) => (refuse = resolve));
+  el.api = new VenueServiceApi((async (_path, method) => {
+    if (method === "GET")
+      return { departmentId: "d1", receivingProfileId: "p1", destinationDepartmentIds: [] };
+    await refused;
+    throw { code: "department_transfer.settings_invalid", params: { field: "receivingProfileId" } };
+  }) as DashboardRequest);
+  await change(el, "name", "Revised");
+  save(el).click();
+  await change(el, "name", "");
+  await selectDepartmentTab(el, "service");
+  const events = tabEvents(el);
+  refuse();
+  await expect.poll(() => el.tab).toBe("details");
+  expect(events).toEqual([{ tab: "details", replace: true }]);
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.marked)).toEqual([
+    "needs fixing",
+    undefined,
+    "needs fixing",
+  ]);
+  expect(shownPanel(el).querySelector("[name=name]")).not.toBeNull();
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "name"));
+});
+it("losing the second department while Transfers shows returns to Details and keeps the draft", async () => {
+  const { el } = await mount();
+  await change(el, "name", "Draft");
+  await selectDepartmentTab(el, "transfers");
+  expect(shownPanel(el).querySelector("[name=receivingProfileId]")).not.toBeNull();
+  const view = structuredClone(model);
+  view.departments[1]!.active = false;
+  el.model = view;
+  await el.updateComplete;
+  await strip(el).updateComplete;
+  expect(el.tab).toBe("details");
+  expect(strip(el).items.map((item) => item.key)).toEqual(["details", "service"]);
+  expect(shownPanel(el).querySelector("[name=name]")).not.toBeNull();
+  expect(field(el, "name").value).toBe("Draft");
+  expect(el.hasUnsavedChanges).toBe(true);
 });

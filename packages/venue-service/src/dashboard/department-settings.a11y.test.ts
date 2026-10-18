@@ -5,6 +5,7 @@ import { cleanup, host, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import "./department-settings.js";
+import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
 const model: VenueServiceView = {
   departments: [
     {
@@ -209,6 +210,7 @@ describe.each(["light", "dark"] as const)("Settings transfers bounds (%s)", (the
       await expect
         .poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]"))
         .not.toBeNull();
+      await selectDepartmentTab(el, "transfers");
       const section = el.shadowRoot!.querySelector<HTMLElement>("[data-test=transfers-section]")!;
       const bounds = section.getBoundingClientRect();
       expect(window.innerWidth).toBe(width);
@@ -235,5 +237,31 @@ describe.each(["light", "dark"] as const)("Settings transfers bounds (%s)", (the
     } finally {
       await page.viewport(old[0]!, old[1]!);
     }
+  });
+});
+describe.each(["light", "dark"] as const)("department-settings tabs (%s)", (theme) => {
+  it.each(["details", "service", "transfers"] as const)("the %s tab", async (tab) => {
+    setLocale("en");
+    const el = (await mountThemed(
+      "<department-settings></department-settings>",
+      theme,
+    )) as HTMLElementTagNameMap["department-settings"];
+    el.model = structuredClone(model);
+    el.departmentId = "d1";
+    el.api = new VenueServiceApi((async (path) =>
+      path.endsWith("/profiles")
+        ? [{ id: "p1", name: "Restaurant counter" }]
+        : {
+            departmentId: "d1",
+            receivingProfileId: "p1",
+            destinationDepartmentIds: ["d2"],
+          }) as DashboardRequest);
+    await el.updateComplete;
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]"))
+      .not.toBeNull();
+    await selectDepartmentTab(el, tab);
+    expect(el.tab).toBe(tab);
+    await expectNoA11yViolations(host);
   });
 });

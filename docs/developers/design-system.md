@@ -4744,8 +4744,9 @@ Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`. Departments always opens its list
 at `/manage/venue-operations`. A department opens at
-`/manage/venue-operations/department/<id>` in its edit dialog; a zone editor adds
-`/view/zones/zone/<id>` and the receipt editor adds `/view/receipt`. The list stays beneath
+`/manage/venue-operations/department/<id>` in its edit dialog; its Service and Transfers tabs add
+`/view/service` and `/view/transfers`, a zone editor adds `/view/zones/zone/<id>` and the receipt
+editor adds `/view/receipt`. The list stays beneath
 these dialogs. Closing one returns to the list; a removed subject closes its editor.
 Old top-level tab addresses are replaced with the list URL. Venue settings
 (`/manage/venue-settings`) starts with `venue-details`, followed by `tables`,
@@ -4959,11 +4960,20 @@ floor plan when no table is placed on the zone's plan. Unassigned zones keep the
 The sidebar returns to the bare list. An editor's deep link keeps that list underneath it;
 closing the editor returns focus to its originating row menu, or Add when that row is gone.
 
-Edit department holds name, trading name, service settings and transfers. Edit zone holds its
-name and four raw service overrides. Each override offers “Same as department (…)”, and saving
-that choice writes null. How orders start chooses Table service or Counter service. Counter
-service has a paid-when choice and a collection-ticket choice. The zone's name and policy save
-in one request. Edit department preserves the department's receipt policy.
+Edit department is tabbed. Details holds name and trading name. Service holds one section per
+topic, each under its own heading; today the one section is “Orders and payment”, with the service
+settings and the zones that differ. Transfers holds the allowed destinations and the receiving
+desk profile, and is offered only while two or more departments are active. One draft and one
+Save, in a row below the strip, cover every tab, so changing tab keeps the draft. It never asks
+about unsaved changes, because the screen's `navigationScopes` (`venue-departments-shell.ts`) lets
+an address change between the open department's offered tabs through. The address keeps the open
+tab (`view` is `service` or `transfers`; Details has none), and an address naming an unknown view,
+or a tab not offered, opens Details and replaces the address without adding a history entry. A
+refusal naming a field, or an invalid Save, shows the first tab holding a marked field, and marks
+every tab that holds one. A strip too wide for the dialog scrolls sideways inside it. Edit zone
+holds its name and four raw service overrides. Each override offers “Same as department (…)”, and saving that choice writes null. How
+orders start chooses Table service or Counter service. Counter service has a paid-when choice and
+a collection-ticket choice. The zone's name and policy save in one request. Edit department preserves the department's receipt policy.
 
 Edit receipt holds receipt printing, trading-name printing, address printing, logo, phone,
 email, the installed tax-agency description field, subtitle and footer. It is a wide `wt-modal`,
