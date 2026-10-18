@@ -2360,8 +2360,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Loose ends left by A466 (A429 slice 2) / A502 part 3.**
   - `wt-input` has no visible description: the Add tables names preview is a polite live region
     after Prefix, so it is not heard when the field takes focus.
-  - The Departments list's "Floor plan" link is shown without `venue.configure`, so a session
-    without it that follows the link lands on Overview. Revisit beside the permissions review.
   - On computers whose scrollbars take space, a size reading just after a floor plan drop may
     shift the plan by the extra room.
   - Resizing a floor plan table needs a pointer or a keyboard, so a screen-reader user on a touch

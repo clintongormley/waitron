@@ -236,13 +236,7 @@ it("orders the columns as drawn, ignoring an order stored before the Also edit c
 });
 
 it("labels the Also edit column in Spanish", async () => {
-  const floorZones = [
-    { id: "z1", name: "Terrace" },
-    { id: "z2", name: "Bar" },
-  ];
-  await withFloorZones(floorZones);
-  cleanup();
   setLocale("es");
-  const es = await withFloorZones(floorZones);
-  expect(es.table.columns.find(({ key }) => key === "also")!.label).toBe("Editar también");
+  const { table } = await setup();
+  expect(table.columns.find(({ key }) => key === "also")!.label).toBe("Editar también");
 });
