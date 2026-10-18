@@ -2323,6 +2323,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   both languages and visible totals at phone and desktop widths. Permanent held-group numbers,
   group reordering, Fire confirmations, command-busy controls and the other bill's nutrition now
   have checks through Sent. A companion quantity uses the same trimmed display as this bill's rows.
+  On the feature branch, Discount and the existing payment controls now sit below the panel total,
+  including when the bill has no draft editor. Opening the old drawer keeps one payment widget
+  and its unfinished cash entry. The panel estimate includes fresh unsent food; Discount and
+  payment still use the saved bill. Native checks cover the partial-payment balance, retained
+  payment confirmations, settlement permission and the 44-pixel footer controls in both languages
+  and themes at phone and desktop widths. Payment-retry checks now open Review before their
+  native phone clicks, retaining the original requests, amounts and assertions. A739's payment
+  redesign remains separate.
   A physical till trial, the old drawer's retirement and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and

@@ -2460,7 +2460,6 @@ export class TillTableOrderScreen extends LitElement {
     const name = index === -1 ? t("adjust.whole_bill") : this.#billName(index);
     return html`<div class="bill-adjust">
       <wt-button
-        size="sm"
         variant="secondary"
         data-discount-bill
         @click=${() =>
@@ -2792,7 +2791,13 @@ export class TillTableOrderScreen extends LitElement {
           }}
         ></till-order-kitchen-note>
         <div class="layout">
-          ${draft === null ? this.#sentOrders() : this.#ordering(draft)}
+          ${
+            draft === null
+              ? html`<section class="draft-pane" data-draft-pane>
+                  ${this.#sentOrders()} ${this.#orderSummary(null)}
+                </section>`
+              : this.#ordering(draft)
+          }
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
         ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#moveDialog()}
@@ -2865,21 +2870,28 @@ export class TillTableOrderScreen extends LitElement {
           }
         </div>
         ${this.#roundControl(draft)} ${this.#otherDraftPanels(draft)} ${this.#retainedDraftPanel()}
-        <div class="total-row" data-order-summary>
-          <span class="label">${t("label.total")}</span>
-          <span class="amount" data-order-total
-            >${this.#money(
-              panelTotal(
-                this.#payStore!.total,
-                this.otherDrafts.length === 0
-                  ? draft.lines
-                  : this.otherDrafts.flatMap((other) => other.lines),
-              ),
-            )}</span
-          >
-        </div>
+        ${this.#orderSummary(draft)}
       </section>
     </div>`;
+  }
+
+  #orderSummary(draft: WorkingOrderStore | null): TemplateResult {
+    return html`<div class="total-row" data-order-summary>
+        <span class="label">${t("label.total")}</span>
+        <span class="amount" data-order-total
+          >${this.#money(
+            panelTotal(
+              this.#payStore!.total,
+              this.otherDrafts.length === 0
+                ? (draft?.lines ?? [])
+                : this.otherDrafts.flatMap((other) => other.lines),
+            ),
+          )}</span
+        >
+      </div>
+      <div data-bill-actions>
+        ${this.#billAdjust()} ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
+      </div>`;
   }
 
   #sentOrders(): TemplateResult {
@@ -4223,7 +4235,6 @@ export class TillTableOrderScreen extends LitElement {
             >${formatMoney(this.#payStore!.total, currentLocale())}</span
           >
         </div>
-        ${this.#billAdjust()} ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
         ${this.#billsSection()} ${this.#statusSection()} ${this.#actionSection()}
       </aside>
     `;
@@ -4292,7 +4303,6 @@ export class TillTableOrderScreen extends LitElement {
         this.fullInvoices
           ? html`<wt-button
               variant="secondary"
-              size="sm"
               data-choose-bill-invoice
               .disabled=${this.busy}
               @click=${() => this.#dispatch("choose-bill-invoice", target)}
@@ -4304,7 +4314,6 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`<wt-button
               variant="secondary"
-              size="sm"
               data-choose-bill-language
               .disabled=${this.busy}
               @click=${() => this.#dispatch("choose-bill-receipt-language", target)}
@@ -4328,7 +4337,6 @@ export class TillTableOrderScreen extends LitElement {
         ({ way, label }) =>
           html`<wt-button
             variant="secondary"
-            size="sm"
             data-open-bill-pay=${way}
             .disabled=${this.busy}
             @click=${() => this.#payPart(way)}

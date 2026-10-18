@@ -682,7 +682,6 @@ describe("till-app: seating a party", () => {
   });
 });
 
-/** The open bill's total and amount to pay, and the party's still to pay, as the drawer shows them. */
 function figures(el: TillApp) {
   const screen = tableOrder(el)!.shadowRoot!;
   const shown = screen.querySelector('[data-bill="wo-4"]')!;

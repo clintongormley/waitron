@@ -167,7 +167,6 @@ const mount = async (over: Partial<TillTableOrderScreen> = {}) => {
 
 const grid = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
-/** Only present while the drawer is open. */
 const tender = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
 async function openDrawer(el: TillTableOrderScreen): Promise<void> {

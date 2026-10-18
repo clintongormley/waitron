@@ -17,6 +17,7 @@ import {
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
+import { resized } from "./screens/till-table-order-screen.test-helpers.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -420,6 +421,15 @@ async function openDialog(el: TillApp, way: "items" | "contribution" | "share" |
   const selector = way === "rest" ? "[data-pay-rest]" : `[data-open-bill-pay="${way}"]`;
   order.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
   await flush(el);
+}
+
+async function showBillFooter(order: TillTableOrderScreen): Promise<void> {
+  await resized(order);
+  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  if (review?.checkVisibility()) {
+    await userEvent.click(review);
+    await order.updateComplete;
+  }
 }
 
 async function type(el: TillApp, name: string, value: string): Promise<void> {
@@ -1867,6 +1877,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
         method === "cash"
           ? { method, amount: "150" }
           : { method, amount: "120.00", externalRef: "operation-17" };
+      await showBillFooter(tableOrder(el));
       const initial = tableOrder(el).shadowRoot!.querySelector("till-tender-pay")!;
       await userEvent.click(
         initial.shadowRoot!.querySelector(method === "cash" ? ".pay" : ".pay-card")!,
@@ -1948,8 +1959,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await flush(el);
       emit(floor(el), "open-table", { tableId: "t4", seated: true });
       await flush(el);
-      tableOrder(el).shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-      await flush(el);
+      await showBillFooter(tableOrder(el));
       await expect
         .poll(() => confirmation()?.shadowRoot?.querySelector(".confirm") ?? null)
         .not.toBeNull();
@@ -1997,6 +2007,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
       emit(order, "pay-tab", { ...tender, guests: 4 });
       await flush(el);
       expect(send).toHaveBeenCalledOnce();
+      await showBillFooter(order);
       const recovery = order.shadowRoot!.querySelector("till-tender-pay")!;
       const confirm = recovery.shadowRoot!.querySelector(".confirm");
       expect(confirm).not.toBeNull();
