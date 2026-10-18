@@ -15,6 +15,7 @@
     "@waitron/adjustments": "workspace:*",
     "@waitron/bookings": "workspace:*",
     "@waitron/dashboard-kit": "workspace:*",
+    "@waitron/fiscal-verifactu": "workspace:*",
     "@waitron/media": "workspace:*",
     "@waitron/payments-stripe": "workspace:*",
     "@waitron/payments-sumup": "workspace:*",

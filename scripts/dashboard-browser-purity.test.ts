@@ -34,6 +34,7 @@ const SUBPATHS: string[] = [
   "packages/bookings/src/dashboard",
   "packages/adjustments/src/dashboard",
   "packages/staffing/src/dashboard",
+  "packages/fiscal-verifactu/src/dashboard",
   "packages/venue-service/src/dashboard/painter.ts",
   "packages/venue-service/src/dashboard/calendar-day-box.ts",
   "packages/venue-service/src/dashboard/fixed-title.ts",

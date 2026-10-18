@@ -212,8 +212,9 @@ export const STAFFING_PACKAGE = "@waitron/staffing";
 export const SERVER_PACKAGE = "@waitron/server";
 
 /**
- * The `test-fiscal-verifactu` shard's package: a `maxWorkers: 4` suite, which oversubscribed its
- * bin-mates when it shared a light shard.
+ * The `test-fiscal-verifactu` shard's package: a Node project, a `maxWorkers: 4` suite that
+ * oversubscribed its bin-mates when it shared a light shard, and a Chromium project for its
+ * dashboard panel.
  */
 export const FISCAL_VERIFACTU_PACKAGE = "@waitron/fiscal-verifactu";
 

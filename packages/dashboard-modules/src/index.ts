@@ -4,6 +4,7 @@ import { VENUE_SERVICE_DASHBOARD } from "@waitron/venue-service/dashboard";
 import { ADJUSTMENTS_DASHBOARD } from "@waitron/adjustments/dashboard";
 import { STAFFING_DASHBOARD } from "@waitron/staffing/dashboard";
 import { WORKFORCE_DASHBOARD } from "@waitron/workforce/dashboard";
+import { VERIFACTU_DASHBOARD } from "@waitron/fiscal-verifactu/src/dashboard/index.js";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
 
 // The dashboard's module registry: every module that contributes a dashboard screen names itself here,
@@ -17,6 +18,7 @@ export const DASHBOARD_MODULES: readonly DashboardContribution[] = [
   ADJUSTMENTS_DASHBOARD,
   STAFFING_DASHBOARD,
   WORKFORCE_DASHBOARD,
+  VERIFACTU_DASHBOARD,
 ];
 
 export { CARD_PROVIDER_PANELS } from "./card-providers.js";
