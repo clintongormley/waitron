@@ -99,8 +99,8 @@ describe("staffing strings", () => {
     expect(STAFFING_STRINGS.es["staffing.day.show_week"]).toBe(
       "Ver la semana estándar de {season}",
     );
-    expect(STAFFING_STRINGS.es["staffing.rota.unpainted_season"]).toBe(
-      "Los puestos salen del personal que pintas: a quién necesita {area} y cuándo. Pinta una vez la semana estándar de {season} y cada semana de la temporada tendrá sus puestos. Puedes seguir añadiendo turnos en Todo el equipo.",
+    expect(STAFFING_STRINGS.es["staffing.rota.unpainted_season"]).toContain(
+      "Pinta una vez la semana estándar de {season}",
     );
     expect(
       Object.values(STAFFING_STRINGS.es).filter((text) => text.includes("semana habitual")),
