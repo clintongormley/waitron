@@ -84,6 +84,16 @@ it("lists each department's sets, the periods using each and each zone's counts"
   expect(text(cell(table, "department:deli", "name"))).toBe("Deli No sets yet");
 });
 
+it("says a layout places no table when the zone has tables but none counts as spare", async () => {
+  const model = casaMarina();
+  model.departments[1]!.zones[0]!.tableCount = 2;
+  const { table } = await mountScreen({ model });
+  const counts = cell(table, "zone:bar-standard:bar-zone", "tables");
+  expect(text(counts)).toBe("No tables on the plan");
+  expect(counts.querySelector("[part~=empty]")).not.toBeNull();
+  expect(cell(table, "zone:standard:inside", "tables").querySelector("[part~=empty]")).toBeNull();
+});
+
 it("links each zone row to its set's layout in the editor, and back to this page", async () => {
   const { table } = await mountScreen();
   const link = cell(table, "zone:dinner:terrace", "name").querySelector("a")!;

@@ -74,9 +74,9 @@ export class FloorPlansScreen extends LitElement {
       wt-data-table::part(default) {
         margin-inline-start: var(--wt-space-1);
         padding: 0 var(--wt-space-2);
+        border: 1px solid currentColor;
         border-radius: var(--wt-radius-sm);
-        background: var(--wt-color-highlight);
-        color: var(--wt-color-on-highlight);
+        color: var(--wt-color-primary-text);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-normal);
         white-space: nowrap;
@@ -85,14 +85,16 @@ export class FloorPlansScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
       wt-data-table::part(zone-link) {
-        margin-inline-start: var(--wt-space-4);
         color: var(--wt-color-primary-text);
       }
       wt-data-table::part(zone-link):focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
-      wt-data-table::part(empty-zone) {
+      wt-data-table::part(count) {
+        white-space: nowrap;
+      }
+      wt-data-table::part(empty) {
         color: var(--wt-color-text-muted);
       }
       wt-data-table::part(chips) {
@@ -199,16 +201,25 @@ export class FloorPlansScreen extends LitElement {
   private tablesCell(row: Row) {
     if (row.kind !== "zone") return nothing;
     const { onPlan, spare } = row.layout;
-    if (row.zone.tableCount === 0)
-      return html`<span part="empty-zone">${t("floor_plans.no_tables")}</span>`;
+    const n = String(onPlan);
     const m = String(spare);
-    if (onPlan === 0)
-      return html`<span part="empty-zone"
-        >${spare ? format("floor_plans.none_on_plan_spare", { m }) : t("floor_plans.none_on_plan")}</span
-      >`;
-    return spare
-      ? format("floor_plans.on_plan_spare", { n: String(onPlan), m })
-      : format("floor_plans.on_plan", { n: String(onPlan) });
+    const [part, text] =
+      row.zone.tableCount === 0
+        ? ["count empty", t("floor_plans.no_tables")]
+        : onPlan === 0
+          ? [
+              "count empty",
+              spare
+                ? format("floor_plans.none_on_plan_spare", { m })
+                : t("floor_plans.none_on_plan"),
+            ]
+          : [
+              "count",
+              spare
+                ? format("floor_plans.on_plan_spare", { n, m })
+                : format("floor_plans.on_plan", { n }),
+            ];
+    return html`<span part=${part}>${text}</span>`;
   }
 
   private actionsCell(row: Row) {
