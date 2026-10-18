@@ -1133,9 +1133,6 @@ help about anything you want very quickly."
     direct child). No menu needs it yet.
   - Help on the dashboard's other screens, added as each is next touched; Products is the only
     screen with it.
-  - A column's help box shows its text in bold: the box is a pop-up inside the table heading, so it
-    takes the heading's bold weight, while a field's box is in normal weight (seen in 2b's look on
-    Products' Availability column; `wt-help-tooltip`'s `[popover]` rule sets no font weight).
 - **Slice 4 must also:** fit the till's 32 px badge target, which hangs 16 px past its box — that
   overflows `wt-modal`'s 12 px side padding at phone width (the body scrolls sideways: the 390 px
   case in `packages/ui/src/components/wt-help-tooltip.slots.test.ts` shows it with the 32 px

@@ -79,6 +79,7 @@ export class WtHelpTooltip extends LitElement {
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
+        font-weight: var(--wt-font-weight-normal);
         box-shadow: var(--wt-shadow-2);
       }
     `,
