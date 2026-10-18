@@ -40,6 +40,23 @@ describe("cutToOwnDay", () => {
       range("22:00", "02:00"),
     );
   });
+  it("cuts a range fitting the day's own start at that day's earlier end", () => {
+    expect(cutToOwnDay(range("22:00", "04:30"), day("05:00", 1320), "05:00")).toEqual(
+      range("22:00", "03:00"),
+    );
+  });
+  it("cuts a whole day from the day's own start at that day's earlier end", () => {
+    expect(cutToOwnDay(range("05:00", "05:00"), day("05:00", 1320), "05:00")).toEqual(
+      range("05:00", "03:00"),
+    );
+  });
+  it("gives nothing for a range fitting the day's own start that begins after its end", () => {
+    expect(cutToOwnDay(range("03:30", "04:30"), day("05:00", 1320), "05:00")).toBeNull();
+  });
+  it("returns a range fitting a lengthened day's own start as the same object", () => {
+    const late = range("22:00", "04:30");
+    expect(cutToOwnDay(late, day("03:00", 1560), "03:00")).toBe(late);
+  });
 });
 
 describe("calendarCutAnchor", () => {

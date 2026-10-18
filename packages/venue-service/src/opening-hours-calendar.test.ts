@@ -925,6 +925,15 @@ describe("a past day's range that misfits its own start", () => {
     });
   });
 
+  it("cuts a range fitting a shortened day's own start at that day's end", async () => {
+    const v = await lateSaturday();
+    const tuesday = (await october(v)).days.find((d) => d.date === "2026-10-20")!;
+    expect({ dayCutover: tuesday.dayCutover, ranges: tuesday.departments[0]!.ranges }).toEqual({
+      dayCutover: "05:00",
+      ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "03:00" }],
+    });
+  });
+
   it("keeps the season's cut dinner beside a special day's painted lunch", async () => {
     const v = await lateSaturday();
     await run((tx) =>

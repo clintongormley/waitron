@@ -22,17 +22,20 @@ function fits(range: ClosedRange, cutover: string): boolean {
   return start < end;
 }
 
-/** A weekly range as a day whose own start differs from `anchor` draws it: one that misfits
- *  the day's start but fits `anchor` is placed by `anchor` and cut at the day's ends; null when
- *  nothing of it is left. Any other range is returned as given. */
+/** A weekly range as a day draws it, cut at the day's ends: placed by the day's own start when it
+ *  fits that start, else by `anchor` when it fits `anchor`; null when nothing of it is left. A
+ *  range fitting neither, or fitting the day's own start and ending within the day, is returned
+ *  as given. */
 export function cutToOwnDay<T extends ClosedRange>(
   range: T,
   day: Pick<ServiceDayContext, "dayCutover" | "endMinute">,
   anchor: string,
 ): T | null {
-  if (fits(range, day.dayCutover) || !fits(range, anchor)) return range;
-  const span = rangeSpan(range, anchor);
-  const offset = minutes(anchor) - minutes(day.dayCutover);
+  const own = fits(range, day.dayCutover);
+  if (!own && !fits(range, anchor)) return range;
+  const span = rangeSpan(range, own ? day.dayCutover : anchor);
+  if (own && span.end <= day.endMinute) return range;
+  const offset = own ? 0 : minutes(anchor) - minutes(day.dayCutover);
   const start = Math.max(span.start + offset, 0);
   const end = Math.min(span.end + offset, day.endMinute);
   if (start >= end) return null;
