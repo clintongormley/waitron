@@ -2305,7 +2305,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   existing adjustment requests. Focused tests cover amount correction, exact whole-family totals,
   a withdrawn reason, retained paid/editor/context controls and keeping unfinished choices when
   you close the window. The owner approved the Spanish Comp wording and the earlier six Sent labels
-  on 2026-10-18. On the feature branch, a held heading now offers Move earlier and
+  on 2026-10-18. On the feature branch, an open New order drag, heading menu or Move to choice
+  retains its bill editor observation. A changed observation leaves the candidate alone; an
+  equivalent read keeps the choice usable. Move to also retains its selected rows and rejects
+  a changed table, API, service revision or draft. Focused browser checks cover these races.
+  On the feature branch, a held heading now offers Move earlier and
   Move later in More, or you can hold its heading for 500 ms and drag it before or after another
   shown held heading. The command includes every bill's held groups and keeps the printed group
   numbers. A changed service revision, group order, bill visit or API refuses the retained action;

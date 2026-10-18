@@ -290,6 +290,14 @@ interface HeldRow {
   splits: boolean;
 }
 
+interface DraftMoveOpening {
+  scope: string;
+  groups: string;
+  api: TillApi | undefined;
+  epoch: number;
+  selected: readonly OrderLine[];
+}
+
 /** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
 function composedParent(node: Element): Element | null {
   const root = node.getRootNode();
@@ -1539,6 +1547,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#selected = new WeakSet();
     this.#routingRows = new WeakMap();
     this.draftMoveStore = null;
+    this.#draftMoveOpening = undefined;
     if (store === null) {
       this.#watchedDraft = { store, stop: () => {} };
       return;
@@ -1550,9 +1559,13 @@ export class TillTableOrderScreen extends LitElement {
         this.#draftEpoch++;
         this.#endDraftDrag();
         this.#cancelAutomaticRouting();
-        if (store.sending) this.draftMoveStore = null;
+        if (store.sending) {
+          this.draftMoveStore = null;
+          this.#draftMoveOpening = undefined;
+        }
         if (store.editsLocked) {
           this.draftMoveStore = null;
+          this.#draftMoveOpening = undefined;
           this.#selected = new WeakSet();
           this.#closeChange();
         }
@@ -1625,6 +1638,8 @@ export class TillTableOrderScreen extends LitElement {
     this.#draftGestures?.disconnect();
     this.#draftGestures = undefined;
     this.#endDraftDrag();
+    this.draftMoveStore = null;
+    this.#draftMoveOpening = undefined;
     super.disconnectedCallback();
     this.#serveScope?.dispose();
     this.#serveScope = undefined;
@@ -1666,8 +1681,14 @@ export class TillTableOrderScreen extends LitElement {
     groups: string;
   };
 
-  #draftDragScope(): string {
-    return JSON.stringify([this.orderId, this.party?.id, this.serviceVisit]);
+  #draftArrangementScope(): string {
+    const edit = this.billEdit;
+    return JSON.stringify([
+      this.orderId,
+      this.party?.id,
+      this.serviceVisit,
+      edit === null ? null : [edit.billId, edit.editorVersion, edit.draftId, edit.draftRevision],
+    ]);
   }
 
   #draftDragGroups(): string {
@@ -1713,7 +1734,7 @@ export class TillTableOrderScreen extends LitElement {
       control,
       group,
       api: this.api,
-      scope: this.#draftDragScope(),
+      scope: this.#draftArrangementScope(),
       groups: this.#draftDragGroups(),
     };
   };
@@ -1737,7 +1758,7 @@ export class TillTableOrderScreen extends LitElement {
       press !== undefined &&
       this.#canDragDraft(press.store) &&
       press.api === this.api &&
-      press.scope === this.#draftDragScope() &&
+      press.scope === this.#draftArrangementScope() &&
       press.groups === this.#draftDragGroups() &&
       press.generation === press.store.loadGeneration &&
       press.lines.length === press.store.lines.length &&
@@ -1888,6 +1909,7 @@ export class TillTableOrderScreen extends LitElement {
     { row: DeadEndAnswer["deadEnds"][number]; stations: DeadEndAnswer["stations"] }
   >();
   @state() private draftMoveStore: WorkingOrderStore | null = null;
+  #draftMoveOpening?: DraftMoveOpening;
   /** Flagged lines the person chose to keep, which no longer ask Remove or Keep. */
   #kept = new WeakSet<OrderLine>();
   #routingTimer?: ReturnType<typeof setTimeout>;
@@ -2000,6 +2022,18 @@ export class TillTableOrderScreen extends LitElement {
     if (this.sentLinePending !== null && this.#sentLine() === undefined)
       this.sentLinePending = null;
     this.#watchDraft();
+    if (this.#draftPress !== undefined && !this.#draftPressCurrent()) this.#endDraftDrag();
+    const move = this.#draftMoveOpening;
+    if (
+      move !== undefined &&
+      (move.scope !== this.#draftArrangementScope() ||
+        move.groups !== this.#draftDragGroups() ||
+        move.api !== this.api ||
+        move.epoch !== this.#draftEpoch)
+    ) {
+      this.draftMoveStore = null;
+      this.#draftMoveOpening = undefined;
+    }
     if (this.takeOverSent !== null && this.takeOversAnswered !== this.takeOverSent) {
       this.#takeOverAnswered = this.takeOverPending?.id;
       this.takeOverSent = null;
@@ -3574,14 +3608,14 @@ export class TillTableOrderScreen extends LitElement {
     const index = slots.findIndex((slot) => slot.key === group.key);
     if (index < 0 || slots.length < 2 || store.editsLocked) return nothing;
     const epoch = this.#draftEpoch;
-    const scope = this.#draftDragScope();
+    const scope = this.#draftArrangementScope();
     const groups = this.#draftDragGroups();
     const api = this.api;
     const move = (by: number) => {
       if (
         !this.#canDragDraft(store) ||
         epoch !== this.#draftEpoch ||
-        scope !== this.#draftDragScope() ||
+        scope !== this.#draftArrangementScope() ||
         groups !== this.#draftDragGroups() ||
         api !== this.api
       )
@@ -4032,23 +4066,43 @@ export class TillTableOrderScreen extends LitElement {
       variant=${disabled ? "secondary" : "primary"}
       ?disabled=${disabled}
       @click=${() => {
-        if (!disabled) this.draftMoveStore = store;
+        if (disabled || !this.#canDragDraft(store)) return;
+        this.#draftMoveOpening = {
+          scope: this.#draftArrangementScope(),
+          groups: this.#draftDragGroups(),
+          api: this.api,
+          epoch: this.#draftEpoch,
+          selected: store.lines.filter((line) => this.#selected.has(line)),
+        };
+        this.draftMoveStore = store;
       }}
       >${t("table.move_line")}</wt-button
     >`;
   }
 
-  #moveDraftSelection(store: WorkingOrderStore, target: Place | "new"): void {
+  #moveDraftSelection(
+    store: WorkingOrderStore,
+    target: Place | "new",
+    opening: DraftMoveOpening | undefined,
+  ): void {
     if (
-      store !== this.#draftStore ||
+      opening === undefined ||
+      opening !== this.#draftMoveOpening ||
+      !this.#canDragDraft(store) ||
       store !== this.draftMoveStore ||
-      store.editsLocked ||
-      store.sending ||
-      this.groupCommandBusy
+      opening.scope !== this.#draftArrangementScope() ||
+      opening.groups !== this.#draftDragGroups() ||
+      opening.api !== this.api ||
+      opening.epoch !== this.#draftEpoch
     )
       return;
     const indexes = [...this.#selectedIndexes(store.lines)];
-    if (indexes.length === 0) return;
+    if (
+      indexes.length === 0 ||
+      indexes.length !== opening.selected.length ||
+      indexes.some((index, at) => store.lines[index] !== opening.selected[at])
+    )
+      return;
     if (target === "new") {
       const layout = this.#draftLayout(store);
       const newlyHeld = layout.filter((group) => group.kind === "new");
@@ -4106,15 +4160,17 @@ export class TillTableOrderScreen extends LitElement {
       store.setLinePlaces(indexes, target);
     }
     this.draftMoveStore = null;
+    this.#draftMoveOpening = undefined;
   }
 
   #draftMoveDialog(store: WorkingOrderStore): TemplateResult {
+    const opening = this.#draftMoveOpening;
     const layout = this.#draftLayout(store);
     const option = (key: string, label: string, place: Place | "new") =>
       html`<wt-button
         variant="secondary"
         data-draft-move-to=${key}
-        @click=${() => this.#moveDraftSelection(store, place)}
+        @click=${() => this.#moveDraftSelection(store, place, opening)}
         >${label}</wt-button
       >`;
     return html`<wt-dialog
@@ -4124,7 +4180,10 @@ export class TillTableOrderScreen extends LitElement {
       .open=${this.draftMoveStore === store && !store.editsLocked && !store.sending}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
-        if (event.target === event.currentTarget) this.draftMoveStore = null;
+        if (event.target === event.currentTarget) {
+          this.draftMoveStore = null;
+          this.#draftMoveOpening = undefined;
+        }
       }}
     >
       <div class="action-options">
@@ -4149,6 +4208,7 @@ export class TillTableOrderScreen extends LitElement {
         variant="secondary"
         @click=${() => {
           this.draftMoveStore = null;
+          this.#draftMoveOpening = undefined;
         }}
         >${t("action.back")}</wt-button
       >
