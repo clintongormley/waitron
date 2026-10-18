@@ -221,7 +221,12 @@ export class CourseList extends LitElement {
     target?.focus();
   }
 
-  #focusName(id: string): Promise<void> {
+  async #focusName(id: string): Promise<void> {
+    if (id === NEW && !this.showAddButton) {
+      await this.updateComplete;
+      this.dispatchEvent(new Event("focus-add-course", { bubbles: true, composed: true }));
+      return;
+    }
     return this.#focus(id === NEW ? '[data-test="add-course"]' : `[data-test="name-${id}"]`);
   }
 
@@ -603,7 +608,6 @@ export class CourseList extends LitElement {
     ${this.#deleteDialog()}`;
   }
 
-  /** Off where the page's own header carries Add course and calls {@link startAdding}. */
   @property({ type: Boolean }) showAddButton = true;
 
   startAdding(): void {

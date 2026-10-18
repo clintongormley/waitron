@@ -66,6 +66,8 @@ export class CoursesScreen extends LitElement {
         .api=${this.api}
         .readOnly=${this.readOnly}
         .showAddButton=${false}
+        @focus-add-course=${() =>
+          this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-course]")?.focus()}
       ></dashboard-course-list>
     `;
   }
