@@ -15,11 +15,13 @@ shift-click adding a run.
 **Architecture:** (1) **One pure rule** in the browser-safe `zone-own-hours.ts`:
 `closureOutsideHours` (server) and `closuresInHours` (browser). (2) **Server:** a new
 `zone-closure-hours.ts` reads the department's hours after the write, inside the same transaction,
-and throws `zone_closed_time.invalid` with the new reason `outside_hours`; the three write routes
-call it, and the configuration import runs the pure rule in `validateSeasonWeeks`. The demo seed's
+and throws the new reason `outside_hours` (`zone_closed_time.invalid` on the season routes,
+`special_day.invalid` on the special-day routes); the three write routes call it, and the configuration import runs the pure rule in `validateSeasonWeeks`. The demo seed's
 Terrace closure moves inside the Restaurant's hours. (3) **Browser:** `paint-grid` gains
-`closedWithin`, cutting every Closed block it emits to the column's open blocks; both painters pass
-their department's hours there and show the new refusal beside the day. The screen closes a painter
+`closedWithin`, cutting every Closed block it emits to the column's open blocks, and
+`closedBehind`, a "<department> closed all day" block drawn behind a zone's paint; both painters
+pass their department's hours there, cut a zone's day when its department's day changes, and show
+the new refusal beside the day. The screen closes a painter
 when it reports a clean save. `add-dates-calendar` drops its own click and arrow handling for
 `DayPicker` (with `dragOnTouch`), which gains a `ranged` callback.
 
@@ -47,11 +49,11 @@ every other venue-service test runs in `--project node` (`packages/venue-service
 | --- | --- |
 | `packages/venue-service/src/zone-own-hours.ts` (+ `.test.ts`) | `closureOutsideHours`, `closuresInHours` |
 | `packages/venue-service/src/zone-closure-hours.ts` (new, + `.test.ts`) | the server check, two entry points |
-| `packages/venue-service/src/errors.ts:193` | `zone_closed_time.invalid` gains `outside_hours`, `zoneId`, `weekday`, `date` |
+| `packages/venue-service/src/errors.ts:182-193` | `zone_closed_time.invalid` gains `outside_hours`, `zoneId`, `weekday`; `special_day.invalid` gains `outside_hours` |
 | `packages/venue-service/src/routes.ts:582-622`, `:1285-1336` | the three write routes call the check |
 | `packages/venue-service/src/configuration-transfer.ts:258-358` | the import refuses an out-of-hours zone closure |
 | `apps/server/scripts/demo-seed/seed.ts:143-153` | Terrace closes 23:00–00:00 |
-| `packages/venue-service/src/dashboard/paint-grid.ts` | `closedWithin` |
+| `packages/venue-service/src/dashboard/paint-grid.ts` | `closedWithin`, `closedBehind`, `paint-outside` |
 | `packages/venue-service/src/dashboard/season-painter.ts` | title, line, no follows note, `closedWithin`, saved event |
 | `packages/venue-service/src/dashboard/special-day-painter.ts` | `closedWithin`, refusal, saved event's `clean`, `remove-dates` |
 | `packages/venue-service/src/dashboard/painter-labels.ts:63-71` | the `outside_hours` wording |
@@ -178,34 +180,44 @@ that breaks the rule.
    the writer-level check breaking 123 test set-ups that use the writers to build zone states, against
    5 route tests. A direct caller of the writers (tests, the demo seed) is not checked; Task 4 still
    corrects the seed.
-2. **One code for every route: `zone_closed_time.invalid` with `reason: "outside_hours"`**, the
-   code the zone closed-week and season-week routes already use for closures, carrying `field` (the
-   refused range's request path), `zoneId`, and `weekday` or `date`. The special-day route uses it
-   too, rather than `special_day.invalid`, so one reason means one thing; the special-day painter
-   learns it (Task 9). The import keeps its convention, `setup.request_invalid { field:
-   "zone_day_ranges" }`.
-3. **Only the zone closures a request writes are checked**, against the department's hours as that
-   request leaves them. A write that changes only a department's hours is not refused and does not
-   cut stored zone closures; such a stretch stays stored, the views already cut it, and a later save
-   of that zone is refused naming that day until the stretch is removed or repainted. Cutting zones
-   when a department's hours shrink is left open (Task 13 files it).
+2. **One reason, `outside_hours`, on each route's own code.** The season-week and closed-week
+   routes throw `zone_closed_time.invalid` (the code they already use for closures) with `field`
+   (the refused range's request path), `reason: "outside_hours"`, `zoneId` and `weekday`. The
+   special-day routes throw `special_day.invalid` with `reason: "outside_hours"`, `field:
+   "zonePaint.<i>.ranges.<k>"`, `zoneId` and `date` — the code and params every other special-day
+   paint refusal already carries, so the special-day painter's `refusePaint` reads it as it is
+   (Task 9a). The import keeps its convention, `setup.request_invalid { field: "zone_day_ranges" }`.
+3. **On the server, only the zone closures a request writes are checked**, against the
+   department's hours as that request leaves them. A write that changes only a department's hours
+   — the menu-week route, period delete, moving a zone to another department, an API call sending
+   only a department — is not refused and does not cut stored zone closures; such a stretch stays
+   stored, the views already cut it, and a later save of that zone is refused naming that day until
+   the stretch is removed or repainted. Owner FYI; filed as an open point (Task 13). **Inside the
+   painters this does not arise:** when a department's draft day changes, each of its zones' draft
+   days is cut to it, so one Save sends the department and the cut zones together (Tasks 8b, 9b).
 4. **A special-day zone's Open paint is not bounded, and a date ticked closed all day is not
    checked** — the resolver ignores zone paint there (`day-resolver.ts:209-213`).
-5. **The painters cut only paint you change.** `paint-grid` cuts the whole day it emits (so any
-   stroke, block change, copy or clear on a day also cuts an older out-of-hours stretch there), but
-   nothing is cut on Save: no untouched day changes silently.
+5. **The painters cut the days you change, and nothing on Save.** `paint-grid` cuts the whole day
+   it emits (so any stroke, block change, copy or clear on a zone's day also cuts an older
+   out-of-hours stretch there), and a department's changed day cuts its zones' same day (Decision
+   3); a day nobody changed is never cut, so a stored out-of-hours stretch on it (from a server-side
+   department change) is still refused at Save, marking that day. A stroke cut to nothing says why
+   beside Save (`opening.closed_outside`).
 6. **The screen closes a painter, not the painter itself.** After a successful save each painter
    reports `clean` — true when nothing was painted while the save was in flight — and the screen
    calls `closePainter()` on a clean save. A paint made during the save keeps the painter open,
    unsaved. Receipt: closing inside the painters broke the 32 after-save cases listed above, and
    `painter-frame` is shared with the staffing painters, whose Save stays as it is (A762's).
-7. **The mockup's Monday column "Santet Deli Co closed all day"** (a zone's day when its department
-   is closed) is not drawn in this item: it is not among the seven points or the mockup's notes, and
-   hiding that day's paint would hide a stored out-of-hours stretch a save could then be refused
-   for. Filed as an open point.
+7. **A zone's day when its department is closed is drawn as the mockup's Monday: a full-day
+   hatched block "<department> closed all day" BEHIND the zone's paint.** Not paint-grid's
+   `closedAllDay`, which hides the day's paint: any stored stretch stays drawn on top, so a stretch
+   a Save is refused for can be seen and deleted. Strokes there are cut to nothing (and say so,
+   Decision 5).
 8. **Wording.** English "standard" everywhere a season's week is named. Spanish "semana estándar",
-   the staffing painter's title (`packages/staffing/src/dashboard/strings.ts:423`); the existing
-   "habitual" strings (`day.edit_week`, `day.standard`) stay.
+   the staffing painter's title (`packages/staffing/src/dashboard/strings.ts:423`), in every Spanish
+   string naming a season's week — `day.edit_week`, `day.show_week` and `hours.delete_confirm`'s
+   "semana habitual" included. `day.standard` ("Horario habitual de {season}") names hours, not a
+   week, and stays.
 9. **The special-day editor keeps its heading (the day's name) and gets no "which dates" line**:
    point 2 names the season painter, and mockup 07 shows neither. A762's "Foo: special day,
    12–15 Feb" is A762's to decide.
@@ -274,10 +286,14 @@ that breaks the rule.
 | `menu.normal_week` (`:767`, `:1626`) | `Standard week` | `Semana estándar` |
 | `hours.menu_delete_clash` (`:594`, `:1447`) | "…{department}'s standard menu week…" | "…la semana estándar de cartas de {department}…" |
 | `season.week_named` / `season.week_shown` (`:94-95`, `:935-936`) | `…, edit the standard week` / `…, show the standard week` | `…, editar la semana estándar` / `…, ver la semana estándar` |
+| `day.edit_week` / `day.show_week` (`:978-979`) | unchanged | `Editar la semana estándar de {season}` / `Ver la semana estándar de {season}` |
+| `hours.delete_confirm` (Spanish `:1492`) | unchanged | `¿Borrar {name} del {date}? Su horario vuelve a ser el de la semana estándar.` |
+| `painter.department_closed` (new) | `{department} closed all day` | `{department} cerrado todo el día` |
 | deleted | `painter.zone_follows`, `painter.zones_follow`, `special.range`, `special.range_last` | |
 
 `opening.follow_week` and `menu.normal_week` have no reader (`git grep` finds only `strings.ts`);
-they are reworded per point 1 and filed as unread (Task 13).
+they are reworded per point 1 and filed as unread (Task 13). No test pins "semana habitual" or
+"semana normal" (`git grep` over `packages/**/*.test.ts` and `apps/**/*.test.ts`).
 
 ## Review Focus
 
@@ -287,12 +303,15 @@ they are reworded per point 1 and filed as unread (Task 13).
 2. **A closure across two touching periods** (Lunch 13:00–16:00, Dinner 16:00–23:00, closure
    15:00–17:00). Expected: one block 15:00–17:00, accepted by the server. Pinned in Tasks 1, 2a and 5.
 3. **A stroke wholly where the department is closed** (a zone's Monday on a closed Monday).
-   Expected: no `paint-change`, Save stays quiet. Pinned in Task 5 and Task 8.
+   Expected: no `paint-change`, Save stays quiet, and beside Save "A zone can only close while its
+   department is open." Pinned in Task 5 and Task 8a.
 4. **A new special day saved from a run picked on the Month.** Expected: the editor closes, the
    address returns to the Month it opened over, and Back does not reopen the editor. Pinned in
-   Task 10.
+   Task 10b.
 5. **Paint made while a save is in flight.** Expected: the painter stays open, that paint unsaved;
-   nothing painted is lost. Pinned in Task 10.
+   nothing painted is lost. Pinned in Task 10a.
+6. **Shrinking a department's day under a zone's closure, then Save.** Expected: one request
+   sending the department and the zone cut to it; no refusal. Pinned in Tasks 8b and 9b.
 
 ---
 
@@ -364,7 +383,7 @@ export async function assertSeasonClosuresInHours(
 ```
 
 `errors.ts`: `"zone_closed_time.invalid": { field: string; reason?: "empty" | "order" | "step" |
-"overlap" | "outside_hours"; zoneId?: string; weekday?: number; date?: string }`. The department of
+"overlap" | "outside_hours"; zoneId?: string; weekday?: number }`. The department of
 each zone comes from `readServiceZones`; its week from `readDepartmentSeasonWeeks(tx, cfg, ids,
 clock.dayCutover)`; `day = { dayCutover: clock.dayCutover, endMinute: 1440 }`. In `routes.ts` the
 season-weeks handler calls it after `saveSeasonWeeks` with `zones.map((z, i) => ({ zoneId: z.id,
@@ -406,15 +425,17 @@ makes a refusal — receipt above):
 
 ## Task 2b: The special-day routes refuse an out-of-hours zone closure
 
-**Files:** Modify `zone-closure-hours.ts`, `routes.ts:582-622`; Test `special-days-routes.test.ts`.
+**Files:** Modify `zone-closure-hours.ts`, `routes.ts:582-622`, `errors.ts:182-189` (`special_day.invalid`'s
+`reason` union gains `"outside_hours"`; it already carries `zoneId` and `date`); Test
+`special-days-routes.test.ts`.
 
 **Interfaces — Produces:**
 
 ```ts
 /** After a special-day write, inside its transaction: each sent zone entry's closed ranges
  *  against its department's resolved day on that date. Dates `closedAllDay` names are skipped.
- *  Throws zone_closed_time.invalid
- *  { field: `zonePaint.${i}.ranges.${k}`, reason: "outside_hours", zoneId, date }. */
+ *  Throws special_day.invalid
+ *  { field: `zonePaint.${i}.ranges.${k}`, reason: "outside_hours", zoneId, date } (Decision 2). */
 export async function assertDatedClosuresInHours(
   tx: Transaction,
   cfg: VenueScope,
@@ -431,7 +452,7 @@ serviceDayContext(clock, date)` (its `dayCutover`, `endMinute`). `k` indexes the
 
 - [ ] **Step 1: failing tests** in `special-days-routes.test.ts`: **"refuses a zone closure
   outside its department's hours on that date, storing nothing"** — `christmas(r)` with the zone
-  range `18:00–20:00` (department 19:00–23:00) → 400 `{ code: "zone_closed_time.invalid", params:
+  range `18:00–20:00` (department 19:00–23:00) → 400 `{ code: "special_day.invalid", params:
   { field: "zonePaint.0.ranges.0", reason: "outside_hours", zoneId: r.sala, date: "2030-12-24" } }`,
   no special day stored (`countDays`), for POST and PUT; **"measures against the department paint
   the same request sends"** (the department paint widened to 18:00–23:00 → 201); **"leaves Open
@@ -466,8 +487,12 @@ bundle holds it) with the department's own paint for that `special_day_date_id` 
   closure `23:00–04:00` against `22:00–02:00`), **"refuses zone season weeks closed where the
   department has no hours"** (replacing `:1411`, below), and in the special-day bundle cases
   (`painted(…)`, around `:1700-1740`): **"refuses a zone's special-date closure outside the
-  department's hours on that date"** and **"accepts one inside the department's special-date
-  paint"**.
+  department's hours on that date"**, and two cases that fail if the department's special-date
+  paint is ignored — **"accepts a zone closure outside the season week but inside the
+  department's special-date paint"** (season Friday 20:00–23:00, the date's department paint
+  Dinner 18:00–23:00, zone closed 18:00–19:00 → accepted) and **"refuses a zone closure inside the
+  season week but under the department's Closed special-date paint"** (season 20:00–23:00, the
+  date's department paint Closed 21:00–22:00, zone closed 21:00–22:00 → `zone_day_ranges`).
 - [ ] **Step 2:** `--project node src/configuration-transfer.test.ts` — the new cases FAIL.
 - [ ] **Step 3:** implement.
 - [ ] **Step 4:** PASS; then `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts src/setup-api.test.ts` (both passed the season-week probe); `typecheck`, `lint` for both packages.
@@ -475,8 +500,8 @@ bundle holds it) with the department's own paint for that `special_day_date_id` 
 
 **Existing checks that change** (`packages/venue-service/src/configuration-transfer.test.ts`):
 - `:1243-1244`, the shared `seasonTables()` zone closure: `ends_at: "04:00:00"` →
-  `"02:00:00"` (inside `w-fri` 22:00–02:00, `:1225`). Setup; it made 8 season-bundle cases fail in
-  the probe, each passing again with it.
+  `"02:00:00"` (inside `w-fri` 22:00–02:00, `:1225`). Setup: the season-week probe failed 8
+  season-bundle cases on the old value; that the new one makes them pass was not run.
 - `:1411-1417` "accepts zone season weeks in a bundle with no periods": the bundle closes a zone
   where its department has no hours, which point 5 refuses; it becomes "refuses zone season weeks
   closed where the department has no hours" (`toThrowError(refusal("zone_day_ranges"))`), and a
@@ -516,10 +541,21 @@ close, which point 5 refuses.
 @property({ attribute: false }) closedWithin: ReadonlyMap<string, readonly Paint[]> | undefined = undefined;
 ```
 
-Applied in `#emit` (so a stroke, a block changed to Closed, Copy to… and Clear all go through it),
-with `{ dayCutover: this.cutover, endMinute: 1440 }`; periodless open blocks of `closedWithin` are
-not expected (filter `periodId !== null`). An emitted day `samePaint` with the current day is not
-emitted.
+```ts
+/** Per column, a label for a full-day Closed block drawn BEHIND the column's paint, as the
+ *  underlay is: unlike `closedAllDay`, the column's paint stays drawn on top and strokes still run
+ *  (`closedWithin` cuts them). */
+@property({ attribute: false }) closedBehind: ReadonlyMap<string, string> = new Map();
+```
+
+and the event `paint-outside`, `CustomEvent<{ key: string }>` (bubbles, composed), sent when a
+stroke's Closed paint lay wholly outside its column's `closedWithin`, so the stroke changes nothing.
+
+`closedWithin` is applied in `#emit` (so a stroke, a block changed to Closed, Copy to… and Clear all
+go through it), with `{ dayCutover: this.cutover, endMinute: 1440 }`; periodless open blocks of
+`closedWithin` are not expected (filter `periodId !== null`). An emitted day `samePaint` with the
+current day is not emitted. `closedBehind` draws the hatched `all-closed` look with its label, under
+the column's blocks (z-order below them, `pointer-events: none`).
 
 - [ ] **Step 1: failing tests** (`paint-grid.test.ts`, with `closedErases = false`,
   `chosen = null`):
@@ -529,10 +565,15 @@ emitted.
   - "a stroke wholly outside the hours emits nothing" (Review Focus 3).
   - "a block changed to Closed and a day copied to another column are cut to that column's hours".
   - "Open paint (a period id) is not cut, and a column closedWithin does not name is not bounded".
+  - "a Closed stroke wholly outside the column's hours sends paint-outside with its column, and a
+    stroke that keeps something does not".
+  - "closedBehind draws its label across the whole day behind the column's paint, which stays
+    drawn and clickable, and a stroke there still runs" (a stored block on that column stays in
+    the DOM above the label; `closedAllDay` unset).
 - [ ] **Step 2:** `--project browser src/dashboard/paint-grid.test.ts` — FAIL.
 - [ ] **Step 3:** implement.
 - [ ] **Step 4:** PASS; `typecheck`, `lint` (venue-service, staffing).
-- [ ] **Step 5:** `git commit -s -m "The paint grid cuts Closed paint to the hours it is given (A723)"`
+- [ ] **Step 5:** `git commit -s -m "The paint grid cuts Closed paint to the hours it is given, and can draw a closed day behind the paint (A723)"`
 
 **Existing checks that change:** none (unset by default).
 
@@ -551,8 +592,10 @@ The heading reads `painter.week`; `<p slot="row" class="covers" data-test="cover
 `painter.week_covers` with `from = formatMonthDay(season.startsOn)` and `to =
 formatMonthDay(seasonLastDay(seasons, season.startsOn))` (as the chip, `:568-572`), before the paint
 row, shown to a viewer too, muted (`--wt-color-text-muted`). The `follows` span (`:607-615`), its
-`.follows` style and the two strings go. Every string row of the table above changes here except
-`painter.edit`, `opening.closed_outside` and `special.pick_hint`.
+`.follows` style and its two strings go. Every string row of the table above changes here except
+the new `painter.edit` (Task 7), `opening.closed_outside` and `painter.department_closed` (Task 8a)
+and `special.pick_hint` (Task 12b), and the deletion of `special.range` and `special.range_last`
+(Task 12b).
 
 - [ ] **Step 1: failing tests** (`season-painter.test.ts`): "titles the painter '<season>: standard
   week' and says which weeks it edits, in English and Spanish" (`Winter: standard week`; covers
@@ -600,7 +643,7 @@ blue), still `--wt-tap-min` tall.
 
 **Existing checks that change:** none expected (tests find the button by `data-test="edit-…"`).
 
-## Task 8: The season painter cuts a zone's Closed paint and explains a refusal
+## Task 8a: The season painter cuts a zone's Closed paint, draws a closed department, and explains a refusal
 
 Spec point 5: "**A zone's Closed paint covers only times its department is open.** Dragging
 Terrace's Closed from 23:30 to 03:00 keeps 23:30–02:00, when Santet Deli Co closes; the server
@@ -610,24 +653,32 @@ refuses a zone closure outside its department's hours from any route."
 `testing/season-painter-fixture.ts`; Test `season-painter.test.ts`, `season-painter.save.test.ts`
 and the set-ups listed below.
 
-`paint-grid` gets `.closedWithin=${zone ? <the department's draft week, the map already passed as
-underlay> : undefined}`. `refusalReason` returns `t("opening.closed_outside")` for reason
-`outside_hours` (before the `zone_closed_time.invalid` line). `withDays(model, departmentId, days,
-seasonId = "winter")` and `slot()` move from `season-painter.save.test.ts:772-794` to the fixture,
-exported, unchanged.
+For a zone, `paint-grid` gets `.closedWithin=` the department's draft week (the map already passed
+as `underlay`) and `.closedBehind=` each weekday whose department draft day is empty, labelled
+`format("painter.department_closed", { department })` (Decision 7; the mockup's Monday). Its
+`paint-outside` sets the notice beside Save to `t("opening.closed_outside")`; the next paint clears
+it as `paint()` already clears `notice`. `refusalReason` returns `t("opening.closed_outside")` for
+reason `outside_hours` (before the `zone_closed_time.invalid` line). `withDays(model, departmentId,
+days, seasonId = "winter")` and `slot()` move from `season-painter.save.test.ts:772-794` to the
+fixture, exported, unchanged.
 
 - [ ] **Step 1: failing tests:** `season-painter.test.ts` — "a zone's Closed stroke keeps only the
-  times its department is open" (Restaurant Tuesday 19:30–02:00 via `withDays`; Terrace drag 23:30
-  → 03:00 → day `[{ null, 23:30–02:00 }]`); "a zone stroke on a day its department is closed paints
-  nothing and leaves Save quiet". `season-painter.save.test.ts` — "an outside_hours refusal shows
-  the zone, marks the day and says why" (`{ code: "zone_closed_time.invalid", params: { field:
-  "zones.0.days.3.ranges.0", reason: "outside_hours" } }` → picker on Terrace, Thursday's heading
-  marked "A zone can only close while its department is open.", beside Save "Terrace, Thursday: A
-  zone can only close while its department is open.").
+  times its department is open" (Restaurant **Friday** 19:30–02:00 via `withDays`; Terrace drag
+  23:30 → 03:00 on Friday → day `[{ null, 23:30–02:00 }]`. Friday, because the fixture's Terrace
+  holds a stored Tuesday 15:00–17:00 closure where Restaurant is closed, and a Tuesday stroke would
+  also cut that stretch (Decision 5)); "a zone stroke on a day its department is closed paints
+  nothing, leaves Save quiet and says 'A zone can only close while its department is open.' beside
+  Save"; "a zone's day with its department closed shows 'Restaurant closed all day' behind its
+  paint" (Wednesday: the label alone; Tuesday: the label with the stored 15:00–17:00 block drawn
+  over it; a department's own view shows no such label). `season-painter.save.test.ts` — "an
+  outside_hours refusal shows the zone, marks the day and says why" (`{ code:
+  "zone_closed_time.invalid", params: { field: "zones.0.days.3.ranges.0", reason: "outside_hours" }
+  }` → picker on Terrace, Thursday's heading marked "A zone can only close while its department is
+  open.", beside Save "Terrace, Thursday: A zone can only close while its department is open.").
 - [ ] **Step 2:** FAIL. **Step 3:** implement and update the set-ups. **Step 4:** run
-  `season-painter.test.ts`, `.save`, `.races`, `.unsaved`, `.a11y`, `clock-revision-editors.test.ts`,
-  `service-delete-editors.test.ts`, `opening-hours-screen.painter.test.ts` — PASS; `typecheck`,
-  `lint`.
+  `season-painter.test.ts`, `.save`, `.races`, `.unsaved`, `.a11y` (add the closed-behind state, both
+  themes), `clock-revision-editors.test.ts`, `service-delete-editors.test.ts`,
+  `opening-hours-screen.painter.test.ts` — PASS; `typecheck`, `lint`.
 - [ ] **Step 5:** `git commit -s -m "The season painter keeps a zone's Closed paint inside its department's hours (A723)"`
 
 **Existing checks that change** (from reading, not run: each paints a zone's Closed where the
@@ -650,69 +701,140 @@ fixture's Restaurant is closed — Wednesday or Thursday, Restaurant's winter we
 - `service-delete-editors.test.ts:263` (a zone stroke on Monday 12:00–16:00, Restaurant 13:00–16:00)
   is now cut to 13:00–16:00; its assertions are about discarding, so none is expected to change.
 
-## Task 9: The special-day painter cuts a zone's Closed paint and explains a refusal
+## Task 8b: Changing a department's day cuts its zones' same day in the season painter
 
-**Files:** Modify `special-day-painter.ts` (`paintArea` `:1276-1375`, `refuse` `:938-1003`,
-`refusePaint` `:1007-1057`); Test `special-day-painter.paint.test.ts`,
-`special-day-painter.save.test.ts`.
+Decision 3, inside the painter: the zone closed-week stage takes all seven days
+(`zone-closed-times.ts:64`), so a zone left outside a shrunk department day would be refused at a
+later Save over a day nobody touched.
+
+**Files:** Modify `season-painter.ts` (`paint`, `:448-457`); Test `season-painter.save.test.ts`,
+`season-painter.test.ts`.
+
+When `paint(key, event)` changes a department's day, each of that department's zones whose draft
+day for the same weekday changes under `closuresInHours(<the new department day>, <the zone's
+day>, { dayCutover: model.dayCutover, endMinute: 1440 })` takes the cut day, in the same draft
+update (one `scope.changed()`), so `edited()` names those zones and one Save sends them with the
+department. A zone day already inside the new hours is left as it is (not marked edited).
+
+- [ ] **Step 1: failing tests** (`season-painter.save.test.ts`): **"shrinking Restaurant's Tuesday
+  cuts Terrace's Tuesday in the same Save"** — mount on `withDays(withBar(), "d1", { 2: [slot("p1",
+  "13:00", "18:00")] })` (Terrace's stored Tuesday 15:00–17:00 inside it); paint Restaurant's Closed
+  16:00 → 18:00; Save → one request whose `departments[0].days` Tuesday is `[p1 13:00–16:00]` and
+  whose `zones` holds exactly `{ zoneId: "z2" }` with Tuesday `[15:00–16:00]` and every other day as
+  stored (both bodies asserted whole). (`season-painter.test.ts`): "widening a department's day
+  leaves its zones unedited"; "a department change on a day its zone has no closure leaves the zone
+  unedited".
+- [ ] **Step 2–4:** FAIL, implement, PASS for every `season-painter*` file; `typecheck`, `lint`.
+- [ ] **Step 5:** `git commit -s -m "Shrinking a department's day in the season painter cuts its zones' closures that day (A723)"`
+
+**Existing checks that change:** none expected — the one winter department stroke on Tuesday
+(`season-painter.save.test.ts:427`) runs after stepping to Spring, where Terrace has no closures.
+Any `edited()` or body assertion that now gains a zone is a STOP: report it.
+
+## Task 9a: The special-day editor cuts a zone's Closed paint, draws a closed department, and explains a refusal
+
+**Files:** Modify `special-day-painter.ts` (`paintArea` `:1276-1375`, `refusePaint`
+`:1007-1057`); Test `special-day-painter.paint.test.ts`, `special-day-painter.save.test.ts`.
 
 For a zone, `closedWithin` maps each date not ticked closed all day, whose season day is known
-(`this.seasonDays`), to the department's open blocks: `layerPaint(season.ranges,
-draft paint of the department on that date, cutover)`. Memoise as `underlay` does (`:1196-1245`);
-a date with no season day is left out (not bounded). `refuse` sends `zone_closed_time.invalid` with
-a `zonePaint…` field to `refusePaint` (which matches it like `special_day.invalid`), whose reason
-for `outside_hours` is `t("opening.closed_outside")`.
+(`this.seasonDays`), to the department's open blocks: `layerPaint(season.ranges, draft paint of the
+department on that date, cutover)`. Memoise as `underlay` does (`:1196-1245`); a date with no season
+day is left out (not bounded). `closedBehind` labels each such date whose department open blocks
+are empty `painter.department_closed` (a date ticked closed all day keeps `closedAllDay`, as
+today). `paint-outside` sets the notice beside Save to `t("opening.closed_outside")`. `refusePaint`
+already reads `special_day.invalid` with a `zonePaint…` field (Decision 2); its reason for
+`outside_hours` becomes `t("opening.closed_outside")`.
 
-- [ ] **Step 1: failing tests:** `special-day-painter.paint.test.ts` — "a zone's Closed stroke keeps
+- [ ] **Step 1 — wire first, then look:** add `closedWithin` alone; run every
+  `special-day-painter*.test.ts` and `opening-hours-screen.special-day.test.ts`; write down every
+  failure (file:line, test name, what it painted). These are the changed checks: each paints a zone's
+  Closed where the fixture's department has no season hours on that date, and gets those hours
+  through the fixture's `season` answer (setup), its assertions unchanged. A failure of any other
+  kind, or one that needs an assertion value changed, is a STOP.
+- [ ] **Step 2: failing tests:** `special-day-painter.paint.test.ts` — "a zone's Closed stroke keeps
   only the times its department is open on that date" (season Restaurant 20:00–23:30, a Terrace
-  drag 19:00 → 21:00 → `[{ null, 20:00–21:00 }]`); "Open paint is not cut". `.save.test.ts` — "an
-  outside_hours refusal shows that zone, marks the date and says why" (`{ code:
-  "zone_closed_time.invalid", params: { field: "zonePaint.0.ranges.0", reason: "outside_hours",
-  zoneId: "z2", date: DEC_15 } }`).
-- [ ] **Step 2–4:** FAIL, implement, PASS for every `special-day-painter*.test.ts` and
-  `opening-hours-screen.special-day.test.ts`; `typecheck`, `lint`.
+  drag 19:00 → 21:00 → `[{ null, 20:00–21:00 }]`); "Open paint is not cut"; "a stroke wholly
+  outside says why beside Save"; "a date whose department has no hours shows '<department> closed
+  all day' behind the zone's paint". `.save.test.ts` — "an outside_hours refusal shows that zone,
+  marks the date and says why" (`{ code: "special_day.invalid", params: { field:
+  "zonePaint.0.ranges.0", reason: "outside_hours", zoneId: "z2", date: DEC_15 } }` → picker on
+  Terrace, `DEC_15`'s column marked "A zone can only close while its department is open.").
+- [ ] **Step 3–4:** FAIL, implement and update the set-ups from Step 1, PASS for the same files;
+  `typecheck`, `lint`.
 - [ ] **Step 5:** `git commit -s -m "The special-day editor keeps a zone's Closed paint inside its department's hours (A723)"`
 
-**Existing checks that change:** not probed. A zone Closed stroke where the fixture's department
-has no season hours on that date is now cut; such a test gets the department season hours under its
-stroke through the fixture's `season` answer (setup), its assertions unchanged — each listed in the
-task report. A changed assertion value is a STOP.
+**Existing checks that change:** the Step 1 list (setup only), copied into the task report and the
+PR's "Changed test checks".
 
-## Task 10: Save closes both painters
+## Task 9b: Changing a department's paint on a date cuts its zones' paint that date
+
+**Files:** Modify `special-day-painter.ts` (`paint`, `:1179-1184`); Test
+`special-day-painter.save.test.ts`.
+
+When `paint(owner, event)` changes a department's paint on a date that has a known season day and
+is not ticked closed all day, each of that department's zones whose draft paint on that date
+changes under `closuresInHours` (Closed blocks only; Open blocks kept) against the department's new
+open blocks takes the cut paint in the same `change(...)`, so `changedPaint()` sends it beside the
+department's entry.
+
+- [ ] **Step 1: failing tests:** **"shrinking Restaurant on a date cuts Terrace's closure that
+  date in the same Save"** — stored Terrace Closed 21:00–23:00 on `DEC_15`, season Restaurant
+  20:00–23:30; paint Restaurant Closed 22:00 → 23:30 on `DEC_15`; Save → `paint` holds Restaurant's
+  `DEC_15` entry and `zonePaint` exactly `[{ zoneId: "z2", date: DEC_15, ranges: [{ kind: "closed",
+  startsAt: "21:00", endsAt: "22:00" }] }]` (both arrays asserted whole); "Terrace's Open paint that
+  date is kept"; "a department change that leaves the zone inside sends no zone entry".
+- [ ] **Step 2–4:** FAIL, implement, PASS for every `special-day-painter*` file; `typecheck`,
+  `lint`.
+- [ ] **Step 5:** `git commit -s -m "Changing a department's special-day paint cuts its zones' closures that date (A723)"`
+
+**Existing checks that change:** none expected; a sent body that now gains a zone entry is a STOP.
+
+## Task 10a: Save closes the season painter
 
 Spec point 4: "**Save closes.** One Save sends every department and zone changed, then closes the
 painter; a refused save keeps it open with its message beside Save. The same in the special-day
 editor."
 
-**Files:** Modify `season-painter.ts:458-514`, `special-day-painter.ts:876-937`,
-`opening-hours-screen.ts:1066-1135`; Test `opening-hours-screen.painter.test.ts`,
-`opening-hours-screen.special-day.test.ts`, `season-painter.save.test.ts`,
-`special-day-painter.save.test.ts`.
+**Files:** Modify `season-painter.ts:458-514`, `opening-hours-screen.ts:1066-1090`; Test
+`opening-hours-screen.painter.test.ts`, `season-painter.save.test.ts`.
 
-**Interfaces — Produces:**
-- `season-painter` dispatches `season-week-saved`, `CustomEvent<{ clean: boolean }>` (bubbles,
-  composed) after a successful save it still owns, once its baseline is committed;
-  `clean = !this.scope?.isDirty()`.
-- `special-day-saved`'s detail becomes `{ detail: SpecialDayDetail; clean: boolean }`, `clean`
-  likewise after `adopt`.
-- The screen: on either event with `clean` from the current painter (`currentPainter(event)`), call
-  `closePainter()` (for a new special day, without first replacing the address with its id). Not
-  clean: as today.
+**Interfaces — Produces:** `season-painter` dispatches `season-week-saved`,
+`CustomEvent<{ clean: boolean }>` (bubbles, composed) after a successful save it still owns, once
+its baseline is committed; `clean = !this.scope?.isDirty()`. The screen, on that event from the
+current painter (`currentPainter(event)`) with `clean`, calls `closePainter()`; not clean, nothing
+(Decision 6).
 
-- [ ] **Step 1: failing tests:**
-  - `opening-hours-screen.painter.test.ts`: "Save closes the painter and returns to the view it
-    opened over" (open from a season chip, paint, Save → the painter is gone, `history.back` taken,
-    the Year shown); "a refused Save keeps the painter open with its message beside Save"; "a paint
-    made while the save is in flight keeps the painter open, unsaved" (Review Focus 5).
-  - `opening-hours-screen.special-day.test.ts`: "Save on a new special day picked on the Month
-    closes the editor back to the Month, and Back does not reopen it" (Review Focus 4); "Save on a
-    stored day closes the editor"; "a refused save keeps it open".
-  - `season-painter.save.test.ts`: "a save sends season-week-saved, clean unless painted during the
-    save"; `special-day-painter.save.test.ts`: the same for `clean` on `special-day-saved`.
-- [ ] **Step 2–4:** FAIL, implement, PASS for those files and every `season-painter*` and
-  `special-day-painter*` file (the after-save cases stay as they are: the painter no longer closes
-  itself); `typecheck`, `lint`.
-- [ ] **Step 5:** `git commit -s -m "Save closes the season painter and the special-day editor (A723)"`
+- [ ] **Step 1: failing tests:** `opening-hours-screen.painter.test.ts`: "Save closes the painter
+  and returns to the view it opened over" (open from a season chip, paint, Save → the painter is
+  gone, `history.back` taken, the Year shown); "Save on a painter loaded directly closes onto the
+  Year by replacement"; "a refused Save keeps the painter open with its message beside Save"; "a
+  paint made while the save is in flight keeps the painter open, unsaved" (Review Focus 5).
+  `season-painter.save.test.ts`: "a save sends season-week-saved, clean unless painted during the
+  save".
+- [ ] **Step 2–4:** FAIL, implement, PASS for those files and every `season-painter*` file (the
+  after-save cases stay as they are: the painter does not close itself); `typecheck`, `lint`.
+- [ ] **Step 5:** `git commit -s -m "Save closes the season painter (A723)"`
+
+**Existing checks that change:** none expected.
+
+## Task 10b: Save closes the special-day editor
+
+**Files:** Modify `special-day-painter.ts:876-937`, `opening-hours-screen.ts:1092-1135`; Test
+`opening-hours-screen.special-day.test.ts`, `special-day-painter.save.test.ts`.
+
+**Interfaces — Produces:** `special-day-saved`'s detail becomes `{ detail: SpecialDayDetail;
+clean: boolean }`, `clean = !this.scope?.isDirty()` after `adopt`. The screen, on a clean save from
+the current painter, calls `closePainter()` — for a new day without first replacing the address
+with its id; not clean, as today (a new day's address takes its id).
+
+- [ ] **Step 1: failing tests:** `opening-hours-screen.special-day.test.ts`: "Save on a new special
+  day picked on the Month closes the editor back to the Month, and Back does not reopen it" (Review
+  Focus 4); "Save on a stored day closes the editor"; "a refused save keeps it open"; "a paint made
+  while the save is in flight keeps it open, and a new day's address takes its id".
+  `special-day-painter.save.test.ts`: "special-day-saved says clean unless painted during the save".
+- [ ] **Step 2–4:** FAIL, implement, PASS for those files and every `special-day-painter*` file;
+  `typecheck`, `lint`.
+- [ ] **Step 5:** `git commit -s -m "Save closes the special-day editor (A723)"`
 
 **Existing checks that change:** an assertion that pins `special-day-saved`'s whole detail gains
 the `clean` key (owner, 2026-09-27: a whole-shape pin may gain the new field's key, every existing
@@ -737,46 +859,64 @@ click, a plain arrow, a cancelled gesture, or a long press that opens.
 
 **Existing checks that change:** none.
 
-## Task 12: The special-day editor's calendar: click toggles, drag or shift-click adds, no Range
+## Task 12a: A click on a chosen date removes it
 
 Spec point 7: "**The special-day editor's Range button goes.** A click adds or removes a date; a
 drag or a shift-click adds a run; one hint line says so. `DayPicker` (`day-picking.ts`), with
 `dragOnTouch` on inside the dialog."
 
-**Files:** Modify `add-dates-calendar.ts`, `special-day-painter.ts:1121-1143`, `:1495-1504`,
-`strings.ts`; Test `add-dates-calendar.test.ts`, `add-dates-calendar.a11y.test.ts`,
-`special-day-painter.test.ts`.
+**Files:** Modify `add-dates-calendar.ts` (`#click`, `:209-226`; the pressed button's
+`cursor: default`, `:107`), `special-day-painter.ts:1121-1143`, `:1495-1504`; Test
+`add-dates-calendar.test.ts`, `special-day-painter.test.ts`.
 
-**Interfaces — Produces:** `export interface RemoveDates { dates: LocalDate[] }`; the calendar
-sends `remove-dates` for a click on a chosen date, `add-dates` for a click on any other and for
-each `ranged` run (only the dates not already chosen; a run over `HOURS_RANGE_MAX_DAYS` adds nothing
-and shows `special.range_long`). `DayPicker` with `{ button, canPick: () => true, dragOnTouch:
-true, choose, ranged }` replaces `#click`, `#keydown`, `anchor`, `ranging`, `focusDate`; the
-handlers bind on the table; a date inside `picker.run` while a gesture is under way is drawn with
-the old anchor ring (`data-picked`); `pointed` still follows focus and click. The Range button,
-its style and the two strings go; `<p class="hint" data-test="hint">` reads `special.pick_hint`,
-the message line stays. The painter's `@remove-dates` calls `removeDates` for each date (one date
-at a time, `removeDates(date, date)`).
+**Interfaces — Produces:** `export interface RemoveDates { dates: LocalDate[] }`; the calendar sends
+`remove-dates` (bubbles, composed) for a plain click on a chosen date, still `add-dates` for a
+plain click on any other. The painter's `@remove-dates` stops it and calls `removeDates(date,
+date)` for each date (the date and its paint leave the draft, as the chip's ✕ does).
 
-- [ ] **Step 1: failing tests** (`add-dates-calendar.test.ts`): "a click on a chosen date sends
-  remove-dates"; "a mouse drag across dates adds the run on release, drawn marked while dragging";
-  "a touch drag adds the run and does not scroll the page" (`dragOnTouch`, as
-  `day-picking.test.ts:482`); "shows one hint line and no Range button, in English and Spanish";
-  `special-day-painter.test.ts`: "remove-dates takes the date and its paint out of the draft".
-- [ ] **Step 2–4:** FAIL, implement, PASS for the three files and `special-day-painter.a11y.test.ts`;
+- [ ] **Step 1: failing tests:** `add-dates-calendar.test.ts` — "a click on a chosen date sends
+  remove-dates with that date"; `special-day-painter.test.ts` — "remove-dates takes the date and its
+  paint out of the draft".
+- [ ] **Step 2–4:** FAIL, implement, PASS for both files and `add-dates-calendar.a11y.test.ts`;
   `typecheck`, `lint`.
-- [ ] **Step 5:** `git commit -s -m "The special-day editor's calendar: a click adds or removes, a drag or shift-click adds a run; Range goes (A723)"`
+- [ ] **Step 5:** `git commit -s -m "A click on a chosen date in the special-day editor removes it (A723)"`
 
-**Existing checks that change** (`add-dates-calendar.test.ts`; Range is removed by point 7, and a
-click on a chosen date now removes it):
+**Existing checks that change:** `add-dates-calendar.test.ts:159-172` "draws chosen dates pressed
+and sends nothing for them, leaving them out of a range": the pressed state and the range leaving
+chosen dates out stay; "sends nothing" for a click on a chosen date → sends `remove-dates` with
+that date (point 7: "A click adds or removes a date").
+
+## Task 12b: The calendar picks through `DayPicker`; Range goes; one hint line
+
+**Files:** Modify `add-dates-calendar.ts`, `strings.ts`; Test `add-dates-calendar.test.ts`,
+`add-dates-calendar.a11y.test.ts`.
+
+`DayPicker` with `{ button, canPick: () => true, dragOnTouch: true, choose, ranged }` replaces
+`#click`, `#keydown`, `anchor`, `ranging` and `focusDate`; its handlers bind on the table. `choose`
+adds or removes the date (Task 12a's rule); `ranged` adds the run's dates not already chosen, or,
+over `HOURS_RANGE_MAX_DAYS`, adds nothing and shows `special.range_long`. A date inside
+`picker.run` while a gesture is under way is drawn with the old anchor ring (`data-picked`);
+`pointed` still follows focus and click. The Range button, its style and the two strings go;
+`<p class="hint" data-test="hint">` reads `special.pick_hint`; the message line stays.
+**`DayPicker` ignores the second click of a fast double-click** (`day-picking.ts:299`,
+`event.detail > 1`), so a double-click on a date toggles it once, not twice; the calendar passes no
+`open`, so the double-click itself does nothing.
+
+- [ ] **Step 1: failing tests** (`add-dates-calendar.test.ts`): "a mouse drag across dates adds the
+  run on release, drawn marked while dragging"; "a touch drag adds the run and does not scroll the
+  page" (`dragOnTouch`, as `day-picking.test.ts:482`); "Shift+arrow adds the run" (Decision 12);
+  "a double-click on a date adds it once" (`userEvent.dblClick`: one `add-dates`, no
+  `remove-dates`); "shows one hint line and no Range button, in English and Spanish".
+- [ ] **Step 2–4:** FAIL, implement, PASS for both files, `special-day-painter.a11y.test.ts` and
+  `special-day-painter.test.ts`; `typecheck`, `lint`.
+- [ ] **Step 5:** `git commit -s -m "The special-day editor's calendar: a drag or shift-click adds a run, and Range goes (A723)"`
+
+**Existing checks that change** (`add-dates-calendar.test.ts`; Range is removed by point 7):
 - `:70` `text(testId(el, "range"))` "Intervalo" → the hint's Spanish text.
 - `:125-142` "makes the next two clicks a range while Range is on, then turns it off" — removed with
-  Range; replaced by the drag cases above.
+  Range; replaced by the drag and Shift+arrow cases above.
 - `:144-157` "turning Range off before the second click forgets its first" — removed with Range;
   the shift-click anchor it relied on stays covered by `:93-106` and `:115-123`, unchanged.
-- `:159-172` "draws chosen dates pressed and sends nothing for them, leaving them out of a range":
-  pressed state and the run leaving chosen dates out stay; "sends nothing" for a click on a chosen
-  date → sends `remove-dates` with that date.
 - `:275-292` "keeps Range on with its first date when its range is too long" — removed with Range;
   `:259-273` (a too-long shift-click keeps its first date) still covers the limit.
 - `:294-315` (arrow keys, one Tab stop) and `:221-231` (the holder named on arrows) should pass
@@ -793,23 +933,29 @@ click on a chosen date now removes it):
 - [ ] `design-system.md:2158-2183` (season painter): heading "<season>: standard week"; the line
   under the bar; no follows note; "(✎ Edit edits one)"; a zone paints Closed only where its
   department is open, a stroke cut to those hours; Save writes the edited weeks in one request and
-  closes the painter, a refusal keeping it open (an `outside_hours` refusal named). `:2184-2223`
+  closes the painter, a refusal keeping it open (an `outside_hours` refusal named); a zone's day
+  whose department is closed shows "<department> closed all day" behind its paint; changing a
+  department's day cuts its zones' closures that day. `:2184-2223`
   (special-day painter): the calendar sentence (click adds or removes, a drag or shift-click adds a
   run, at most 366, one hint line; no Range); a zone's Closed paint cut to its department's hours on
-  that date; **`:2205` "the painter stays open and the answer becomes the saved state" → "Save
+  that date, and a department's changed paint cutting its zones' closures that date; **`:2205` "the painter stays open and the answer becomes the saved state" → "Save
   closes the painter; a refused save keeps it open with its message beside Save; paint made while a
   save is in flight keeps it open, unsaved."**
 - [ ] `docs/backlog.md:1459-1463`: delete the A723 entry. `docs/backlog/service-periods.md:166-192`:
   delete the A723 section. A762 (`:194-210`) stays; its point 2 gains one line: "A723 kept the
   special-day editor's heading as the day's name with no dates line (A723 plan, Decision 9)."
 - [ ] Open points, each its own short entry in the Service periods area (one line in
-  `docs/backlog.md`, detail in `service-periods.md`): (a) a department-hours change (menu week,
-  period delete, a department's paint, moving a zone) leaves a stored zone closure outside the new
-  hours, and the next save of that zone is refused (Decision 3); (b) the mockup's "Santet Deli Co
-  closed all day" on a zone's day when the department is closed (Decision 7); (c) the route-level
-  placement of the check: a direct caller of the writers is not checked (Decision 1);
-  (d) `opening.follow_week` and `menu.normal_week` have no reader; (e) the plan defaults sent to the
-  owner as an FYI (Decisions 1, 3, 6, 7, 9).
+  `docs/backlog.md`, detail in `service-periods.md`): (a) a server-side department-hours change
+  (the menu-week route, period delete, moving a zone to another department, an API call sending
+  only a department) leaves a stored zone closure outside the new hours, and the next save of that
+  zone is refused naming that day (Decision 3); (b) the route-level placement of the check: a
+  direct caller of the writers is not checked (Decision 1); (c) unticking a special date's "closed
+  all day" makes the zone paint stored on it count again, unchecked against the department's hours
+  (Decision 4); (d) moving or deleting a season changes which season week a special date falls in,
+  so a zone closure checked against one week can end up outside the next, unchecked; (e) a yearly
+  special day's zone paint is checked only against its stored date's season and weekday, not each
+  year's; (f) `opening.follow_week` and `menu.normal_week` have no reader; (g) the plan defaults
+  sent to the owner as an FYI (Decisions 1, 3, 6, 7, 9).
 - [ ] `service-periods.md` "## Decisions and deliberate limits": Decisions 2, 4, 5 and 8, one line
   each, "(A723 plan, Decision N; plan default)".
 - [ ] `git commit -s -m "docs: the painters say what they edit, close on Save, and keep a zone's closures inside opening hours (A723)"`
@@ -825,7 +971,8 @@ click on a chosen date now removes it):
   scripts in `~/waitron-campaign/a723-script/`, PNGs in `~/waitron-campaign/a723-shots/`. At 390 px
   (touch) and 1280 px, light and dark, English and Spanish, capture: the season painter on a
   department (title, line, "✎ Edit" chips), on Terrace (no follows note), Terrace's Tuesday after a
-  drag past the Restaurant's close (cut, as mockup note E), a refused save beside Save; the
+  drag past the Restaurant's close (cut, as mockup note E), a zone's day with its department closed
+  ("Restaurant closed all day" behind the paint), a refused save beside Save; the
   special-day editor (calendar with the hint and no Range, a run being dragged, a date removed by a
   click, a touch drag at 390 px not scrolling the page); after Save, each painter closed onto the
   view it opened over. Put back anything changed in the demo venue through the dashboard, and say
@@ -846,4 +993,5 @@ click on a chosen date now removes it):
   import's `setup.request_invalid { field: "zone_day_ranges" }`; the demo seed's Terrace closure.
 - **"Changed test checks":** the union of every task's list, each with its reason.
 - The plan defaults sent to the owner as an FYI (Decisions 1, 3, 6, 7, 9), with the receipts.
+- The Spanish wording change ("semana estándar", Decision 8).
 - **"LOOK":** what Task 14 captured.
