@@ -57,7 +57,7 @@ useVenueDb({
 const takeOff = (tableId: string) => inTx(v, (tx) => takeOffToday(tx, v.cfg, tableId));
 const putBack = (tableId: string) => inTx(v, (tx) => putBackToday(tx, v.cfg, tableId));
 const seats = (tableId: string, n: number) => inTx(v, (tx) => seatsToday(tx, v.cfg, tableId, n));
-const back = (tableId: string) => inTx(v, (tx) => backToSaved(tx, v.cfg, tableId));
+const back = (tableId: string) => inTx(v, (tx) => backToSaved(tx, v.cfg, REMOVALS, tableId, NOW));
 const reset = (zoneId: string) =>
   inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 

@@ -552,7 +552,11 @@ describe("stale floor identifiers", () => {
     ["table take off", "table.not_found", (tx, f) => takeOffToday(tx, v.cfg, f.tableId)],
     ["table put back", "table.not_found", (tx, f) => putBackToday(tx, v.cfg, f.tableId)],
     ["table seats", "table.not_found", (tx, f) => seatsToday(tx, v.cfg, f.tableId, 4)],
-    ["table back to saved", "table.not_found", (tx, f) => backToSaved(tx, v.cfg, f.tableId)],
+    [
+      "table back to saved",
+      "table.not_found",
+      (tx, f) => backToSaved(tx, v.cfg, [], f.tableId, new Date()),
+    ],
     [
       "table spare placement",
       "table.not_found",

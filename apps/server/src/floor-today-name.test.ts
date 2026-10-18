@@ -11,6 +11,7 @@ import {
 } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
+import { markMoved } from "./floor-today-mark-moved.js";
 import { nameToday, sameName } from "./floor-today-name.js";
 import { resetTable } from "./floor-today-reset-table.js";
 import { splitJoinedTable } from "./floor-today-split.js";
@@ -599,7 +600,7 @@ describe("what moves, ends or keeps today's name", () => {
     await rename(table.bar!, suffixed("Pair"));
     const { joinId } = (await mergeOf(v, table.bar!))!;
 
-    await inTx(v, (tx) => backToSaved(tx, v.cfg, table.bar!));
+    await inTx(v, (tx) => backToSaved(tx, v.cfg, [], table.bar!, new Date()));
 
     expect(await joinRow(joinId)).toEqual([]);
   });
@@ -723,7 +724,7 @@ describe("what moves, ends or keeps today's name", () => {
     const window = suffixed("Window");
     await rename(table.window!, window);
 
-    await inTx(v, (tx) => backToSaved(tx, v.cfg, table.window!));
+    await inTx(v, (tx) => backToSaved(tx, v.cfg, [], table.window!, new Date()));
     expect(await nameOf(table.window!)).toBe(window);
     await inTx(v, (tx) => takeOffToday(tx, v.cfg, table.window!));
     await inTx(v, (tx) => putBackToday(tx, v.cfg, table.window!));
@@ -885,6 +886,26 @@ describe("a reset clears today's name", () => {
 
     await finish(partyId);
     await resetRoom(zoneId);
+
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await nameOf(table.c5!)).toBeNull();
+    await rename(table.bar!, corner);
+    expect(await nameOf(table.bar!)).toBe(corner);
+  });
+
+  it("a part Mark moved takes back into Long table once its guests leave loses its name, which is then free", async () => {
+    const { table, zoneId } = await LONG_TABLE();
+    const { partyId } = await seat(v, table.long!);
+    await resetRoom(zoneId);
+    await splitOffLong(table, [table.c5!], 6);
+    const corner = suffixed("Corner");
+    await rename(table.c5!, corner);
+    await finish(partyId);
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, new Date()));
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await nameOf(table.c5!)).toBe(corner);
+
+    await inTx(v, (tx) => markMoved(tx, v.cfg, REMOVALS, table.long!, new Date()));
 
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await nameOf(table.c5!)).toBeNull();

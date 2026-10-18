@@ -444,14 +444,16 @@ describe("Back to its saved place on a joined table", () => {
     await split(table.long!, [table.c5!], 6);
     const longBefore = await todayRow(v, table.long!);
 
-    const error = await refusalOf(inTx(v, (tx) => backToSaved(tx, v.cfg, table.long!)));
+    const error = await refusalOf(
+      inTx(v, (tx) => backToSaved(tx, v.cfg, [], table.long!, new Date())),
+    );
 
     expect(error?.code).toBe("joined_table.parts_split_off");
     expect(error?.params).toEqual({ tableId: table.long! });
     expect(await todayRow(v, table.long!)).toEqual(longBefore);
 
     await inTx(v, (tx) => moveToday(tx, v.cfg, table.bar!, { x: 60, y: 60 }));
-    await inTx(v, (tx) => backToSaved(tx, v.cfg, table.bar!));
+    await inTx(v, (tx) => backToSaved(tx, v.cfg, [], table.bar!, new Date()));
     expect(await todayRow(v, table.bar!)).toMatchObject({ x: 40, y: 0 });
   });
 });
@@ -665,7 +667,9 @@ describe("taking a joined table's tables off for today", () => {
     await split(table.long!, [table.c5!], 6);
     const before = await everything();
 
-    const error = await refusalOf(inTx(v, (tx) => backToSaved(tx, v.cfg, table.c5!)));
+    const error = await refusalOf(
+      inTx(v, (tx) => backToSaved(tx, v.cfg, [], table.c5!, new Date())),
+    );
 
     expect(error?.code).toBe("table.split_off");
     expect(error?.params).toEqual({ tableId: table.c5! });

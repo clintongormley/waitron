@@ -36,6 +36,7 @@ import {
 import {
   expectRevision,
   giveKeptSize,
+  needingMoving,
   plannedZone,
   tableServiceZone,
   todayRow,
@@ -224,6 +225,13 @@ describe("the table routes' revision", () => {
         const { zoneId, table } = await ROOM();
         await expectRevision(v, today(table.a!, "move", { x: 30, y: 30 }), zoneId);
         return { zoneId, tableId: table.a!, body: {} };
+      },
+    ],
+    [
+      "mark-moved",
+      async () => {
+        const { zoneId, tableId } = await needingMoving(v);
+        return { zoneId, tableId, body: {} };
       },
     ],
     [

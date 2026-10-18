@@ -46,6 +46,7 @@ import {
   type Target,
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
+import { markMoved, tableNeedsMoving } from "./floor-today-mark-moved.js";
 import { standsInSql } from "./joined-split-layout.js";
 import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
@@ -277,6 +278,8 @@ export interface CatchUp {
   inReset: boolean;
   /** A table taken off today stays off at its new place. */
   keepTakenOff: boolean;
+  /** Marked reset rows Mark moved applies though their tables move. */
+  carry?: ReadonlySet<string>;
 }
 
 /** Applies the zone's PENDING reset rows that can be applied now, repeating while a pass changes something. */
@@ -302,7 +305,7 @@ async function catchUpPass(
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
-  { inReset, keepTakenOff }: CatchUp,
+  { inReset, keepTakenOff, carry = new Set() }: CatchUp,
 ): Promise<boolean> {
   const zoneRows = await tx
     .select({
@@ -403,6 +406,7 @@ async function catchUpPass(
   // A marked group waits for Mark moved while any of its tables would still move; once none
   // would (taken off, say), it applies as any other row does (plan decision 10).
   for (const id of stillToMove(rowOf, [...groupOf.values()], moves)) {
+    if (carry.has(id)) continue;
     for (const [target, row] of rowOf) if (row.id === id) rowOf.delete(target);
   }
   const targets = [...rowOf.keys()];
@@ -1173,14 +1177,18 @@ export async function seatsToday(
  * Sets the table's today's row from what the last reset copied for it, after it leaves any merge.
  * Its label and its today's name are left alone. The kitchen is told of each bill of a party at the
  * table's group, and each counter order with food on its way to one of its tables, when
- * `kitchenToBeTold` (kitchen-print.ts) says so.
+ * `kitchenToBeTold` (kitchen-print.ts) says so. On a table that needs moving it is Mark moved
+ * (plan decision 23).
  */
 export async function backToSaved(
   tx: Transaction,
   cfg: TillConfig,
+  removals: readonly TableRemoval[],
   tableId: string,
+  now: Date,
 ): Promise<void> {
   const { row, merge } = await todayOf(tx, cfg, tableId);
+  if (await tableNeedsMoving(tx, tableId)) return markMoved(tx, cfg, removals, tableId, now);
   await refuseSplitOff(tx, tableId);
   const [splitOff] = await tx
     .select({ id: floorTodaySplitParts.id })
