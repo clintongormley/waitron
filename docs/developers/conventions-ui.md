@@ -420,8 +420,8 @@ copying the tables.
 
 Put it at the very top of the page at full width, with the menu and content underneath. Show the
 canonical Waitron lockup and the deployment tenant's legal name on login and every authenticated
-screen. Put the account menu (a person-icon `wt-row-actions` popover holding Account settings, Theme
-and Log out) at the trailing edge only when a session exists. Use the tenant name, not a location: a
+screen. Put the account menu (a person-icon `wt-row-actions` popover holding Account settings, Theme,
+Language and Log out) at the trailing edge only when a session exists. Use the tenant name, not a location: a
 deployment database has one tenant and that tenant can contain several locations
 (`packages/db/src/schema/tenants.ts`).
 

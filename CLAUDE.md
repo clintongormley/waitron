@@ -310,7 +310,7 @@ called weaker than its name, the topic file lists what it does not see.
   [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
   legal name (not a location). The account menu (a person-icon `wt-row-actions` popover holding
-  Account settings, Theme and Log out) sits at the trailing edge only when a session exists.
+  Account settings, Theme, Language and Log out) sits at the trailing edge only when a session exists.
 - **The dashboard matches the browser's `Accept-Language` when no language is saved.** Guard against
   a late locale response overwriting an authenticated person's language or an explicit choice.
 - **Dashboard login offers methods without revealing account enrolment.** Never query account status

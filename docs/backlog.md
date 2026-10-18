@@ -3722,9 +3722,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [mockups/a582-help-mode/](backlog/mockups/a582-help-mode/)). Slice 1 of 5 landed (#1846: the
   help badge, the help switch's state and the help slots in `packages/ui`), and the shared half of
   slice 2 landed (#1848: a menu option with a help badge beside it, the help switch button, and
-  help on table columns and tabs, in `packages/ui`). Nothing turns help on yet, so every "?" still
-  shows as before. Next: slice 2's dashboard half, which lands only after the owner answers Q41
-  (where the switch goes in the banner at phone width); then slices 3–5, in the design's §8 order. On the dashboard and on every device — tills, handhelds, and probably the
+  help on table columns and tabs, in `packages/ui`); its dashboard half is this pull request (the
+  "?" in the banner, help on Products and in two menus, the five existing "?" shown only in help
+  mode, and, by the owner's answer B to Q41, the language choices in the account menu when signed
+  in). Next: slices 3–5, in the design's §8 order. On the dashboard and on every device — tills, handhelds, and probably the
   kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
   on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows
   the help or opens its page in the documentation. Nothing changes on the page while it is off.
@@ -3885,13 +3886,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **Override PIN limits (C89, #951), for the owner** — **Next action:** the owner decides whether to
   add the countdown and make the limit required. Left open by service Task 11 (#916).
   [Detail](backlog/till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
-
-- On the dashboard, the language chooser's menu is now a native popover in the top layer (A187), so
-  it paints over the alert pop-up (`.alert-toast` in `apps/dashboard/src/dashboard-app.ts`): where
-  the two overlap, an alert arriving while the menu is open is hidden under it, and its countdown
-  keeps running. Decide whether an arriving alert should close the menu. Left open by C133 (#1045,
-  the till's tabs fit one screen), under service Task 16 (#981).
-  [Detail](backlog/till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)
 
 - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Why that
   screen behaved differently has not been established. Left open by the service, ordering and

@@ -832,14 +832,10 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     space changes the screen's layout, so it is its own change. Likewise the till's
     `.submitted-toast` (`apps/till/src/till-app.ts`) still sits one tap target and two gaps
     above the bottom edge, the room the old bottom-right language button (later the footer)
-    took; decide whether it should drop to the bottom edge. On the dashboard, the language
-    chooser's menu is now a native popover in the top layer (A187), so it paints over the alert
-    pop-up (`.alert-toast` in `apps/dashboard/src/dashboard-app.ts`, which hangs below the
-    banner's row at its trailing edge, under the update bar while that shows, with `z-index: 40`, a stacking order the top layer ignores): where
-    the two overlap, an alert arriving while the menu is open is hidden under it, and its
-    countdown keeps running,
-    since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it only while the pointer
-    or keyboard focus is on the pop-up. Decide whether an arriving alert should close the menu.
+    took; decide whether it should drop to the bottom edge. (The dashboard half of this point, the language
+    chooser's menu painting over an arriving alert, no longer arises since A582's slice 2b: signed
+    in, the banner has no language chooser, and alerts arrive only signed in. Read from
+    `apps/dashboard/src/dashboard-app.ts`, `#banner` and `#returnToLogin`, not run.)
 
 ## Task 17 (#991, a table that leaves without paying)
 
