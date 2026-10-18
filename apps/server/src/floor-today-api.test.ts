@@ -1258,7 +1258,7 @@ async function inService(tableId: string): Promise<boolean> {
 }
 
 describe("resetting a zone onto a layout", () => {
-  it("with no record yet, resets onto the department's default set and records it", async () => {
+  it("with no record yet, leaves the zone as it is when its due set holds no saved layout", async () => {
     const zone = await inTx(v, async (tx) => {
       const department = await createDepartment(tx, v.cfg, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
@@ -1287,12 +1287,12 @@ describe("resetting a zone onto a layout", () => {
       return { zoneId, standard: set!.id };
     });
 
-    await expectRevision(v, resetZoneToday(zone.zoneId), zone.zoneId, 1);
+    await expectRevision(v, resetZoneToday(zone.zoneId), zone.zoneId, 0);
 
     const [row] = await inTx(v, (tx) =>
       tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zone.zoneId)),
     );
-    expect(row).toMatchObject({ setId: zone.standard, layoutRevision: 0, occurrence: null });
+    expect(row).toBeUndefined();
   });
 
   it("leaves a zone whose department has no set as it is, answering its revision", async () => {
