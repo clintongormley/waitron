@@ -24,7 +24,7 @@ import type { Paint } from "../paint-model.js";
 import { rebaseDays, refill, samePaint, savedBlocks, withoutPeriods } from "../paint-model.js";
 import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
 import { closuresInHours } from "../zone-own-hours.js";
-import type { AddDates } from "./add-dates-calendar.js";
+import type { AddDates, RemoveDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
@@ -1137,6 +1137,10 @@ export class SpecialDayPainter extends LitElement {
       ),
     });
   }
+  private removeChosen(event: CustomEvent<RemoveDates>) {
+    event.stopPropagation();
+    for (const date of event.detail.dates) this.removeDates(date, date);
+  }
   /** Removes the dates from `first` to `last`, with their paint. */
   private removeDates(first: LocalDate, last: LocalDate) {
     const gone = (date: LocalDate) => date >= first && date <= last;
@@ -1606,6 +1610,7 @@ export class SpecialDayPainter extends LitElement {
                 .selected=${this.draft.dates.map(({ date }) => date)}
                 .taken=${this.taken}
                 @add-dates=${this.addDates}
+                @remove-dates=${this.removeChosen}
                 @month-change=${(event: CustomEvent<{ month: string }>) => {
                   event.stopPropagation();
                   this.showMonth(event.detail.month);

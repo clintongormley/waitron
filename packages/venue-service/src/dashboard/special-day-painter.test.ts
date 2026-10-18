@@ -1053,6 +1053,30 @@ describe("edges", () => {
     expect(saveButton(painter).disabled).toBe(false);
   });
 
+  it("remove-dates takes the date and its paint out of the draft", async () => {
+    const { painter } = await mount({ days: { sd1: paintedDay() } });
+    const outside: Event[] = [];
+    const listen = (event: Event) => outside.push(event);
+    document.body.addEventListener("remove-dates", listen);
+    part(painter, "add-dates")!.click();
+    await settle(painter);
+    painter.shadowRoot!.querySelector("add-dates-calendar")!.dispatchEvent(
+      new CustomEvent("remove-dates", {
+        detail: { dates: ["2026-12-14", "2026-12-25"] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(painter);
+    expect(chips(painter)).toEqual(["2026-12-15"]);
+    expect(grid(painter).columns.map(({ key }) => key)).toEqual(["2026-12-15"]);
+    document.body.removeEventListener("remove-dates", listen);
+    expect(outside).toEqual([]);
+    await addDates(painter, ["2026-12-14", "2026-12-25"]);
+    expect(chips(painter)).toEqual(["2026-12-14", "2026-12-15", "2026-12-25"]);
+    expect(saveButton(painter).disabled).toBe(false);
+  });
+
   it("dates the draft already holds add nothing", async () => {
     const { painter } = await mount();
     await addDates(painter, ["2026-12-14", "2026-12-14"]);

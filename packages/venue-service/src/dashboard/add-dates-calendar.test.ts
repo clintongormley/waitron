@@ -34,6 +34,13 @@ function added(el: AddDatesCalendar): LocalDate[][] {
   );
   return sent;
 }
+function removedBy(el: AddDatesCalendar): LocalDate[][] {
+  const sent: LocalDate[][] = [];
+  el.addEventListener("remove-dates", (event) =>
+    sent.push((event as CustomEvent<{ dates: LocalDate[] }>).detail.dates),
+  );
+  return sent;
+}
 async function shiftClick(el: AddDatesCalendar, date: LocalDate) {
   day(el, date).dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
   await el.updateComplete;
@@ -156,19 +163,39 @@ describe("Add-dates calendar", () => {
     expect(sent).toEqual([["2026-12-16"]]);
   });
 
-  it("draws chosen dates pressed and sends nothing for them, leaving them out of a range", async () => {
+  it("draws chosen dates pressed and a click on one sends remove-dates, leaving them out of a range", async () => {
     const el = await mount({ selected: ["2026-12-10", "2026-12-11"] });
     const sent = added(el);
+    const removed = removedBy(el);
     expect(day(el, "2026-12-10").getAttribute("aria-pressed")).toBe("true");
     expect(day(el, "2026-12-09").getAttribute("aria-pressed")).toBe("false");
     await userEvent.click(day(el, "2026-12-10"));
     expect(sent).toEqual([]);
+    expect(removed).toEqual([["2026-12-10"]]);
     await shiftClick(el, "2026-12-12");
     expect(sent).toEqual([["2026-12-12"]]);
     sent.length = 0;
     day(el, "2026-12-09").click();
     await shiftClick(el, "2026-12-11");
     expect(sent).toEqual([["2026-12-09"], ["2026-12-09"]]);
+  });
+
+  it("a click on a chosen date sends remove-dates with that date", async () => {
+    const el = await mount({ selected: ["2026-12-10"] });
+    const sent = added(el);
+    const removed: CustomEvent<{ dates: LocalDate[] }>[] = [];
+    const listen = (event: Event) => removed.push(event as CustomEvent<{ dates: LocalDate[] }>);
+    document.body.addEventListener("remove-dates", listen);
+    try {
+      await userEvent.click(day(el, "2026-12-10"));
+      expect(removed.map((event) => event.detail.dates)).toEqual([["2026-12-10"]]);
+      expect(removed[0]!.composed).toBe(true);
+      await userEvent.click(day(el, "2026-12-11"));
+      expect(sent).toEqual([["2026-12-11"]]);
+      expect(removed).toHaveLength(1);
+    } finally {
+      document.body.removeEventListener("remove-dates", listen);
+    }
   });
 
   it("marks a date another special day holds with its name, and still adds it", async () => {

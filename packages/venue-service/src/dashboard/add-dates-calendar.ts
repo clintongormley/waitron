@@ -12,6 +12,11 @@ export interface AddDates {
   dates: LocalDate[];
 }
 
+/** What `remove-dates` carries: chosen dates to take out of the draft. */
+export interface RemoveDates {
+  dates: LocalDate[];
+}
+
 /** The months the month read serves, so the host can read each month's taken dates. */
 const FIRST_MONTH = "0100-02";
 const LAST_MONTH = "9998-12";
@@ -29,9 +34,10 @@ function monthDates(month: string): LocalDate[] {
   return dates;
 }
 
-/** A month of dates to pick from: a click adds a date, a shift-click (or two clicks with Range on)
- *  adds every date between it and the last one clicked. Dates another special day holds are marked
- *  with its name but still offered; the server refuses them. ‹ › send `month-change`. */
+/** A month of dates to pick from: a click adds a date, or removes a chosen one; a shift-click (or
+ *  two clicks with Range on) adds every date between it and the last one clicked. Dates another
+ *  special day holds are marked with its name but still offered; the server refuses them. ‹ › send
+ *  `month-change`. */
 @customElement("add-dates-calendar")
 export class AddDatesCalendar extends LitElement {
   static override styles = [
@@ -104,7 +110,6 @@ export class AddDatesCalendar extends LitElement {
         border-color: var(--wt-color-primary);
         background: var(--wt-color-primary);
         color: var(--wt-color-on-primary);
-        cursor: default;
       }
       td[data-anchor] button {
         box-shadow: inset 0 0 0 var(--wt-field-line-width-active) var(--wt-color-primary);
@@ -220,7 +225,8 @@ export class AddDatesCalendar extends LitElement {
       if (!this.#range(this.anchor, date)) return;
     } else {
       this.message = "";
-      this.#add([date]);
+      if (this.selected.includes(date)) this.#emit<RemoveDates>("remove-dates", { dates: [date] });
+      else this.#add([date]);
     }
     this.anchor = date;
   }
