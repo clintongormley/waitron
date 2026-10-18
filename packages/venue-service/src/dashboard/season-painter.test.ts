@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -12,7 +12,9 @@ import {
   painterModel,
   pick,
   settle,
+  slot,
   withBar,
+  withDays,
   type Write,
 } from "../testing/season-painter-fixture.js";
 import "./season-painter.js";
@@ -41,6 +43,13 @@ async function mount(options: Partial<Pick<SeasonPainter, "zoneId" | "seasonId" 
   await grid(painter).updateComplete;
   return { painter, writes };
 }
+/** The painter model with Restaurant open 06:00–12:00 on the given weekdays, so a zone may close then. */
+const openOn = (...weekdays: number[]) =>
+  withDays(
+    painterModel(),
+    "d1",
+    Object.fromEntries(weekdays.map((weekday) => [weekday, [slot("p1", "06:00", "12:00")]])),
+  );
 const picker = (el: SeasonPainter) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=department]")!;
 const chip = (el: SeasonPainter, test: string) =>
@@ -51,7 +60,7 @@ it("titles the season's week and steps through the seasons with ‹ and ›", as
   painter.addEventListener("painter-navigate", (event) =>
     navigations.push((event as CustomEvent).detail),
   );
-  expect(frame(painter).heading).toBe("Winter week");
+  expect(frame(painter).heading).toBe("Winter: standard week");
   expect(chip(painter, "season")!.textContent!.trim()).toBe("Winter · 1 Dec – 28 Feb");
   expect(grid(painter).columns.map((column) => column.key)).toEqual([
     "1",
@@ -68,21 +77,64 @@ it("titles the season's week and steps through the seasons with ‹ and ›", as
   ]);
   chip(painter, "next-season")!.click();
   await settle(painter);
-  expect(frame(painter).heading).toBe("Spring week");
+  expect(frame(painter).heading).toBe("Spring: standard week");
   expect(chip(painter, "season")!.textContent!.trim()).toBe("Spring · 1 Mar – 30 Nov");
   expect(grid(painter).days.get("1")).toEqual([
     { periodId: "p2", startsAt: "20:00", endsAt: "23:00" },
   ]);
   chip(painter, "previous-season")!.click();
   await settle(painter);
-  expect(frame(painter).heading).toBe("Winter week");
+  expect(frame(painter).heading).toBe("Winter: standard week");
   expect(navigations).toEqual([
     { seasonId: "spring", departmentId: "d1", zoneId: null },
     { seasonId: "winter", departmentId: "d1", zoneId: null },
   ]);
 });
 
-it("lists each active department with its zones beneath, and says the zones follow it", async () => {
+it("titles the painter '<season>: standard week' and says which weeks it edits, in English and Spanish", async () => {
+  const { painter } = await mount();
+  expect(frame(painter).heading).toBe("Winter: standard week");
+  expect(chip(painter, "season")!.textContent!.trim()).toBe("Winter · 1 Dec – 28 Feb");
+  const covers = chip(painter, "covers")!;
+  expect(covers.getAttribute("slot")).toBe("row");
+  expect(covers.textContent!.trim()).toBe(
+    "Every week from 1 Dec to 28 Feb opens these hours, except on special days.",
+  );
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-text-muted)";
+  painter.shadowRoot!.append(probe);
+  expect(getComputedStyle(covers).color, "muted").toBe(getComputedStyle(probe).color);
+  probe.remove();
+  const row = painter.shadowRoot!.querySelectorAll("[slot=row]");
+  expect([...row].indexOf(covers), "the line sits before the paint row").toBe(0);
+  expect(row.length).toBe(2);
+  painter.remove();
+  setLocale("es");
+  const spanish = (await mount()).painter;
+  expect(frame(spanish).heading).toBe("Winter: semana estándar");
+  expect(chip(spanish, "covers")!.textContent!.trim()).toBe(
+    "Cada semana del 1 dic al 28 feb abre con este horario, salvo los días especiales.",
+  );
+});
+
+it("a viewer sees the line saying which weeks it edits too", async () => {
+  painter = document.createElement("season-painter");
+  painter.api = painterApi([]);
+  painter.model = painterModel();
+  painter.seasonId = "winter";
+  painter.departmentId = "d1";
+  painter.readOnly = true;
+  painter.open = true;
+  applyTokens(painter);
+  document.body.append(painter);
+  await settle(painter);
+  expect(frame(painter).heading).toBe("Winter: standard week");
+  expect(chip(painter, "covers")!.textContent!.trim()).toBe(
+    "Every week from 1 Dec to 28 Feb opens these hours, except on special days.",
+  );
+});
+
+it("lists each active department with its zones beneath", async () => {
   const { painter } = await mount();
   expect(
     picker(painter).options.map(({ value, label, depth }) => [value, label, depth ?? 0]),
@@ -92,9 +144,7 @@ it("lists each active department with its zones beneath, and says the zones foll
     ["zone:z2", "Terrace", 1],
   ]);
   expect(picker(painter).value).toBe("d1");
-  expect(chip(painter, "follows")!.textContent!.trim()).toBe(
-    "Dining room and Terrace follow Restaurant",
-  );
+  expect(chip(painter, "follows")).toBeNull();
   const link = painter.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=periods-link]")!;
   expect(link.textContent!.trim()).toBe("Periods");
   expect(link.getAttribute("href")).toBe("/manage/opening-hours/view/year/window/periods");
@@ -131,8 +181,181 @@ it("a department paints its periods with Closed erasing; a zone paints Closed ov
   expect(chip(painter, "paint-closed")!.getAttribute("aria-pressed")).toBe("true");
 });
 
-it("keeps the draft across the picker: Restaurant's paint is still there after Terrace", async () => {
+it("a zone's Closed stroke keeps only the times its department is open", async () => {
+  const { painter } = await mount({
+    model: withDays(painterModel(), "d1", { 5: [slot("p2", "19:30", "02:00")] }),
+  });
+  await pick(painter, "zone:z2");
+  await drag(painter, "5", 17.5 * 60, 21 * 60);
+  expect(grid(painter).days.get("5")).toEqual([
+    { periodId: null, startsAt: "23:30", endsAt: "02:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: [], zones: ["z2"] });
+});
+
+it("a zone stroke on a day its department is closed paints nothing, leaves Save quiet and says 'A zone can only close while its department is open.' beside Save", async () => {
   const { painter } = await mount();
+  await pick(painter, "zone:z2");
+  await drag(painter, "3", 0, 3 * 60);
+  expect(grid(painter).days.get("3")).toEqual([]);
+  expect(painter.edited()).toEqual({ departments: [], zones: [] });
+  expect(frame(painter).dirty).toBe(false);
+  expect(
+    frame(painter).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save]",
+    )!.disabled,
+  ).toBe(true);
+  expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+});
+
+describe("a zone's Copy to…", () => {
+  /** Restaurant open Mon and Thu 13:00–16:00 and Wed 06:00–12:00; Terrace closed Mon 14:00–15:00
+   *  and Wed 08:00–09:00. */
+  function terraceModel() {
+    const model = withDays(painterModel(), "d1", {
+      3: [slot("p1", "06:00", "12:00")],
+      4: [slot("p1", "13:00", "16:00")],
+    });
+    const terrace = model.departments[0]!.zones[1]!.seasonWeeks.find(
+      ({ seasonId }) => seasonId === "winter",
+    )!;
+    terrace.week = terrace.week.map(({ weekday, ranges }) => ({
+      weekday,
+      ranges:
+        weekday === 1
+          ? [{ startsAt: "14:00", endsAt: "15:00" }]
+          : weekday === 3
+            ? [{ startsAt: "08:00", endsAt: "09:00" }]
+            : ranges,
+    }));
+    return model;
+  }
+  async function copyMondayTo(el: SeasonPainter, key: string) {
+    const g = grid(el);
+    const menu = g.shadowRoot!.querySelector<HTMLElement>(
+      `.heading[data-column="1"] wt-row-actions`,
+    )!;
+    await userEvent.click(menu);
+    await userEvent.click(
+      [...menu.querySelectorAll<HTMLElement>("wt-button")].find(
+        (button) => button.textContent!.trim() === "Copy to…",
+      )!,
+    );
+    await g.updateComplete;
+    const chooser = g.shadowRoot!.querySelector<HTMLElement>(".chooser")!;
+    await userEvent.click(chooser.querySelector<HTMLInputElement>(`input[name="copyTo-${key}"]`)!);
+    await g.updateComplete;
+    await userEvent.click(
+      [...chooser.querySelectorAll<HTMLElement>("wt-button")].find(
+        (button) => button.textContent!.trim() === "Copy",
+      )!,
+    );
+    await settle(el);
+  }
+
+  it("onto a day where none of its Closed paint lies inside the department's hours replaces that day, its own closures going, and says why beside Save", async () => {
+    const { painter } = await mount({ model: terraceModel() });
+    await pick(painter, "zone:z2");
+    expect(grid(painter).days.get("3")).toEqual([
+      { periodId: null, startsAt: "08:00", endsAt: "09:00" },
+    ]);
+    await copyMondayTo(painter, "3");
+    expect(grid(painter).days.get("3")).toEqual([]);
+    expect(grid(painter).days.get("1")).toEqual([
+      { periodId: null, startsAt: "14:00", endsAt: "15:00" },
+    ]);
+    expect(painter.edited()).toEqual({ departments: [], zones: ["z2"] });
+    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+  });
+
+  it("onto a day whose hours hold its Closed paint lands that paint", async () => {
+    const { painter } = await mount({ model: terraceModel() });
+    await pick(painter, "zone:z2");
+    expect(grid(painter).days.get("4")).toEqual([]);
+    await copyMondayTo(painter, "4");
+    expect(grid(painter).days.get("4")).toEqual([
+      { periodId: null, startsAt: "14:00", endsAt: "15:00" },
+    ]);
+    expect(painter.edited()).toEqual({ departments: [], zones: ["z2"] });
+    expect(frame(painter).refusal).toBe("");
+  });
+});
+
+it("a zone's day with its department closed shows 'Restaurant closed all day' behind its paint", async () => {
+  const { painter } = await mount();
+  const column = (key: string) =>
+    grid(painter).shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${key}"]`)!;
+  expect(grid(painter).closedBehind.size).toBe(0);
+  expect(column("3").querySelector(".all-closed.behind")).toBeNull();
+  await pick(painter, "zone:z2");
+  expect(column("3").querySelector(".all-closed.behind")!.textContent!.trim()).toBe(
+    "Restaurant closed all day",
+  );
+  expect(column("3").querySelector(".block")).toBeNull();
+  expect(column("2").querySelector(".all-closed.behind")!.textContent!.trim()).toBe(
+    "Restaurant closed all day",
+  );
+  expect(grid(painter).days.get("2")).toEqual([
+    { periodId: null, startsAt: "15:00", endsAt: "17:00" },
+  ]);
+  expect(column("2").querySelectorAll(".block.closed")).toHaveLength(1);
+  expect(column("1").querySelector(".all-closed.behind")).toBeNull();
+});
+
+it("the label behind a zone's paint follows a refresh of its department's week and a change of language", async () => {
+  const { painter } = await mount();
+  const behind = (key: string) =>
+    grid(painter)
+      .shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${key}"] .all-closed.behind`)
+      ?.textContent?.trim();
+  await pick(painter, "zone:z2");
+  expect(behind("3")).toBe("Restaurant closed all day");
+  painter.model = openOn(3);
+  await settle(painter);
+  expect(behind("3")).toBeUndefined();
+  expect(behind("4")).toBe("Restaurant closed all day");
+  setLocale("es");
+  painter.requestUpdate();
+  await settle(painter);
+  expect(behind("4")).toBe("Restaurant cerrado todo el día");
+});
+
+it("a painter render that changes nothing leaves a zone's grid alone", async () => {
+  const { painter } = await mount();
+  await pick(painter, "zone:z2");
+  const updated = vi.spyOn(grid(painter) as unknown as { updated(): void }, "updated");
+  for (let round = 0; round < 3; round++) {
+    painter.requestUpdate();
+    await painter.updateComplete;
+    await grid(painter).updateComplete;
+  }
+  expect(updated).toHaveBeenCalledTimes(0);
+});
+
+it("widening a department's day leaves its zones unedited", async () => {
+  const { painter } = await mount({
+    model: withDays(painterModel(), "d1", { 2: [slot("p1", "13:00", "18:00")] }),
+  });
+  await drag(painter, "2", 12 * 60, 14 * 60);
+  expect(grid(painter).days.get("2")).toEqual([
+    { periodId: "p1", startsAt: "13:00", endsAt: "20:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+});
+
+it("a department change on a day its zone has no closure leaves the zone unedited", async () => {
+  const { painter } = await mount();
+  chip(painter, "paint-closed")!.click();
+  await settle(painter);
+  await drag(painter, "1", 8 * 60, 10 * 60);
+  expect(grid(painter).days.get("1")).toEqual([
+    { periodId: "p1", startsAt: "13:00", endsAt: "14:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+});
+
+it("keeps the draft across the picker: Restaurant's paint is still there after Terrace", async () => {
+  const { painter } = await mount({ model: openOn(4) });
   chip(painter, "paint-p2")!.click();
   await settle(painter);
   expect(chip(painter, "paint-p2")!.getAttribute("aria-pressed")).toBe("true");
@@ -181,11 +404,11 @@ it("a live model refresh takes the untouched days of an edited week and reseeds 
 });
 
 it("a live model refresh on an edited zone week takes another day's change and keeps the painted day", async () => {
-  const { painter } = await mount({ zoneId: "z2" });
+  const { painter } = await mount({ zoneId: "z2", model: openOn(4) });
   await drag(painter, "4", 0, 3 * 60);
   const closedMorning = [{ periodId: null, startsAt: "06:00", endsAt: "09:00" }];
   expect(grid(painter).days.get("4")).toEqual(closedMorning);
-  const next = painterModel();
+  const next = openOn(4);
   const terrace = next.departments[0]!.zones[1]!.seasonWeeks[1]!.week;
   (terrace[5]!.ranges as unknown[]).push({ startsAt: "10:00", endsAt: "11:00" });
   (terrace[4]!.ranges as unknown[]).push({ startsAt: "20:00", endsAt: "22:00" });
@@ -242,6 +465,30 @@ it("+ New period saves the period on its own, keeps the painting and chooses the
     { periodId: "p2", startsAt: "20:00", endsAt: "23:00" },
   ]);
   expect(frame(painter).dirty).toBe(true);
+});
+
+it("each period chip offers a visible '✎ Edit', named 'Edit <period>'", async () => {
+  const { painter } = await mount();
+  const edit = chip(painter, "edit-p1")!;
+  expect(edit.textContent!.replace(/\s+/g, " ").trim()).toBe("✎ Edit");
+  expect(edit.getAttribute("aria-label")).toBe("Edit Lunch");
+  expect(edit.querySelector('[aria-hidden="true"]')?.textContent).toBe("✎");
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-primary-text)";
+  probe.style.display = "block";
+  probe.style.blockSize = "var(--wt-tap-min)";
+  painter.shadowRoot!.append(probe);
+  expect(edit.getBoundingClientRect().height).toBeGreaterThanOrEqual(
+    probe.getBoundingClientRect().height,
+  );
+  expect(getComputedStyle(edit).color).toBe(getComputedStyle(probe).color);
+  probe.remove();
+  painter.remove();
+  setLocale("es");
+  const spanish = (await mount()).painter;
+  const editar = chip(spanish, "edit-p1")!;
+  expect(editar.textContent!.replace(/\s+/g, " ").trim()).toBe("✎ Editar");
+  expect(editar.getAttribute("aria-label")).toBe("Editar Lunch");
 });
 
 it("✎ opens the period dialog with that period, and a refusal shows in it", async () => {
@@ -492,7 +739,7 @@ it("a refresh that removes the open season drops its edits, says so beside Save 
     currentSeasonId: "spring",
   };
   await settle(painter);
-  expect(frame(painter).heading).toBe("Spring week");
+  expect(frame(painter).heading).toBe("Spring: standard week");
   expect(frame(painter).refusal).toBe("Winter was removed; its changes were dropped.");
   expect(frame(painter).dirty).toBe(false);
   expect(painter.edited()).toEqual({ departments: [], zones: [] });
@@ -500,12 +747,12 @@ it("a refresh that removes the open season drops its edits, says so beside Save 
 });
 
 it("a refresh that removes an edited zone drops only that zone's edits, with a notice", async () => {
-  const { painter } = await mount();
+  const { painter } = await mount({ model: openOn(4) });
   await drag(painter, "3", 7 * 60, 9 * 60);
   await pick(painter, "zone:z2");
   await drag(painter, "4", 0, 3 * 60);
   await pick(painter, "d1");
-  const next = painterModel();
+  const next = openOn(4);
   const restaurant = next.departments[0]!;
   painter.model = {
     ...next,
@@ -536,7 +783,7 @@ it("a refresh that makes an edited department inactive drops its edits, and noth
   expect(frame(painter).refusal).toBe("Bar is no longer active; its changes were dropped.");
   expect(painter.edited()).toEqual({ departments: [], zones: [] });
   expect(frame(painter).dirty).toBe(false);
-  expect(frame(painter).heading).toBe("Winter week");
+  expect(frame(painter).heading).toBe("Winter: standard week");
   expect(grid(painter).days.get("1")).toEqual([
     { periodId: "p1", startsAt: "13:00", endsAt: "16:00" },
   ]);
@@ -573,7 +820,7 @@ it("read-only: only ✕, no paint row, a grid that cannot paint, and the seasons
   expect(grid(painter).readOnly).toBe(true);
   for (const test of ["hint", "paint-closed", "paint-p1", "edit-p1", "new-period"])
     expect(chip(painter, test)).toBeNull();
-  expect(painter.shadowRoot!.querySelector("[slot=row]")).toBeNull();
+  expect(painter.shadowRoot!.querySelector("[slot=row]:not([data-test=covers])")).toBeNull();
   await drag(painter, "3", 120, 240);
   expect(painter.edited()).toEqual({ departments: [], zones: [] });
   chip(painter, "next-season")!.click();
@@ -598,7 +845,7 @@ it("a refresh that moves the current season keeps the season being painted and i
   await drag(painter, "3", 14 * 60, 17 * 60);
   painter.model = { ...painterModel(), currentSeasonId: "spring" };
   await settle(painter);
-  expect(frame(painter).heading).toBe("Winter week");
+  expect(frame(painter).heading).toBe("Winter: standard week");
   expect(grid(painter).days.get("3")).toEqual([
     { periodId: "p2", startsAt: "20:00", endsAt: "23:00" },
   ]);
@@ -673,7 +920,7 @@ it("a refresh that removes the open season of a clean painter moves on without a
     currentSeasonId: "spring",
   };
   await settle(painter);
-  expect(frame(painter).heading).toBe("Spring week");
+  expect(frame(painter).heading).toBe("Spring: standard week");
   expect(frame(painter).refusal).toBe("");
   expect(frame(painter).dirty).toBe(false);
 });
@@ -738,7 +985,7 @@ describe.each(["en", "es"] as const)("the bar (%s)", (locale) => {
         const shown = [
           chip(painter, "season")!,
           picker(painter),
-          chip(painter, "follows")!,
+          chip(painter, "covers")!,
           chip(painter, "periods-link")!,
         ].map((el) => el.getBoundingClientRect());
         for (const [i, box] of shown.entries()) {
@@ -754,13 +1001,13 @@ describe.each(["en", "es"] as const)("the bar (%s)", (locale) => {
     }
   });
 
-  it("at 1280px the zones' sentence reads on one line", async () => {
+  it("at 1280px the line saying which weeks it edits reads on one line", async () => {
     const old = [window.innerWidth, window.innerHeight];
     try {
       await page.viewport(1280, 900);
       setLocale(locale);
       const { painter } = await mount({ model: busyRestaurant() });
-      expect(lines(chip(painter, "follows")!)).toBe(1);
+      expect(lines(chip(painter, "covers")!)).toBe(1);
     } finally {
       await page.viewport(old[0]!, old[1]!);
     }
@@ -800,14 +1047,14 @@ it("at 1280×900 the week's seven days fit side by side, with no edge faded", as
 });
 
 it("a refresh that removes two edited zones names both in one notice", async () => {
-  const { painter } = await mount();
+  const { painter } = await mount({ model: openOn(3, 4) });
   await pick(painter, "zone:z1");
   await drag(painter, "3", 0, 3 * 60);
   await pick(painter, "zone:z2");
   await drag(painter, "4", 0, 3 * 60);
   await pick(painter, "d1");
   expect(painter.edited()).toEqual({ departments: [], zones: ["z1", "z2"] });
-  const next = painterModel();
+  const next = openOn(3, 4);
   painter.model = {
     ...next,
     departments: [{ ...next.departments[0]!, zones: [] }, ...next.departments.slice(1)],
@@ -876,7 +1123,7 @@ it("with one season, ‹ and › activated by script stay on the season and navi
   chip(painter, "previous-season")!.click();
   chip(painter, "next-season")!.click();
   await settle(painter);
-  expect(frame(painter).heading).toBe("Winter week");
+  expect(frame(painter).heading).toBe("Winter: standard week");
   expect(navigations).toEqual([]);
   expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
 });

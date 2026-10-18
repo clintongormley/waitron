@@ -16,6 +16,7 @@ import { resolveZoneClosedDays, type DayPlan } from "./day-resolver.js";
 import {
   joinTouching,
   readZoneSeasonWeeks,
+  type ServingRead,
   seasonWeekList,
   seasonsHolding,
   targetSeasons,
@@ -27,6 +28,8 @@ import { zoneExtensions } from "./schema/zone-extensions.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import "./errors.js";
 
+/** Writes a zone's closed week, then runs `afterWrite` with the clock and the zone's department
+ *  this write read. */
 export async function replaceZoneClosedWeek(
   tx: Transaction,
   cfg: VenueScope,
@@ -34,9 +37,9 @@ export async function replaceZoneClosedWeek(
   days: unknown,
   expectedClockRevision: number,
   at: Date = new Date(),
-  options: { seasonId?: string } = {},
+  options: { seasonId?: string; afterWrite?: (read: ServingRead) => Promise<void> } = {},
 ): Promise<void> {
-  await resolveZoneContext(tx, cfg, zoneId);
+  const zone = await resolveZoneContext(tx, cfg, zoneId);
   const clock = await readLocationClock(tx, cfg.locationId);
   const staged = await stageZoneClosedWeek(tx, cfg, zoneId, days, clock, options.seasonId);
   await assertBusinessDayScheduleWrite(
@@ -48,6 +51,10 @@ export async function replaceZoneClosedWeek(
     clock,
   );
   await staged.write();
+  await options.afterWrite?.({
+    clock,
+    departmentOf: new Map([[zone.zoneId, zone.departmentId]]),
+  });
 }
 
 /** A zone's closed week checked and compared with what its seasons hold, written by `write`. The

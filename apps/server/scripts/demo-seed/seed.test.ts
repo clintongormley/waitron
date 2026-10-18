@@ -52,7 +52,7 @@ describe("seedDemoRestaurant", () => {
   });
 
   it.each(["06:00", "05:00"])(
-    "closes only the Terrace from 23:00 to the %s changeover after its sales",
+    "closes only the Terrace from 23:00 to the Restaurant's midnight close, after its sales, with a %s changeover",
     async (cutover) => {
       const venue = await provisionVenue();
       await withTransaction(suite.db, (tx) =>
@@ -92,7 +92,7 @@ describe("seedDemoRestaurant", () => {
             zone: "Terrace",
             weekday,
             starts_at: "23:00:00",
-            ends_at: cutover === "06:00" ? "06:00:00" : "05:00:00",
+            ends_at: "00:00:00",
           })),
         );
       } finally {

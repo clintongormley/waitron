@@ -46,6 +46,8 @@ export interface SpecialDayAnswers {
     ranges?: ServiceRange[];
     zones?: Record<string, ClosedRange[]>;
     dayCutover?: string;
+    /** Departments other than `d1`, with no zones. */
+    others?: { departmentId: string; ranges: ServiceRange[] }[];
   };
   /** Awaited before a season days read answers. */
   seasonAfter?: () => Promise<unknown>;
@@ -126,6 +128,7 @@ export function specialDayApi(writes: Write[] = [], answers: SpecialDayAnswers =
                       closed: season.zones?.[zoneId] ?? [],
                     })),
                   },
+                  ...(season.others ?? []).map((other) => ({ ...other, zones: [] })),
                 ],
               };
             }),

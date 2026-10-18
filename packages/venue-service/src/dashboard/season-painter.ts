@@ -21,6 +21,7 @@ import {
   type Paint,
 } from "../paint-model.js";
 import { seasonLastDay } from "../season-rules.js";
+import { closuresInHours } from "../zone-own-hours.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn } from "./paint-grid.js";
 import { format, formatMonthDay } from "./hours-view.js";
@@ -33,7 +34,6 @@ import { paintRow, paintRowStyles } from "./paint-row.js";
 import {
   departmentOf,
   droppedNotice,
-  listOf,
   ownerName,
   refusalReason,
   removedPeriods,
@@ -159,7 +159,8 @@ export class SeasonPainter extends LitElement {
         container-type: size;
         --paint-grid-fill: calc(100cqb - var(--wt-tap-min) - 3px);
       }
-      .follows {
+      .covers {
+        margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -200,6 +201,9 @@ export class SeasonPainter extends LitElement {
   private revision = 0;
   /** Replaced whenever a save's answer would land on a draft it no longer belongs to. */
   private generation = {};
+  /** The weeks the save in flight sent, and whether a refresh since dropped an edit it did not
+   *  send: that save is then not clean. */
+  private inFlight?: { sent: Draft; dropped: boolean };
   private scope?: DraftScope<Draft>;
   private coordinator?: LeaveCoordinator;
 
@@ -358,6 +362,8 @@ export class SeasonPainter extends LitElement {
         const owner = departmentOf(this.model, key);
         if (owner && !owner.active) inactive.add(owner.name);
         else gone.push(ownerName(previous, key));
+        if (this.inFlight && !sameWeek(week, this.inFlight.sent.get(key)))
+          this.inFlight.dropped = true;
         continue;
       }
       if (follow) {
@@ -452,7 +458,19 @@ export class SeasonPainter extends LitElement {
     this.notice = "";
     if (this.refused?.owner === key && this.refused.column === event.detail.key)
       this.refused = undefined;
-    this.draft = new Map(this.draft).set(key, week);
+    const draft = new Map(this.draft).set(key, week);
+    const department = this.model.departments.find(({ id }) => departmentKey(id) === key);
+    for (const zone of department?.zones ?? []) {
+      const zoneWeek = draft.get(zoneKey(zone.id));
+      if (!zoneWeek) continue;
+      const cut = closuresInHours(
+        event.detail.day.filter(isPeriodPaint),
+        zoneWeek.get(event.detail.key)!,
+        { dayCutover: this.model.dayCutover, endMinute: 1440 },
+      ).map(({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }));
+      draft.set(zoneKey(zone.id), copyWeek(zoneWeek).set(event.detail.key, cut));
+    }
+    this.draft = draft;
     this.scope?.changed();
   }
   private async save() {
@@ -470,6 +488,8 @@ export class SeasonPainter extends LitElement {
         paint: sent.get(key)!.get(String(weekday))!,
       }));
     const generation = this.generation;
+    const flight = { sent, dropped: false };
+    this.inFlight = flight;
     this.saving = true;
     this.notice = "";
     this.refused = undefined;
@@ -501,6 +521,7 @@ export class SeasonPainter extends LitElement {
       return;
     } finally {
       if (generation === this.generation) this.saving = false;
+      if (this.inFlight === flight) this.inFlight = undefined;
     }
     if (generation !== this.generation) return;
     const baseline = copyDraft(this.baseline);
@@ -511,6 +532,13 @@ export class SeasonPainter extends LitElement {
       sent: new Map([...(this.confirming?.sent ?? []), ...sent]),
       barrier: this.api.rereadWatches(),
     };
+    this.dispatchEvent(
+      new CustomEvent<{ clean: boolean }>("season-week-saved", {
+        detail: { clean: !flight.dropped && !this.scope?.isDirty() },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
   /** A refusal naming `departments.<i>` or `zones.<i>` shows that week, marking the day it names. */
   private refuse(error: unknown, departments: string[], zones: string[]) {
@@ -583,37 +611,47 @@ export class SeasonPainter extends LitElement {
   }
   private picker(department: Department) {
     const zone = this.zone(department);
-    const zones = department.zones.map(({ name }) => name);
-    const list = listOf(zones);
     return html`<wt-combobox
-        slot="picker"
-        name="department"
-        label=${t("painter.department")}
-        hide-label
-        search="never"
-        ?disabled=${this.saving}
-        .value=${zone ? `zone:${zone.id}` : department.id}
-        .options=${this.model.departments
-          .filter(({ active }) => active)
-          .flatMap((entry) => [
-            { value: entry.id, label: entry.name },
-            ...entry.zones.map(({ id, name }) => ({ value: `zone:${id}`, label: name, depth: 1 })),
-          ])}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.pick(event.detail.value);
-        }}
-      ></wt-combobox>
-      ${
-        zones.length
-          ? html`<span slot="picker" class="follows" data-test="follows"
-              >${format(zones.length === 1 ? "painter.zone_follows" : "painter.zones_follow", {
-                zones: list,
-                department: department.name,
-              })}</span
-            >`
-          : nothing
-      }`;
+      slot="picker"
+      name="department"
+      label=${t("painter.department")}
+      hide-label
+      search="never"
+      ?disabled=${this.saving}
+      .value=${zone ? `zone:${zone.id}` : department.id}
+      .options=${this.model.departments
+        .filter(({ active }) => active)
+        .flatMap((entry) => [
+          { value: entry.id, label: entry.name },
+          ...entry.zones.map(({ id, name }) => ({ value: `zone:${id}`, label: name, depth: 1 })),
+        ])}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.pick(event.detail.value);
+      }}
+    ></wt-combobox>`;
+  }
+  private behind?: {
+    week: ReadonlyMap<string, readonly Paint[]>;
+    label: string;
+    map: ReadonlyMap<string, string>;
+  };
+  private closedBehind(
+    department: Department,
+    week: ReadonlyMap<string, readonly Paint[]>,
+  ): ReadonlyMap<string, string> {
+    const label = format("painter.department_closed", { department: department.name });
+    if (this.behind?.week !== week || this.behind.label !== label)
+      this.behind = {
+        week,
+        label,
+        map: new Map(
+          WEEK_DISPLAY_ORDER.filter((weekday) => !(week.get(String(weekday)) ?? []).length).map(
+            (weekday) => [String(weekday), label],
+          ),
+        ),
+      };
+    return this.behind.map;
   }
   private paintRow(department: Department, chosen: string | null, zoned: boolean) {
     return paintRow({
@@ -651,6 +689,9 @@ export class SeasonPainter extends LitElement {
     const zone = this.zone(department);
     const key = zone ? zoneKey(zone.id) : departmentKey(department.id);
     const chosen = this.effectiveChosen(department, zone !== undefined);
+    const underlay = zone
+      ? (this.draft.get(departmentKey(department.id)) ?? NOTHING_BY_KEY)
+      : NOTHING_BY_KEY;
     return html`<painter-frame
         .open=${this.open}
         .heading=${format("painter.week", { season: season.name })}
@@ -669,12 +710,20 @@ export class SeasonPainter extends LitElement {
         }}
       >
         ${this.seasonChip()}${this.picker(department)} ${periodsLink()}
+        <p slot="row" class="covers" data-test="covers">
+          ${format("painter.week_covers", {
+            from: formatMonthDay(season.startsOn),
+            to: formatMonthDay(seasonLastDay(this.model.seasons, season.startsOn)),
+          })}
+        </p>
         ${this.readOnly ? nothing : this.paintRow(department, chosen, zone !== undefined)}
         <paint-grid
           .target=${`${this.seasonId}/${key}`}
           .columns=${this.columns()}
           .days=${this.draft.get(key) ?? NOTHING_BY_KEY}
-          .underlay=${zone ? (this.draft.get(departmentKey(department.id)) ?? NOTHING_BY_KEY) : NOTHING_BY_KEY}
+          .underlay=${underlay}
+          .closedWithin=${zone ? underlay : undefined}
+          .closedBehind=${zone ? this.closedBehind(department, underlay) : NOTHING_BY_KEY}
           .periods=${department.periods}
           .chosen=${chosen}
           .cutover=${this.model.dayCutover}
@@ -687,6 +736,11 @@ export class SeasonPainter extends LitElement {
               : NOTHING_BY_KEY
           }
           @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(key, event)}
+          @paint-outside=${(event: Event) => {
+            event.stopPropagation();
+            this.refused = undefined;
+            this.notice = t("opening.closed_outside");
+          }}
         ></paint-grid>
       </painter-frame>
       ${this.periods.render()}`;

@@ -182,7 +182,8 @@ declare module "@waitron/shared" {
     "special_day.invalid": {
       field: string;
       date?: string;
-      reason?: "empty" | "order" | "step" | "overlap" | "clock_skips" | "end_offset";
+      reason?:
+        "empty" | "order" | "step" | "overlap" | "clock_skips" | "end_offset" | "outside_hours";
       departmentId?: string;
       zoneId?: string;
       periodId?: string;
@@ -190,7 +191,12 @@ declare module "@waitron/shared" {
     "special_day.not_found": { specialDayId: string };
     /** Another special day already holds `date` (the first day the two would share). */
     "special_day.date_taken": { date: string; name: string; specialDayId: string };
-    "zone_closed_time.invalid": { field: string; reason?: "empty" | "order" | "step" | "overlap" };
+    "zone_closed_time.invalid": {
+      field: string;
+      reason?: "empty" | "order" | "step" | "overlap" | "outside_hours";
+      zoneId?: string;
+      weekday?: number;
+    };
     "station.always_open": { stationId: string };
     "holiday.invalid": { field: string };
     /** A configuration import's hours or holiday row holds a value a save would refuse; `field` is

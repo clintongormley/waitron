@@ -399,6 +399,188 @@ describe("the special-day routes", () => {
     expect(await countDays(r)).toBe(1);
   });
 
+  it("refuses a zone closure outside its department's hours on that date, storing nothing", async () => {
+    const r = await routed();
+    const body = {
+      ...christmas(r),
+      zonePaint: [
+        {
+          zoneId: r.sala,
+          date: "2030-12-24",
+          ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
+        },
+      ],
+      expectedClockRevision: 0,
+    };
+    const error = {
+      code: "special_day.invalid",
+      params: {
+        field: "zonePaint.0.ranges.0",
+        reason: "outside_hours",
+        zoneId: r.sala,
+        date: "2030-12-24",
+      },
+    };
+    await answers(await r.send("POST", "", r.manager, body), 400, error);
+    expect(await countDays(r)).toBe(0);
+    const day = await seeded(r);
+    await answers(await r.send("PUT", `/${day.id}`, r.manager, body), 400, error);
+    expect(await countDays(r)).toBe(1);
+    expect(await stored(r, day.id)).toEqual(day);
+  });
+
+  it("measures against the department paint the same request sends", async () => {
+    const r = await routed();
+    const response = await r.send("POST", "", r.manager, {
+      ...christmas(r),
+      paint: [
+        {
+          departmentId: r.restaurant,
+          date: "2030-12-24",
+          ranges: [{ periodId: r.dinner, startsAt: "18:00", endsAt: "23:00" }],
+        },
+      ],
+      zonePaint: [
+        {
+          zoneId: r.sala,
+          date: "2030-12-24",
+          ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
+        },
+      ],
+      expectedClockRevision: 0,
+    });
+    expect(response.status).toBe(201);
+  });
+
+  it("leaves Open zone paint and a date closed all day unchecked", async () => {
+    const r = await routed();
+    const open = await r.send("POST", "", r.manager, {
+      ...christmas(r),
+      zonePaint: [
+        {
+          zoneId: r.sala,
+          date: "2030-12-24",
+          ranges: [
+            { kind: "open", startsAt: "06:00", endsAt: "07:00" },
+            { kind: "closed", startsAt: "19:00", endsAt: "20:00" },
+          ],
+        },
+      ],
+      expectedClockRevision: 0,
+    });
+    expect(open.status).toBe(201);
+    const other = await routed();
+    const closedDay = await other.send("POST", "", other.manager, {
+      ...christmas(other),
+      zonePaint: [
+        ...christmas(other).zonePaint,
+        {
+          zoneId: other.sala,
+          date: "2030-12-25",
+          ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
+        },
+      ],
+      expectedClockRevision: 0,
+    });
+    expect(closedDay.status).toBe(201);
+  });
+
+  it("reads an upper-case zone id as the stored zone", async () => {
+    const r = await routed();
+    const upper = r.sala.toUpperCase();
+    const zonePaint = (startsAt: string) => [
+      {
+        zoneId: upper,
+        date: "2030-12-24",
+        ranges: [{ kind: "closed", startsAt, endsAt: "20:00" }],
+      },
+    ];
+    await answers(
+      await r.send("POST", "", r.manager, {
+        ...christmas(r),
+        zonePaint: zonePaint("18:00"),
+        expectedClockRevision: 0,
+      }),
+      400,
+      {
+        code: "special_day.invalid",
+        params: {
+          field: "zonePaint.0.ranges.0",
+          reason: "outside_hours",
+          zoneId: r.sala,
+          date: "2030-12-24",
+        },
+      },
+    );
+    const response = await r.send("POST", "", r.manager, {
+      ...christmas(r),
+      zonePaint: zonePaint("19:00"),
+      expectedClockRevision: 0,
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as SpecialDayDetail;
+    expect(body.zonePaint.map((entry) => entry.zoneId)).toEqual([r.sala]);
+  });
+
+  it("names a refused closure by its entry's and its range's places as sent", async () => {
+    const r = await routed();
+    await answers(
+      await r.send("POST", "", r.manager, {
+        ...christmas(r),
+        zonePaint: [
+          {
+            zoneId: r.sala,
+            date: "2030-12-24",
+            ranges: [
+              { kind: "open", startsAt: "06:00", endsAt: "07:00" },
+              { kind: "closed", startsAt: "18:00", endsAt: "20:00" },
+            ],
+          },
+        ],
+        expectedClockRevision: 0,
+      }),
+      400,
+      {
+        code: "special_day.invalid",
+        params: {
+          field: "zonePaint.0.ranges.1",
+          reason: "outside_hours",
+          zoneId: r.sala,
+          date: "2030-12-24",
+        },
+      },
+    );
+    await answers(
+      await r.send("POST", "", r.manager, {
+        ...christmas(r),
+        zonePaint: [
+          {
+            zoneId: r.sala,
+            date: "2030-12-25",
+            ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
+          },
+          {
+            zoneId: r.sala,
+            date: "2030-12-24",
+            ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
+          },
+        ],
+        expectedClockRevision: 0,
+      }),
+      400,
+      {
+        code: "special_day.invalid",
+        params: {
+          field: "zonePaint.1.ranges.0",
+          reason: "outside_hours",
+          zoneId: r.sala,
+          date: "2030-12-24",
+        },
+      },
+    );
+    expect(await countDays(r)).toBe(0);
+  });
+
   it("answers special_day.invalid with 400", async () => {
     const r = await routed();
     const response = await r.send("POST", "", r.manager, {

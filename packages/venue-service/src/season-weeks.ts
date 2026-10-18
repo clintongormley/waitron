@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError } from "@waitron/shared";
+import { AppError, type BusinessDayClock } from "@waitron/shared";
 import { assertBusinessDayScheduleWrite, sameScheduleRanges } from "./business-day-schedule.js";
 import { assertWeekEndOffsets, readDepartmentWeekReads, stageMenuWeek } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
@@ -20,6 +20,13 @@ import { readServiceZones, stageZoneClosedWeek } from "./zone-closed-times.js";
 import "./errors.js";
 
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
+
+/** The clock and the departments of the zones a save read, as it read them in its transaction,
+ *  handed to its `afterWrite`. */
+export interface ServingRead {
+  clock: BusinessDayClock;
+  departmentOf: ReadonlyMap<string, string>;
+}
 
 /** Touching ranges of the same period become one; input sorted from the changeover. */
 export function joinTouching<T extends { startsAt: string; endsAt: string }>(
@@ -302,7 +309,8 @@ async function within<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
 }
 
 /** Every listed department week and zone week of one season, under one revision check; each
- *  department's end offsets are checked once every week is written. */
+ *  department's end offsets are checked once every week is written, then `afterWrite` runs with
+ *  the clock and zones this save read. */
 export async function saveSeasonWeeks(
   tx: Transaction,
   cfg: VenueScope,
@@ -316,6 +324,7 @@ export async function saveSeasonWeeks(
   },
   at: Date,
   expectedClockRevision: number,
+  afterWrite?: (read: ServingRead) => Promise<void>,
 ): Promise<void> {
   const season = (await seasonsNaming(tx, cfg, seasonId)).own;
   const clock = await readLocationClock(tx, cfg.locationId);
@@ -340,10 +349,11 @@ export async function saveSeasonWeeks(
     });
   }
   const zoneEntries = input.zones ?? [];
-  const serving =
+  const serving = new Map(
     zoneEntries.length === 0
-      ? new Set<string>()
-      : new Set((await readServiceZones(tx, cfg)).map((zone) => zone.id));
+      ? []
+      : (await readServiceZones(tx, cfg)).map((zone) => [zone.id, zone.departmentId] as const),
+  );
   const zoneSeasonWeeks = await readZoneSeasonWeeks(
     tx,
     cfg,
@@ -370,4 +380,5 @@ export async function saveSeasonWeeks(
   );
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
   await assertWeekEndOffsets(tx, cfg, clock, departmentWeeks);
+  await afterWrite?.({ clock, departmentOf: serving });
 }

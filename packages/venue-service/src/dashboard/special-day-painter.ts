@@ -23,7 +23,8 @@ import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { Paint } from "../paint-model.js";
 import { rebaseDays, refill, samePaint, savedBlocks, withoutPeriods } from "../paint-model.js";
 import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
-import type { AddDates } from "./add-dates-calendar.js";
+import { closuresInHours } from "../zone-own-hours.js";
+import type { AddDates, RemoveDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
 import { paintRow, paintRowStyles } from "./paint-row.js";
@@ -792,8 +793,8 @@ export class SpecialDayPainter extends LitElement {
     this.scope?.commit(copyDraft(this.baseline));
   }
   /** An edited owner's paint goes back to its saved state when the owner is gone from `this.model`
-   *  or no longer active, and the notice beside Save names it. */
-  private dropUnpaintable(previous: Model) {
+   *  or no longer active, and the notice beside Save names it. True when it dropped any. */
+  private dropUnpaintable(previous: Model): boolean {
     const paintable = new Set(
       this.model.departments
         .filter(({ active }) => active)
@@ -812,10 +813,11 @@ export class SpecialDayPainter extends LitElement {
       if (saved) paint.set(owner, copyDays(saved));
       else paint.delete(owner);
     }
-    if (!paint) return;
+    if (!paint) return false;
     this.draft = { ...this.draft, paint };
     this.notice = droppedNotice(gone, inactive);
     this.scope?.changed();
+    return true;
   }
   /** One entry per (owner, date) whose paint differs from the saved state, for owners the model
    *  still has; a removed date sends none, as the server drops its paint with it. */
@@ -929,9 +931,13 @@ export class SpecialDayPainter extends LitElement {
     this.seeded = this.seedKey();
     this.attempted = false;
     this.adopt(detail, [], "", this.paintedSince(sent));
-    this.dropUnpaintable(model);
+    const dropped = this.dropUnpaintable(model);
     this.dispatchEvent(
-      new CustomEvent("special-day-saved", { detail: { detail }, bubbles: true, composed: true }),
+      new CustomEvent<{ detail: SpecialDayDetail; clean: boolean }>("special-day-saved", {
+        detail: { detail, clean: !dropped && !this.scope?.isDirty() },
+        bubbles: true,
+        composed: true,
+      }),
     );
     this.api.rereadWithSpecialDays();
   }
@@ -1038,7 +1044,9 @@ export class SpecialDayPainter extends LitElement {
       .find((department) => department.id === id)
       ?.periods.find((entry) => entry.id === params.periodId);
     const reason =
-      params.reason === "end_offset" || params.reason === "clock_skips"
+      params.reason === "end_offset" ||
+      params.reason === "clock_skips" ||
+      params.reason === "outside_hours"
         ? refusalReason("special_day.invalid", params.reason, period)
         : t("opening.check_day");
     const name = ownerName(this.model, owner);
@@ -1130,6 +1138,10 @@ export class SpecialDayPainter extends LitElement {
       ),
     });
   }
+  private removeChosen(event: CustomEvent<RemoveDates>) {
+    event.stopPropagation();
+    for (const date of event.detail.dates) this.removeDates(date, date);
+  }
   /** Removes the dates from `first` to `last`, with their paint. */
   private removeDates(first: LocalDate, last: LocalDate) {
     const gone = (date: LocalDate) => date >= first && date <= last;
@@ -1178,8 +1190,32 @@ export class SpecialDayPainter extends LitElement {
   }
   private paint(owner: string, event: CustomEvent<PaintChange>) {
     event.stopPropagation();
+    const { key: date, day } = event.detail;
     const paint = new Map(this.draft.paint);
-    paint.set(owner, new Map(paint.get(owner)).set(event.detail.key, event.detail.day));
+    paint.set(owner, new Map(paint.get(owner)).set(date, day));
+    const department = this.model.departments.find(({ id }) => departmentKey(id) === owner);
+    const season = this.seasonDays
+      .get(date)
+      ?.departments.find(({ departmentId }) => departmentId === department?.id);
+    if (department && season && !this.closedDates().has(date)) {
+      const cutover = this.cutover();
+      const open = layerPaint(season.ranges, day, cutover);
+      for (const zone of department.zones) {
+        const zoneDay = paint.get(zoneKey(zone.id))?.get(date);
+        if (!zoneDay) continue;
+        const kept = zoneDay.filter(({ periodId }) => periodId === ZONE_OPEN);
+        const closed = zoneDay.filter(({ periodId }) => periodId === null);
+        const cut = closuresInHours(open, closed, { dayCutover: cutover, endMinute: 1440 }).map(
+          ({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }),
+        );
+        // The stored day comes back in clock-text order, which `samePaint` would read as a change.
+        if (samePaint(cut, closed.sort(byStart(cutover)))) continue;
+        paint.set(
+          zoneKey(zone.id),
+          new Map(paint.get(zoneKey(zone.id))).set(date, [...kept, ...cut].sort(byStart(cutover))),
+        );
+      }
+    }
     this.change({ ...this.draft, paint });
   }
 
@@ -1242,6 +1278,63 @@ export class SpecialDayPainter extends LitElement {
     owner: string;
     cutover: string;
     underlay: ReadonlyMap<string, Paint[]>;
+  };
+  /** For a zone, each date not closed all day whose season day is known, mapped to its
+   *  department's open blocks that date: the season's hours with the draft's paint laid over. */
+  private closedWithin(department: Department, cutover: string) {
+    const painted = this.draft.paint.get(departmentKey(department.id));
+    const shut = this.closedDates();
+    const memo = this.withinMemo;
+    if (
+      memo?.days === this.seasonDays &&
+      memo.painted === painted &&
+      memo.shut === shut &&
+      memo.departmentId === department.id &&
+      memo.cutover === cutover
+    )
+      return memo.within;
+    const within = new Map<string, Paint[]>();
+    for (const [date, day] of this.seasonDays) {
+      if (shut.has(date)) continue;
+      const season = day.departments.find(({ departmentId }) => departmentId === department.id);
+      if (!season) continue;
+      within.set(date, layerPaint(season.ranges, painted?.get(date) ?? [], cutover));
+    }
+    this.withinMemo = {
+      days: this.seasonDays,
+      painted,
+      shut,
+      departmentId: department.id,
+      cutover,
+      within,
+    };
+    return within;
+  }
+  private behind?: {
+    within: ReadonlyMap<string, readonly Paint[]>;
+    label: string;
+    map: ReadonlyMap<string, string>;
+  };
+  private closedBehind(
+    department: Department,
+    within: ReadonlyMap<string, readonly Paint[]>,
+  ): ReadonlyMap<string, string> {
+    const label = format("painter.department_closed", { department: department.name });
+    if (this.behind?.within !== within || this.behind.label !== label)
+      this.behind = {
+        within,
+        label,
+        map: new Map([...within].filter(([, open]) => !open.length).map(([date]) => [date, label])),
+      };
+    return this.behind.map;
+  }
+  private withinMemo?: {
+    days: ReadonlyMap<LocalDate, SeasonDay>;
+    painted: ReadonlyMap<LocalDate, Paint[]> | undefined;
+    shut: ReadonlySet<LocalDate>;
+    departmentId: string;
+    cutover: string;
+    within: ReadonlyMap<string, Paint[]>;
   };
 
   private picker(department: Department, zone: Department["zones"][number] | undefined) {
@@ -1331,10 +1424,9 @@ export class SpecialDayPainter extends LitElement {
     const zone = this.zone(department);
     const owner = zone ? zoneKey(zone.id) : departmentKey(department.id);
     const chosen = this.effectiveChosen(department, zone !== undefined);
-    const periods: readonly PaintPeriod[] = zone
-      ? [...department.periods, { id: ZONE_OPEN, name: t("special.open"), colour: "green" }]
-      : department.periods;
+    const periods = zone ? this.zonePeriods(department) : department.periods;
     const stopped = this.loading || this.loadFailed || this.offered !== undefined;
+    const within = zone ? this.closedWithin(department, cutover) : undefined;
     return html`${notices}${
       this.readOnly
         ? nothing
@@ -1358,6 +1450,8 @@ export class SpecialDayPainter extends LitElement {
             .columns=${this.columns()}
             .days=${this.draft.paint.get(owner) ?? NOTHING_BY_KEY}
             .underlay=${this.underlay(department, zone?.id, cutover)}
+            .closedWithin=${within}
+            .closedBehind=${within ? this.closedBehind(department, within) : NOTHING_BY_KEY}
             .periods=${periods}
             .chosen=${chosen}
             .closedErases=${false}
@@ -1367,9 +1461,29 @@ export class SpecialDayPainter extends LitElement {
             .readOnly=${this.readOnly || stopped}
             .columnErrors=${columnErrors(owner)}
             @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(owner, event)}
+            @paint-outside=${(event: Event) => {
+              event.stopPropagation();
+              this.refused = undefined;
+              this.notice = t("opening.closed_outside");
+            }}
             >${ticks}</paint-grid
           >`
     }`;
+  }
+
+  /** A zone's grid periods, kept while its department's periods and the label stay. */
+  private zonePeriodsMemo?: {
+    periods: Department["periods"];
+    label: string;
+    list: readonly PaintPeriod[];
+  };
+  private zonePeriods(department: Department): readonly PaintPeriod[] {
+    const label = t("special.open");
+    const memo = this.zonePeriodsMemo;
+    if (memo?.periods === department.periods && memo.label === label) return memo.list;
+    const list = [...department.periods, { id: ZONE_OPEN, name: label, colour: "green" as const }];
+    this.zonePeriodsMemo = { periods: department.periods, label, list };
+    return list;
   }
 
   /** The dates ticked Closed, kept while they stay so the grid sees the same set. */
@@ -1497,6 +1611,7 @@ export class SpecialDayPainter extends LitElement {
                 .selected=${this.draft.dates.map(({ date }) => date)}
                 .taken=${this.taken}
                 @add-dates=${this.addDates}
+                @remove-dates=${this.removeChosen}
                 @month-change=${(event: CustomEvent<{ month: string }>) => {
                   event.stopPropagation();
                   this.showMonth(event.detail.month);

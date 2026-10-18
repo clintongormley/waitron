@@ -2247,20 +2247,34 @@ and paint with it" (the opening-hours seasons spec, mockup 9); opened from the P
 
 The season painter (`season-painter.ts`, under `packages/venue-service/src/dashboard/`) edits one
 season's week for every active department and zone, in a full-screen frame (`painter-frame.ts`, a
-`wt-modal size="full"`). Its bar holds ✕, the heading "<season> week", ‹ the season chip ›, the
-department-or-zone picker, a Periods link that opens the Periods window over the painter, and
-Cancel and Save; the bar stays in view while the
+`wt-modal size="full"`). Its bar holds ✕, the heading "<season>: standard week", ‹ the season chip
+›, the department-or-zone picker, a Periods link that opens the Periods window over the painter,
+and Cancel and Save; the bar stays in view while the
 paint grid (`paint-grid.ts`) scrolls in the space under it. A heading too long for its room wraps
-onto more lines rather than being cut. A paint row offers the department's periods (✎ edits one),
+onto more lines rather than being cut. A line under the bar says what is edited: "Every week from
+<first day> to <last day> opens these hours, except on special days." A paint row offers the
+department's periods (✎ Edit edits one),
 Closed and + New period, which saves the period on its own and chooses it. Dragging down a day
 paints the chosen period in the business day's quarter hours; a drag over a block replaces what it
 covers, touching blocks of one period join, and clicking a block offers another period or Delete.
 Each day's ⋮ offers Copy to…, with a tick per day, and Clear. In a department, Closed erases; a zone
 paints Closed only, over its department's week drawn faded, and Delete there gives the time back to
-the department. One draft holds every department and zone of the season, so the picker keeps edits;
-Save stays quiet until the draft changes and writes the edited weeks in one request. ‹ › ask first
-when there are edits. A refusal that names a department or zone switches the picker to it, marks the
-day's heading and is told beside Save; the draft stays for a retry. A live refresh takes the stored
+the department. A zone's Closed paint stays inside the times its department is open: a stroke,
+block change or Copy on a zone's day is cut to those hours, and one whose Closed paint is cut away
+entirely (a Copy then leaves the target day with no closures) says "A zone can only close while its
+department is open." beside Save. A zone's day on which its department is closed shows
+"<department> closed all day" behind the zone's paint. Changing a department's day cuts its
+zones' closures that day to the new hours. One draft holds every department and zone of the season,
+so the picker keeps edits; Save stays quiet until the draft changes, writes the edited weeks in one
+request, and closes the painter, back to the view it was opened over. Paint made while the save is
+in flight keeps the painter open, unsaved, and so does an edit the save did not send that a refresh
+drops while the save is out because its department or zone was removed or made inactive, with the
+notice that says so; a save answered after a newer painter has opened
+neither closes nor marks the newer one. ‹ › ask first
+when there are edits. A refusal keeps the painter open: one that names a department or zone
+switches the picker to it, marks the day's heading and is told beside Save, and one for a zone
+closure outside its department's hours (`outside_hours`) gives the reason "A zone can only close while its
+department is open."; the draft stays for a retry. A live refresh takes the stored
 paint on every day the draft has not changed, and a day the draft changed keeps the draft
 (`refresh`, `season-painter.ts`; the cases in `season-painter.races.test.ts` and
 `season-painter.test.ts`); while a save is in flight, and until the first read that started after
@@ -2275,16 +2289,22 @@ The special-day painter (`special-day-painter.ts`) edits one special day in the 
 holds ✕, the day's name as heading ("New special day" before it has one), Delete on a stored day,
 the department-or-zone picker, and Cancel and Save. A side panel holds the required name, the
 required dates as chips each with a remove button, + Add dates…, and Every year as No or Yes. + Add dates…
-opens a month to pick from (`add-dates-calendar.ts`): a click adds a date, a shift-click or Range
-adds every date between it and the last one clicked, at most 366 at a time, and a date another
-special day holds is marked with that day's name but still offered. Every year notes that it
+opens a month to pick from (`add-dates-calendar.ts`): a click adds a date or removes a chosen one,
+and a double-click counts as one click; a drag (a touch drag too, with no long press), a
+shift-click or Shift+arrow adds every date of the run and leaves the dates already chosen as they
+are, at most 366 at a time (a longer run adds nothing and says "Choose at most 366 dates."). A run
+is drawn marked only while a drag is under way. One hint line under the month says so. A date another special day holds is marked with that day's name but still offered. Every year notes that it
 follows the holiday's name to its date each year when a stored date was saved on a public holiday
 or a new date is one, and warns that 29 February repeats only in leap years. The grid has a column
 per date, headed by its short weekday, day and month, with a Closed tick under each heading that
 shuts the whole date.
 Each date's season hours are drawn faded under the paint; what is painted replaces them for that
 stretch. A department paints its periods and Closed; a zone paints Open and Closed over its
-department's day, with the zone's season closures drawn as Closed. A date's ⋮ offers Copy to… and
+department's day, with the zone's season closures drawn as Closed. A zone's Closed paint is cut to
+its department's hours on that date, as in the season painter, with the same message when a
+change's Closed paint is cut away entirely and the same "<department> closed all day" behind a date
+its department is closed; a department's changed paint cuts the closures painted for its zones on
+that date. A date's ⋮ offers Copy to… and
 Clear. The grid is drawn from the first date's changeover; when the dates' changeovers differ, a
 notice says so. Opened on a public holiday with no special day, a new day starts with the holiday's
 name and its date (on a picked run whose first date is the holiday, every date of the run) and can
@@ -2292,8 +2312,12 @@ be saved as it opened; when a special day of that name exists, the painter
 first offers Add to <name>, which opens the one with the latest date with this date, or every date of the picked run, added as an
 unsaved change, or New special day; once the new day is edited or a save of it is sent, no offer is made. Save stays quiet until the draft changes and sends the name,
 Every year, the dates and their Closed ticks, and paint only for each department or zone and date
-whose paint differs from what is saved; the painter stays open and the answer becomes the saved
-state. A live refresh reads a stored day again: its name and Every year each follow what is now
+whose paint differs from what is saved. Save closes the painter, back to the view it was opened
+over; a refused save keeps it open with its message beside Save; paint made while a save is in
+flight keeps it open, unsaved, with the answer as the saved state, and so does paint dropped while
+the save was out because its department or zone was removed or made inactive, with the notice that
+says so. A save
+answered after a newer painter has opened neither closes nor marks the newer one. A live refresh reads a stored day again: its name and Every year each follow what is now
 stored unless the draft has changed them, when the draft and what it is compared against both stay.
 The dates follow what is stored one by one: the draft keeps the dates it added and the Closed ticks
 it changed, leaves out the dates it removed, and keeps a date no longer stored when it changed that
@@ -4260,8 +4284,9 @@ it or malformed is ignored, so the day opens on its first date alone), and
 `/view/special-day/special-day/<id>` for a stored one, where `/date/<yyyy-mm-dd>` adds that date to
 its draft as an unsaved change; Back or Forward to the same day with another date asks first when
 the draft has changes, and then opens the stored day again with that date. It opens over the view it was opened from, or the Year on a direct
-load, and closing it returns there; a new day saved takes its own day's address without a new
-history entry. An old `/view/date/date/<yyyy-mm-dd>` address is replaced by the month of that date,
+load, and closing it returns there. A save with nothing left unsaved closes it, back there; a new
+day whose save leaves it open (paint made, or dropped, while the save was out) takes its own day's
+address without a new history entry. An old `/view/date/date/<yyyy-mm-dd>` address is replaced by the month of that date,
 and `/view/date` with no date or a bad one by the month view. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 Opening hours' Year.

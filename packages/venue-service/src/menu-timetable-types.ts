@@ -23,6 +23,11 @@ export interface MenuWeekDay {
   slots: MenuSlot[];
 }
 
+export interface ClosedWeekDay {
+  weekday: number;
+  ranges: readonly ClosedRange[];
+}
+
 export interface DepartmentService {
   departmentId: string;
   open: boolean;

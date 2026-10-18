@@ -26,6 +26,8 @@ export interface DayPickerOptions {
   picked?(run: DayRun | null): void;
   /** A double-click, a long press, Enter. */
   open?(date: LocalDate, run: DayRun, trigger: HTMLElement): void;
+  /** A run picked by a gesture that has ended: a drag's release, a shift-click, a Shift+arrow. */
+  ranged?(run: DayRun): void;
 }
 
 interface Gesture {
@@ -81,6 +83,11 @@ export class DayPicker implements ReactiveController {
 
   get run(): DayRun | null {
     return this.#run;
+  }
+
+  /** A pointer drag, or a long press then a drag, is under way: the run is still being picked. */
+  get dragging(): boolean {
+    return this.#gesture !== null && (this.#gesture.dragging || this.#gesture.movedSinceHold);
   }
 
   get focusDate(): LocalDate | null {
@@ -147,6 +154,10 @@ export class DayPicker implements ReactiveController {
   #pick(anchor: LocalDate, date: LocalDate): void {
     this.#anchor = anchor;
     this.#set(span(anchor, date));
+  }
+
+  #ranged(): void {
+    if (this.#run !== null) this.#options.ranged?.(this.#run);
   }
 
   /** The day an event came from: the nearest element on its path carrying `data-date`. */
@@ -266,6 +277,7 @@ export class DayPicker implements ReactiveController {
       this.#swallowClick = gesture.pointerId;
     }
     this.#end();
+    if (gesture.dragging || gesture.movedSinceHold) this.#ranged();
   }
 
   #cancel(gesture: Gesture): void {
@@ -278,6 +290,7 @@ export class DayPicker implements ReactiveController {
     const gesture = this.#gesture;
     if (gesture === null) return;
     this.#gesture = null;
+    if (gesture.dragging || gesture.movedSinceHold) this.#host.requestUpdate();
     clearTimeout(gesture.timer);
     releasePointer(gesture.grid, gesture.pointerId);
     gesture.grid.removeEventListener("touchmove", gesture.stopScroll);
@@ -302,6 +315,7 @@ export class DayPicker implements ReactiveController {
     this.#runBeforeClick = this.#run;
     if (event.shiftKey && this.#anchor !== null && this.#options.canPick()) {
       this.#pick(this.#anchor, date);
+      this.#ranged();
       return;
     }
     this.#pick(date, date);
@@ -331,8 +345,10 @@ export class DayPicker implements ReactiveController {
       if (button === null) return;
       this.#focus = next;
       button.focus();
-      if (event.shiftKey && this.#options.canPick()) this.#pick(this.#anchor ?? date, next);
-      else this.#pick(next, next);
+      if (event.shiftKey && this.#options.canPick()) {
+        this.#pick(this.#anchor ?? date, next);
+        this.#ranged();
+      } else this.#pick(next, next);
       this.#host.requestUpdate();
       return;
     }

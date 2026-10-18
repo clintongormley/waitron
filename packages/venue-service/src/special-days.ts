@@ -22,7 +22,7 @@ import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import { readHolidayDates } from "./holidays.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
-import { joinTouching } from "./season-weeks.js";
+import { joinTouching, type ServingRead } from "./season-weeks.js";
 import { scheduleCutovers } from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
 import "./errors.js";
@@ -725,13 +725,14 @@ function parseInput(value: unknown, clock: BusinessDayClock) {
 }
 
 /** Refuses the first painted department, then the first painted zone, in request order, that is not
- *  one of the venue's active departments or active service zones. */
+ *  one of the venue's active departments or active service zones; gives each painted zone's
+ *  department. */
 async function assertPaintOwners(
   tx: Transaction,
   cfg: VenueScope,
   departmentIds: readonly string[],
   zoneIds: readonly string[],
-): Promise<void> {
+): Promise<Map<string, string>> {
   if (departmentIds.length > 0) {
     const found = new Set(
       (
@@ -751,28 +752,28 @@ async function assertPaintOwners(
     if (missing !== undefined)
       throw new AppError("department.not_found", { departmentId: missing });
   }
-  if (zoneIds.length > 0) {
-    const found = new Set(
-      (
-        await tx
-          .select({ id: zoneServicePolicies.zoneId })
-          .from(zoneServicePolicies)
-          .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-          .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-          .where(
-            and(
-              eq(zoneServicePolicies.locationId, cfg.locationId),
-              inArray(zoneServicePolicies.zoneId, [...new Set(zoneIds)]),
-              eq(departments.active, true),
-              eq(floorZones.active, true),
-              eq(floorZones.locationId, cfg.locationId),
-            ),
-          )
-      ).map((row) => row.id),
-    );
-    const missing = zoneIds.find((id) => !found.has(id));
-    if (missing !== undefined) throw new AppError("service_zone.not_found", { zoneId: missing });
-  }
+  if (zoneIds.length === 0) return new Map();
+  const departmentOf = new Map(
+    (
+      await tx
+        .select({ id: zoneServicePolicies.zoneId, departmentId: zoneServicePolicies.departmentId })
+        .from(zoneServicePolicies)
+        .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
+        .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+        .where(
+          and(
+            eq(zoneServicePolicies.locationId, cfg.locationId),
+            inArray(zoneServicePolicies.zoneId, [...new Set(zoneIds)]),
+            eq(departments.active, true),
+            eq(floorZones.active, true),
+            eq(floorZones.locationId, cfg.locationId),
+          ),
+        )
+    ).map((row) => [row.id, row.departmentId] as const),
+  );
+  const missing = zoneIds.find((id) => !departmentOf.has(id));
+  if (missing !== undefined) throw new AppError("service_zone.not_found", { zoneId: missing });
+  return departmentOf;
 }
 
 /** Refuses a painted period that is not the painted department's own. */
@@ -1029,7 +1030,8 @@ export async function readSpecialDay(
 
 /** Saves a special day in the caller's transaction. Dates are compared by value, so a kept date keeps
  *  its row and every paint the request does not name; a named (owner, date) is replaced whole, and
- *  given empty ranges it is cleared. */
+ *  given empty ranges it is cleared. Then runs `afterWrite` with the clock and the painted zones'
+ *  departments this save read. */
 export async function saveSpecialDay(
   tx: Transaction,
   cfg: VenueScope,
@@ -1037,12 +1039,13 @@ export async function saveSpecialDay(
   input: unknown,
   at: Date,
   expectedClockRevision: number,
+  afterWrite?: (read: ServingRead) => Promise<void>,
 ): Promise<SpecialDayDetail> {
   await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
   const stored = id === null ? null : await readSpecialDay(tx, cfg, id);
   const clock = await readLocationClock(tx, cfg.locationId);
   const parsed = parseInput(input, clock);
-  await assertPaintOwners(
+  const zoneDepartments = await assertPaintOwners(
     tx,
     cfg,
     parsed.paint.map((entry) => entry.ownerId),
@@ -1185,6 +1188,7 @@ export async function saveSpecialDay(
     );
   }
   await checkScheduleAfterWrite(tx, cfg, clock);
+  await afterWrite?.({ clock, departmentOf: zoneDepartments });
   return readSpecialDay(tx, cfg, specialDayId);
 }
 

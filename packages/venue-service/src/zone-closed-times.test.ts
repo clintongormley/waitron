@@ -88,6 +88,29 @@ async function specialDay(
   );
 }
 describe("zone closed times", () => {
+  it("hands afterWrite the clock and the zone's department it read, once the week is written", async () => {
+    const v = await venue();
+    const seen = await tx(async (db) => {
+      let seen: unknown;
+      await replaceZoneClosedWeek(db, v.cfg, v.terrace, week(), 0, at, {
+        afterWrite: async (read) => {
+          const written = await db
+            .select({ id: zoneDayRanges.id })
+            .from(zoneDayRanges)
+            .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
+            .where(eq(zoneDays.zoneId, v.terrace));
+          seen = { ...read, written: written.length > 0 };
+        },
+      });
+      return seen;
+    });
+    expect(seen).toEqual({
+      clock: expect.objectContaining({ dayCutover: "06:00" }),
+      departmentOf: new Map([[v.terrace, v.departmentId]]),
+      written: true,
+    });
+  });
+
   it("replaces only a zone's normal week, including clearing empty days", async () => {
     const v = await venue();
     await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(), 0));

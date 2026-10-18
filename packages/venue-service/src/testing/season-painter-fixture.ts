@@ -165,3 +165,26 @@ export function readNumbers(el: SeasonPainter) {
   };
   return { at, after: <M extends object>(model: M) => at(model, Number.MAX_SAFE_INTEGER) };
 }
+
+export type Slot = { periodId: string; startsAt: string; endsAt: string };
+/** `model` with the given days of one department's week in one season replaced. */
+export function withDays(
+  model: OpeningHoursModel,
+  departmentId: string,
+  days: Record<number, Slot[]>,
+  seasonId = "winter",
+): OpeningHoursModel {
+  const season = model.departments
+    .find(({ id }) => id === departmentId)!
+    .seasonWeeks.find((week) => week.seasonId === seasonId)!;
+  season.week = season.week.map(({ weekday, slots }) => ({
+    weekday,
+    slots: days[weekday] ?? slots,
+  }));
+  return model;
+}
+export const slot = (periodId: string, startsAt: string, endsAt: string): Slot => ({
+  periodId,
+  startsAt,
+  endsAt,
+});

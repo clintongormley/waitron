@@ -163,33 +163,127 @@ reads years 0–99 as 1900–1999 (#1616 fixed `addDays` and `weekdayOf`). Unrea
 which start at year 100; changing `isLocalDate` would change which dates the server accepts from
 outside (menu publication dates, imports), so it needs a decision.
 
-## A723. The season painter and the special-day editor: say what they are, close on Save, keep a zone's closures inside opening hours
+## A server write that changes a department's hours leaves its zones' closures outside them
 
-**A723 (owner, 2026-10-15).** Mockups: [season painter](mockups/a718-a727-calendar-and-stations/06-season-painter.png),
-[special-day editor](mockups/a718-a727-calendar-and-stations/07-special-day-editor.png). Files:
-`packages/venue-service/src/dashboard/season-painter.ts`, `special-day-painter.ts`, `paint-row.ts`,
-`painter-frame.ts`, `add-dates-calendar.ts`, `strings.ts`, and the server's season-week and
-special-day write routes.
+Left open by A723.
 
-1. **"Standard", not "normal"**, wherever a season's week is named: the painter's title becomes
-   "Autumn: standard week", and strings such as "Follow the normal week" (`opening.follow_week`)
-   follow.
-2. **A line under the top bar says what is being edited:** "Every week from 5 Sept to 30 Nov opens
-   these hours, except on special days."
-3. **The "… follow Santet Deli Co" note leaves the top bar** (`painter.zone_follows`,
-   `painter.zones_follow`).
-4. **Save closes.** One Save sends every department and zone changed, then closes the painter; a
-   refused save keeps it open with its message beside Save. The same in the special-day editor. The
-   design notes' sentence that "the painter stays open and the answer becomes the saved state"
-   (design-system.md, the special-day painter) changes with it. Owner: you can paint a zone without
-   saving first, so one Save at the end is enough.
-5. **A zone's Closed paint covers only times its department is open.** Dragging Terrace's Closed
-   from 23:30 to 03:00 keeps 23:30–02:00, when Santet Deli Co closes; the server refuses a zone
-   closure outside its department's hours from any route.
-6. **A period chip's edit control is a visible "✎ Edit" button** (`paint-row.ts:165`), not a bare ✎.
-7. **The special-day editor's Range button goes.** A click adds or removes a date; a drag or a
-   shift-click adds a run; one hint line says so. `DayPicker` (`day-picking.ts`), with `dragOnTouch` on
-   inside the dialog.
+A write that changes only a department's hours is not refused and does not cut the zone closures
+already stored: the menu-week route (`replaceMenuWeek`), deleting a period (`period-delete.ts`),
+moving a zone to another department (`configureZone`, `operations.ts`), and a season-week request
+that sends only a department. A closure left outside the new hours stays stored, and the next save
+of that zone is refused, naming that day, until the stretch is deleted or repainted. In the
+painters, changing a department's day cuts the closures painted for its zones on that same season
+day or special date; a special date's zone paint is not cut when the season week under it changes
+(see "A change to a department's season week can leave a special date's zone closure outside its
+new hours", below). Decide whether those writes should cut the closures too. (A723 plan, Decision 3; the list of
+writes is the plan's reading of the code, not run here.)
+
+## The zone-closure hours check runs at the routes, not inside the writers
+
+Left open by A723.
+
+The check that a zone closure lies inside its department's hours runs in the season-week,
+closed-week and special-day routes and in the configuration import (`configuration-transfer.ts`),
+not inside the writers. The season-week and closed-week routes pass `assertSeasonClosuresInHours`
+(`zone-closure-hours.ts`) to `saveSeasonWeeks` and `replaceZoneClosedWeek` as their optional
+`afterWrite` hook, which the writer runs after its writes; the special-day routes call
+`assertDatedClosuresInHours` after `saveSpecialDay` returns. A caller that passes no hook, or calls
+`saveSpecialDay` directly (tests and the demo seed today), is not checked, and a new route must
+pass or call the check itself. The plan counted 123 test set-ups that build zone states through the writers and
+would break under a check inside them. (A723 plan, Decision 1.)
+
+## Unticking a special date's "Closed all day" brings back its zone paint unchecked
+
+Left open by A723.
+
+The server does not check zone closures on a date ticked closed all day
+(`assertDatedClosuresInHours` skips it), because the day's resolver ignores zone paint there. Zone
+paint stored on that date counts again once the tick is removed, and the save that removes the
+tick checks only the zone paint the request sends, which the editor limits to paint that differs
+from what is saved. So a stored closure outside the department's hours that date is not caught.
+(A723 plan, Decision 4.)
+
+## A change to a department's season week can leave a special date's zone closure outside its new hours
+
+Left open by A723.
+
+A special date's department hours come from the season week its date falls in, with the day's own
+paint laid over them. A change to that week (a season-painter save, the menu-week route) or to
+which week a date falls in (moving a season's start, deleting a season) changes those hours, and
+nothing checks the zone closures stored on special dates against them: the season-week check reads
+only the zone weeks a request sends, and the special-day check only the zone paint a special-day
+save sends.
+
+## A yearly special day's zone paint is checked against its stored date only
+
+Left open by A723.
+
+`assertDatedClosuresInHours` checks each stored date against its department's hours on that date.
+A special day that repeats every year falls in later years on other weekdays, and perhaps in other
+seasons, where the department's hours can differ; its zone closures are not checked there.
+
+## A special day whose dates have different changeovers is cut on the first date's changeover
+
+Left open by A723.
+
+The special-day editor draws every date from the first date's changeover (`cutover`,
+`special-day-painter.ts`) and cuts every date's zone Closed paint on it, while the server checks
+each date on its own changeover (`serviceDayContext` in `assertDatedClosuresInHours`). On a special
+day whose dates have different changeovers (dates either side of a scheduled change to the
+business day's start, `cutoverForBusinessDay`), the two can disagree: the server refuses, and the
+editor shows its reason. Read in the code, not run.
+
+## The season-week and closed-week routes do not lower-case a zone or season id, as the special-day route does
+
+Found during A723.
+
+The season-week route (`PUT …/seasons/:seasonId/weeks`) and the closed-week route
+(`PUT …/zones/:zoneId/closed-week`) take a zone or season id as sent (`requireUuidParam`,
+`requireBodyUuid`, `requireWeekList`, `routes.ts`), so an upper-case id finds no row and is
+answered as not found (404); the special-day route lower-cases a zone or department id before
+storing it (`special-days.ts`). Measured during A723 with a temporary test: an upper-case zone id,
+and then an upper-case season id, sent to each of the two routes was answered 404
+(`service_zone.not_found`, `season.not_found`). It predates A723. Decide whether the two routes lower-case ids too.
+
+## A cut-away zone stroke hides another day's refusal marker until the next Save
+
+Left open by A723.
+
+In both opening-hours painters, a change to a zone's day whose Closed paint is cut away entirely
+replaces the whole refusal beside Save with "A zone can only close while its department is open."
+(the `paint-outside` handlers in `season-painter.ts` and `special-day-painter.ts`), so the marker
+a refused Save put on another day's heading disappears too. The next Save marks it again; the newest
+message wins.
+
+## A season closure on a special date is not cut or checked against that date's shorter hours
+
+Found during A723.
+
+On a special date, a zone's closures from its season week still apply, with the date's zone paint
+laid over them (`layerZonePaint` in `resolveZoneClosedDays`, `day-resolver.ts`). When the
+department's paint for that date shortens its hours, nothing cuts or checks those season closures:
+the special-day painter cuts only a zone's paint on that date and skips a zone with none (`paint`,
+`special-day-painter.ts`), and the special-day routes check only the closed ranges in the zone
+paint the request sends (`assertDatedClosuresInHours`, `zone-closure-hours.ts`). So a season
+closure can lie outside that date's department hours. Found by reading the code, not run.
+
+## A723's plan defaults sent to the owner as an FYI
+
+Left open by A723.
+
+A723's plan made these choices by default and sent them to the owner to overrule if wanted
+([plan](../superpowers/plans/2026-10-18-a723-painters-standard-week.md), "Decisions this plan
+makes"):
+
+- Decision 1: the zone-closure hours check runs at the routes and the import, not in the writers.
+- Decision 3: the server checks only the zone closures a request writes; a department-only change
+  leaves stored closures as they are.
+- Decision 6: the Opening hours screen closes a painter after a clean save; paint made during the
+  save keeps it open, unsaved.
+- Decision 7: a zone's day on which its department is closed shows "<department> closed all day"
+  behind the zone's paint, which stays drawn on top.
+- Decision 9: the special-day editor keeps the day's name as its heading, with no line naming its
+  dates.
 
 ## A762. Every painter says what it edits in its colour, and the Staffing month marks special days
 
@@ -206,6 +300,11 @@ wording); the stored season colours it paints with landed in A721.
 2. **The staffing painters take A723's wording too:** "Winter: standard week" or "Foo: special day,
    12–15 Feb", with A723's line under the top bar saying which dates it covers. Today the staffing
    special-day painter shows only "Foo" and a department.
+   A723 kept the special-day editor's heading as the day's name with no dates line (A723 plan,
+   Decision 9). The staffing Spanish strings still say "semana habitual" (`staffing.rota.paint_week`,
+   `staffing.day.edit_week`, `staffing.day.show_week` and `staffing.rota.unpainted_season`,
+   `packages/staffing/src/dashboard/strings.ts`) where Opening hours and the staffing painter's own
+   title now say "semana estándar".
 3. **The Staffing month marks a special day's dates in its colour**, as one run the way the season
    bar marks a season. Today each date only carries the name in coloured text.
 
@@ -256,6 +355,23 @@ Re-check when a new year's list is added.
   (A721 plan, Decision 17; plan default, sent to the owner as an FYI, 2026-10-17).** A field the
   person changed keeps their value; a season deleted elsewhere is dropped if untouched or binned,
   and kept with "This season no longer exists." if touched, and Save waits until it is binned.
+
+- **A zone closure outside its department's hours is refused with the reason `outside_hours` on
+  each route's own code (A723 plan, Decision 2; plan default).** The season-week and closed-week
+  routes answer `zone_closed_time.invalid`, the special-day routes `special_day.invalid` with
+  `field: "zonePaint.<i>.ranges.<k>"`; the configuration import keeps
+  `setup.request_invalid { field: "zone_day_ranges" }`.
+
+- **A special-day zone's Open paint is not bounded, and a date ticked closed all day is not checked
+  (A723 plan, Decision 4; plan default).** The day's resolver ignores zone paint on such a date.
+
+- **The painters cut a zone's closures only on the days a change touches, and nothing on Save
+  (A723 plan, Decision 5; plan default).** A day nobody changed keeps a stored out-of-hours stretch,
+  and a season-painter Save that sends that zone's week is refused for it, marking that day.
+
+- **"Standard week" in English and "semana estándar" in Spanish wherever Opening hours names a
+  season's week (A723 plan, Decision 8; plan default).** `day.standard` ("Horario habitual de
+  {season}") names hours, not a week, and stays.
 
 - **In the Calendar's Month and Week a day's name breaks only between its words, a word too wide
   for its place cut with "…" and kept whole in the name's title; the day box shows the name whole,

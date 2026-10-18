@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { LocalDate } from "../hours-types.js";
 import type { AddDatesCalendar } from "./add-dates-calendar.js";
@@ -7,8 +7,12 @@ import "./add-dates-calendar.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => setLocale("en"));
-afterEach(() => {
+afterEach(async () => {
+  await userEvent.keyboard("{/Shift}");
+  await commands.parkPointer();
   for (const host of hosts.splice(0)) host.remove();
+  await commands.parkTouch();
+  window.scrollTo(0, 0);
   setLocale("en");
 });
 
@@ -33,6 +37,41 @@ function added(el: AddDatesCalendar): LocalDate[][] {
     sent.push((event as CustomEvent<{ dates: LocalDate[] }>).detail.dates),
   );
   return sent;
+}
+function removedBy(el: AddDatesCalendar): LocalDate[][] {
+  const sent: LocalDate[][] = [];
+  el.addEventListener("remove-dates", (event) =>
+    sent.push((event as CustomEvent<{ dates: LocalDate[] }>).detail.dates),
+  );
+  return sent;
+}
+/** Takes each add into `selected`, as the painter does. */
+function keepAdded(el: AddDatesCalendar): void {
+  el.addEventListener("add-dates", (event) => {
+    el.selected = [...el.selected, ...(event as CustomEvent<{ dates: LocalDate[] }>).detail.dates];
+  });
+}
+const sel = (date: LocalDate) => `add-dates-calendar td[data-date="${date}"] > button`;
+const marked = (el: AddDatesCalendar) =>
+  [...root(el).querySelectorAll<HTMLElement>("td[data-picked]")].map((cell) => cell.dataset.date);
+/** Each set of dates drawn marked while `during` runs, with how many adds had been sent by then. */
+async function watchMarks(
+  el: AddDatesCalendar,
+  sent: LocalDate[][],
+  during: () => Promise<unknown>,
+): Promise<{ marked: string; sent: number }[]> {
+  const seen: { marked: string; sent: number }[] = [];
+  const observer = new MutationObserver(() =>
+    seen.push({ marked: marked(el).join(), sent: sent.length }),
+  );
+  observer.observe(root(el), { subtree: true, attributeFilter: ["data-picked"] });
+  try {
+    await during();
+    await el.updateComplete;
+  } finally {
+    observer.disconnect();
+  }
+  return seen;
 }
 async function shiftClick(el: AddDatesCalendar, date: LocalDate) {
   day(el, date).dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
@@ -67,7 +106,9 @@ describe("Add-dates calendar", () => {
     el.requestUpdate();
     await el.updateComplete;
     expect(text(testId(el, "month")).toLowerCase()).toBe("diciembre 2026");
-    expect(text(testId(el, "range"))).toBe("Intervalo");
+    expect(text(testId(el, "hint"))).toBe(
+      "Haz clic en una fecha para añadirla o quitarla. Arrastra, o haz clic con Mayús, para añadir varias.",
+    );
   });
 
   it("draws nothing until it has a month", async () => {
@@ -122,53 +163,161 @@ describe("Add-dates calendar", () => {
     expect(sent.at(-1)).toEqual(["2026-12-30", "2026-12-31", "2027-01-01", "2027-01-02"]);
   });
 
-  it("makes the next two clicks a range while Range is on, then turns it off", async () => {
+  it("a mouse drag across dates adds the run on release, drawn marked while dragging", async () => {
     const el = await mount();
     const sent = added(el);
-    const range = testId(el, "range");
-    expect(range.getAttribute("aria-pressed")).toBe("false");
-    await userEvent.click(range);
-    expect(range.getAttribute("aria-pressed")).toBe("true");
-    await userEvent.click(day(el, "2026-12-14"));
-    expect(sent).toEqual([]);
-    expect(day(el, "2026-12-14").closest("td")!.hasAttribute("data-anchor")).toBe(true);
-    expect(text(testId(el, "message"))).toBe("Choose the last date.");
-    await userEvent.click(day(el, "2026-12-12"));
-    expect(sent).toEqual([["2026-12-12", "2026-12-13", "2026-12-14"]]);
-    expect(range.getAttribute("aria-pressed")).toBe("false");
-    expect(text(testId(el, "message"))).toBe("");
-    await userEvent.click(day(el, "2026-12-20"));
-    expect(sent.at(-1)).toEqual(["2026-12-20"]);
+    const seen: { marked: (string | undefined)[]; sent: number }[] = [];
+    const observer = new MutationObserver(() =>
+      seen.push({ marked: marked(el), sent: sent.length }),
+    );
+    observer.observe(root(el), { subtree: true, attributeFilter: ["data-picked"] });
+    try {
+      await commands.mouseDrag([sel("2026-12-09"), sel("2026-12-10"), sel("2026-12-12")]);
+      await el.updateComplete;
+    } finally {
+      observer.disconnect();
+    }
+    expect(
+      seen.some(
+        (at) => at.sent === 0 && at.marked.join() === "2026-12-09,2026-12-10,2026-12-11,2026-12-12",
+      ),
+    ).toBe(true);
+    expect(sent).toEqual([["2026-12-09", "2026-12-10", "2026-12-11", "2026-12-12"]]);
+    expect(marked(el)).toEqual([]);
   });
 
-  it("turning Range off before the second click forgets its first", async () => {
+  it("a drag repeating the last run is drawn marked until its release", async () => {
     const el = await mount();
     const sent = added(el);
-    testId(el, "range").click();
-    await el.updateComplete;
-    day(el, "2026-12-14").click();
-    await el.updateComplete;
-    testId(el, "range").click();
-    await el.updateComplete;
-    expect(text(testId(el, "message"))).toBe("");
-    expect(root(el).querySelector("[data-anchor]")).toBeNull();
-    day(el, "2026-12-16").click();
-    expect(sent).toEqual([["2026-12-16"]]);
+    const drag = () =>
+      commands.mouseDrag([sel("2026-12-09"), sel("2026-12-10"), sel("2026-12-12")]);
+    await drag();
+    expect(sent).toHaveLength(1);
+    const seen = await watchMarks(el, sent, drag);
+    expect(seen).toContainEqual({
+      marked: "2026-12-09,2026-12-10,2026-12-11,2026-12-12",
+      sent: 1,
+    });
+    expect(sent).toHaveLength(2);
+    expect(marked(el)).toEqual([]);
   });
 
-  it("draws chosen dates pressed and sends nothing for them, leaving them out of a range", async () => {
+  it("a drag back onto its first date is drawn marking that date", async () => {
+    const el = await mount();
+    const sent = added(el);
+    const seen = await watchMarks(el, sent, () =>
+      commands.mouseDrag([sel("2026-12-09"), sel("2026-12-11"), sel("2026-12-09")]),
+    );
+    expect(seen).toContainEqual({ marked: "2026-12-09", sent: 0 });
+    expect(sent).toEqual([["2026-12-09"]]);
+    expect(marked(el)).toEqual([]);
+  });
+
+  it("a shift-double-click inside a dragged run leaves nothing marked", async () => {
+    const el = await mount();
+    await commands.mouseDrag([sel("2026-12-09"), sel("2026-12-12")]);
+    await el.updateComplete;
+    expect(marked(el)).toEqual([]);
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.dblClick(day(el, "2026-12-10"));
+    await userEvent.keyboard("{/Shift}");
+    await el.updateComplete;
+    expect(marked(el)).toEqual([]);
+  });
+
+  it("names the holder of a held date reached by a shift-click", async () => {
+    const el = await mount({ taken: new Map([["2026-12-25", "Christmas"]]) });
+    day(el, "2026-12-20").click();
+    await shiftClick(el, "2026-12-25");
+    expect(text(testId(el, "held"))).toBe("Christmas holds this date.");
+  });
+
+  it("a touch drag adds the run and does not scroll the page", async () => {
+    const el = await mount();
+    const filler = document.createElement("div");
+    filler.style.blockSize = "4000px";
+    document.body.append(filler);
+    hosts.push(filler);
+    window.scrollTo(0, 0);
+    const sent = added(el);
+    await commands.touchGesture({ at: sel("2026-12-15"), moveTo: sel("2026-12-01") });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(window.scrollY).toBe(0);
+    expect(sent).toEqual([
+      Array.from({ length: 15 }, (_, index) => `2026-12-${String(index + 1).padStart(2, "0")}`),
+    ]);
+  });
+
+  it("Shift+arrow adds the run", async () => {
+    const el = await mount();
+    keepAdded(el);
+    const sent = added(el);
+    day(el, "2026-12-09").focus();
+    await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{/Shift}");
+    expect(sent).toEqual([["2026-12-09", "2026-12-10"], ["2026-12-11"]]);
+    expect(root(el).activeElement).toBe(day(el, "2026-12-11"));
+  });
+
+  it("a double-click on a date adds it once", async () => {
+    const el = await mount();
+    keepAdded(el);
+    const sent = added(el);
+    const removed = removedBy(el);
+    await userEvent.dblClick(day(el, "2026-12-09"));
+    await el.updateComplete;
+    expect(sent).toEqual([["2026-12-09"]]);
+    expect(removed).toEqual([]);
+  });
+
+  it("shows one hint line and no Range button, in English and Spanish", async () => {
+    const el = await mount();
+    expect(root(el).querySelectorAll(".hint")).toHaveLength(1);
+    expect(text(testId(el, "hint"))).toBe(
+      "Click a date to add or remove it. Drag, or shift-click, to add several.",
+    );
+    expect(root(el).querySelector('[data-test="range"]')).toBeNull();
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(text(testId(el, "hint"))).toBe(
+      "Haz clic en una fecha para añadirla o quitarla. Arrastra, o haz clic con Mayús, para añadir varias.",
+    );
+    expect(root(el).querySelector('[data-test="range"]')).toBeNull();
+  });
+
+  it("draws chosen dates pressed and a click on one sends remove-dates, leaving them out of a range", async () => {
     const el = await mount({ selected: ["2026-12-10", "2026-12-11"] });
     const sent = added(el);
+    const removed = removedBy(el);
     expect(day(el, "2026-12-10").getAttribute("aria-pressed")).toBe("true");
     expect(day(el, "2026-12-09").getAttribute("aria-pressed")).toBe("false");
     await userEvent.click(day(el, "2026-12-10"));
     expect(sent).toEqual([]);
+    expect(removed).toEqual([["2026-12-10"]]);
     await shiftClick(el, "2026-12-12");
     expect(sent).toEqual([["2026-12-12"]]);
     sent.length = 0;
     day(el, "2026-12-09").click();
     await shiftClick(el, "2026-12-11");
     expect(sent).toEqual([["2026-12-09"], ["2026-12-09"]]);
+  });
+
+  it("a click on a chosen date sends remove-dates with that date", async () => {
+    const el = await mount({ selected: ["2026-12-10"] });
+    const sent = added(el);
+    const removed: CustomEvent<{ dates: LocalDate[] }>[] = [];
+    const listen = (event: Event) => removed.push(event as CustomEvent<{ dates: LocalDate[] }>);
+    document.body.addEventListener("remove-dates", listen);
+    try {
+      await userEvent.click(day(el, "2026-12-10"));
+      expect(removed.map((event) => event.detail.dates)).toEqual([["2026-12-10"]]);
+      expect(removed[0]!.composed).toBe(true);
+      await userEvent.click(day(el, "2026-12-11"));
+      expect(sent).toEqual([["2026-12-11"]]);
+      expect(removed).toHaveLength(1);
+    } finally {
+      document.body.removeEventListener("remove-dates", listen);
+    }
   });
 
   it("marks a date another special day holds with its name, and still adds it", async () => {
@@ -270,25 +419,6 @@ describe("Add-dates calendar", () => {
     expect(sent.at(-1)).toHaveLength(366);
     expect(sent.at(-1)![0]).toBe("2027-01-01");
     expect(text(testId(el, "message"))).toBe("");
-  });
-
-  it("keeps Range on with its first date when its range is too long", async () => {
-    const el = await mount({ month: "2027-01" });
-    const sent = added(el);
-    testId(el, "range").click();
-    await el.updateComplete;
-    day(el, "2027-01-01").click();
-    el.month = "2028-01";
-    await el.updateComplete;
-    day(el, "2028-01-02").click();
-    await el.updateComplete;
-    expect(sent).toEqual([]);
-    expect(text(testId(el, "message"))).toBe("Choose at most 366 dates.");
-    expect(testId(el, "range").getAttribute("aria-pressed")).toBe("true");
-    day(el, "2028-01-01").click();
-    await el.updateComplete;
-    expect(sent.map((dates) => dates.length)).toEqual([366]);
-    expect(testId(el, "range").getAttribute("aria-pressed")).toBe("false");
   });
 
   it("moves focus between dates with the arrow keys, one Tab stop in the month", async () => {
