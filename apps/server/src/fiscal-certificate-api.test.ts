@@ -224,7 +224,7 @@ describe("GET /management-api/fiscal-certificate", () => {
     const response = await get(mount(seat), venue.supervisor.cookie);
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({
-      error: { code: "authorization.not_permitted" },
+      error: { code: "authorization.not_permitted", params: { permission: "fiscal.view" } },
     });
     expect(seat.calls).toEqual(["read"]);
   });
@@ -259,7 +259,7 @@ describe("POST /management-api/fiscal-certificate", () => {
     const response = await post(mount(seat), venue.supervisor.cookie, certificateBody);
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({
-      error: { code: "authorization.not_permitted" },
+      error: { code: "authorization.not_permitted", params: { permission: "system.manage" } },
     });
     expect(seat.calls).toEqual(["install"]);
   });
