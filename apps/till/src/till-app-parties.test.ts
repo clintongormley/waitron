@@ -7353,6 +7353,79 @@ describe("till-app: Current orders", () => {
       return panel;
     }
     it.each(["till", "phone-portrait"] as const)(
+      "a native %s held-heading reorder sends every bill's groups once and refreshes their positions",
+      async (formFactor) => {
+        let moved = false;
+        const held = (id: string, position: number, displayNumber: number, billId: string) => ({
+          ...orders.groups[0]!,
+          id,
+          position,
+          displayNumber,
+          state: "held" as const,
+          firedAt: null,
+          rows: orders.groups[0]!.rows.map((row) => ({
+            ...row,
+            lineId: `${id}-food`,
+            workingOrderId: billId,
+            released: false,
+            firedAt: null,
+          })),
+        });
+        const read = (): CurrentOrders => ({
+          ...orders,
+          revision: moved ? 4 : 3,
+          reminder: null,
+          nextDisplayNumber: 32,
+          groups: [
+            held("g2", moved ? 3 : 2, 12, "wo-4"),
+            held("g3", moved ? 2 : 3, 31, "wo-check"),
+            held("g4", 4, 4, "wo-4"),
+          ],
+        });
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+          readCurrentOrders: vi.fn(async () => read()),
+          listGroups: vi.fn(async () => ({
+            revision: read().revision,
+            groups: read().groups.map((group) => ({
+              ...group,
+              courseIds: [],
+              lineIds: group.rows.map((row) => row.lineId),
+              summary: group.rows[0]!.name,
+            })),
+          })),
+          reorderGroups: vi.fn(async () => {
+            moved = true;
+            return { revision: 4 };
+          }),
+        });
+        const order = await openMesa(el);
+        const panel = await visiblePanel(order);
+        await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
+        await panel.updateComplete;
+        const more = panel.shadowRoot!.querySelector<
+          HTMLElement & { updateComplete: Promise<unknown> }
+        >('[data-group-more="g2"]')!;
+        await more.updateComplete;
+        await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+        await userEvent.click(more.querySelector<HTMLElement>("[data-group-later]")!);
+        await flush(el);
+        expect(api.reorderGroups).toHaveBeenCalledExactlyOnceWith("v1", ["g3", "g2", "g4"], {
+          submissionId: expect.any(String),
+          expectedPartyRevision: 3,
+        });
+        expect(tableOrder(el)!.currentOrders!.revision).toBe(4);
+        expect(
+          tableOrder(el)!.groups.map((group) => [group.id, group.position, group.displayNumber]),
+        ).toEqual([
+          ["g2", 3, 12],
+          ["g3", 2, 31],
+          ["g4", 4, 4],
+        ]);
+        expect(banner(el)).toBeNull();
+      },
+    );
+    it.each(["till", "phone-portrait"] as const)(
       "a native %s row tap serves once and Undo sends that accepted quantity",
       async (formFactor) => {
         const { el } = await mountApp({

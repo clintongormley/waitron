@@ -2284,7 +2284,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   existing adjustment requests. Focused tests cover amount correction, exact whole-family totals,
   a withdrawn reason, retained paid/editor/context controls and keeping unfinished choices when
   you close the window. The new Spanish Comp wording awaits review; the earlier six Sent labels
-  were approved on 2026-10-18. Held-heading reorder and held-dish Finish resolution remain open. Its
+  were approved on 2026-10-18. On the feature branch, a held heading now offers Move earlier and
+  Move later in More, or you can hold its heading for 500 ms and drag it before or after another
+  shown held heading. The command includes every bill's held groups and keeps the printed group
+  numbers. A changed service revision, group order, bill visit or API refuses the retained action;
+  a changed read closes the old menu. Native till/handheld requests and keyboard menus have focused
+  checks, including phone widths in both themes. The two new Spanish reorder labels await review.
+  A physical till trial, unsent-line/group drag, the old drawer's retirement and held-dish Finish
+  resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
   target recovery. Single-dish Fire now's command/API/client work is qualified on the feature

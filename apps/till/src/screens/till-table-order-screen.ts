@@ -32,7 +32,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { type ComboboxOption, baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
-import type { SentLineInfo } from "../widgets/sent-orders.js";
+import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
 import { sentPanel, type SentSlice } from "../state/sent-panel.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
@@ -2594,6 +2594,7 @@ export class TillTableOrderScreen extends LitElement {
   #sentOrders(): TemplateResult {
     const billId = this.orderId ?? "";
     const scope = JSON.stringify([this.serviceVisit, this.party?.id ?? null]);
+    const api = this.api;
     const bills = shownBills(this.bills);
     return html`<div data-sent-orders>
       ${
@@ -2608,6 +2609,28 @@ export class TillTableOrderScreen extends LitElement {
         .billLabels=${new Map(bills.map((bill, index) => [bill.workingOrderId, billName(this.party?.displayName ?? "", index)]))}
         .busy=${this.busy || this.groupCommandBusy}
         .now=${this.now}
+        @reorder-held=${(event: CustomEvent<SentReorderDetail>) => {
+          event.stopPropagation();
+          const { expected, heldGroupIds } = event.detail;
+          const held = this.groups
+            .filter((group) => group.state === "held")
+            .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+            .map((group) => group.id);
+          if (
+            !this.isConnected ||
+            this.busy ||
+            this.groupCommandBusy ||
+            this.currentOrdersUnread ||
+            this.api !== api ||
+            this.orderId !== billId ||
+            JSON.stringify([this.serviceVisit, this.party?.id ?? null]) !== expected.scope ||
+            this.currentOrders?.revision !== expected.revision ||
+            held.length !== expected.ids.length ||
+            held.some((id, index) => id !== expected.ids[index])
+          )
+            return;
+          this.#dispatch("reorder-groups", { heldGroupIds } satisfies ReorderGroupsDetail);
+        }}
         @sent-line-info=${(event: CustomEvent<SentLineInfo>) => {
           event.stopPropagation();
           if (!this.isConnected || this.busy || this.groupCommandBusy) return;
