@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -318,11 +318,81 @@ describe("till-table-details-sheet", () => {
     const el = await mount({
       table: table({
         ...seated,
-        party: party({ outstanding: "5.00", unsentDrafts: [{ ownerName: "Luis", lineCount: 2 }] }),
+        party: party({
+          outstanding: "5.00",
+          unsentDrafts: [{ billId: "bill-1", billNumber: 1, ownerName: "Luis", lineCount: 2 }],
+        }),
       }),
     });
-    expect(text(el, "[data-unsent]")).toBe("Luis has an unsent order: 2 items");
+    expect(text(el, "[data-unsent]")).toBe("Bill 1 · Luis has an unsent order: 2 items");
   });
+
+  it("keeps every bill/editor pair visible in the expanded detail alongside independent service signals", async () => {
+    const el = await mount({
+      table: table({
+        ...seated,
+        pendingToServe: 3,
+        readyToServe: 1,
+        party: party({
+          billCount: 2,
+          unsentDrafts: [
+            { billId: "b1", billNumber: 1, ownerName: "Luis", lineCount: 2 },
+            { billId: "b2", billNumber: 2, ownerName: "Luis", lineCount: 1 },
+          ],
+          reminder: { groupId: "g1", dueAt: "2026-10-10T11:00:00Z" },
+        }),
+      }),
+      now: Date.parse("2026-10-10T12:00:00Z"),
+    });
+    expect(
+      [...el.shadowRoot!.querySelectorAll("[data-unsent]")].map((li) =>
+        li.textContent!.replace(/\s+/g, " ").trim(),
+      ),
+    ).toEqual([
+      "Bill 1 · Luis has an unsent order: 2 items",
+      "Bill 2 · Luis has an unsent order: 1 item",
+    ]);
+    expect(text(el, "[data-kitchen]")).toBe("2 to serve · 1 ready");
+    expect(text(el, "[data-fire-due]")).toBe("Time to fire");
+  });
+
+  it.each([360, 390])(
+    "keeps a long bill editor name inside the expanded phone detail at %i px",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        const el = await mount({
+          table: table({
+            ...seated,
+            party: party({
+              unsentDrafts: [
+                {
+                  billId: "b1",
+                  billNumber: 1,
+                  ownerName: "AlexandradelRosariodelasMercedesFernandezFernandez",
+                  lineCount: 2,
+                },
+                { billId: "b2", billNumber: 2, ownerName: "Luis", lineCount: 1 },
+              ],
+            }),
+          }),
+        });
+        const dialog = dialogOf(el);
+        await dialog.updateComplete;
+        const box = dialog.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+        for (const mark of el.shadowRoot!.querySelectorAll<HTMLElement>("[data-unsent]")) {
+          const range = document.createRange();
+          range.selectNodeContents(mark);
+          const bounds = range.getBoundingClientRect();
+          expect(bounds.left).toBeGreaterThanOrEqual(box.left);
+          expect(bounds.right).toBeLessThanOrEqual(box.right);
+        }
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
 
   it("shows the signal chips, the booking and a delivery", async () => {
     const el = await mount({

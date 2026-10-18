@@ -550,6 +550,7 @@ export class TillFloorScreen extends LitElement {
       }
 
       .unsent {
+        max-width: 100%;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -557,6 +558,8 @@ export class TillFloorScreen extends LitElement {
       }
 
       .badge.unsent {
+        max-width: 100%;
+        overflow-wrap: anywhere;
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
         border: 1px dashed var(--wt-color-warning);
@@ -2000,7 +2003,7 @@ export class TillFloorScreen extends LitElement {
         tabTotal,
         status,
         reservedTime: table.nextReservation?.time ?? null,
-        unsentDrafts: table.party?.unsentDrafts.map((draft) => draft.ownerName),
+        unsentDrafts: table.party?.unsentDrafts.map(unsentText),
         partyName: shownPartyName(table),
         fireDue: this.#fireDue(table),
         chips: tableChips(table),

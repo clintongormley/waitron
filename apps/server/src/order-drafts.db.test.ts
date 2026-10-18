@@ -425,6 +425,53 @@ const withSauce = (v: Venue) => [
   { listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
 ];
 
+describe("floor bill/editor pairs", () => {
+  async function pairsAt(v: Venue, tableId: string) {
+    const rows = await inTx((tx) => listTablesWithState(tx, v.cfg));
+    return rows.find((row) => row.id === tableId)!.party!.unsentDrafts;
+  }
+
+  it("keeps two bills by one editor separate and changes only the taken-over or emptied bill", async () => {
+    const v = await setupVenue();
+    const { partyId, tableId } = await seated(v);
+    const first = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+    const second = await saveOnSeparateBill(v, partyId, ALEX, null, 0, [
+      item(v, "fish"),
+      item(v, "burger"),
+    ]);
+    const secondEdit = await inTx((tx) => readBillEditState(tx, second.billId));
+    expect(await pairsAt(v, tableId)).toEqual([
+      { billId: first.billId, billNumber: 1, ownerName: "Alex", lineCount: 1 },
+      { billId: second.billId, billNumber: 2, ownerName: "Alex", lineCount: 2 },
+    ]);
+
+    const taken = await takeOver(v, partyId, first.id, SAM, first.revision);
+    expect(await pairsAt(v, tableId)).toEqual([
+      { billId: first.billId, billNumber: 1, ownerName: "Sam", lineCount: 1 },
+      { billId: second.billId, billNumber: 2, ownerName: "Alex", lineCount: 2 },
+    ]);
+    await save(v, partyId, SAM, taken.id, taken.revision, []);
+    expect(await pairsAt(v, tableId)).toEqual([
+      { billId: second.billId, billNumber: 2, ownerName: "Alex", lineCount: 2 },
+    ]);
+    expect(await inTx((tx) => readBillEditState(tx, second.billId))).toEqual(secondEdit);
+  });
+
+  it("numbers the bills in their shown order even when their drafts were saved in reverse", async () => {
+    const v = await setupVenue();
+    const { partyId, tableId } = await seated(v);
+    const second = await saveOnSeparateBill(v, partyId, SAM, null, 0, [item(v, "fish")]);
+    expect(await pairsAt(v, tableId)).toEqual([
+      { billId: second.billId, billNumber: 2, ownerName: "Sam", lineCount: 1 },
+    ]);
+    const first = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+    expect(await pairsAt(v, tableId)).toEqual([
+      { billId: first.billId, billNumber: 1, ownerName: "Alex", lineCount: 1 },
+      { billId: second.billId, billNumber: 2, ownerName: "Sam", lineCount: 1 },
+    ]);
+  });
+});
+
 describe("separate drafts (spec §12 item 1)", () => {
   it("keeps Alex's and Sam's drafts apart, refuses Sam's save onto Alex's, and shows each unsent order on the table", async () => {
     const v = await setupVenue();
@@ -457,8 +504,8 @@ describe("separate drafts (spec §12 item 1)", () => {
 
     // Two rows on Alex's draft hold three units: the count is of rows.
     expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([
-      { ownerName: "Alex", lineCount: 2 },
-      { ownerName: "Sam", lineCount: 1 },
+      { billId: alex.billId, billNumber: 1, ownerName: "Alex", lineCount: 2 },
+      { billId: sam.billId, billNumber: 2, ownerName: "Sam", lineCount: 1 },
     ]);
   });
 
@@ -467,12 +514,16 @@ describe("separate drafts (spec §12 item 1)", () => {
     const mesa4 = await seated(v);
     const mesa5 = await seated(v, "Mesa 5");
     const alex = await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "beer")]);
-    await save(v, mesa5.partyId, SAM, null, 0, [item(v, "fish")]);
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([{ ownerName: "Alex", lineCount: 1 }]);
+    const sam = await save(v, mesa5.partyId, SAM, null, 0, [item(v, "fish")]);
+    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([
+      { billId: alex.billId, billNumber: 1, ownerName: "Alex", lineCount: 1 },
+    ]);
 
     await save(v, mesa4.partyId, ALEX, alex.id, alex.revision, []);
     expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([]);
-    expect(await unsentDraftsAt(v, mesa5.tableId)).toEqual([{ ownerName: "Sam", lineCount: 1 }]);
+    expect(await unsentDraftsAt(v, mesa5.tableId)).toEqual([
+      { billId: sam.billId, billNumber: 1, ownerName: "Sam", lineCount: 1 },
+    ]);
   });
 
   it("does not show a draft that is no longer open, even one still holding lines", async () => {
@@ -493,7 +544,9 @@ describe("saving a draft", () => {
     const nobody = randomUUID();
     const draft = await save(v, mesa4.partyId, nobody, null, 0, [item(v, "beer")]);
     expect(draft).toMatchObject({ ownerId: nobody, ownerName: "" });
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([{ ownerName: "", lineCount: 1 }]);
+    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([
+      { billId: draft.billId, billNumber: 1, ownerName: "", lineCount: 1 },
+    ]);
     await expect(save(v, mesa4.partyId, SAM, draft.id, 0, [])).rejects.toMatchObject({
       code: "draft.taken_over",
       params: { draftId: draft.id, ownerId: nobody, ownerName: null },
@@ -933,7 +986,7 @@ describe("draft bill ownership", () => {
     expect(await draftsOf(v, partyId)).toEqual([samFirst, taken]);
   });
 
-  it("shows one floor summary per owner across bills while keeping people with the same name separate", async () => {
+  it("shows one floor summary per bill even when its editors have the same name", async () => {
     const v = await setupVenue();
     const { partyId, tabId, tableId } = await seated(v);
     const secondId = await otherBill(v, partyId, tabId);
@@ -946,8 +999,9 @@ describe("draft bill ownership", () => {
     const thirdId = await otherBill(v, partyId, tabId);
     await onBill(v, partyId, thirdId, SAM);
     expect(await unsentDraftsAt(v, tableId)).toEqual([
-      { ownerName: "Alex", lineCount: 2 },
-      { ownerName: "Alex", lineCount: 1 },
+      { billId: tabId, billNumber: 1, ownerName: "Alex", lineCount: 1 },
+      { billId: secondId, billNumber: 2, ownerName: "Alex", lineCount: 1 },
+      { billId: thirdId, billNumber: 3, ownerName: "Alex", lineCount: 1 },
     ]);
     expect(
       (await draftsOf(v, partyId)).map(({ billId, ownerId }) => ({ billId, ownerId })),
@@ -1834,7 +1888,9 @@ describe("taking over a draft (D5, spec §2)", () => {
       { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
       { kind: "taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
     ]);
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([{ ownerName: "Sam", lineCount: 1 }]);
+    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([
+      { billId: alex.billId, billNumber: 1, ownerName: "Sam", lineCount: 1 },
+    ]);
   });
 
   it("answers draft.out_of_date, writing nothing, to a takeover from a stale revision", async () => {
@@ -1934,7 +1990,10 @@ describe("taking over a draft (D5, spec §2)", () => {
       { kind: "created", fromPerson: null, toPerson: ALEX, actorId: ALEX, detail: {} },
       { kind: "taken_over", fromPerson: ALEX, toPerson: SAM, actorId: SAM, detail: {} },
     ]);
-    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([{ ownerName: "Sam", lineCount: 4 }]);
+    expect(await unsentDraftsAt(v, mesa4.tableId)).toEqual([
+      { billId: alex.billId, billNumber: 1, ownerName: "Sam", lineCount: 2 },
+      { billId: sam.billId, billNumber: 2, ownerName: "Sam", lineCount: 2 },
+    ]);
     await refusedWritingNothing(() => save(v, mesa4.partyId, ALEX, alex.id, 1, []), {
       code: "draft.taken_over",
       params: { draftId: alex.id, ownerId: SAM },
@@ -3293,8 +3352,8 @@ describe("merging parties (D2)", () => {
 
     // The source's table now seats the target's party, and shows its unsent orders.
     expect(await unsentDraftsAt(v, mesa5.tableId)).toEqual([
-      { ownerName: "Alex", lineCount: 4 },
-      { ownerName: "Sam", lineCount: 1 },
+      { billId: alexOn4.billId, billNumber: 1, ownerName: "Alex", lineCount: 4 },
+      { billId: samOn5.billId, billNumber: 2, ownerName: "Sam", lineCount: 1 },
     ]);
   });
 
@@ -4745,7 +4804,9 @@ describe("source-backed draft foundations", () => {
       { id: draft.lines[1]!.id, position: 2 },
       { id: draft.lines[0]!.id, position: 3 },
     ]);
-    expect(await unsentDraftsAt(v, tableId)).toEqual([{ ownerName: "Alex", lineCount: 3 }]);
+    expect(await unsentDraftsAt(v, tableId)).toEqual([
+      { billId: tabId, billNumber: 1, ownerName: "Alex", lineCount: 3 },
+    ]);
     const taken = await takeOver(v, partyId, draft.id, SAM, saved.revision);
     expect(taken.lines).toEqual(saved.lines);
     expect(
@@ -5120,7 +5181,9 @@ describe("source-backed draft foundations", () => {
     expect(saved.lines).toHaveLength(1);
     expect(saved.lines[0]).toMatchObject({ id, sourceLineId: parentId, slot: 0 });
     expect(await storedLines(draft.id)).toEqual([]);
-    expect(await unsentDraftsAt(v, tableId)).toEqual([{ ownerName: "Alex", lineCount: 1 }]);
+    expect(await unsentDraftsAt(v, tableId)).toEqual([
+      { billId: tabId, billNumber: 1, ownerName: "Alex", lineCount: 1 },
+    ]);
   });
 
   it("transfers a colleague's source references in place and leaves the taker's other bill alone", async () => {
@@ -5222,7 +5285,9 @@ describe("source-backed draft foundations", () => {
     await db
       .insert(orderDraftRecalledLines)
       .values({ draftId: draft.id, sourceLineId: second.parentId, position: 4 });
-    expect(await unsentDraftsAt(v, tableId)).toEqual([{ ownerName: "Alex", lineCount: 4 }]);
+    expect(await unsentDraftsAt(v, tableId)).toEqual([
+      { billId: tabId, billNumber: 1, ownerName: "Alex", lineCount: 4 },
+    ]);
   });
 
   it("retains the original working-line allergy tick through source placement save and takeover", async () => {

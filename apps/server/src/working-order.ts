@@ -8338,7 +8338,7 @@ async function readSeatedParties(
   const partyIds = [...new Set(members.map((member) => member.partyId))];
   const labels = await partyTableLabels(tx, partyIds);
   const bills = await readBillsOfParties(tx, partyIds);
-  const unsentDrafts = await readUnsentDrafts(tx, partyIds);
+  const unsentDrafts = await readUnsentDrafts(tx, partyIds, bills);
   const reminders = await readReleaseReminders(tx, partyIds);
   const notes = await VENUE_SERVICE.readKitchenNotes(
     tx,

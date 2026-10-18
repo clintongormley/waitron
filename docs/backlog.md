@@ -2232,6 +2232,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   no product behavior. The empty-bill first-save rule and three exact EN/ES messages have final
   approval after the relay correction; five earlier Pay name/count strings are withdrawn. Twelve
   cancellation translations stay approved; English Void/Comp naming stands.
+  The unlanded floor read now keeps every nonempty bill/editor pair separately, even when
+  the editor names match. Bill numbers follow the table screen's non-abandoned bill list,
+  including bills with no unsent dishes. Takeover and emptying one bill leave the other pair
+  visible. List cards, compact map labels and expanded details carry these bill labels and
+  retain dish counts; long editor names wrap at phone width. Focused server and browser checks
+  cover the pairs alongside the existing ready and due signals. Whole-item work listed above
+  remains open.
   **A773-2**, firing and the pass, is planned after A773-1 lands: Requested/pass release, Away/Done
   removal, station settings and counter changes. The [six choices](backlog/mockups/a773-1-open-points/README.md)
   are answered in spec §14. Physical trials and the remaining panel/actions/finish/delivery work

@@ -1009,7 +1009,12 @@ function lateSaveLiveFloor() {
           ...each.party!,
           unsentDrafts: server.drafts
             .filter((one) => one.partyId === each.party!.id && one.lines.length > 0)
-            .map((one) => ({ ownerName: one.ownerName, lineCount: one.lines.length })),
+            .map((one) => ({
+              billId: one.billId,
+              billNumber: 1,
+              ownerName: one.ownerName,
+              lineCount: one.lines.length,
+            })),
         },
       })),
     ),
@@ -1213,7 +1218,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     await back(el);
     await settle(el);
 
-    expect(unsentMark(el, "t4")).toBe("Ana has an unsent order: 2 items");
+    expect(unsentMark(el, "t4")).toBe("Bill 1 · Ana has an unsent order: 2 items");
     expect(unsentMark(el, "t7")).toBeUndefined();
   });
 
@@ -1228,7 +1233,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     emit(shell(el), "screen-select", { screen: "floor" });
     await settle(el);
 
-    expect(unsentMark(el, "t4")).toBe("Ana has an unsent order: 1 item");
+    expect(unsentMark(el, "t4")).toBe("Bill 1 · Ana has an unsent order: 1 item");
   });
 
   it("restores the draft from the server on coming back to the table", async () => {

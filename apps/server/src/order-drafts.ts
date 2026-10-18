@@ -36,6 +36,7 @@ import {
   partyZone,
   partyRevisionOfOrder,
   requireBillOfParty,
+  type FamilyBill,
   requireOpenParty,
   runServiceCommand,
 } from "./parties.js";
@@ -173,8 +174,10 @@ export interface SaveDraftInput {
   lines: unknown;
 }
 
-/** One unsent draft on a party, as the floor shows it: `lineCount` counts rows, not units. */
+/** One bill’s saved unsent dishes; `lineCount` counts rows, not units. */
 export interface UnsentDraft {
+  billId: string;
+  billNumber: number;
   ownerName: string;
   lineCount: number;
 }
@@ -1049,16 +1052,22 @@ async function captureDraft(
   });
 }
 
-/** Each party's unsent rows by owner, in oldest-draft order. */
 export async function readUnsentDrafts(
   tx: Transaction,
   partyIds: readonly string[],
+  billsOf: ReadonlyMap<string, readonly FamilyBill[]>,
 ): Promise<Map<string, UnsentDraft[]>> {
   const unsent = new Map<string, UnsentDraft[]>(partyIds.map((id) => [id, []]));
-  if (partyIds.length === 0) return unsent;
+  const shown = new Map(
+    partyIds.map((id) => [id, billsOf.get(id)!.filter((bill) => bill.status !== "abandoned")]),
+  );
+  const billIds = [
+    ...new Set([...shown.values()].flatMap((bills) => bills.map((bill) => bill.workingOrderId))),
+  ];
+  if (billIds.length === 0) return unsent;
   const rows = await tx
     .select({
-      partyId: orderDrafts.partyId,
+      billId: orderDrafts.billId,
       ownerName: persons.displayName,
       lineCount: sql<number>`cast(count(distinct ${orderDraftLines.id}) + count(distinct ${orderDraftRecalledLines.id}) as int)`,
     })
@@ -1066,12 +1075,22 @@ export async function readUnsentDrafts(
     .leftJoin(orderDraftLines, eq(orderDraftLines.draftId, orderDrafts.id))
     .leftJoin(orderDraftRecalledLines, eq(orderDraftRecalledLines.draftId, orderDrafts.id))
     .leftJoin(persons, eq(persons.id, orderDrafts.ownerId))
-    .where(and(inArray(orderDrafts.partyId, [...partyIds]), eq(orderDrafts.state, "open")))
-    .groupBy(orderDrafts.partyId, orderDrafts.ownerId)
-    .having(sql`count(${orderDraftLines.id}) + count(${orderDraftRecalledLines.id}) > 0`)
-    .orderBy(sql`min(${orderDrafts.createdAt})`, sql`min(${orderDrafts.id})`);
-  for (const row of rows) {
-    unsent.get(row.partyId)!.push({ ownerName: row.ownerName ?? "", lineCount: row.lineCount });
+    .where(and(inArray(orderDrafts.billId, billIds), eq(orderDrafts.state, "open")))
+    .groupBy(orderDrafts.billId, orderDrafts.ownerId)
+    .having(sql`count(${orderDraftLines.id}) + count(${orderDraftRecalledLines.id}) > 0`);
+  const byBill = new Map(rows.map((row) => [row.billId, row]));
+  for (const [partyId, bills] of shown) {
+    for (const [index, bill] of bills.entries()) {
+      const draft = byBill.get(bill.workingOrderId);
+      if (draft !== undefined) {
+        unsent.get(partyId)!.push({
+          billId: bill.workingOrderId,
+          billNumber: index + 1,
+          ownerName: draft.ownerName ?? "",
+          lineCount: draft.lineCount,
+        });
+      }
+    }
   }
   return unsent;
 }

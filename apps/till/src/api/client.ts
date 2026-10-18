@@ -880,8 +880,10 @@ export interface DraftSubmission extends GroupCommand {
 /** The groups placed, and the draft as it is left: null once every line was sent. */
 export type SubmittedDraft = SubmittedGroups & BillDraftSnapshot;
 
-/** One unsent draft on a party, as the floor shows it: `lineCount` counts rows, not units. */
+/** One bill’s saved unsent dishes; `lineCount` counts rows, not units. */
 export interface UnsentDraft {
+  billId: string;
+  billNumber: number;
   ownerName: string;
   lineCount: number;
 }
@@ -2010,8 +2012,7 @@ export interface TableParty {
   outstanding: string;
   billCount: number;
   tableIds: string[];
-  /** Every open draft on the party that holds a line, oldest first; `ownerName` is "" for an
-   * unknown person. */
+  /** Nonempty saved outboxes in the bill list’s order; `ownerName` is "" for an unknown person. */
   unsentDrafts: UnsentDraft[];
   /** Null when the venue has reminders off, no group is held, or the party is not open. */
   reminder: ReleaseReminder | null;
