@@ -36,8 +36,10 @@ const swatchColours = unsafeCSS(
     .join("\n"),
 );
 
-/** Every active department's floor plan sets, and under each set its department's zones. Cell
- *  markup lives in the table's shadow root, so it is styled through parts. */
+/** Every active department's floor plan sets, and under each set its department's zones, as one
+ *  flat table in the model's order: the department and set rows sit flush left, as the mock-up
+ *  draws them, which a tree's indent would not. Cell markup lives in the table's shadow root, so
+ *  it is styled through parts. */
 @customElement("dashboard-floor-plans-screen")
 export class FloorPlansScreen extends LitElement {
   static override styles = [
@@ -74,9 +76,9 @@ export class FloorPlansScreen extends LitElement {
       wt-data-table::part(default) {
         margin-inline-start: var(--wt-space-1);
         padding: 0 var(--wt-space-2);
-        border: 1px solid currentColor;
         border-radius: var(--wt-radius-sm);
-        color: var(--wt-color-primary-text);
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-normal);
         white-space: nowrap;
@@ -85,6 +87,7 @@ export class FloorPlansScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
       wt-data-table::part(zone-link) {
+        margin-inline-start: var(--wt-space-4);
         color: var(--wt-color-primary-text);
       }
       wt-data-table::part(zone-link):focus-visible {
@@ -131,7 +134,6 @@ export class FloorPlansScreen extends LitElement {
     this.detach = this.api.watchFloorPlanSets(
       (model) => {
         this.model = model;
-        this.readError = "";
       },
       () => {
         this.readError = t("floor_plans.load_error");
@@ -274,13 +276,6 @@ export class FloorPlansScreen extends LitElement {
                 .columns=${columns}
                 .rows=${this.rows(model)}
                 .rowKey=${(row: Row) => row.key}
-                .rowParent=${(row: Row) =>
-                  row.kind === "set"
-                    ? `department:${row.department.id}`
-                    : row.kind === "zone"
-                      ? `set:${row.set.id}`
-                      : null}
-                .rowCollapsible=${() => false}
                 .rowCellParts=${(row: Row) => (row.kind === "department" ? "department-cell" : "")}
               ></wt-data-table>`
       }`;

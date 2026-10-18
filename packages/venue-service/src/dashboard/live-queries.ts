@@ -42,6 +42,7 @@ const HIERARCHY_DELETE_READS = [
   "department_transfer_desks",
   "department_transfer_destinations",
   "department_transfer_requests",
+  "department_floor_plan_sets",
 ] as const;
 
 /** Every table `readCalendarMonthPlan` reads, the holiday tables and the special days' paint included. */
@@ -236,8 +237,6 @@ export const QUERY_DEPENDENCIES = {
     "categories",
     "kitchen_stations",
     "floor_zones",
-    "floor_plans",
-    "floor_plan_tables",
     "products",
     "content_languages",
     "menu_details",

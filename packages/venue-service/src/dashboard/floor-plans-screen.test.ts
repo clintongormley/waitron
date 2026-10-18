@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import type { WtDataTable } from "@waitron/ui";
+import { applyTokens, type WtDataTable } from "@waitron/ui";
 import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import { casaMarina } from "./floor-plans-fixture.js";
 import { VenueServiceApi } from "./client.js";
@@ -25,6 +25,7 @@ async function mountScreen(
   const screen = document.createElement("dashboard-floor-plans-screen") as FloorPlansScreen;
   screen.api = new VenueServiceApi(request);
   screen.readOnly = options.readOnly ?? false;
+  applyTokens(screen);
   document.body.append(screen);
   hosts.push(screen);
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
@@ -94,6 +95,19 @@ it("says a layout places no table when the zone has tables but none counts as sp
   expect(cell(table, "zone:standard:inside", "tables").querySelector("[part~=empty]")).toBeNull();
 });
 
+it("draws department and set rows flush left, and indents only the zone links", async () => {
+  const { table } = await mountScreen();
+  const contentLeft = (td: HTMLElement) =>
+    td.getBoundingClientRect().left + parseFloat(getComputedStyle(td).paddingInlineStart);
+  const department = cell(table, "department:restaurant", "name");
+  const set = cell(table, "set:standard", "name");
+  const zone = cell(table, "zone:standard:inside", "name");
+  const setName = set.querySelector("[part~=set-name]")!.getBoundingClientRect().left;
+  expect(setName).toBeCloseTo(contentLeft(set), 0);
+  expect(contentLeft(department)).toBeCloseTo(contentLeft(set), 0);
+  expect(zone.querySelector("a")!.getBoundingClientRect().left).toBeGreaterThan(setName);
+});
+
 it("links each zone row to its set's layout in the editor, and back to this page", async () => {
   const { table } = await mountScreen();
   const link = cell(table, "zone:dinner:terrace", "name").querySelector("a")!;
@@ -142,24 +156,27 @@ it("says so when there is no department", async () => {
     .toBe("No departments yet. Add one in Departments and zones.");
 });
 
-it("says the read failed, and clears it once a read succeeds", async () => {
-  let fail = true;
-  const screen = document.createElement("dashboard-floor-plans-screen") as FloorPlansScreen;
-  const api = new VenueServiceApi((async () => {
-    if (fail) throw new Error("offline");
-    return casaMarina();
-  }) as DashboardRequest);
-  screen.api = api;
-  document.body.append(screen);
-  hosts.push(screen);
-  await expect
-    .poll(() => screen.shadowRoot!.querySelector("[data-test=read-error]")?.textContent)
-    .toBe("Floor plans could not be loaded. It will be tried again.");
-  fail = false;
-  screen.remove();
-  document.body.append(screen);
-  await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=read-error]")).toBeNull();
-  await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
+it("says the read failed, and clears it when the next timed read succeeds", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    let fail = true;
+    const screen = document.createElement("dashboard-floor-plans-screen") as FloorPlansScreen;
+    screen.api = new VenueServiceApi((async () => {
+      if (fail) throw new Error("offline");
+      return casaMarina();
+    }) as DashboardRequest);
+    document.body.append(screen);
+    hosts.push(screen);
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=read-error]")?.textContent)
+      .toBe("Floor plans could not be loaded. It will be tried again.");
+    fail = false;
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-test=read-error]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("speaks Spanish", async () => {

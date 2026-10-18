@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import {
   floorPlanPlacements,
   floorPlans,
@@ -138,7 +138,12 @@ async function readLayouts(
   const zoneHeld = new Set(zoneIds);
   const setHeld = new Set(setIds);
   const pairs = requestedPairs.filter((p) => zoneHeld.has(p.zoneId) && setHeld.has(p.setId));
-  const asked = new Set(pairs.map((p) => `${p.setId}:${p.zoneId}`));
+  const zonesOfSet = new Map<string, string[]>();
+  for (const { setId, zoneId } of pairs) {
+    const zones = zonesOfSet.get(setId);
+    if (zones === undefined) zonesOfSet.set(setId, [zoneId]);
+    else zones.push(zoneId);
+  }
   const tables = await tx
     .select({
       id: floorPlanTables.id,
@@ -151,22 +156,21 @@ async function readLayouts(
   const plans =
     pairs.length === 0
       ? []
-      : (
-          await tx
-            .select({
-              id: floorPlans.id,
-              setId: floorPlans.setId,
-              zoneId: floorPlans.zoneId,
-              revision: floorPlans.revision,
-            })
-            .from(floorPlans)
-            .where(
-              and(
-                inArray(floorPlans.setId, [...new Set(pairs.map((p) => p.setId))]),
-                inArray(floorPlans.zoneId, [...new Set(pairs.map((p) => p.zoneId))]),
+      : await tx
+          .select({
+            id: floorPlans.id,
+            setId: floorPlans.setId,
+            zoneId: floorPlans.zoneId,
+            revision: floorPlans.revision,
+          })
+          .from(floorPlans)
+          .where(
+            or(
+              ...[...zonesOfSet].map(([setId, zoneIds]) =>
+                and(eq(floorPlans.setId, setId), inArray(floorPlans.zoneId, zoneIds)),
               ),
-            )
-        ).filter((plan) => asked.has(`${plan.setId}:${plan.zoneId}`));
+            ),
+          );
   const places =
     plans.length === 0
       ? []
