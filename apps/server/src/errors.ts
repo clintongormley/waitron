@@ -58,6 +58,8 @@ declare module "@waitron/shared" {
     };
     "venue.detail_changed": { field: string };
     "fiscal.clock_drift": { seconds: number };
+    "fiscal.certificate_not_used": Record<string, never>;
+    "fiscal.certificate_too_large": Record<string, never>;
     "cloud.unavailable": Record<string, never>;
     "cloud.request_unavailable": Record<string, never>;
     "cloud.state_invalid": Record<string, never>;
