@@ -122,7 +122,12 @@ export class BusinessDayStartEditor extends LitElement {
     if (changes.has("model") && this.draft && this.#clockIdentity !== this.#identity()) {
       this.#sequence++;
       this.preview = undefined;
-      if (!this.actionError) this.actionError = t("business_day.changed");
+      if (!this.actionError || this.actionError === this.#previewRefusal) {
+        if (this.#previewRefusal && this.errors.dayCutover === this.#previewRefusal)
+          this.errors = {};
+        this.#previewRefusal = "";
+        this.actionError = t("business_day.changed");
+      }
     }
     if (changes.has("readOnly") && this.readOnly) {
       this.#sequence++;

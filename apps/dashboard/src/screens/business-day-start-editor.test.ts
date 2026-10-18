@@ -934,6 +934,42 @@ it("puts a preview refusal naming the time under the field, without Retry", asyn
   expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe("");
   expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe("");
 });
+it("says the clock changed when it changes under a preview refused over the time", async () => {
+  setLocale("en-GB");
+  const { el } = await rig(
+    {
+      previewBusinessDayStart: async () => {
+        throw {
+          code: "venue.business_day_invalid",
+          params: {
+            field: "dayCutover",
+            reason: "clock_transition",
+            clocksChangeOn: "2026-10-25",
+            saveFrom: "2026-10-26T01:30:00.000Z",
+          },
+        };
+      },
+    },
+    october(),
+  );
+  await click(el, "change");
+  await change(el, "dayCutover", "02:30");
+  await expect.poll(() => q<WtInput>(el, "[name=dayCutover]")!.error).toBeTruthy();
+  const changed = "The business-day clock changed. Close and reopen to review it.";
+  el.model = {
+    ...october(),
+    clock: {
+      ...october().clock,
+      cutoverChanges: [{ effectiveBusinessDay: "2026-10-22", dayCutover: "04:00" }],
+    },
+  };
+  await flush(el);
+  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(changed);
+  expect(q<WtInput>(el, "[name=dayCutover]")!.error).toBe("");
+  await change(el, "dayCutover", "02:45");
+  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(changed);
+  expect(save(el).disabled).toBe(true);
+});
 it("offers Retry when a preview fails without naming a field", async () => {
   setLocale("en-GB");
   const { el } = await rig(
