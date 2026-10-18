@@ -165,7 +165,7 @@ go-live nothing is carried forward.
    `wt-delete-dialog`).
 2. **The department dialog becomes tabbed — Details, Service, Receipts, Transfers.** Details,
    Service (with its "Orders and payment" section) and Transfers landed in A756's first pull
-   request. Still left: the Receipts tab, into which receipt editing
+   request (#1852). Still left: the Receipts tab, into which receipt editing
    (`apps/dashboard/src/screens/department-receipt-dialog.ts`) moves while the departments table's
    Receipt link (`packages/venue-service/src/dashboard/departments-list.ts:215-226`) goes; and
    Service's "Courses and the kitchen" section, holding the reminder to send the next course

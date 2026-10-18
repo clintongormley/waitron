@@ -1776,8 +1776,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).** Courses
-  get a page under Products and menus, with A773's "Held until fired" column. After A725. Check the
-  order against A773's plan. [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
+  get a page under Products and menus, with A773's "Held until fired" column. The department dialog's
+  Details, Service and Transfers tabs landed in #1852; left: the Courses page, the Receipts tab, then
+  the parts that wait for A773-1 (plan `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md`).
+  Open point from #1852: the Transfers panel's heading is an `h2`, the dialog title's level, beside
+  Service's `h3` sections — an existing accessibility check selects `h2`. [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
 
 - **A807. One slip per printer and one notice per station for a whole-order kitchen-note change
   (owner, 2026-10-17).** Today a change or removal of the order's kitchen note prints one slip and
