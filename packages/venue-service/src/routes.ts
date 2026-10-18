@@ -350,7 +350,7 @@ import {
 } from "./opening-hours-calendar.js";
 import { saveSeasons, seasonDeleteImpact } from "./seasons.js";
 import type { SeasonChange, SeasonEntry } from "./season-rules.js";
-import { saveSeasonWeeks } from "./season-weeks.js";
+import { saveSeasonWeeks, type ServingRead } from "./season-weeks.js";
 
 /** A comma list of one to `SEASON_DAYS_MAX_DATES` dates whose years `parseCalendarYear` accepts,
  *  or null. */
@@ -564,13 +564,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       "zonePaint",
       "expectedClockRevision",
     ] as const;
-    const assertSpecialDayClosuresInHours = (tx: Transaction, input: unknown) => {
+    const specialDayClosuresInHours = (tx: Transaction, input: unknown) => (read: ServingRead) => {
       const { dates, zonePaint } = input as SpecialDayInput;
       return assertDatedClosuresInHours(
         tx,
         ctx.cfg,
         zonePaint ?? [],
         new Set(dates.filter((entry) => entry.closedAllDay).map((entry) => entry.date)),
+        read,
       );
     };
 
@@ -593,19 +594,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
-        const saved = await gated(sessionId, async (tx) => {
+        const saved = await gated(sessionId, (tx) => {
           onlyKeys(body, SPECIAL_DAY_KEYS);
           const { expectedClockRevision, ...input } = body;
-          const day = await saveSpecialDay(
+          return saveSpecialDay(
             tx,
             ctx.cfg,
             null,
             input,
             new Date(),
             expectedClockRevision as number,
+            specialDayClosuresInHours(tx, input),
           );
-          await assertSpecialDayClosuresInHours(tx, input);
-          return day;
         });
         return c.json(saved, 201);
       }),
@@ -617,19 +617,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const id = requireUuidParam(c.req.param("id"), "SpecialDayId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         return c.json(
-          await gated(sessionId, async (tx) => {
+          await gated(sessionId, (tx) => {
             onlyKeys(body, SPECIAL_DAY_KEYS);
             const { expectedClockRevision, ...input } = body;
-            const day = await saveSpecialDay(
+            return saveSpecialDay(
               tx,
               ctx.cfg,
               id,
               input,
               new Date(),
               expectedClockRevision as number,
+              specialDayClosuresInHours(tx, input),
             );
-            await assertSpecialDayClosuresInHours(tx, input);
-            return day;
           }),
         );
       }),

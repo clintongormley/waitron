@@ -10,6 +10,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { readLocationClock } from "@waitron/reporting";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -225,7 +226,7 @@ describe("assertDatedClosuresInHours", () => {
     const zoneId = randomUUID();
     expect(
       await refusal(() =>
-        withTransaction(db, (tx) =>
+        withTransaction(db, async (tx) =>
           assertDatedClosuresInHours(
             tx,
             v.cfg,
@@ -237,6 +238,10 @@ describe("assertDatedClosuresInHours", () => {
               },
             ],
             new Set(),
+            {
+              clock: await readLocationClock(tx, v.cfg.locationId),
+              departmentOf: new Map([[v.barra, v.deli]]),
+            },
           ),
         ),
       ),
