@@ -1099,10 +1099,23 @@ help about anything you want very quickly."
   `wt-price-input`, `wt-number-stepper`, `wt-file-input`, `wt-disclosure`, `wt-dialog` and
   `wt-modal`. Nothing turns help on yet and no existing "?" uses the new mode, so every "?" still
   shows as before. Plan: [2026-10-18-a582-1-help-badge.md](../superpowers/plans/2026-10-18-a582-1-help-badge.md).
-- **Remaining slices** (design §8): **2** the dashboard — the banner switch, the "?" beside options
-  in the account menu and `wt-row-actions` menus (design §3.3), `help` on table columns and tabs,
-  the dashboard's five existing "?" switched to `mode="help-mode"` in the same PR, and Products as
-  the first screen with help; **3** guide pages served by the box (EN and ES; a new unauthenticated
+- **Slice 2a landed (#1848, 2026-10-18).** `packages/ui` has `wt-menu-row` (a menu option with its
+  help badge in its own tap-sized square beside it), `wt-help-switch` (the "?" button that turns
+  help on and off, pressed while on), `help` on `wt-data-table` columns (the badge over the
+  heading's label) and on `wt-tabs` items (drawn outside the tab strip; hidden, with its box
+  closed, while its tab is scrolled out of view). `wt-row-actions` keeps its menu open for a
+  `data-keep-open` element inside a slotted element's shadow root, and places an open menu again
+  when its size changes. No screen uses them yet. Plan:
+  [2026-10-18-a582-2-dashboard-help.md](../superpowers/plans/2026-10-18-a582-2-dashboard-help.md)
+  (PR 2a is Tasks 1–6).
+- **Left open by 2a:** `wt-help-tooltip` is not in `packages/ui/src/tap-target-and-focus.test.ts`'s
+  interactive set; a throwaway check in #1848's review showed it would fail that guard's focus
+  check, because focus on the element does not pass to its inner button. Decide whether it should
+  delegate focus, then add it to the set.
+- **Remaining slices** (design §8): **2b** the dashboard — the banner switch, `wt-menu-row` in the
+  account menu and `wt-row-actions` menus (design §3.3), the dashboard's five existing "?" switched
+  to `mode="help-mode"` in the same PR, and Products as the first screen with help (Tasks 7a–11 of
+  the plan above; it lands only after the owner answers Q41, the banner at phone width); **3** guide pages served by the box (EN and ES; a new unauthenticated
   route, FULL review); **4** tills and handhelds — the bar switch that never leaves the bar (at phone
   width the language chooser leaves first), the till's More and person menus, badges on Counter,
   Floor and Order, the guide sheet, off on lock or a change of person; **5** kitchen screens and

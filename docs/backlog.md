@@ -3691,8 +3691,11 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   DESIGNED and approved 2026-10-18
   ([design](superpowers/specs/2026-10-18-a582-help-mode-design.md), pictures in
   [mockups/a582-help-mode/](backlog/mockups/a582-help-mode/)). Slice 1 of 5 landed (#1846: the
-  help badge, the help switch's state and the help slots in `packages/ui`; nothing turns help on
-  yet, so every "?" still shows as before). Slices 2–5 remain, in the design's §8 order. On the dashboard and on every device — tills, handhelds, and probably the
+  help badge, the help switch's state and the help slots in `packages/ui`), and the shared half of
+  slice 2 landed (#1848: a menu option with a help badge beside it, the help switch button, and
+  help on table columns and tabs, in `packages/ui`). Nothing turns help on yet, so every "?" still
+  shows as before. Next: slice 2's dashboard half, which lands only after the owner answers Q41
+  (where the switch goes in the banner at phone width); then slices 3–5, in the design's §8 order. On the dashboard and on every device — tills, handhelds, and probably the
   kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
   on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows
   the help or opens its page in the documentation. Nothing changes on the page while it is off.
