@@ -64,8 +64,6 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "categories",
     "kitchen_stations",
     "floor_zones",
-    "floor_plans",
-    "floor_plan_tables",
     "products",
     "content_languages",
     "menu_details",
@@ -156,6 +154,7 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "department_transfer_desks",
       "department_transfer_destinations",
       "department_transfer_requests",
+      "department_floor_plan_sets",
     ]);
   },
 );
