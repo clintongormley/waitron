@@ -48,6 +48,7 @@ import {
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { markMoved, tableNeedsMoving } from "./floor-today-mark-moved.js";
+import { refusePlaceTaken } from "./floor-today-reset-table.js";
 import { blocksPlaceSql } from "./joined-split-layout.js";
 import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
@@ -1284,7 +1285,7 @@ export async function backToSaved(
   tableId: string,
   now: Date,
 ): Promise<void> {
-  const { row, merge } = await todayOf(tx, cfg, tableId);
+  const { zoneId, row, merge } = await todayOf(tx, cfg, tableId);
   if (await tableNeedsMoving(tx, tableId)) return markMoved(tx, cfg, removals, tableId, now);
   await refuseSplitOff(tx, tableId);
   const [splitOff] = await tx
@@ -1301,6 +1302,10 @@ export async function backToSaved(
     throw new AppError("table.not_on_today_plan", { tableId });
   }
   const members = merge?.members.map((member) => member.tableId) ?? [];
+  const place = placementOf(saved);
+  if (place !== null) {
+    await refusePlaceTaken(tx, zoneId, tableId, place, new Set([tableId, ...members]), true);
+  }
   await withMovedSlips(tx, cfg, members.length === 0 ? null : { tables: members }, async () => {
     await leaveMerges(tx, [tableId]);
     await tx

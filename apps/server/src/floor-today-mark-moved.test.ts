@@ -103,6 +103,11 @@ const newPlaceTaken = (tableId: string, standingId: string) => ({
   body: { error: { code: "table.new_place_taken", params: { tableId, standingId } } },
 });
 
+const placeTaken = (tableId: string, standingId: string) => ({
+  status: 409,
+  body: { error: { code: "table.place_taken", params: { tableId, standingId } } },
+});
+
 async function seatAt(tableId: string): Promise<string> {
   const answer = await send("POST", `/api/tables/${tableId}/seat`, {});
   expect(answer.status).toBe(200);
@@ -1026,5 +1031,51 @@ describe("Leave it here", () => {
     await expectRevision(v, leaveHere(c4), z.zoneId);
 
     for (const id of [c9, c3, c4]) expect(await rowStateOf(id)).toEqual(ended);
+  });
+});
+
+describe("Back to its saved place checks what stands there", () => {
+  const move = (tableId: string, x: number, y: number) =>
+    send("POST", `/api/tables/${tableId}/today/move`, { x, y });
+
+  /** Table 3 marked moved into its new place at 40, then dragged back to 0; table 8 at 120. */
+  async function threeDraggedOff() {
+    const z = await threeNeedsMoving([{ key: "t8", standard: 120, dinner: 120 }]);
+    const t8 = z.live("t8");
+    await expectRevision(v, markMoved(z.t3), z.d.zoneId);
+    expect(await todayRow(z.t3)).toMatchObject({ x: 40 });
+    await expectRevision(v, move(z.t3, 0, 0), z.d.zoneId);
+    return { ...z, t8 };
+  }
+
+  it("after Leave it here, Back is refused while the table that blocked it stands there", async () => {
+    const z = await threeNeedsMoving([{ key: "t8", standard: 120, dinner: 120 }]);
+    const t8 = z.live("t8");
+    await setToday(t8, { x: 36 });
+    expect(await refusal(markMoved(z.t3))).toEqual(newPlaceTaken(z.t3, t8));
+    await expectRevision(v, leaveHere(z.t3), z.d.zoneId);
+    const before = await everything();
+
+    expect(await refusal(back(z.t3))).toEqual(placeTaken(z.t3, t8));
+
+    expect(await everything()).toEqual(before);
+  });
+
+  it("Back after an ordinary drag is refused while another table stands in the saved place", async () => {
+    const z = await threeDraggedOff();
+    await expectRevision(v, move(z.t8, 36, 0), z.d.zoneId);
+    const before = await everything();
+
+    expect(await refusal(back(z.t3))).toEqual(placeTaken(z.t3, z.t8));
+
+    expect(await everything()).toEqual(before);
+  });
+
+  it("Back is still served when nothing stands in the saved place", async () => {
+    const z = await threeDraggedOff();
+
+    await expectRevision(v, back(z.t3), z.d.zoneId);
+
+    expect(await todayRow(z.t3)).toMatchObject({ x: 40 });
   });
 });

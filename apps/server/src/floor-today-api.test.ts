@@ -2005,4 +2005,32 @@ describe("Update layout", () => {
     });
     expect(await todayRow(v, live("two"))).toMatchObject({ x: 0 });
   });
+
+  it("serves Back while the overlapping table stands exactly at its own saved place", async () => {
+    const { d, live } = await overlappingDinner(44);
+    await updateToDinner(d.zoneId);
+    await expectRevision(v, today(live("two"), "move", { x: 0, y: 0 }), d.zoneId);
+
+    await expectRevision(v, today(live("two"), "back"), d.zoneId);
+
+    expect(await todayRow(v, live("two"))).toMatchObject({ x: 40 });
+  });
+
+  it("refuses Back while the overlapping table stands one square off its own place", async () => {
+    const { d, live } = await overlappingDinner(44);
+    await updateToDinner(d.zoneId);
+    await expectRevision(v, today(live("two"), "move", { x: 0, y: 0 }), d.zoneId);
+    await expectRevision(v, today(live("four"), "move", { x: 45, y: 0 }), d.zoneId);
+
+    expect(await refusal(today(live("two"), "back"))).toEqual({
+      status: 409,
+      body: {
+        error: {
+          code: "table.place_taken",
+          params: { tableId: live("two"), standingId: live("four") },
+        },
+      },
+    });
+    expect(await todayRow(v, live("two"))).toMatchObject({ x: 0 });
+  });
 });

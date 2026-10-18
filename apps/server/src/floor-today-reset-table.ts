@@ -172,7 +172,7 @@ async function apartNow(tx: Transaction, tableId: string): Promise<boolean> {
  * number order is named. When `place` is the saved one, a table standing exactly where the saved
  * layout puts it does not count (`blocksPlace`), as at the reset that put them both down.
  */
-async function refusePlaceTaken(
+export async function refusePlaceTaken(
   tx: Transaction,
   zoneId: string,
   tableId: string,
