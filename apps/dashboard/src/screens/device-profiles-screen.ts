@@ -823,11 +823,16 @@ export class DeviceProfilesScreen extends LitElement {
       if (this.invalidInactivityText !== null)
         errors.inactivity = t("device_profiles.err_inactivity");
       if (this.#decidesScope()) {
+        const departmentHasZones = this.#departmentZones(this.draftDepartmentId).length > 0;
         if (this.draftDepartmentId === "")
           errors.department = t("device_profiles.err_department_required");
+        else if (!departmentHasZones) errors.zones = t("device_profiles.err_department_no_zones");
         else if (this.#allowedZones().length === 0)
           errors.zones = t("device_profiles.err_zones_required");
-        if (this.draftStartingZoneId === "")
+        if (
+          this.draftStartingZoneId === "" &&
+          (this.draftDepartmentId === "" || departmentHasZones)
+        )
           errors.startingZone = t("device_profiles.err_starting_zone_required");
       }
       if (this.draftRoles.length === 0) errors.roles = t("device_profiles.err_roles_required");
