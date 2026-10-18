@@ -2235,7 +2235,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   and load-failure message remain when the detailed read is unavailable. A paid held dish stays held,
   and its dish window shows whether all or part is paid. Group command checks retain their exact
   quantities, refusals and retries, with held groups and their dishes checked in visible order.
-  The drawer's To serve and Served lists and its direct Cancel strip remain to be retired.
+  The drawer's To serve list and its direct Cancel strip remain to be retired.
   The Sent heading keeps its word on one line beside
   the counts at phone width, including Spanish. Cancellation still follows the earlier picture-03
   implementation on this unlanded branch; the owner's Q43 changes need A758's revised design before integration.
@@ -2322,10 +2322,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   action leaves the dish window open when a newer read says the dish is no longer released.
   You can read a sent dish's course in its information window and in the read-only fallback,
   including a retired course retained by the service or bill read. Three earlier course-label
-  checks now open Sent and retain their expected labels and read-only checks. The old Current
-  orders, To serve and Served drawer lists still need their remaining own-bill Move/Split,
-  Change/course-edit, refusal and allergy checks moved before removal. Sent's Comp now opens one reason-first
-  window on the feature branch.
+  checks now open Sent and retain their expected labels and read-only checks. The remaining
+  To serve drawer list needs its refusal, cancellation and recorded-line checks moved before
+  removal. Sent's Comp now opens one reason-first window on the feature branch.
   You choose the whole dish with its extras or one priced extra, then Free, % or € from the
   reason's allowed actions. A whole dish starts at all units and accepts a count from one to its
   quantity; a weighed dish or one extra is covered whole. The preview and approval still use the
@@ -2414,6 +2413,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Focused browser checks cover missing metadata, changed observations and late command/approver
   answers after API replacement. The existing server closing checks remain unchanged; held-dish
   resolution before Finish is still T22 work.
+  On the feature branch, served dishes appear in Sent without a second Served list in the
+  drawer. Their information window keeps the recorded original and adjusted prices for the dish
+  and its extras, using the service read for current amounts. It also retains staff option
+  answers, extra notes and the displayed bill's extra nutrition from matching stored rows. Focused
+  browser checks cover the replacement and price display in both languages and themes at phone
+  and desktop widths. To serve, direct Cancel and the revised A758 cancellation/Finish work remain
+  open; cancellation rules are unchanged by this checkpoint.
   **A773-2**, firing and the pass, is planned after A773-1 lands: Requested/pass release, Away/Done
   removal, station settings and counter changes. The [six choices](backlog/mockups/a773-1-open-points/README.md)
   are answered in spec §14. Physical trials and the remaining panel/actions/finish/delivery work

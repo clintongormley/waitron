@@ -531,9 +531,6 @@ export class TillTableOrderScreen extends LitElement {
         justify-content: flex-end;
         gap: var(--wt-space-2);
       }
-      .served-line {
-        color: var(--wt-color-text-muted);
-      }
 
       /* A CHILD extras row belongs to the dish above it, and a waiter must be able to see that at a
          glance: three of a €12.50 cheese is a pick on a burger, not three portions of cheese. Same
@@ -1958,10 +1955,6 @@ export class TillTableOrderScreen extends LitElement {
     return this.lines.filter((line) => line.servedAt === null);
   }
 
-  #served(): TabLine[] {
-    return this.lines.filter((line) => line.servedAt !== null);
-  }
-
   /** The STAFF label the server froze onto the line, falling back to the live catalogue, then to the raw
    * id for a product deactivated since the line was added. */
   #nameForLine(line: TabLine): string {
@@ -2727,6 +2720,43 @@ export class TillTableOrderScreen extends LitElement {
     </wt-row-actions>`;
   }
 
+  #sentBillLine(
+    row: CurrentOrderRow,
+    extra?: CurrentOrderRow["extras"][number],
+  ): TabLine | undefined {
+    return row.workingOrderId === this.orderId
+      ? this.lines.find(
+          (line) =>
+            line.id === (extra?.lineId ?? row.lineId) &&
+            (extra === undefined
+              ? line.lineNo === row.lineNo && line.parentLineNo == null
+              : line.parentLineNo === row.lineNo),
+        )
+      : undefined;
+  }
+
+  #sentDetails(
+    row: CurrentOrderRow,
+    extra?: CurrentOrderRow["extras"][number],
+  ): TemplateResult | typeof nothing {
+    const line = this.#sentBillLine(row, extra);
+    if (line === undefined) return nothing;
+    return html`${extra === undefined ? nothing : this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${extra === undefined ? nothing : this.#lineNote(line)}`;
+  }
+
+  #sentPrice(
+    row: CurrentOrderRow,
+    amount: Decimal,
+    extra?: CurrentOrderRow["extras"][number],
+  ): TemplateResult {
+    const line = this.#sentBillLine(row, extra);
+    const before =
+      line?.listUnitPriceGross === undefined
+        ? amount
+        : listedGross({ ...line, quantity: extra?.quantity ?? row.quantity });
+    return lineTotal(before, amount);
+  }
+
   #sentLineDialog(): TemplateResult {
     const pending = this.sentLinePending;
     const slice = this.#sentLine();
@@ -2773,16 +2803,17 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`
               <p class="move-dish">
-                ${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}
+                ${row.name}${this.#nutrition(row)}
+                ×${this.#displayQty(row.quantity)}${this.#sentDetails(row)}
               </p>
               ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
               <div class="total-row">
                 <span>${row.name}</span
                 ><span class="amount" data-sent-line-amount
-                  >${formatMoney(subtractDecimal(decimal(row.netAmount), extraTotal), currentLocale())}</span
+                  >${this.#sentPrice(row, subtractDecimal(decimal(row.netAmount), extraTotal))}</span
                 >
               </div>
-              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${this.#displayQty(extra.quantity)}</span><span class="amount">${this.#money(extra.netAmount)}</span></div>`)}
+              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${this.#displayQty(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, decimal(extra.netAmount), extra)}</span></div>`)}
               ${row.note === null ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
               ${this.#sentCourse(row.courseId, this.currentOrders?.retainedCourses.find((course) => course.id === row.courseId) ?? this.lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo)?.course)}
               <p data-sent-line-status>
@@ -3815,7 +3846,7 @@ export class TillTableOrderScreen extends LitElement {
   #drawer(pending: TabLine[]): TemplateResult {
     return html`
       <aside class="drawer" data-drawer aria-label=${t("table.open_drawer")}>
-        ${this.#pendingSection(pending)} ${this.#servedSection()}
+        ${this.#pendingSection(pending)}
         <div class="total-row">
           <span class="label">${t("label.total")}</span>
           <span class="amount" data-tab-total
@@ -4167,29 +4198,6 @@ export class TillTableOrderScreen extends LitElement {
       <span class="qty">${this.#displayQty(line.quantity)}</span>
       ${this.#lineTotal(line)} ${this.#lineActions(line)}
     </li>`;
-  }
-
-  #servedSection(): TemplateResult {
-    const served = this.#served();
-    return html`<section class="served">
-      <h2>${t("table.served_title")}</h2>
-      ${
-        served.length === 0
-          ? html`<p class="empty">${t("table.none_served")}</p>`
-          : html`<ul>
-              ${served.map(
-                (line) =>
-                  html`<li class="line served-line${this.#isChild(line) ? " child-line" : ""}">
-                    <span class="name"
-                      >${this.#nameForLine(line)}${this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
-                    >
-                    <span class="qty">${this.#displayQty(line.quantity)}</span>
-                    ${this.#lineTotal(line)}
-                  </li>`,
-              )}
-            </ul>`
-      }
-    </section>`;
   }
 
   #sentOf(group: CurrentOrderGroup): TemplateResult {

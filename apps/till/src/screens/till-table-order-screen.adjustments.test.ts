@@ -480,8 +480,10 @@ describe("till-table-order-screen: the price an adjusted line had", () => {
         { ...steaks, quantity: "1.000", listUnitPriceGross: "25.00" },
       ],
     });
-    const served = el.shadowRoot!.querySelector(".served-line")!;
     const pending = el.shadowRoot!.querySelector(".pending-line")!;
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await el.updateComplete;
+    const served = await openSentDish(el, servedBread.id, "served");
     expect(total(served)).toBe(`${t("table.price_was")} ${money("5.00")} ${money("4.50")}`);
     expect(total(pending)).toBe(money("25.00"));
   });

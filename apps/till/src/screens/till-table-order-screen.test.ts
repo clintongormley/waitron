@@ -526,18 +526,38 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
   });
 
-  // Marking served moved into Current orders (till-table-order-screen.current-orders.test.ts): an
-  // unserved row offers it and a served one does not, a dish's extras never do, and a press emits
-  // `serve-lines`. The bill's lines no longer carry a whole-line tick.
-  it("splits the drawer into Pendiente de servir and Servido lines", async () => {
-    const { el } = await mount({ lines: [pendingLine, servedLine] });
+  it("keeps serving in Sent and removes the duplicate Served drawer list", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      lines: [pendingLine, servedLine],
+      currentOrders: current({
+        groups: [],
+        reminder: null,
+        ungrouped: [pendingLine, servedLine].map((line) =>
+          currentRow(line.id, "Café", line.quantity, {
+            lineNo: line.lineNo,
+            servedAt: line.servedAt,
+            servedQuantity: line.servedAt === null ? "0.000" : line.quantity,
+            netAmount: grossOf(line.unitPriceGross, line.quantity),
+          }),
+        ),
+      }),
+    });
+    await openSentDish(el, servedLine.id, "served");
+    const panel = await sentPanelFor(el);
+    expect(panel.shadowRoot!.querySelectorAll("[data-fired-line]")).toHaveLength(1);
+    expect(panel.shadowRoot!.querySelectorAll("[data-served-line]")).toHaveLength(1);
+    expect(panel.shadowRoot!.textContent).toContain(t("table.served_title"));
+    const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
+    const closed = new Promise<void>((resolve) =>
+      dialog.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    dialog.closeAfter("saved");
+    await closed;
     await openDrawer(el);
     expect(el.shadowRoot!.querySelectorAll(".pending-line")).toHaveLength(1);
-    expect(el.shadowRoot!.querySelectorAll(".served-line")).toHaveLength(1);
-    expect(el.shadowRoot!.querySelector("[data-serve]")).toBeNull();
-    const text = el.shadowRoot!.textContent ?? "";
-    expect(text).toContain(t("table.pending_title"));
-    expect(text).toContain(t("table.served_title"));
+    expect(el.shadowRoot!.querySelector(".served-line, [data-serve]")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("table.pending_title"));
   });
 
   it("keeps an extras row's figures in its dish's columns", async () => {
@@ -697,7 +717,9 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-pending-badge]")).toBeNull();
     const text = el.shadowRoot!.querySelector("[data-drawer]")!.textContent ?? "";
     expect(text).toContain(t("table.none_pending"));
-    expect(text).toContain(t("table.none_served"));
+    expect(el.shadowRoot!.querySelector(".served")).toBeNull();
+    const panel = await sentPanelFor(el);
+    expect(panel.shadowRoot!.querySelector("[data-sent-panel]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-tab-total]")!.textContent).toContain(
       formatMoney("0.00", currentLocale()),
     );
