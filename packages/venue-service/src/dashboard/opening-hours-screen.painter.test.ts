@@ -464,6 +464,89 @@ describe("Save closes the season painter", () => {
     expect(el.shadowRoot!.querySelector("opening-hours-year")!.year).toBe(2027);
   });
 
+  it("with the app's guard, Save closes the painter a chip opened without asking", async () => {
+    history.replaceState(null, "", "/manage/before");
+    let app!: PainterApp;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => app?.leave.coordinator.isDirty() ?? false,
+      request: (proceed, signal) =>
+        app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    });
+    try {
+      await guard.write("/manage/opening-hours/view/year/year/2027");
+      ({ app } = await mountApp());
+      const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+      const question =
+        app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+          "wt-unsaved-changes",
+        )!;
+      const asked: boolean[] = [];
+      const sampler = setInterval(() => asked.push(question.open), 5);
+      const painter = await openFromChip(el);
+      await drag(painter, "3", 7 * 60, 9 * 60);
+      saveButton(painter).click();
+      await expect.poll(() => painterOf(el)).toBeNull();
+      await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year/year/2027");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      clearInterval(sampler);
+      expect(asked.length).toBeGreaterThan(0);
+      expect(asked.includes(true)).toBe(false);
+      expect(question.open).toBe(false);
+      expect(app.writes.filter((write) => (write as unknown[])[1] === "PUT")).toHaveLength(1);
+      history.back();
+      await expect.poll(() => location.pathname).toBe("/manage/before");
+    } finally {
+      guard.dispose();
+    }
+  });
+
+  it("a save left in flight when Back moved to another season leaves the newer painter open", async () => {
+    history.replaceState(null, "", "/manage/before");
+    let app!: PainterApp;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => app?.leave.coordinator.isDirty() ?? false,
+      request: (proceed, signal) =>
+        app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    });
+    try {
+      await guard.write("/manage/opening-hours/view/season/season/winter/department/d1");
+      await guard.write("/manage/opening-hours/view/season/season/spring/department/d1");
+      ({ app } = await mountApp());
+      const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+      const painter = await shownPainter(el);
+      await expect.poll(() => painter.seasonId).toBe("spring");
+      let succeed!: () => void;
+      const save = vi.spyOn(app.api, "saveSeasonWeeks").mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            succeed = resolve;
+          }),
+      );
+      const saved = vi.fn();
+      painter.addEventListener("season-week-saved", saved);
+      await drag(painter, "3", 7 * 60, 9 * 60);
+      saveButton(painter).click();
+      await expect.poll(() => save.mock.calls.length).toBe(1);
+      history.back();
+      await choose(app, "discard");
+      await expect.poll(() => painter.seasonId).toBe("winter");
+      const back = vi.spyOn(history, "back");
+      succeed();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await settle(painter);
+      expect(painterOf(el)).toBe(painter);
+      expect(painter.seasonId).toBe("winter");
+      expect(back).not.toHaveBeenCalled();
+      expect(location.pathname).toBe(
+        "/manage/opening-hours/view/season/season/winter/department/d1",
+      );
+      expect(frame(painter).dirty).toBe(false);
+      expect(saved).not.toHaveBeenCalled();
+    } finally {
+      guard.dispose();
+    }
+  });
+
   it("Save on a painter loaded directly closes onto the Year by replacement", async () => {
     const el = await mount("/manage/opening-hours/view/season/season/winter/department/d1");
     const painter = await shownPainter(el);

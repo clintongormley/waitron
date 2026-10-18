@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
@@ -206,6 +206,79 @@ it("a zone stroke on a day its department is closed paints nothing, leaves Save 
     )!.disabled,
   ).toBe(true);
   expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+});
+
+describe("a zone's Copy to…", () => {
+  /** Restaurant open Mon and Thu 13:00–16:00 and Wed 06:00–12:00; Terrace closed Mon 14:00–15:00
+   *  and Wed 08:00–09:00. */
+  function terraceModel() {
+    const model = withDays(painterModel(), "d1", {
+      3: [slot("p1", "06:00", "12:00")],
+      4: [slot("p1", "13:00", "16:00")],
+    });
+    const terrace = model.departments[0]!.zones[1]!.seasonWeeks.find(
+      ({ seasonId }) => seasonId === "winter",
+    )!;
+    terrace.week = terrace.week.map(({ weekday, ranges }) => ({
+      weekday,
+      ranges:
+        weekday === 1
+          ? [{ startsAt: "14:00", endsAt: "15:00" }]
+          : weekday === 3
+            ? [{ startsAt: "08:00", endsAt: "09:00" }]
+            : ranges,
+    }));
+    return model;
+  }
+  async function copyMondayTo(el: SeasonPainter, key: string) {
+    const g = grid(el);
+    const menu = g.shadowRoot!.querySelector<HTMLElement>(
+      `.heading[data-column="1"] wt-row-actions`,
+    )!;
+    await userEvent.click(menu);
+    await userEvent.click(
+      [...menu.querySelectorAll<HTMLElement>("wt-button")].find(
+        (button) => button.textContent!.trim() === "Copy to…",
+      )!,
+    );
+    await g.updateComplete;
+    const chooser = g.shadowRoot!.querySelector<HTMLElement>(".chooser")!;
+    await userEvent.click(chooser.querySelector<HTMLInputElement>(`input[name="copyTo-${key}"]`)!);
+    await g.updateComplete;
+    await userEvent.click(
+      [...chooser.querySelectorAll<HTMLElement>("wt-button")].find(
+        (button) => button.textContent!.trim() === "Copy",
+      )!,
+    );
+    await settle(el);
+  }
+
+  it("onto a day where none of its Closed paint lies inside the department's hours replaces that day, its own closures going, and says why beside Save", async () => {
+    const { painter } = await mount({ model: terraceModel() });
+    await pick(painter, "zone:z2");
+    expect(grid(painter).days.get("3")).toEqual([
+      { periodId: null, startsAt: "08:00", endsAt: "09:00" },
+    ]);
+    await copyMondayTo(painter, "3");
+    expect(grid(painter).days.get("3")).toEqual([]);
+    expect(grid(painter).days.get("1")).toEqual([
+      { periodId: null, startsAt: "14:00", endsAt: "15:00" },
+    ]);
+    expect(painter.edited()).toEqual({ departments: [], zones: ["z2"] });
+    expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+  });
+
+  it("onto a day whose hours hold its Closed paint lands that paint", async () => {
+    const { painter } = await mount({ model: terraceModel() });
+    await pick(painter, "zone:z2");
+    expect(grid(painter).days.get("4")).toEqual([]);
+    await copyMondayTo(painter, "4");
+    expect(grid(painter).days.get("4")).toEqual([
+      { periodId: null, startsAt: "14:00", endsAt: "15:00" },
+    ]);
+    expect(painter.edited()).toEqual({ departments: [], zones: ["z2"] });
+    expect(frame(painter).refusal).toBe("");
+  });
 });
 
 it("a zone's day with its department closed shows 'Restaurant closed all day' behind its paint", async () => {
