@@ -10,6 +10,7 @@ import {
 import {
   CORE_MIGRATIONS,
   floorZones,
+  locationBusinessDaySettings,
   locationDayCutoverChanges,
   locations,
   tenants,
@@ -833,5 +834,143 @@ describe("the season days read", () => {
       { date: "2030-12-09", dayCutover: "06:00" },
       { date: "2030-12-10", dayCutover: "07:00" },
     ]);
+  });
+});
+
+describe("a past day's range that misfits its own start", () => {
+  const AFTER_RETURN = new Date("2026-11-02T12:00:00Z");
+  /** 05:00, then 03:00 from 2026-10-21, then 05:00 again from 2026-10-28, with Sala's dinner
+   *  stored at 22:00–04:30 on Saturdays after the start came back to 05:00, and Terrace closed
+   *  23:00–04:00 then. */
+  async function lateSaturday() {
+    const { cfg } = await venue([]);
+    await suite.db
+      .update(locations)
+      .set({ dayCutover: "05:00:00" })
+      .where(eq(locations.id, cfg.locationId));
+    await run(async (tx) => {
+      await tx
+        .insert(locationBusinessDaySettings)
+        .values({ locationId: cfg.locationId, revision: 1 });
+      await tx.insert(locationDayCutoverChanges).values([
+        { locationId: cfg.locationId, effectiveBusinessDay: "2026-10-21", dayCutover: "03:00:00" },
+        { locationId: cfg.locationId, effectiveBusinessDay: "2026-10-28", dayCutover: "05:00:00" },
+      ]);
+    });
+    return run(async (tx) => {
+      const menuId = (await createCatalogue(tx, { name: `Carta ${randomUUID()}` })).id;
+      const { document } = await buildMenuDocument(tx, menuId);
+      await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
+      const sala = (await createDepartment(tx, cfg, { name: "Sala", orderStart: "table" })).id;
+      const period = async (name: string) =>
+        (await saveMenuPeriod(tx, cfg, sala, { name, menuId, staffMenuIds: [] }, 0)).id;
+      const lunch = await period("Lunch");
+      const dinner = await period("Dinner");
+      await replaceMenuWeek(
+        tx,
+        cfg,
+        sala,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: weekday === 6 ? [{ periodId: dinner, startsAt: "22:00", endsAt: "04:30" }] : [],
+        })),
+        AFTER_RETURN,
+        1,
+      );
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: cfg.locationId, name: "Terrace", displayOrder: 1 })
+        .returning({ id: floorZones.id });
+      await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: sala });
+      await replaceZoneClosedWeek(
+        tx,
+        cfg,
+        zone!.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          ranges: weekday === 6 ? [{ startsAt: "23:00", endsAt: "04:00" }] : [],
+        })),
+        1,
+        AFTER_RETURN,
+      );
+      return { cfg, sala, lunch, dinner, terrace: zone!.id };
+    });
+  }
+  const october = (v: { cfg: VenueScope }) =>
+    run((tx) => readOpeningHoursMonth(tx, v.cfg, "2026-10", AFTER_RETURN));
+  const onSaturday = (month: Awaited<ReturnType<typeof october>>, date: string) => {
+    const day = month.days.find((d) => d.date === date)!;
+    return {
+      dayCutover: day.dayCutover,
+      ranges: day.departments[0]!.ranges,
+      closed: day.departments[0]!.zones[0]!.closed,
+    };
+  };
+
+  it("draws it cut at the day's own changeover, and a day under today's start as stored", async () => {
+    const v = await lateSaturday();
+    const month = await october(v);
+    expect(onSaturday(month, "2026-10-24")).toEqual({
+      dayCutover: "03:00",
+      ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "03:00" }],
+      closed: [{ startsAt: "23:00", endsAt: "03:00" }],
+    });
+    expect(onSaturday(month, "2026-10-31")).toEqual({
+      dayCutover: "05:00",
+      ranges: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" }],
+      closed: [{ startsAt: "23:00", endsAt: "04:00" }],
+    });
+  });
+
+  it("keeps the season's cut dinner beside a special day's painted lunch", async () => {
+    const v = await lateSaturday();
+    await run((tx) =>
+      saveSpecialDay(
+        tx,
+        v.cfg,
+        null,
+        {
+          name: "Feria",
+          repeatsYearly: false,
+          dates: [{ date: "2026-10-24", closedAllDay: false }],
+          paint: [
+            {
+              departmentId: v.sala,
+              date: "2026-10-24",
+              ranges: [{ periodId: v.lunch, startsAt: "12:00", endsAt: "15:00" }],
+            },
+          ],
+        },
+        AFTER_RETURN,
+        1,
+      ),
+    );
+    expect(onSaturday(await october(v), "2026-10-24").ranges).toEqual([
+      { periodId: v.lunch, startsAt: "12:00", endsAt: "15:00" },
+      { periodId: v.dinner, startsAt: "22:00", endsAt: "03:00" },
+    ]);
+  });
+
+  it("counts the cut range as open in the year, under a special day with no paint", async () => {
+    const v = await lateSaturday();
+    await run((tx) =>
+      saveSpecialDay(
+        tx,
+        v.cfg,
+        null,
+        {
+          name: "Feria",
+          repeatsYearly: false,
+          dates: [{ date: "2026-10-24", closedAllDay: false }],
+        },
+        AFTER_RETURN,
+        1,
+      ),
+    );
+    const year = await run((tx) => readOpeningHoursYear(tx, v.cfg, 2026, AFTER_RETURN));
+    expect(year.days.find((day) => day.date === "2026-10-24")).toMatchObject({
+      tone: "special_day",
+      closed: false,
+    });
   });
 });

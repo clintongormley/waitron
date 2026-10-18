@@ -4,10 +4,12 @@ import type { PreparedServiceDay } from "@waitron/module";
 import { readLocationClock, type LocationPlace } from "@waitron/reporting";
 import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { layerPaint, layerZonePaint } from "./day-paint.js";
+import { cutToOwnDay } from "./calendar-cut.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import type { VenueScope } from "./operations.js";
 import { zoneServicePolicies } from "./schema/service.js";
+import { serviceDayWallContext } from "./service-day-context.js";
 import { seasonOn, type Season } from "./season-rules.js";
 import { readDepartmentSeasonWeeks, readZoneSeasonWeeks, type SeasonDays } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
@@ -31,6 +33,23 @@ function fromChangeover<T extends { startsAt: string; endsAt: string }>(
   cutover: string,
 ): T[] {
   return [...ranges].sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
+}
+
+/** Asked for by the calendar alone: each day's season ranges as {@link cutToOwnDay} draws them,
+ *  `anchor` being the start in force when the calendar is read. */
+export interface CalendarCut {
+  anchor: string;
+}
+
+function cutSeason<T extends ClosedRange>(
+  ranges: readonly T[],
+  clock: BusinessDayClock,
+  day: LocalDate,
+  cut: CalendarCut | undefined,
+): readonly T[] {
+  if (cut === undefined) return ranges;
+  const own = serviceDayWallContext(clock, day);
+  return ranges.flatMap((range) => cutToOwnDay(range, own, cut.anchor) ?? []);
 }
 
 /** Each day's season, and the special day standing on it, for the days it was read for. */
@@ -191,6 +210,7 @@ export async function resolveDepartmentsDays(
   businessDays: readonly LocalDate[],
   clock: BusinessDayClock,
   given?: DayPlan,
+  cut?: CalendarCut,
 ): Promise<Map<string, Map<LocalDate, ResolvedDepartmentDay>>> {
   const resolved = new Map<string, Map<LocalDate, ResolvedDepartmentDay>>();
   if (businessDays.length === 0 || departmentIds.length === 0) return resolved;
@@ -210,7 +230,12 @@ export async function resolveDepartmentsDays(
       const special = plan.special.get(day);
       const seasonId = plan.seasonIdOn.get(day) ?? null;
       const cutover = cutovers.get(day)!;
-      const season = (seasonId === null ? undefined : weeks.get(seasonId)?.[weekdayOf(day)]) ?? [];
+      const season = cutSeason(
+        (seasonId === null ? undefined : weeks.get(seasonId)?.[weekdayOf(day)]) ?? [],
+        clock,
+        day,
+        cut,
+      );
       const ranges = special
         ? special.closedAllDay
           ? []
@@ -232,6 +257,7 @@ export async function resolveZoneClosedDays(
   businessDays: readonly LocalDate[],
   clock: BusinessDayClock,
   given?: DayPlan,
+  cut?: CalendarCut,
 ): Promise<Map<string, Map<LocalDate, ClosedRange[]>>> {
   const resolved = new Map<string, Map<LocalDate, ClosedRange[]>>();
   if (zoneIds?.length === 0 || businessDays.length === 0) return resolved;
@@ -257,8 +283,12 @@ export async function resolveZoneClosedDays(
     for (const day of businessDays) {
       const special = plan.special.get(day);
       const seasonId = plan.seasonIdOn.get(day) ?? null;
-      const season =
-        (seasonId === null ? undefined : weeks.get(zoneId)?.get(seasonId)?.[weekdayOf(day)]) ?? [];
+      const season = cutSeason(
+        (seasonId === null ? undefined : weeks.get(zoneId)?.get(seasonId)?.[weekdayOf(day)]) ?? [],
+        clock,
+        day,
+        cut,
+      );
       const ranges = special
         ? special.closedAllDay
           ? []
