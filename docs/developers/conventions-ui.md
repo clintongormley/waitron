@@ -112,7 +112,7 @@ image the way `src/assets/` does: `apps/server/scripts/copy-migrations.mjs:25` c
 (`apps/server/src/guide-catalogue.ts:8-10`) finds the folder with
 `new URL("./guide/", import.meta.url)`. The image smoke test fetches `/help/es/products` from a
 blank box and looks for the Spanish page's `id="variants"` and `<html lang="es">` (the step "The
-image carries the user guides, the Spanish twins included" in `.github/workflows/image-smoke.yml`).
+image serves the Spanish Products guide" in `.github/workflows/image-smoke.yml`).
 
 ### What the renderer accepts, and what it refuses
 
@@ -169,7 +169,8 @@ list's own string, never the request's (`mountGuidePages`'s `/help/:lang/:page` 
 matters because Hono hands the route a decoded parameter: measured 2026-10-18 on Hono 4.13.13
 with a throwaway script holding only `app.get("/help/:lang/:page", …)`,
 `/help/en/..%2F..%2Fetc%2Fpasswd` reached the handler as `page: "../../etc/passwd"`. Anything else under `/help`, including `/help`, `/help/en` and a
-trailing slash, answers the guide's own 404 page (`mountGuidePages`'s `/help/*` catch-all). An
+trailing slash, answers the guide's own 404 page: from the `/help/:lang/:page` route when its two
+parts are not on the lists, and from `mountGuidePages`'s `/help/*` catch-all for every other address. An
 address whose first part after `/help/` is exactly a language in `GUIDE_LANGUAGES` gets the 404
 page in that language, so `/help/es`, `/help/es/x/y` and `/help/es/products/` answer in Spanish;
 every other address gets it in English.

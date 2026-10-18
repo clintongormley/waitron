@@ -182,7 +182,7 @@ describe("guide pages", () => {
     expect(spanishText).toContain("Página no disponible");
     expect(spanishText).toContain("No se ha podido mostrar esta página de la guía.");
     expect(log).toHaveBeenLastCalledWith("error", "guide.page_missing", {
-      lang: "es",
+      lang: "en",
       page: "products",
     });
   });
@@ -222,17 +222,32 @@ describe("guide pages", () => {
     });
   });
 
-  it("answers the Spanish 500 page, naming the file it tried, when the twin is missing and the English file cannot be read", async () => {
+  it("answers the Spanish 500 page and logs the English file it tried, when the twin is missing and the English file cannot be read", async () => {
     const unreadable = newRoot("unreadable-fallback");
     mkdirSync(join(unreadable, "en", "products.md"), { recursive: true });
     const log = vi.fn();
     const res = await appFor(unreadable, log).request("/help/es/products");
     expect(res.status).toBe(500);
     expect(await res.text()).toContain("No se ha podido mostrar esta página de la guía.");
+    expect(log).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledWith("error", "guide.read_failed", {
       lang: "en",
       page: "products",
       code: "EISDIR",
+    });
+  });
+
+  it("logs the English file's language when the twin is missing and the English guide does not render", async () => {
+    const broken = newRoot("broken-fallback");
+    write(broken, "en", "products", "# Products\n\n### hidden words\n");
+    const log = vi.fn();
+    const res = await appFor(broken, log).request("/help/es/products");
+    expect(res.status).toBe(500);
+    expect(await res.text()).toContain("No se ha podido mostrar esta página de la guía.");
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("error", "guide.render_failed", {
+      lang: "en",
+      page: "products",
     });
   });
 

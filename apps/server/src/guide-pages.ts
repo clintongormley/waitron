@@ -213,7 +213,7 @@ export function mountGuidePages(app: Hono, deps: GuidePagesDeps, log: Logger): v
       return broken(c, lang);
     }
     if (markdown === undefined) {
-      log("error", "guide.page_missing", { lang, page: name });
+      log("error", "guide.page_missing", { lang: shownLang, page: name });
       return broken(c, lang);
     }
 
@@ -221,7 +221,7 @@ export function mountGuidePages(app: Hono, deps: GuidePagesDeps, log: Logger): v
     try {
       rendered = renderGuide(markdown, GUIDE_PAGES);
     } catch {
-      log("error", "guide.render_failed", { lang, page: name });
+      log("error", "guide.render_failed", { lang: shownLang, page: name });
       return broken(c, lang);
     }
 

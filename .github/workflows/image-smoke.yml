@@ -187,7 +187,7 @@ jobs:
             | openssl x509 > leaf.pem
           openssl verify -CAfile ca.crt leaf.pem
 
-      - name: The image carries the user guides, the Spanish twins included
+      - name: The image serves the Spanish Products guide
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP"
