@@ -63,6 +63,14 @@ found hidden Cancel, Delete and Back controls even though direct `.click()` test
 `packages/staffing/src/dashboard/shift-edit-dialog.test.ts` and `publish-dialog.test.ts` now check
 their native buttons' rendered width; those tests cover the staffing dialogs, not other callers.
 
+## Register a till dialog before deferring menu updates
+
+Put `trackDialog()` on each till dialog. The app uses `dialogOpenUnder` before asking about
+changed menu prices; an unregistered window does not defer that question. The Move to case in
+`apps/till/src/till-app-drafts.test.ts` covers this window. In the A773-1 experiment on
+2026-10-18, removing its registration made that case show the price question while Move to
+was open; restoring it kept the question deferred until after closing and the next poll.
+
 ## A screen does not draw its own form field
 
 A `<select>`, a `<textarea>` or an `<input>` that takes text is drawn by a field primitive

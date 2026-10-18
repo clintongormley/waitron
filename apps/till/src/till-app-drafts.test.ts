@@ -879,35 +879,37 @@ describe("dead-end questions with no timely answer", () => {
     expect(banner(el)!.textContent).toContain(t("table.error"));
   });
 
-  it("releases Send after three seconds and ignores a later station answer", async () => {
+  it("keeps direct Send available through a timed-out automatic check and ignores its late answer", async () => {
     let answer!: (value: unknown) => void;
     const askDraftDeadEnds = vi.fn(() => new Promise((resolve) => (answer = resolve)));
     const { el } = await mountApp({ askDraftDeadEnds });
     await openMesa(el);
-    await tap(el, "Beer");
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    tableOrder(el)!
-      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!
-      .click();
+    press(el, "Beer");
+    await settleTimers(el);
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+    await settleTimers(el);
+    await vi.advanceTimersByTimeAsync(400);
     await settleTimers(el);
     expect(askDraftDeadEnds).toHaveBeenCalledOnce();
+    const savedId = server.drafts[0]!.lines[0]!.id;
     const screen = tableOrder(el)!;
-    const confirm = () =>
+    const send = () =>
       screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-        "[data-draft-confirm]",
+        '[data-draft-action="send-all"]',
       )!;
-    expect(confirm().disabled).toBe(true);
+    expect(send().disabled).toBe(false);
     await vi.advanceTimersByTimeAsync(2_999);
     await settleTimers(el);
-    expect(confirm().disabled).toBe(true);
+    expect(send().disabled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     await settleTimers(el);
-    expect(confirm().disabled).toBe(false);
+    expect(send().disabled).toBe(false);
     answer({
       sends: true,
       deadEnds: [
         {
-          key: "late-id",
+          key: savedId,
           name: "Beer",
           quantity: "1",
           stationId: "bar",
@@ -919,10 +921,12 @@ describe("dead-end questions with no timely answer", () => {
     });
     await settleTimers(el);
     expect(screen.shadowRoot!.querySelector("till-dead-ends-section")).toBeNull();
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(rows(el)).toEqual(["Beer ×1"]);
   });
 });
 
-it("saves a Send preview station choice on the matching live draft line", async () => {
+it("saves an automatic-warning station choice on the matching live draft line", async () => {
   const askDraftDeadEnds = vi.fn(async (_partyId: string, _draftId: string, lineIds: string[]) => ({
     sends: true,
     deadEnds: [
@@ -941,29 +945,26 @@ it("saves a Send preview station choice on the matching live draft line", async 
   await openMesa(el);
   await tap(el, "Beer");
   await tap(el, "Steak");
-  await actOpenPreview(el, "send-all");
+  await expect.poll(() => askDraftDeadEnds.mock.calls.length, { timeout: 2000 }).toBe(1);
   const screen = tableOrder(el)!;
   expect(askDraftDeadEnds).toHaveBeenCalledWith(
     "v1",
-    "draft-1",
-    expect.any(Array),
+    server.drafts[0]!.id,
+    server.drafts[0]!.lines.map((line) => line.id),
     expect.any(Object),
   );
-  expect(
-    screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-draft-confirm]")!
-      .disabled,
-  ).toBe(true);
+  expect(screen.shadowRoot!.querySelector("[data-draft-routing-warning]")).not.toBeNull();
+  expect(api.submitDraft).not.toHaveBeenCalled();
   screen
     .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
     .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
   await flush(el);
-  screen.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
-  await flush(el, 6);
+  await act(el, "send-all");
   expect(api.saveDraft.mock.calls.at(-1)![1].lines[0].makeAt).toBe("kitchen");
   expect(api.submitDraft).toHaveBeenCalledOnce();
 });
 
-it("reopens the Send preview and checks again after a station refusal", async () => {
+it("refreshes inline routing and keeps the outbox after a direct Send station refusal", async () => {
   const askDraftDeadEnds = vi
     .fn()
     .mockResolvedValueOnce({ sends: true, deadEnds: [], stations: [] })
@@ -985,36 +986,39 @@ it("reopens the Send preview and checks again after a station refusal", async ()
   const { el } = await mountApp({ askDraftDeadEnds, submitDraft });
   await openMesa(el);
   await tap(el, "Beer");
+  await expect.poll(() => askDraftDeadEnds.mock.calls.length, { timeout: 2000 }).toBe(1);
   await act(el, "send-all");
+  await expect.poll(() => askDraftDeadEnds.mock.calls.length).toBe(2);
+  await flush(el);
   expect(submitDraft).toHaveBeenCalledOnce();
   expect(askDraftDeadEnds).toHaveBeenCalledTimes(2);
   expect(tableOrder(el)!.shadowRoot!.querySelector("till-dead-ends-section")).not.toBeNull();
   expect(
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-      "[data-draft-confirm]",
+      '[data-draft-action="send-all"]',
     )!.disabled,
   ).toBe(true);
+  expect(rows(el)).toEqual(["Beer ×1"]);
+  expect(savedLines()).toEqual(["offer-beer ×1"]);
 });
 
-it("keeps Confirm available when the station question fails", async () => {
-  const { el } = await mountApp({
-    askDraftDeadEnds: vi.fn().mockRejectedValue(new TypeError("offline")),
-  });
+it("keeps direct Send available when the automatic station question fails", async () => {
+  const askDraftDeadEnds = vi.fn().mockRejectedValue(new TypeError("offline"));
+  const { el } = await mountApp({ askDraftDeadEnds });
   await openMesa(el);
   await tap(el, "Beer");
-  await actOpenPreview(el, "send-all");
+  await expect.poll(() => askDraftDeadEnds.mock.calls.length, { timeout: 2000 }).toBe(1);
+  await flush(el);
   const screen = tableOrder(el)!;
   expect(screen.shadowRoot!.querySelector("till-dead-ends-section")).toBeNull();
   expect(
-    screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-draft-confirm]")!
-      .disabled,
+    screen.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      '[data-draft-action="send-all"]',
+    )!.disabled,
   ).toBe(false);
+  await act(el, "send-all");
+  expect(api.submitDraft).toHaveBeenCalledOnce();
 });
-
-async function actOpenPreview(el: TillApp, kind: string): Promise<void> {
-  tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`)!.click();
-  await flush(el);
-}
 
 /**
  * A floor read from what the draft server holds when it is asked, and saves that answer late, so a
@@ -2288,7 +2292,7 @@ describe("till-app: sending the draft", () => {
     expect(api.saveDraft).toHaveBeenCalledOnce();
   });
 
-  it("adds a later addition to the held group picked, naming it", async () => {
+  it("moves a later addition into a held group and submits that saved per-group join", async () => {
     const held: OrderGroup = {
       courseIds: [],
       id: "g-mains",
@@ -2306,17 +2310,27 @@ describe("till-app: sending the draft", () => {
     });
     await openMesa(el);
     await tap(el, "Flan");
-    tableOrder(el)!
-      .shadowRoot!.querySelector<HTMLInputElement>('[data-destination="add-to-held"]')!
-      .click();
+    await toggle(el, "Flan");
+    const screen = tableOrder(el)!.shadowRoot!;
+    screen.querySelector<HTMLElement>("[data-review-open]")!.click();
     await flush(el);
-
-    await act(el, "submit");
+    await userEvent.click(screen.querySelector<HTMLElement>("[data-draft-move]")!);
+    await flush(el);
+    const dialog = screen.querySelector<HTMLElement>("[data-draft-move-dialog]")!;
+    const closed = new Promise((resolve) =>
+      dialog.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await userEvent.click(
+      dialog.querySelector<HTMLElement>('[data-draft-move-to="join:g-mains"]')!,
+    );
+    await closed;
+    await flush(el);
+    expect(draft(el).lines[0]!.place).toEqual({ kind: "join", groupId: "g-mains" });
+    await act(el, "send-all");
 
     expect(api.submitDraft.mock.calls[0]![2]).toEqual(
       expect.objectContaining({
-        joinGroupId: "g-mains",
-        groups: [{ release: "hold", lineIds: ["line-2"] }],
+        groups: [{ release: "hold", lineIds: ["line-2"], joinGroupId: "g-mains" }],
       }),
     );
   });
@@ -3619,7 +3633,20 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
     const actions = [...tableOrder(el)!.shadowRoot!.querySelectorAll("[data-draft-action]")].map(
       (action) => action.getAttribute("data-draft-action"),
     );
-    expect(actions).toEqual(["submit"]);
+    expect(actions).toEqual(["fire-selected", "send-all"]);
+    expect(
+      tableOrder(el)!
+        .shadowRoot!.querySelector("[data-draft-group]")!
+        .getAttribute("data-draft-group"),
+    ).toBe("fire");
+    await act(el, "send-all");
+    expect(api.submitDraft.mock.calls[0]![0]).toBe("v9");
+    expect(server.sentGroups(api.submitDraft.mock.calls[0]![2])).toEqual([
+      {
+        release: "fire",
+        lines: [{ menuItemId: "offer-flan", menuVersionId: "v1", quantity: "1" }],
+      },
+    ]);
   });
 });
 
@@ -4822,18 +4849,36 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     expect(refreshText(el)).toContain("Beer €10.00 → €12.00");
   });
 
-  it("asks nothing while the check before sending is open, and asks at the next poll once it is closed", async () => {
+  it("asks nothing while Move to is open, and asks at the next poll once it is closed", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
     await openMesa(el);
-    await tap(el, "Beer");
-    await saved(el);
-    const screen = tableOrder(el)!.shadowRoot!;
-    screen.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
+    await userEvent.click(
+      [...browser(el)!.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
+        (button) => button.querySelector(".name")?.textContent === "Beer",
+      )!,
+    );
     await flush(el);
+    await saved(el);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(refresh(el)).toBeNull();
+    const screen = tableOrder(el)!.shadowRoot!;
+    await toggle(el, "Beer");
+    screen.querySelector<HTMLElement>("[data-review-open]")!.click();
+    await flush(el);
+    await userEvent.click(screen.querySelector<HTMLElement>("[data-draft-move]")!);
+    await flush(el);
+    expect(
+      screen.querySelector<HTMLElement & { open: boolean }>("[data-draft-move-dialog]")!.open,
+    ).toBe(true);
 
     await publish(el, { Beer: "6.00" });
     expect(refresh(el)).toBeNull();
-    screen.querySelector<HTMLElement>("[data-draft-dismiss]")!.click();
+    const dialog = screen.querySelector<HTMLElement>("[data-draft-move-dialog]")!;
+    const closed = new Promise((resolve) =>
+      dialog.addEventListener("wt-close", resolve, { once: true }),
+    );
+    await userEvent.click(dialog.querySelector<HTMLElement>('[slot="footer"]')!);
+    await closed;
     await flush(el);
     await poll(el);
 
@@ -5409,21 +5454,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
       .sentGroups(api.submitDraft.mock.calls[call]![2])
       .flatMap((group) => group.lines.map((line) => line.menuItemId));
 
-  async function pressAndRead(el: TillApp, action: string): Promise<string> {
-    screen(el).querySelector<HTMLElement>(`[data-draft-action="${action}"]`)!.click();
-    await flush(el);
-    return screen(el)
-      .querySelector("[data-preview-body]")!
-      .textContent!.replace(/\s+/g, " ")
-      .trim();
-  }
-
-  async function confirm(el: TillApp): Promise<void> {
-    screen(el).querySelector<HTMLElement>("[data-draft-confirm]")!.click();
-    await flush(el, 6);
-  }
-
-  it("shows a line the server alone flags, and Send all leaves it out with a message, sending the rest", async () => {
+  it("shows the server refusal on the line and direct Send all leaves it out, sending the rest", async () => {
     server.unavailable.add("offer-flan");
     const { el } = await mountApp();
     await openMesa(el);
@@ -5432,17 +5463,15 @@ describe("till-app: a draft line that cannot be sold now", () => {
     await saved(el);
 
     expect(flagText(el)).toEqual([t("basket.blocked.server")]);
-    expect(await pressAndRead(el, "send-all")).toContain(
-      t("table.left_out_one").replace("{names}", "Flan ×1"),
-    );
-    await confirm(el);
+    expect(screen(el).querySelector('[data-flag-remove="1"]')).not.toBeNull();
+    await act(el, "send-all");
 
     expect(sentNames()).toEqual(["offer-beer"]);
     expect(rows(el)).toEqual(["Flan ×1"]);
     expect(server.drafts[0]!.lines.map((line) => line.menuItemId)).toEqual(["offer-flan"]);
   });
 
-  it("shows a line the till's own poll flags, and Fire all leaves it out", async () => {
+  it("shows a line the till's own poll flags, and selected Fire leaves it out", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
       const { el } = await mountApp({
@@ -5455,10 +5484,8 @@ describe("till-app: a draft line that cannot be sold now", () => {
       await flush(el, 6);
 
       expect(flagText(el)).toEqual([t("basket.blocked.unavailable")]);
-      expect(await pressAndRead(el, "fire-all")).toContain(
-        t("table.left_out_one").replace("{names}", "Flan ×1"),
-      );
-      await confirm(el);
+      expect(screen(el).querySelector('[data-flag-remove="1"]')).not.toBeNull();
+      await act(el, "fire-all");
 
       expect(sentNames()).toEqual(["offer-beer"]);
       expect(rows(el)).toEqual(["Flan ×1"]);
@@ -5660,9 +5687,10 @@ describe("till-app: a draft line that cannot be sold now", () => {
         await flush(el, 6);
 
         expect(flagText(el)).toEqual([t("basket.blocked.not_sold_separately")]);
-        expect(await pressAndRead(el, "send-all")).toContain(
-          t("table.left_out_one").replace("{names}", "Flan ×1"),
-        );
+        await act(el, "send-all");
+        expect(sentNames()).toEqual(["offer-beer"]);
+        expect(rows(el)).toEqual(["Flan ×1"]);
+        expect(flagText(el)).toEqual([t("basket.blocked.not_sold_separately")]);
       } finally {
         vi.useRealTimers();
       }
@@ -5811,8 +5839,18 @@ describe("till-app: a draft line that cannot be sold now", () => {
     await tap(el, "Flan");
     await saved(el);
 
-    expect(await pressAndRead(el, "send-all")).toContain(t("table.nothing_sent"));
-    expect(screen(el).querySelector("[data-draft-confirm]")).toBeNull();
+    expect(flagText(el)).toEqual([t("basket.blocked.server"), t("basket.blocked.server")]);
+    expect(
+      screen(el).querySelector<HTMLElement & { disabled: boolean }>(
+        '[data-draft-action="send-all"]',
+      )!.disabled,
+    ).toBe(true);
+    await act(el, "send-all");
+    expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
+    expect(
+      screen(el).querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")?.open ??
+        false,
+    ).toBe(false);
     expect(api.submitDraft).not.toHaveBeenCalled();
   });
 
@@ -5963,7 +6001,15 @@ describe("till-app: a draft line that cannot be sold now", () => {
 
       expect(rows(el)).toEqual(["Beer ×1"]);
       expect(flagText(el)).toEqual([t("basket.blocked.extra")]);
-      expect(await pressAndRead(el, "fire-all")).toContain(t("table.nothing_sent"));
+      await toggle(el, "Beer");
+      expect(
+        screen(el).querySelector<HTMLElement & { disabled: boolean }>(
+          '[data-draft-action="fire-selected"]',
+        )!.disabled,
+      ).toBe(true);
+      await act(el, "fire-selected");
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(flagText(el)).toEqual([t("basket.blocked.extra")]);
       expect(api.submitDraft).not.toHaveBeenCalled();
     });
   });

@@ -2235,9 +2235,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   directly, and Fire sends only ticked eligible dishes. Known unsellable or unrouted dishes stay
   in New order. A refused send refreshes station warnings without opening a preview or sending
   again. Recalled dishes use their saved source references, including when their old offer is
-  no longer available. This remains an intermediate panel step: migration of the old preview's
-  behavioral checks, deletion of its remaining implementation, the Sent panel and held-dish
-  Finish resolution remain open. Its
+  no longer available. The original main-screen and app checks now use direct actions, saved
+  Move to placements and automatic station warnings. A menu update waits while Move to is open,
+  then asks about changed prices after you close it and the next poll runs. Other preview suites
+  still need their useful checks moved before the remaining preview implementation is deleted.
+  The Sent panel and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
   target recovery. Single-dish Fire now's command/API/client work is qualified on the feature
@@ -2253,8 +2255,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   app instance. A move waits for this device's pending destination save before reading its
   editing state. If you open another table while it waits, it sends neither the read nor the move.
   Navigation and late command outcomes have
-  focused browser checks, but the remaining panels/actions and delivery are still open. The
-  empty-bill first-save rule and three exact EN/ES messages have final
+  focused browser checks, but the remaining panels/actions and delivery are still open. Keep
+  selections and an open Move to window when a focus refresh returns the same saved work; this
+  part of T24 remains open. The empty-bill first-save rule and three exact EN/ES messages have final
   approval after the relay correction; five earlier Pay name/count strings are withdrawn. Twelve
   cancellation translations stay approved; English Void/Comp naming stands.
   The unlanded floor read now keeps every nonempty bill/editor pair separately, even when

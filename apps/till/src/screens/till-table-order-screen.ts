@@ -3844,6 +3844,7 @@ export class TillTableOrderScreen extends LitElement {
         >${label}</wt-button
       >`;
     return html`<wt-dialog
+      ${trackDialog()}
       data-draft-move-dialog
       .heading=${t("table.move_line")}
       .open=${this.draftMoveStore === store && !store.editsLocked && !store.sending}
