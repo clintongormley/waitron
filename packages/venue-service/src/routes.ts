@@ -80,6 +80,7 @@ import {
 } from "./department-transfers.js";
 import "./errors.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
+import { assertSeasonClosuresInHours } from "./zone-closure-hours.js";
 import { parseEndOffsetMinutes } from "./period-end-offset.js";
 import {
   deleteSpecialDay,
@@ -1287,12 +1288,12 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const seasonId = requireUuidParam(c.req.param("seasonId"), "SeasonId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        await gated(sessionId, (tx) => {
+        await gated(sessionId, async (tx) => {
           onlyKeys(body, ["departments", "zones", "expectedClockRevision"]);
           const departments = requireWeekList(body.departments, "departments", "departmentId");
           const zones = requireWeekList(body.zones, "zones", "zoneId");
           const revision = requireClockRevision(body);
-          return saveSeasonWeeks(
+          await saveSeasonWeeks(
             tx,
             ctx.cfg,
             seasonId,
@@ -1309,6 +1310,16 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             new Date(),
             revision,
           );
+          await assertSeasonClosuresInHours(
+            tx,
+            ctx.cfg,
+            seasonId,
+            (zones ?? []).map(({ id, days }, i) => ({
+              zoneId: id,
+              field: `zones.${i}.`,
+              days: days as readonly { weekday: number; ranges: readonly ClosedRange[] }[],
+            })),
+          );
         });
         return c.body(null, 204);
       }),
@@ -1320,17 +1331,25 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         onlyKeys(body, ["days", "seasonId", "expectedClockRevision"]);
-        await gated(sessionId, (tx) =>
-          replaceZoneClosedWeek(
+        await gated(sessionId, async (tx) => {
+          const seasonId = requireBodyUuid(body.seasonId, "seasonId");
+          await replaceZoneClosedWeek(
             tx,
             ctx.cfg,
             zoneId,
             body.days,
             body.expectedClockRevision as number,
             new Date(),
-            { seasonId: requireBodyUuid(body.seasonId, "seasonId") },
-          ),
-        );
+            { seasonId },
+          );
+          await assertSeasonClosuresInHours(tx, ctx.cfg, seasonId, [
+            {
+              zoneId,
+              field: "",
+              days: body.days as readonly { weekday: number; ranges: readonly ClosedRange[] }[],
+            },
+          ]);
+        });
         return c.body(null, 204);
       }),
     );
