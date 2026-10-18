@@ -5714,15 +5714,11 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   it to `CLAUDE.md` §2's trap list, through the normal pull request flow.
 
 - **drizzle-kit 0.31.11 left out `ON DELETE` when it generated an `ALTER TABLE … ADD … REFERENCES`
-  on this engine, while its snapshot kept it**, and no guard compares a key's delete rule with the
-  migrated database. Observed once by an implementer (five store tests failed with a foreign-key
-  refusal), not independently re-run. Left open by A429 slice 1 (#1493).
-  - **A812. Prove the schema-conformance suite catches a lost delete rule, then correct the
-    sentence above.** `packages/db/src/testing/schema-conformance.ts` appears to compare each key's
-    delete rule with the migrated database (read, not run). In one migration set that opts into the
-    suite, drop the delete rule from one migrated key and run the suite. Only if it fails, cut "no
-    guard compares a key's delete rule with the migrated database" and say instead that the suite
-    compares it for the sets that opt in; if it passes, the sentence stays.
+  on this engine, while its snapshot kept it.** The schema-conformance suite compares declared
+  delete rules with the migrated database for the sets that opt in; [A812's deletion
+  experiment](developers/testing-guide.md#a-missing-delete-rule-fails-the-schema-comparison) caught
+  one omitted rule. The generator omission was observed once by an implementer (five store tests
+  failed with a foreign-key refusal), not independently re-run. Left open by A429 slice 1 (#1493).
 
 ### Dependency upgrades
 

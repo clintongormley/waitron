@@ -173,6 +173,31 @@ in passing.
 and mutates it. What that cost, with the figures, is in [ci-and-gates.md](ci-and-gates.md) →
 "Moving harness code out of a `.test.ts` changes what gates it".
 
+## A missing delete rule fails the schema comparison
+
+On 2026-10-19, A812 ran the existing staffing schema-conformance suite in an independently
+installed disposable checkout of `a3de98c14d2f01f982b78a746a436437e9a001be`:
+
+```bash
+pnpm --filter @waitron/staffing exec vitest run --project node src/schema/schema-conformance.test.ts
+```
+
+The unchanged checkout passed all eight cases. Removing only `ON DELETE restrict` from the
+`shift_assignments.staff_role_id` reference to `staff_roles.id` in
+`packages/staffing/drizzle/0001_staffing_days_blocks_assignments.sql`, leaving the declaration and
+test unchanged, made the `shift_assignments` comparison fail with this difference:
+
+```diff
+- staff_role_id -> staff_roles(id) on delete restrict on update no action
++ staff_role_id -> staff_roles(id) on delete no action on update no action
+```
+
+That run exited 1 with one failed case and seven passed. Restoring the original migration bytes
+and repeating the command passed all eight cases; `git status --porcelain` was empty afterwards.
+This checks one omitted rule through an existing opted-in migration set. It does not reproduce
+drizzle-kit's generation of an added column or exercise deletion of populated rows. A migration
+set without a call to `describeSchemaConformance` gets no comparison from this suite.
+
 **Containers and Docker**
 
 ## A container port-binding timeout needs Docker state as well as the container's own logs.
