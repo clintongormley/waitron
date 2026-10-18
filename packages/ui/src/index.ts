@@ -134,6 +134,8 @@ export {
 export { NavigationGuard, navigationGuardFor, type NavigationLeave } from "./navigation-guard.js";
 
 export { WtRowActions } from "./components/wt-row-actions.js";
+export { WtMenuRow } from "./components/wt-menu-row.js";
+export { WtHelpSwitch } from "./components/wt-help-switch.js";
 export { WtTabs, type TabItem } from "./components/wt-tabs.js";
 export {
   DROPDOWN_ICONS,

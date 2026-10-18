@@ -1,6 +1,6 @@
 import { html, nothing } from "lit";
 import { afterEach, describe, expect, it, test, vi } from "vitest";
-import { commands, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import type { WtButton } from "./wt-button.js";
 import "./wt-button.js";
 import { WtDataTable } from "./wt-data-table.js";
@@ -837,4 +837,128 @@ test("removal during opening does not let a pending toggle report a closed popup
   expect(popup.matches(":popover-open")).toBe(true);
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+});
+
+describe("a help badge inside a menu row, and a menu that changes size", () => {
+  it("stays open for a click on a data-keep-open element inside a slotted element's shadow root", async () => {
+    if (!customElements.get("test-keep-open-row")) {
+      customElements.define(
+        "test-keep-open-row",
+        class extends HTMLElement {
+          constructor() {
+            super();
+            this.attachShadow({ mode: "open" }).innerHTML =
+              "<slot></slot><button data-keep-open>?</button>";
+          }
+        },
+      );
+    }
+    const { el, trigger, popup } = await mountActions();
+    const row = document.createElement("test-keep-open-row");
+    const help = document.createElement("wt-button");
+    help.textContent = "Rename";
+    row.append(help);
+    el.append(row);
+    await help.updateComplete;
+    await userEvent.click(trigger);
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.click(row.shadowRoot!.querySelector("button")!);
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.click(help);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("a data-keep-open element outside the menu does not keep it open", async () => {
+    const { host, trigger, edit, popup } = await mountActions();
+    host.setAttribute("data-keep-open", "");
+    await userEvent.click(trigger);
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.click(edit);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("a data-keep-open on the wt-row-actions element itself does not keep it open", async () => {
+    const { el, trigger, edit, popup } = await mountActions();
+    el.setAttribute("data-keep-open", "");
+    await userEvent.click(trigger);
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.click(edit);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("an open menu that grows stays inside the window", async () => {
+    await page.viewport(390, 800);
+    const errors: string[] = [];
+    const onError = (event: ErrorEvent) => errors.push(event.message);
+    window.addEventListener("error", onError);
+    try {
+      const { el, host, trigger, popup } = await mountActions();
+      host.style.display = "flex";
+      host.style.justifyContent = "flex-end";
+      el.align = "end";
+      await el.updateComplete;
+      await userEvent.click(trigger);
+      expect(popup.matches(":popover-open")).toBe(true);
+      const wide = document.createElement("wt-button");
+      wide.textContent = "A thirty-character long label!";
+      expect(wide.textContent).toHaveLength(30);
+      el.append(wide);
+      // Until the button renders, its bare text wraps inside the popup and fits.
+      await wide.updateComplete;
+      await vi.waitFor(() =>
+        expect(popup.getBoundingClientRect().right).toBeLessThanOrEqual(innerWidth - 8),
+      );
+      for (let frame = 0; frame < 2; frame++)
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(errors.filter((message) => message.includes("ResizeObserver"))).toEqual([]);
+    } finally {
+      window.removeEventListener("error", onError);
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("a closed menu is not watched for size", async () => {
+    const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+    const unobserve = vi.spyOn(ResizeObserver.prototype, "unobserve");
+    const disconnect = vi.spyOn(ResizeObserver.prototype, "disconnect");
+    const outside = document.createElement("button");
+    outside.textContent = "Outside";
+    document.body.append(outside);
+    try {
+      const { el, trigger, edit, popup } = await mountActions();
+      const watchesPopup = () => observe.mock.calls.filter(([target]) => target === popup).length;
+      const observers = () =>
+        observe.mock.contexts.filter((_, index) => observe.mock.calls[index]![0] === popup);
+      const stops = () =>
+        unobserve.mock.contexts.filter(
+          (observer, index) =>
+            observers().includes(observer) && unobserve.mock.calls[index]![0] === popup,
+        ).length +
+        disconnect.mock.contexts.filter((observer) => observers().includes(observer)).length;
+      expect(watchesPopup()).toBe(0);
+
+      await userEvent.click(trigger);
+      expect(watchesPopup()).toBe(1);
+      let before = stops();
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() => expect(stops()).toBeGreaterThan(before));
+
+      await userEvent.click(trigger);
+      expect(watchesPopup()).toBe(2);
+      before = stops();
+      await userEvent.click(edit);
+      expect(popup.matches(":popover-open")).toBe(false);
+      await vi.waitFor(() => expect(stops()).toBeGreaterThan(before));
+
+      el.show();
+      expect(watchesPopup()).toBe(3);
+      before = stops();
+      await userEvent.click(outside);
+      expect(popup.matches(":popover-open")).toBe(false);
+      await vi.waitFor(() => expect(stops()).toBeGreaterThan(before));
+    } finally {
+      outside.remove();
+      vi.restoreAllMocks();
+    }
+  });
 });

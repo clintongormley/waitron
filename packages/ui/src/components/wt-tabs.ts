@@ -3,6 +3,9 @@ import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
+import { HelpModeController } from "../help-mode.js";
+import "./wt-help-tooltip.js";
+import type { WtHelpTooltip } from "./wt-help-tooltip.js";
 
 export interface TabItem {
   key: string;
@@ -10,6 +13,8 @@ export interface TabItem {
   /** Draws the tab in the primary colour with a "*" after its label; the text is what the star
    * means, and the tab is named "label, text". */
   marked?: string;
+  /** A help-mode badge over the tab's label; `label` is the badge's whole accessible name. */
+  help?: { text: string; label: string };
 }
 
 /** The fade spans this many `--wt-space-6`: wider than the padding and gap between two labels. */
@@ -26,6 +31,7 @@ export class WtTabs extends LitElement {
         min-width: 0;
       }
       .tab-row {
+        position: relative;
         display: flex;
         align-items: center;
         min-width: 0;
@@ -99,6 +105,16 @@ export class WtTabs extends LitElement {
       button:hover {
         background: var(--wt-color-surface);
       }
+      /* Outside the tablist, which may own only tabs; #placeBadges puts each over its tab. */
+      wt-help-tooltip {
+        position: absolute;
+        inset: auto;
+        margin: 0;
+        translate: -50% -50%;
+      }
+      wt-help-tooltip[data-out-of-view] {
+        visibility: hidden;
+      }
       [role="tabpanel"] {
         padding-block: var(--wt-space-3);
       }
@@ -111,6 +127,7 @@ export class WtTabs extends LitElement {
   @property() value = "";
   @property() label = "";
   readonly #id = uniqueId("wt-tabs");
+  readonly #help = new HelpModeController(this);
 
   get #selected(): string | undefined {
     return this.items.find((item) => item.key === this.value)?.key ?? this.items[0]?.key;
@@ -150,9 +167,10 @@ export class WtTabs extends LitElement {
     button.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
-  // Scrolls the strip and sets its fade width and overflow mark, none of which changes the size of
-  // the strip or the selected tab, so it needs no frame delay. A selected tab that changes size
-  // re-sizes the fade without scrolling, so a strip the reader scrolled stays put.
+  // Scrolls the strip, sets its fade width and overflow mark, and places the help badges, none of
+  // which changes the size of the strip or the selected tab, so it needs no frame delay. A selected
+  // tab that changes size re-sizes the fade without scrolling, so a strip the reader scrolled stays
+  // put.
   readonly #sizeObserver = new ResizeObserver((entries) => {
     let stripResized = false;
     let tabResized = false;
@@ -168,6 +186,7 @@ export class WtTabs extends LitElement {
       this.#sizeFade();
       this.#showOverflow();
     }
+    this.#placeBadges();
   });
   #observedStrip: Element | null = null;
   #observedWidth: number | null = null;
@@ -240,6 +259,7 @@ export class WtTabs extends LitElement {
     this.#overflowFrame ??= requestAnimationFrame(() => {
       this.#overflowFrame = null;
       this.#showOverflow();
+      this.#placeBadges();
     });
   }
 
@@ -261,6 +281,36 @@ export class WtTabs extends LitElement {
     else delete this.dataset.overflow;
   }
 
+  #placeBadges(): void {
+    if (!this.#help.on) return;
+    const badges = this.renderRoot.querySelectorAll<WtHelpTooltip>(".tab-row > wt-help-tooltip");
+    if (badges.length === 0) return;
+    const row = badges[0]!.parentElement!;
+    const bar = row.querySelector<HTMLElement>('[role="tablist"]')!;
+    const rowBounds = row.getBoundingClientRect();
+    const barBounds = bar.getBoundingClientRect();
+    const rtl = getComputedStyle(bar).direction === "rtl";
+    for (const badge of badges) {
+      const label = bar.querySelector(`[data-key="${CSS.escape(badge.dataset.key!)}"] .tab-label`)!;
+      const bounds = label.getBoundingClientRect();
+      const x = rtl ? bounds.left : bounds.right;
+      badge.style.left = `${x - rowBounds.left}px`;
+      badge.style.top = `${bounds.top - rowBounds.top}px`;
+      const out = x < barBounds.left || x > barBounds.right;
+      if (out && !badge.hasAttribute("data-out-of-view")) this.#leaveView(badge);
+      badge.toggleAttribute("data-out-of-view", out);
+    }
+  }
+
+  // A badge made invisible keeps its box open. Focus goes to the selected tab without scrolling, which
+  // would undo the reader's scroll.
+  #leaveView(badge: WtHelpTooltip): void {
+    badge.hide();
+    if (!badge.matches(":focus-within")) return;
+    const { tabs, index } = this.#selectedTab();
+    tabs[index]!.focus({ preventScroll: true });
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     if (this.hasUpdated) this.#observeSizes();
@@ -279,6 +329,7 @@ export class WtTabs extends LitElement {
     this.#observeSizes();
     if (changed.has("items") || changed.has("value")) this.#showSelected();
     this.#showOverflow();
+    this.#placeBadges();
   }
 
   override render() {
@@ -308,12 +359,23 @@ export class WtTabs extends LitElement {
                 @click=${(event: MouseEvent) => this.#select(event, item.key)}
                 @keydown=${(event: KeyboardEvent) => this.#keydown(event, index)}
               >
-                ${item.label}${
+                ${item.help ? html`<span class="tab-label">${item.label}</span>` : item.label}${
                   item.marked ? html`<span class="mark" aria-hidden="true">*</span>` : nothing
                 }
               </button>`,
           )}
         </div>
+        ${repeat(
+          this.items.filter((item) => item.help),
+          (item) => item.key,
+          (item) =>
+            html`<wt-help-tooltip
+              mode="help-mode"
+              data-key=${item.key}
+              aria-label=${item.help!.label}
+              >${item.help!.text}</wt-help-tooltip
+            >`,
+        )}
         <div class="tab-actions" part="tab-actions"><slot name="actions"></slot></div>
       </div>
       ${repeat(

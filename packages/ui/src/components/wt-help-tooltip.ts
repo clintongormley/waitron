@@ -102,7 +102,12 @@ export class WtHelpTooltip extends LitElement {
   }
 
   override updated(): void {
-    if (this.mode === "help-mode" && !this.#help.on) this.popup.hidePopover();
+    if (this.mode === "help-mode" && !this.#help.on) this.hide();
+  }
+
+  /** Closes the box if it is open. Does nothing before the first render, where there is no box. */
+  hide(): void {
+    if (this.hasUpdated) this.popup.hidePopover();
   }
 
   private onToggle(): void {

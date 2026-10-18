@@ -3,6 +3,8 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption, chooseOptions, cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
+import { setHelpMode } from "../help-mode.js";
+import type { WtHelpTooltip } from "./wt-help-tooltip.js";
 import type { WtCombobox } from "./wt-combobox.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-button.js";
@@ -11,6 +13,7 @@ import "./wt-switch.js";
 import "./wt-input.js";
 
 afterEach(cleanup);
+afterEach(() => setHelpMode(false));
 
 describe.each(["light", "dark"] as const)("server-paged table a11y (%s)", (theme) => {
   test.each(["page", "loading", "empty", "error", "dates"])("%s", async (state) => {
@@ -919,6 +922,33 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     expect(scroll.scrollTop).toBe(200);
     expect(el.shadowRoot!.querySelector("th[data-filtered]")).not.toBeNull();
     await expectNoA11yViolations(host);
+  });
+
+  test.each(["off", "on"] as const)("a column with help, help %s", async (state) => {
+    const on = state === "on";
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Products"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      {
+        key: "status",
+        label: "Availability",
+        cell: (row) => row.status,
+        sortValue: (row) => row.status,
+        help: { text: "Whether it can be sold now.", label: "Help: Availability" },
+      },
+    ] satisfies DataTableColumn<Row>[];
+    el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+    el.rowKey = (row) => row.id;
+    await el.updateComplete;
+    const badge = el.shadowRoot!.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
+    setHelpMode(on);
+    await badge.updateComplete;
+    const heading = el.shadowRoot!.querySelectorAll<HTMLElement>('th[role="columnheader"]')[1]!;
+    await expect.element(page.elementLocator(heading)).toHaveAccessibleName("Availability");
+    await expectNoA11yViolations(host, on ? { enable: ["target-size"] } : {});
   });
 });
 

@@ -2,10 +2,13 @@ import { afterEach, describe, expect, test } from "vitest";
 import axe from "axe-core";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
+import { setHelpMode } from "../help-mode.js";
+import type { WtHelpTooltip } from "./wt-help-tooltip.js";
 import type { WtTabs } from "./wt-tabs.js";
 import "./wt-tabs.js";
 
 afterEach(cleanup);
+afterEach(() => setHelpMode(false));
 describe.each(["light", "dark"] as const)("tabs accessibility (%s)", (theme) => {
   test("an action beside the tablist is named and separate from its tabs", async () => {
     const el = (await mountThemed(
@@ -89,5 +92,23 @@ describe.each(["light", "dark"] as const)("tabs accessibility (%s)", (theme) => 
     await expectNoA11yViolations(host);
     el.shadowRoot!.querySelector('[role="tab"]')!.textContent = "";
     expect((await axe.run(host)).violations.map((v) => v.id)).toContain("button-name");
+  });
+
+  test.each(["off", "on"] as const)("a tab with help, help %s", async (state) => {
+    const on = state === "on";
+    const el = (await mountThemed(
+      '<wt-tabs label="Venue operations"><p slot="status">Ready for service</p><p slot="menus">Manage menus</p></wt-tabs>',
+      theme,
+    )) as WtTabs;
+    el.items = [
+      { key: "status", label: "Status" },
+      { key: "menus", label: "Menus", help: { text: "Dishes and prices.", label: "Help: Menus" } },
+    ];
+    await el.updateComplete;
+    const badge = el.shadowRoot!.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
+    setHelpMode(on);
+    await badge.updateComplete;
+    await el.updateComplete;
+    await expectNoA11yViolations(host, on ? { enable: ["target-size"] } : {});
   });
 });
