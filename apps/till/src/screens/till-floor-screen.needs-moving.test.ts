@@ -740,4 +740,21 @@ describe("till-floor-screen: a table that needs moving", () => {
     await settle(el);
     expect(api.markMovedToday).toHaveBeenCalledOnce();
   });
+
+  it("sends no Mark moved from the map's question while the card's Leave it here for that table is being sent", async () => {
+    const api = stubApi();
+    api.leaveHereToday.mockReturnValue(new Promise(() => {}));
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await toList(el);
+    await userEvent.click(cardButton(el, "t3", "leave-here"));
+    await settle(el);
+
+    await toggleFloorView(el);
+    await tap(el, "t3");
+    moveDialog(el)!.querySelector<HTMLElement>("[data-mark-moved]")!.click();
+    await settle(el);
+
+    expect(api.leaveHereToday).toHaveBeenCalledOnce();
+    expect(api.markMovedToday).not.toHaveBeenCalled();
+  });
 });
