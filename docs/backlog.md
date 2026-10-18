@@ -2359,10 +2359,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The duplicate course picker and static course labels are removed from the remaining drawer.
   Sent retains the recorded course. Recalled dishes edit their course in New order, staging the
   choice until Save; focused checks retain the source identity and quantity through submission.
-  The bare recalled-basket fixture clips the extra row's trailing currency at phone width when
-  its not-offered marker is visible. Recheck that row through the actual read-only table screen
-  during the remaining native acceptance work. A physical till trial, the old drawer's retirement
-  and held-dish Finish resolution remain open. Its
+  A long recalled extra's name now wraps on the feature branch, keeping its warning and price
+  inside New order. Actual table-screen checks cover both languages and themes at phone and
+  desktop widths, retaining the source reference and recorded amount. A physical till trial, the
+  old drawer's retirement and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
   target recovery. Single-dish Fire now's command/API/client work is qualified on the feature

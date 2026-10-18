@@ -234,6 +234,10 @@ export class TillBasket extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      .option .name {
+        overflow-wrap: anywhere;
+      }
+
       .option-total {
         font-variant-numeric: tabular-nums;
       }
