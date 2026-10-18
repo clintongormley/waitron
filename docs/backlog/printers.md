@@ -493,7 +493,7 @@ just a green typecheck.
 
 - **Left open by #1261's review:** no database trigger protects the logo image; the app-level
   department receipt usage refuses a library delete. The phone and email length limits (30 and
-  254) are copied into `apps/dashboard/src/screens/department-receipt-dialog.ts`, separately
+  254) are copied into `apps/dashboard/src/screens/department-receipt-editor.ts`, separately
   from `packages/layouts/src/validate.ts`.
 
 **2026-10-12, A493:** the venue receipt is no longer a configuration-transfer entry. The

@@ -201,6 +201,6 @@ photograph from a product or section. The library lists that menu by name, follo
 to release it.
 
 A saved receipt logo also keeps a photograph in use. The library lists that use as
-**<department> receipt logo**, and its link opens the department's **Edit receipt** dialog:
+**<department> receipt logo**, and its link opens the department's **Receipts** tab:
 choose **Remove** beside the logo, and save. A department that is no longer active is listed
 with **(Deleted department)** after its name and no link.

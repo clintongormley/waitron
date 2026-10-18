@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, mount } from "@waitron/ui/src/test-helpers.js";
-import { VenueServiceApi, type FloorZone } from "./client.js";
+import { VenueServiceApi, type FloorZone, type VenueServiceView } from "./client.js";
 import { zonesModel } from "../testing/department-zones-fixture.js";
 import "./departments-list.js";
 beforeEach(() => {
@@ -152,54 +152,31 @@ async function withFloorZones(floorZones: FloorZone[]) {
   return { el, table };
 }
 
-it("offers a department's Receipt in its Also edit cell, opening the receipt without activating the row", async () => {
+it("a department row has no Receipt link and the description button opens Receipts", async () => {
   const { el, table } = await setup();
-  const cell = alsoCell(table, "department:d1");
-  const link = cell.querySelector<HTMLAnchorElement>('a[data-test="receipt-department-d1"]');
-  expect(link, "the department row offers its receipt").not.toBeNull();
-  expect(link!.textContent!.trim()).toBe("Receipt");
-  expect(link!.getAttribute("href")).toBe("/manage/venue-operations/department/d1/view/receipt");
-  expect(link!.hasAttribute("data-own-click")).toBe(true);
-  expect(link!.closest("wt-row-actions")).toBeNull();
+  for (const id of ["d1", "d2"])
+    expect(alsoCell(table, `department:${id}`).textContent!.trim()).toBe("");
+  expect(table.shadowRoot!.querySelector('[data-test^="receipt-department-"]')).toBeNull();
+  el.model!.readiness.push({
+    code: "department.operation_description_required",
+    departmentId: "d2",
+    departmentName: "Deli",
+  } as VenueServiceView["readiness"][number]);
+  el.requestUpdate();
+  await el.updateComplete;
+  await table.updateComplete;
   const receipt = vi.fn(),
     opened = vi.fn();
   el.addEventListener("edit-receipt", receipt);
   el.addEventListener("open-department", opened);
-  await userEvent.click(link!);
+  await userEvent.click(
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=receipt-setup-d2]")!,
+  );
   expect(receipt.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
-    { departmentId: "d1" },
+    { departmentId: "d2" },
   ]);
   expect(opened).not.toHaveBeenCalled();
-  expect(location.pathname).not.toContain("/view/receipt");
-
-  const modified = new MouseEvent("click", {
-    bubbles: true,
-    composed: true,
-    cancelable: true,
-    ctrlKey: true,
-  });
-  let preventedBeforeHarness: boolean | undefined;
-  link!.addEventListener(
-    "click",
-    (click) => {
-      preventedBeforeHarness = click.defaultPrevented;
-      click.preventDefault();
-    },
-    { once: true },
-  );
-  link!.dispatchEvent(modified);
-  expect(preventedBeforeHarness).toBe(false);
-  expect(receipt).toHaveBeenCalledTimes(1);
-
-  el.receiptAvailable = (department) => department.id !== "d1";
-  await el.updateComplete;
-  await table.updateComplete;
-  expect(alsoCell(table, "department:d1").textContent!.trim()).toBe("");
-  expect(alsoCell(table, "department:d2").textContent!.trim()).toBe("Receipt");
-  el.receiptAvailable = () => true;
-  await el.updateComplete;
-  await table.updateComplete;
-  expect(alsoCell(table, "department:d1").textContent!.trim()).toBe("Receipt");
+  expect(alsoCell(table, "department:d2").textContent!.trim()).toBe("");
 });
 
 it("draws no floor-plan link on a zone row; the Floor plans page holds them", async () => {
@@ -258,19 +235,14 @@ it("orders the columns as drawn, ignoring an order stored before the Also edit c
   ]);
 });
 
-it("names each Also edit link's row, in English and Spanish", async () => {
+it("labels the Also edit column in Spanish", async () => {
   const floorZones = [
     { id: "z1", name: "Terrace" },
     { id: "z2", name: "Bar" },
   ];
-  const { table } = await withFloorZones(floorZones);
-  const label = (selector: string) =>
-    table.shadowRoot!.querySelector(selector)!.getAttribute("aria-label");
-  expect(label('[data-test="receipt-department-d1"]')).toBe("Restaurant: Receipt");
+  await withFloorZones(floorZones);
   cleanup();
   setLocale("es");
   const es = await withFloorZones(floorZones);
   expect(es.table.columns.find(({ key }) => key === "also")!.label).toBe("Editar también");
-  const esLink = (selector: string) => es.table.shadowRoot!.querySelector(selector)!;
-  expect(esLink('[data-test="receipt-department-d1"]').textContent!.trim()).toBe("Recibo");
 });

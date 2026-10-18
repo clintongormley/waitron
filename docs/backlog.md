@@ -1779,14 +1779,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
 - **A756. The Kitchen tab split up (owner, 2026-10-16; changed by A773 the same day).** Left: the
-  department dialog's Receipts tab, then the parts that wait for A773-1, among them the Courses
-  page's "Held until fired" column (plan `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md`).
-  Open point from #1852: the Transfers panel's heading is an `h2`, the dialog title's level, beside
-  Service's `h3` sections — an existing accessibility check selects `h2`. Open points from #1854:
-  once A773-1 lands, rename the two `kitchen-screen.a11y.test.ts` cases that still name a course
-  list; on the Courses page the row dividers stop short of the card's sides (mock-up 02 runs them to
-  the edge; needs `course-list.ts` styles), and an error under the list would sit on the card's
-  bottom border (read from the code, not seen). [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
+  parts that wait for A773-1 — the reminder to send the next course on the department's Service
+  tab, and late flags, identical dishes, held courses, MOVED slips, done on the screen and changes
+  after sending on each station — then the Kitchen tab's removal, after A773-2 takes fire control
+  away (plan `docs/superpowers/plans/2026-10-18-a756-kitchen-tab-split.md`, "Parts that wait").
+  Open points from #1852 and #1854 are in the detail. [Detail](backlog/kitchen.md#a756-the-kitchen-tab-split-up-a-courses-page-a-department-service-tab-and-an-every-station-card), [mockups](backlog/mockups/a756-kitchen-settings/)
 
 - **A807. One slip per printer and one notice per station for a whole-order kitchen-note change
   (owner, 2026-10-17).** Today a change or removal of the order's kitchen note prints one slip and
@@ -2393,8 +2390,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     its token and its row in `docs/developers/design-system.md`. Retire it, or record why it is
     kept.
   - Check "closing the editor returns focus to its originating row menu" in
-    `docs/developers/design-system.md` (Departments and zones) now that Edit receipt opens from the
-    Receipt link: a review saw focus return to the link.
+    `docs/developers/design-system.md` (Departments and zones): a review saw focus return to the
+    Receipt link, which A756 has since removed; the department dialog still opens from the row
+    and from "Set up the tax-agency description".
   - The pinned Actions column's left divider showed a gap between two zone rows in a 1280 px
     light-theme screenshot of Departments and zones. Not known whether it predates A718.
 

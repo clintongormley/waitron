@@ -326,6 +326,27 @@ it("closing from the Service tab returns focus to that row's menu", async () => 
     .poll(() => menu.shadowRoot!.activeElement)
     .toBe(menu.shadowRoot!.querySelector("button"));
 });
+it("the list's tax-agency description button opens the department dialog on Receipts", async () => {
+  const model = structuredClone(zonesModel);
+  model.readiness.push({
+    code: "department.operation_description_required",
+    departmentId: "d2",
+    departmentName: "Deli",
+  } as (typeof model.readiness)[number]);
+  const shell = await mount("/manage/venue-operations", undefined, model);
+  const list = shell.shadowRoot!.querySelector("departments-list")!;
+  await list.updateComplete;
+  const table = list.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  await userEvent.click(
+    table.shadowRoot!.querySelector<HTMLElement>("[data-test=receipt-setup-d2]")!,
+  );
+  const form = await departmentSettings(shell);
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d2");
+  await expect.poll(() => form.tab).toBe("receipt");
+  expect(form.shadowRoot!.querySelector("[data-test=receipt-panel]")!.textContent).toBe("d2");
+  expect(location.pathname).toBe("/manage/venue-operations/department/d2/view/receipt");
+});
 it("/view/receipt opens the department dialog on its Receipts tab", async () => {
   const shell = await mount("/manage/venue-operations/department/d1/view/receipt");
   const form = await departmentSettings(shell);

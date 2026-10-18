@@ -210,24 +210,6 @@ export class DepartmentsList extends LitElement {
       row.kind === "department" ? { departmentId: row.id } : { zoneId: row.id },
     );
   }
-  #also(row: DepartmentZoneRow) {
-    if (row.kind !== "department" || this.receiptAvailable?.(row) === false) return nothing;
-    const label = t("venue.receipt");
-    return html`<a
-      part="link"
-      data-own-click
-      data-test=${`receipt-department-${row.id}`}
-      aria-label=${`${row.name}: ${label}`}
-      href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/receipt`}
-      @click=${(event: MouseEvent) => {
-        if (event.button || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
-          return;
-        event.preventDefault();
-        this.#emit("edit-receipt", { departmentId: row.id });
-      }}
-      >${label}</a
-    >`;
-  }
   #policy(row: DepartmentZoneRow, field: PolicyField) {
     const parentId = row.kind === "department" ? row.id : row.departmentId;
     const parent = this.model!.salePolicies.departments.find(
@@ -370,7 +352,7 @@ export class DepartmentsList extends LitElement {
       {
         key: "also",
         label: t("venue.also_edit"),
-        cell: (row) => this.#also(row),
+        cell: () => nothing,
       },
       {
         key: "actions",

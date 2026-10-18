@@ -94,6 +94,12 @@ export class DepartmentSettings extends LitElement {
         gap: var(--wt-space-5);
         max-width: var(--wt-form-max-width);
       }
+      .form.wide {
+        max-width: none;
+      }
+      .form.wide > :not(wt-tabs) {
+        max-width: var(--wt-form-max-width);
+      }
       section {
         display: grid;
         gap: var(--wt-space-4);
@@ -583,7 +589,7 @@ export class DepartmentSettings extends LitElement {
       ...(marked.has(key) ? { marked: t("venue.tab_needs_fixing") } : {}),
     }));
     return html`<div
-      class="form"
+      class=${this.offeredTabs.includes("receipt") ? "form wide" : "form"}
       @keydown=${(event: KeyboardEvent) => {
         const panel = this.receiptPanel;
         if (panel && event.composedPath().includes(panel)) return;

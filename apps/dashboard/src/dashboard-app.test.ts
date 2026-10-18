@@ -8230,26 +8230,6 @@ describe("mounted public department dialogs", () => {
         .textContent,
     ).toBe("This department no longer exists.");
   });
-  it("the department's Receipt link navigates to its department without a picker", async () => {
-    const app = await mountDepartments(
-      "/manage/venue-operations",
-      ["venue_service.manage", "layout.configure"],
-      false,
-      true,
-    );
-    find(app, '[data-test="receipt-department-d2"]')!.click();
-    await expect
-      .poll(() => location.pathname)
-      .toBe("/manage/venue-operations/department/d2/view/receipt");
-    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
-    expect(
-      (
-        find(app, "dashboard-department-receipt-editor") as HTMLElement & {
-          subject: { id: string };
-        }
-      ).subject.id,
-    ).toBe("d2");
-  });
   it("the department dialog offers no Receipts tab when the host cannot offer Receipt", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1", [
       "venue_service.manage",
