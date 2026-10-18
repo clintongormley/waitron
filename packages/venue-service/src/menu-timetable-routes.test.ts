@@ -525,6 +525,7 @@ describe("the opening-hours period API", () => {
           colour: "red",
           staffMenuIds: [],
           endOffsetMinutes: 0,
+          floorPlanSetId: null,
           weekdays: [],
           routingUses: [],
         },
@@ -554,6 +555,7 @@ describe("the opening-hours period API", () => {
       menuId: r.almuerzo,
       staffMenuIds: [r.cafe, r.deliParaLlevar],
       endOffsetMinutes: 0,
+      floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
     });
@@ -568,6 +570,7 @@ describe("the opening-hours period API", () => {
       menuId: r.almuerzo,
       staffMenuIds: [r.cafe, r.deliParaLlevar],
       endOffsetMinutes: 0,
+      floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
     });
@@ -584,6 +587,7 @@ describe("the opening-hours period API", () => {
       menuId: r.almuerzo,
       staffMenuIds: [r.deliParaLlevar, r.cafe],
       endOffsetMinutes: 0,
+      floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
     });
