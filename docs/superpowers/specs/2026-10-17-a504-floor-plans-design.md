@@ -556,6 +556,10 @@ part 2a); the till reads again and the waiter tries again.
   place. It needs the device's `take-orders` action, as the other today's-plan writes do
   (`floor-today-api.ts:145-147`, `226-228`), unlike Mark cleared, which needs only a session
   (`POST /api/tables/:id/cleared`, `till-api.ts:2741-2749`). It sends the room's revision.
+- **Leave it here (A878, 2026-10-18).** A later owner decision added a third answer to the
+  question: Leave it here keeps the table, with its joined group, where today's map has it until
+  the next reset, without changing the saved layout. See
+  [the A878 plan](../plans/2026-10-18-a878-leave-it-here.md).
 - **Order:** a table that needs clearing shows "Needs clearing" first; once marked cleared it shows
   "Needs moving".
 - **Seating:** a table that needs moving is refused for seating, for a party moved to it and for
@@ -603,6 +607,10 @@ refuse a free table whose new place belongs to another free table moving at the 
 
 These are all the paths A600 names, so its backlog entry is deleted when A504 lands. A565 (a reset
 does not wait for food on its way to an ordinary table) is unchanged.
+
+**Back to its saved place (A878, 2026-10-18).** Back did not check what stood in the saved place;
+A878 added that check, refusing `table.place_taken`. See
+[the A878 plan](../plans/2026-10-18-a878-leave-it-here.md), decision 7.
 
 ### 7.6 The four resets (decisions 14, 15 and 19)
 

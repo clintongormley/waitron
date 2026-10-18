@@ -872,7 +872,15 @@ When the zones read offers another layout (`layoutDue`), a device that can chang
 to name, "A newer layout is ready.", beside an Update layout button (`#layoutBanner`,
 `apps/till/src/screens/till-floor-screen.ts`). A table that needs moving takes the needs-clearing
 fill on the map (`apps/till/src/state/floor-map.ts`); its list card says "Needs moving" and carries
-Mark moved.
+Leave it here then Mark moved, both small and secondary. While one of the two is being sent for a
+table, the card draws the pressed button busy and the other disabled, and any other press of either
+for that table (card, question or offer) is ignored. Tapping the table on the map asks Cancel
+(ghost), Leave it here (secondary) and Mark moved (primary), in that order; the till's Needs
+clearing question keeps its secondary Cancel. On a device that cannot change today's plan neither
+Leave it here nor Mark moved is shown. When Mark moved, or Back to its saved place on a table that
+needs moving, is refused `table.new_place_taken`, a small secondary Leave it here button for the
+table pressed sits under the refusal line, as wide as its words, for as long as that refusal is
+shown and the table still needs moving.
 
 `wt-floor-map` draws the till's tables for a zone, fitted to its box: the tables' crop (two squares
 past them) is scaled to fit and centred, with no grid lines. Its size is its parent's choice; the

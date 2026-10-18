@@ -1490,6 +1490,19 @@ TypeScript and SQL (`apps/server/src/reset-row-moves.test.ts`). Next: have the c
 its verdict on each waiting reset row and the others read it, or at least share the exclusions and
 pin the TypeScript and SQL copies as matching. Left open by A504.
 
+## A879. After Leave it here, bookings and the dashboard's table list still follow the last reset's copy
+
+**A879 (2026-10-18).** Leave it here (A878) leaves a joined group as today's map has it, but whether
+a table is a saved part is still read from what the zone's last reset copied (`savedPart`,
+`packages/db/src/joined-parts.ts`), not from today's map. Where the new layout joins 4 and 5 and
+staff leave 4 and 5 standing apart, the dashboard's table list (`GET /api/tables`,
+`apps/server/src/tables.ts`) leaves out 4 and 5 and lists the off-map 4+5, and a booking for today
+at 4 is refused `table.in_joined_table` (`requireActiveTable`, `packages/bookings/src/bookings.ts`)
+until the next reset. A878's plan review ran both (experiments P3 and P4, 2026-10-18; the plan's
+reader table, [plan](../superpowers/plans/2026-10-18-a878-leave-it-here.md)). It was already so
+while 4 and 5 needed moving, so Leave it here only makes it last the rest of the day. Next: decide
+whether those reads should follow today's map once a group is left.
+
 ## Decisions and deliberate limits
 
 ### Device zones and period menu memory (A740)
