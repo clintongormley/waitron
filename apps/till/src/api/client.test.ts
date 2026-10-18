@@ -2585,6 +2585,10 @@ describe("TillApi", () => {
         expectedPartyRevision: 3,
         otherPartyId: "v7",
         expectedOtherPartyRevision: 9,
+        expectedEdits: [
+          { billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null },
+          { billId: "wo-7", editorVersion: 6, draftId: null, draftRevision: null },
+        ],
       }),
     ).resolves.toEqual(answer);
 
@@ -2600,6 +2604,10 @@ describe("TillApi", () => {
           expectedPartyRevision: 3,
           otherPartyId: "v7",
           expectedOtherPartyRevision: 9,
+          expectedEdits: [
+            { billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null },
+            { billId: "wo-7", editorVersion: 6, draftId: null, draftRevision: null },
+          ],
         }),
       }),
     );
@@ -2728,6 +2736,7 @@ describe("TillApi", () => {
       new TillApi("", fetchStub).joinTables("v1", "tbl-9", "separate", {
         expectedPartyRevision: 3,
         otherPartyId: null,
+        expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
       }),
     ).resolves.toEqual(answer);
 
@@ -2742,6 +2751,7 @@ describe("TillApi", () => {
           bills: "separate",
           expectedPartyRevision: 3,
           otherPartyId: null,
+          expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
         }),
       }),
     );
@@ -2751,7 +2761,11 @@ describe("TillApi", () => {
     const answer = { partyId: "v1", mainBillId: "wo-4", merged: false };
     const fetchStub = vi.fn(async () => jsonResponse(answer));
     const api = new TillApi("", fetchStub);
-    const revisions = { expectedPartyRevision: 3, otherPartyId: null };
+    const revisions = {
+      expectedPartyRevision: 3,
+      otherPartyId: null,
+      expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
+    };
 
     await expect(
       api.joinTables("v1", "tbl-9", "merge", revisions, {
@@ -2779,6 +2793,7 @@ describe("TillApi", () => {
         bills: "merge",
         expectedPartyRevision: 3,
         otherPartyId: null,
+        expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
         merge: { moving: "tbl-9", target: "tbl-1", side: "left", seats: 6 },
         zoneRevision: 4,
       },
@@ -2787,10 +2802,17 @@ describe("TillApi", () => {
         bills: "merge",
         expectedPartyRevision: 3,
         otherPartyId: null,
+        expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
         merge: { moving: "tbl-1", target: "tbl-9", side: "top" },
         zoneRevision: 5,
       },
-      { tableId: "tbl-9", bills: "separate", expectedPartyRevision: 3, otherPartyId: null },
+      {
+        tableId: "tbl-9",
+        bills: "separate",
+        expectedPartyRevision: 3,
+        otherPartyId: null,
+        expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
+      },
     ]);
   });
 
@@ -2962,7 +2984,11 @@ describe("TillApi", () => {
         "v1",
         "tbl-9",
         "merge",
-        { expectedPartyRevision: 3, otherPartyId: null },
+        {
+          expectedPartyRevision: 3,
+          otherPartyId: null,
+          expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
+        },
         { moving: "tbl-9", target: "tbl-1", side: "left", seats: 6, zoneRevision: 4 },
       ),
     ).resolves.toEqual(answer);
@@ -2973,6 +2999,7 @@ describe("TillApi", () => {
       bills: "merge",
       expectedPartyRevision: 3,
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null }],
       merge: { moving: "tbl-9", target: "tbl-1", side: "left", seats: 6 },
       zoneRevision: 4,
     });
@@ -4270,15 +4297,33 @@ describe("TillApi: a seated party", () => {
   it.each([
     [
       "moveGuests",
-      (api: TillApi) => api.moveGuests("v1", "tbl-9", "merge", { expectedPartyRevision: 3 }),
+      (api: TillApi) =>
+        api.moveGuests("v1", "tbl-9", "merge", {
+          expectedPartyRevision: 3,
+          expectedEdits: [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }],
+        }),
       "/api/parties/v1/move",
-      { toTableId: "tbl-9", bills: "merge", expectedPartyRevision: 3 },
+      {
+        toTableId: "tbl-9",
+        bills: "merge",
+        expectedPartyRevision: 3,
+        expectedEdits: [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }],
+      },
     ],
     [
       "joinTables",
-      (api: TillApi) => api.joinTables("v1", "tbl-9", "merge", { expectedPartyRevision: 3 }),
+      (api: TillApi) =>
+        api.joinTables("v1", "tbl-9", "merge", {
+          expectedPartyRevision: 3,
+          expectedEdits: [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }],
+        }),
       "/api/parties/v1/join",
-      { tableId: "tbl-9", bills: "merge", expectedPartyRevision: 3 },
+      {
+        tableId: "tbl-9",
+        bills: "merge",
+        expectedPartyRevision: 3,
+        expectedEdits: [{ billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null }],
+      },
     ],
     [
       "mergeBills",

@@ -3,7 +3,15 @@ import type { FloorMapDrop, WtFloorMap } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableParty, TableState, TableToday, TillApi } from "../api/client.js";
+import { codeMessage } from "../i18n/codes.js";
+import type {
+  PartyDraftSnapshot,
+  FloorZone,
+  TableParty,
+  TableState,
+  TableToday,
+  TillApi,
+} from "../api/client.js";
 import { nextFloorMoment } from "../state/floor-today.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
@@ -91,6 +99,21 @@ function planned(
 function stubApi() {
   const answer = () => Promise.resolve({ zoneId: "z1", revision: 0 });
   return {
+    listDrafts: vi.fn<TillApi["listDrafts"]>((partyId) =>
+      Promise.resolve({
+        drafts: [],
+        billEdits: [
+          {
+            billId: `bill-${partyId}`,
+            editorId: null,
+            editorName: null,
+            editorVersion: partyId === "P" ? 3 : 7,
+            draftId: null,
+            draftRevision: null,
+          },
+        ],
+      }),
+    ),
     moveToday: vi.fn<TillApi["moveToday"]>(answer),
     mergeToday: vi.fn<TillApi["mergeToday"]>(answer),
     joinTables: vi.fn<TillApi["joinTables"]>(() =>
@@ -119,6 +142,7 @@ async function drop(el: TillFloorScreen, detail: FloorMapDrop): Promise<void> {
     new CustomEvent("wt-table-drag-end", { detail, bubbles: true, composed: true }),
   );
   await el.updateComplete;
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 function drawnAt(el: TillFloorScreen, tableId: string): number | undefined {
@@ -167,7 +191,11 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       "P",
       "t2",
       "merge",
-      { expectedPartyRevision: 3, otherPartyId: null },
+      {
+        expectedPartyRevision: 3,
+        otherPartyId: null,
+        expectedEdits: [{ billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null }],
+      },
       { moving: "t1", target: "t2", side: "left", zoneRevision: 0 },
     );
     expect(drawnAt(el, "t1")).toBe(18);
@@ -208,7 +236,11 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       "P",
       "t2",
       "merge",
-      { expectedPartyRevision: 3, otherPartyId: null },
+      {
+        expectedPartyRevision: 3,
+        otherPartyId: null,
+        expectedEdits: [{ billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null }],
+      },
       { moving: "t1", target: "t2", side: "left", seats: 9, zoneRevision: 0 },
     );
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
@@ -255,7 +287,15 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       "Q",
       "t1",
       "separate",
-      { expectedPartyRevision: 7, otherPartyId: "P", expectedOtherPartyRevision: 3 },
+      {
+        expectedPartyRevision: 7,
+        otherPartyId: "P",
+        expectedOtherPartyRevision: 3,
+        expectedEdits: [
+          { billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null },
+          { billId: "bill-Q", editorVersion: 7, draftId: null, draftRevision: null },
+        ],
+      },
       { moving: "t1", target: "t2", side: "left", zoneRevision: 0 },
     );
     expect(refreshes.count).toBe(1);
@@ -281,7 +321,15 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       "Q",
       "t1",
       "separate",
-      { expectedPartyRevision: 7, otherPartyId: "P", expectedOtherPartyRevision: 3 },
+      {
+        expectedPartyRevision: 7,
+        otherPartyId: "P",
+        expectedOtherPartyRevision: 3,
+        expectedEdits: [
+          { billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null },
+          { billId: "bill-Q", editorVersion: 7, draftId: null, draftRevision: null },
+        ],
+      },
       { moving: "t1", target: "t2", side: "left", seats: 6, zoneRevision: 0 },
     );
   });
@@ -362,6 +410,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     expect(api.joinTables).toHaveBeenCalledExactlyOnceWith("P", "F2", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: null,
+      expectedEdits: [{ billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null }],
     });
     expect(api.joinTables.mock.calls[0]).toHaveLength(4);
     expect(drawnAt(el, "F2")).toBe(20);
@@ -428,7 +477,15 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       "Q",
       "t1",
       "merge",
-      { expectedPartyRevision: 7, otherPartyId: "P", expectedOtherPartyRevision: 3 },
+      {
+        expectedPartyRevision: 7,
+        otherPartyId: "P",
+        expectedOtherPartyRevision: 3,
+        expectedEdits: [
+          { billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null },
+          { billId: "bill-Q", editorVersion: 7, draftId: null, draftRevision: null },
+        ],
+      },
       { moving: "t1", target: "t2", side: "left", zoneRevision: 0 },
     );
   });
@@ -456,7 +513,15 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       "Q",
       "t1",
       "merge",
-      { expectedPartyRevision: 7, otherPartyId: "P", expectedOtherPartyRevision: 3 },
+      {
+        expectedPartyRevision: 7,
+        otherPartyId: "P",
+        expectedOtherPartyRevision: 3,
+        expectedEdits: [
+          { billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null },
+          { billId: "bill-Q", editorVersion: 7, draftId: null, draftRevision: null },
+        ],
+      },
       { moving: "t1", target: "t2", side: "left", seats: 6, zoneRevision: 0 },
     );
   });
@@ -609,7 +674,15 @@ describe("till-floor-screen: joins and the room's revision", () => {
       "Q",
       "t1",
       "merge",
-      { expectedPartyRevision: 7, otherPartyId: "P", expectedOtherPartyRevision: 3 },
+      {
+        expectedPartyRevision: 7,
+        otherPartyId: "P",
+        expectedOtherPartyRevision: 3,
+        expectedEdits: [
+          { billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null },
+          { billId: "bill-Q", editorVersion: 7, draftId: null, draftRevision: null },
+        ],
+      },
       { moving: "t1", target: "t2", side: "left", zoneRevision: 7 },
     );
 
@@ -624,7 +697,15 @@ describe("till-floor-screen: joins and the room's revision", () => {
       "Q",
       "t1",
       "merge",
-      { expectedPartyRevision: 7, otherPartyId: "P", expectedOtherPartyRevision: 3 },
+      {
+        expectedPartyRevision: 7,
+        otherPartyId: "P",
+        expectedOtherPartyRevision: 3,
+        expectedEdits: [
+          { billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null },
+          { billId: "bill-Q", editorVersion: 7, draftId: null, draftRevision: null },
+        ],
+      },
       { moving: "t1", target: "t2", side: "left", seats: 6, zoneRevision: 7 },
     );
   });
@@ -659,4 +740,392 @@ describe("till-floor-screen: joins and the room's revision", () => {
     await drop(el, { tableId: "t9", x: 9, y: 3, targetId: null });
     expect(api.moveToday).toHaveBeenLastCalledWith("t9", { x: 9, y: 3 }, 5);
   });
+});
+
+describe("floor join ownership observations", () => {
+  const pair = () => [planned("t1", 2, {}, "1", P), planned("t2", 20, {}, "2", Q)];
+  const dropPair = (el: TillFloorScreen) =>
+    drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+  const observations = [
+    { billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null },
+    { billId: "bill-Q", editorVersion: 7, draftId: null, draftRevision: null },
+  ];
+  async function finish(el: TillFloorScreen) {
+    const choice = el.shadowRoot!.querySelector("till-bill-choice-dialog");
+    expect(choice).not.toBeNull();
+    send(choice!, "bill-choice-confirm", { bills: "separate" });
+    await settle(el);
+  }
+  function deferred() {
+    let resolve!: (value: PartyDraftSnapshot) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<PartyDraftSnapshot>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("reads both parties before the bill question, then sends every original bill in sorted order", async () => {
+    const api = stubApi();
+    const read = deferred();
+    api.listDrafts.mockImplementationOnce(() => read.promise);
+    const el = await mount(pair(), api);
+    await dropPair(el);
+    expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).toBeNull();
+    expect(api.joinTables).not.toHaveBeenCalled();
+    read.resolve({
+      drafts: [],
+      billEdits: [
+        {
+          billId: "z-empty",
+          editorId: null,
+          editorName: null,
+          editorVersion: 8,
+          draftId: null,
+          draftRevision: null,
+        },
+        {
+          billId: "a-owned",
+          editorId: "ana",
+          editorName: "Ana",
+          editorVersion: 4,
+          draftId: "d-a",
+          draftRevision: 9,
+        },
+      ],
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).not.toBeNull(),
+    );
+    await finish(el);
+    expect(api.listDrafts.mock.calls.map(([id]) => id).sort()).toEqual(["P", "Q"]);
+    expect(api.joinTables).toHaveBeenCalledExactlyOnceWith(
+      "Q",
+      "t1",
+      "separate",
+      {
+        expectedPartyRevision: 7,
+        otherPartyId: "P",
+        expectedOtherPartyRevision: 3,
+        expectedEdits: [
+          { billId: "a-owned", editorVersion: 4, draftId: "d-a", draftRevision: 9 },
+          { billId: "bill-P", editorVersion: 3, draftId: null, draftRevision: null },
+          { billId: "z-empty", editorVersion: 8, draftId: null, draftRevision: null },
+        ],
+      },
+      { moving: "t1", target: "t2", side: "left", zoneRevision: 0 },
+    );
+  });
+
+  it("joining a free table reads only the seated party and sends its empty bill expectation", async () => {
+    const api = stubApi();
+    const el = await mount([planned("t1", 2, {}, "1", P), planned("t2", 20)], api);
+    await dropPair(el);
+    expect(api.listDrafts.mock.calls.map(([id]) => id)).toEqual(["P"]);
+    expect(api.joinTables.mock.calls[0]?.[3]).toEqual({
+      expectedPartyRevision: 3,
+      otherPartyId: null,
+      expectedEdits: [observations[0]],
+    });
+  });
+
+  it("the seats retry retains the original observations instead of reading newer versions", async () => {
+    const api = stubApi();
+    api.joinTables.mockRejectedValueOnce(seatsRefusal);
+    const el = await mount(pair(), api);
+    await dropPair(el);
+    await finish(el);
+    api.listDrafts.mockResolvedValue({ drafts: [], billEdits: [] });
+    send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
+      seats: 9,
+    });
+    await settle(el);
+    expect(api.joinTables).toHaveBeenCalledTimes(2);
+    expect(api.listDrafts).toHaveBeenCalledTimes(2);
+    expect(api.joinTables.mock.calls.map((call) => call[3])).toEqual([
+      {
+        expectedPartyRevision: 7,
+        otherPartyId: "P",
+        expectedOtherPartyRevision: 3,
+        expectedEdits: observations,
+      },
+      {
+        expectedPartyRevision: 7,
+        otherPartyId: "P",
+        expectedOtherPartyRevision: 3,
+        expectedEdits: observations,
+      },
+    ]);
+  });
+
+  it.each(["draft.taken_over", "draft.out_of_date", undefined])(
+    "a failed preparatory read (%s) opens no question and sends nothing",
+    async (code) => {
+      const api = stubApi();
+      api.listDrafts.mockRejectedValueOnce(code === undefined ? undefined : { code });
+      const el = await mount(pair(), api);
+      await dropPair(el);
+      expect(api.joinTables).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).toBeNull();
+      expect(refusal(el)).toBe(
+        code === undefined
+          ? "The order on this table could not be read. Open the table again."
+          : codeMessage(code),
+      );
+      expect(drawnAt(el, "t1")).toBe(2);
+    },
+  );
+
+  it("duplicate bill metadata refuses before asking or joining", async () => {
+    const api = stubApi();
+    const snapshot = await api.listDrafts("P");
+    api.listDrafts.mockResolvedValue(snapshot);
+    const el = await mount(pair(), api);
+    await dropPair(el);
+    expect(api.joinTables).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).toBeNull();
+    expect(refusal(el)).not.toBeNull();
+  });
+
+  it.each(["api", "operator", "disconnect", "zone"] as const)(
+    "a changed %s fences a delayed read and its question",
+    async (change) => {
+      const api = stubApi();
+      const read = deferred();
+      const snapshot = await api.listDrafts("Q");
+      api.listDrafts.mockImplementationOnce(() => read.promise);
+      const el = await mount(pair(), api);
+      await dropPair(el);
+      if (change === "api") el.api = stubApi() as unknown as TillApi;
+      if (change === "operator") Object.assign(el, { operatorSession: 2 });
+      if (change === "disconnect") el.remove();
+      if (change === "zone") el.selectedZoneId = "another";
+      await el.updateComplete;
+      read.resolve(snapshot);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).toBeNull();
+      expect(api.joinTables).not.toHaveBeenCalled();
+      expect(refusal(el)).toBeNull();
+    },
+  );
+
+  it("a replaced API cannot send an already-open bill confirmation", async () => {
+    const api = stubApi();
+    const el = await mount(pair(), api);
+    await dropPair(el);
+    const choice = el.shadowRoot!.querySelector("till-bill-choice-dialog")!;
+    el.api = stubApi() as unknown as TillApi;
+    await el.updateComplete;
+    send(choice, "bill-choice-confirm", { bills: "merge" });
+    await settle(el);
+    expect(api.joinTables).not.toHaveBeenCalled();
+  });
+
+  it("an old join refusal cannot open seats or overwrite the replacement screen", async () => {
+    const api = stubApi();
+    let reject!: (reason: unknown) => void;
+    api.joinTables.mockImplementationOnce(
+      () =>
+        new Promise((_yes, no) => {
+          reject = no;
+        }),
+    );
+    const el = await mount(pair(), api);
+    const refreshes = countRefreshes(el);
+    await dropPair(el);
+    await finish(el);
+    el.api = stubApi() as unknown as TillApi;
+    await el.updateComplete;
+    reject(seatsRefusal);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
+    expect(refusal(el)).toBeNull();
+    expect(refreshes.count).toBe(0);
+  });
+});
+
+describe("floor join scope and recovery", () => {
+  const tables = () => [planned("t1", 2, {}, "1", P), planned("t2", 20, {}, "2", Q)];
+  const joinDrop = (el: TillFloorScreen) =>
+    drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+
+  it("switching the active zone closes the original bill question", async () => {
+    const api = stubApi();
+    const el = await mount(tables(), api, [zone(), zone({ id: "z2", name: "Terrace" })]);
+    await joinDrop(el);
+    expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z2"]')!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).toBeNull();
+    expect(api.joinTables).not.toHaveBeenCalled();
+  });
+
+  it.each(["draft.taken_over", "draft.out_of_date"])(
+    "a join refusal retains %s and refreshes without retrying",
+    async (code) => {
+      const api = stubApi();
+      api.joinTables.mockRejectedValueOnce({ code });
+      const el = await mount(tables(), api);
+      const refreshes = countRefreshes(el);
+      await joinDrop(el);
+      send(el.shadowRoot!.querySelector("till-bill-choice-dialog")!, "bill-choice-confirm", {
+        bills: "separate",
+      });
+      await settle(el);
+      expect(refusal(el)).toBe(codeMessage(code));
+      expect(api.joinTables).toHaveBeenCalledTimes(1);
+      expect(refreshes.count).toBe(1);
+      expect(drawnAt(el, "t1")).toBe(2);
+    },
+  );
+
+  it("a later drop replaces a pending read without reopening its old question", async () => {
+    const api = stubApi();
+    const snapshot = await api.listDrafts("Q");
+    let answer!: (value: PartyDraftSnapshot) => void;
+    api.listDrafts.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const el = await mount(tables(), api);
+    await joinDrop(el);
+    await drop(el, { tableId: "t1", x: 8, y: 3, targetId: null });
+    answer(snapshot);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).toBeNull();
+    expect(api.joinTables).not.toHaveBeenCalled();
+    expect(api.moveToday).toHaveBeenCalledExactlyOnceWith("t1", { x: 8, y: 3 }, 0);
+  });
+});
+
+describe("floor join cancellation and late replies", () => {
+  const two = () => [planned("t1", 2, {}, "1", P), planned("t2", 20, {}, "2", Q)];
+  const joining = (el: TillFloorScreen) => drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+
+  it("cancelling seats retires the original confirmation", async () => {
+    const api = stubApi();
+    api.joinTables.mockRejectedValueOnce(seatsRefusal);
+    const el = await mount(two(), api);
+    await joining(el);
+    send(el.shadowRoot!.querySelector("till-bill-choice-dialog")!, "bill-choice-confirm", {
+      bills: "separate",
+    });
+    await settle(el);
+    const seats = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
+    send(seats, "today-seats-cancel");
+    await settle(el);
+    send(seats, "today-seats-confirm", { seats: 8 });
+    await settle(el);
+    expect(api.joinTables).toHaveBeenCalledTimes(1);
+    expect(drawnAt(el, "t1")).toBe(2);
+  });
+
+  it("a late read refusal cannot overwrite the replacement API's floor", async () => {
+    const api = stubApi();
+    let reject!: (reason: unknown) => void;
+    api.listDrafts.mockImplementationOnce(
+      () =>
+        new Promise((_yes, no) => {
+          reject = no;
+        }),
+    );
+    const el = await mount(two(), api);
+    const refreshes = countRefreshes(el);
+    await joining(el);
+    el.api = stubApi() as unknown as TillApi;
+    await el.updateComplete;
+    reject({ code: "draft.taken_over" });
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await el.updateComplete;
+    expect(refusal(el)).toBeNull();
+    expect(refreshes.count).toBe(0);
+    expect(api.joinTables).not.toHaveBeenCalled();
+  });
+
+  it("a late success cannot carry its room revision into the replacement API", async () => {
+    const api = stubApi();
+    let resolve!: (value: Awaited<ReturnType<TillApi["joinTables"]>>) => void;
+    api.joinTables.mockImplementationOnce(
+      () =>
+        new Promise((yes) => {
+          resolve = yes;
+        }),
+    );
+    const el = await mount(two(), api);
+    const refreshes = countRefreshes(el);
+    await joining(el);
+    send(el.shadowRoot!.querySelector("till-bill-choice-dialog")!, "bill-choice-confirm", {
+      bills: "separate",
+    });
+    await settle(el);
+    const next = stubApi();
+    el.api = next as unknown as TillApi;
+    await el.updateComplete;
+    resolve({ partyId: "Q", mainBillId: null, merged: false, zoneRevisions: { z1: 99 } });
+    await new Promise<void>((done) => requestAnimationFrame(() => done()));
+    await el.updateComplete;
+    expect(refreshes.count).toBe(0);
+    await drop(el, { tableId: "t1", x: 8, y: 3, targetId: null });
+    expect(next.moveToday).toHaveBeenCalledExactlyOnceWith("t1", { x: 8, y: 3 }, 0);
+  });
+});
+
+describe("floor join replaced prompts", () => {
+  const two = () => [planned("t1", 2, {}, "1", P), planned("t2", 20, {}, "2", Q)];
+  const joining = (el: TillFloorScreen) => drop(el, { tableId: "t1", x: 17, y: 3, targetId: "t2" });
+
+  it.each(["bill-choice-confirm", "bill-choice-cancel"])(
+    "an old %s cannot close the replacement question",
+    async (type) => {
+      const api = stubApi();
+      const el = await mount(two(), api);
+      await joining(el);
+      const old = el.shadowRoot!.querySelector("till-bill-choice-dialog")!;
+      await joining(el);
+      const current = el.shadowRoot!.querySelector("till-bill-choice-dialog")!;
+      expect(current).not.toBeNull();
+      expect(current).not.toBe(old);
+      send(old, type, { bills: "merge" });
+      await settle(el);
+      expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).toBe(current);
+      expect(api.joinTables).not.toHaveBeenCalled();
+      send(current, "bill-choice-confirm", { bills: "separate" });
+      await settle(el);
+      expect(api.joinTables).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(["today-seats-confirm", "today-seats-cancel"])(
+    "an old %s cannot close the replacement seats prompt",
+    async (type) => {
+      const api = stubApi();
+      api.joinTables.mockRejectedValue(seatsRefusal);
+      const el = await mount(two(), api);
+      const choose = async () => {
+        await joining(el);
+        send(el.shadowRoot!.querySelector("till-bill-choice-dialog")!, "bill-choice-confirm", {
+          bills: "separate",
+        });
+        await settle(el);
+        return el.shadowRoot!.querySelector("till-today-seats-dialog")!;
+      };
+      const old = await choose();
+      const current = await choose();
+      expect(current).not.toBeNull();
+      expect(current).not.toBe(old);
+      send(old, type, { seats: 8 });
+      await settle(el);
+      expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBe(current);
+      expect(api.joinTables).toHaveBeenCalledTimes(2);
+      send(current, "today-seats-confirm", { seats: 8 });
+      await settle(el);
+      expect(api.joinTables).toHaveBeenCalledTimes(3);
+    },
+  );
 });

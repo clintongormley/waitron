@@ -2061,6 +2061,7 @@ export interface JoinMerge {
  * its revision, or null for a table read free; both are left out for a table of the party itself.
  */
 export interface TableActionRevisions {
+  expectedEdits: BillEditExpected[];
   expectedPartyRevision: number;
   otherPartyId?: string | null;
   expectedOtherPartyRevision?: number;

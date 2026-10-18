@@ -1298,7 +1298,24 @@ describe("till-app table ordering: refused and failed table actions", () => {
       .fn()
       .mockResolvedValueOnce([openTable])
       .mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    const { el } = await mountApp({ getTablesState });
+    const { el } = await mountApp({
+      getTablesState,
+      getPartyBills: vi.fn().mockResolvedValue([
+        {
+          workingOrderId: "wo-7",
+          revision: 0,
+          invoiceType: "F2",
+          recipient: null,
+          partyId: "v-2",
+          label: null,
+          status: "open",
+          total: "3.00",
+          outstanding: "3.00",
+          hasPayments: false,
+          receiptAvailable: false,
+        } satisfies PartyBill,
+      ]),
+    });
     const screen = await toTableOrder(el);
     expect(screen.tables).toEqual([openTable]);
 
@@ -1308,6 +1325,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
     expect(api.moveGuests).toHaveBeenCalledWith("v-2", "t9", "merge", {
       expectedPartyRevision: 3,
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
     });
     expect(tableOrder(el)!.tables).toEqual([]);
     expect(banner(el)).toBeNull();

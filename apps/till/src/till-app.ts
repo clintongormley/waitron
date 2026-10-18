@@ -14553,6 +14553,7 @@ export class TillApp extends LitElement {
         .tables=${this.tables}
         .tablesReadAt=${this.tablesReadAt}
         .api=${this.api}
+        .operatorSession=${this.#operatorSession}
         .canExitToCounter=${false}
         .canOpenStation=${this.#allowsDestination("station")}
         .canChangeToday=${this.capabilities.includes("take-orders")}
