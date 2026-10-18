@@ -174,8 +174,7 @@ hook, or how tests are scheduled:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.
-- **`pnpm --filter ""` is a hard error**, and an unquoted `$PACKAGES` expansion still GLOBS. Both
-  gates build filters as positional parameters under `set -f … set +f`.
+- **`pnpm --filter ""` is a hard error**, and an unquoted `$PACKAGES` expansion still GLOBS.
 - **A scoped `pnpm` run that selects nothing REPORTS SUCCESS.** CI checks the selection with
   `scripts/changed-packages.mjs runnable test:coverage`; the hook checks `runnable typecheck`.
   A green selection guard alone does not mean a check ran.
@@ -187,9 +186,8 @@ hook, or how tests are scheduled:
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a
   shared wire body with `toEqual`. A focused pass proves only those cases; CI supplies package-wide
   coverage.
-- **Adding a workspace package fails root guards until it is named in the shard lists**, and
-  one of them CRASHES rather than asserting, so the message names a missing `vitest.config.ts`
-  and reads like a broken checkout.
+- **Adding a workspace package fails root guards until it is named in the shard lists**. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#adding-a-workspace-package-breaks-the-root-guards-until-it-is-wired-in).
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
   it.** Grep for tests that pin the list, run those guards, and verify CI selects every affected consumer.
 - **Every package whose vitest config enables browser mode runs in real headless Chromium**
@@ -199,13 +197,13 @@ hook, or how tests are scheduled:
   a backgrounded whole-workspace `pnpm -r test:coverage`. Chromium's launch depends on a Codex
   seat's PERMISSIONS, not on Codex.
 - **A migration can fail on a box that already has a trigger naming what it changes.**
-  `applyMigrations` removes the change feed first for
-  that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it); a rebuild of a table
-  another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
+  `applyMigrations` removes the change feed first for that reason; a rebuild of a table another
+  set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
   than its name — its rows are synthetic and counted, not compared, and it installs today's
   change-feed list, and today's append-only list less the tables the previous step lacked, at every
-  step. Cost: an earlier bricked box that was wiped, and a box that failed three
-  starts on 2026-09-26.
+  step. Cost: an earlier bricked box that was wiped, and a box that failed three starts on
+  2026-09-26. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#a-migration-can-fail-on-a-database-that-already-carries-earlier-migrations-and-what-boot-installed-after-them).
 - **The upgrade test makes its scratch directory under `scratchParent()` (`scripts/scratch-dir.mjs`),
   which picks `/dev/shm` when it exists, because every commit waits for the disk.** Cost: it timed
   out in CI five times. Nothing guards it. Receipt:
