@@ -73,6 +73,9 @@ export class BusinessDayStartEditor extends LitElement {
       .history {
         color: var(--wt-color-text-muted);
       }
+      .preview a {
+        color: var(--wt-color-primary-text);
+      }
       .preview {
         padding: var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
