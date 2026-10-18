@@ -783,8 +783,8 @@ export class TillFloorScreen extends LitElement {
 
   /**
    * A seated table resumes; a table needing clearing offers Mark cleared, and one needing moving
-   * Leave it here and Mark moved; a free one asks for guests, headed and seated beside the other tables `seat` names
-   * when a drop gives them.
+   * Leave it here and Mark moved; a free one asks for guests, headed and seated beside the other
+   * tables `seat` names when a drop gives them.
    */
   #openTable(
     table: TableState,
