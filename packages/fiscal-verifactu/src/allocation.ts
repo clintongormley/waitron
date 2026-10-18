@@ -1,6 +1,6 @@
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   deployment,
@@ -22,6 +22,7 @@ import {
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { registroSif } from "./schema/sif.js";
+import { currentSif } from "./registro-sif.js";
 import { cadenas } from "./schema/cadenas.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { verifyDeclaredDormantReservation } from "./declared-paper-evidence.js";
@@ -179,6 +180,45 @@ function authenticatedContext(context: AllocationContext, authority: unknown, ac
     },
     check: authorise,
   };
+}
+
+export async function activateAuthenticatedHourStandbyAllocation(
+  tx: Transaction,
+  node: ProvisionedNode,
+  allocation: unknown,
+  approval: unknown,
+  context: AllocationContext,
+  authority: unknown,
+): Promise<ActivationResult> {
+  if (context.authority.kind !== "hour")
+    throw new AppError("sif.allocation_invalid", { reason: "source_mismatch" });
+  const target = { ...node };
+  const authorised = authenticatedContext(
+    {
+      ...context,
+      authority: { ...context.authority },
+      requiredBases: structuredClone(context.requiredBases),
+    },
+    authority,
+    "promote",
+  );
+  if (authorised.context.priorActivation !== "committed") {
+    const liveSif = await currentSif(tx, target.nodeId).catch((error: unknown) => {
+      if (isAppError(error) && error.code === "sif.not_registered") return null;
+      throw error;
+    });
+    if (liveSif !== null || (await liveSeriesBases(tx, target)).length !== 0)
+      throw new AppError("sif.allocation_invalid", { reason: "standby_already_active" });
+  }
+  return activate(
+    tx,
+    target,
+    allocation,
+    approval,
+    authorised.context,
+    authorised.context.requiredBases,
+    authorised.check,
+  );
 }
 
 export async function activateAuthenticatedDormantAllocation(

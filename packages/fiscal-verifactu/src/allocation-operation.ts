@@ -14,6 +14,7 @@ import { hourAdmissionRefusal, type AllocationContext } from "./allocation-envel
 import {
   activateAuthenticatedAllocation,
   activateAuthenticatedDormantAllocation,
+  activateAuthenticatedHourStandbyAllocation,
 } from "./allocation.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
 import type { ActivationResult } from "./schema/allocations.js";
@@ -227,6 +228,7 @@ export async function activateModuleAllocation(
     return refuse("reservation_mismatch");
   if (
     binding.action === "promote" &&
+    heldEvidence.authority.kind !== "hour" &&
     (typeof input.reservationEventId !== "string" || input.reservationEventId.length === 0)
   )
     return refuse("reservation_missing");
@@ -248,25 +250,34 @@ export async function activateModuleAllocation(
     authority: heldEvidence.authority,
   };
   const result =
-    binding.action === "promote"
-      ? await activateAuthenticatedDormantAllocation(
+    binding.action === "promote" && heldEvidence.authority.kind === "hour"
+      ? await activateAuthenticatedHourStandbyAllocation(
           tx,
           node,
-          input.reservationEventId as string,
           input.allocation,
           input.approval,
           context,
           authority,
         )
-      : await activateAuthenticatedAllocation(
-          tx,
-          node,
-          input.allocation,
-          input.approval,
-          context,
-          authority,
-          binding.action,
-        );
+      : binding.action === "promote"
+        ? await activateAuthenticatedDormantAllocation(
+            tx,
+            node,
+            input.reservationEventId as string,
+            input.allocation,
+            input.approval,
+            context,
+            authority,
+          )
+        : await activateAuthenticatedAllocation(
+            tx,
+            node,
+            input.allocation,
+            input.approval,
+            context,
+            authority,
+            binding.action,
+          );
   authoriseHour();
   return result;
 }

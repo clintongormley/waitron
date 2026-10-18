@@ -1450,3 +1450,36 @@ commit `0e1b2a56099ea983b67784e8e5985fb2404c6081` reproduced the same ten names 
 `first-fiscal-document.route`. Their complete names and logs remain in the lane's
 `a679-key-reissue-20261018` receipts. They remain branch qualification work before finish-branch;
 no whole-branch passing result is claimed.
+
+## Hour standby activation and the same-hour question (2026-10-18)
+
+No existing test, fixture or assertion changes. The new
+`packages/fiscal-verifactu/src/hour-standby-activation.test.ts` checks the exact additive wrapper
+approved by the owner on 2026-10-18 at approximately 09:00, plus hour-specific dispatch through
+`activateModuleAllocation`. The first four cases failed at the obsolete reservation requirement
+before that patch and dispatch were applied. This was a missing promotion path, not an observed
+duplicate invoice.
+
+With an original activation at 11:40 UTC (`06RB`), a selection at 11:50 refuses
+`hour_not_later` for each taxpayer-wide answer. These cases read the real database through the
+module's history reader. At 12:00, selection returns `06RC`. A separate direct activation attempt
+using `06RB` refuses `installation_used`, including after the original SIF and series are retired;
+the tests compare fiscal rows and counters before and after each refusal.
+
+Next-hour activation creates every configured series, including two standard bases and `FF/full`,
+without a fiscal reservation. Exact committed replay keeps counters; changed replay, active SIF
+alone, active series alone, changed scope, incomplete bases, missing isolation and expired
+authority refuse. A held call also checks that changing the caller's target, bases or authority
+carrier cannot change the admitted activation.
+
+The independently installed candidate passes all 22 cases. Eight omission controls fail and pass
+again after restoration: complete dormant bases, active SIF, active series, hour-only source,
+target snapshot, base snapshot, carrier snapshot and spent-hour floor. Removing the spent-hour
+comparison makes all three same-hour selection assertions fail. No existing SQL, writer body,
+hash, numbering, restore hook or protected assertion changes. The protected-file diff is exactly
+the approved patch, SHA-256 `c99d9dd6957c83ded1505170a4b1a22e1e69963d3ec0f3dc31f40a4e32d4405a`.
+
+These are module-boundary checks with synthetic clock readings. Dormant admission, the actual
+host's promotion preparation and its complete browser/HTTP journey remain open in Task 8.
+Unseen activity on a separate venue is still subject to the approved design's taxpayer-wide
+coordination assumptions; this patch supplies no shared global reservation.
