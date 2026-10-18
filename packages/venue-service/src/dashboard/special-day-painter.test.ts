@@ -1655,4 +1655,19 @@ describe("the heading names the day, says it is a special day and lists its date
       }
     });
   });
+
+  it("at 390 px a run's dash where the line is full keeps its last day beside it", async () => {
+    const old = [window.innerWidth, window.innerHeight];
+    try {
+      await page.viewport(390, 844);
+      const { painter } = await mount({ specialDayId: null });
+      await typeName(painter, "Christmas company dinners");
+      await addDates(painter, ["2026-12-01", "2026-12-02", "2026-12-24", "2026-12-25"]);
+      const title = titleOf(painter);
+      expect(lines(title).filter((line) => line.endsWith("–"))).toEqual([]);
+      expect(brokenWords(title)).toEqual([]);
+    } finally {
+      await page.viewport(old[0]!, old[1]!);
+    }
+  });
 });
