@@ -1,7 +1,8 @@
 # A788: the business day's start changes at the next changeover
 
-**Status:** design, waiting for the owner's answers (questions in section 9, to be asked one at a
-time). No product code is changed by this document.
+**Status:** design, answered by the owner on 2026-10-18 (all four questions answered A; section 9);
+build planned in `docs/superpowers/plans/2026-10-18-a788-business-day-next-changeover.md`. No product
+code is changed by this document.
 
 **Inspected base:** `ee59f461c` (main, 2026-10-18). Every `file:line` below is at that commit.
 "Probe" means a script or a temporary test that was run on 2026-10-18 on Node v26.11.1 against
@@ -538,7 +539,8 @@ runs its full wave with two Codex run-it reviews.
    `docs/developers/conventions-data.md:660`, `:676`, `:1202-1210`, a dated pointer at the head of
    the A495 spec, and the backlog.
 
-If question 4 is answered "yes", it becomes slice 5, after slice 2.
+5. **Opening hours: only the start in force and a waiting one limit new hours** (question 4
+   answered A). Built after slice 2.
 
 ## 9. Questions for the owner, one at a time
 
@@ -559,6 +561,9 @@ have to be changed first; hours such as 21:30–23:30 or 02:00–04:00 could sta
 - **B.** Allow only starts from 00:00 to 12:00, so a business day is always named after the date
   most of its trading happens on. This takes back the "9pm" in your own example.
 
+**Owner's answer, 2026-10-18 (through the campaign watcher):** A — keep allowing any start time,
+evening starts such as 21:00 included.
+
 ### Question 2 of 4 — very short or very long changeover days
 
 The changeover day lasts 24 h plus the difference between the new and the old start: 05:00 → 03:00
@@ -572,6 +577,9 @@ that long; a 1-minute day gets a report of its own. (If question 1 was answered 
 - **B.** Refuse a changeover day shorter than 12 h or longer than 36 h ("Move the start in steps of
   up to 12 hours").
 
+**Owner's answer, 2026-10-18 (through the campaign watcher):** A — no limit on the changeover day's
+length.
+
 ### Question 3 of 4 — a Save after midnight, when the new time has already passed
 
 It is 01:00 on Wednesday, still Tuesday's business day, which ends at 05:00. You change the start
@@ -581,6 +589,9 @@ to 00:30. Wednesday 00:30 has already passed.
   Thursday 00:30 (19.5 h); from Thursday the day starts at 00:30. The card shows "00:30, from Thu
   22 Oct, 00:30" so you see when it takes effect.
 - **B.** Refuse: "That time has already passed tonight. Save again after 05:00."
+
+**Owner's answer, 2026-10-18 (through the campaign watcher):** A — a Save after the new time has
+already passed tonight takes effect the next night (rule 2), and the card shows when.
 
 ### Question 4 of 4 — old starts keep limiting the opening hours
 
@@ -595,6 +606,11 @@ Opening hours. This is true today, with or without A788.
   in the Opening hours calendar draw a range that does not fit their own start cut at that day's
   ends. Built as a fifth slice.
 - **B.** Keep it as it is, and leave it as a backlog entry.
+
+**Owner's answer, 2026-10-18 (through the campaign watcher):** A — the opening-hours editors check
+new hours only against the start in force and a waiting one; past days in the Opening hours calendar
+draw a range that does not fit their own start cut at that day's ends; built as slice 5, after slice
+2.
 
 ## Mockups
 
