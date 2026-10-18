@@ -183,6 +183,14 @@ async function openDrawer(el: TillTableOrderScreen): Promise<void> {
   await el.updateComplete;
 }
 
+async function sentFallbackFor(el: TillTableOrderScreen): Promise<HTMLElement> {
+  el.style.width = "960px";
+  await resized(el);
+  const fallback = el.shadowRoot!.querySelector<HTMLElement>("[data-sent-fallback]")!;
+  expect(fallback.checkVisibility()).toBe(true);
+  return fallback;
+}
+
 const recallFixtures = new WeakSet<TillTableOrderScreen>();
 
 async function recallControl(el: TillTableOrderScreen, lineNo: number) {
@@ -563,12 +571,14 @@ describe("till-table-order-screen", () => {
   it("keeps an extras row's figures in its dish's columns", async () => {
     const extra = { ...pendingLine, lineNo: 2, parentLineNo: 1, quantity: "2.000" };
     const { el } = await mount({ lines: [pendingLine, extra] });
-    await openDrawer(el);
-    const pending = [...el.shadowRoot!.querySelectorAll(".pending-line")];
+    const fallback = await sentFallbackFor(el);
+    const pending = [...fallback.querySelectorAll(".sent-fallback-row")];
     expect(pending).toHaveLength(2);
     const totalRight = (row: Element) =>
       Math.round(row.querySelector(".line-total")!.getBoundingClientRect().right);
     expect(totalRight(pending[1]!)).toBe(totalRight(pending[0]!));
+    for (const row of pending)
+      expect(totalRight(row)).toBe(Math.round(row.getBoundingClientRect().right));
   });
 
   it("shows the tab total from the LOCKED add-time prices (never a catalogue recompute)", async () => {
@@ -583,8 +593,7 @@ describe("till-table-order-screen", () => {
   it("resolves product names from the catalogue, falling back to the id for an unknown product", async () => {
     const ghost: TabLine = { ...pendingLine, lineNo: 3, productId: "ghost" };
     const { el } = await mount({ lines: [pendingLine, ghost] });
-    await openDrawer(el);
-    const text = el.shadowRoot!.querySelector("[data-drawer]")!.textContent ?? "";
+    const text = (await sentFallbackFor(el)).textContent ?? "";
     expect(text).toContain("Café"); // resolved from the catalogue
     expect(text).toContain("ghost"); // deactivated/unknown product → the raw id
   });
@@ -2768,17 +2777,15 @@ describe("till-table-order-screen", () => {
     });
 
     it("paints a child extras row as belonging to its dish, never as a dish of its own", async () => {
-      // A waiter scanning "Pendiente de servir" must not read a pick as another dish. The basket's
-      // `.option` rule is the house shape for a pick: indented under its dish and muted. Measured
-      // here rather than asserted as a class, because a class the stylesheet has no rule for paints
-      // nothing.
       const { el } = await mount({ lines: [pendingLine, childLine], courses });
-      await openDrawer(el);
-      const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".pending-line")];
+      const fallback = await sentFallbackFor(el);
+      const rows = [...fallback.querySelectorAll<HTMLElement>(".sent-fallback-row")];
       expect(rows).toHaveLength(2);
       const dish = getComputedStyle(rows[0]!);
       const child = getComputedStyle(rows[1]!);
-      expect(parseFloat(child.paddingLeft)).toBeGreaterThan(parseFloat(dish.paddingLeft));
+      expect(rows[1]!.getBoundingClientRect().left).toBeGreaterThan(
+        rows[0]!.getBoundingClientRect().left,
+      );
       expect(child.color).not.toBe(dish.color);
       expect(parseFloat(child.fontSize)).toBeLessThan(parseFloat(dish.fontSize));
     });
@@ -3760,8 +3767,7 @@ describe("till-table-order-screen", () => {
 
     it("shows a line's note on the tab line, beside its locked price", async () => {
       const { el } = await mountLines([{ ...burgerLine, note: "no onions" }]);
-      await openDrawer(el);
-      const row = el.shadowRoot!.querySelector(".pending-line")!;
+      const row = (await sentFallbackFor(el)).querySelector(".sent-fallback-row")!;
       expect(row.querySelector(".line-note")!.textContent).toContain("no onions");
       expect(row.querySelector(".line-total")!.textContent).toBe(
         formatMoney("9.50", currentLocale()),
@@ -6361,17 +6367,16 @@ describe("till-table-order-screen", () => {
     });
 
     it("resolves a tab line's NAME from the full product set even when its menu is not the one shown", async () => {
-      // A cerveza (drinks menu) line on the tab while the FOOD menu is selected: the round grid hides
-      // cerveza, but the drawer must still name the line — name resolution reads the full products.
       const cervezaLine: TabLine = { ...pendingLine, lineNo: 3, productId: "cerveza" };
       const { el } = await mount({
         ...bothMenus,
         selectedMenuId: "cat-food",
         lines: [cervezaLine],
       });
-      await openDrawer(el);
       expect(gridNames(el)).toEqual(["Bocadillo"]); // grid stays on the selected menu
-      expect(el.shadowRoot!.querySelector(".pending-line .name")!.textContent).toContain("Cerveza");
+      expect(
+        (await sentFallbackFor(el)).querySelector(".sent-fallback-name")!.textContent,
+      ).toContain("Cerveza");
     });
 
     describe("search across the served menus", () => {

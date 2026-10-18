@@ -55,6 +55,22 @@ describe.each(["en", "es"] as const)("incomplete Sent read in %s", (locale) => {
             ? ["Was€10.00€6.50", "€1.50", "€2.00"]
             : ["Antes10,00€6,50€", "1,50€", "2,00€"],
         );
+        const dish = fallback.querySelector<HTMLElement>(
+          "[data-sent-fallback-line] > .sent-fallback-row",
+        )!;
+        const extra = fallback.querySelector<HTMLElement>(
+          "[data-sent-fallback-extra] > .sent-fallback-row",
+        )!;
+        expect(extra.getBoundingClientRect().left).toBeGreaterThan(
+          dish.getBoundingClientRect().left,
+        );
+        expect(getComputedStyle(extra).color).not.toBe(getComputedStyle(dish).color);
+        expect(parseFloat(getComputedStyle(extra).fontSize)).toBeLessThan(
+          parseFloat(getComputedStyle(dish).fontSize),
+        );
+        expect(Math.round(prices[1]!.getBoundingClientRect().right)).toBe(
+          Math.round(prices[0]!.getBoundingClientRect().right),
+        );
         expect(currentLocale().startsWith(locale)).toBe(true);
         for (const price of prices) {
           const rect = price.getBoundingClientRect();

@@ -2423,7 +2423,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Focused browser checks cover changing or clearing the balance and another bill's balance;
   native captures cover both languages and themes at phone and desktop widths. The existing
   adjusted-price checks now open Sent's dish window, retaining their exact original and adjusted
-  dish/extra prices. To serve, direct Cancel and the revised A758 cancellation/Finish work remain
+  dish/extra prices. The stored-content checks now read Sent's fallback instead of To serve:
+  catalogue and missing-product names, cross-menu names, the saved note and locked price, extras'
+  price-column alignment, their visual hierarchy and the split-off dish/extra family. The fallback
+  uses muted, smaller text for extras. Browser checks retain the existing names, amounts and
+  parent-child expectations, with language/theme/width checks for indentation and alignment.
+  To serve, direct Cancel and the revised A758 cancellation/Finish work remain
   open; cancellation rules are unchanged by these checkpoints.
   **A773-2**, firing and the pass, is planned after A773-1 lands: Requested/pass release, Away/Done
   removal, station settings and counter changes. The [six choices](backlog/mockups/a773-1-open-points/README.md)

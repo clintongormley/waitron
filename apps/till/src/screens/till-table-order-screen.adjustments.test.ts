@@ -380,6 +380,8 @@ describe("till-table-order-screen: a dish split by a give-away", () => {
     // As the server lists Pizza x2 with an olive each once one was given away: the part split off
     // and its olive are numbered after every other row, the olive straight after its dish.
     const el = await mountScreen({
+      draftStore: null,
+      currentOrders: null,
       lines: [
         pizza,
         olives,
@@ -395,15 +397,18 @@ describe("till-table-order-screen: a dish split by a give-away", () => {
         },
       ],
     });
-    const rows = [...el.shadowRoot!.querySelectorAll(".pending-line")];
-    expect(rows.map((row) => row.querySelector(".name")!.textContent!.trim())).toEqual([
-      "Pizza",
-      "Olives",
-      "Steak",
-      "Pizza",
-      "Olives",
-    ]);
-    expect(rows.map((row) => row.classList.contains("child-line"))).toEqual([
+    const fallback = el.shadowRoot!.querySelector<HTMLElement>("[data-sent-fallback]")!;
+    expect(fallback.checkVisibility()).toBe(true);
+    const rows = [...fallback.querySelectorAll(".sent-fallback-row")];
+    expect(
+      rows.map((row) =>
+        row
+          .querySelector(".sent-fallback-name")!
+          .textContent!.trim()
+          .replace(/ ×[\d.]+[\s\S]*$/, ""),
+      ),
+    ).toEqual(["Pizza", "Olives", "Steak", "Pizza", "Olives"]);
+    expect(rows.map((row) => row.parentElement!.hasAttribute("data-sent-fallback-extra"))).toEqual([
       false,
       true,
       false,

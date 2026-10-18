@@ -609,6 +609,8 @@ export class TillTableOrderScreen extends LitElement {
 
       .sent-fallback li ul {
         padding-inline-start: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
       }
 
       .sent-fallback-row {
