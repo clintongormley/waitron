@@ -549,6 +549,50 @@ describe("till-held-orders: moving a counter order to a table", () => {
     expect(picker(el)!.textContent).toContain(t("held.no_tables"));
   });
 
+  it("qualifies the bill choice before opening and ignores readiness after cancelling the picker", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [mesa],
+      tables,
+    });
+    let ready!: () => void;
+    let prompt!: object;
+    el.addEventListener("held-relocation-open", (raw) => {
+      const event = raw as CustomEvent<{ ready: () => void; prompt: object }>;
+      event.preventDefault();
+      ready = event.detail.ready;
+      prompt = event.detail.prompt;
+    });
+    await openPicker(el);
+    target(el, "t7")!.click();
+    await el.updateComplete;
+    expect(billChoice(el)).toBeNull();
+    expect(ready).toBeTypeOf("function");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-picker-cancel]")!.click();
+    await el.updateComplete;
+    ready();
+    await el.updateComplete;
+    expect(billChoice(el)).toBeNull();
+    await openPicker(el);
+    target(el, "t7")!.click();
+    await el.updateComplete;
+    ready();
+    await el.updateComplete;
+    const moved = heard(el, "move-held-order");
+    const choice = billChoice(el)!;
+    await choice.updateComplete;
+    choice.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!.click();
+    await el.updateComplete;
+    expect(moved).toEqual([
+      {
+        orderId: "wo-1",
+        tableId: "t7",
+        seated: { id: "v7", revision: 9 },
+        bills: "separate",
+        prompt,
+      },
+    ]);
+  });
+
   it("moves the order to a free table at once, and a table needing clearing sends nothing", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [mesa],

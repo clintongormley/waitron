@@ -2615,6 +2615,9 @@ describe("TillApi", () => {
         partyId: "v1",
         otherPartyId: "v7",
         expectedOtherPartyRevision: 9,
+        expectedEdits: [
+          { billId: "wo-check", editorVersion: 4, draftId: null, draftRevision: null },
+        ],
       }),
     ).resolves.toEqual(answer);
 
@@ -2631,6 +2634,9 @@ describe("TillApi", () => {
           partyId: "v1",
           otherPartyId: "v7",
           expectedOtherPartyRevision: 9,
+          expectedEdits: [
+            { billId: "wo-check", editorVersion: 4, draftId: null, draftRevision: null },
+          ],
         }),
       }),
     );
@@ -2644,6 +2650,7 @@ describe("TillApi", () => {
     await new TillApi("", fetchStub).moveBill("wo-12", { tableId: "tbl-9" }, "merge", {
       partyId: null,
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null }],
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -2654,6 +2661,9 @@ describe("TillApi", () => {
           bills: "merge",
           partyId: null,
           otherPartyId: null,
+          expectedEdits: [
+            { billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null },
+          ],
         }),
       }),
     );
@@ -2668,10 +2678,12 @@ describe("TillApi", () => {
     await api.moveBill("wo-4", { counter: { zoneId: "z-bar" } }, "merge", {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
     });
     await api.moveBill("wo-4", { counter: { zoneId: null } }, "merge", {
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
     });
 
     const bodies = fetchStub.mock.calls.map((call) =>
@@ -2682,6 +2694,7 @@ describe("TillApi", () => {
       bills: "merge",
       expectedPartyRevision: 3,
       partyId: "v1",
+      expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
     });
     expect(bodies[1].to).toEqual({
       counter: { zoneId: null },
@@ -2702,6 +2715,7 @@ describe("TillApi", () => {
       new TillApi("", fetchStub).moveBill("wo-4", { counter: { zoneId: null } }, "merge", {
         expectedPartyRevision: 3,
         partyId: "v1",
+        expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
       }),
     ).rejects.toEqual({ code: "party.main_bill_stays", partyId: "v1", status: 409 });
   });

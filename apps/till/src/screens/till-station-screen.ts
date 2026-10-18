@@ -790,7 +790,7 @@ export class TillStationScreen extends LitElement {
         : await api.getFindBill(detail.workingOrderId, { signal: limit.signal });
       if (!live()) return;
       const expectedEdit =
-        bill?.edit == null
+        bill?.partyId == null || bill.edit == null
           ? null
           : {
               billId: bill.edit.billId,

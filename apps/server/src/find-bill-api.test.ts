@@ -77,7 +77,7 @@ describe("Find a bill list routes", () => {
       json: { timeZone: "Pacific/Honolulu" },
     });
   });
-  it("returns the selected table bill's retained edit version and no bill edit for a counter order", async () => {
+  it("returns retained edit versions for selected table and counter bills", async () => {
     const party = await seatedWith(venue, "Tarta");
     await inTx(venue, (tx) =>
       tx.insert(billEditStates).values({
@@ -101,7 +101,22 @@ describe("Find a bill list routes", () => {
         },
       },
     });
-    expect(await get(`/api/bills/${counter}`)).toMatchObject({ status: 200, json: { edit: null } });
+    await inTx(venue, (tx) =>
+      tx.insert(billEditStates).values({ billId: counter, editorId: null, editorVersion: 11 }),
+    );
+    expect(await get(`/api/bills/${counter}`)).toMatchObject({
+      status: 200,
+      json: {
+        edit: {
+          billId: counter,
+          editorId: null,
+          editorName: null,
+          editorVersion: 11,
+          draftId: null,
+          draftRevision: null,
+        },
+      },
+    });
   });
   it("serves authenticated pages and fresh selection while the legacy lookup remains static", async () => {
     const id = await parked(venue, "Caña");

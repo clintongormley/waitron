@@ -228,7 +228,11 @@ import type { ProfileNotice } from "./widgets/profile-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 
 import type { StringKey } from "./i18n/strings.js";
-import { TillHeldOrders, type MoveHeldOrderDetail } from "./widgets/held-orders.js";
+import {
+  TillHeldOrders,
+  type MoveHeldOrderDetail,
+  type HeldRelocationOpenDetail,
+} from "./widgets/held-orders.js";
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
 import { otherPartyRead, shownTableNames, type SeatedRead } from "./widgets/table-targets.js";
@@ -829,6 +833,20 @@ interface TableRelocation {
   source: BillComposition;
   expectedEdits: BillEditExpected[];
   target: SeatedRead;
+}
+
+interface CounterRelocation {
+  api: TillApi;
+  session: number;
+  generation: number;
+  basket: string;
+  orderId: string;
+  tableId: string;
+  target: SeatedRead;
+  expectedEdits: BillEditExpected[];
+  screen: Screen;
+  tab: BuiltInScreen | undefined;
+  drill: Drill | undefined;
 }
 
 interface CancellingItem {
@@ -12266,44 +12284,159 @@ export class TillApp extends LitElement {
     return billToOpen(left);
   }
 
-  /**
-   * A counter order, read with no party, moves to a table. The counter stays on screen and says
-   * where it went; a basket holding that order is emptied, since it is now the table's bill.
-   */
-  async #onMoveHeldOrder(event: Event, retried = false): Promise<void> {
-    const { orderId, tableId, seated, bills } = (event as CustomEvent<MoveHeldOrderDetail>).detail;
-    const session = this.#operatorSession;
-    const basket = this.#basketPayload();
-    const generation = this.#store.loadGeneration;
+  readonly #heldRelocationPrompts = new WeakMap<object, Promise<CounterRelocation | null>>();
+
+  #counterRelocationCurrent(asked: CounterRelocation): boolean {
+    return (
+      this.api === asked.api &&
+      this.#operatorSession === asked.session &&
+      this.stage === "order" &&
+      this.screen === asked.screen &&
+      this.activeTabKey === asked.tab &&
+      this.drill === asked.drill &&
+      this.#store.loadGeneration === asked.generation &&
+      this.#basketPayload() === asked.basket
+    );
+  }
+
+  async #onHeldRelocationOpen(event: Event): Promise<void> {
+    event.preventDefault();
+    const { orderId, table, prompt, ready } = (event as CustomEvent<HeldRelocationOpenDetail>)
+      .detail;
+    const opening = {
+      api: this.api,
+      session: this.#operatorSession,
+      generation: this.#store.loadGeneration,
+      basket: this.#basketPayload(),
+      screen: this.screen,
+      tab: this.activeTabKey,
+      drill: this.drill,
+    };
+    const pending = this.#counterRelocationEdits(orderId, table.id, table.party);
+    this.#heldRelocationPrompts.set(prompt, pending);
+    const asked = await pending;
+    if (asked !== null && this.#counterRelocationCurrent(asked)) ready();
+    else if (
+      this.api === opening.api &&
+      this.#operatorSession === opening.session &&
+      this.screen === opening.screen &&
+      this.activeTabKey === opening.tab &&
+      this.drill === opening.drill &&
+      this.#store.id === orderId &&
+      (this.#store.loadGeneration !== opening.generation ||
+        this.#basketPayload() !== opening.basket)
+    ) {
+      this.#replaceBasket(() => this.#onHeldRelocationOpen(event));
+    }
+  }
+
+  async #counterRelocationEdits(
+    orderId: string,
+    tableId: string,
+    target: SeatedRead,
+  ): Promise<CounterRelocation | null> {
+    const asked: CounterRelocation = {
+      api: this.api,
+      session: this.#operatorSession,
+      generation: this.#store.loadGeneration,
+      basket: this.#basketPayload(),
+      orderId,
+      tableId,
+      target: target == null ? target : { id: target.id, revision: target.revision },
+      expectedEdits: [],
+      screen: this.screen,
+      tab: this.activeTabKey,
+      drill: this.drill,
+    };
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const bill = await asked.api.getFindBill(orderId, { signal: limit.signal });
+      if (!this.#counterRelocationCurrent(asked)) return null;
+      if (
+        bill.workingOrderId !== orderId ||
+        bill.partyId !== null ||
+        bill.edit == null ||
+        bill.edit.billId !== orderId
+      )
+        throw { code: "draft.out_of_date" };
+      const edits = [bill.edit];
+      if (target != null) {
+        const destination = await asked.api.listDrafts(target.id, { signal: limit.signal });
+        edits.push(...destination.billEdits);
+      }
+      if (!this.#counterRelocationCurrent(asked)) return null;
+      asked.expectedEdits = edits
+        .map(({ billId, editorVersion, draftId, draftRevision }) => ({
+          billId,
+          editorVersion,
+          draftId,
+          draftRevision,
+        }))
+        .sort((a, b) => (a.billId < b.billId ? -1 : a.billId > b.billId ? 1 : 0));
+      if (
+        new Set(asked.expectedEdits.map((edit) => edit.billId)).size !== asked.expectedEdits.length
+      )
+        throw { code: "draft.out_of_date" };
+      return asked;
+    } catch (error) {
+      if (this.#counterRelocationCurrent(asked)) {
+        const code = (error as { code?: string } | undefined)?.code;
+        this.errorKey =
+          code === "draft.out_of_date" || code === "draft.taken_over"
+            ? { code }
+            : "table.reread_failed";
+      }
+      return null;
+    } finally {
+      limit.done();
+    }
+  }
+
+  async #onMoveHeldOrder(
+    event: Event,
+    retried = false,
+    original?: CounterRelocation,
+  ): Promise<void> {
+    const { orderId, tableId, seated, bills, prompt } = (event as CustomEvent<MoveHeldOrderDetail>)
+      .detail;
+    const asked =
+      original ??
+      (await (prompt === undefined
+        ? this.#counterRelocationEdits(orderId, tableId, seated)
+        : this.#heldRelocationPrompts.get(prompt)));
+    if (
+      asked == null ||
+      !this.#counterRelocationCurrent(asked) ||
+      asked.orderId !== orderId ||
+      asked.tableId !== tableId
+    )
+      return;
+    this.errorKey = undefined;
+    const live = () => this.#counterRelocationCurrent(asked);
     const moveTo = this.tables.find((table) => table.id === tableId);
     const label = moveTo === undefined ? "" : shownUnder(moveTo);
-    this.errorKey = undefined;
     try {
-      const zoneId = this.tables.find((table) => table.id === tableId)?.zoneId;
-      if (!(await this.#askStoredDeadEnds(orderId, zoneId ?? undefined))) return;
-      if (session !== this.#operatorSession) return;
-      await this.api.moveBill(orderId, { tableId }, bills, {
+      if (!(await this.#askStoredDeadEnds(orderId, moveTo?.zoneId ?? undefined))) return;
+      if (!live()) return;
+      await asked.api.moveBill(orderId, { tableId }, bills, {
         partyId: null,
-        ...otherPartyRead(seated, null),
+        ...otherPartyRead(asked.target, null),
+        expectedEdits: asked.expectedEdits,
       });
-      if (session !== this.#operatorSession) return;
+      if (!live()) return;
     } catch (error) {
-      if (session !== this.#operatorSession) return;
-      if (!retried && (error as { code?: string }).code === "station.no_replacement") {
-        await this.#onMoveHeldOrder(event, true);
+      if (!live()) return;
+      const code = (error as { code?: string } | undefined)?.code;
+      if (!retried && code === "station.no_replacement") {
+        await this.#onMoveHeldOrder(event, true, asked);
         return;
       }
-      await this.#onTableRefusal(error, () => session === this.#operatorSession);
-      if (session !== this.#operatorSession) return;
-      // A failed re-read keeps the list it had; the banner says the refusal.
-      await this.#refreshHeldOrders().catch(() => undefined);
+      if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
+      else await this.#onTableRefusal(error, live);
+      if (live()) await this.#refreshHeldOrders().catch(() => undefined);
       return;
     }
-    if (
-      this.#store.id === orderId &&
-      generation === this.#store.loadGeneration &&
-      basket === this.#basketPayload()
-    ) {
+    if (this.#store.id === orderId) {
       this.#dismissStationChoices();
       this.#clearBasket();
     }
@@ -14915,6 +15048,7 @@ export class TillApp extends LitElement {
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#onMoveGuests(event)}
         @move-bill=${(event: Event) => void this.#onMoveBill(event)}
+        @held-relocation-open=${(event: Event) => void this.#onHeldRelocationOpen(event)}
         @move-held-order-open=${() => {
           this.#onFloorRefresh();
           void this.#refreshFloorZones();

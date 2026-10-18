@@ -4491,6 +4491,23 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
 
   describe("A773 signed-in station move observations", () => {
     const expectedEdit = { billId: "wo-1", editorVersion: 6, draftId: null, draftRevision: null };
+    it("keeps counter station moves unowned when the bill read carries a retained version", async () => {
+      const getFindBill = vi.fn().mockResolvedValue({
+        workingOrderId: "wo-1",
+        partyId: null,
+        edit: { ...expectedEdit, editorId: null, editorName: null },
+      });
+      const moveDishStation = vi.fn().mockResolvedValue({ revision: 2, moved: [] });
+      const { el } = await mountMove({ deviceMode: false }, { getFindBill, moveDishStation });
+      choose(await open(el), "st-2");
+      await expect.poll(() => moveDishStation.mock.calls.length).toBe(1);
+      expect(moveDishStation.mock.calls[0]![1]).toEqual({
+        submissionId: expect.any(String),
+        lineIds: ["wol-1"],
+        stationId: "st-2",
+        expectedEdit: null,
+      });
+    });
     it("reads the table bill before opening and carries that observation to the signed-in route", async () => {
       const getFindBill = vi.fn().mockResolvedValue({
         workingOrderId: "wo-1",

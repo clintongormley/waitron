@@ -74,7 +74,7 @@ export function mountFindBillApi(app: Hono, deps: TillApiDeps, log: Logger, run:
           id,
           await orderZoneCondition(tx, deps.cfg, session.device.deviceProfileId),
         );
-        return { ...bill, edit: bill.partyId === null ? null : await readBillEditState(tx, id) };
+        return { ...bill, edit: await readBillEditState(tx, id) };
       });
       return c.json(result);
     }),

@@ -2090,6 +2090,7 @@ export interface MoveBillRevisions
     Omit<BillRevisions, "partyId">,
     Pick<TableActionRevisions, "otherPartyId" | "expectedOtherPartyRevision"> {
   partyId?: string | null;
+  expectedEdits: BillEditExpected[];
 }
 
 /** A move's answer: the party the bill is in now (null at the counter), and the bill it ended up

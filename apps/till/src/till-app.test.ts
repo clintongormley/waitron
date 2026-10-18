@@ -9357,6 +9357,7 @@ describe("till-app", () => {
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
+          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           moveGuests,
         });
@@ -9370,6 +9371,7 @@ describe("till-app", () => {
         expect(moveGuests).toHaveBeenCalledWith("v-2", "t9", "merge", {
           expectedPartyRevision: 3,
           otherPartyId: null,
+          expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
         });
         // Re-reads the floor so the freed/occupied tables reconcile, and stays on the table-order screen.
         expect(getTablesState).toHaveBeenCalledTimes(2);
@@ -9383,6 +9385,7 @@ describe("till-app", () => {
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
+          getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           joinTables,
         });
@@ -9395,6 +9398,7 @@ describe("till-app", () => {
         expect(joinTables).toHaveBeenCalledWith("v-2", "t9", "merge", {
           expectedPartyRevision: 3,
           otherPartyId: null,
+          expectedEdits: [{ billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null }],
         });
         expect(getTablesState).toHaveBeenCalledTimes(2);
         expect(tableOrder(el)).not.toBeNull();
@@ -9418,6 +9422,7 @@ describe("till-app", () => {
       });
 
       it("merge-bills absorbs another bill then reloads this bill's lines AND the floor", async () => {
+        drafts.bills.add("wo-9");
         const mergeBills = vi.fn().mockResolvedValue(undefined);
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
@@ -9437,6 +9442,10 @@ describe("till-app", () => {
         expect(mergeBills).toHaveBeenCalledWith("wo-7", "wo-9", {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdits: [
+            { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-9", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
         // The current tab absorbed the other's lines (reload) and the floor changed (reload).
         expect(getTabLines).toHaveBeenCalledTimes(2);
@@ -9444,6 +9453,7 @@ describe("till-app", () => {
       });
 
       it("transfer-lines moves selected lines out then reloads this tab's lines AND the floor", async () => {
+        drafts.bills.add("wo-9");
         const transferItems = vi.fn().mockResolvedValue(undefined);
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
@@ -9463,12 +9473,17 @@ describe("till-app", () => {
         expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdits: [
+            { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-9", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
         expect(getTabLines).toHaveBeenCalledTimes(2);
         expect(getTablesState).toHaveBeenCalledTimes(2);
       });
 
       it("requires staff confirmation before transferring lines off a bill over €3,000", async () => {
+        drafts.bills.add("wo-9");
         const transferItems = vi.fn().mockResolvedValue(undefined);
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([largeOpenTable]),
@@ -9492,10 +9507,15 @@ describe("till-app", () => {
         expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdits: [
+            { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+            { billId: "wo-9", editorVersion: 0, draftId: null, draftRevision: null },
+          ],
         });
       });
 
-      it("sends no party with a bill action once the party has left the table while its bill is open", async () => {
+      it("refuses a bill action after its party leaves the table", async () => {
+        drafts.bills.add("wo-9");
         const transferItems = vi.fn().mockResolvedValue(undefined);
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
@@ -9523,7 +9543,8 @@ describe("till-app", () => {
         emit(tableOrder(el)!, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
         await flush(el);
 
-        expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {});
+        expect(transferItems).not.toHaveBeenCalled();
+        expect(tableOrder(el)!.orderId).toBe("wo-7");
       });
 
       it("split-lines switches pay and later receipt actions to the bill split off", async () => {
@@ -9549,6 +9570,7 @@ describe("till-app", () => {
         expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
         });
         expect(getTabLines).toHaveBeenLastCalledWith("wo-check");
         expect(tableOrder(el)!.orderId).toBe("wo-check");
@@ -9604,6 +9626,7 @@ describe("till-app", () => {
         expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
         });
       });
 
@@ -9625,6 +9648,7 @@ describe("till-app", () => {
         expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1, quantity: "1" }], {
           expectedPartyRevision: 3,
           partyId: "v-2",
+          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
         });
         expect(tableOrder(el)!.orderId).toBe("wo-7");
         expect(getTabLines).toHaveBeenCalledTimes(1);
@@ -16283,11 +16307,227 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       listWorkingOrders: vi.fn().mockResolvedValue([counterOrder]),
       getTablesState: vi.fn().mockResolvedValue([mesa7, mesa9]),
       moveBill: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false }),
+      getFindBill: vi.fn().mockResolvedValue({
+        ...billRow({ workingOrderId: "wo-12", partyId: null }),
+        edit: {
+          billId: "wo-12",
+          editorId: null,
+          editorName: null,
+          editorVersion: 8,
+          draftId: null,
+          draftRevision: null,
+        },
+      }),
+      listDrafts: vi.fn().mockResolvedValue({
+        drafts: [],
+        billEdits: [
+          {
+            billId: "wo-7",
+            editorId: null,
+            editorName: null,
+            editorVersion: 3,
+            draftId: null,
+            draftRevision: null,
+          },
+          {
+            billId: "wo-2",
+            editorId: "p1",
+            editorName: "Ana",
+            editorVersion: 5,
+            draftId: "draft-2",
+            draftRevision: 9,
+          },
+        ],
+      }),
       ...overrides,
     });
     const c = await toCounter(mounted.el);
     return { ...mounted, c };
   }
+
+  it("counter relocation keeps the destination observations shown before native confirmation", async () => {
+    const { el } = await counterWith();
+    const held = heldList(el);
+    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>(".move")!);
+    await flush(el);
+    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!);
+    await flush(el);
+    expect(currentApi.listDrafts).toHaveBeenCalledWith("v7", { signal: expect.any(AbortSignal) });
+    const choice = held.shadowRoot!.querySelector<HTMLElement>("till-bill-choice-dialog")!;
+    expect(choice).not.toBeNull();
+    vi.mocked(currentApi.listDrafts).mockResolvedValue({ drafts: [], billEdits: [] });
+    await userEvent.click(choice.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!);
+    await flush(el);
+    expect(currentApi.moveBill).toHaveBeenCalledWith("wo-12", { tableId: "t7" }, "separate", {
+      partyId: null,
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null },
+        { billId: "wo-2", editorVersion: 5, draftId: "draft-2", draftRevision: 9 },
+        { billId: "wo-7", editorVersion: 3, draftId: null, draftRevision: null },
+      ],
+    });
+  });
+
+  it("counter relocation ignores the reply after its API changes", async () => {
+    let answer!: (result: unknown) => void;
+    const { el, c } = await counterWith({
+      moveBill: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      ),
+    });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(currentApi.moveBill).toHaveBeenCalledOnce();
+    const reads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+    el.api = { ...currentApi } as unknown as TillApi;
+    await flush(el);
+    answer({ partyId: "v-new", billId: "wo-12", merged: false });
+    await flush(el);
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(reads);
+    expect(toast(el).open).toBe(false);
+  });
+
+  it.each(["read", "reply"])(
+    "counter relocation keeps the floor unchanged after leaving during %s",
+    async (phase) => {
+      let release!: (value: unknown) => void;
+      const delayed = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      );
+      const { el, c } = await counterWith({
+        [phase === "read" ? "getFindBill" : "moveBill"]: delayed,
+      });
+      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+      await flush(el);
+      expect(delayed).toHaveBeenCalledOnce();
+      selectTab(el, "floor");
+      await flush(el);
+      const reads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+      release(
+        phase === "read"
+          ? {
+              ...billRow({ workingOrderId: "wo-12", partyId: null }),
+              edit: {
+                billId: "wo-12",
+                editorVersion: 8,
+                draftId: null,
+                draftRevision: null,
+              },
+            }
+          : { partyId: "v-new", billId: "wo-12", merged: false },
+      );
+      await flush(el);
+      expect(currentApi.moveBill).toHaveBeenCalledTimes(phase === "read" ? 0 : 1);
+      expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(reads);
+      expect(toast(el).open).toBe(false);
+    },
+  );
+
+  it("counter relocation asks before replacing a basket retrieved during the source read", async () => {
+    let release!: (row: unknown) => void;
+    const getFindBill = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const { el, c } = await counterWith({ getFindBill });
+    const held = heldList(el);
+    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>(".move")!);
+    await flush(el);
+    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>('[data-target="t9"]')!);
+    await flush(el);
+    expect(getFindBill).toHaveBeenCalledOnce();
+    c.store.loadFrom("wo-12", [{ product: cafe, quantity: "2" }], "Retrieved", 0);
+    c.store.setLineQuantity(0, "3");
+    release({
+      ...billRow({ workingOrderId: "wo-12", partyId: null }),
+      edit: {
+        billId: "wo-12",
+        editorVersion: 8,
+        draftId: null,
+        draftRevision: null,
+      },
+    });
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    expect(question.open).toBe(true);
+    await question.updateComplete;
+    await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!);
+    await flush(el);
+    expect(c.store.id).toBe("wo-12");
+    expect(c.store.lines[0]!.quantity).toBe("3");
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+  });
+
+  it("counter relocation sends the complete sorted source and destination bill observations", async () => {
+    const { el, c } = await counterWith();
+    emit(c, "move-held-order", {
+      orderId: "wo-12",
+      tableId: "t7",
+      seated: { id: "v7", revision: 9 },
+      bills: "separate",
+    });
+    await flush(el);
+    expect(currentApi.moveBill).toHaveBeenCalledWith("wo-12", { tableId: "t7" }, "separate", {
+      partyId: null,
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null },
+        { billId: "wo-2", editorVersion: 5, draftId: "draft-2", draftRevision: 9 },
+        { billId: "wo-7", editorVersion: 3, draftId: null, draftRevision: null },
+      ],
+    });
+  });
+
+  it("counter relocation refuses missing source metadata before moving", async () => {
+    const { el, c } = await counterWith({
+      getFindBill: vi.fn().mockResolvedValue({
+        ...billRow({ workingOrderId: "wo-12", partyId: null }),
+        edit: null,
+      }),
+    });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+    expect(alert(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it("counter relocation ignores a source read after API replacement", async () => {
+    let answer!: (row: unknown) => void;
+    const getFindBill = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el, c } = await counterWith({ getFindBill });
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+    expect(getFindBill).toHaveBeenCalledOnce();
+    el.api = { ...currentApi } as unknown as TillApi;
+    await flush(el);
+    answer({
+      ...billRow({ workingOrderId: "wo-12", partyId: null }),
+      edit: {
+        billId: "wo-12",
+        editorVersion: 8,
+        draftId: null,
+        draftRevision: null,
+      },
+    });
+    await flush(el);
+    expect(currentApi.moveBill).not.toHaveBeenCalled();
+  });
 
   it("does not reload held orders when a move to a table answers after sign-out", async () => {
     let answer!: (result: { partyId: string; billId: string; merged: boolean }) => void;
@@ -16539,6 +16779,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(currentApi.moveBill).toHaveBeenCalledWith("wo-12", { tableId: "t9" }, "merge", {
       partyId: null,
       otherPartyId: null,
+      expectedEdits: [{ billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null }],
     });
     expect(counter(el)).not.toBeNull();
     expect(toast(el).open).toBe(true);
@@ -16612,6 +16853,11 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       partyId: null,
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null },
+        { billId: "wo-2", editorVersion: 5, draftId: "draft-2", draftRevision: 9 },
+        { billId: "wo-7", editorVersion: 3, draftId: null, draftRevision: null },
+      ],
     });
     expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Mesa 7"));
   });
@@ -16637,6 +16883,11 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       partyId: null,
       otherPartyId: "v7",
       expectedOtherPartyRevision: 9,
+      expectedEdits: [
+        { billId: "wo-12", editorVersion: 8, draftId: null, draftRevision: null },
+        { billId: "wo-2", editorVersion: 5, draftId: "draft-2", draftRevision: 9 },
+        { billId: "wo-7", editorVersion: 3, draftId: null, draftRevision: null },
+      ],
     });
   });
 
@@ -20264,6 +20515,17 @@ describe("W69 held move basket protection", () => {
         moveBill: vi
           .fn()
           .mockResolvedValue({ partyId: "party-new", billId: "wo-1", merged: false }),
+        getFindBill: vi.fn(async (id: string) => ({
+          ...billRow({ workingOrderId: id, partyId: null }),
+          edit: {
+            billId: id,
+            editorId: null,
+            editorName: null,
+            editorVersion: 0,
+            draftId: null,
+            draftRevision: null,
+          },
+        })),
         ...overrides,
       },
       theme,
@@ -20311,7 +20573,11 @@ describe("W69 held move basket protection", () => {
       "wo-1",
       { tableId: "t9" },
       "merge",
-      { partyId: null, otherPartyId: null },
+      {
+        partyId: null,
+        otherPartyId: null,
+        expectedEdits: [{ billId: "wo-1", editorVersion: 0, draftId: null, draftRevision: null }],
+      },
     );
     expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
     expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
@@ -20465,7 +20731,13 @@ describe("W69 held move basket protection", () => {
               "other-held",
               { tableId: "t9" },
               "merge",
-              { partyId: null, otherPartyId: null },
+              {
+                partyId: null,
+                otherPartyId: null,
+                expectedEdits: [
+                  { billId: "other-held", editorVersion: 0, draftId: null, draftRevision: null },
+                ],
+              },
             );
             expect(warning(el).open).toBe(false);
             expect(c.store.id).toBe("wo-1");
