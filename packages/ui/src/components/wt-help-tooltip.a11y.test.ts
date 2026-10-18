@@ -50,6 +50,23 @@ describe.each(["light", "dark"] as const)("wt-help-tooltip a11y (%s theme)", (th
     await badge.updateComplete;
     await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
+
+  test("help on, box open with a guide link", async () => {
+    const container = await mountThemed(
+      HELP_MODE_BADGE.replace(
+        'mode="help-mode"',
+        'mode="help-mode" guide-href="/guide/products#selling-unit" guide-label="Read more in the guide"',
+      ),
+      theme,
+    );
+    const badge = container.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
+    setHelpMode(true);
+    await badge.updateComplete;
+    badge.shadowRoot!.querySelector("button")!.click();
+    await badge.updateComplete;
+    expect(badge.shadowRoot!.querySelector("a[part=guide]")).not.toBeNull();
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
+  });
 });
 
 // wt-input and wt-textarea live in packages/ui-core, which cannot load wt-help-tooltip.

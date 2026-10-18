@@ -30,6 +30,7 @@ import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
 import "../src/components/wt-menu-row.js";
 import "../src/components/wt-help-switch.js";
+import "../src/components/wt-help-tooltip.js";
 import "../src/components/wt-combobox.js";
 import "../src/components/wt-colour-chooser.js";
 import "../src/components/wt-count-badge.js";
@@ -238,6 +239,16 @@ const panel = (theme: "light" | "dark") => `
             <wt-button align="start" class="create-member">Add team member</wt-button>
           </wt-row-actions>
           <wt-help-switch></wt-help-switch>
+          <span style="position: relative">
+            Selling unit
+            <wt-help-tooltip
+              mode="help-mode"
+              aria-label="Help: Selling unit"
+              guide-href="#guide"
+              guide-label="Read more in the guide"
+              >The unit you sell it in.</wt-help-tooltip
+            >
+          </span>
           <wt-row-actions label="Menu with help" align="end">
             <wt-menu-row help="Changes this person's name, role and PIN." help-label="Help: Edit">
               <wt-button variant="ghost" align="start">Edit</wt-button>

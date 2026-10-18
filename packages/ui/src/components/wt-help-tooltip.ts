@@ -82,15 +82,32 @@ export class WtHelpTooltip extends LitElement {
         font-weight: var(--wt-font-weight-normal);
         box-shadow: var(--wt-shadow-2);
       }
+
+      [part="guide"] {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        margin-block-start: var(--wt-space-1);
+        color: var(--wt-color-primary-text);
+      }
+
+      [part="guide"]:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
     `,
   ];
 
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
   /** `help-mode` follows the help switch; anything else is always visible. */
   @property({ reflect: true }) mode: "always" | "help-mode" = "always";
+  /** The link is drawn only when both `guide-href` and `guide-label` are set. */
+  @property({ attribute: "guide-href" }) guideHref = "";
+  @property({ attribute: "guide-label" }) guideLabel = "";
   @state() private open = false;
 
   private readonly tooltipId = uniqueId("wt-help-tooltip");
+  private readonly textId = uniqueId("wt-help-tooltip-text");
 
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
@@ -158,6 +175,10 @@ export class WtHelpTooltip extends LitElement {
     if (!event.composedPath().includes(this)) this.popup.hidePopover();
   };
 
+  private onGuideClick(): void {
+    this.popup.hidePopover();
+  }
+
   /** Pixel margins live here rather than in CSS because the arithmetic is viewport-relative. */
   private positionTooltip(): void {
     const anchor = this.trigger.getBoundingClientRect();
@@ -168,20 +189,38 @@ export class WtHelpTooltip extends LitElement {
   }
 
   override render() {
+    // A link inside a role="tooltip" box would be read as part of the description, so with a link
+    // only the text is the tooltip.
+    const guide = this.guideHref !== "" && this.guideLabel !== "";
+    const describedBy = guide ? this.textId : this.tooltipId;
     return html`
       <button
         type="button"
         aria-label=${this.ariaLabel ?? nothing}
         aria-expanded=${this.open}
-        aria-describedby=${this.open ? this.tooltipId : nothing}
+        aria-describedby=${this.open ? describedBy : nothing}
         popovertarget=${this.tooltipId}
         @click=${this.onTriggerClick}
       >
         <span class="icon" aria-hidden="true">?</span>
       </button>
-      <div id=${this.tooltipId} popover role="tooltip" @toggle=${this.onToggle}>
-        <slot></slot>
-      </div>
+      ${
+        guide
+          ? html`<div id=${this.tooltipId} popover @toggle=${this.onToggle}>
+              <div id=${this.textId} role="tooltip"><slot></slot></div>
+              <a
+                part="guide"
+                href=${this.guideHref}
+                target="_blank"
+                rel="noopener"
+                @click=${this.onGuideClick}
+                >${this.guideLabel}</a
+              >
+            </div>`
+          : html`<div id=${this.tooltipId} popover role="tooltip" @toggle=${this.onToggle}>
+              <slot></slot>
+            </div>`
+      }
     `;
   }
 }
