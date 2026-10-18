@@ -40,7 +40,7 @@ describe("dashboard guide links", () => {
   it("only help-guide.ts writes a guide path in the dashboard's source", () => {
     const writers = sourceFiles(DASHBOARD_SRC)
       .filter((path) => !path.endsWith(".test.ts") && !path.endsWith("/help-guide.ts"))
-      .filter((path) => /["'`]\/help\//.test(readFileSync(path, "utf8")))
+      .filter((path) => readFileSync(path, "utf8").includes("/help/"))
       .map((path) => relative(DASHBOARD_SRC, path));
     expect(writers).toEqual([]);
   });

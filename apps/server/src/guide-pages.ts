@@ -32,6 +32,8 @@ export const GUIDE_PAGE_TOKENS: Readonly<Record<string, readonly [string, string
   "--wt-space-5": "24px",
   "--wt-space-6": "32px",
   "--wt-radius-md": "8px",
+  "--wt-focus-ring": "2px solid var(--wt-color-focus)",
+  "--wt-focus-offset": "2px",
   "--wt-font-family": 'system-ui, -apple-system, "Segoe UI", sans-serif',
   "--wt-font-size-md": "14px",
   "--wt-font-size-lg": "18px",
@@ -65,7 +67,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
     },
     notFoundTitle: "Page not found",
     notFound: "There is no guide page at this address.",
-    brokenTitle: "Page not shown",
+    brokenTitle: "Page unavailable",
     broken: "This guide page could not be shown.",
   },
   es: {
@@ -78,7 +80,7 @@ const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } =
     missingTwin: "Esta página aún no está en español. Se muestra en inglés.",
     notFoundTitle: "Página no encontrada",
     notFound: "No hay ninguna página de la guía en esta dirección.",
-    brokenTitle: "Página no mostrada",
+    brokenTitle: "Página no disponible",
     broken: "No se ha podido mostrar esta página de la guía.",
   },
 };
@@ -121,12 +123,13 @@ padding: var(--wt-space-2) var(--wt-space-3);
 border-radius: var(--wt-radius-md);
 }
 section:target {
+scroll-margin-top: var(--wt-space-4);
 background: var(--wt-color-highlight);
 color: var(--wt-color-on-highlight);
 border-inline-start: var(--wt-space-1) solid var(--wt-color-primary);
 }
 a { color: var(--wt-color-primary-text); overflow-wrap: anywhere; }
-a:focus-visible { outline: 2px solid var(--wt-color-focus); outline-offset: 2px; }
+a:focus-visible { outline: var(--wt-focus-ring); outline-offset: var(--wt-focus-offset); }
 code {
 background: var(--wt-color-surface-sunken);
 border: 1px solid var(--wt-color-border);

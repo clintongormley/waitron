@@ -24,8 +24,7 @@ function block(css: string, opener: string): string {
 }
 
 function declared(css: string, name: string): string[] {
-  const escaped = name.replace(/[-]/g, "\\-");
-  return [...css.matchAll(new RegExp(`(?<![\\w-])${escaped}\\s*:\\s*([^;}]+)`, "g"))].map((m) =>
+  return [...css.matchAll(new RegExp(`(?<![\\w-])${name}\\s*:\\s*([^;}]+)`, "g"))].map((m) =>
     m[1]!.trim(),
   );
 }
@@ -33,6 +32,7 @@ function declared(css: string, name: string): string[] {
 const colors = read("colors.css");
 const light = block(colors, ":where([data-wt-theme-root]) {");
 const dark = block(colors, "@media (prefers-color-scheme: dark) {");
+const forcedDark = block(colors, ':where([data-wt-theme-root][data-theme="dark"]) {');
 const structure = read("structure.css");
 
 const entries = Object.entries(GUIDE_PAGE_TOKENS);
@@ -44,6 +44,7 @@ it("each colour the guide page copies matches the token, light and dark", () => 
     const [lightCopy, darkCopy] = value as readonly [string, string];
     expect(declared(light, name), `${name}, light`).toEqual([lightCopy]);
     expect(declared(dark, name), `${name}, dark`).toEqual([darkCopy]);
+    expect(declared(forcedDark, name), `${name}, forced dark`).toEqual([darkCopy]);
   }
 });
 
