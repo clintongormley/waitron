@@ -939,7 +939,6 @@ export class TillTableOrderScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      .group-actions,
       .group-line-actions {
         display: flex;
         flex-wrap: wrap;
@@ -4633,15 +4632,8 @@ export class TillTableOrderScreen extends LitElement {
   #groupRow(group: OrderGroup): TemplateResult {
     const isHeld = group.state === "held";
     const name = groupName(group);
-    const label = (key: StringKey) => `${t(key)} · ${name}`;
     const shown = this.currentOrders?.groups.find((candidate) => candidate.id === group.id);
     const current = this.currentOrders === null ? null : (shown?.rows ?? []);
-    const fires = this.fireControl === "waiter";
-    const servesWhole =
-      !isHeld &&
-      current !== null &&
-      current.every((row) => row.released) &&
-      current.some((row) => row.servedAt === null);
     return html`<li class="group" data-group=${group.id} data-group-state=${group.state}>
       <div class="group-head">
         <span class="group-name" data-group-position>${name}</span>
@@ -4652,38 +4644,6 @@ export class TillTableOrderScreen extends LitElement {
         current === null
           ? html`<p class="group-summary" data-group-summary>${group.summary}</p>`
           : nothing
-      }
-      ${
-        isHeld
-          ? html`<div class="group-actions">
-              ${
-                fires
-                  ? html`<wt-button
-                      variant="primary"
-                      data-group-fire=${group.id}
-                      aria-label=${label("table.group_fire")}
-                      ?disabled=${this.groupCommandBusy}
-                      @click=${() => this.#requestFireGroup(group)}
-                    >
-                      ${t("table.group_fire")}
-                    </wt-button>`
-                  : nothing
-              }
-            </div>`
-          : servesWhole
-            ? html`<div class="group-actions">
-                <wt-button
-                  variant="secondary"
-                  data-serve-group=${group.id}
-                  aria-label=${label("table.serve_group")}
-                  ?disabled=${this.groupCommandBusy}
-                  @click=${() =>
-                    this.#dispatch("serve-group", { groupId: group.id } satisfies ServeGroupDetail)}
-                >
-                  ${t("table.serve_group")}
-                </wt-button>
-              </div>`
-            : nothing
       }
       <ul class="group-lines">
         ${
@@ -4727,8 +4687,6 @@ export class TillTableOrderScreen extends LitElement {
     return html`<till-fired-ago .firedAt=${group.firedAt} .now=${this.now}></till-fired-ago>`;
   }
 
-  /** A row of Current orders. `held` is its group while that group is held, when the row offers Move
-   * and Split; otherwise it says what is known of it and, once released, offers Mark served. */
   #currentRow(row: CurrentOrderRow, held: OrderGroup | null): TemplateResult {
     const state = held === null ? this.#rowState(row) : nothing;
     const served = decimal(row.servedQuantity);
@@ -4759,7 +4717,7 @@ export class TillTableOrderScreen extends LitElement {
       </span>
       ${
         held === null
-          ? html`${this.#serveActions(row)}${
+          ? html`${
               row.kitchen?.movable && !this.#pending().some((line) => line.id === row.lineId)
                 ? this.#moveStationButton(row.lineNo, {
                     workingOrderId: row.workingOrderId,
@@ -4811,41 +4769,6 @@ export class TillTableOrderScreen extends LitElement {
     return t("table.row_served_of")
       .replace("{served}", this.#displayQty(row.servedQuantity))
       .replace("{quantity}", this.#displayQty(row.quantity));
-  }
-
-  #serveActions(row: CurrentOrderRow): TemplateResult | typeof nothing {
-    const serves = row.released && row.servedAt === null;
-    const undoes = compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
-    if (!serves && !undoes) return nothing;
-    const label = (key: StringKey) => `${t(key)} · ${row.name}`;
-    return html`<span class="group-line-actions">
-      ${
-        undoes
-          ? html`<wt-button
-              variant="secondary"
-              data-unserve-row=${row.lineId}
-              aria-label=${label("table.unserve")}
-              ?disabled=${this.groupCommandBusy}
-              @click=${() => this.#requestServe(row, true)}
-            >
-              ${t("table.unserve")}
-            </wt-button>`
-          : nothing
-      }
-      ${
-        serves
-          ? html`<wt-button
-              variant="primary"
-              data-serve-row=${row.lineId}
-              aria-label=${label("table.serve")}
-              ?disabled=${this.groupCommandBusy}
-              @click=${() => this.#requestServe(row, false)}
-            >
-              ${t("table.serve")}
-            </wt-button>`
-          : nothing
-      }
-    </span>`;
   }
 
   /** The most a press can mark served (what is left), or take back (what is served). */

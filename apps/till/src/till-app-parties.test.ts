@@ -5591,7 +5591,7 @@ describe("till-app: the order's groups", () => {
       await flush(el);
     }
 
-    async function groupMenu(el: TillApp, id: string) {
+    async function openSent(el: TillApp) {
       const order = tableOrder(el)!;
       if (order.shadowRoot!.querySelector("[data-drawer]") !== null) {
         await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
@@ -5611,6 +5611,19 @@ describe("till-app: the order's groups", () => {
           await panel.updateComplete;
         }
       }
+      return panel;
+    }
+
+    async function fireFromSent(el: TillApp, id: string) {
+      const panel = await openSent(el);
+      await userEvent.click(
+        panel.shadowRoot!.querySelector<HTMLElement>(`[data-group-fire="${id}"]`)!,
+      );
+      await flush(el);
+    }
+
+    async function groupMenu(el: TillApp, id: string) {
+      const panel = await openSent(el);
       const more = panel.shadowRoot!.querySelector<WtRowActions>(`[data-group-more="${id}"]`)!;
       await more.updateComplete;
       await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
@@ -5644,9 +5657,10 @@ describe("till-app: the order's groups", () => {
       const lineReads = server.getTabLines.mock.calls.length;
       const groupReads = server.listGroups.mock.calls.length;
 
-      await press(el, '[data-group-fire="g3"]');
+      await fireFromSent(el, "g3");
       expect(server.fireGroup).not.toHaveBeenCalled();
       await press(el, "[data-fire-confirm]");
+      await reopenDrawer(el);
 
       expect(server.fireGroup.mock.calls).toEqual([["v1", "g3", command(3)]]);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
@@ -5823,8 +5837,9 @@ describe("till-app: the order's groups", () => {
       const lineReads = server.getTabLines.mock.calls.length;
       const groupReads = server.listGroups.mock.calls.length;
 
-      await press(el, '[data-group-fire="g3"]');
+      await fireFromSent(el, "g3");
       await press(el, "[data-fire-confirm]");
+      await reopenDrawer(el);
 
       expect(server.fireGroup).toHaveBeenCalledOnce();
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);

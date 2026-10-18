@@ -66,6 +66,11 @@ describe.each(["en", "es"] as const)("Sent course in %s", (locale) => {
         ),
       ).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-group-up], [data-group-down]")).toBeNull();
+      expect(
+        el.shadowRoot!.querySelector(
+          "[data-drawer] [data-group-fire], [data-drawer] [data-serve-group], [data-drawer] [data-serve-row], [data-drawer] [data-unserve-row]",
+        ),
+      ).toBeNull();
       await expectNoA11yViolations(host);
       await page.screenshot({
         element: el,

@@ -1988,10 +1988,11 @@ describe("till-table-order-screen", () => {
     });
 
     it("closes an open Fire confirmation and Move to… picker when another order is shown", async () => {
-      const { el } = await mountGroups({ fireControl: "waiter" });
+      const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
+      await openDrawer(el);
       const dialog = (name: string) =>
         el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(`[data-${name}-dialog]`)!;
-      control(el, '[data-group-fire="g3"]')!.click();
+      panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g3"]')!.click();
       await el.updateComplete;
       control(el, '[data-move-line="l-flan"]')!.click();
       await el.updateComplete;
@@ -2685,14 +2686,47 @@ describe("till-table-order-screen", () => {
     it("offers no Send on a line in a HELD group, which is released by firing its group", async () => {
       const inHeldGroup: TabLine = { ...heldLine, groupId: "g-held" };
       const { el } = await mount({
+        orderId: "wo-4",
         lines: [inHeldGroup],
+        currentOrders: current({
+          groups: [
+            currentGroup("g-held", 1, "held", [
+              currentRow(inHeldGroup.id, "Café", inHeldGroup.quantity, {
+                lineNo: inHeldGroup.lineNo,
+                courseId: inHeldGroup.courseId,
+                unitPrecision: inHeldGroup.unitPrecision ?? null,
+                netAmount: grossOf(inHeldGroup.unitPriceGross, inHeldGroup.quantity),
+                firedAt: null,
+                released: false,
+                kitchen: {
+                  stationId: null,
+                  movable: false,
+                  state: "queued",
+                  firedAt: null,
+                  awayAt: null,
+                },
+              }),
+            ]),
+          ],
+          ungrouped: [],
+          reminder: null,
+        }),
         groups: [orderGroup("g-held", "held")],
         courses,
         fireControl: "waiter",
       });
+      const panel = await sentPanelFor(el);
+      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
+        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
+        if (toggle.getAttribute("aria-expanded") === "false") {
+          await userEvent.click(toggle);
+          await panel.updateComplete;
+        }
+      }
       await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-group-fire="g-held"]')).not.toBeNull();
+      expect(panel.shadowRoot!.querySelector('[data-group-fire="g-held"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-drawer] [data-group-fire="g-held"]')).toBeNull();
     });
 
     it("offers Send on a recalled line whose group has fired", async () => {

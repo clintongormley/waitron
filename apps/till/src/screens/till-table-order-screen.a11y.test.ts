@@ -1,3 +1,9 @@
+import {
+  current,
+  currentGroup,
+  row as currentRow,
+} from "./till-table-order-screen.current-orders.test-helpers.js";
+import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { t } from "../i18n/t.js";
@@ -594,9 +600,44 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the Fire confirmation", async () => {
+    it("has no violations in the Fire confirmation from Sent", async () => {
       const { el, host } = await withGroups();
-      await press(el, '[data-group-fire="g2"]');
+      el.currentOrders = current({
+        groups: [
+          currentGroup("g2", 2, "held", [
+            currentRow("line-1", "Café", "2.000", {
+              workingOrderId: "wo-1",
+              courseId: "c1",
+              netAmount: "3.00",
+              firedAt: null,
+              released: false,
+              kitchen: {
+                stationId: null,
+                movable: false,
+                state: "queued",
+                firedAt: null,
+                awayAt: null,
+              },
+            }),
+          ]),
+        ],
+        ungrouped: [],
+        reminder: null,
+      });
+      await el.updateComplete;
+      const panel = await sentPanelFor(el);
+      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
+        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
+        if (toggle.getAttribute("aria-expanded") === "false") {
+          await userEvent.click(toggle);
+          await panel.updateComplete;
+        }
+      }
+      await userEvent.click(
+        panel.shadowRoot!.querySelector<HTMLElement>('[data-group-fire="g2"]')!,
+      );
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-fire-dialog]")!.hasAttribute("open")).toBe(true);
       await expectNoA11yViolations(host);
     });
 
