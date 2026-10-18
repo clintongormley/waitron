@@ -2230,8 +2230,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a-re-sent-place-on-an-already-placed-order-answers-409-rather-than-replaying-the-original-result--leave-it-or-build-the-replay)
 
 - **`apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown at six call sites;
-  a helper would collapse it.** Cosmetic, and cheapest alongside the tip-collection work that touches
-  `#onPayTab`. Raised by the A1 review wave (A1d).
+  a helper would collapse it.** Cosmetic, and cheapest alongside A848 (the empty-order message) that
+  touches `#onPayTab` (under _Payments and card readers_). Raised by the A1 review wave (A1d).
 
 - **Loose ends left by A395 (#1435) and A425, the till's one-row top bar.**
   - Open, decided as built: a change in the pending-transfer count alone never brings items back
@@ -3541,7 +3541,41 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   unchecked; a sandbox case beside `checkout.sandbox.test.ts` would settle it.
   [Detail](backlog/payments.md#check-how-real-stripe-answers-a-malformed-reader-id-and-one-from-another-stripe-account)
 
-- **Tips still need designing** — queued as A793 (lane C).
+- **A793 — tips: who a tip belongs to, how it is shared out, and what payroll gets** — DESIGNED
+  2026-10-18, waiting for the owner's answer to one question (Q38 in lane C's questions file;
+  [design](superpowers/specs/2026-10-18-a793-tips-design.md), pictures in
+  [mockups/a793-tips/](backlog/mockups/a793-tips/), research in
+  [compliance/research/2026-10-18-a793-tips.md](compliance/research/2026-10-18-a793-tips.md)); not
+  built. A shared pot per business day split by hours clocked (kitchen included) or each person
+  keeping their own, chosen on a new Tips tab in Venue settings that also replaces
+  `WAITRON_TILL_TIPS`; cash tips handed out at the day's close (once a close counts the drawer,
+  A239, and the asesor's L6(g) allows it), card tips paid with wages; a Tips page under Team by day
+  and by pay period, frozen when a pay period closes (once the product has a step that closes one).
+  Six build slices in the design's §7, the first a fix (next entry). Replaces the old "Tip-collection UI" entry: cash and
+  typed-card tips already arrived with bill payments (#956).
+
+- **A whole-order card payment does not refuse a negative tip** (found by A793's design, read, not
+  run). With tips on, a request that did not come from the till's own form (which refuses it) can
+  carry `tip: "-5.00"`: `POST /api/pay` never checks `tip` (`apps/server/src/till-api.ts:1682-1737`)
+  and `decimal()` accepts it (`packages/shared/src/money.ts:14-25`), so the reader would be asked for
+  the bill less €5.00 and the tender would then fail its `tip_amount >= 0` check after the card was
+  charged.
+  A tip with more than two decimals is not checked either; the bill payment routes refuse both
+  (`apps/server/src/bill-payments-api.ts:32`). Next: a route case sending `tip: "-5.00"`, then refuse
+  it before the reader is asked. A793's slice 1. Full review (money).
+
+- **A whole-order payment records the amount it expected, not the amount captured** (found by A793's
+  design, read). A capture that differs from bill plus till tip is written as bill plus till tip
+  (`apps/server/src/till-sale.ts:1568`, and `:1879` for an order already placed); only the recovery
+  path reads the captured amount and calls the excess a tip. The only cause found is a reader whose
+  own tip screen was switched on outside Waitron; other causes were not checked. Next: compare the captured amount at capture time, as the bill payment loop does
+  (`payment.bill_capture_mismatch`).
+
+- **Three small tip display gaps** (found by A793's design, read): the dashboard's order detail shows
+  a bill payment's applied amount without its tip (`apps/dashboard/src/widgets/order-detail-dialog.ts:398`);
+  the card slip's words are fixed Spanish (`apps/server/src/payment-slip.ts:55-59`); and the Spanish
+  refund slip says "Propina" where the English says "Tip returned"
+  (`apps/server/src/tender-refund-receipt.ts:79-92`).
 
 - **A848. Show a clear message when the till pays, sends or moves an empty order.** `#onPayTab`
   (`apps/till/src/till-app.ts`) shows `sale.error` for any server code it does not name, which
@@ -4364,6 +4398,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Choose readable PDF flags for working-time exports.** Decide how `null`, `true` and `false`
   should read in each language while preserving CSV scalars.
   [Detail](backlog/workforce.md#pdf-boolean-and-empty-values).
+
+- **Nothing in the product closes a pay period** (found by A793's design, read). The workforce
+  module's `closePayPeriod` (`packages/workforce/src/pay-period-close.ts:76`) is called only by test
+  files (among them the fixture `apps/server/test/attendance-export-fixture.ts:77`); no route,
+  scheduled duty or screen calls it. A793's slice 6 (tips frozen with the pay period) waits for one. Next: decide
+  with the owner who closes a period and when (a manager's button, or automatically once it is
+  due), then build it.
 
 - **Pay-period cadence changes need a rule after closure.** Changing monthly to weekly after
   January closes makes 1 February resolve to 26 January–2 February, which closure refuses
@@ -5897,8 +5938,8 @@ _Formerly entries spread across the old sections._
 _Formerly the "Later and parked" paragraph under What's built._
 
 **Later and parked** (no owner decision pending; reopen when work reaches them): Square and
-generic CSV menu import · accounting export (SP17) · opening hours and channel sync (SP19) · tip
-payroll (SP13) · per-seat ordering and multiple tabs per table (each reopens a
+generic CSV menu import · accounting export (SP17) · opening hours and channel sync (SP19) ·
+per-seat ordering and multiple tabs per table (each reopens a
 settled decision — specced with the owner, never landed unattended) · KDS ops polish (routing
 audit view, station kind, definable kitchen statuses) · recipes depth (nested
 sub-recipes, plate costing, stock depletion, variants, customer-facing browse) · inventory and
@@ -6012,7 +6053,7 @@ partial scope; the detail for a live thread is in its area.
 | 10  | Tabs / table service         | TS-1 tables+tabs, TS-2 statuses, TS-3 move/join/merge, TS-4 transfer, till action-flow wiring, TS-5 split-bill (#324)                                                                                                                                                                                                                                                                                                             | core COMPLETE; owner-added extensions parked                                                                                                                                  |
 | 11  | Floor plan                   | FP-1 live floor + FP-2 spatial canvas/editor                                                                                                                                                                                                                                                                                                                                                                                      | —                                                                                                                                                                             |
 | 12  | KDS / devices                | KDS-1 stations/routing/tickets, KDS-2 courses/fire, KDS-3 expo, KDS-4 kitchen printing, order-timing alerts; device identity + profiles (#199, #231, #269)                                                                                                                                                                                                                                                                        | routing audit view; a device-scoped collect route                                                                                                       |
-| 13  | Tips                         | attribution stored (`tenders.tip_amount`) — UI collection ONLY on the integrated-card idle screen                                                                                                                                                                                                                                                                                                                                 | tip-collection UI for cash / manual card / handheld (_Payments and card readers_); payroll export (integrate-not-build)                                                       |
+| 13  | Tips                         | tip choices on bill payments (card, cash) and on the whole-order screen for a connected reader, off unless `WAITRON_TILL_TIPS` is set; kept off the invoice; sharing and payroll designed (A793), not built                                                                                                                                                                                                                       | sharing, the Tips page and the pay-period statement (A793); payroll export (integrate-not-build)                                                                              |
 | 14  | Bookings                     | Bookings-1, now the `@waitron/bookings` module (#270, #273)                                                                                                                                                                                                                                                                                                                                                                       | public/online/QR, availability, reminders, CRM, recurring, calendar grid, deposits                                                                                            |
 | 15  | Online ordering              | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (later phase)                                                                                                                                                     |
 | 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), till clocking and breaks, D2 scheduling, roster authoring + approvals, staff request path + portal; own/manager Hours and PDF/CSV working-time exports | inspector remote access; advisor export checks; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |

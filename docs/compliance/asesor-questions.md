@@ -2,6 +2,8 @@
 
 **2026-10-17, A664:** You adopted the [revised proposal](../superpowers/specs/2026-10-16-a664-data-retention-design.md#owner-decision-2026-10-17-adopted-for-specialist-review) for specialist review. [Q48](#q48-a664-retention-and-evidence-process-added-2026-10-16) awaits the relevant fiscal/commercial, labour and privacy decisions. You will send it; no enquiry has been sent by this campaign. The historical Word copies have not been changed.
 
+**2026-10-18, A793 (tips):** [Q13](#q13-propinas--outside-the-vat-base-and-off-the-invoice-added-2026-07-31) gained an open part (d) on suggested tip percentages and a default service charge; [Q49](#q49-card-tips-in-the-venues-books--income-or-money-owed-to-staff-added-2026-10-18) (how card tips are booked) and [Q50](#q50-a-fixed-service-charge-on-the-bill--allowed-by-consumer-law-added-2026-10-18) (a fixed "service" charge under consumer law) were added after Q13. The research behind them is [research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md). None is in the shortened list or the Word copies yet, and no enquiry has been sent.
+
 Companion to [verifactu-findings.md](verifactu-findings.md), which records what is already
 settled. **Do not ask about anything in that document** — it is sourced from AEAT and BOE
 primary texts. These are the items that research could not resolve.
@@ -151,7 +153,9 @@ substantive pass **2026-08-01**.
 > the base (LIVA art. 78.Tres.2º); once the factura is issued, correcting it needs a rectificativa.
 > The residuals are product/interpretive, not fiscal — see the findings. (Caveat recorded there: the
 > DGT consultas were read via reproduction because PETETE failed TLS validation; confirm the exact
-> wording on PETETE if an asesor engages.)
+> wording on PETETE if an asesor engages.) *(2026-10-18: except Q13(d), added open; ask it. The
+> V3095-17 reading above is narrowed in
+> [research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md) §1 and §5.)*
 >
 > **① Server-as-SIF** (`../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`, #33).
 > The unit AEAT holds responsible for issuing invoices — the SIF — is the **local server**, not the
@@ -237,7 +241,8 @@ Questions not in the 6 October Word copy (Q3, Q4, Q8, Q10, and the lawyer's Q9, 
 are unchanged by this pass. Q46, on selling by weight, was added afterwards the same day as S17.
 Q37(d), on a change of legal name, was added on 2026-10-11 as S18 (A494). Q47, on keeping the
 later records of a chain unsent, was added on 2026-10-12 as S19 at the owner's request; the Word
-copies do not carry it.
+copies do not carry it. Q13(d), Q49 and Q50, on tips and service charges, were added on 2026-10-18
+(A793) and are not in this list yet.
 
 ### What happened to each question sent on 6 October
 
@@ -270,7 +275,7 @@ copies do not carry it.
 | 5.1 | Q15 | Art. 80.Cuatro's current conditions: answered at BOE. **S5**. |
 | 5.2 | Q15(c) | **S5**. |
 | 5.3 | — | **R4**. |
-| 5.4 | Q13 | Answered (2174-03, V2182-23). The corporate-tax treatment of card tips belongs to the venue's accountant and the labour list (L6). |
+| 5.4 | Q13 | Answered (2174-03, V2182-23). The corporate-tax treatment of card tips belongs to the venue's accountant and the labour list (L6). *(2026-10-18: the booking question is now Q49; Q13 gained an open part (d).)* |
 | 6.1–6.9 | Q33–Q41 | No source addresses a restore from an old backup or two real invoices under one number. **S16**, one question about our cautious default. |
 | — | Q43 | Dropped: technical, and measured (two runs of up to 1,000 records answered in order). |
 | — | Q44 | **R5**, with the consent wording fixed first (TRLGDCU art. 63.3). |
@@ -1023,6 +1028,20 @@ technical design question. Q33 covers installation identity and the recovery evi
 
 ### Q13. Propinas — outside the VAT base, and off the invoice? (added 2026-07-31)
 
+> **Reopened in part, 2026-10-18 (A793).** **(d)** below is new and open: ask it. (a)–(c) stay
+> answered. Two statements in the banner below go further than the rulings' text, as
+> [research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md) §1 and §5 show with quotes:
+> the request in V3095-17 put the casino gambling tax as its only direct question; the DGT also
+> answered on corporate tax, income tax, VAT and the gaming activities tax because the request discussed them. The casino
+> regulation it quotes requires tips to go into boxes on the gaming tables (or at reception and the
+> cash desk), and the ruling does not mention cards, so it is not "the card-present shape"; and its
+> corporate-tax line holds only «en la medida en que» the tips are accounting income, on the casinos'
+> own accounting rules. Binding VAT rulings on tips collected electronically include V2182-23 (2023, tips
+> passed on to drivers), V5110-26 (2026) and V1808-22 (2022, tips a company keeps). For (c), RD 1619/2012 art. 7.1 allows «cualesquiera otras
+> menciones» on a simplified invoice; our reading is that the tip may be printed as information,
+> outside the «Contraprestación total», since it is not consideration.
+> The booking question the banner calls a workforce/accounting matter is now **Q49**.
+
 > 🟢 **CLOSED 2026-08-01 — moved to [verifactu-findings.md §11](verifactu-findings.md). Do not ask
 > (a) or (b).** A voluntary tip is not *contraprestación*, so it is outside the base imponible del IVA,
 > off the factura and out of the huella — the assumption the schema already encodes. The test is
@@ -1068,6 +1087,82 @@ gesture but part of a single card capture that exceeds the invoice total.
 > **(c)** ¿Existe alguna obligación de documentar la propina frente al cliente, o basta con el
 > justificante de pago de la entidad adquirente? Si la incluimos como bloque informativo separado
 > al pie del ticket, ¿hay algún requisito de forma?
+
+**(d) Suggested percentages, and a service charge added by default (added 2026-10-18, open).** The
+A793 tips design shows no suggested tip percentages until this is answered. A tip stays outside VAT
+only while it is voluntary. The DGT's tip rulings (V2182-23, V5110-26) quote an earlier ruling that
+adds «en la medida en que no se haya establecido una cuantía fija», in so far as no fixed amount has
+been set. The EU Court of Justice held in C-404/99 (Commission v France, 29 March 2001) that a
+compulsory service charge is part of the VAT base, even when it is announced to customers and paid
+in full to staff. No ruling covers an amount the guest is offered and may refuse, or a charge added
+by default that the guest may ask to remove. Quotes:
+[research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md) §§1–2.
+
+> **(d)** Si el datáfono o el ticket sugiere porcentajes de propina que el cliente puede rechazar,
+> ¿sigue siendo propina voluntaria fuera de la base imponible? ¿Y si añadimos por defecto un
+> «servicio» que el cliente puede pedir que se quite? (Según la sentencia del TJUE de 29 de marzo
+> de 2001, asunto C-404/99, el recargo de servicio obligatorio forma parte de la base imponible.)
+
+---
+
+### Q49. Card tips in the venue's books — income, or money owed to staff? (added 2026-10-18)
+
+**For the asesor fiscal and the venue's accountant.** Not a Veri*Factu question: the tip stays off
+the invoice and out of the huella whatever the answer.
+
+**Why it matters.** A tip a guest adds to a card payment lands in the venue's bank account, and the
+venue passes it to staff through payroll (the A793 design, which never treats a tip as the venue's
+own money). The DGT's rulings point in different directions, and none settles the booking:
+
+- **2174-03** (general, 2003, under the corporate tax law since repealed): a restaurant receives
+  tips «como mero intermediario entre sus clientes y sus camareros», so they are neither taxable
+  income nor, when shared out, an expense.
+- **V3095-17** (binding, 2017, a casino): tips go into corporate tax «en la medida en que» they are
+  accounting income, on the casinos' own accounting rules.
+- **V1808-22** (binding, 2022, a website's tip button): tips a company obtains for itself go into
+  its corporate-tax base, and stay outside VAT while they pay for nothing.
+- In V1808-22 the DGT declined the request's bookkeeping question (one entry per tip, or one total)
+  as outside its remit, and no ruling of the
+  ICAC (the accounting standards institute) on tips was found.
+
+Asked separately on the payroll side as [L6](asesor-laboral-questions.md). Quotes:
+[research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md) §5.
+
+> **(a)** ¿Cómo contabilizamos las propinas cobradas por datáfono que repartimos al personal: como
+> ingreso y gasto, o como deuda con el personal? La consulta 2174-03 dice que la entidad las recibe
+> «como mero intermediario entre sus clientes y sus camareros».
+>
+> **(b)** Si la casa se queda una parte de las propinas, ¿tributa esa parte en el Impuesto sobre
+> Sociedades (consulta V1808-22) y sigue fuera de la base imponible del IVA?
+
+---
+
+### Q50. A fixed "service" charge on the bill — allowed by consumer law? (added 2026-10-18)
+
+**Not a tax question.** This is consumer law, and the rules on restaurants differ by region. It is
+asked only in case the owner ever wants a service charge: the A793 design adds none. Part (c) lets
+the advisor point us elsewhere.
+
+**Why it matters.** The consumer authority of Andalucía (Dirección General de Consumo, 29 November
+2024) says no amount may be charged for cover or service, and a higher price for terrace service
+may not be set as a percentage; its note names no regulation. The national consumer code (TRLGDCU)
+requires the full final price, with any extra charges broken out, before the contract (arts. 20.1.c
+and 60.2.c), and lists as abusive a surcharge that pays for no extra service the customer can accept
+or refuse (art. 89.5). Our reading is that a compulsory "servicio" is exposed under art. 89.5; that
+is a reading, not a ruling. If one were charged, it would be part of the VAT base (C-404/99, see
+Q13(d)). Castilla y León's and Madrid's pages could not be read. Quotes:
+[research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md) §2.
+
+> **(a)** En nuestra comunidad autónoma, ¿podemos cobrar un «servicio» o un porcentaje fijo, o la
+> normativa de restauración lo prohíbe? La Dirección General de Consumo de la Junta de Andalucía
+> indicó el 29/11/2024: «No se puede cobrar ninguna cantidad por cubierto o por servicio porque tanto
+> el servicio como el cubierto son inherentes a la prestación que se realiza por el
+> establecimiento.», sin citar la norma.
+>
+> **(b)** Si es lícito, ¿cómo debe anunciarse en la carta y en el ticket (arts. 20.1.c, 60.2.c y 89.5
+> TRLGDCU)?
+>
+> **(c)** Si estas cuestiones quedan fuera de su ámbito, ¿a quién nos recomienda consultar?
 
 ---
 
@@ -3273,8 +3368,9 @@ claims were checked in primary sources; live-service acceptance remains a separa
 - **Q1 and Q2 are now moot / non-load-bearing** under server-as-SIF (#33) — the server is the SIF,
   so a till need not be one (Q1) and the SIF files its own records (Q2). They were demoted on
   inference before; the architecture change retires them outright. Don't lead with them any more.
-- **Q3, Q4, Q8, Q9(b), Q10, Q13 and Q15 are answered** — do not ask them. Q4 is settled on AEAT's own
-  text; Q13 (propinas) and Q15's core (short payment) are closed on primary source and moved to
+- **Q3, Q4, Q8, Q9(b), Q10, Q13 and Q15 are answered** — do not ask them. *(2026-10-18: except
+  Q13(d), added open; ask it.)* Q4 is settled on AEAT's own text; Q13 (propinas) and Q15's core
+  (short payment) are closed on primary source and moved to
   [verifactu-findings.md](verifactu-findings.md) §§11–12. Asking any of these invites a confident
   wrong answer to a question we no longer have.
 - **Q9(a) is the standing consulta candidate**, and it is a lawyer's question. RD-ley 15/2025 moved

@@ -381,6 +381,11 @@ AEAT's developer FAQ v1.3 (4 December 2025) is still the latest: the live file i
 
 ## 5.4 Tips
 
+> **Dated pointer, 2026-10-18:** the corporate-tax "conflict" and the card-tip question below are
+> taken further in [2026-10-18-a793-tips.md](2026-10-18-a793-tips.md) §5: V3095-17's corporate-tax line is
+> conditional on casino accounting rules, and V1808-22 covers tips a company keeps for itself. The
+> booking question is now asesor-questions Q49; withholding is 1866-03 and RIRPF art. 76.1.3.º (§3).
+
 **Bullet 1. Is a tip outside VAT, including on a card? — ANSWERED**
 - **2174-03 (general, 2003): restaurant tips are not consideration, so they are outside the taxable amount.**
   > «Las cantidades que en concepto de propinas satisfagan con carácter voluntario y unilateral los destinatarios de los servicios de restaurante, y que no los sean exigibles por la prestación de tales servicios, no constituirán un crédito efectivo a favor de la sociedad consultante ni tampoco contraprestación de dichos servicios a efectos del Impuesto sobre el Valor Añadido, por lo que no formarán parte de la base imponible de dicho Impuesto correspondiente a los referidos servicios de hostelería que prestará la sociedad consultante.»

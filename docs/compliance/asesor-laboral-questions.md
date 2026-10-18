@@ -14,7 +14,9 @@ us) and a Spanish formulation (to hand over).
 are built; payroll (D3) is deliberately export-not-build and deferred until the gestoría's package is
 known. These are **confirm-before-go-live** items and one export-format dependency — not gates.
 
-Created **2026-08-26**. Question IDs are `L#`, stable identifiers, not reading order.
+Created **2026-08-26**. Question IDs are `L#`, stable identifiers, not reading order. On
+**2026-10-18** (A793, tips) L6 gained parts (c)–(g) and its framing of DGT V3095-17 was corrected;
+see its banner.
 
 > **⚠ Status of the moving parts (checked 2026-08-26).** The load-bearing item — the *registro horario
 > digital* Real Decreto (L1) — is **still not approved and not in the BOE**. The 21 July 2026 push to
@@ -152,28 +154,94 @@ pending hours. We hold the hours and absences; we need to know exactly what fiel
 
 ### L6. Card-collected tips — booked income, and *retención* on the nómina?
 
-**Why it matters.** The IVA side is closed on primary source (a voluntary tip is outside the base
-imponible del IVA and off the factura — DGT V3095-17, [verifactu-findings.md](verifactu-findings.md)
-§11). But a tip taken through the **card terminal** (unlike cash handed straight to a waiter) passes
-through the business's bank account, and V3095-17's own reasoning is that when the house collects tips
-into a *tronco* and redistributes them, they are an *ingreso contable* that integrates into the base of
-the Impuesto sobre Sociedades, and for the employees the amounts are *rendimientos del trabajo* subject
-to IRPF *retención*. This does **not** touch the factura or the huella — it is an accounting/payroll
-duty. It straddles the two advisors: the IS/booking side is the *asesor fiscal*'s, the nómina/retención
-side is here.
+> **Corrected and extended 2026-10-18 (A793).** Parts (c)–(g) are new. The context below and the
+> Spanish introduction were rewritten, because the earlier text overstated V3095-17. It said the
+> ruling's "own reasoning is that when the house collects tips into a *tronco* and redistributes them,
+> they are an *ingreso contable* that integrates into the base of the Impuesto sobre Sociedades". The
+> ruling's text makes that conditional, «en la medida en que las propinas recibidas por la entidad
+> consultante tenga la consideración de ingreso contable», and the accounting rule it then cites is
+> the casinos' own: «La Orden de 23 de junio de 1978 por la que se aprueban las normas de Adaptación
+> del Plan General de Contabilidad para los Casinos de Juego». The request put the casino gambling
+> tax as its only direct question; the DGT also answered on corporate tax, income tax, VAT and the gaming activities tax because
+> the request discussed them. The ruling does not mention cards. Its income-tax half (tips are
+> employment income, «las propinas estarán sujetas a retención») is in its text and stands; the
+> on-point authorities for a restaurant's card tips are now cited instead. Receipts, with every quote
+> checked against the downloaded ruling:
+> [research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md) §§3–5. Part (b) is unchanged;
+> part (a) now asks only the payroll part.
 
-> Las propinas voluntarias quedan fuera de la base imponible del IVA y no figuran en la factura (ya
-> resuelto por vía fiscal — DGT V3095-17). Ahora bien, cuando la propina se cobra por datáfono —a
-> diferencia del efectivo entregado directamente al camarero— pasa por la cuenta bancaria del negocio.
-> La propia V3095-17 razona que, cuando la casa recauda las propinas en un tronco y las redistribuye,
-> constituyen un ingreso contable que se integra en la base del Impuesto sobre Sociedades, y para los
-> empleados son rendimientos del trabajo sujetos a retención de IRPF.
+**Why it matters.** The VAT side is settled: a voluntary tip is outside the VAT base and so outside
+the invoice's total (DGT 2174-03; V2182-23 and V5110-26 for tips collected electronically;
+[verifactu-findings.md](verifactu-findings.md) §11); no ruling read distinguishes cash from card.
+Income tax is settled in principle: tips are the employee's employment income (V2236-13, binding),
+and when the employer pays card tips out to staff it must withhold income tax on them,
+worked out together with the rest of their pay (1866-03, a general ruling on exactly that case;
+income-tax regulation, RIRPF, art. 76.1.3.º, which requires withholding «Cuando satisfagan a su
+personal cantidades desembolsadas por terceros en concepto de propina», that is, when the employer
+pays its staff amounts that third parties gave as a tip). A tip taken through the **card
+terminal** passes through the business's bank account; cash handed straight to a waiter does not.
+How the venue books card tips, and whether it owes corporate tax on any share it keeps, is the
+*asesor fiscal*'s and the accountant's question, now
+[asesor-questions.md Q49](asesor-questions.md#q49-card-tips-in-the-venues-books--income-or-money-owed-to-staff-added-2026-10-18).
+This does **not** touch the invoice or the huella; it is a payroll duty, and the parts below are for
+the payroll adviser:
+
+- **(c) Social Security.** The contribution base is total pay "by reason of the work", and the list
+  of exclusions (LGSS art. 147.2) is closed and does not mention tips. The Supreme Court (STS
+  635/2021, read through a publisher's copy, not the court's database) calls tips outside salary,
+  and says their status as a working condition «nada tiene que ver con su naturaleza, con su
+  eventual tributación…» (has nothing to do with their nature or possible taxation). No Social
+  Security guidance found mentions tips. This decides whether payroll adds contributions on
+  shared-out tips.
+- **(d) Withholding on cash handed straight to the waiter.** 2174-03 says the restaurant must
+  withhold on the tips its workers receive, without separating cash; art. 76.1.3.º speaks of amounts
+  the employer pays. No source settles it.
+- **(e) How card tips are shared when nothing has been agreed.** A Madrid High Court ruling (TSJ
+  Madrid, 31/05/2023, read only through a law professor's blog) held that card tips the business
+  collects must, without a lawful agreement with the works council, be shared equally among all
+  staff who take part in the food service (in that case, a hotel department that included the
+  kitchen). The design's default sharing rule depends on this.
+- **(f) Reporting.** LGSS art. 147.3 requires every pay item to be reported to the Social Security
+  treasury (TGSS), counted or not. Payroll needs to know how tips are reported.
+- **(g) Cash tips left in the till and shared out at the close.** The A793 design must choose whether
+  that cash goes through payroll. Our reading is that the employer then pays it to its staff, in
+  art. 76.1.3.º's words; no source addresses it.
+
+> Las propinas voluntarias quedan fuera de la base imponible del IVA y, por tanto, del importe total
+> de la factura (DGT 2174-03, V2182-23 y V5110-26). Constituyen rendimientos del trabajo del
+> empleado (V2236-13) y, cuando el empleador reparte entre su personal las propinas cobradas por datáfono, debe calcular la
+> retención junto con las restantes retribuciones (consulta 1866-03; el art. 76.1.3.º RIRPF obliga
+> a retener «Cuando satisfagan a su personal cantidades desembolsadas por terceros en concepto de
+> propina»). La propina cobrada por datáfono —a diferencia del efectivo entregado directamente al
+> camarero— pasa por la cuenta bancaria del negocio. La contabilización y el Impuesto sobre
+> Sociedades los planteamos por separado al asesor fiscal.
 >
-> **(a)** ¿Debemos contabilizar como ingreso las propinas cobradas por datáfono y hacerlas pasar por la
-> nómina de los empleados con su retención, mientras que las entregadas en efectivo directamente al
-> trabajador no?
+> **(a)** ¿Deben las propinas cobradas por datáfono pasar por la nómina de los empleados con su
+> retención, mientras que las entregadas en efectivo directamente al trabajador no? (La
+> contabilización se pregunta en Q49.)
 >
 > **(b)** ¿Cómo se articula, a efectos de nómina y retención, la redistribución del tronco de propinas?
+>
+> **(c)** ¿Las propinas cobradas por datáfono y repartidas en nómina forman parte de la base de
+> cotización (el art. 147.2 LGSS no las excluye; la STS 635/2021 (leída a través de la copia de un
+> editor, no de la base de datos del tribunal) las considera extrasalariales)? ¿Y las entregadas en
+> efectivo directamente al trabajador?
+>
+> **(d)** ¿Debemos practicar retención sobre las propinas en efectivo que el cliente da al camarero
+> sin pasar por la caja? La consulta 2174-03 no distingue; el art. 76.1.3.º RIRPF obliga a retener
+> «Cuando satisfagan a su personal cantidades desembolsadas por terceros en concepto de propina», y
+> esas propinas no pasan por la empresa.
+>
+> **(e)** A falta de acuerdo del comité de empresa o de regla en nuestro convenio provincial,
+> ¿debemos repartir las propinas de tarjeta a partes iguales entre todo el personal que interviene en
+> el servicio de restauración (en ese caso, un departamento que incluía la cocina), como resolvió el
+> TSJ de Madrid el 31/05/2023 (según la cita de un blog)?
+>
+> **(f)** ¿Cómo comunicamos a la TGSS las propinas abonadas en nómina, dado el art. 147.3 LGSS?
+>
+> **(g)** Si las propinas en efectivo que entran en la caja (el cliente deja el cambio) se reparten al
+> cierre del día en efectivo, ¿debe el reparto pasar igualmente por nómina con su retención, por ser
+> cantidades que el empleador paga a su personal (art. 76.1.3.º RIRPF)?
 
 ---
 

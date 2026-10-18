@@ -722,6 +722,14 @@ an edge case.
 
 ## 11. Propinas — outside the base imponible del IVA, off the factura, off the huella (added 2026-08-01)
 
+> **Dated pointer, 2026-10-18:** [research/2026-10-18-a793-tips.md](research/2026-10-18-a793-tips.md)
+> (§1, §3, §5) narrows two claims below. The request in V3095-17 put the casino gambling tax as its
+> only direct question; the DGT also answered on corporate tax, income tax, VAT and the gaming activities tax because the
+> request discussed them. The ruling does not mention cards, so it is not the card-tip shape; its
+> corporate-tax line is conditional on casino accounting rules, so "a tip that flows through
+> Waitron's card terminal is business income" is not what it says. The withholding authority for a
+> restaurant's card tips is 1866-03 with RIRPF art. 76.1.3.º. The VAT conclusion stands.
+
 > **Correction, 2026-10-09: PETETE was reached, and two things below change.** (1) V3095-17's
 > wording in the table is a legal database's paraphrase. The ruling's own text is: «Por lo tanto, las
 > propinas que de manera voluntaria y unilateral satisfagan los clientes de la consultante a los
