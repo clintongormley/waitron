@@ -22,7 +22,6 @@ import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import {
   checkZonePlanSave,
   readLayout,
-  readZonePlan,
   saveLayout,
   type LayoutRef,
   type ZonePlanSave,
@@ -174,17 +173,20 @@ async function readDefault(zoneId: string) {
   return inTx(v, (tx) => readLayout(tx, v.cfg, at));
 }
 
-/** The statements `readZonePlan` takes for a zone whose master holds `tables` tables. */
+/** The statements `readLayout` takes for a zone whose layout holds `tables` tables. */
 async function readCost(tables: number): Promise<number> {
   const z = await zone();
+  const at = await layoutOf(z);
   await masterOf(
     z,
     Array.from({ length: tables }, (_, i) => ({ label: fresh(`r${i}`) })),
+    1,
+    at.setId,
   );
   return inTx(v, async (tx) => {
     const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
     try {
-      await readZonePlan(tx, v.cfg, z);
+      await readLayout(tx, v.cfg, at);
       return prepare.mock.calls.length;
     } finally {
       prepare.mockRestore();
@@ -195,7 +197,7 @@ async function readCost(tables: number): Promise<number> {
 describe("readZonePlan", () => {
   it("reads a plan in the same statements however many tables it holds", async () => {
     const two = await readCost(2);
-    expect(two).toBe(4);
+    expect(two).toBe(6);
     expect(await readCost(7)).toBe(two);
   });
 
@@ -1205,8 +1207,11 @@ describe("floor plans without adoption", () => {
   it("reads a zone with live tables and no master plan as an empty draft", async () => {
     const z = await zone();
     await liveTable(z, fresh("Unplanned"));
-    expect(await inTx(v, (tx) => readZonePlan(tx, v.cfg, z))).toEqual({
+    const { setId } = await layoutOf(z);
+    expect(await readDefault(z)).toEqual({
       zoneId: z,
+      setId,
+      setName: "Standard",
       revision: 0,
       savedAt: null,
       tables: [],
