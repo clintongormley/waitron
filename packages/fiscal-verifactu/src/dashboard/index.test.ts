@@ -28,16 +28,26 @@ describe("VERIFACTU_DASHBOARD", () => {
     ]);
   });
 
-  it("the panel's create returns a renderer", () => {
-    const fetchImpl = vi.fn();
+  it("the panel renders the certificate card, reading through the request it is given", async () => {
+    const answer = { filing: true, revision: null, timeZone: "Europe/Madrid", installed: null };
+    const fetchImpl = vi.fn(
+      async () => ({ ok: true, status: 200, text: async () => JSON.stringify(answer) }) as Response,
+    );
     const handle = VERIFACTU_DASHBOARD.settingsPanels![0]!.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
     });
-    expect(typeof handle.render).toBe("function");
     const container = document.createElement("div");
     document.body.append(container);
     try {
-      expect(() => render(handle.render(), container)).not.toThrow();
+      render(handle.render(), container);
+      const card = container.querySelector("dashboard-aeat-certificate-card")!;
+      await vi.waitFor(() =>
+        expect(card.shadowRoot?.querySelector("[data-test=certificate-message]")).not.toBeNull(),
+      );
+      expect(fetchImpl).toHaveBeenCalledWith(
+        "/management-api/fiscal-certificate",
+        expect.objectContaining({ method: "GET" }),
+      );
     } finally {
       container.remove();
     }
