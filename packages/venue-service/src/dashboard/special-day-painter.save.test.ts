@@ -148,6 +148,75 @@ describe("Save sends only the paint the draft changed", () => {
     });
   });
 
+  const terraceClosed = (ranges: { kind: "open" | "closed"; startsAt: string; endsAt: string }[]) =>
+    storedDay({ zonePaint: [{ zoneId: "z2", date: DEC_15, ranges }] });
+  async function shrinkRestaurant(el: SpecialDayPainter, from: string) {
+    chip(el, "paint-closed").click();
+    await settle(el);
+    await drag(el, DEC_15, at(from), at("23:30"));
+  }
+
+  it("shrinking Restaurant on a date cuts Terrace's closure that date in the same Save", async () => {
+    const { painter, writes } = await mount({
+      days: { sd1: terraceClosed([{ kind: "closed", startsAt: "21:00", endsAt: "23:00" }]) },
+    });
+    await shrinkRestaurant(painter, "22:00");
+    await save(painter, writes);
+    expect(body(writes[0]!).paint).toEqual([
+      {
+        departmentId: "d1",
+        date: DEC_15,
+        ranges: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }],
+      },
+    ]);
+    expect(body(writes[0]!).zonePaint).toEqual([
+      {
+        zoneId: "z2",
+        date: DEC_15,
+        ranges: [{ kind: "closed", startsAt: "21:00", endsAt: "22:00" }],
+      },
+    ]);
+  });
+
+  it("Terrace's Open paint that date is kept", async () => {
+    const { painter, writes } = await mount({
+      days: {
+        sd1: terraceClosed([
+          { kind: "open", startsAt: "20:00", endsAt: "21:00" },
+          { kind: "closed", startsAt: "21:00", endsAt: "23:00" },
+        ]),
+      },
+    });
+    await shrinkRestaurant(painter, "22:00");
+    await save(painter, writes);
+    expect(body(writes[0]!).zonePaint).toEqual([
+      {
+        zoneId: "z2",
+        date: DEC_15,
+        ranges: [
+          { kind: "open", startsAt: "20:00", endsAt: "21:00" },
+          { kind: "closed", startsAt: "21:00", endsAt: "22:00" },
+        ],
+      },
+    ]);
+  });
+
+  it("a department change that leaves the zone inside sends no zone entry", async () => {
+    const { painter, writes } = await mount({
+      days: { sd1: terraceClosed([{ kind: "closed", startsAt: "21:00", endsAt: "23:00" }]) },
+    });
+    await shrinkRestaurant(painter, "23:00");
+    await save(painter, writes);
+    expect(body(writes[0]!).paint).toEqual([
+      {
+        departmentId: "d1",
+        date: DEC_15,
+        ranges: [{ periodId: null, startsAt: "23:00", endsAt: "23:30" }],
+      },
+    ]);
+    expect(Object.keys(body(writes[0]!))).not.toContain("zonePaint");
+  });
+
   it("a zone's Open stretch is sent as open", async () => {
     const { painter, writes } = await mount();
     await pick(painter, "zone:z1");

@@ -23,6 +23,7 @@ import type { SeasonDays } from "../opening-hours-calendar.js";
 import type { Paint } from "../paint-model.js";
 import { rebaseDays, refill, samePaint, savedBlocks, withoutPeriods } from "../paint-model.js";
 import type { SpecialDayDetail, SpecialDayInput, SpecialDaySummary } from "../special-days.js";
+import { closuresInHours } from "../zone-own-hours.js";
 import type { AddDates } from "./add-dates-calendar.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn, PaintPeriod } from "./paint-grid.js";
@@ -1180,8 +1181,31 @@ export class SpecialDayPainter extends LitElement {
   }
   private paint(owner: string, event: CustomEvent<PaintChange>) {
     event.stopPropagation();
+    const { key: date, day } = event.detail;
     const paint = new Map(this.draft.paint);
-    paint.set(owner, new Map(paint.get(owner)).set(event.detail.key, event.detail.day));
+    paint.set(owner, new Map(paint.get(owner)).set(date, day));
+    const department = this.model.departments.find(({ id }) => departmentKey(id) === owner);
+    const season = this.seasonDays
+      .get(date)
+      ?.departments.find(({ departmentId }) => departmentId === department?.id);
+    if (department && season && !this.closedDates().has(date)) {
+      const cutover = this.cutover();
+      const open = layerPaint(season.ranges, day, cutover);
+      for (const zone of department.zones) {
+        const zoneDay = paint.get(zoneKey(zone.id))?.get(date);
+        if (!zoneDay) continue;
+        const kept = zoneDay.filter(({ periodId }) => periodId === ZONE_OPEN);
+        const cut = closuresInHours(
+          open,
+          zoneDay.filter(({ periodId }) => periodId === null),
+          { dayCutover: cutover, endMinute: 1440 },
+        ).map(({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }));
+        paint.set(
+          zoneKey(zone.id),
+          new Map(paint.get(zoneKey(zone.id))).set(date, [...kept, ...cut].sort(byStart(cutover))),
+        );
+      }
+    }
     this.change({ ...this.draft, paint });
   }
 
