@@ -147,6 +147,63 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     );
   });
 
+  it("create() answers navigationScopes from the open department dialog", async () => {
+    const view = {
+      departments: [{ id: "d1", name: "Restaurant", tradingName: "Casa", active: true }],
+      zones: [],
+      floorZones: [],
+      salePolicies: { departments: [], zones: [] },
+      readiness: [],
+      settings: { editSentLines: true },
+      kitchenTicketGrouping: "combined",
+      printHeldWork: false,
+      printMovedSlips: true,
+      releaseReminderMinutes: null,
+      clearingWorkflow: false,
+    };
+    const fetchImpl = vi.fn((path: string) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify(
+            path === "/management-api/venue-service"
+              ? view
+              : path.endsWith("/transfers")
+                ? { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] }
+                : [],
+          ),
+      } as Response),
+    );
+    history.replaceState(null, "", "/manage/venue-operations/department/d1");
+    const handle = VENUE_SERVICE_DASHBOARD.create({
+      request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+      liveData: new LiveData(),
+    });
+    const at = (path: string) => new URL(path, location.origin);
+    expect(
+      handle.navigationScopes!(at("/manage/venue-operations/department/d1/view/service")),
+    ).toBe(undefined);
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    render(handle.render(), container);
+    const screen = container.querySelector<VenueOperationsScreen>(
+      "dashboard-venue-operations-screen",
+    )!;
+    await vi.waitFor(() =>
+      expect(
+        screen
+          .shadowRoot!.querySelector("venue-departments-shell")
+          ?.shadowRoot!.querySelector("department-edit-dialog"),
+      ).toBeTruthy(),
+    );
+    expect(
+      handle.navigationScopes!(at("/manage/venue-operations/department/d1/view/service")),
+    ).toEqual([]);
+    expect(handle.navigationScopes!(at("/manage/venue-operations/department/d2"))).toBe(undefined);
+  });
+
   it("opens Prep stations with the same request and live-data context", async () => {
     const fetchImpl = vi.fn((path: string) =>
       Promise.resolve({

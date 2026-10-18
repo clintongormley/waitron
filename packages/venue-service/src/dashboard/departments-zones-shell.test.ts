@@ -1,24 +1,30 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { html } from "lit";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi } from "./client.js";
 import { zonesModel } from "../testing/department-zones-fixture.js";
+import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
 import "./venue-departments-shell.js";
 const initial = location.href;
 const shells: HTMLElementTagNameMap["venue-departments-shell"][] = [];
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const shell of shells.splice(0)) shell.remove();
   history.replaceState(null, "", initial);
   setLocale("en");
 });
-async function mount(path = "/manage/venue-operations", request?: DashboardRequest) {
+async function mount(
+  path = "/manage/venue-operations",
+  request?: DashboardRequest,
+  model = structuredClone(zonesModel),
+) {
   setLocale("en");
   history.replaceState(null, "", `${path}?source=saved`);
   const shell = document.createElement("venue-departments-shell");
   applyTokens(shell);
-  shell.model = structuredClone(zonesModel);
+  shell.model = model;
   shell.api = new VenueServiceApi(
     request ??
       ((async (path) =>
@@ -155,4 +161,140 @@ it("a second completed move queues another refresh while the first read is pendi
   finish();
   await expect.poll(() => reads).toBe(2);
   await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
+});
+
+function oneDepartment() {
+  const model = structuredClone(zonesModel);
+  model.departments = model.departments.map((row) =>
+    row.id === "d1" ? row : { ...row, active: false },
+  );
+  return model;
+}
+async function departmentSettings(shell: HTMLElementTagNameMap["venue-departments-shell"]) {
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).not.toBeNull();
+  const editor = shell.shadowRoot!.querySelector("department-edit-dialog")!;
+  await editor.updateComplete;
+  const form = editor.shadowRoot!.querySelector("department-settings")!;
+  await form.updateComplete;
+  return form;
+}
+function written(spy: { mock: { calls: unknown[][] } }) {
+  return spy.mock.calls.map(([, , url]) => new URL(String(url), location.href).pathname);
+}
+it("choosing the Service tab records /view/service and Back returns to Details", async () => {
+  const shell = await mount("/manage/venue-operations/department/d1");
+  const form = await departmentSettings(shell);
+  await selectDepartmentTab(form, "service");
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/venue-operations/department/d1/view/service");
+  expect(location.search).toBe("?source=saved");
+  history.back();
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+  await expect.poll(() => form.tab).toBe("details");
+  expect(form.isConnected).toBe(true);
+});
+it("/manage/venue-operations/department/d1/view/service opens the dialog on Service", async () => {
+  const shell = await mount("/manage/venue-operations/department/d1/view/service");
+  const form = await departmentSettings(shell);
+  expect(form.tab).toBe("service");
+  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/service");
+});
+it("an address naming Transfers with one department opens Details and replaces the address", async () => {
+  const replace = vi.spyOn(history, "replaceState");
+  const push = vi.spyOn(history, "pushState");
+  const shell = await mount(
+    "/manage/venue-operations/department/d1/view/transfers",
+    undefined,
+    oneDepartment(),
+  );
+  const form = await departmentSettings(shell);
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+  expect(form.tab).toBe("details");
+  expect(written(replace)).toContain("/manage/venue-operations/department/d1");
+  expect(push).not.toHaveBeenCalled();
+});
+it("when Transfers stops being offered the address returns to Details by replacement", async () => {
+  const shell = await mount("/manage/venue-operations/department/d1/view/transfers");
+  const form = await departmentSettings(shell);
+  expect(form.tab).toBe("transfers");
+  const replace = vi.spyOn(history, "replaceState");
+  const push = vi.spyOn(history, "pushState");
+  shell.model = oneDepartment();
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/d1");
+  await shell.updateComplete;
+  expect(form.tab).toBe("details");
+  expect(written(replace)).toEqual(["/manage/venue-operations/department/d1"]);
+  expect(push).not.toHaveBeenCalled();
+});
+it("closing from the Service tab returns focus to that row's menu", async () => {
+  const shell = await mount();
+  const list = shell.shadowRoot!.querySelector("departments-list")!;
+  await list.updateComplete;
+  const table = list.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>("[data-test=open-department-d1]")!.click();
+  const form = await departmentSettings(shell);
+  await selectDepartmentTab(form, "service");
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/venue-operations/department/d1/view/service");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
+  const menu = table
+    .shadowRoot!.querySelector("[data-test=open-department-d1]")!
+    .closest("wt-row-actions")!;
+  await expect
+    .poll(() => menu.shadowRoot!.activeElement)
+    .toBe(menu.shadowRoot!.querySelector("button"));
+});
+it("/view/receipt still opens Edit receipt", async () => {
+  const shell = await mount("/manage/venue-operations/department/d1/view/receipt");
+  expect(shell.shadowRoot!.querySelector("[data-test=receipt-panel]")!.textContent).toBe("d1");
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
+  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/receipt");
+});
+it("navigationScopes is [] for another offered tab of the open department and undefined for another department, a zone or receipt", async () => {
+  const at = (path: string) => new URL(path, location.origin);
+  const list = await mount();
+  expect(list.navigationScopes(at("/manage/venue-operations/department/d1?source=saved"))).toBe(
+    undefined,
+  );
+  list.remove();
+  const shell = await mount("/manage/venue-operations/department/d1/view/service");
+  await departmentSettings(shell);
+  for (const path of [
+    "/department/d1",
+    "/department/d1/view/service",
+    "/department/d1/view/transfers",
+  ])
+    expect(
+      shell.navigationScopes(at(`/manage/venue-operations${path}?source=saved`)),
+      path,
+    ).toEqual([]);
+  for (const path of [
+    "/manage/venue-operations/department/d2?source=saved",
+    "/manage/venue-operations/department/d1/view/zones/zone/z1?source=saved",
+    "/manage/venue-operations/department/d1/view/receipt?source=saved",
+    "/manage/venue-operations?source=saved",
+    "/manage/venue-operations/department/d1/view/service",
+    "/manage/venue-operations/department/d1/view/service?source=saved#x",
+    "/manage/products?source=saved",
+    "/manage/venue-operations/department/%E0%A4%A?source=saved",
+    "/manage/venue-operations/department/d1/department/d1?source=saved",
+    "/manage/venue-operations/department?source=saved",
+    "/manage/venue-operations/department/d1/view/service/zone/z1?source=saved",
+    "/manage/venue-operations/department/d1/view/zones?source=saved",
+    "/other/venue-operations/department/d1?source=saved",
+    "https://elsewhere.example/manage/venue-operations/department/d1?source=saved",
+  ])
+    expect(shell.navigationScopes(at(path)), path).toBe(undefined);
+  shell.remove();
+  const single = await mount("/manage/venue-operations/department/d1", undefined, oneDepartment());
+  await departmentSettings(single);
+  expect(
+    single.navigationScopes(
+      at("/manage/venue-operations/department/d1/view/transfers?source=saved"),
+    ),
+  ).toBe(undefined);
 });

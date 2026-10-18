@@ -6,7 +6,6 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import { departmentHoursModel } from "../testing/department-hours-fixture.js";
 import "./venue-departments-shell.js";
-import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
 
 const initialUrl = location.href;
 const model: VenueServiceView = {
@@ -147,7 +146,8 @@ it("the real differing-zone link keeps the edited department until Discard accep
   await editor.updateComplete;
   await settings.updateComplete;
   await edit(settings);
-  await selectDepartmentTab(settings, "service");
+  settings.tab = "service";
+  await settings.updateComplete;
   const link = settings.shadowRoot!.querySelector<HTMLAnchorElement>(
     "[data-test=zones-that-differ] a",
   )!;
@@ -360,7 +360,8 @@ it("keeping a requested zone switch retains the department editor's originating 
   const form = editor.shadowRoot!.querySelector("department-settings")!;
   await form.updateComplete;
   await edit(form);
-  await selectDepartmentTab(form, "service");
+  form.tab = "service";
+  await form.updateComplete;
   const link = form.shadowRoot!.querySelector<HTMLAnchorElement>(
     "[data-test=zones-that-differ] a",
   )!;

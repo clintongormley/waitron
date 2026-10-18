@@ -8011,6 +8011,42 @@ describe("mounted public department dialogs", () => {
     expect(box.value).toBe("Restaurant");
     await expect.poll(() => find(app, "dashboard-department-receipt-dialog")).not.toBeNull();
   });
+  async function chooseTab(app: DashboardApp, tab: string) {
+    const strip = find(app, "department-settings")!.shadowRoot!.querySelector("wt-tabs")!;
+    await strip.updateComplete;
+    await userEvent.click(
+      page.elementLocator(strip.shadowRoot!.querySelector(`[role=tab][data-key=${tab}]`)!),
+    );
+  }
+  async function noQuestionAt(app: DashboardApp, path: string) {
+    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open || location.pathname === path).toBe(true);
+    expect(question.open, "no leave question").toBe(false);
+    await flush(app);
+    expect(question.open, "no leave question").toBe(false);
+    expect(location.pathname).toBe(path);
+  }
+  it('typing a name then choosing Service asks nothing, records /view/service and keeps "Draft restaurant"', async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1");
+    const box = await draft(app);
+    await chooseTab(app, "service");
+    await noQuestionAt(app, "/manage/venue-operations/department/d1/view/service");
+    expect(box.isConnected).toBe(true);
+    expect(box.value).toBe("Draft restaurant");
+    expect(leaveCoordinatorFor(box)!.isDirty()).toBe(true);
+  });
+  it("Back from Service returns to Details with no question and the draft kept", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1");
+    const box = await draft(app);
+    await chooseTab(app, "service");
+    await noQuestionAt(app, "/manage/venue-operations/department/d1/view/service");
+    history.back();
+    await noQuestionAt(app, "/manage/venue-operations/department/d1");
+    const form = find(app, "department-settings") as HTMLElement & { tab: string };
+    await expect.poll(() => form.tab).toBe("details");
+    expect(box.isConnected).toBe(true);
+    expect(box.value).toBe("Draft restaurant");
+  });
   it.each([{ permissions: [] }, { permissions: ["venue.view"] }])(
     "a department deep link still requires its own permission: %j",
     async ({ permissions }) => {

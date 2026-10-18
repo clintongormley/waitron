@@ -6,6 +6,7 @@ import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import { t } from "./strings.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "./department-settings.js";
+import type { DepartmentTab } from "./department-settings.js";
 
 @customElement("department-edit-dialog")
 export class DepartmentEditDialog extends LitElement {
@@ -14,6 +15,7 @@ export class DepartmentEditDialog extends LitElement {
   @property({ attribute: false }) model!: VenueServiceView;
   @property() departmentId = "";
   @property({ type: Boolean }) refreshing = false;
+  @property() tab: DepartmentTab = "details";
   @state() private dismissed = false;
   private shownDepartment = "";
   override connectedCallback() {
@@ -101,6 +103,7 @@ export class DepartmentEditDialog extends LitElement {
           .model=${this.model}
           .departmentId=${department.id}
           .refreshing=${this.refreshing}
+          .tab=${this.tab}
           @saved=${this.saved}
           @cancelled=${(event: Event) => {
             event.stopPropagation();

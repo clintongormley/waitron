@@ -96,6 +96,9 @@ export class VenueOperationsLoader extends LitElement {
     this.loadError = "";
     this.api.liveData?.invalidate(QUERY_DEPENDENCIES.operations.map((type) => ({ type })));
   }
+  navigationScopes(destination: URL): readonly object[] | undefined {
+    return this.shadowRoot?.querySelector("venue-departments-shell")?.navigationScopes(destination);
+  }
   override render() {
     return html`${this.loadError ? html`<p role="alert">${this.loadError}</p>` : nothing}${this.model ? html`<venue-departments-shell .renderPanel=${this.renderPanel} .api=${this.api} .model=${this.model} @model-change=${this.#modelChange}></venue-departments-shell>` : nothing}`;
   }

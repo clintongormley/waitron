@@ -28,6 +28,10 @@ import type {
 import { t } from "./strings.js";
 
 export type DepartmentTab = "details" | "service" | "transfers";
+export function offeredDepartmentTabs(model?: VenueServiceView): DepartmentTab[] {
+  const transfers = (model?.departments.filter((d) => d.active).length ?? 0) >= 2;
+  return ["details", "service", ...(transfers ? (["transfers"] as const) : [])];
+}
 type Field = keyof DepartmentSettingsInput | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
@@ -169,10 +173,10 @@ export class DepartmentSettings extends LitElement {
     return this.model?.departments.find((d) => d.id === this.departmentId);
   }
   private get showsTransfers() {
-    return (this.model?.departments.filter((d) => d.active).length ?? 0) >= 2;
+    return offeredDepartmentTabs(this.model).includes("transfers");
   }
   get offeredTabs(): DepartmentTab[] {
-    return ["details", "service", ...(this.showsTransfers ? (["transfers"] as const) : [])];
+    return offeredDepartmentTabs(this.model);
   }
   private get shownErrors(): Partial<Record<Field, string>> {
     return { ...(this.attempted ? this.errors : {}), ...this.refused };

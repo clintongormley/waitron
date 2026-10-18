@@ -2,14 +2,23 @@ import type { DashboardPanelRenderer } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, UrlStateController } from "@waitron/ui";
+import { baseStyles, navigationGuardFor, UrlStateController } from "@waitron/ui";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import { t } from "./strings.js";
 import "./departments-list.js";
 import "./department-edit-dialog.js";
+import { offeredDepartmentTabs, type DepartmentTab } from "./department-settings.js";
 import "./zone-edit-dialog.js";
 import "./department-dialogs.js";
 import type { DepartmentDialog } from "./department-dialogs.js";
+
+type View = "settings" | "service" | "transfers" | "zones" | "receipt";
+const tabOf = (view: View | null): DepartmentTab | undefined =>
+  view === "settings" || view === null
+    ? "details"
+    : view === "service" || view === "transfers"
+      ? view
+      : undefined;
 
 @customElement("venue-departments-shell")
 export class VenueDepartmentsShell extends LitElement {
@@ -37,7 +46,7 @@ export class VenueDepartmentsShell extends LitElement {
   @property({ attribute: false }) api!: VenueServiceApi;
   @property({ attribute: false }) model!: VenueServiceView;
   @state() private departmentId = "";
-  @state() private view: "settings" | "zones" | "receipt" = "settings";
+  @state() private view: View = "settings";
   @state() private zone = "";
   @state() private dialog?: DepartmentDialog;
   @state() private busy = false;
@@ -84,6 +93,45 @@ export class VenueDepartmentsShell extends LitElement {
   }
   protected override updated() {
     this.setAttribute("aria-busy", String(this.busy));
+    const tab = tabOf(this.view);
+    if (tab && this.#openDepartment() && !offeredDepartmentTabs(this.model).includes(tab))
+      void this.#navigate({ view: null }, true);
+  }
+  #openDepartment() {
+    return this.model?.departments.find((row) => row.id === this.departmentId && row.active);
+  }
+  /** `[]` lets an address write move between the open department's offered tabs without asking. */
+  navigationScopes(destination: URL): readonly object[] | undefined {
+    const current = new URL(navigationGuardFor(window)?.href ?? location.href);
+    const tab = tabOf(this.view);
+    if (
+      destination.origin !== current.origin ||
+      destination.search !== current.search ||
+      destination.hash !== current.hash ||
+      !tab ||
+      !this.#openDepartment()
+    )
+      return undefined;
+    const parts = destination.pathname.split("/");
+    if (parts[1] !== "manage" || parts[2] !== "venue-operations") return undefined;
+    const pairs = new Map<string, string>();
+    for (let i = 3; i < parts.length; i += 2) {
+      if (parts[i + 1] === undefined || pairs.has(parts[i]!)) return undefined;
+      try {
+        pairs.set(parts[i]!, decodeURIComponent(parts[i + 1]!));
+      } catch {
+        return undefined;
+      }
+    }
+    const view = pairs.get("view") ?? null;
+    pairs.delete("view");
+    const next = tabOf(view as View | null);
+    return pairs.size === 1 &&
+      pairs.get("department") === this.departmentId &&
+      next &&
+      offeredDepartmentTabs(this.model).includes(next)
+      ? []
+      : undefined;
   }
   #current(generation: object) {
     return this.isConnected && this.#generation === generation;
@@ -287,14 +335,17 @@ export class VenueDepartmentsShell extends LitElement {
     if (this.#url.read("dashboard") !== "venue-operations") return;
     this.departmentId = this.#url.read("department") ?? "";
     const view = this.#url.read("view");
-    this.view = view === "zones" || view === "receipt" ? view : "settings";
+    this.view =
+      view === "zones" || view === "receipt" || view === "service" || view === "transfers"
+        ? view
+        : "settings";
     this.zone = this.#url.read("zone") ?? "";
     if (
       this.departmentId &&
       this.#editorOrigin &&
       (this.#editorOrigin.kind === "zone"
         ? this.zone !== this.#editorOrigin.id
-        : this.view !== "settings" || this.departmentId !== this.#editorOrigin.id)
+        : !tabOf(this.view) || this.departmentId !== this.#editorOrigin.id)
     )
       this.#editorOrigin = undefined;
     if (!this.departmentId && (this.#url.read("view") || this.#url.read("zone")))
@@ -311,7 +362,7 @@ export class VenueDepartmentsShell extends LitElement {
     if (
       this.#current(generation) &&
       this.departmentId === event.detail.departmentId &&
-      this.view === "settings"
+      tabOf(this.view)
     )
       this.#editorOrigin = { kind: "department", id: event.detail.departmentId };
   }
@@ -330,6 +381,14 @@ export class VenueDepartmentsShell extends LitElement {
   #openReceipt(event: CustomEvent<{ departmentId: string }>) {
     event.stopPropagation();
     void this.#navigate({ department: event.detail.departmentId, view: "receipt", zone: null });
+  }
+  #tabChange(event: CustomEvent<{ tab: DepartmentTab; replace: boolean }>) {
+    event.stopPropagation();
+    if (!tabOf(this.view) || !this.#openDepartment()) return;
+    void this.#navigate(
+      { view: event.detail.tab === "details" ? null : event.detail.tab, zone: null },
+      event.detail.replace,
+    );
   }
   async #editorClosed(event: CustomEvent<{ departmentId?: string; zoneId?: string }>) {
     event.stopPropagation();
@@ -433,6 +492,8 @@ export class VenueDepartmentsShell extends LitElement {
                     .model=${this.model}
                     .departmentId=${department.id}
                     .refreshing=${this.busy}
+                    .tab=${tabOf(this.view) ?? "details"}
+                    @department-tab-change=${this.#tabChange}
                     @closed=${this.#editorClosed}
                     @gone=${this.#editorClosed}
                     @saved=${this.#editorSaved}
