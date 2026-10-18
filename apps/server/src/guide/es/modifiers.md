@@ -109,10 +109,10 @@ pedido, y una respuesta de opciones se guarda como el texto que se eligió. Cada
 conserva la lista hasta que vuelves a publicar esa carta. Para una lista de opciones esto importa,
 porque sus opciones ya no existen: hasta que publiques, la caja no puede añadir un plato que llevaba
 la lista, y se rechaza guardar cambios en un pedido aparcado que contiene ese plato. El pedido de
-una mesa sí puede recibir una ronda nueva, y aún puedes cambiar la cantidad de una de sus líneas,
-pero otros cambios en un pedido que contiene ese plato pueden rechazarse igual. Así que vuelve a
-publicar tus cartas justo después de eliminar una lista de opciones. A partir de entonces, el
-siguiente cambio que se guarde en un pedido aparcado quita cualquier extra elegido de una lista
+una mesa sí puede recibir una ronda nueva sin ese plato, y aún puedes cambiar la cantidad de una de
+sus líneas, pero otros cambios en un pedido que contiene ese plato pueden rechazarse igual. Así que
+vuelve a publicar tus cartas justo después de eliminar una lista de opciones. A partir de entonces,
+el siguiente cambio que se guarde en un pedido aparcado quita cualquier extra elegido de una lista
 eliminada, junto con su cargo, y descarta cualquier respuesta a una lista de opciones eliminada. En
 el pedido de una mesa esos extras y respuestas se quedan, y se rechaza aumentar la cantidad de un
 plato que lleva uno de esos extras.

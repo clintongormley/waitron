@@ -1136,7 +1136,8 @@ help about anything you want very quickly."
   docs/guide/ is explained in [conventions-ui.md](../developers/conventions-ui.md), "Why they are not
   under `docs/`". Plan: [2026-10-18-a582-3-guide-pages.md](../superpowers/plans/2026-10-18-a582-3-guide-pages.md).
 - **Left open by 3:**
-  - A `wt-data-table` column badge and a `wt-menu-row` badge cannot carry a guide link.
+  - A `wt-data-table` column badge, a `wt-tabs` item's badge and a `wt-menu-row` badge cannot carry a
+    guide link.
   - The till's `/help` proxy and the guide sheet belong to slice 4. A guide link opens a new tab;
     a till needs a hook to open its sheet instead, such as a cancelable `wt-*` event on the link's
     click.

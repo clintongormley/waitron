@@ -9,7 +9,7 @@ introduce su precio. Su IVA empieza en la clase elegida en **Clase de IVA para p
 la pestaña **Datos del local** de **Ajustes del local**; cámbiala aquí si este producto tributa de otra
 forma. Para un producto sin IVA, elige **Sin impuestos (0%)**. Un cambio de clase de IVA llega a las
 cajas cuando vuelves a publicar la carta; hasta entonces venden el producto con la clase con la que se
-publicó la carta.
+publicó la carta. Una línea que ya está en un pedido conserva la clase con la que se añadió.
 
 El editor deja a la vista los campos que cambias a menudo y pliega el resto bajo un encabezado que
 resume lo que contiene, así ves de un vistazo qué secciones has rellenado. Abre una haciendo clic en su

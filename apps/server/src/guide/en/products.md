@@ -9,6 +9,7 @@ and enter its price. Its VAT starts on the class chosen as **VAT class for new p
 **Venue details** tab of **Venue settings**; change it here when this product is taxed differently.
 For a product with no VAT, choose **No tax (0%)**. A change of VAT class reaches the tills when the
 menu is published again; until then they sell the product at the class the menu was published with.
+A line already on an order keeps the class it was added with.
 
 The editor keeps the fields you change often on screen and folds the rest away behind a heading that
 summarises what is inside it, so you can see at a glance which sections you have filled in. Open one

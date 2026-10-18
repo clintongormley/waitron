@@ -948,8 +948,9 @@ async function bootServer(
   mountGuidePages(app, log);
 
   if (config.till === undefined) {
-    // SETUP MODE — this box is bound to no venue. It serves only `/health` and the unauthenticated
-    // setup surface, and runs no background work: there is nothing to submit yet.
+    // SETUP MODE — this box is bound to no venue. Beyond the routes mounted above, it serves
+    // `/health` and the unauthenticated setup surface, and runs no background work: there is
+    // nothing to submit yet.
     //
     // `ensureBoxSecrets` runs regardless of `config.tls`: the box's own vault key must exist whichever
     // front-door cert is served. An operator's `WAITRON_TLS_*` pair still wins as the served cert.
