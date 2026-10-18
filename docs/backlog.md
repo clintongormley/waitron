@@ -5043,6 +5043,12 @@ the tree. What remains, largest first:
   writers live on, or the triggers stop writing it directly and something above them does (P3). Left
   open by SQLite slice 1 (#490 and the preparation tasks).
 
+- **A promoting standby may list itself with an empty `contactUrl`, so no till is told to dial it.**
+  Nothing the #600 review could find copies `node_membership` from the primary to a standby. A
+  standby whose own held membership list omits it takes the fallback in `nextStandings`
+  (`packages/membership/src/standings.ts`), which appends it with an empty `contactUrl`, and
+  `routableServers` (`packages/membership/src/fence.ts`) then drops it. Found by reading, not run.
+
 ### CI, tests and developer tooling
 
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**, the slowest server file by
@@ -5607,13 +5613,18 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   from A95).** Read, not run; whether any file they scan has a `/*` inside a `--` comment or a string
   is not measured. [Detail](backlog/architecture.md#the-two-sql-scanners-named-stripsql-blank-block-comments-before----comments)
 
-- **What the grants refuse ONE OPERATION AT A TIME is not guarded (2026-09-19).**
-  `scripts/write-path-tables.test.ts` (#430) covers the tables request code may read and never write
-  and nothing else. **Next action:** decide before the flip between three shapes. [Detail](backlog/architecture.md#what-the-grants-refuse-one-operation-at-a-time-is-not-guarded)
+- **A805. Check the frozen grants record against today's protections, then delete it.**
+  `packages/fiscal-verifactu/src/privileges.expected.ts` is a frozen record of what the old
+  database's grants allowed on each table. For every table it restricted, confirm the table is
+  declared `appendOnly()`, is listed in `scripts/write-path-tables.json`, or is fine to write freely.
+  Each leftover becomes its own short entry; then delete the frozen file. Done when the file is gone
+  and every restricted table is accounted for. [Detail](backlog/architecture.md#a805-check-the-frozen-grants-record-against-todays-protections-then-delete-it)
 
-- **Still unprobed: the remaining "not a 500" titles across the `apps/server` route suites**, which
-  name no engine. Left open by C127 (#1036, #1042), after which no comment or test title names a
-  PostgreSQL SQLSTATE as today's behaviour.
+- **`apps/server` route-suite test titles still say "not a 500" or that an unscreened malformed id
+  becomes an opaque 500, although ids are text columns now.** The titles name no engine; none has
+  been probed against today's behaviour. Left open by C127 (#1036, #1042) and found again by #600
+  while pruning comments.
+  [Detail](backlog/architecture.md#appsserver-test-titles-still-say-an-unscreened-malformed-id-becomes-an-opaque-500-although-ids-are-text-columns-now)
 
 - **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23;
   narrowed by A92 and #1039).** Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps
@@ -5640,13 +5651,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   nothing replaced them (one write transaction per venue file is what serialises those writers now).
   [Detail](backlog/architecture.md#working-orderts-near-requirelivecourse-says-the-fire-verbs-use-the-same-live-course-definition-firecourse-calls-requirecourse)
 
-- **`apps/server` test titles still say an unscreened malformed id becomes an opaque 500, although
-  ids are text columns now** — found by #600 while pruning comments. Nothing the review could find
-  copies `node_membership` from the primary to a standby, so a promoting standby may take
-  `nextStandings`' fallback that appends it with an empty `contactUrl` (`packages/membership`),
-  which `routableServers` then drops.
-  [Detail](backlog/architecture.md#appsserver-test-titles-still-say-an-unscreened-malformed-id-becomes-an-opaque-500-although-ids-are-text-columns-now)
-
 - **Pointers outside `docs/` that #597 made stale** — found by #597 while pruning comments. The fake
   SumUp client leaves its one-shot switches for a lookup or a refund armed when a checkout before
   them is refused; no test combines the two.
@@ -5669,8 +5673,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **`decimalToCents` refuses an amount over the bound (#583), but `centsToDecimal` itself has no
   digit bound** — found by #579 while pruning comments (`packages/shared`).
-  `docs/developers/conventions-data.md` (the "no column width left to measure" paragraph) has only
-  the PostgreSQL raw-read table, not the SQLite one #579's commit message now carries.
   [Detail](backlog/architecture.md#decimaltocents-refuses-an-amount-over-the-bound-583-but-centstodecimal-itself-has-no-digit-bound)
 
 - **Loose ends left by A394-3 (#1447).**
@@ -5761,15 +5763,19 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
   transaction while another is still running.
 
+- **A806. Throw `sale.number_reused` when a sale would reuse an invoice number.** The code is
+  declared in `packages/core/src/errors.ts` (with the series and the number) and nothing throws it.
+  Where a sale is written, catch the refusal of the `sales_series_invoice_number_key` unique
+  constraint, recognised by what the refusal names (`packages/db/src/constraint-target.ts`), never by
+  its result code alone, and throw `sale.number_reused` with the series and the number. Done when a
+  test forces a duplicate number and asserts that code. FULL review (fiscal invariant).
+
 - **Loose ends left by the tenant-column removal (#378, 2026-09-16).**
   - **These index and key names still read `tenant`, and the columns they name are gone.** This is
     its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in
     production error translation, so renaming them changes behaviour and wants its own failing
     tests first.
     [Detail](backlog/architecture.md#these-index-and-key-names-still-read-tenant-and-the-columns-they-name-are-gone)
-  - **Decide whether to implement `sale.number_reused`.** It was added in `10b16fd57` for a
-    translation of the invoice-number unique-index violation that was never written. Decide whether
-    that translation is still wanted before deleting the code (A77 kept it pending this).
   - **`server.credential_unusable` names an unusable credential, although `server.*` is reserved
     for facts about the process itself.** **Next action:** choose a prefix (`credentials.missing`
     is the nearest sibling) and rename it in one change, checking the prefix matchers

@@ -103,7 +103,7 @@ No stored fiscal row is to be rewritten.
   `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
   stopping both concurrent-settlement tests first. `sale.number_reused` is registered in
   `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower
-  (see _Decide whether to implement `sale.number_reused`_). Outside core,
+  (A806 is the job to throw it). Outside core,
   `docs/developers/conventions-data.md` says the stored breakdown holds "the literals a fiscal
   record hashes" (#598 found the hash covers the totals, not the breakdown).
 

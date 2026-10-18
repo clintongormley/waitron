@@ -96,17 +96,18 @@ their full text.
   replaced…", which holds the copy of `/--.*$/` in `scripts/module-graph-honesty.test.ts`: a fix to
   one touches the other's code.
 
-## What the grants refuse ONE OPERATION AT A TIME is not guarded
+## A805. Check the frozen grants record against today's protections, then delete it
 
-- **What the grants refuse ONE OPERATION AT A TIME is not guarded (2026-09-19).**
-  `scripts/write-path-tables.test.ts` (#430) covers the tables request code may read and never
-  write — those `scripts/write-path-tables.json` lists, `tenants`, `nodes`, `deployment`,
-  `mirror_config` and `node_roles` — and nothing else. The slice-1 design asks for more: everything
-  else should become a guard that reads the source, not a convention with nothing checking it. Many
-  tables refuse an insert, an update or a delete only through the grant, with no trigger backing it,
-  and TRUNCATE is wider still — no table grants it and only ten carry a trigger blocking it. The
-  per-table matrix is read from `packages/fiscal-verifactu/src/privileges.expected.ts`, which goes
-  when the grants do.
+- **A805. Check the frozen grants record against today's protections, then delete it.**
+  `packages/fiscal-verifactu/src/privileges.expected.ts` records what the old database's grants
+  allowed on each table before the storage switch; its own header calls it a frozen record that
+  nothing checks. `scripts/write-path-tables.test.ts` (#430) is its one live reader and covers only
+  the tables request code may read and never write — those `scripts/write-path-tables.json` lists.
+  **The job:** for every table the frozen record restricted (any letter missing from `SIUD`),
+  confirm the table is declared `appendOnly()` in its module's classification list, is listed in
+  `scripts/write-path-tables.json`, or is fine to write freely. Each leftover becomes its own short
+  backlog entry. Then delete the frozen file, and the cross-check `write-path-tables.test.ts` makes
+  against it. Done when the file is gone and every restricted table is accounted for.
 
   **What #430's review left behind, none of it taken there.** The allowance list is a JSON file
   rather than the annotated TypeScript constant every sibling guard uses, because the plan named a
@@ -114,16 +115,6 @@ their full text.
   `JSON.parse` instead, which no test reads. The detector only reads a builder call whose receiver
   looks like a database handle, so a write through a handle named something else is invisible; that
   was the price of not reporting `cache.delete(nodes)` on an ordinary `Set`.
-
-  **Next action:** decide before the flip between three shapes. Grow the guard an operation column,
-  which means encoding a privilege matrix as regexes. Give the tables that lack one a `reject_mutation`
-  trigger, as the core baseline already does for eight tables in a single migration. Or brand the owner handle as its own type
-  so `tsc` refuses the write instead of a text scan reporting it. Today the distinction is carried by
-  a NAME and nothing else: `apps/server` declares `ownerDb: Database` at half a dozen call sites and
-  hands it to write helpers in `packages/db` that take a plain `Database`, which is the same gap
-  `CLAUDE.md` §3 names for the neighbouring `Database`/`Transaction` case. The third also closes
-  the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
-  than a call chain.
 
 ## Small renames and dead exports the sweep found and could not make
 
@@ -209,10 +200,9 @@ their full text.
 
 - Found by #600 (the small packages), not fixable in a comments-only change. `apps/server` test
   titles still say an unscreened malformed id becomes an opaque 500, although ids are text columns
-  now. Also found by reading only, not run: nothing the review could find copies
-  `node_membership` from the primary to a standby, so a promoting standby may take
-  `nextStandings`' fallback that appends it with an empty `contactUrl` (`packages/membership`),
-  which `routableServers` then drops.
+  now. The same family: the remaining "not a 500" titles across the `apps/server` route suites,
+  which name no engine and were left unprobed by C127 (#1036, #1042), after which no comment or
+  test title names a PostgreSQL SQLSTATE as today's behaviour.
 
 ## Pointers outside `docs/` that #597 made stale
 
@@ -273,9 +263,7 @@ their full text.
 
 - Found by #579 (`packages/shared`). `decimalToCents` refuses an amount over the bound
   (#583), but `centsToDecimal` itself has no digit bound, so a count past 99999999999999 cents
-  that reaches it by another route is still turned into an amount without refusal.
-  `docs/developers/conventions-data.md` (the "no column width left to measure" paragraph) has only
-  the PostgreSQL raw-read table, not the SQLite one #579's commit message now carries. Comments
+  that reaches it by another route is still turned into an amount without refusal. Comments
   saying drizzle wraps a failed query remain elsewhere — `git grep -l -i -E "drizzle wraps|wraps
 every failed" -- ':!docs'` listed files in `apps/server`, `db`, `identity`, `media`,
   `migrations`, `printing` and `store` on 2026-09-24, not each checked (see the
@@ -427,9 +415,10 @@ run to install the new trigger. Owner question Q5 of A483.
   `persons_tenant_pending_email_uq` and `persons_tenant_google_subject_uq`. (The `tenants*`,
   `tenant_themes*`, `tenant_receipts*` and `tenant_credentials*` names are correct and stay.) This is
   its own slice, not a tidy-up: THREE of the four `persons_*` names are matched BY NAME in production
-  error translation — `persons_tenant_email_uq` (`packages/identity/src/staff.ts` and
-  `account-action.ts`), `persons_tenant_live_display_name_uq` and `persons_tenant_pending_email_uq`
-  (`staff.ts`) — so renaming them changes behaviour and wants its own failing tests first.
+  error translation — `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq` and
+  `persons_tenant_pending_email_uq`, whose names are held in `packages/identity/src/person-constraints.ts`
+  (read by `staff.ts` and `account-action.ts`) — so renaming them changes behaviour and wants its own
+  failing tests first.
 
 ## `server.credential_unusable` names an unusable credential, although `server.*` is reserved for facts about the process itself
 
