@@ -805,6 +805,9 @@ export async function ensureToday(
 
 const dueRow = alias(floorResetTables, "due_row");
 const dueMember = alias(floorResetTables, "due_member");
+const dueJoined = alias(floorResetTables, "due_joined");
+const dueLink = alias(floorResetTableParts, "due_link");
+const dueSibling = alias(floorResetTableParts, "due_sibling");
 
 /**
  * movesTable's rule in SQL, for the reset row `row`: true when its table has a today's row,
@@ -826,22 +829,32 @@ function movesInSql(row: typeof dueRow | typeof dueMember): SQL {
 
 /**
  * Whether the zone holds a pending reset row a catch-up could apply: one not marked ready to
- * move, or a marked one whose table, and every pending table of its joined group (plan decision
- * 8), no longer moves. Weaker than "will apply": a row can still wait for its guests or its name.
+ * move, or a marked one whose table, and every pending, unplaced table of the joined group of a
+ * pending joined row holding it (plan decision 8), no longer moves. Weaker than "will apply": a row can still wait for its guests or its name.
  */
 export function catchUpDue(zoneId: SQLWrapper): SQL {
   const r = dueRow;
   const m = dueMember;
-  const p = floorResetTableParts;
+  const j = dueJoined;
+  const link = dueLink;
+  const sibling = dueSibling;
+  const as = (name: string) => sql.identifier(name);
+  // `link` finds the joined row of a group holding `r`; `sibling` then walks every row of that
+  // group, the joined row and each part, as catchUpPass's groups do.
   return sql`exists (
-    select 1 from ${floorResetTables} ${sql.identifier("due_row")}
+    select 1 from ${floorResetTables} ${as("due_row")}
     where ${r.zoneId} = ${zoneId} and ${r.pending} = 1 and (
       ${r.readyToMove} = 0 or (
         not ${movesInSql(r)}
         and not exists (
-          select 1 from ${p}
-          inner join ${floorResetTables} ${sql.identifier("due_member")} on ${m.id} in (${p.joinedResetTableId}, ${p.partResetTableId})
-          where ${r.id} in (${p.joinedResetTableId}, ${p.partResetTableId})
+          select 1 from ${floorResetTableParts} ${as("due_link")}
+          inner join ${floorResetTables} ${as("due_joined")}
+            on ${j.id} = ${link.joinedResetTableId} and ${j.pending} = 1
+          inner join ${floorResetTableParts} ${as("due_sibling")}
+            on ${sibling.joinedResetTableId} = ${link.joinedResetTableId}
+          inner join ${floorResetTables} ${as("due_member")}
+            on ${m.id} in (${sibling.joinedResetTableId}, ${sibling.partResetTableId})
+          where ${r.id} in (${link.joinedResetTableId}, ${link.partResetTableId})
             and ${m.pending} = 1 and ${m.placed} = 0 and ${movesInSql(m)}
         )
       )

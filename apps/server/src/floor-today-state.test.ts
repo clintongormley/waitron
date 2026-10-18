@@ -20,7 +20,7 @@ import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { splitJoinedTable } from "./floor-today-split.js";
-import { catchUpDue, ensureToday } from "./floor-today-store.js";
+import { catchUpDue, ensureToday, placeSpareToday, takeOffToday } from "./floor-today-store.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { finishTable } from "./parties.js";
 import { inTx, OPERATOR, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
@@ -542,6 +542,39 @@ describe("the till's table-state answer says what needs moving", () => {
     await catchUp();
     for (const id of [t45, t4, t5]) expect(await readyToMoveOf(id)).toBe(true);
     expect((await todayRow(v, t4))!.x).toBeNull();
+  });
+
+  it("a marked joined group is not due while a sibling part still moves", async () => {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    const s = await standardAndDinner(
+      v,
+      NOW,
+      [
+        { key: "t4", label: fresh("4") },
+        { key: "t5", label: fresh("5") },
+        { key: "t45", label: fresh("4+5"), partKeys: ["t4", "t5"] },
+      ],
+      { standard: { t4: 0, t5: 20, t45: null }, dinner: { t4: null, t5: null, t45: 0 } },
+    );
+    await s.onto(s.d.dinner);
+    const [t4, t5, t45] = [s.live("t4"), s.live("t5"), s.live("t45")];
+    await seatAndFinishAcross(t45, () => s.onto(s.d.standard));
+    await catchUp();
+    expect(await readyToMoveOf(t45)).toBe(true);
+
+    await inTx(v, (tx) => takeOffToday(tx, v.cfg, t45));
+    await inTx(v, (tx) => placeSpareToday(tx, v.cfg, t5, { x: 99, y: 0 }));
+    expect((await todayRow(v, t5))!.x).toBe(99);
+
+    const due = await inTx(v, (tx) =>
+      tx
+        .select({ id: floorZones.id })
+        .from(floorZones)
+        .where(and(eq(floorZones.id, s.d.zoneId), catchUpDue(floorZones.id))),
+    );
+    expect(due).toEqual([]);
+    await catchUp();
+    for (const id of [t45, t4, t5]) expect(await readyToMoveOf(id)).toBe(true);
   });
 
   it("a member of a marked group whose own change is seats only (seats changed today) reads false", async () => {
