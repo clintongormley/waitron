@@ -23,6 +23,8 @@ class DayPickingHost extends LitElement {
   `;
   chosen: LocalDate[] = [];
   opened: [LocalDate, DayRun][] = [];
+  ranged: DayRun[] = [];
+  onPicked: ((run: DayRun | null) => void) | undefined;
   contextMenus: { prevented: boolean }[] = [];
   allowPicking = true;
   dragOnTouch = false;
@@ -36,8 +38,12 @@ class DayPickingHost extends LitElement {
       dragOnTouch: this.dragOnTouch,
       holdMs: 300,
       choose: (date) => this.chosen.push(date),
-      picked: () => this.requestUpdate(),
+      picked: (run) => {
+        this.onPicked?.(run);
+        this.requestUpdate();
+      },
       open: (date, run) => this.opened.push([date, run]),
+      ranged: (run) => this.ranged.push(run),
     };
     this.picker = new DayPicker(this, options);
   }
@@ -492,5 +498,70 @@ describe("DayPicker", () => {
     expect(window.scrollY).toBe(0);
     expect(host.opened).toEqual([]);
     expect(host.chosen).toEqual([]);
+  });
+
+  it("a mouse drag reports its run once, on release", async () => {
+    const host = await mount();
+    const reportedWhilePicking: number[] = [];
+    host.onPicked = () => reportedWhilePicking.push(host.ranged.length);
+    await commands.mouseDrag([sel(20), sel(21), sel(22), sel(23)]);
+    await expectRun(host, run(20, 23));
+    expect(reportedWhilePicking.length).toBeGreaterThan(1);
+    expect(reportedWhilePicking.every((count) => count === 0)).toBe(true);
+    expect(host.ranged).toEqual([run(20, 23)]);
+
+    await commands.mouseDrag([sel(20), sel(23), sel(18)]);
+    expect(host.ranged).toEqual([run(20, 23), run(18, 20)]);
+  });
+
+  it("with dragOnTouch, a touch drag reports its run on lift", async () => {
+    const host = await mount({ dragOnTouch: true });
+    await commands.touchGesture({ at: sel(15), moveTo: sel(17) });
+    await expectRun(host, run(15, 17));
+    expect(host.ranged).toEqual([run(15, 17)]);
+  });
+
+  it("a long press then a drag reports its run on lift", async () => {
+    const host = await mount();
+    await commands.touchGesture({ at: sel(15), holdMs: 400, moveTo: sel(17) });
+    await expectRun(host, run(15, 17));
+    expect(host.ranged).toEqual([run(15, 17)]);
+  });
+
+  it("a shift-click reports the run from the anchor", async () => {
+    const host = await mount();
+    await userEvent.click(button(host, 20));
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.click(button(host, 23));
+    expect(host.ranged).toEqual([run(20, 23)]);
+    await userEvent.click(button(host, 17));
+    expect(host.ranged).toEqual([run(20, 23), run(17, 20)]);
+  });
+
+  it("Shift+arrow reports the run so far", async () => {
+    const host = await mount();
+    button(host, 21).focus();
+    await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowRight}{/Shift}");
+    expect(host.ranged).toEqual([run(21, 22), run(21, 23)]);
+  });
+
+  it("a click, an arrow and a cancelled drag report nothing", async () => {
+    const host = await mount();
+    await userEvent.click(button(host, 20));
+    await expectRun(host, run(20, 20));
+    await userEvent.keyboard("{ArrowRight}");
+    await expectRun(host, run(21, 21));
+
+    host.onPicked = (picked) => {
+      if (picked?.to === day(13)) host.allowPicking = false;
+    };
+    await commands.mouseDrag([sel(10), sel(11), sel(12), sel(13), sel(14)]);
+    host.onPicked = undefined;
+    host.allowPicking = true;
+    expect(host.picker.run).toEqual(run(21, 21));
+
+    await commands.touchGesture({ at: sel(15), holdMs: 400 });
+    expect(host.opened).toEqual([[day(15), run(15, 15)]]);
+    expect(host.ranged).toEqual([]);
   });
 });
