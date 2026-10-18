@@ -1,4 +1,4 @@
-import { currentLocale } from "@waitron/dashboard-kit";
+import { currentLocale, dateTimeFormat } from "@waitron/dashboard-kit";
 import type { LocalDate } from "../hours-types.js";
 import { t } from "./strings.js";
 
@@ -8,18 +8,11 @@ export function format(key: Parameters<typeof t>[0], values: Record<string, stri
   );
 }
 
-/** One formatter per language and options: building one costs far more than using it, and the
- *  Year draws hundreds of dates on every render. */
-const formatters = new Map<string, Intl.DateTimeFormat>();
 function dateFormat(options: Intl.DateTimeFormatOptions, language = currentLocale()) {
-  const locale = language.startsWith("es") ? "es-ES" : "en-GB";
-  const key = `${locale} ${JSON.stringify(options)}`;
-  let formatter = formatters.get(key);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat(locale, { ...options, timeZone: "UTC" });
-    formatters.set(key, formatter);
-  }
-  return formatter;
+  return dateTimeFormat(language.startsWith("es") ? "es-ES" : "en-GB", {
+    ...options,
+    timeZone: "UTC",
+  });
 }
 const asUtc = (date: LocalDate) => new Date(`${date}T00:00:00Z`);
 const joined = (parts: Intl.DateTimeFormatPart[]) => parts.map((part) => part.value).join("");

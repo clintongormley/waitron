@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { businessDayBoundaryAt, businessDayBounds, cutoverForBusinessDay } from "@waitron/shared";
 import {
+  dateTimeFormat,
   formatBusinessDate,
   formatChangeoverMoment,
   formatDayLength,
@@ -386,7 +387,7 @@ export class BusinessDayStartEditor extends LitElement {
     return codeMessage(code);
   }
   #clockTime(at: string): string {
-    return new Intl.DateTimeFormat("en-GB", {
+    return dateTimeFormat("en-GB", {
       timeZone: this.model.clock.timeZone,
       hour: "2-digit",
       minute: "2-digit",

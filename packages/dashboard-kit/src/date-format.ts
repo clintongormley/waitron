@@ -8,13 +8,30 @@ export function formatIsoMinute(iso: string): string {
   return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
 
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+/** One formatter per locale and options, shared: building one costs far more than using it, and
+ *  render paths format on every render. */
+export function dateTimeFormat(
+  locale: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${locale} ${JSON.stringify(options)}`;
+  let formatter = formatters.get(key);
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat(locale, options);
+    formatters.set(key, formatter);
+  }
+  return formatter;
+}
+
 function partsOf(
   at: Date,
   locale: string,
   options: Intl.DateTimeFormatOptions,
 ): Partial<Record<Intl.DateTimeFormatPartTypes, string>> {
   const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
-  for (const part of new Intl.DateTimeFormat(locale, options).formatToParts(at)) {
+  for (const part of dateTimeFormat(locale, options).formatToParts(at)) {
     parts[part.type] = part.value;
   }
   return parts;

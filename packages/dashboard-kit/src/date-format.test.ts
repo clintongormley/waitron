@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import {
+  dateTimeFormat,
   formatBusinessDate,
   formatChangeoverMoment,
   formatDayLength,
@@ -64,4 +65,13 @@ it("formats a day's length in whole hours and minutes, leaving out a zero part",
   expect(formatDayLength(1)).toBe("1 min");
   expect(formatDayLength(1380)).toBe("23 h");
   expect(formatDayLength(780)).toBe("13 h");
+});
+
+it("shares one formatter per locale and options", () => {
+  const options = { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit" } as const;
+  expect(dateTimeFormat("en-GB", { ...options })).toBe(dateTimeFormat("en-GB", { ...options }));
+  expect(dateTimeFormat("es-ES", options)).not.toBe(dateTimeFormat("en-GB", options));
+  expect(dateTimeFormat("en-GB", { ...options, timeZone: "UTC" })).not.toBe(
+    dateTimeFormat("en-GB", options),
+  );
 });
