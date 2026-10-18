@@ -65,6 +65,7 @@ const suite = useVenueDb({
         }
       : set,
   ),
+  resetPerTest: false,
 });
 
 it("upgrades populated printers through the pre-canvas-retirement schema without changing settings, holder or device choices", async () => {
