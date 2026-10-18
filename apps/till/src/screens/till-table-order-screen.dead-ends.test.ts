@@ -1,10 +1,18 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { DeadEndAnswer } from "../api/client.js";
 import type { OrderLine } from "../state/working-order.js";
-import type { SubmitDraftDetail } from "./till-table-order-screen.js";
-import { beer, flan, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
+import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
+import {
+  beer,
+  flan,
+  mount,
+  openDraftLine,
+  resized,
+  store,
+} from "./till-table-order-screen.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -26,154 +34,140 @@ const answer: DeadEndAnswer = {
     { id: "kitchen", name: "Kitchen", open: true },
   ],
 };
-
-async function preview(lines: OrderLine[]) {
+interface Check {
+  sent: readonly OrderLine[];
+  checkId: number;
+}
+function checkSaved(el: TillTableOrderScreen) {
+  const checked = new Promise<Check>((resolve) =>
+    el.addEventListener(
+      "check-dead-ends",
+      (event) => {
+        event.preventDefault();
+        resolve((event as CustomEvent<Check>).detail);
+      },
+      { once: true },
+    ),
+  );
+  const revision = (el.routingRevision ?? 0) + 1;
+  el.billEdit = {
+    billId: el.orderId!,
+    editorVersion: 1,
+    draftId: "draft",
+    draftRevision: revision,
+  };
+  el.routingRevision = revision;
+  return checked;
+}
+async function saved(lines: OrderLine[]) {
   const { el } = await mount();
   el.parentElement!.style.width = "1280px";
   await resized(el);
   store(el).loadFrom(store(el).id, lines);
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
-  await el.updateComplete;
-  return el;
+  const check = await checkSaved(el);
+  return { el, check };
 }
-
-it("checks sent line objects and requires a station before Confirm", async () => {
-  const el = await preview([{ product: beer, quantity: "1" }]);
-  let checked: readonly OrderLine[] | undefined;
-  el.addEventListener("check-dead-ends", (event) => {
-    event.preventDefault();
-    checked = (event as CustomEvent<{ sent: readonly OrderLine[] }>).detail.sent;
-  });
-  // A reopened preview must ask with the same live line objects, not saved draft ids.
-  el.shadowRoot!.querySelector<HTMLElement>("[data-draft-dismiss]")!.click();
-  await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
-  await el.updateComplete;
-  expect(checked).toEqual([store(el).lines[0]]);
-  el.answerDeadEnds([store(el).lines[0]!], answer);
-  await el.updateComplete;
-  const confirm = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-    "[data-draft-confirm]",
+const send = (el: TillTableOrderScreen) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-draft-action="send-all"]',
   )!;
-  expect(confirm.disabled).toBe(true);
-  const section = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!;
-  expect(section).not.toBeNull();
-  section.dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
+const section = (el: TillTableOrderScreen) =>
+  el.shadowRoot!.querySelector("[data-draft-routing-detail] till-dead-ends-section")!;
+
+it("checks live saved line objects and requires a station before sending the unresolved dish", async () => {
+  const { el, check } = await saved([{ product: beer, quantity: "1" }]);
+  expect(check.sent).toEqual([store(el).lines[0]]);
+  el.answerDeadEnds(check.sent, answer, check.checkId);
+  await el.updateComplete;
+  expect(send(el).disabled).toBe(true);
+  await openDraftLine(el, 0);
+  expect(section(el)).not.toBeNull();
+  section(el).dispatchEvent(
+    new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }),
+  );
   await el.updateComplete;
   expect(store(el).lines[0]!.makeAt).toBe("kitchen");
-  expect(confirm.disabled).toBe(false);
+  expect(send(el).disabled).toBe(false);
 });
 
-it("keeps Confirm disabled and does not submit while the draft save is pending", async () => {
-  const { el } = await mount();
-  el.parentElement!.style.width = "1280px";
-  await resized(el);
-  store(el).loadFrom(store(el).id, [{ product: beer, quantity: "1" }]);
+it("keeps Send disabled and does not submit while the draft command is pending", async () => {
+  const { el, check } = await saved([{ product: beer, quantity: "1" }]);
+  const submitted = vi.fn();
+  el.addEventListener("submit-draft", submitted);
+  store(el).sending = true;
   await el.updateComplete;
-  let submitted = false;
-  el.addEventListener("check-dead-ends", (event) => event.preventDefault());
-  el.addEventListener("submit-draft", () => (submitted = true));
-  el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
+  el.answerDeadEnds(check.sent, { ...answer, deadEnds: [] }, check.checkId);
   await el.updateComplete;
-  const confirm = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-    "[data-draft-confirm]",
-  )!;
-  expect(confirm.disabled).toBe(true);
-  confirm.click();
-  expect(submitted).toBe(false);
+  expect(send(el).disabled).toBe(true);
+  send(el).click();
+  expect(submitted).not.toHaveBeenCalled();
 });
 
-it("removes a dead-end line and confirms only the remaining dish with recomputed groups", async () => {
-  const el = await preview([
+it("removes a dead-end line and sends only the remaining dish with recomputed groups", async () => {
+  const { el, check } = await saved([
     { product: beer, quantity: "1" },
     { product: flan, quantity: "1" },
   ]);
-  el.answerDeadEnds([...store(el).lines], answer);
+  el.answerDeadEnds(check.sent, answer, check.checkId);
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!.dispatchEvent(
-    new CustomEvent("remove", { detail: { key: "0" } }),
+  const picker = await openDraftLine(el, 0);
+  section(el).dispatchEvent(new CustomEvent("remove", { detail: { key: "0" } }));
+  await el.updateComplete;
+  await picker.updateComplete;
+  const submitted: SubmitDraftDetail[] = [];
+  el.addEventListener("submit-draft", (event) =>
+    submitted.push((event as CustomEvent<SubmitDraftDetail>).detail),
   );
-  await el.updateComplete;
-  let submitted: SubmitDraftDetail | undefined;
-  el.addEventListener("submit-draft", (event) => {
-    submitted = (event as CustomEvent<SubmitDraftDetail>).detail;
-  });
-  el.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
-  expect(submitted?.sent.map((line) => line.product.name)).toEqual(["Flan"]);
-  expect(submitted?.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
+  await userEvent.click(send(el));
+  expect(submitted[0]?.sent.map((line) => line.product.name)).toEqual(["Flan"]);
+  expect(submitted[0]?.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
 });
 
 it("clears a saved making station that has since been switched off", async () => {
-  const el = await preview([{ product: beer, quantity: "1", makeAt: "old-bar" }]);
-  el.answerDeadEnds([store(el).lines[0]!], answer);
+  const { el, check } = await saved([{ product: beer, quantity: "1", makeAt: "old-bar" }]);
+  el.answerDeadEnds(check.sent, answer, check.checkId);
   await el.updateComplete;
   expect(store(el).lines[0]!.makeAt).toBeUndefined();
-  expect(
-    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-draft-confirm]")!
-      .disabled,
-  ).toBe(true);
+  expect(send(el).disabled).toBe(true);
 });
 
-it("ignores an earlier question answered after the same lines are reopened", async () => {
-  const el = await preview([{ product: beer, quantity: "1" }]);
-  const checks: number[] = [];
-  el.addEventListener("check-dead-ends", (event) => {
-    event.preventDefault();
-    checks.push((event as CustomEvent<{ checkId: number }>).detail.checkId);
-  });
-  el.shadowRoot!.querySelector<HTMLElement>("[data-draft-dismiss]")!.click();
+it("ignores an earlier question answered after the same saved lines are checked again", async () => {
+  const { el, check: first } = await saved([{ product: beer, quantity: "1" }]);
+  const second = await checkSaved(el);
+  el.answerDeadEnds(first.sent, answer, first.checkId);
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
+  expect(el.shadowRoot!.querySelector("[data-draft-routing-warning]")).toBeNull();
+  el.answerDeadEnds(second.sent, answer, second.checkId);
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>("[data-draft-dismiss]")!.click();
-  await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
-  await el.updateComplete;
-  el.answerDeadEnds([store(el).lines[0]!], answer, checks[0]);
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("till-dead-ends-section")).toBeNull();
-  el.answerDeadEnds([store(el).lines[0]!], answer, checks[1]);
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("till-dead-ends-section")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-draft-routing-warning]")).not.toBeNull();
 });
 
 const buttonFill = (host: Element) =>
   getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
-
 it.each(["light", "dark"] as const)(
-  "draws Confirm quiet like Back while the station check is out and while a dish has no station, then blue (%s theme)",
+  "draws Send quiet while its only dish has no station, then blue (%s theme)",
   async (theme) => {
-    const { el } = await mount();
+    const { el, check } = await saved([{ product: beer, quantity: "1" }]);
     el.parentElement!.setAttribute("data-theme", theme);
-    el.parentElement!.style.width = "1280px";
-    await resized(el);
-    store(el).loadFrom(store(el).id, [{ product: beer, quantity: "1" }]);
+    el.answerDeadEnds(check.sent, answer, check.checkId);
     await el.updateComplete;
-    el.addEventListener("check-dead-ends", (event) => event.preventDefault());
-    el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
-    await el.updateComplete;
-    const confirm =
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-draft-confirm]")!;
-    const backFill = buttonFill(el.shadowRoot!.querySelector("[data-draft-dismiss]")!);
-    await confirm.updateComplete;
-    expect(confirm.disabled).toBe(true);
-    expect(confirm.getAttribute("variant")).toBe("secondary");
-    expect(buttonFill(confirm)).toBe(backFill);
-
-    el.answerDeadEnds([store(el).lines[0]!], answer);
-    await el.updateComplete;
-    await confirm.updateComplete;
-    expect(confirm.disabled).toBe(true);
-    expect(confirm.getAttribute("variant")).toBe("secondary");
-
-    el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!.dispatchEvent(
+    await send(el).updateComplete;
+    const quietFill = buttonFill(send(el));
+    const move =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-draft-move]")!;
+    await move.updateComplete;
+    expect(quietFill).toBe(buttonFill(move));
+    expect(send(el).disabled).toBe(true);
+    expect(send(el).getAttribute("variant")).toBe("secondary");
+    await openDraftLine(el, 0);
+    section(el).dispatchEvent(
       new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }),
     );
     await el.updateComplete;
-    await confirm.updateComplete;
-    expect(confirm.disabled).toBe(false);
-    expect(confirm.getAttribute("variant")).toBe("primary");
-    expect(buttonFill(confirm)).not.toBe(backFill);
+    await send(el).updateComplete;
+    expect(send(el).disabled).toBe(false);
+    expect(send(el).getAttribute("variant")).toBe("primary");
+    expect(buttonFill(send(el))).not.toBe(quietFill);
   },
 );

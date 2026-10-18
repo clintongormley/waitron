@@ -1113,6 +1113,13 @@ check. The confirmation tests cover Keep/Discard, silent abort, keyboard focus, 
 both themes; the integration suite exercises a retained edited field at phone and desktop widths
 with EN/ES copy. Those shared-component checks do not establish protection in an unwired app form.
 
+A leave request scoped to a screen sees a nested editor only through the registry's parent
+relationship. The table-order line picker receives its screen as `draftParent` through the basket.
+On 2026-10-18, the enclosing-leave case in
+`apps/till/src/screens/till-table-order-screen.preview-unsaved.test.ts` found no question for a
+staged note before that link was added. Removing the picker's parent registration in an
+independently installed checkout failed the same assertion; restoring it passed the suite.
+
 Each connected application shell owns one `LeaveController`; resolve its coordinator from a
 contributed form with `leaveCoordinatorFor(element)` (`@waitron/ui`). A disconnected shell
 releases its drafts and pending confirmation. A forced session exit calls `forceReset()` before

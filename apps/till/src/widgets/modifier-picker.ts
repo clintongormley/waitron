@@ -197,6 +197,7 @@ export class TillModifierPicker extends LitElement {
   @property({ attribute: false }) courseChoices: readonly ComboboxOption[] = [];
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean }) lineDetails = false;
+  @property({ attribute: false }) draftParent?: object;
   @state() private courseId = "";
 
   /** How many of each offered product is taken, keyed by {@link pickKey}. */
@@ -240,6 +241,7 @@ export class TillModifierPicker extends LitElement {
     this.#baseline ??= this.#draft();
     const { coordinator, scope } = draftScopeFor<ModifierDraft>(this, {
       id: this,
+      parent: this.draftParent,
       current: () => this.#draft(),
       snapshot: (value) => ({ ...value, picks: { ...value.picks }, answers: { ...value.answers } }),
       equal: (a, b) =>

@@ -3417,6 +3417,7 @@ export class TillTableOrderScreen extends LitElement {
                   <till-basket
                     .hideKitchenNote=${true}
                     .lineDetails=${true}
+                    .draftParent=${this}
                     .courses=${this.courses}
                     .orderInFlight=${this.groupCommandBusy}
                     stacked

@@ -292,6 +292,7 @@ export class TillBasket extends LitElement {
 
   @property({ type: Boolean, reflect: true }) stacked = false;
   @property({ type: Boolean }) lineDetails = false;
+  @property({ attribute: false }) draftParent?: object;
   @property({ attribute: false }) courses: readonly TillCourse[] = [];
 
   /** The stored order the basket holds, as the server last listed it; null when not known. While it
@@ -730,6 +731,7 @@ export class TillBasket extends LitElement {
       ${
         this.modifierLine && this.#modifierSelection
           ? html`<till-modifier-picker
+              .draftParent=${this.draftParent}
               .product=${this.#modifierProduct}
               .lineDetails=${this.lineDetails}
               .withNote=${this.lineDetails}

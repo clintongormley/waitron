@@ -2242,8 +2242,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Move to placements and automatic station warnings. A menu update waits while Move to is open,
   then asks about changed prices after you close it and the next poll runs. Routing-warning
   behavior and accessibility suites now use the automatic saved-revision check, retaining their
-  stale-control, station-choice, theme and width checks. Other preview suites still need their
-  useful checks moved before the remaining preview implementation is deleted.
+  stale-control, station-choice, theme and width checks. The old dead-end and preview-leave suites
+  now check direct Send and staged line notes. A leave request for the table screen includes its
+  line editor, so Keep and Discard protect an unfinished note. The menu-refresh and party-send
+  checks now use direct actions and saved placements; a presented bill retains its unsent dishes
+  rather than sending them to another open bill. The remaining preview implementation and unused
+  helpers still need to be removed.
   The Sent panel and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and

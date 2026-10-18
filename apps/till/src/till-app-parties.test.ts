@@ -4821,7 +4821,6 @@ describe("till-app: the order's groups", () => {
     await flush(el);
   }
 
-  /** A confirmed preview's `submit-draft` for the first `count` of {@link roundLines}, as rung. */
   function roundDetail(
     order: TillTableOrderScreen,
     groups: { release: "fire" | "hold"; lineIndexes: number[] }[],
@@ -4953,14 +4952,9 @@ describe("till-app: the order's groups", () => {
     expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
   });
 
-  it("sends the round to the bill chosen in Send to after a refresh shows that bill presented", async () => {
+  it("refuses this bill's round after a refresh shows it presented, without sending to another open bill", async () => {
     let finish!: (value: unknown) => void;
     const { el } = await mountApp({
-      getPartyBills: vi.fn(async (partyId: string) =>
-        partyId === "v7" || partyId === "v9"
-          ? [{ ...tabBill, partyId, workingOrderId: partyId === "v7" ? "wo-7" : "wo-9" }]
-          : [tabBill, checkBill],
-      ),
       updateOrderLine: vi.fn(
         () =>
           new Promise((resolve) => {
@@ -4978,25 +4972,21 @@ describe("till-app: the order's groups", () => {
       revision: 0,
     });
     await flush(el);
-    order.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!.click();
-    await flush(el);
-    const choice = order.shadowRoot!.querySelector<HTMLInputElement>(
-      'input[name="billId"][value="wo-check"]',
-    )!;
-    choice.click();
-    await flush(el);
-    expect(choice.checked).toBe(true);
     vi.mocked(api.getTablesState).mockResolvedValue([seated({}, { revision: 5 }), mesa7, mesa9]);
-    vi.mocked(api.getPartyBills).mockResolvedValue([tabBill, { ...checkBill, status: "placed" }]);
-
+    vi.mocked(api.getPartyBills).mockResolvedValue([{ ...tabBill, status: "placed" }, checkBill]);
     finish({ revision: 1, party: { id: "v1", revision: 4 } });
     await flush(el);
-    expect(order.bills[1]!.status).toBe("placed");
-    order.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    expect(order.bills[0]!.status).toBe("placed");
+    order.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
     await flush(el);
-
-    expect(api.submitDraft).toHaveBeenCalledOnce();
-    expect(vi.mocked(api.submitDraft).mock.calls[0]![2]).toHaveProperty("billId", "wo-check");
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(order.orderId).toBe("wo-4");
+    expect(partyDraft(order).lines.map((line) => [line.product.id, line.quantity])).toEqual([
+      ["flan", "1"],
+      ["pan", "2"],
+    ]);
+    expect(order.bills[1]!.workingOrderId).toBe("wo-check");
+    expect(order.bills[1]!.status).toBe("open");
   });
 
   it("sends the revision the submission answered with on the party's next command", async () => {
@@ -6406,9 +6396,11 @@ describe("till-app: submitting the draft", () => {
         if (submission.expectedPartyRevision !== revision)
           throw { code: "party.out_of_date", partyId: "v1" };
         const taken = drafts.apply(partyId, draftId, submission);
-        for (const group of drafts.sentGroups(submission)) {
+        for (const [index, group] of drafts.sentGroups(submission).entries()) {
           const ids = group.lines.map(() => `line-${++lineIds}`);
-          const joined = groups.find((held) => held.id === submission.joinGroupId);
+          const joined = groups.find(
+            (held) => held.id === (submission.groups[index]!.joinGroupId ?? submission.joinGroupId),
+          );
           if (joined !== undefined) {
             joined.lineIds.push(...ids);
             continue;
@@ -6465,11 +6457,21 @@ describe("till-app: submitting the draft", () => {
     await flush(el);
   }
 
-  async function act(el: TillApp, order: TillTableOrderScreen, kind: string): Promise<void> {
+  async function act(
+    el: TillApp,
+    order: TillTableOrderScreen,
+    kind: "send-all" | "fire-selected",
+  ): Promise<void> {
     order.shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`)!.click();
     await flush(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+  }
+
+  async function fireAll(el: TillApp, order: TillTableOrderScreen): Promise<void> {
+    for (const tick of order.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]")) {
+      if (tick.getAttribute("aria-pressed") !== "true") tick.click();
+    }
     await flush(el);
+    await act(el, order, "fire-selected");
   }
 
   const toast = (el: TillApp) =>
@@ -6487,8 +6489,6 @@ describe("till-app: submitting the draft", () => {
     await act(el, order, "fire-selected");
     await toggle(el, tableOrder(el)!, "Salad");
     await act(el, tableOrder(el)!, "fire-selected");
-    await toggle(el, tableOrder(el)!, "Croquetas");
-    await act(el, tableOrder(el)!, "send-selected");
     expect(tableOrder(el)).not.toBeNull();
     expect(toast(el)?.open ?? false).toBe(false);
     await act(el, tableOrder(el)!, "send-all");
@@ -6506,7 +6506,7 @@ describe("till-app: submitting the draft", () => {
       { position: 4, state: "held", summary: "1 × offer-steak" },
       { position: 5, state: "held", summary: "1 × offer-flan" },
     ]);
-    expect(api.submitDraft).toHaveBeenCalledTimes(4);
+    expect(api.submitDraft).toHaveBeenCalledTimes(3);
     expect(tableOrder(el)).toBeNull();
     expect(floor(el)).not.toBeNull();
     expect(toast(el)!.open).toBe(true);
@@ -6532,7 +6532,7 @@ describe("till-app: submitting the draft", () => {
     const { el } = await mountApp({ ...withCourses(), ...server });
     const order = await openMesa(el);
     await ring(el, order, beer, steak);
-    await act(el, order, "fire-all");
+    await fireAll(el, order);
     expect(toast(el)!.open).toBe(true);
     const withNotice = floor(el)!.getBoundingClientRect().top;
 
@@ -6642,12 +6642,13 @@ describe("till-app: submitting the draft", () => {
       partyOnNextBill();
 
       await toggle(el, order, "Beer");
-      await act(el, order, "submit");
+      await act(el, order, "fire-selected");
 
       const next = tableOrder(el)!;
       expect(next.orderId).toBe("wo-4");
       expect(draftOf(next).lines.map((line) => line.product.id)).toEqual(["steak"]);
-      expect(next.shadowRoot!.querySelector("[data-destination-choice]")).not.toBeNull();
+      expect(next.shadowRoot!.querySelector("[data-destination-choice]")).toBeNull();
+      expect(draftOf(next).lines[0]!.place).toEqual({ kind: "fire" });
     });
 
     it("keeps a later addition's chosen destination and held group for its rest", async () => {
@@ -6668,22 +6669,21 @@ describe("till-app: submitting the draft", () => {
       );
       const order = await openMesa(el);
       await ring(el, order, beer, steak);
-      order.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
-      await flush(el);
-      order.shadowRoot!.querySelector<HTMLElement>('[data-held-group="g-b"]')!.click();
+      draftOf(order).setLinePlaces([0, 1], { kind: "join", groupId: "g-b" });
       await flush(el);
       partyOnNextBill();
 
       await toggle(el, order, "Beer");
-      await act(el, order, "submit");
+      await act(el, order, "fire-selected");
 
       const next = tableOrder(el)!;
-      const pressed = (selector: string) =>
-        next.shadowRoot!.querySelector(selector)!.getAttribute("aria-pressed");
       expect(next.orderId).toBe("wo-4");
-      expect(vi.mocked(api.submitDraft).mock.calls[0]![2].joinGroupId).toBe("g-b");
-      expect(pressed('[data-destination="add-to-held"]')).toBe("true");
-      expect(pressed('[data-held-group="g-b"]')).toBe("true");
+      expect(drafts.sentGroups(vi.mocked(api.submitDraft).mock.calls[0]![2])).toEqual([
+        { release: "fire", lines: [{ menuItemId: "offer-beer", quantity: "1" }] },
+      ]);
+      expect(draftOf(next).lines.map((line) => [line.product.id, line.place])).toEqual([
+        ["steak", { kind: "join", groupId: "g-b" }],
+      ]);
     });
   });
 
@@ -6698,7 +6698,7 @@ describe("till-app: submitting the draft", () => {
     await flush(el);
 
     await ring(el, order, flan);
-    await act(el, order, "submit");
+    await act(el, order, "send-all");
 
     expect(server.groups).toHaveLength(2);
     expect(toast(el)!.message).toBe("Fired: 1 group.");
@@ -6709,7 +6709,7 @@ describe("till-app: submitting the draft", () => {
     const { el } = await mountApp({ ...withCourses(), ...server });
     const order = await openMesa(el);
     await ring(el, order, beer, steak);
-    await act(el, order, "fire-all");
+    await fireAll(el, order);
     expect(toast(el)!.message).toBe("Fired: 1 group.");
   });
 
@@ -6721,14 +6721,14 @@ describe("till-app: submitting the draft", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       await ring(el, order, beer);
-      await act(el, order, "fire-all");
+      await fireAll(el, order);
       expect(toast(el)!.message).toBe("Fired: 1 group.");
 
       await vi.advanceTimersByTimeAsync(600);
       emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
       await flush(el);
       await ring(el, tableOrder(el)!, flan);
-      await act(el, tableOrder(el)!, "submit");
+      await act(el, tableOrder(el)!, "send-all");
       expect(server.groups).toHaveLength(2);
       expect(toast(el)!.message).toBe("Fired: 1 group.");
       expect(toast(el)!.open).toBe(true);
@@ -6753,17 +6753,16 @@ describe("till-app: submitting the draft", () => {
     await flush(el);
     order = tableOrder(el)!;
     await ring(el, order, flan);
-    order.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
+    draftOf(order).setLinePlaces([0], { kind: "join", groupId: "g1" });
     await flush(el);
-    await act(el, order, "submit");
+    await act(el, order, "send-all");
 
     expect(vi.mocked(api.submitDraft).mock.calls[1]![2]).toEqual({
       submissionId: expect.any(String),
       expectedPartyRevision: 4,
       draftRevision: expect.any(Number),
       expectedEdit: { billId: "wo-4", editorVersion: 3, draftId: "draft-3", draftRevision: 1 },
-      joinGroupId: "g1",
-      groups: [{ release: "hold", lineIds: [expect.any(String)] }],
+      groups: [{ release: "hold", lineIds: [expect.any(String)], joinGroupId: "g1" }],
     });
     expect(drafts.sentGroups(vi.mocked(api.submitDraft).mock.calls[1]![2])).toEqual([
       { release: "hold", lines: [{ menuItemId: "offer-flan", quantity: "1" }] },
@@ -6789,7 +6788,7 @@ describe("till-app: submitting the draft", () => {
     const card =
       tabGrid(el)!.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
     await ring(el, card, beer);
-    await act(el, card, "fire-all");
+    await fireAll(el, card);
 
     expect((shell(el) as HTMLElement & { activeScreen?: string }).activeScreen).toBe("floor");
     expect(toast(el)!.message).toBe("Fired: 1 group.");
@@ -6811,7 +6810,7 @@ describe("till-app: submitting the draft", () => {
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
 
-    await act(el, order, "fire-all");
+    await fireAll(el, order);
     await flush(el);
 
     expect(api.submitDraft).toHaveBeenCalledOnce();
@@ -6824,7 +6823,6 @@ describe("till-app: submitting the draft", () => {
   });
 
   it("refuses to add to a held group while the groups could not be read, and reads them again", async () => {
-    // A preview opened before a read failed still names the group it joins.
     const listGroups = vi.fn().mockRejectedValue(new TypeError("offline"));
     const { el } = await mountApp({ ...withCourses(), listGroups });
     const order = await openMesa(el);
@@ -6854,7 +6852,7 @@ describe("till-app: submitting the draft", () => {
     });
     const order = await openMesa(el);
     await ring(el, order, beer);
-    await act(el, order, "fire-all");
+    await fireAll(el, order);
     expect(api.submitDraft).toHaveBeenCalledOnce();
     expect(banner(el)).toBeNull();
   });
