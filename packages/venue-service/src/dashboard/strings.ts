@@ -180,6 +180,8 @@ const en = {
   "paint.copy": "Copy",
   "paint.clear": "Clear",
   "painter.week": "{season}: standard week",
+  "painter.special_day": "{name}: special day, {dates}",
+  "painter.special_day_undated": "{name}: special day",
   "painter.department_closed": "{department} closed all day",
   "painter.week_covers":
     "Every week from {from} to {to} opens these hours, except on special days.",
@@ -1024,6 +1026,8 @@ const es: Record<keyof typeof en, string> = {
   "paint.copy": "Copiar",
   "paint.clear": "Vaciar",
   "painter.week": "{season}: semana estándar",
+  "painter.special_day": "{name}: día especial, {dates}",
+  "painter.special_day_undated": "{name}: día especial",
   "painter.department_closed": "{department} cerrado todo el día",
   "painter.week_covers":
     "Cada semana del {from} al {to} abre con este horario, salvo los días especiales.",

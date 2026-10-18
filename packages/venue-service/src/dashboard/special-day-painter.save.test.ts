@@ -690,12 +690,12 @@ describe("after a save", () => {
     await expect.poll(() => writes.length).toBe(1);
     painter.specialDayId = "sd2";
     await settle(painter);
-    await expect.poll(() => frame(painter).heading).toBe("New Year");
+    await expect.poll(() => frame(painter).heading).toBe("New Year: special day, 31 Dec");
     succeed();
     await new Promise((resolve) => setTimeout(resolve, 50));
     await settle(painter);
     expect(saved).toEqual([]);
-    expect(frame(painter).heading).toBe("New Year");
+    expect(frame(painter).heading).toBe("New Year: special day, 31 Dec");
     expect(grid(painter).columns.map(({ key }) => key)).toEqual(["2026-12-31"]);
     expect(frame(painter).dirty).toBe(false);
   });
@@ -1022,7 +1022,9 @@ describe("a live update while the day is open", () => {
       dates: [...storedDay().dates, { date: "2026-12-31", closedAllDay: false }],
     });
     await deliver(painter);
-    await expect.poll(() => frame(painter).heading).toBe("Renamed");
+    await expect
+      .poll(() => frame(painter).heading)
+      .toBe("Renamed: special day, 14–⁠15 Dec, 31 Dec");
     expect(dates(painter)).toEqual([DEC_14, DEC_15, "2026-12-31"]);
     expect(repeats(painter, "yes").checked).toBe(true);
     await save(painter, writes);
@@ -1043,7 +1045,9 @@ describe("a live update while the day is open", () => {
       dates: storedDay().dates.filter(({ date }) => date !== DEC_15),
     });
     await deliver(painter);
-    await expect.poll(() => frame(painter).heading).toBe("Renamed");
+    await expect
+      .poll(() => frame(painter).heading)
+      .toBe("Renamed: special day, 14–⁠15 Dec, 25 Dec");
     expect(dates(painter)).toEqual([DEC_14, DEC_15, DEC_25]);
     expect(grid(painter).days.get(DEC_15)).toEqual([dinner("19:00", "22:00")]);
     expect(frame(painter).dirty).toBe(true);

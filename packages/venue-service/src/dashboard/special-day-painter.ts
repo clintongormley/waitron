@@ -48,7 +48,7 @@ import {
   formatWeekday,
 } from "./hours-view.js";
 import { t } from "./strings.js";
-import { runsOf } from "./date-runs.js";
+import { formatDateRuns, runsOf } from "./date-runs.js";
 import "./add-dates-calendar.js";
 import "./painter-frame.js";
 import "./paint-grid.js";
@@ -1502,7 +1502,12 @@ export class SpecialDayPainter extends LitElement {
 
   private heading(): string {
     const name = this.draft.name.trim();
-    if (name) return name;
+    if (name) {
+      const dates = formatDateRuns(this.draft.dates.map(({ date }) => date));
+      return dates
+        ? format("painter.special_day", { name, dates })
+        : format("painter.special_day_undated", { name });
+    }
     return t(this.specialDayId === null ? "special.new" : "special.edit");
   }
   private message(): string {
