@@ -1888,6 +1888,29 @@ describe("venue service management routes", () => {
     expect(body.zones).not.toContainEqual(expect.objectContaining({ id: other.zoneId }));
   });
 
+  it("marks every listed zone active, which the device profile form filters on", async () => {
+    const fx = await fixture();
+    const scope = { locationId: fx.locationId };
+    const department = await withTransaction(db, (tx) =>
+      createDepartment(tx, scope, { name: "Deli", orderStart: "counter" }),
+    );
+    await withTransaction(db, (tx) =>
+      configureZone(tx, scope, { zoneId: fx.zoneId, departmentId: department.id }),
+    );
+    for (const path of [
+      "/management-api/venue-service/departments-and-zones",
+      "/management-api/venue-service",
+    ]) {
+      const response = await send(fx.app, "GET", path, fx.managerCookie);
+      expect(response.status).toBe(200);
+      const { zones } = (await response.json()) as { zones: { id: string; active?: boolean }[] };
+      expect(zones).toContainEqual(
+        expect.objectContaining({ id: fx.zoneId, departmentId: department.id }),
+      );
+      for (const zone of zones) expect(zone).toMatchObject({ active: true });
+    }
+  });
+
   it("scopes edited departments to their venue", async () => {
     // A manager cannot edit a department in another location sharing the same database.
     const fx = await fixture();
