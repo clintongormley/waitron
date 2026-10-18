@@ -18,6 +18,7 @@ import { registerIcons } from "./wt-icon.js";
 import "./wt-combobox.js";
 import "./wt-button.js";
 import "./wt-dialog.js";
+import "./wt-help-tooltip.js";
 
 registerIcons({
   "table-filter": "M1 2h14v1.5L10 9v5l-4 1.5V9L1 3.5z",
@@ -60,6 +61,8 @@ export interface DataTableColumn<Row> {
   pinned?: "end";
   /** Keep the whole cell outside row activation, including blank space beside its action. */
   activatesRow?: false;
+  /** A help-mode badge over the heading's label; `label` is the badge's whole accessible name. */
+  help?: { text: string; label: string };
 }
 
 type Filter<Row> = NonNullable<DataTableColumn<Row>["filter"]>;
@@ -381,6 +384,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .sort:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
+      }
+
+      .head-label {
+        position: relative;
+        display: inline-block;
       }
 
       .indicator {
@@ -2555,7 +2563,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 aria-label=${
                   column.filter && this.#activeValues(column).length > 0
                     ? `${column.label}: ${this.filteredColumnLabel}`
-                    : nothing
+                    : column.help
+                      ? column.label
+                      : nothing
                 }
                 aria-sort=${
                   column.sortValue === undefined
@@ -2567,26 +2577,29 @@ export class WtDataTable<Row = unknown> extends LitElement {
               >
                 ${this.#treeHeading(
                   index,
-                  column.sortValue === undefined
-                    ? column.label
-                    : html`<button
-                        class="sort"
-                        data-sort=${column.key}
-                        @click=${(event: Event) => {
-                          event.stopPropagation();
-                          this.#sort(column);
-                        }}
-                      >
-                        ${column.label}<span class="indicator" aria-hidden="true"
-                          >${
-                            this.sortKey === column.key
-                              ? this.sortDirection === "ascending"
-                                ? "▲"
-                                : "▼"
-                              : ""
-                          }</span
+                  this.#withHelp(
+                    column,
+                    column.sortValue === undefined
+                      ? column.label
+                      : html`<button
+                          class="sort"
+                          data-sort=${column.key}
+                          @click=${(event: Event) => {
+                            event.stopPropagation();
+                            this.#sort(column);
+                          }}
                         >
-                      </button>`,
+                          ${column.label}<span class="indicator" aria-hidden="true"
+                            >${
+                              this.sortKey === column.key
+                                ? this.sortDirection === "ascending"
+                                  ? "▲"
+                                  : "▼"
+                                : ""
+                            }</span
+                          >
+                        </button>`,
+                  ),
                 )}
               </th>
             `,
@@ -2594,6 +2607,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
         </tr>
       </thead>
     `;
+  }
+
+  #withHelp(column: DataTableColumn<Row>, content: unknown) {
+    return column.help
+      ? html`<span class="head-label"
+          >${content}<wt-help-tooltip mode="help-mode" aria-label=${column.help.label}
+            >${column.help.text}</wt-help-tooltip
+          ></span
+        >`
+      : content;
   }
 
   /** In a tree, the heading over the column that draws the tree, for a consumer to line up with
