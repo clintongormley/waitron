@@ -116,7 +116,8 @@ come after the list above:
   need their own designs.
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
-  installing or renewing the AEAT certificate after setup; upgrade testing with rows the product
+  installing or renewing the AEAT certificate after setup (A795: designed, three owner questions
+  open); upgrade testing with rows the product
   itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
   installer (B3); the degraded-but-trading recovery spec.
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
@@ -440,10 +441,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   open by the reviews of A261 step 5 (Hours, #1298); the file is a frozen record of the old grants
   and was not edited.
 
-- **Installing or renewing the AEAT certificate after setup.** Only the setup wizard can set it
-  (`apps/server/src/setup-api.ts`), and nothing watches when it expires. Needs a view, renew and
-  replace surface and an expiry alert. Fiscal: the owner lands it.
-  [Detail](backlog/fiscal.md#installing-or-renewing-the-aeat-certificate-after-setup)
+- **A795 — installing or renewing the AEAT certificate after setup: DESIGNED, waiting on three owner
+  questions.** Only the setup wizard can set it (`apps/server/src/setup-api.ts`), and nothing watches
+  when it expires; an expired certificate reads to the filing pass as a network failure, so only the
+  four-hour delay alert fires. The [design](superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)
+  puts a card on Venue settings → Venue details, checks file, passphrase, dates, tax ID and a
+  read-only AEAT query before replacing, records every install, and adds expiry alerts. Open: who
+  may replace it, how early the warning starts, and whether the box emails. FULL review; the owner
+  lands it. [Detail](backlog/fiscal.md#installing-or-renewing-the-aeat-certificate-after-setup)
 
 - **VAT at line add (M7v, A68).** — left open by the menus plan. Asesor Q26 (the rate on the day of
   issue) is open. The till computes a basket VAT split (`vatBreakdown`,
@@ -484,6 +489,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
     download fails there: on a demo box, and on a box whose settings name no onboarding intent, such
     as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
     intent is preparation or live (`apps/server/src/boot.ts`).
+
+- **A852. Setup's fiscal test answers "uncertain, retry" for a certificate whose passphrase is wrong**
+  (found by A795's design). The wizard never opens the file, so the test sale is sent and fails at
+  the connection, which the readiness check reads as uncertain; a retry can never pass.
+  [Detail](backlog/setup.md#a852-setups-fiscal-test-answers-uncertain-retry-for-a-wrong-passphrase)
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
   Several small wizard leftovers remain: a fiscal-test banner that may outlive its screen, an

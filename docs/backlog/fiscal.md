@@ -852,11 +852,25 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
 
 ## Installing or renewing the AEAT certificate after setup
 
-- **Installing or renewing the AEAT certificate after setup.** Only the setup wizard can set it
+- **A795 — installing or renewing the AEAT certificate after setup.** Only the setup wizard can set it
   (`apps/server/src/setup-api.ts`), and nothing watches when it expires: `cert-expiry.ts` reads the
-  box's own HTTPS certificate, not the AEAT one. Needs a view, renew and replace surface and an
-  expiry alert. Separate from getting the certificate onto a promoted standby (_Afterwards_). Fiscal:
-  the owner lands it.
+  box's own HTTPS certificate, not the AEAT one. Separate from getting the certificate onto a promoted
+  standby (_Afterwards_). Fiscal: the owner lands it.
+- **Design (2026-10-18):** [2026-10-18-a795-aeat-certificate-after-setup-design.md](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md),
+  mockups in [mockups/a795-aeat-certificate/](mockups/a795-aeat-certificate/). Measured on the way:
+  setup's check never opens the file (a wrong passphrase, random bytes, a keyless file and an expired
+  certificate were all accepted); the filing pass reads the certificate afresh each pass, so a new one
+  needs no restart; an expired certificate is backed off like a network failure and raises no
+  "awaiting certificate" alert. Decided against house precedent: a card on Venue settings → Venue
+  details, contributed by the Veri*Factu module; checks in order (size, opens, details, dates, not the
+  same, tax ID refused on mismatch, a read-only AEAT query with no override) before one short write;
+  the old certificate is not kept; every install recorded in an append-only `local` table; alerts
+  `fiscal.certificate_expiring` (red from 14 days) and `fiscal.certificate_expired`.
+- **Waiting on the owner (§9 of the design):** Q1 who may replace it (recommended: managers, through
+  `system.manage`); Q2 when the warning starts (recommended: 60 days); Q3 whether the box emails as
+  expiry nears (recommended: yes).
+- **Before landing:** a consulta to production AEAT and one with a company seal at `www10`, with a
+  real certificate; and where a real seal keeps the company's tax ID.
 
 ## VAT at line add (M7v, A68)
 
