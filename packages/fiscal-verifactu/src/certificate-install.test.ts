@@ -50,7 +50,7 @@ function notPermitted(): AppError {
 
 const servers: AnsweringServer[] = [];
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((s) => s.close()));
+  await Promise.all(servers.splice(0).map((s) => s?.close()));
 });
 
 async function serve(

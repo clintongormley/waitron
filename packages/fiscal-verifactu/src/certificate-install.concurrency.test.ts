@@ -30,7 +30,7 @@ const NIF = "89890001K";
 
 const servers: AnsweringServer[] = [];
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((s) => s.close()));
+  await Promise.all(servers.splice(0).map((s) => s?.close()));
 });
 
 function testRing(): KeyRing {

@@ -23,7 +23,7 @@ function materialOf(issued: Candidate): CertMaterial {
 
 const servers: AnsweringServer[] = [];
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((s) => s.close()));
+  await Promise.all(servers.splice(0).map((s) => s?.close()));
 });
 
 async function serve(answer: Parameters<typeof startAnsweringServer>[1]): Promise<AnsweringServer> {
