@@ -2306,7 +2306,7 @@ Save keep the plain gap. The heading writes the dates as runs in date order, joi
 Dec", "12–15 Feb", "30 Jan – 2 Feb", each with its year only when the dates span more than one year
 (`formatDateRuns`, `date-runs.ts`). A U+2060 word joiner follows the dash of a run inside one month,
 so the heading never breaks there (an English case in `special-day-painter.test.ts` checks it at 390
-px); a run across months may break at its spaces. A side panel holds the required name, the
+px). A side panel holds the required name, the
 required dates as chips each with a remove button, + Add dates…, and Every year as No or Yes. + Add dates…
 opens a month to pick from (`add-dates-calendar.ts`): a click adds a date or removes a chosen one,
 and a double-click counts as one click; a drag (a touch drag too, with no long press), a

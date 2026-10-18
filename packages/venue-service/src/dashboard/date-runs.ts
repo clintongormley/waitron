@@ -14,7 +14,7 @@ export function runsOf(dates: readonly LocalDate[]): [LocalDate, LocalDate][] {
 }
 
 /** The dates as runs, "14–⁠15 Dec, 25 Dec", in the dashboard's language; "" for none. A run inside
- *  one month joins its day numbers with an en dash and a word joiner so it never wraps. */
+ *  one month joins its day numbers with an en dash and a word joiner so a line never breaks after the dash. */
 export function formatDateRuns(dates: readonly LocalDate[]): string {
   const sorted = [...new Set(dates)].sort();
   const years = new Set(sorted.map((date) => date.slice(0, 4))).size > 1;

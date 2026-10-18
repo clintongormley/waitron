@@ -18,9 +18,10 @@ import { t } from "./strings.js";
 export type PainterBand = CalendarColour | "special" | "";
 
 /**
- * A painter's full-screen frame: one bar (close, heading, the `picker`, `link` and `actions`
- * slots, Cancel and Save) over the `row` slot and the default slot, which fills the rest of the
- * screen so what it holds scrolls inside itself and the bar stays put.
+ * A painter's full-screen frame: an optional band in the colour of what it edits, above one bar
+ * (close, heading, the `picker` and `link` slots, then Cancel, the `actions` slot and Save), over
+ * the `row` slot and the default slot, which fills the rest of the screen so what it holds scrolls
+ * inside itself and the bar stays put.
  *
  * The host owns the draft: it hands over the scope and coordinator `draftScopeFor` gave it, which
  * the frame asks before Cancel, close or Escape, and `dirty`, which sets Save. It sends

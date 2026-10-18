@@ -220,7 +220,8 @@ that breaks the rule.
    week, and stays.
 9. **The special-day editor keeps its heading (the day's name) and gets no "which dates" line**:
    point 2 names the season painter, and mockup 07 shows neither. A762's "Foo: special day,
-   12–15 Feb" is A762's to decide.
+   12–15 Feb" is A762's to decide. (2026-10-18: superseded by A762's plan, Decision 3: the editor
+   is titled "<name>: special day, <dates>".)
 10. **The line sits in the painter's `row` slot**, above the paint row, not in a new `painter-frame`
     slot, so the frame the staffing painters share does not change.
 11. **"+ Add dates…" stays a toggle.** Point 7 removes only Range.
