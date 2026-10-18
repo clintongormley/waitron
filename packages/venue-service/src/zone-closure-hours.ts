@@ -29,8 +29,8 @@ export async function assertSeasonClosuresInHours(
   cfg: VenueScope,
   seasonId: string,
   zones: readonly { zoneId: string; field: string; days: readonly ClosedWeekDay[] }[],
+  at: Date,
   read?: ServingRead,
-  at: Date = new Date(),
 ): Promise<void> {
   if (zones.length === 0) return;
   const { clock, departmentOf } = read ?? {

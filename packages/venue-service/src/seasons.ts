@@ -4,7 +4,6 @@ import { readLocationClock } from "@waitron/reporting";
 import {
   AppError,
   CALENDAR_COLOURS,
-  type BusinessDayClock,
   type CalendarColour,
   type ErrorParams,
 } from "@waitron/shared";
@@ -13,7 +12,7 @@ import {
   assertWaitingChangeFits,
 } from "./business-day-schedule.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
-import { inForceClock } from "./service-day-context.js";
+import { lastOrdersClock, type LastOrdersClock } from "./service-day-context.js";
 import type { VenueScope } from "./operations.js";
 import {
   byStart,
@@ -81,7 +80,7 @@ export function temporaryStart(index: number): string {
 async function checkScheduleAfterSeasonWrite(
   tx: Transaction,
   cfg: VenueScope,
-  clock: BusinessDayClock,
+  clock: LastOrdersClock,
 ): Promise<void> {
   const clash = await scheduleEndOffsetClash(tx, cfg, clock);
   if (clash !== null) invalid({ field: "seasons", reason: "end_offset", ...clash });
@@ -201,7 +200,7 @@ export async function saveSeasons(
     }
   }
   if (timed) {
-    await checkScheduleAfterSeasonWrite(tx, cfg, inForceClock(clock, at));
+    await checkScheduleAfterSeasonWrite(tx, cfg, lastOrdersClock(clock, at));
     await assertWaitingChangeFits(tx, cfg, at, clock);
   }
   return readSeasons(tx, cfg);

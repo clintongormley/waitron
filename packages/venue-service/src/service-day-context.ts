@@ -58,6 +58,16 @@ export function settledClock(clock: BusinessDayClock, at: Date): BusinessDayCloc
   };
 }
 
+/** What a last-orders check after an hours save at `at` reads: a one-off date under its own start
+ *  on `clock`, everything undated under `weekly`, the start in force. */
+export interface LastOrdersClock {
+  clock: BusinessDayClock;
+  weekly: string;
+}
+export function lastOrdersClock(clock: BusinessDayClock, at: Date): LastOrdersClock {
+  return { clock: settledClock(clock, at), weekly: inForceClock(clock, at).dayCutover };
+}
+
 /** The start in force at `at` as the clock's only start: what an undated weekly check fits. */
 export function inForceClock(clock: BusinessDayClock, at: Date): BusinessDayClock {
   // Without changes the first start is in force at every moment, and the time zone, which a

@@ -1341,8 +1341,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
                 ctx.cfg,
                 seasonId,
                 (zoneWeeks ?? []).map((zone, i) => ({ ...zone, field: `zones.${i}.` })),
-                read,
                 at,
+                read,
               ),
           );
         });
@@ -1374,8 +1374,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
                   ctx.cfg,
                   seasonId,
                   [{ zoneId, field: "", days: body.days as readonly ClosedWeekDay[] }],
-                  read,
                   at,
+                  read,
                 ),
             },
           );

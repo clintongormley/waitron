@@ -20,7 +20,7 @@ import {
 import type { Season } from "./season-rules.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { rangeSpan, type ClosedRange, type ServiceRange } from "./service-day.js";
-import { inForceClock } from "./service-day-context.js";
+import { inForceClock, lastOrdersClock } from "./service-day-context.js";
 import { readServiceZones, stageZoneClosedWeek } from "./zone-closed-times.js";
 import "./errors.js";
 
@@ -385,7 +385,7 @@ export async function saveSeasonWeeks(
     expectedClockRevision,
   );
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
-  await assertWeekEndOffsets(tx, cfg, inForce, departmentWeeks);
+  await assertWeekEndOffsets(tx, cfg, lastOrdersClock(clock, at), departmentWeeks);
   await afterWrite?.({ clock, departmentOf: serving });
   if (changed) await assertWaitingChangeFits(tx, cfg, at, clock);
 }

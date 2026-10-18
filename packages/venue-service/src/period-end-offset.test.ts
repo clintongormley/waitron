@@ -6,6 +6,8 @@ import {
   type SeasonSchedule,
 } from "./period-end-offset.js";
 import type { ServiceRange } from "./service-day.js";
+import { inForceClock, settledClock } from "./service-day-context.js";
+import type { BusinessDayClock } from "@waitron/shared";
 
 const lunch = { periodId: "lunch", startsAt: "12:00", endsAt: "14:00" };
 const next = { periodId: "dinner", startsAt: "14:15", endsAt: "18:00" };
@@ -329,4 +331,48 @@ it("walks a repeating special date through where it says it falls each year", ()
       "06:00",
     ),
   ).toEqual({ periodId: "dinner", slotIndex: 0, date: "2026-12-19", specialDayId: "sd-1" });
+});
+
+describe("end offsets for an hours save after the start moved", () => {
+  // 05:00, then 03:00 from 2026-10-21, then 05:00 again from 2026-10-28; saved on 2026-11-02.
+  const clock: BusinessDayClock = {
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    cutoverChanges: [
+      { effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" },
+      { effectiveBusinessDay: "2026-10-28", dayCutover: "05:00" },
+    ],
+  };
+  const at = new Date("2026-11-02T12:00:00Z");
+  const settled = settledClock(clock, at);
+  const weekly = inForceClock(clock, at).dayCutover;
+  const offsets = new Map([["p", 30]]);
+  const oneOff = (date: string, startsAt: string, endsAt: string) => ({
+    date,
+    closeWholeVenue: false,
+    paint: [{ periodId: "p", startsAt, endsAt }],
+    specialDayId: `sd-${date}`,
+  });
+  const noWeek = [
+    { seasonId: "year", startsOn: "01-01", week: Array.from({ length: 7 }, () => []) },
+  ];
+
+  it("judges a past one-off date under its own start", () => {
+    const past = [oneOff("2026-10-23", "03:00", "04:30"), oneOff("2026-10-24", "05:00", "06:00")];
+    expect(findSeasonEndOffsetClash(noWeek, past, offsets, settled, weekly)).toBeNull();
+  });
+  it("still finds a future one-off date's clash", () => {
+    const future = [oneOff("2026-11-12", "03:00", "04:30"), oneOff("2026-11-13", "05:00", "06:00")];
+    expect(findSeasonEndOffsetClash(noWeek, future, offsets, settled, weekly)).toMatchObject({
+      periodId: "p",
+      date: "2026-11-12",
+    });
+  });
+  it("judges the weekly ranges under the start in force alone", () => {
+    const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
+    week[3] = [{ periodId: "p", startsAt: "22:00", endsAt: "04:30" }];
+    const seasons = [{ seasonId: "year", startsOn: "01-01", week }];
+    expect(findSeasonEndOffsetClash(seasons, [], offsets, settled)).not.toBeNull();
+    expect(findSeasonEndOffsetClash(seasons, [], offsets, settled, weekly)).toBeNull();
+  });
 });

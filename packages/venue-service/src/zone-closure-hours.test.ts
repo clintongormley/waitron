@@ -30,6 +30,7 @@ beforeAll(() => {
   db = suite.db;
 });
 
+const at = new Date("2026-03-02T12:00:00Z");
 const closedMonday = (ranges: { startsAt: string; endsAt: string }[]) =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: weekday === 1 ? ranges : [] }));
 
@@ -100,13 +101,19 @@ describe("assertSeasonClosuresInHours", () => {
   it("passes a closure inside its department's hours", async () => {
     const v = await venue();
     await withTransaction(db, (tx) =>
-      assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
-        {
-          zoneId: v.barra,
-          field: "",
-          days: closedMonday([{ startsAt: "10:00", endsAt: "12:00" }]),
-        },
-      ]),
+      assertSeasonClosuresInHours(
+        tx,
+        v.cfg,
+        v.seasonId,
+        [
+          {
+            zoneId: v.barra,
+            field: "",
+            days: closedMonday([{ startsAt: "10:00", endsAt: "12:00" }]),
+          },
+        ],
+        at,
+      ),
     );
   });
 
@@ -115,16 +122,22 @@ describe("assertSeasonClosuresInHours", () => {
     expect(
       await refusal(() =>
         withTransaction(db, (tx) =>
-          assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
-            {
-              zoneId: v.barra,
-              field: "zones.3.",
-              days: closedMonday([
-                { startsAt: "09:00", endsAt: "10:00" },
-                { startsAt: "11:00", endsAt: "12:30" },
-              ]),
-            },
-          ]),
+          assertSeasonClosuresInHours(
+            tx,
+            v.cfg,
+            v.seasonId,
+            [
+              {
+                zoneId: v.barra,
+                field: "zones.3.",
+                days: closedMonday([
+                  { startsAt: "09:00", endsAt: "10:00" },
+                  { startsAt: "11:00", endsAt: "12:30" },
+                ]),
+              },
+            ],
+            at,
+          ),
         ),
       ),
     ).toEqual({
@@ -148,9 +161,13 @@ describe("assertSeasonClosuresInHours", () => {
     expect(
       await refusal(() =>
         withTransaction(db, (tx) =>
-          assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
-            { zoneId: v.barra, field: "", days },
-          ]),
+          assertSeasonClosuresInHours(
+            tx,
+            v.cfg,
+            v.seasonId,
+            [{ zoneId: v.barra, field: "", days }],
+            at,
+          ),
         ),
       ),
     ).toEqual({
@@ -165,24 +182,36 @@ describe("assertSeasonClosuresInHours", () => {
       configureZone(tx, v.cfg, { zoneId: v.barra, departmentId: v.deli }),
     );
     await withTransaction(db, (tx) =>
-      assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
-        {
-          zoneId: v.barra,
-          field: "",
-          days: closedMonday([{ startsAt: "15:00", endsAt: "16:00" }]),
-        },
-      ]),
+      assertSeasonClosuresInHours(
+        tx,
+        v.cfg,
+        v.seasonId,
+        [
+          {
+            zoneId: v.barra,
+            field: "",
+            days: closedMonday([{ startsAt: "15:00", endsAt: "16:00" }]),
+          },
+        ],
+        at,
+      ),
     );
     expect(
       await refusal(() =>
         withTransaction(db, (tx) =>
-          assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
-            {
-              zoneId: v.barra,
-              field: "",
-              days: closedMonday([{ startsAt: "10:00", endsAt: "11:00" }]),
-            },
-          ]),
+          assertSeasonClosuresInHours(
+            tx,
+            v.cfg,
+            v.seasonId,
+            [
+              {
+                zoneId: v.barra,
+                field: "",
+                days: closedMonday([{ startsAt: "10:00", endsAt: "11:00" }]),
+              },
+            ],
+            at,
+          ),
         ),
       ),
     ).toEqual({
@@ -197,9 +226,13 @@ describe("assertSeasonClosuresInHours", () => {
     expect(
       await refusal(() =>
         withTransaction(db, (tx) =>
-          assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
-            { zoneId: v.barra, field: "", days },
-          ]),
+          assertSeasonClosuresInHours(
+            tx,
+            v.cfg,
+            v.seasonId,
+            [{ zoneId: v.barra, field: "", days }],
+            at,
+          ),
         ),
       ),
     ).toEqual({
@@ -240,16 +273,20 @@ describe("assertSeasonClosuresInHours", () => {
           weekday,
           slots: weekday === 1 ? [{ periodId, startsAt: "04:00", endsAt: "06:00" }] : [],
         })),
-        new Date(),
+        at,
         1,
         { seasonId: v.seasonId },
       );
     });
     const closure = (startsAt: string, endsAt: string) =>
       withTransaction(db, (tx) =>
-        assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
-          { zoneId: v.barra, field: "", days: closedMonday([{ startsAt, endsAt }]) },
-        ]),
+        assertSeasonClosuresInHours(
+          tx,
+          v.cfg,
+          v.seasonId,
+          [{ zoneId: v.barra, field: "", days: closedMonday([{ startsAt, endsAt }]) }],
+          at,
+        ),
       );
     await closure("05:30", "06:00");
     expect(await refusal(() => closure("06:00", "07:00"))).toEqual({
@@ -264,9 +301,13 @@ describe("assertSeasonClosuresInHours", () => {
     expect(
       await refusal(() =>
         withTransaction(db, (tx) =>
-          assertSeasonClosuresInHours(tx, v.cfg, v.seasonId, [
-            { zoneId, field: "", days: closedMonday([]) },
-          ]),
+          assertSeasonClosuresInHours(
+            tx,
+            v.cfg,
+            v.seasonId,
+            [{ zoneId, field: "", days: closedMonday([]) }],
+            at,
+          ),
         ),
       ),
     ).toEqual({ code: "service_zone.not_found", params: { zoneId } });

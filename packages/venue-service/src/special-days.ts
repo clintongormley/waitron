@@ -26,7 +26,13 @@ import { departments, zoneServicePolicies } from "./schema/service.js";
 import { readHolidayDates } from "./holidays.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
 import { joinTouching, type ServingRead } from "./season-weeks.js";
-import { inForceClock, scheduleCutovers, settledClock } from "./service-day-context.js";
+import {
+  inForceClock,
+  lastOrdersClock,
+  type LastOrdersClock,
+  scheduleCutovers,
+  settledClock,
+} from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
 import "./errors.js";
 
@@ -895,7 +901,7 @@ async function requireSpecialDay(tx: Transaction, cfg: VenueScope, id: string) {
 async function checkScheduleAfterWrite(
   tx: Transaction,
   cfg: VenueScope,
-  clock: BusinessDayClock,
+  clock: LastOrdersClock,
 ): Promise<void> {
   const clash = await scheduleEndOffsetClash(tx, cfg, clock);
   if (clash !== null)
@@ -1197,7 +1203,7 @@ export async function saveSpecialDay(
       })),
     );
   }
-  await checkScheduleAfterWrite(tx, cfg, inForce);
+  await checkScheduleAfterWrite(tx, cfg, lastOrdersClock(clock, at));
   await afterWrite?.({ clock, departmentOf: zoneDepartments });
   await assertWaitingChangeFits(tx, cfg, at, clock);
   return readSpecialDay(tx, cfg, specialDayId);
@@ -1215,6 +1221,6 @@ export async function deleteSpecialDay(
   await requireSpecialDay(tx, cfg, id);
   await tx.delete(specialDays).where(eq(specialDays.id, id));
   const clock = await readLocationClock(tx, cfg.locationId);
-  await checkScheduleAfterWrite(tx, cfg, inForceClock(clock, at));
+  await checkScheduleAfterWrite(tx, cfg, lastOrdersClock(clock, at));
   await assertWaitingChangeFits(tx, cfg, at, clock);
 }

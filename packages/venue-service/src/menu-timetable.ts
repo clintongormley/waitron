@@ -61,6 +61,8 @@ import {
   scheduleCutovers,
   serviceDayContext,
   inForceClock,
+  lastOrdersClock,
+  type LastOrdersClock,
   type ServiceDayContext,
 } from "./service-day-context.js";
 import "./errors.js";
@@ -179,7 +181,7 @@ async function endOffsetClash(
   cfg: VenueScope,
   only?: readonly string[],
   validateZeroOffsets = false,
-  acquiredClock?: BusinessDayClock,
+  acquiredClock?: BusinessDayClock | LastOrdersClock,
 ) {
   const periods = await tx
     .select({
@@ -196,7 +198,8 @@ async function endOffsetClash(
       ),
     );
   if (!validateZeroOffsets && periods.every((period) => period.offset === 0)) return null;
-  const clock = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
+  const read = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
+  const { clock, weekly } = "weekly" in read ? read : { clock: read, weekly: undefined };
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
   const departmentIds =
     only === undefined
@@ -231,6 +234,7 @@ async function endOffsetClash(
       })),
       offsets,
       clock,
+      weekly,
     );
     if (clash !== null) {
       return {
@@ -247,7 +251,7 @@ async function endOffsetClash(
 }
 
 /** The first sending cutoff that runs into what follows it, over every department. */
-export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope, clock?: BusinessDayClock) {
+export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope, clock?: LastOrdersClock) {
   return endOffsetClash(tx, cfg, undefined, false, clock);
 }
 
@@ -256,7 +260,7 @@ export function departmentEndOffsetClash(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
-  clock?: BusinessDayClock,
+  clock: LastOrdersClock,
 ) {
   return endOffsetClash(tx, cfg, [departmentId], false, clock);
 }
@@ -608,7 +612,7 @@ async function writeMenuPeriod(
       })),
     );
   const clock = await readLocationClock(tx, cfg.locationId);
-  const clash = await endOffsetClash(tx, cfg, [departmentId], false, inForceClock(clock, at));
+  const clash = await endOffsetClash(tx, cfg, [departmentId], false, lastOrdersClock(clock, at));
   if (clash !== null)
     throw new AppError("menu_period.invalid", {
       field: "endOffsetMinutes",
@@ -683,7 +687,7 @@ export async function replaceMenuWeek(
     expectedClockRevision,
   );
   await staged.write();
-  await assertWeekEndOffsets(tx, cfg, inForce, [{ departmentId, ...staged }]);
+  await assertWeekEndOffsets(tx, cfg, lastOrdersClock(clock, at), [{ departmentId, ...staged }]);
   if (staged.changed) await assertWaitingChangeFits(tx, cfg, at, clock);
 }
 
@@ -692,7 +696,7 @@ export async function replaceMenuWeek(
 export async function assertWeekEndOffsets(
   tx: Transaction,
   cfg: VenueScope,
-  clock: BusinessDayClock,
+  clock: LastOrdersClock,
   weeks: readonly { departmentId: string; clashField: (clash: EndOffsetClash) => string }[],
 ): Promise<void> {
   const clash = await endOffsetClash(

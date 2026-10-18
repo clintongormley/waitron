@@ -25,7 +25,7 @@ import {
 import { departments } from "./schema/service.js";
 import { joinTouching } from "./season-weeks.js";
 import { rangeSpan, serviceMomentAt } from "./service-day.js";
-import { inForceClock } from "./service-day-context.js";
+import { inForceClock, lastOrdersClock } from "./service-day-context.js";
 import "./errors.js";
 
 export interface PaintedIn {
@@ -256,7 +256,7 @@ export async function deletePeriod(
     tx,
     cfg,
     period.departmentId,
-    inForceClock(clock, at),
+    lastOrdersClock(clock, at),
   );
   if (clash !== null)
     invalidTimetable(replacementId === null ? "periodId" : "replacementPeriodId", {
@@ -317,8 +317,8 @@ async function fitExtensionsToReplacement(
   }
 }
 
-/** Joins touching ranges of one period within each of `dayIds`' days, ordered from the day's
- *  changeover. */
+/** Joins touching ranges of one period within each of `dayIds`' days, ordered from a dated day's
+ *  own start, or an undated day's start in force at `at`. */
 async function joinTouchingRanges(
   tx: Transaction,
   dayIds: readonly string[],
