@@ -116,6 +116,14 @@ installed code, and only their number is stale.
   now used for dependency optimization instead of esbuild". Nobody re-checked that vite 8 still emits
   that warning, or that the `include` lists are still the fix.
 
+**Local observation, 2026-10-18 (A773-1).** After a temporary till browser config had been removed,
+`pnpm --filter @waitron/till exec vitest run` with the new Sent widget's two suites,
+`sent-panel.test.ts`, `draft-layout.test.ts` and five existing table-screen suites logged
+`dependency optimized: lit/directive.js`, then `optimized dependencies changed. reloading` and
+`Vite unexpectedly reloaded a test`. All nine files failed to import and the run reported
+`Tests no tests`. Repeating that selection after the cache had been populated ran 493 passing tests.
+No `include` change or controlled cold-cache comparison was made, so the fix remains unmeasured.
+
 ## The till's QR pin compares the code against itself, not an authority
 
 **Left behind by the till QR library upgrade (qrcode-generator 1 -> 2, 2026-09-20).**

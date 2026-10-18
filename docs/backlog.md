@@ -2253,7 +2253,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   submission and count-summary helpers are removed on the feature branch. Retained-course
   recovery checks now read the current New order layout; live-label precedence, reused course
   names, blocked selections and empty sends have focused checks there.
-  The Sent panel and held-dish Finish resolution remain open. Its
+  The Sent component now has standalone browser checks for folds, prices, serving quantities,
+  shared held-group Fire and reminders. A native press stays in place when a due banner arrives,
+  and a long press opens line information without serving. It is not yet connected to the table
+  screen. That integration, Undo feedback, conditional sent-line actions and held-dish Finish
+  resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
   target recovery. Single-dish Fire now's command/API/client work is qualified on the feature
@@ -6010,8 +6014,9 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
     a declaration.** If a future change puts a second vite in the tree, they could land on a
     different one silently.
     [Detail](backlog/dependencies.md#the-browser-mode-packages-that-declare-no-vite-follow-the-others-by-deduplication-not-by-a-declaration)
-  - **A dependency-optimizer receipt taken on vite 6 was not re-measured.** Nobody re-checked that
-    vite 8 still emits that warning, or that the `include` lists are still the fix.
+  - **The dependency-optimizer fix still needs a cold-cache check on Vite 8.** A773-1 locally
+    observed the reload warning followed by failed imports and no executed tests on 2026-10-18.
+    A later run with the optimizer cache populated passed; that does not measure an `include` fix.
     [Detail](backlog/dependencies.md#a-dependency-optimizer-receipt-taken-on-vite-6-was-not-re-measured)
 
 - **Loose ends left by the till QR library upgrade (qrcode-generator 1 -> 2, 2026-09-20).**
