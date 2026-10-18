@@ -472,6 +472,7 @@ describe("Save closes the season painter", () => {
       request: (proceed, signal) =>
         app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
     });
+    let sampler: ReturnType<typeof setInterval> | undefined;
     try {
       await guard.write("/manage/opening-hours/view/year/year/2027");
       ({ app } = await mountApp());
@@ -481,7 +482,7 @@ describe("Save closes the season painter", () => {
           "wt-unsaved-changes",
         )!;
       const asked: boolean[] = [];
-      const sampler = setInterval(() => asked.push(question.open), 5);
+      sampler = setInterval(() => asked.push(question.open), 5);
       const painter = await openFromChip(el);
       await drag(painter, "3", 7 * 60, 9 * 60);
       saveButton(painter).click();
@@ -496,6 +497,7 @@ describe("Save closes the season painter", () => {
       history.back();
       await expect.poll(() => location.pathname).toBe("/manage/before");
     } finally {
+      clearInterval(sampler);
       guard.dispose();
     }
   });
