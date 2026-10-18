@@ -1538,6 +1538,80 @@ describe("no reset puts a table down on another", () => {
     expect(await readyOf(t9)).toEqual({ pending: false, readyToMove: false });
   });
 
+  it("a table blocked on a later read is marked, and a stored table may then be put down on it, as it needs moving (spec §7.5, No lock)", async () => {
+    await clearingWorkflow(false);
+    const s = await standardAndDinner(
+      [
+        { key: "b", label: fresh("B") },
+        { key: "c", label: fresh("C") },
+        { key: "t6", label: fresh("6") },
+      ],
+      { standard: { b: 0, c: 40, t6: null }, dinner: { b: 40, c: 80, t6: 0 } },
+    );
+    await s.onto(s.d.standard);
+    const [b, c, t6] = [s.live("b"), s.live("c"), s.live("t6")];
+    const partyB = await seatAt(b);
+    await seatAt(c);
+    await s.onto(s.d.dinner);
+    expect(await todayRow(t6)).toMatchObject({ x: null });
+
+    await finish(partyB);
+    const states = await readStates();
+
+    expect(await readyOf(b)).toEqual({ pending: true, readyToMove: true });
+    expect(states.get(b)!.today.needsMoving).toBe(true);
+    expect(await todayRow(b)).toMatchObject({ x: 0 });
+    expect(await todayRow(t6)).toMatchObject({ x: 0 });
+  });
+
+  it("a free table whose new place is taken on a later read is marked, and the room is not caught up again", async () => {
+    await clearingWorkflow(false);
+    const s = await standardAndDinner(
+      [
+        { key: "b", label: fresh("B") },
+        { key: "c", label: fresh("C") },
+      ],
+      { standard: { b: 0, c: 80 }, dinner: { b: 40, c: 80 } },
+    );
+    await s.onto(s.d.standard);
+    const [b, c] = [s.live("b"), s.live("c")];
+    const partyB = await seatAt(b);
+    await s.onto(s.d.dinner);
+    await setToday(c, { x: 40 });
+
+    await finish(partyB);
+    await readStates();
+
+    expect(await readyOf(b)).toEqual({ pending: true, readyToMove: true });
+    expect(await todayRow(b)).toMatchObject({ x: 0 });
+    expect(await dueIn(s.d.zoneId)).toBe(0);
+  });
+
+  it("a joined group waiting for its stored joined table's place is not caught up on every read", async () => {
+    await clearingWorkflow(false);
+    const s = await standardAndDinner(
+      [
+        { key: "t4", label: fresh("4") },
+        { key: "t5", label: fresh("5") },
+        { key: "t45", label: fresh("4+5"), partKeys: ["t4", "t5"] },
+        { key: "t8", label: fresh("8") },
+      ],
+      {
+        standard: { t4: 0, t5: 20, t45: null, t8: 60 },
+        dinner: { t4: null, t5: null, t45: 60, t8: 60 },
+      },
+    );
+    await s.onto(s.d.standard);
+    const [t4, t5, t45] = [s.live("t4"), s.live("t5"), s.live("t45")];
+
+    await s.onto(s.d.dinner);
+    await readStates();
+
+    expect(await todayRows([t4, t5, t45])).toMatchObject([{ x: 0 }, { x: 20 }, { x: null }]);
+    expect(await readyOf(t45)).toEqual({ pending: true, readyToMove: false });
+    expect(await dueIn(s.d.zoneId)).toBe(0);
+  });
+
   /** 6 waits behind 8, moved onto its new place by hand; 7 needs moving; nothing else waits. */
   async function sixBehindEight(
     more: {

@@ -543,23 +543,22 @@ async function catchUpPass(
     if (blocked.size + blockedCreates.size === before) break;
   }
 
-  if (inReset) {
-    const drawnBlocked = [...rowOf].flatMap(([target, row]) =>
-      target.tableId !== null && blocked.has(target.tableId) && drawnAt(target.tableId) !== null
-        ? [row.id]
-        : [],
-    );
-    const marked = new Set(drawnBlocked);
-    for (const group of groups) {
-      if (group.rows.some((r) => marked.has(r.id))) for (const r of group.rows) marked.add(r.id);
-    }
-    const toMark = [...marked].filter((id) => byId.has(id) && !byId.get(id)!.readyToMove);
-    if (toMark.length > 0) {
-      await tx
-        .update(floorResetTables)
-        .set({ readyToMove: true })
-        .where(inArray(floorResetTables.id, toMark));
-    }
+  // A drawn table whose new place is taken keeps its place, marked ready to move (spec §7.5).
+  const drawnBlocked = [...rowOf].flatMap(([target, row]) =>
+    target.tableId !== null && blocked.has(target.tableId) && drawnAt(target.tableId) !== null
+      ? [row.id]
+      : [],
+  );
+  const marking = new Set(drawnBlocked);
+  for (const group of groups) {
+    if (group.rows.some((r) => marking.has(r.id))) for (const r of group.rows) marking.add(r.id);
+  }
+  const toMark = [...marking].filter((id) => byId.has(id) && !byId.get(id)!.readyToMove);
+  if (toMark.length > 0) {
+    await tx
+      .update(floorResetTables)
+      .set({ readyToMove: true })
+      .where(inArray(floorResetTables.id, toMark));
   }
 
   if (!inReset) {
@@ -929,9 +928,11 @@ const dueLink = alias(floorResetTableParts, "due_link");
 const dueSibling = alias(floorResetTableParts, "due_sibling");
 
 /**
- * Whether the zone holds a pending reset row a catch-up could apply: one not marked ready to
- * move, or a marked one whose table, and every pending, unplaced table of the joined group of a
- * pending joined row holding it (plan decision 8), no longer moves. Weaker than "will apply": a row can still wait for its guests or its name.
+ * Whether the zone holds a pending reset row a catch-up could apply, whose place, and the place of
+ * every pending row of a joined group holding it, is not taken: one not marked ready to move, or
+ * a marked one whose table, and every pending, unplaced table of the joined group of a pending
+ * joined row holding it (plan decision 8), no longer moves. Weaker than "will apply": a row can
+ * still wait for its guests or its name.
  */
 export function catchUpDue(zoneId: SQLWrapper): SQL {
   const r = dueRow;
@@ -944,7 +945,18 @@ export function catchUpDue(zoneId: SQLWrapper): SQL {
   // group, the joined row and each part, as catchUpPass's groups do.
   return sql`exists (
     select 1 from ${floorResetTables} ${as("due_row")}
-    where ${r.zoneId} = ${zoneId} and ${r.pending} = 1 and not ${placeTaken(r)} and (
+    where ${r.zoneId} = ${zoneId} and ${r.pending} = 1 and not ${placeTaken(r)}
+    and not exists (
+      select 1 from ${floorResetTableParts} ${as("due_link")}
+      inner join ${floorResetTables} ${as("due_joined")}
+        on ${j.id} = ${link.joinedResetTableId} and ${j.pending} = 1
+      inner join ${floorResetTableParts} ${as("due_sibling")}
+        on ${sibling.joinedResetTableId} = ${link.joinedResetTableId}
+      inner join ${floorResetTables} ${as("due_member")}
+        on ${m.id} in (${sibling.joinedResetTableId}, ${sibling.partResetTableId})
+      where ${r.id} in (${link.joinedResetTableId}, ${link.partResetTableId})
+        and ${m.id} <> ${r.id} and ${m.pending} = 1 and ${placeTaken(m)}
+    ) and (
       ${r.readyToMove} = 0 or (
         not ${resetRowMoves(r)}
         and not exists (
@@ -966,15 +978,21 @@ export function catchUpDue(zoneId: SQLWrapper): SQL {
 /**
  * catchUpPass's rule for a row it would put down off the map, in SQL: the row is not yet placed,
  * has a place, its table is not drawn (and is not a marked one taken off, which stays off), and a
- * table drawn in the zone, neither out of service in a joined table nor needing moving, stands in
- * that place.
+ * table drawn in the zone stands in that place: not out of service in a joined table, not needing
+ * moving, and not a pending member of a joined group holding the row, which moves with it.
  */
-function placeTaken(r: typeof dueRow): SQL {
+function placeTaken(r: typeof dueRow | typeof dueMember): SQL {
   const own = sql.identifier("place_own");
   const blocker = sql.identifier("place_blocker");
   const blockerTable = sql.identifier("place_blocker_table");
   const col = (table: SQLWrapper, name: string) => sql`${table}.${sql.identifier(name)}`;
   const b = (name: string) => col(blocker, name);
+  const [link, joined, sibling, member] = [
+    "place_link",
+    "place_joined",
+    "place_sibling",
+    "place_member",
+  ].map((name) => sql.identifier(name));
   return sql`(
     ${r.placed} = 0 and ${r.x} is not null
     and not exists (
@@ -992,6 +1010,17 @@ function placeTaken(r: typeof dueRow): SQL {
         and ${b("x")} is not null and ${b("taken_off")} = 0
         and not ${joinedOutOfService(b("table_id"))}
         and not ${needsMoving(b("table_id"))}
+        and not exists (
+          select 1 from ${floorResetTableParts} ${link}
+          inner join ${floorResetTables} ${joined}
+            on ${col(joined, "id")} = ${col(link, "joined_reset_table_id")} and ${col(joined, "pending")} = 1
+          inner join ${floorResetTableParts} ${sibling}
+            on ${col(sibling, "joined_reset_table_id")} = ${col(link, "joined_reset_table_id")}
+          inner join ${floorResetTables} ${member}
+            on ${col(member, "id")} in (${col(sibling, "joined_reset_table_id")}, ${col(sibling, "part_reset_table_id")})
+          where ${r.id} in (${col(link, "joined_reset_table_id")}, ${col(link, "part_reset_table_id")})
+            and ${col(member, "pending")} = 1 and ${col(member, "table_id")} = ${b("table_id")}
+        )
         and ${standsInSql(
           { x: r.x, y: r.y, width: r.width, height: r.height, rotation: r.rotation },
           { x: b("x"), y: b("y"), width: b("width"), height: b("height"), rotation: b("rotation") },
