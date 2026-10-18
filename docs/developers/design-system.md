@@ -4967,11 +4967,11 @@ desk profile, and is offered only while two or more departments are active. One 
 Save, in a row below the strip, cover every tab, so changing tab keeps the draft. It never asks
 about unsaved changes, because the screen's `navigationScopes` (`venue-departments-shell.ts`) lets
 an address change between the open department's offered tabs through. The address keeps the open
-tab (`view` is `service` or `transfers`; Details has none), and an address naming a tab not
-offered opens Details. A refusal naming a field, or an invalid Save, shows the first tab holding a
-marked field, and marks every tab that holds one. A strip too wide for the dialog scrolls sideways
-inside it. Edit zone holds its name and four raw service
-overrides. Each override offers “Same as department (…)”, and saving that choice writes null. How
+tab (`view` is `service` or `transfers`; Details has none), and an address naming an unknown view,
+or a tab not offered, opens Details and replaces the address without adding a history entry. A
+refusal naming a field, or an invalid Save, shows the first tab holding a marked field, and marks
+every tab that holds one. A strip too wide for the dialog scrolls sideways inside it. Edit zone
+holds its name and four raw service overrides. Each override offers “Same as department (…)”, and saving that choice writes null. How
 orders start chooses Table service or Counter service. Counter service has a paid-when choice and
 a collection-ticket choice. The zone's name and policy save in one request. Edit department preserves the department's receipt policy.
 

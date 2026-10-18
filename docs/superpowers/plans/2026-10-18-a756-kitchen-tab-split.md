@@ -158,8 +158,7 @@ Files (all outside A773-1): `packages/venue-service/src/dashboard/department-set
   Transfers) holding a marked field, then focuses it; every tab holding a marked field carries
   `marked` (`TabItem.marked`, `packages/ui/src/components/wt-tabs.ts:15`).
 
-New strings (venue-service catalogue, EN / ES):
-`venue.department_tabs` "Department" / "Departamento" (the strip's label);
+The strip's label reuses `venue.department`. New strings (venue-service catalogue, EN / ES):
 `venue.department_tab.details` "Details" / "Datos";
 `venue.department_tab.service` "Service" / "Servicio";
 `venue.department_tab.transfers` "Transfers" / "Traslados";
