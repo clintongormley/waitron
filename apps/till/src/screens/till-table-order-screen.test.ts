@@ -7,11 +7,16 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { heldViews, placeFor } from "../state/draft-place.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { WtCombobox } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { formatMoney } from "@waitron/shared";
-import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  servedMenus,
+} from "../widgets/test-helpers.js";
 import { resized } from "./till-table-order-screen.test-helpers.js";
 import {
   TillTableOrderScreen,
@@ -1879,6 +1884,7 @@ describe("till-table-order-screen", () => {
           lineNo: 3,
           lineName: "Croquetas",
           patch: { note: "no salt" },
+          expectedEdit: null,
           revision: 7,
           saleLine: {
             menuItemId: undefined,
@@ -2602,6 +2608,7 @@ describe("till-table-order-screen", () => {
         lineNo: 5,
         lineName: "Burger",
         patch: { note: "no onions" },
+        expectedEdit: null,
         revision: 7,
         saleLine: {
           menuItemId: "menu-item-burger",
@@ -2614,6 +2621,79 @@ describe("till-table-order-screen", () => {
       expect(seen.event!.bubbles).toBe(true);
       expect(seen.event!.composed).toBe(true);
       expect(editor(el)).toBeNull();
+    });
+
+    for (const locale of ["en", "es"] as const)
+      for (const theme of ["light", "dark"] as const)
+        it.each([360, 390, 1280])(
+          `confirms the native line edit with its opening observation (${locale}, ${theme}, %s px)`,
+          async (width) => {
+            const previousLocale = currentLocale();
+            const previousSize = { width: window.innerWidth, height: window.innerHeight };
+            setLocale(locale);
+            try {
+              await page.viewport(width, 900);
+              const opened = {
+                billId: "wo-4",
+                editorVersion: 7,
+                draftId: null,
+                draftRevision: null,
+              };
+              const { el } = await mountLines([burgerLine], { revision: 7, billEdit: opened });
+              el.parentElement!.setAttribute("data-theme", theme);
+              await userEvent.click(
+                page.elementLocator(
+                  el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!,
+                ),
+              );
+              await el.updateComplete;
+              await userEvent.click(page.elementLocator(lineAction(el, "change", 5)!));
+              await el.updateComplete;
+              const picker = editor(el)!;
+              await picker.updateComplete;
+              await userEvent.fill(
+                page.elementLocator(noteBox(picker)),
+                locale === "en" ? "no onions" : "sin cebolla",
+              );
+              const seen = captureChange(el);
+              await expectNoA11yViolations(picker);
+              const bounds = noteBox(picker).getBoundingClientRect();
+              expect(bounds.left).toBeGreaterThanOrEqual(0);
+              expect(bounds.right).toBeLessThanOrEqual(width);
+              await page.screenshot({
+                path: `__screenshots__/a773-line-edit/${locale}-${theme}-${width}.png`,
+              });
+              await userEvent.click(
+                page.elementLocator(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!),
+              );
+              await el.updateComplete;
+              expect(seen.event!.detail.expectedEdit).toEqual(opened);
+              expect(seen.event!.detail.patch.note).toBe(
+                locale === "en" ? "no onions" : "sin cebolla",
+              );
+            } finally {
+              cleanupWidgets();
+              setLocale(previousLocale);
+              await page.viewport(previousSize.width, previousSize.height);
+            }
+          },
+        );
+
+    it("retains the editing observation from opening Change through a metadata refresh", async () => {
+      const opened = { billId: "wo-4", editorVersion: 7, draftId: null, draftRevision: null };
+      const { el } = await mountLines([burgerLine], { revision: 7 });
+      Object.assign(el, { billEdit: opened });
+      await el.updateComplete;
+      await openDrawer(el);
+      const picker = await openChange(el, 5);
+      Object.assign(el, { billEdit: { ...opened, editorVersion: 9 } });
+      await el.updateComplete;
+      const seen = captureChange(el);
+      await typeNote(picker, "no onions");
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(seen.event!.detail.expectedEdit).toEqual(opened);
+      expect(seen.event!.detail.patch).toEqual({ note: "no onions" });
+      expect(seen.event!.detail.revision).toBe(7);
     });
 
     it("sends the revision the editor was opened at, not one read while it was open", async () => {
@@ -2670,6 +2750,7 @@ describe("till-table-order-screen", () => {
         lineNo: 5,
         lineName: "Burger",
         revision: 3,
+        expectedEdit: null,
         patch: {
           note: "sin cebolla",
           extras: [{ listId: "list-extras", picks: [{ productId: "p-cheese", quantity: 2 }] }],

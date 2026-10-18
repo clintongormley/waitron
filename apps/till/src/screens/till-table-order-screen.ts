@@ -6,7 +6,7 @@ import {
   nutritionIconStyles,
   nutritionDietLabels,
 } from "../widgets/nutrition-icons.js";
-import type { LineNutrition } from "../api/client.js";
+import type { BillEditExpected, LineNutrition } from "../api/client.js";
 import "../widgets/order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "../widgets/order-kitchen-note.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
@@ -400,6 +400,7 @@ export interface BillPayDetail {
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
+  expectedEdit: BillEditExpected | null;
   lineNo: number;
   /** The line's staff name, for a message about the change shown once another order is open. */
   lineName: string;
@@ -1259,6 +1260,7 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The revision {@link lines} was read at. */
   @property({ attribute: false }) revision = 0;
+  @property({ attribute: false }) billEdit: BillEditExpected | null = null;
   /** The venue's setting. When off, the server refuses to change or recall a sent line that has a
    * ticket item, so those lines offer Cancel instead. */
   @property({ attribute: false }) editSentLines = true;
@@ -1335,6 +1337,7 @@ export class TillTableOrderScreen extends LitElement {
   #changeProduct?: TillProduct;
   #changeSelection?: LineSelection;
   #changeRevision = 0;
+  #changeExpectedEdit: BillEditExpected | null = null;
 
   @state() private actionStep:
     | "closed"
@@ -2504,6 +2507,7 @@ export class TillTableOrderScreen extends LitElement {
       ...(line.note === null ? {} : { note: line.note }),
     };
     this.#changeRevision = this.revision;
+    this.#changeExpectedEdit = this.billEdit === null ? null : { ...this.billEdit };
     this.changeLine = line;
   }
 
@@ -2511,6 +2515,7 @@ export class TillTableOrderScreen extends LitElement {
     this.changeLine = null;
     this.#changeProduct = undefined;
     this.#changeSelection = undefined;
+    this.#changeExpectedEdit = null;
   }
 
   /** `options` and `extras` go only when the till offers the dish a list of that kind
@@ -2522,6 +2527,7 @@ export class TillTableOrderScreen extends LitElement {
     const line = this.changeLine!;
     const offered = offeredListsOf(this.#changeProduct!);
     const opened = this.#changeSelection!.options ?? [];
+    const expectedEdit = this.#changeExpectedEdit;
     this.#closeChange();
     const patch: OrderLinePatch = { note: detail.note ?? null };
     const options = detail.options ?? [];
@@ -2530,6 +2536,7 @@ export class TillTableOrderScreen extends LitElement {
     if (offered.some((entry) => entry.kind === "extras"))
       patch.extras = toWireModifiers({ extras: detail.extras }).extras ?? [];
     const change: ChangeLineDetail = {
+      expectedEdit,
       lineNo: line.lineNo,
       lineName: this.#nameForLine(line),
       patch,

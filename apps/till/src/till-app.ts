@@ -2610,6 +2610,7 @@ export class TillApp extends LitElement {
   @state() private editDeadEnds: {
     answer: DeadEndAnswer;
     change: ChangeLineDetail;
+    composition: BillComposition;
     orderId: string;
     visit: number;
     stationId?: string;
@@ -11916,23 +11917,23 @@ export class TillApp extends LitElement {
     this.#closeApprovers();
   }
 
-  /**
-   * A saved change stores the new revision and reads the order, its bills and what the party owes
-   * again whenever that order is still the open one, wherever the waiter is, so the next change is
-   * not refused as out of date and an extra's price shows at once. A refusal reads the order again
-   * too, and one because the kitchen has started the line offers to cancel it. A change that got
-   * no answer also reads the order, its bills and what the party owes again.
-   * When the order is no longer the open one, or {@link #orderVisit} says the waiter started leaving
-   * it and did not come back to it, a refusal or a change that got no answer changes nothing on
-   * screen but the message, which names the line, and its table while the floor lists it, because
-   * the waiter may believe a note (an allergy, say) was saved. Paying the tab and a server switch
-   * take the order off screen without that counter moving.
-   */
   async #onChangeLine(event: Event): Promise<void> {
     const change = (event as CustomEvent<ChangeLineDetail>).detail;
     const { lineNo, lineName, patch, revision } = change;
     const orderId = this.activeTabId;
     if (orderId === undefined) return;
+    const composition = this.#billComposition([orderId]);
+    if (composition === null) return;
+    if (
+      change.expectedEdit == null ||
+      change.expectedEdit.billId !== orderId ||
+      !this.#billChoiceCurrent(change.expectedEdit)
+    ) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    const identity = () =>
+      this.api === composition.api && this.#operatorSession === composition.session;
     const visit = this.#orderVisit;
     const left = () => this.#hasLeftOrder(orderId, visit);
     const tableId = this.activeTableId;
@@ -11940,11 +11941,21 @@ export class TillApp extends LitElement {
     this.cancelOffer = null;
     let outcome: { saved: { revision: number; party: BillParty } } | { error: unknown };
     try {
-      outcome = { saved: await this.api.updateOrderLine(orderId, lineNo, patch, revision) };
+      outcome = {
+        saved: await composition.api.updateOrderLine(
+          orderId,
+          lineNo,
+          patch,
+          revision,
+          change.expectedEdit,
+        ),
+      };
     } catch (error) {
       outcome = { error };
     }
+    if (!identity() || (!left() && !this.#billChoiceCurrent(change.expectedEdit))) return;
     if ("saved" in outcome) {
+      if (left()) return;
       this.#noteBillParty(outcome.saved.party);
       if (this.activeTabId !== orderId) return;
       this.tabRevision = outcome.saved.revision;
@@ -11970,12 +11981,12 @@ export class TillApp extends LitElement {
       const question = limited(3_000);
       try {
         const answer = await Promise.race([
-          this.api.askSaleDeadEnds([change.saleLine], orderId),
+          composition.api.askSaleDeadEnds([change.saleLine], orderId),
           pause(question.signal).then(() => undefined),
         ]);
-        if (left()) return;
+        if (!identity() || left()) return;
         if (answer !== undefined && answer.deadEnds.length > 0) {
-          this.editDeadEnds = { answer, change, orderId, visit };
+          this.editDeadEnds = { answer, change, composition, orderId, visit };
           return;
         }
       } catch {
@@ -11984,15 +11995,23 @@ export class TillApp extends LitElement {
         question.done();
       }
     }
+    if (!identity()) return;
     this.errorKey =
-      code === "working_order.out_of_date"
-        ? "held.changed_elsewhere"
-        : code === "bill.received_exceeds_total"
-          ? billWriteError(outcome.error, true)
-          : lineWriteError(outcome.error);
+      code !== undefined && DRAFT_REFUSALS.has(code)
+        ? draftRefusalError({
+            refused: code,
+            ownerName: (outcome.error as { ownerName?: string }).ownerName,
+          })
+        : code === "working_order.out_of_date"
+          ? "held.changed_elsewhere"
+          : code === "bill.received_exceeds_total"
+            ? billWriteError(outcome.error, true)
+            : lineWriteError(outcome.error);
     if (isNetworkFailure(outcome.error)) await this.#rereadAmounts(orderId, visit);
     else if (isBillMoneyRefusal(outcome.error)) await this.#loadLinesAndBills();
     else await this.#loadTabLines();
+    if (!identity()) return;
+    if (code !== undefined && DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
     if (code === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
   }
 
@@ -12005,11 +12024,7 @@ export class TillApp extends LitElement {
 
   #syncEditDeadEnds(): void {
     const pending = this.editDeadEnds;
-    if (
-      pending === null ||
-      this.activeTabId !== pending.orderId ||
-      this.#hasLeftOrder(pending.orderId, pending.visit)
-    ) {
+    if (pending === null || !this.#editDeadEndsCurrent(pending)) {
       this.#releaseEditDeadEnds();
       return;
     }
@@ -12036,6 +12051,7 @@ export class TillApp extends LitElement {
     return (
       this.isConnected &&
       this.editDeadEnds?.change === pending.change &&
+      this.#billCompositionCurrent(pending.composition) &&
       this.activeTabId === pending.orderId &&
       !this.#hasLeftOrder(pending.orderId, pending.visit)
     );
@@ -12072,12 +12088,7 @@ export class TillApp extends LitElement {
 
   #renderEditDeadEnds(): TemplateResult | typeof nothing {
     const pending = this.editDeadEnds;
-    if (
-      pending === null ||
-      this.activeTabId !== pending.orderId ||
-      this.#hasLeftOrder(pending.orderId, pending.visit)
-    )
-      return nothing;
+    if (pending === null || !this.#editDeadEndsCurrent(pending)) return nothing;
     return html`${keyed(
       pending.change,
       html`<wt-dialog
@@ -14643,6 +14654,7 @@ export class TillApp extends LitElement {
       .tables=${this.tables}
       .zones=${this.zones}
       .orderId=${this.activeTabId}
+      .billEdit=${this.#draftReady ? (this.#draftSync?.expectedEdit ?? null) : null}
       .draftStore=${draft}
       .otherDrafts=${this.#otherDrafts(draft)}
       .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
@@ -14772,6 +14784,7 @@ export class TillApp extends LitElement {
           .tables=${this.tables}
           .zones=${this.zones}
           .orderId=${this.activeTabId}
+          .billEdit=${this.#draftReady ? (this.#draftSync?.expectedEdit ?? null) : null}
           .draftStore=${draft}
           .otherDrafts=${this.#otherDrafts(draft)}
           .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}

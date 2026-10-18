@@ -122,3 +122,23 @@ describe("split-table editing request", () => {
     });
   });
 });
+
+describe("direct line editing observation", () => {
+  it.each([null, { billId: "bill-2", editorVersion: 7, draftId: "draft-2", draftRevision: 3 }])(
+    "carries the explicit editing observation %j with the original patch and revision",
+    async (expectedEdit) => {
+      const result = { revision: 8, party: { id: "party", revision: 9 } };
+      const fetch = vi.fn(async () => Response.json(result));
+      const patch = { note: "no salt", quantity: "2" };
+      expect(
+        await new TillApi("", fetch).updateOrderLine("bill-2", 3, patch, 7, expectedEdit),
+      ).toEqual(result);
+      expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/working-orders/bill-2/lines/3", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...patch, revision: 7, expectedEdit }),
+      });
+    },
+  );
+});

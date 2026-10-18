@@ -2513,6 +2513,7 @@ describe("TillApi", () => {
         3,
         { quantity: "2", note: null, extras: [] },
         7,
+        null,
       ),
     ).resolves.toEqual({ revision: 8, party: { id: "v1", revision: 5 } });
 
@@ -2520,7 +2521,13 @@ describe("TillApi", () => {
       "/api/working-orders/ord-1/lines/3",
       expect.objectContaining({
         method: "PUT",
-        body: JSON.stringify({ quantity: "2", note: null, extras: [], revision: 7 }),
+        body: JSON.stringify({
+          quantity: "2",
+          note: null,
+          extras: [],
+          revision: 7,
+          expectedEdit: null,
+        }),
       }),
     );
   });

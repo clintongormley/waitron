@@ -299,6 +299,14 @@ async function flush(el: TillApp, rounds = 3): Promise<void> {
 }
 
 function emit(source: Element, type: string, detail?: unknown): void {
+  if (
+    type === "change-line" &&
+    typeof detail === "object" &&
+    detail !== null &&
+    !Object.hasOwn(detail, "expectedEdit")
+  ) {
+    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
+  }
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
@@ -765,6 +773,7 @@ it("asks where a refused line edit should be made and retries with the chosen st
     1,
     { quantity: "2", makeAt: "kitchen" },
     0,
+    tableOrder(el)!.billEdit,
   );
 });
 
@@ -6035,6 +6044,55 @@ describe("line-edit unsaved station choice", () => {
     expect((await question(el)).open).toBe(false);
     expect(updateOrderLine).toHaveBeenCalledTimes(1);
   });
+  it.each(["own", "other"])(
+    "keeps the original line-edit observation after %s bill metadata changes",
+    async (which) => {
+      const { el, dialog, choose, updateOrderLine } = await opening();
+      const { billId, editorVersion, draftId, draftRevision } = server.edit("wo-4");
+      const original = { billId, editorVersion, draftId, draftRevision };
+      const refreshed = await server.listDrafts("v1");
+      const target = which === "own" ? "wo-4" : "wo-7";
+      api.listDrafts.mockResolvedValue({
+        ...refreshed,
+        billEdits: refreshed.billEdits.map((edit) =>
+          edit.billId === target ? { ...edit, editorVersion: edit.editorVersion + 2 } : edit,
+        ),
+      });
+      window.dispatchEvent(new Event("focus"));
+      await flush(el, 6);
+      await choose();
+      dialog.querySelector<HTMLElement>("[data-edit-dead-ends-retry]")!.click();
+      await flush(el, 6);
+      if (which === "own") {
+        expect(updateOrderLine).toHaveBeenCalledOnce();
+        expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+      } else {
+        expect(updateOrderLine).toHaveBeenCalledTimes(2);
+        expect(updateOrderLine).toHaveBeenLastCalledWith(
+          "wo-4",
+          1,
+          { quantity: "2", makeAt: "kitchen" },
+          0,
+          original,
+        );
+      }
+      expect(api.saveDraft).not.toHaveBeenCalled();
+      expect(api.takeOverDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retires the selected routing retry when its API is replaced", async () => {
+    const { el, dialog, choose, updateOrderLine } = await opening();
+    await choose();
+    const retry = dialog.querySelector<HTMLElement>("[data-edit-dead-ends-retry]")!;
+    el.api = { ...api } as unknown as TillApi;
+    await flush(el, 6);
+    retry.click();
+    await flush(el);
+    expect(updateOrderLine).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+  });
+
   it("Confirm accepts the existing exact retry and invalidates pending discard", async () => {
     const { el, dialog, choose, cancel, updateOrderLine } = await opening();
     await choose();
@@ -6052,6 +6110,7 @@ describe("line-edit unsaved station choice", () => {
       1,
       { quantity: "2", makeAt: "kitchen" },
       0,
+      tableOrder(el)!.billEdit,
     );
     oldDiscard.click();
     await flush(el);
@@ -8453,5 +8512,128 @@ describe("A773 retained bill candidates in the app", () => {
       answer();
       await flush(el, 6);
     }
+  });
+});
+
+describe("direct line editing authority", () => {
+  const observation = () => {
+    const { billId, editorVersion, draftId, draftRevision } = server.edit("wo-4");
+    return { billId, editorVersion, draftId, draftRevision };
+  };
+  const change = () => ({
+    lineNo: 1,
+    lineName: "Beer",
+    patch: { quantity: "2" },
+    revision: 0,
+    expectedEdit: observation(),
+  });
+
+  it("carries the shown observation in the line change", async () => {
+    const updateOrderLine = vi
+      .fn()
+      .mockResolvedValue({ revision: 1, party: { id: "v1", revision: 4 } });
+    const { el } = await mountApp({ updateOrderLine });
+    const order = await openMesa(el);
+    const ask = change();
+    emit(order, "change-line", ask);
+    await flush(el);
+    expect(updateOrderLine).toHaveBeenCalledExactlyOnceWith(
+      "wo-4",
+      1,
+      { quantity: "2" },
+      0,
+      ask.expectedEdit,
+    );
+  });
+
+  it.each(["missing", "wrong bill", "old version", "old draft", "old draft revision"])(
+    "sends nothing for a %s editing observation",
+    async (kind) => {
+      const updateOrderLine = vi.fn().mockResolvedValue({ revision: 1, party: null });
+      const { el } = await mountApp({ updateOrderLine });
+      const order = await openMesa(el);
+      const ask = change();
+      const expectedEdit =
+        kind === "missing"
+          ? undefined
+          : {
+              ...ask.expectedEdit,
+              ...(kind === "wrong bill" ? { billId: "wo-7" } : {}),
+              ...(kind === "old version" ? { editorVersion: 7 } : {}),
+              ...(kind === "old draft" ? { draftId: "old-draft" } : {}),
+              ...(kind === "old draft revision" ? { draftRevision: 7 } : {}),
+            };
+      emit(order, "change-line", { ...ask, expectedEdit });
+      await flush(el);
+      expect(updateOrderLine).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+      expect(api.saveDraft).not.toHaveBeenCalled();
+      expect(api.takeOverDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["success", "refusal"])(
+    "keeps a newer editor observation after a late line-edit %s",
+    async (outcome) => {
+      let answer!: (value: unknown) => void;
+      let refuse!: (error: unknown) => void;
+      const updateOrderLine = vi.fn(
+        () =>
+          new Promise((resolve, reject) => {
+            answer = resolve;
+            refuse = reject;
+          }),
+      );
+      const { el } = await mountApp({ updateOrderLine });
+      const order = await openMesa(el);
+      emit(order, "change-line", change());
+      await flush(el);
+      const refreshed = await server.listDrafts("v1");
+      api.listDrafts.mockResolvedValue({
+        ...refreshed,
+        billEdits: refreshed.billEdits.map((edit) =>
+          edit.billId === "wo-4" ? { ...edit, editorVersion: edit.editorVersion + 2 } : edit,
+        ),
+      });
+      window.dispatchEvent(new Event("focus"));
+      await flush(el, 6);
+      const reads = api.getTabLines.mock.calls.length;
+      if (outcome === "success") answer({ revision: 23, party: { id: "v1", revision: 23 } });
+      else refuse({ code: "ticket.already_started" });
+      await flush(el, 6);
+      expect(updateOrderLine).toHaveBeenCalledOnce();
+      expect(api.getTabLines).toHaveBeenCalledTimes(reads);
+      expect(tableOrder(el)!.revision).not.toBe(23);
+      expect(tableOrder(el)!.billEdit?.editorVersion).toBe(2);
+      expect(tableOrder(el)!.cancelOffer).toBeNull();
+      expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("ticket.already_started"));
+    },
+  );
+
+  it.each(["success", "refusal"])("ignores an old API's late line-edit %s", async (outcome) => {
+    let answer!: (value: { revision: number; party: { id: string; revision: number } }) => void;
+    let refuse!: (error: unknown) => void;
+    const updateOrderLine = vi.fn(
+      () =>
+        new Promise((resolve, reject) => {
+          answer = resolve;
+          refuse = reject;
+        }),
+    );
+    const { el } = await mountApp({ updateOrderLine });
+    const order = await openMesa(el);
+    emit(order, "change-line", change());
+    await flush(el);
+    expect(updateOrderLine).toHaveBeenCalledOnce();
+    el.api = { ...api } as unknown as TillApi;
+    await flush(el, 6);
+    const calls = api.getTabLines.mock.calls.length;
+    if (outcome === "success") answer({ revision: 23, party: { id: "v1", revision: 23 } });
+    else refuse({ code: "ticket.already_started" });
+    await flush(el, 6);
+    expect(api.getTabLines).toHaveBeenCalledTimes(calls);
+    expect(tableOrder(el)!.revision).not.toBe(23);
+    expect(tableOrder(el)!.cancelOffer).toBeNull();
+    expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("ticket.already_started"));
   });
 });

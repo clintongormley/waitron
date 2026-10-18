@@ -3104,11 +3104,12 @@ export class TillApi {
     lineNo: number,
     patch: OrderLinePatch,
     revision: number,
+    expectedEdit: BillEditExpected | null,
   ): Promise<{ revision: number; party: BillParty }> {
     return this.#request<{ revision: number; party: BillParty }>(
       `/api/working-orders/${orderId}/lines/${lineNo}`,
       "PUT",
-      { ...patch, revision },
+      { ...patch, revision, expectedEdit },
     );
   }
 

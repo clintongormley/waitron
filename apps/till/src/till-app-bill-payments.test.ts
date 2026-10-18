@@ -361,6 +361,14 @@ async function flush(el: TillApp, rounds = 3): Promise<void> {
 }
 
 function emit(source: Element, type: string, detail?: unknown): void {
+  if (
+    type === "change-line" &&
+    typeof detail === "object" &&
+    detail !== null &&
+    !Object.hasOwn(detail, "expectedEdit")
+  ) {
+    detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
+  }
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
@@ -2499,7 +2507,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
     });
     await flush(el);
 
-    expect(updateOrderLine).toHaveBeenCalledWith("wo-4", 1, { quantity: "2" }, 0);
+    expect(updateOrderLine).toHaveBeenCalledWith("wo-4", 1, { quantity: "2" }, 0, order.billEdit);
     expect(text(banner(el))).toBe(codeMessage("bill.line_paid"));
     expectReadAgain(reads);
   });
