@@ -420,6 +420,11 @@ async function catchUpPass(
   }
   const rows = [...byId.values()];
   if (rows.length === 0) return false;
+  const groups = [...groupOf.values()];
+  const groupsOfRow = new Map<string, ResetGroup[]>();
+  for (const group of groups) {
+    for (const { id } of group.rows) groupsOfRow.set(id, [...(groupsOfRow.get(id) ?? []), group]);
+  }
   const rowOf = new Map<Target, (typeof rows)[number]>();
   for (const row of rows) {
     const target: Target = {
@@ -479,7 +484,7 @@ async function catchUpPass(
   };
   // A marked group waits for Mark moved while any of its tables would still move; once none
   // would (taken off, say), it applies as any other row does (plan decision 10).
-  for (const id of stillToMove(rowOf, [...groupOf.values()], moves)) {
+  for (const id of stillToMove(rowOf, groupsOfRow, moves)) {
     if (carry.has(id)) continue;
     for (const [target, row] of rowOf) if (row.id === id) rowOf.delete(target);
   }
@@ -511,7 +516,6 @@ async function catchUpPass(
     tx,
     ids.filter((id) => removing.has(id) && !waiting.has(id)),
   );
-  const groups = [...groupOf.values()];
   const drawnAt = (tableId: string | null): Placement | null => {
     const today = tableId === null ? undefined : todayRows.get(tableId);
     return today === undefined || today.takenOff ? null : placementOf(today);
@@ -638,8 +642,8 @@ async function catchUpPass(
       : [],
   );
   const marking = new Set(drawnBlocked);
-  for (const group of groups) {
-    if (group.rows.some((r) => marking.has(r.id))) for (const r of group.rows) marking.add(r.id);
+  for (const id of drawnBlocked) {
+    for (const group of groupsOfRow.get(id) ?? []) for (const r of group.rows) marking.add(r.id);
   }
   const toMark = [...marking].filter((id) => byId.has(id) && !byId.get(id)!.readyToMove);
   if (toMark.length > 0) {
@@ -650,7 +654,7 @@ async function catchUpPass(
   }
 
   if (!inReset) {
-    const marked = readyToMove(plan.apply, rowOf, [...groupOf.values()], moves).filter(
+    const marked = readyToMove(plan.apply, rowOf, groupsOfRow, moves).filter(
       (id) => !byId.get(id)!.readyToMove,
     );
     if (marked.length > 0) {
@@ -785,16 +789,15 @@ async function joinedOutOfServiceIn(
  */
 function stillToMove(
   rowOf: ReadonlyMap<Target, { id: string; placed: boolean; readyToMove: boolean }>,
-  groups: readonly ResetGroup[],
+  groupsOfRow: ReadonlyMap<string, readonly ResetGroup[]>,
   moves: (target: Target) => boolean,
 ): Set<string> {
   const waiting = new Set<string>();
   for (const [target, row] of rowOf) {
     if (!row.readyToMove || row.placed || !moves(target)) continue;
     waiting.add(row.id);
-    for (const group of groups) {
-      if (group.rows.some((r) => r.id === row.id)) for (const r of group.rows) waiting.add(r.id);
-    }
+    for (const group of groupsOfRow.get(row.id) ?? [])
+      for (const r of group.rows) waiting.add(r.id);
   }
   return waiting;
 }
@@ -806,7 +809,7 @@ function stillToMove(
 function readyToMove(
   apply: ResetPlan["apply"],
   rowOf: ReadonlyMap<Target, { id: string; placed: boolean }>,
-  groups: readonly ResetGroup[],
+  groupsOfRow: ReadonlyMap<string, readonly ResetGroup[]>,
   moves: (target: Target) => boolean,
 ): string[] {
   const targetOf = new Map([...rowOf].map(([target, row]) => [row.id, target]));
@@ -818,7 +821,7 @@ function readyToMove(
   for (const { target } of apply) {
     const row = rowOf.get(target)!;
     if (row.placed) continue;
-    const together = groups.filter((group) => group.rows.some((r) => r.id === row.id));
+    const together = groupsOfRow.get(row.id) ?? [];
     const members = new Set([row.id, ...together.flatMap((group) => group.rows.map((r) => r.id))]);
     if (![...members].some(moving)) continue;
     for (const id of members) if (targetOf.has(id)) marked.add(id);
