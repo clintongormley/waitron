@@ -3,7 +3,7 @@ import type { ReactiveController, ReactiveControllerHost } from "lit";
 let on = false;
 const listeners = new Set<() => void>();
 
-export function helpModeOn(): boolean {
+export function currentHelpMode(): boolean {
   return on;
 }
 

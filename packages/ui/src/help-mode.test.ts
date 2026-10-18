@@ -1,6 +1,11 @@
 import { LitElement, html } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HelpModeController, helpModeOn, setHelpMode, subscribeHelpMode } from "./help-mode.js";
+import {
+  HelpModeController,
+  currentHelpMode,
+  setHelpMode,
+  subscribeHelpMode,
+} from "./help-mode.js";
 
 class HelpModeProbe extends LitElement {
   readonly #help = new HelpModeController(this);
@@ -31,7 +36,7 @@ function shown(probe: HelpModeProbe): string | null | undefined {
 
 describe("the help switch", () => {
   it("starts off", () => {
-    expect(helpModeOn()).toBe(false);
+    expect(currentHelpMode()).toBe(false);
   });
 
   it("turning it on tells every listener once", () => {
@@ -42,7 +47,7 @@ describe("the help switch", () => {
     setHelpMode(true);
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).toHaveBeenCalledTimes(1);
-    expect(helpModeOn()).toBe(true);
+    expect(currentHelpMode()).toBe(true);
     stopFirst();
     stopSecond();
   });

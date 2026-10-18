@@ -637,7 +637,7 @@ the one exception, by the owner's decision (A263, 2026-10-03): each is `--wt-ste
 number between them keeps them apart and 24 by 24 CSS px is WCAG 2.2's level AA minimum (criterion
 2.5.8; the 44px figure is the level AAA criterion 2.5.5).
 
-A `wt-help-tooltip` in help mode is the second 24px exception, by the approved A582 spec (§3.2):
+A `wt-help-tooltip` in help mode is also below `--wt-tap-min`, by the approved A582 spec (§3.2):
 while help is on its target is `--wt-help-badge-target` (24px on the dashboard), again WCAG 2.2's
 level AA minimum. Its always-mode button stays `--wt-tap-min` square. Pinned by "it is a 24px
 target around a 20px circle" in `packages/ui/src/components/wt-help-tooltip.help-mode.test.ts` and
@@ -2089,7 +2089,7 @@ packages/ui/src/components/*.ts` shows which primitives set it today.
 ### Help mode
 
 Help mode is one app-wide switch that shows or hides the help badges. It lives in
-`packages/ui/src/help-mode.ts`: `helpModeOn()` reads it, `setHelpMode(on)` sets it and tells its
+`packages/ui/src/help-mode.ts`: `currentHelpMode()` reads it, `setHelpMode(on)` sets it and tells its
 listeners only when the value changes, `subscribeHelpMode(listener)` returns an unsubscribe, and
 `HelpModeController` redraws a Lit element when it changes — and once when the element is put back
 in the page, so a badge that was out of the page shows the current state. It is held in memory

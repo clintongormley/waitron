@@ -95,7 +95,8 @@
      24px is WCAG 2.2's level AA minimum target (2.5.8). */
   --wt-stepper-button-width: 24px;
 
-  /* The dashboard's help badge; a till sets 32px and 24px. 24px is WCAG 2.2's AA minimum target. */
+  /* A help-mode badge's target and the circle inside it. 24px is WCAG 2.2's level AA minimum
+     target (2.5.8). */
   --wt-help-badge-target: 24px;
   --wt-help-badge-size: 20px;
 
