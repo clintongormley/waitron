@@ -1597,14 +1597,17 @@ describe("no reset puts a table down on another", () => {
         { key: "t8", label: fresh("8") },
       ],
       {
-        standard: { t4: 0, t5: 20, t45: null, t8: 60 },
-        dinner: { t4: null, t5: null, t45: 60, t8: 60 },
+        standard: { t4: 0, t5: 20, t45: null, t8: 120 },
+        dinner: { t4: null, t5: null, t45: 60, t8: 120 },
       },
     );
     await s.onto(s.d.standard);
     const [t4, t5, t45] = [s.live("t4"), s.live("t5"), s.live("t45")];
-
+    const partyId = await seatAt(t4);
     await s.onto(s.d.dinner);
+    await setToday(s.live("t8"), { x: 60 });
+
+    await finish(partyId);
     await readStates();
 
     expect(await todayRows([t4, t5, t45])).toMatchObject([{ x: 0 }, { x: 20 }, { x: null }]);
