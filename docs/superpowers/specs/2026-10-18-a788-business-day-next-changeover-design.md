@@ -438,7 +438,7 @@ can have been recorded after 03:00 yet.)
   waits (`business-day-schedule.ts:501-508`). The editors' parse check runs the waiting start
   separately, and each of the eight callers (section 2) runs the clash check after its write while
   a change waits; both refuse with a new `hours.clock_change_conflict` (409,
-  `{ dayCutover, startsAt, conflicts, conflictCount }`). `hours.clock_change_pending` and its copy
+  `{ dayCutover, startsAt, timeZone, conflicts, conflictCount }`). `hours.clock_change_pending` and its copy
   (`dashboard/strings.ts:377`, `:1228`) go; the painters' handling of it moves to the new code
   (`season-painter.ts:549`, `special-day-painter.ts:955`, `:1071`, `season-refusal.ts:38`,
   `period-delete-dialog.ts:106`).

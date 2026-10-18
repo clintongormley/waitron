@@ -413,12 +413,12 @@ it("a failed re-read after a refused delete keeps the refusal at the bottom, the
   const dialog = await removePeriod(el);
   await impactShown(dialog);
   confirm(dialog).click();
-  const pending = clockChangeConflictSentence;
-  await expect.poll(() => bottom(dialog)).toBe(pending);
+  const conflict = clockChangeConflictSentence;
+  await expect.poll(() => bottom(dialog)).toBe(conflict);
   failImpact = true;
   el.api.rereadWatches();
   await expect.poll(() => retry(dialog)).not.toBeNull();
-  expect(bottom(dialog)).toBe(pending);
+  expect(bottom(dialog)).toBe(conflict);
   expect(body(dialog)).toContain("Painted in 2 seasons.");
   expect(confirm(dialog).disabled).toBe(false);
 });
