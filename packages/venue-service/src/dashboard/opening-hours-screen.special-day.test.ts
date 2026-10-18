@@ -10,7 +10,15 @@ import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
 import { monthModel } from "../testing/opening-hours-month-fixture.js";
-import { frame, painterModel, settle, storedDay } from "../testing/special-day-painter-fixture.js";
+import {
+  drag,
+  frame,
+  grid,
+  painterModel,
+  part,
+  settle,
+  storedDay,
+} from "../testing/special-day-painter-fixture.js";
 import { captureShellLinks } from "../testing/shell-link-capture.js";
 import "./opening-hours-screen.js";
 
@@ -588,7 +596,7 @@ describe("a run picked on the Month", () => {
 });
 
 describe("after the painter writes", () => {
-  it("a new day once saved takes its own address without a new history entry", async () => {
+  it("a new day once saved, with a paint made while the save is in flight, takes its own address without a new history entry", async () => {
     const { el, writes } = await mount("/manage/opening-hours/view/special-day/date/2026-12-10");
     const painter = await shownPainter(el);
     painter.shadowRoot!.querySelector("wt-input[name=name]")!.dispatchEvent(
@@ -599,18 +607,45 @@ describe("after the painter writes", () => {
       }),
     );
     await settle(painter);
+    const write = el.api.specialDays.writeSpecialDay.bind(el.api.specialDays);
+    let succeed!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      succeed = resolve;
+    });
+    const save = vi
+      .spyOn(el.api.specialDays, "writeSpecialDay")
+      .mockImplementationOnce((...args) => gate.then(() => write(...args)));
     const pushed = pushedPaths();
+    const replaced = vi.spyOn(history, "replaceState");
+    const back = vi.spyOn(history, "back");
     frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await expect.poll(() => save.mock.calls.length).toBe(1);
+    await settle(painter);
+    part(painter, "paint-p2")!.click();
+    await settle(painter);
+    // Minutes after the 06:00 changeover: 19:00 to 22:00.
+    await drag(painter, "2026-12-10", 13 * 60, 16 * 60);
+    succeed();
     await expect
       .poll(() => location.pathname)
       .toBe("/manage/opening-hours/view/special-day/special-day/sd-new");
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await settle(painter);
     expect(writes.map(([path, method]) => [path, method])).toEqual([
       ["/management-api/venue-service/special-days", "POST"],
     ]);
     expect(pushed()).toEqual([]);
+    expect(
+      replaced.mock.calls.map((call) => new URL(String(call[2]), location.href).pathname),
+    ).toEqual(["/manage/opening-hours/view/special-day/special-day/sd-new"]);
+    expect(back).not.toHaveBeenCalled();
     expect(painterOf(el)).toBe(painter);
     expect(painter.specialDayId).toBe("sd-new");
     expect(nameOf(painter)).toBe("Staff party");
+    expect(grid(painter).days.get("2026-12-10")).toEqual([
+      { periodId: "p2", startsAt: "19:00", endsAt: "22:00" },
+    ]);
+    expect(frame(painter).dirty).toBe(true);
   });
 
   it("Add to the same-named day takes that day's address without a new history entry", async () => {
@@ -661,6 +696,201 @@ describe("after the painter writes", () => {
     ]);
     history.back();
     await expect.poll(() => location.pathname).toBe("/manage/before");
+  });
+});
+
+describe("Save closes the special-day editor", () => {
+  const saveButton = (painter: SpecialDayPainter) =>
+    frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!;
+  async function rename(painter: SpecialDayPainter, value: string) {
+    painter
+      .shadowRoot!.querySelector("wt-input[name=name]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+    await settle(painter);
+  }
+  const monthOf = (el: Screen) => el.shadowRoot!.querySelector("opening-hours-month")!;
+  async function openRunOnMonth(el: Screen, run: LocalDate[]) {
+    await expect.poll(() => monthOf(el)?.model?.month).toBe("2026-12");
+    await monthOf(el).updateComplete;
+    const button = (date: LocalDate) =>
+      monthOf(el).shadowRoot!.querySelector<HTMLButtonElement>(`[data-date="${date}"] button`)!;
+    button(run[0]!).scrollIntoView({ block: "center" });
+    if (run.length > 1)
+      await commands.mouseDrag(
+        run.map((date) => `opening-hours-month [data-date="${date}"] button`),
+      );
+    await userEvent.dblClick(button(run.at(-1)!));
+    return shownPainter(el);
+  }
+  const specialPaths = (calls: unknown[][]) =>
+    calls
+      .map((call) => new URL(String(call[2]), location.href).pathname)
+      .filter((path) => path.includes("/special-day"));
+
+  it("Save on a new special day picked on the Month closes the editor back to the Month, and Back does not reopen it", async () => {
+    history.replaceState(null, "", "/manage/before");
+    history.pushState(null, "", "/manage/opening-hours/view/month/month/2026-12");
+    const { el, writes } = await mount("/manage/opening-hours/view/month/month/2026-12");
+    const run = ["2026-12-01", "2026-12-02", "2026-12-03", "2026-12-04"];
+    const painter = await openRunOnMonth(el, run);
+    expect(location.pathname).toBe(
+      "/manage/opening-hours/view/special-day/date/2026-12-01/to/2026-12-04",
+    );
+    await rename(painter, "Staff party");
+    const back = vi.spyOn(history, "back");
+    const replaced = vi.spyOn(history, "replaceState");
+    const pushed = pushedPaths();
+    saveButton(painter).click();
+    await expect.poll(() => painterOf(el)).toBeNull();
+    expect(writes.map(([path, method]) => [path, method])).toEqual([
+      ["/management-api/venue-service/special-days", "POST"],
+    ]);
+    expect((writes[0]![2] as SpecialDayInput).dates.map(({ date }) => date)).toEqual(run);
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(specialPaths(replaced.mock.calls)).toEqual([]);
+    expect(pushed()).toEqual([]);
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/opening-hours/view/month/month/2026-12");
+    await expect.poll(() => drawnView(el)).toBe("month");
+    back.mockRestore();
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/manage/before");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(painterOf(el)).toBeNull();
+    expect(pushed()).toEqual([]);
+  });
+
+  it("Save on a stored day closes the editor", async () => {
+    const { el, writes } = await mount("/manage/opening-hours/view/special-day/special-day/sd1");
+    const painter = await shownPainter(el);
+    await rename(painter, "Staff dinners");
+    const back = vi.spyOn(history, "back");
+    saveButton(painter).click();
+    await expect.poll(() => painterOf(el)).toBeNull();
+    expect(writes.map(([path, method]) => [path, method])).toEqual([
+      ["/management-api/venue-service/special-days/sd1", "PUT"],
+    ]);
+    expect(back).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/manage/opening-hours/view/year");
+    expect(drawnView(el)).toBe("year");
+  });
+
+  it("a refused save keeps it open", async () => {
+    const { el } = await mount("/manage/opening-hours/view/special-day/special-day/sd1");
+    const painter = await shownPainter(el);
+    vi.spyOn(el.api.specialDays, "writeSpecialDay").mockRejectedValueOnce({
+      code: "special_day.invalid",
+      params: {},
+    });
+    await rename(painter, "Staff dinners");
+    const back = vi.spyOn(history, "back");
+    saveButton(painter).click();
+    await expect.poll(() => frame(painter).refusal).toBe("This could not be saved. Try again.");
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await settle(painter);
+    expect(painterOf(el)).toBe(painter);
+    expect(frame(painter).dirty).toBe(true);
+    expect(nameOf(painter)).toBe("Staff dinners");
+    expect(back).not.toHaveBeenCalled();
+    expect(location.pathname).toBe("/manage/opening-hours/view/special-day/special-day/sd1");
+  });
+
+  async function mountGuarded(...addresses: string[]) {
+    history.replaceState(null, "", "/manage/before");
+    const app = document.createElement("special-day-guarded-test-app") as GuardedApp;
+    const guard = new NavigationGuard(window, {
+      isDirty: () => app.isConnected && app.leave.coordinator.isDirty(),
+      request: (proceed, signal) =>
+        app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+    });
+    for (const address of addresses) await guard.write(address);
+    applyTokens(app);
+    hosts.push(app);
+    document.body.append(app);
+    await app.updateComplete;
+    const el = app.shadowRoot!.querySelector("dashboard-opening-hours-screen")!;
+    const question =
+      app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+        "wt-unsaved-changes",
+      )!;
+    return { app, el, guard, question };
+  }
+
+  it("with the app's guard, Save closes a new day picked on the Month without asking", async () => {
+    const { app, el, guard, question } = await mountGuarded(
+      "/manage/opening-hours/view/month/month/2026-12",
+    );
+    const asked: boolean[] = [];
+    const sampler = setInterval(() => asked.push(question.open), 5);
+    try {
+      const painter = await openRunOnMonth(el, ["2026-12-03"]);
+      expect(location.pathname).toBe("/manage/opening-hours/view/special-day/date/2026-12-03");
+      await rename(painter, "Staff party");
+      saveButton(painter).click();
+      await expect.poll(() => painterOf(el)).toBeNull();
+      await expect
+        .poll(() => location.pathname)
+        .toBe("/manage/opening-hours/view/month/month/2026-12");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      clearInterval(sampler);
+      expect(asked.length).toBeGreaterThan(0);
+      expect(asked.includes(true)).toBe(false);
+      expect(question.open).toBe(false);
+      expect(app.recorded.writes.map(([path, method]) => [path, method])).toEqual([
+        ["/management-api/venue-service/special-days", "POST"],
+      ]);
+      history.back();
+      await expect.poll(() => location.pathname).toBe("/manage/before");
+      expect(painterOf(el)).toBeNull();
+    } finally {
+      clearInterval(sampler);
+      guard.dispose();
+    }
+  });
+
+  it("a save left in flight when Back moved to another day leaves the newer editor open", async () => {
+    const { app, el, guard, question } = await mountGuarded(
+      "/manage/opening-hours/view/special-day/special-day/sd2",
+      "/manage/opening-hours/view/special-day/special-day/sd1",
+    );
+    try {
+      const painter = await shownPainter(el);
+      expect(nameOf(painter)).toBe("Christmas dinners");
+      let succeed!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        succeed = resolve;
+      });
+      const write = app.api.specialDays.writeSpecialDay.bind(app.api.specialDays);
+      const save = vi
+        .spyOn(app.api.specialDays, "writeSpecialDay")
+        .mockImplementationOnce((...args) => gate.then(() => write(...args)));
+      const saved = vi.fn();
+      painter.addEventListener("special-day-saved", saved);
+      await rename(painter, "Staff dinners");
+      saveButton(painter).click();
+      await expect.poll(() => save.mock.calls.length).toBe(1);
+      history.back();
+      await expect.poll(() => question.open).toBe(true);
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await expect.poll(() => question.open).toBe(false);
+      await expect.poll(() => nameOf(painter)).toBe("Fair week");
+      const back = vi.spyOn(history, "back");
+      succeed();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await settle(painter);
+      expect(painterOf(el)).toBe(painter);
+      expect(painter.specialDayId).toBe("sd2");
+      expect(nameOf(painter)).toBe("Fair week");
+      expect(back).not.toHaveBeenCalled();
+      expect(location.pathname).toBe("/manage/opening-hours/view/special-day/special-day/sd2");
+      expect(frame(painter).dirty).toBe(false);
+      expect(saved).not.toHaveBeenCalled();
+    } finally {
+      guard.dispose();
+    }
   });
 });
 

@@ -617,6 +617,34 @@ describe("after a save", () => {
     expect(frame(painter).dirty).toBe(false);
   });
 
+  it("special-day-saved says clean unless painted during the save", async () => {
+    let succeed!: () => void;
+    const late = new Promise<void>((resolve) => {
+      succeed = resolve;
+    });
+    const { painter, writes } = await mount({ refusals: [late] });
+    const sent: { detail: SpecialDayDetail; clean: boolean }[] = [];
+    const seen = { bubbles: false, composed: false };
+    painter.addEventListener("special-day-saved", (event) => {
+      seen.bubbles = event.bubbles;
+      seen.composed = event.composed;
+      sent.push((event as CustomEvent<{ detail: SpecialDayDetail; clean: boolean }>).detail);
+    });
+    await paintDinner(painter, DEC_14);
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    await settle(painter);
+    expect(sent).toEqual([]);
+    await drag(painter, DEC_15, at("19:00"), at("22:00"));
+    succeed();
+    await expect.poll(() => sent.map(({ clean }) => clean)).toEqual([false]);
+    expect(sent[0]!.detail.id).toBe("sd1");
+    expect(seen).toEqual({ bubbles: true, composed: true });
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await save(painter, writes);
+    expect(sent.map(({ clean }) => clean)).toEqual([false, true]);
+  });
+
   it("drops an answer that lands after the painter moved to another special day", async () => {
     let succeed!: () => void;
     const late = new Promise<void>((resolve) => {

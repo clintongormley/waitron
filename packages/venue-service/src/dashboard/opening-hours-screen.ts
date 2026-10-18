@@ -1114,9 +1114,11 @@ export class OpeningHoursScreen extends LitElement {
       .addDate=${specialDayId === null ? null : date}
       .holidays=${holidays}
       .readOnly=${this.readOnly}
-      @special-day-saved=${(event: CustomEvent<{ detail: SpecialDayDetail }>) => {
+      @special-day-saved=${(event: CustomEvent<{ detail: SpecialDayDetail; clean: boolean }>) => {
         event.stopPropagation();
-        if (this.currentPainter(event) && this.special?.specialDayId === null)
+        if (!this.currentPainter(event)) return;
+        if (event.detail.clean) this.closePainter();
+        else if (this.special?.specialDayId === null)
           this.replaceAddress(
             this.specialUrl({ specialDayId: event.detail.detail.id, date: null }),
           );

@@ -932,7 +932,11 @@ export class SpecialDayPainter extends LitElement {
     this.adopt(detail, [], "", this.paintedSince(sent));
     this.dropUnpaintable(model);
     this.dispatchEvent(
-      new CustomEvent("special-day-saved", { detail: { detail }, bubbles: true, composed: true }),
+      new CustomEvent<{ detail: SpecialDayDetail; clean: boolean }>("special-day-saved", {
+        detail: { detail, clean: !this.scope?.isDirty() },
+        bubbles: true,
+        composed: true,
+      }),
     );
     this.api.rereadWithSpecialDays();
   }
