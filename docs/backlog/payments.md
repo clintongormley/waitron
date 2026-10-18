@@ -28,6 +28,50 @@ their full text.
   Post-invoice returns use the durable `tender_refunds` path (A737 Part 2): the server records
   the request before sending, keeps `tr_<refundId>` on retry and recovers pending outcomes.
 
+## A846. Held card payments: what the check found, and what to build
+
+A held payment is an orphan (a card payment whose order was closed or abandoned with no sale) whose
+amount the card provider paid out differs from ours, so the sweep will not refund it
+(`amountDrifted`, `packages/payments/src/reconcile.ts`).
+
+Measured 2026-10-18 with a throwaway test in `apps/server` (kept outside the repository) that ran
+the real scheduler (`runDue`), `reconcilerAsDuty` and `reconcilePayments` with `recordIncidentOnce`
+over a fake settlement report, one payment captured at €10.00 and paid out at €12.50:
+
+- **One held payment works today.** Day 1 raised `payment.reconcile_orphan` (remediation
+  `amountDrifted`) and `payment.reconcile_drift`. Both were marked handled; the next day's
+  re-sweep of the same, already-checked day raised both again. Left open, each stayed one alert,
+  and the re-sweep chain went on daily. Nothing was refunded.
+- **A second held payment stayed out of every alert.** Held payments on 1 and 2 July, every open
+  alert marked handled each morning: on four days running the open orphan alert named only the
+  first. Every orphan alert shares one key (the payment check, no device, no sale), the older
+  day's re-sweep runs first, and while the first stays held it takes the key every day.
+- **A failed check ended the re-check for good.** The provider failed three checks in a row (about
+  45 minutes at the default back-off): the re-sweep was marked `parked`, and no later day checked
+  that day again. The held payment was then in no open alert. A first check that parks is never
+  retried either.
+- **Nothing lets a person close a held payment.** The payment stays `captured` on an abandoned
+  order. Stripe is the only provider with a reconciler, and its sweep compares each charge's own
+  gross amount, read from `type: "charge"` balance transactions alone (`listSettlements`,
+  `packages/payments-stripe/src/stripe-report-client.ts`). A refund made in Stripe's own dashboard
+  is, I believe, a balance transaction of its own that this read never lists, so the figures would
+  still differ and the daily reminder would never stop. Not tested against Stripe.
+
+Proposed build (owner question Q44 decides the first two points):
+
+1. A "Held: paid out at a different amount" list in the Payments screen's section for stuck bill
+   payments and refunds, every held payment whatever day it was taken, each with Record outcome:
+   "Refunded in the card provider's dashboard" or "Kept: the money was owed", an optional note
+   and the manager PIN, as the section's existing Record outcome takes. Recording ends the checks
+   and the alert for that payment; Waitron refunds nothing. Needs a place to keep the provider's
+   figure and the outcome (a migration).
+2. One alert for held payments, apart from the ordinary orphan alert, that names every held
+   payment, links to that list, and stays up until each has an outcome.
+3. A check that fails three times in a row is tried again the next day, instead of never.
+4. The alert wording stops saying Waitron may not check these payments again.
+
+Picture: `mockups/a846-held-card-payments/01-record-what-was-done.png` (also `-dark`).
+
 ## A847. Allow joining and unjoining tables during a pending card refund
 
 - **A847. Allow joining and unjoining tables during a pending card refund.** Today a pending card

@@ -3542,7 +3542,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   daily for as long as the amounts disagree (`resweepAfter`, `apps/server/src/reconcile-duty.ts`;
   the chain is pinned in `packages/scheduler/src/resweep.test.ts`). First check whether that already
   covers the "closed periods" half; if it does, the job is the daily reminder alone. Done when tests show the alert still raised and reminded on a later day, and a
-  closed period's unresolved orphan found again by the sweep.
+  closed period's unresolved orphan found again by the sweep. **Checked 2026-10-18: the single
+  case works, but a second held payment can stay out of every alert, a failed check ends the daily
+  re-check for good, and nothing lets a person close a held payment.** Build waits for owner
+  question Q44 (how a person closes one).
+  [Detail](backlog/payments.md#a846-held-card-payments-what-the-check-found-and-what-to-build)
 
 - **The reconciler's card reversal records only after the provider call, with a fresh key each time.** **Next
   action:** give the reconciler's reversal the same durable-attempt rule.
