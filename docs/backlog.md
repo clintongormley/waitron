@@ -2231,9 +2231,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   remove that dish there. A saved revision now starts a station check after 400 ms on both till
   and handheld layouts, before you press Send. A new edit, bill, editor version or API invalidates
   the old answer; an unanswered check retains the last warning. Moving these details into the
-  line window remains open. This is an intermediate panel step:
-  direct Send all/selected Fire, removal of the old
-  destination/preview controls, the Sent panel and held-dish Finish resolution remain open. Its
+  line window remains open. On the feature branch, Send all now sends the saved arrangement
+  directly, and Fire sends only ticked eligible dishes. Known unsellable or unrouted dishes stay
+  in New order. A refused send refreshes station warnings without opening a preview or sending
+  again. Recalled dishes use their saved source references, including when their old offer is
+  no longer available. This remains an intermediate panel step: migration of the old preview's
+  behavioral checks, deletion of its remaining implementation, the Sent panel and held-dish
+  Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
   target recovery. Single-dish Fire now's command/API/client work is qualified on the feature

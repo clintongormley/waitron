@@ -143,6 +143,7 @@ import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import type { Place } from "../state/draft-place.js";
 import {
   draftLayout,
+  fireGroups,
   sendAllGroups,
   type LayoutGroup,
   type SubmitGroup,
@@ -168,6 +169,7 @@ export const DRAFT_SIDE_BY_SIDE_MIN_WIDTH = 720;
 
 /** Group `lineIndexes` refer to `sent`, which may be only part of `store.lines`. */
 export interface SubmitDraftDetail {
+  /** Fresh offers only; recalled rows are identified by `sent` and the saved draft. */
   lines: GroupLine[];
   groups: (DraftGroup & Pick<SubmitGroup, "joinGroupId" | "afterGroupId">)[];
   joinGroupId?: string;
@@ -242,7 +244,6 @@ function leftOutText(lines: readonly OrderLine[]): string {
 const LEFT_OUT_NAMED = 3;
 
 /** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
-type Destination = "fire-now" | "add-to-held" | "add-as-new";
 
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
 type TableVerb = "move" | "join" | "move-bill";
@@ -1549,9 +1550,6 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The draft this screen re-renders on. */
   #watchedDraft?: { store: WorkingOrderStore | null; stop: () => void };
-  /** The last draft shown. A later addition's destination belongs to it, so it survives an order
-   * that shows no draft for a moment, as while the app follows the party onto its next bill. */
-  #shownDraft?: WorkingOrderStore;
 
   #watchDraft(): void {
     const store = this.#draftStore;
@@ -1562,10 +1560,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#selected = new WeakSet();
     this.#routingRows = new WeakMap();
     this.draftMoveStore = null;
-    if (store !== null && store !== this.#shownDraft) {
-      if (this.#shownDraft !== undefined) this.#resetDestination();
-      this.#shownDraft = store;
-    }
     if (store === null) {
       this.#watchedDraft = { store, stop: () => {} };
       return;
@@ -1602,15 +1596,9 @@ export class TillTableOrderScreen extends LitElement {
   #noteDraftStart(store: WorkingOrderStore): void {
     if (store.lineCount === 0) {
       this.#drafts.delete(store);
-      this.#resetDestination();
     } else {
       this.#draftOf(store);
     }
-  }
-
-  #resetDestination(): void {
-    this.destination = "fire-now";
-    this.joinTarget = null;
   }
 
   override connectedCallback(): void {
@@ -1676,9 +1664,6 @@ export class TillTableOrderScreen extends LitElement {
   @state() private draftMoveStore: WorkingOrderStore | null = null;
   /** Flagged lines the person chose to keep, which no longer ask Remove or Keep. */
   #kept = new WeakSet<OrderLine>();
-  @state() private destination: Destination = "fire-now";
-  /** The held group Add to held group joins; the first held group when unset or gone. */
-  @state() private joinTarget: string | null = null;
   @state() private pendingDraft: PendingDraft | null = null;
   readonly #previewId = {};
   #previewScope?: DraftScope<{ value: string; label: string } | null>;
@@ -2011,32 +1996,6 @@ export class TillTableOrderScreen extends LitElement {
     this.requestUpdate();
   }
 
-  #isLaterAddition(store: WorkingOrderStore): boolean {
-    return this.#drafts.get(store)?.laterAddition === true;
-  }
-
-  #effectiveDestination(): Destination {
-    return this.destination === "add-to-held" && this.#heldInOrder.length === 0
-      ? "fire-now"
-      : this.destination;
-  }
-
-  #joinGroup(): OrderGroup | undefined {
-    const held = this.#heldInOrder;
-    return held.find((group) => group.id === this.joinTarget) ?? held[0];
-  }
-
-  #laterAction(): DraftAction {
-    switch (this.#effectiveDestination()) {
-      case "fire-now":
-        return { kind: "fire-now" };
-      case "add-as-new":
-        return { kind: "add-as-new" };
-      case "add-to-held":
-        return { kind: "add-to-held", groupId: this.#joinGroup()!.id };
-    }
-  }
-
   /**
    * The preview is counted from the submission, and Confirm sends the submission kept here, so it is
    * exactly what the preview named. An unoverridden line OMITS
@@ -2125,6 +2084,18 @@ export class TillTableOrderScreen extends LitElement {
     const last = this.#lastPreview;
     if (last === undefined || sent.some((line) => !last.store.lines.includes(line))) return;
     this.#openPreview(last.store, last.action);
+  }
+
+  refreshDraftRouting(store: WorkingOrderStore, sent: readonly OrderLine[]): void {
+    if (
+      !this.isConnected ||
+      store !== this.#draftStore ||
+      sent.some((line) => !store.lines.includes(line))
+    )
+      return;
+    this.#cancelAutomaticRouting();
+    this.#routingChecked = undefined;
+    this.requestUpdate();
   }
 
   currentDeadEndsCheck(checkId: number): boolean {
@@ -3698,52 +3669,80 @@ export class TillTableOrderScreen extends LitElement {
       ?.focus();
   }
 
-  /** A first-order draft: Send all and Fire all now with nothing checked, Send selected and Fire
-   * selected now with a selection. A later addition: its destination, then one Send. Firing now is
-   * offered under every `fireControl`: the kitchen and the pass cannot fire a held group of lines
-   * with no course. */
+  #draftSendable(line: OrderLine): boolean {
+    return (
+      (line.source !== undefined || !flagged(line)) &&
+      (this.#routingRows.get(line) === undefined || line.makeAt !== undefined)
+    );
+  }
+
+  #submitArrangement(store: WorkingOrderStore, selectedOnly: boolean): void {
+    if (
+      !this.isConnected ||
+      store !== this.#draftStore ||
+      store.sending ||
+      store.editsLocked ||
+      this.groupCommandBusy ||
+      !this.orderingAllowed
+    )
+      return;
+    const lines = this.#draftLayout(store).flatMap((group) =>
+      group.sections.flatMap((section) => section.indexes.map((index) => store.lines[index]!)),
+    );
+    const sendable = (index: number) => this.#draftSendable(lines[index]!);
+    const groups = selectedOnly
+      ? fireGroups(lines, this.#selectedIndexes(lines), sendable)
+      : sendAllGroups(lines, this.groups, sendable);
+    const indexes = groups.flatMap((group) => group.indexes);
+    if (indexes.length === 0) return;
+    const sent = indexes.map((index) => lines[index]!);
+    const positions = new Map(indexes.map((index, position) => [index, position]));
+    const detail: SubmitDraftDetail = {
+      lines: sent.flatMap((line) =>
+        line.source !== undefined
+          ? []
+          : [
+              {
+                ...toWireProductIdentity(line.product),
+                quantity: line.quantity,
+                ...toWireLineExtras(line),
+                ...toWireModifiers(line),
+                ...(line.courseId === undefined ? {} : { courseId: line.courseId }),
+              },
+            ],
+      ),
+      groups: groups.map(({ indexes, ...group }) => ({
+        ...group,
+        lineIndexes: indexes.map((index) => positions.get(index)!),
+      })),
+      store,
+      sent,
+      draft: this.#draftOf(store),
+    };
+    this.#dispatch("submit-draft", detail);
+  }
+
   #draftBar(store: WorkingOrderStore): TemplateResult {
-    const disabled = store.lineCount === 0 || store.sending;
-    const button = (
-      action: DraftAction,
-      key: StringKey,
-      variant: "primary" | "secondary",
-      name: string = action.kind,
-    ) => {
-      const selectedOnly = action.kind === "send-selected" || action.kind === "fire-selected";
-      const expired = store.lines.every(
-        (line) => line.blocked === "period_ended" || (selectedOnly && !this.#selected.has(line)),
-      );
+    const busy =
+      store.sending || store.editsLocked || this.groupCommandBusy || !this.orderingAllowed;
+    const sendable = store.lines.filter((line) => this.#draftSendable(line));
+    const button = (selectedOnly: boolean, key: StringKey, name: string) => {
+      const disabled = busy || !sendable.some((line) => !selectedOnly || this.#selected.has(line));
       return html`<wt-button
         class="draft-action"
         data-draft-action=${name}
-        variant=${expired ? "secondary" : variant}
+        variant=${disabled ? "secondary" : "primary"}
         size="lg"
-        ?disabled=${disabled || expired}
-        @click=${() => this.#openPreview(store, action)}
-      >
-        ${t(key)}
-      </wt-button>`;
+        ?disabled=${disabled}
+        @click=${() => this.#submitArrangement(store, selectedOnly)}
+        >${t(key)}</wt-button
+      >`;
     };
-    if (this.#isLaterAddition(store)) {
-      return html`<div class="draft-bar">
-        ${this.#draftMoveButton(store)} ${this.#destinationChoice()}
-        <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
-          ${button(this.#laterAction(), "table.draft_submit", "primary", "submit")}
-        </div>
-      </div>`;
-    }
-    const anySelected = store.lines.some((line) => this.#selected.has(line));
     return html`<div class="draft-bar">
       ${this.#draftMoveButton(store)}
       <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
-        ${
-          anySelected
-            ? html`${button({ kind: "send-selected" }, "table.draft_send_selected", "secondary")}
-              ${button({ kind: "fire-selected" }, "table.draft_fire_selected", "primary")}`
-            : html`${button({ kind: "send-all" }, "table.draft_send_all", "secondary")}
-              ${button({ kind: "fire-all" }, "table.draft_fire_all", "primary")}`
-        }
+        ${button(true, "table.group_fire", "fire-selected")}
+        ${button(false, "table.draft_send_all", "send-all")}
       </div>
     </div>`;
   }
@@ -3879,61 +3878,6 @@ export class TillTableOrderScreen extends LitElement {
         >${t("action.back")}</wt-button
       >
     </wt-dialog>`;
-  }
-
-  #destinationChoice(): TemplateResult {
-    const chosen = this.#effectiveDestination();
-    const held = this.#heldInOrder;
-    const options: [Destination, StringKey][] = [
-      ["fire-now", "table.destination_fire_now"],
-      ...(held.length === 0
-        ? []
-        : [["add-to-held", "table.destination_add_to_held"] as [Destination, StringKey]]),
-      ["add-as-new", "table.destination_add_as_new"],
-    ];
-    const joining = this.#joinGroup();
-    return html`<div
-        class="destination"
-        role="group"
-        aria-label=${t("table.destination_label")}
-        data-destination-choice
-      >
-        ${options.map(
-          ([kind, key]) =>
-            html`<button
-              type="button"
-              class="option"
-              data-destination=${kind}
-              aria-pressed=${chosen === kind}
-              @click=${() => (this.destination = kind)}
-            >
-              ${t(key)}
-            </button>`,
-        )}
-      </div>
-      ${
-        chosen === "add-to-held"
-          ? html`<div
-              class="destination held-picker"
-              role="group"
-              aria-label=${t("table.held_picker_label")}
-              data-held-picker
-            >
-              ${held.map(
-                (group, index) =>
-                  html`<button
-                    type="button"
-                    class="option"
-                    data-held-group=${group.id}
-                    aria-pressed=${group.id === joining?.id}
-                    @click=${() => (this.joinTarget = group.id)}
-                  >
-                    ${heldGroupLabel(group, index)}
-                  </button>`,
-              )}
-            </div>`
-          : nothing
-      }`;
   }
 
   #previewDialog(): TemplateResult {

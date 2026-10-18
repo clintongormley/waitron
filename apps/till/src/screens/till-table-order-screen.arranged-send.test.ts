@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { WtDialog } from "@waitron/ui";
 import type { OrderGroup } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
@@ -29,12 +28,6 @@ async function send(el: TillTableOrderScreen): Promise<SubmitDraftDetail> {
     await userEvent.click(review);
     await el.updateComplete;
   }
-  await userEvent.click(
-    el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
-  );
-  await el.updateComplete;
-  const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-draft-preview]")!;
-  await dialog.updateComplete;
   const submitted = new Promise<SubmitDraftDetail>((resolve) =>
     el.addEventListener(
       "submit-draft",
@@ -42,7 +35,9 @@ async function send(el: TillTableOrderScreen): Promise<SubmitDraftDetail> {
       { once: true },
     ),
   );
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!);
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+  );
   return submitted;
 }
 

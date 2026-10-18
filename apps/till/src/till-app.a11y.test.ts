@@ -330,9 +330,8 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       .shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
       .store.addProduct({ ...products[0]!, menuItemId: "menu-item-p1" }, "1");
     await flush(el);
-    order.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!.click();
+    order.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!.click();
     await flush(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
     await flush(el);
     await flush(el);
 

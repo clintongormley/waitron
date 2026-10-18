@@ -370,9 +370,15 @@ async function toggle(el: TillApp, name: string): Promise<void> {
 }
 
 async function act(el: TillApp, kind: string): Promise<void> {
+  if (kind === "fire-all") {
+    for (const row of tableOrder(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
+      '[data-draft-select][aria-pressed="false"]',
+    ))
+      row.click();
+    await flush(el);
+    kind = "fire-selected";
+  }
   tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`)!.click();
-  await flush(el);
-  tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
   await flush(el, 6);
 }
 
@@ -3060,11 +3066,14 @@ describe("till-app: how long a send may take", () => {
   }
 
   async function confirmFireAll(el: TillApp): Promise<void> {
-    tableOrder(el)!
-      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!
-      .click();
+    for (const row of tableOrder(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
+      '[data-draft-select][aria-pressed="false"]',
+    ))
+      row.click();
     await settle(el);
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-selected"]')!
+      .click();
     await settle(el);
   }
 
@@ -3124,15 +3133,12 @@ describe("till-app: how long a send may take", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
     await settle(el);
-    tableOrder(el)!
-      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!
-      .click();
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
     await settle(el);
     api.saveDraft.mockImplementation(noAnswer);
     draft(el).setLineCourse(0, "mains");
     await settle(el);
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
-    await settle(el);
+    await confirmFireAll(el);
 
     await vi.advanceTimersByTimeAsync(149_999);
     await settle(el);
@@ -3162,17 +3168,12 @@ describe("till-app: how long a send may take", () => {
     await vi.advanceTimersByTimeAsync(100_000);
     press(el, "Steak");
     await settle(el);
-    tableOrder(el)!
-      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!
-      .click();
-    await settle(el);
     release();
     await settle(el);
     api.saveDraft.mockImplementation(noAnswer);
     draft(el).setLineCourse(0, "mains");
     await settle(el);
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
-    await settle(el);
+    await confirmFireAll(el);
 
     await vi.advanceTimersByTimeAsync(149_999);
     await settle(el);
@@ -6335,6 +6336,32 @@ describe("recalled draft source splitting", () => {
     });
   }
 
+  it("direct Fire resends a recalled source even after its fresh offer's period ends", async () => {
+    seedSource();
+    const { el } = await mountApp();
+    await openMesa(el);
+    const outbox = draft(el);
+    const line = outbox.lines[0]!;
+    expect(line.source?.line.id).toBe("source-7");
+    line.blocked = "period_ended";
+    line.notOffered = true;
+    tableOrder(el)!.requestUpdate();
+    await flush(el);
+    await toggle(el, "Recorded steak");
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-selected"]')!
+      .click();
+    await flush(el, 6);
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+    expect(api.submitDraft.mock.calls[0]![2].groups).toEqual([
+      { release: "fire", lineIds: ["reference-source-7"] },
+    ]);
+    expect(await api.submitDraft.mock.results[0]!.value).toMatchObject({ draft: null });
+    expect(outbox.lineCount).toBe(0);
+    expect(line.source!.netAmount).toBe("17.25");
+    expect(line.source!.line.unitPriceGross).toBe("7.50");
+  });
+
   function saveSplit(): void {
     const saved = server.drafts[0]!;
     saved.revision += 1;
@@ -9035,4 +9062,95 @@ describe("automatic saved-draft routing", () => {
       ).toBe(false);
     },
   );
+});
+
+describe("direct New order actions", () => {
+  async function direct(el: TillApp, kind: "send-all" | "fire-selected") {
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${kind}"]`)!
+      .click();
+    await flush(el, 6);
+  }
+  it("sends without a preview and empties the saved outbox only after the accepted response", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Steak");
+    const outbox = draft(el);
+    await direct(el, "send-all");
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+    expect(api.submitDraft.mock.calls[0]![2].groups).toEqual([
+      { release: "fire", lineIds: ["line-2", "line-3"] },
+    ]);
+    expect(outbox.lineCount).toBe(0);
+    expect(server.drafts).toEqual([]);
+  });
+  it("fires only the ticked saved row and retains the unticked dish and its bill", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    await tap(el, "Steak");
+    await toggle(el, "Steak");
+    await direct(el, "fire-selected");
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+    expect(api.submitDraft.mock.calls[0]![2].groups).toEqual([
+      { release: "fire", lineIds: ["line-3"] },
+    ]);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(server.drafts[0]!.billId).toBe("wo-4");
+    expect(savedLines()).toEqual(["offer-beer ×1"]);
+  });
+  it("refreshes routing warnings after a refused direct send, without preview or automatic resubmission", async () => {
+    let refused = false;
+    const submitDraft = vi.fn(async () => {
+      refused = true;
+      throw { code: "station.no_replacement" };
+    });
+    const askDraftDeadEnds = vi.fn(async (_party: string, _draft: string, ids: string[]) => ({
+      sends: true,
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+      deadEnds: refused
+        ? [
+            {
+              key: ids[0]!,
+              name: "Beer",
+              quantity: "1",
+              stationId: "bar",
+              stationName: "Bar",
+              why: "closed",
+            },
+          ]
+        : [],
+    }));
+    const { el } = await mountApp({ submitDraft, askDraftDeadEnds });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await expect.poll(() => askDraftDeadEnds.mock.calls.length).toBe(1);
+    await direct(el, "send-all");
+    await expect
+      .poll(() => tableOrder(el)!.shadowRoot!.querySelector("[data-draft-routing-warning]"))
+      .not.toBeNull();
+    expect(submitDraft).toHaveBeenCalledOnce();
+    expect(askDraftDeadEnds).toHaveBeenCalledTimes(2);
+    expect(rows(el)).toEqual(["Beer ×1"]);
+    expect(savedLines()).toEqual(["offer-beer ×1"]);
+    expect(
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "[data-draft-preview]",
+      )!.open,
+    ).toBe(false);
+  });
+  it("retains the whole outbox and sends nothing when its save is refused", async () => {
+    const { el } = await mountApp({
+      saveDraft: vi.fn().mockRejectedValue({ code: "draft.out_of_date", status: 409 }),
+    });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await direct(el, "send-all");
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(retainedCandidate(el)?.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+      ["Beer", "1"],
+    ]);
+    expect(banner(el)).not.toBeNull();
+  });
 });

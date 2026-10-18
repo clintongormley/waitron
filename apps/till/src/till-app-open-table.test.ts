@@ -1965,7 +1965,6 @@ describe("A768 the order screen shows at once", () => {
       .shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!
       .click();
     await flush(el);
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
     await flush(el, 6);
     expect(server.submitDraft).toHaveBeenCalledOnce();
     const [partyId, draftId] = server.submitDraft.mock.calls[0]!;

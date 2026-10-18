@@ -213,8 +213,19 @@ async function submitDraft(
   el: TillTableOrderScreen,
   kind: string,
 ): Promise<CustomEvent | undefined> {
-  await openPreview(el, kind);
-  return confirmPreview(el);
+  if (kind === "fire-all") {
+    for (const row of el.shadowRoot!.querySelectorAll<HTMLElement>(
+      '[data-draft-select][aria-pressed="false"]',
+    ))
+      row.click();
+    await el.updateComplete;
+    kind = "fire-selected";
+  }
+  let captured: CustomEvent | undefined;
+  el.addEventListener("submit-draft", (event) => (captured = event as CustomEvent), { once: true });
+  draftAction(el, kind)!.click();
+  await el.updateComplete;
+  return captured;
 }
 
 /** Each of `controls` whose tap target — a `wt-button`'s inner button, else the control itself —

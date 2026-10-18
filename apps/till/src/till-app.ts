@@ -10053,7 +10053,7 @@ export class TillApp extends LitElement {
     const tableId = this.activeTableId;
     let party = this.orderParty;
     if (tabId === undefined || store?.sending === true) return;
-    if (sent?.some((line) => line.blocked === "period_ended")) {
+    if (sent?.some((line) => line.source === undefined && line.blocked === "period_ended")) {
       this.errorKey = "menu.last_orders_ended";
       return;
     }
@@ -10110,7 +10110,7 @@ export class TillApp extends LitElement {
     if (followUp === "recheck-dead-ends") {
       this.renderRoot
         .querySelector<TillTableOrderScreen>("till-table-order-screen")
-        ?.reopenDraftPreview(sent);
+        ?.refreshDraftRouting(store, sent);
       return;
     }
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
