@@ -75,7 +75,6 @@ async function mountSixteen(choices: readonly ColourChoice[] = sixteen("en"), va
   return mounted;
 }
 
-/** The number of tracks in the panel's radio group. */
 function columns(el: WtColourChooser): number {
   const group = el.shadowRoot!.querySelector<HTMLElement>('[role="radiogroup"]')!;
   return getComputedStyle(group).gridTemplateColumns.split(" ").length;

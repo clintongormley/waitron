@@ -218,7 +218,7 @@ export class WtColourChooser extends LitElement {
     popup.style.minWidth = `${anchor.width}px`;
     popup.style.maxWidth = `${innerWidth - 16}px`;
     popup.style.maxHeight = `${innerHeight - 16}px`;
-    // Four columns while every colour name fits on one line at the width allowed, else two.
+    // Set here, not through render(): the line count below reads this layout at once.
     const group = popup.querySelector<HTMLElement>('[role="radiogroup"]')!;
     group.dataset.columns = "4";
     if ([...group.querySelectorAll(".colour-name")].some((name) => lineCount(name) > 1))

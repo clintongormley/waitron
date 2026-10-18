@@ -533,7 +533,7 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "venue-service/0057_black_shadow_king": {
     lost: ["menu_period_staff_menus", "period_extensions", "routing_cell_periods"],
   },
-  // Rebuilds `menu_periods` again to widen its colour CHECK to sixteen; loses the same children.
+  // Rebuilds `menu_periods` again to widen its colour CHECK; loses the same children.
   "venue-service/0060_certain_the_fallen": {
     lost: ["menu_period_staff_menus", "period_extensions", "routing_cell_periods"],
   },
@@ -542,7 +542,7 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "staffing/0002_charming_black_widow": {
     refused: ["DROP TABLE `staff_roles`", "FOREIGN KEY constraint failed"],
   },
-  // Rebuilds `staff_roles` again to widen its colour CHECK to sixteen; refused the same way.
+  // Rebuilds `staff_roles` again to widen its colour CHECK; refused the same way.
   "staffing/0003_huge_william_stryker": {
     refused: ["DROP TABLE `staff_roles`", "FOREIGN KEY constraint failed"],
   },

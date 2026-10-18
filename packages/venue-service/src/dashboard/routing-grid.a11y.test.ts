@@ -151,9 +151,9 @@ const COLOURS = [
 ] as const;
 
 /**
- * One station per colour: category `c<i>` sends Every zone to station `s<i>` with a Lunch
- * line to the next station, and its product inherits both. One cell carries a refusal and another a
- * disabled station.
+ * One station per colour in `COLOURS`: category `c<i>` sends Every zone to station `s<i>` with a
+ * Lunch line to the next station, and its product inherits both. One cell carries a refusal and
+ * another a disabled station.
  */
 const everyColour = routing({
   periods: flaggedLine.periods.map((period) => ({ ...period, productIds: ["p0"] })),
