@@ -81,6 +81,30 @@ export function createFirstSetupNodeKeys(options: Options) {
     const data = await readDurableHostJson(path, 4096);
     return data === null ? null : readFirstSetupStagedKey(data, state);
   };
+  const generate = async (state: FirstSetupState, prior?: StagedNodeKey) => {
+    const secret = generatePassword();
+    const alphabet = "34679ACDEFHJKMNPQRTUVWXY";
+    let name: string;
+    do
+      name = `${new Date().toISOString().slice(0, 10)} · ${Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("")}`;
+    while (name === prior?.name);
+    const stage: StagedNodeKey = {
+      version: 1,
+      stageId: randomUUID(),
+      attemptId: state.frozen.attemptId,
+      nodeId: state.frozen.nodeId,
+      frozenDigest: firstSetupFrozenDigest(state),
+      name,
+      verifier: hashSecret(secret),
+    };
+    await writeDurableHostJson(path, stage, 4096);
+    transient = {
+      stage,
+      key: { nodeId: stage.nodeId, name, secret },
+      ownerGeneration: state.ownerGeneration,
+    };
+    return structuredClone({ stage, key: transient.key });
+  };
   return {
     stageInitialNodeKey(
       owner: FirstSetupOwnerAttempt,
@@ -102,25 +126,21 @@ export function createFirstSetupNodeKeys(options: Options) {
             throw new AppError("setup.attempt_conflict", {});
           return structuredClone({ stage: transient.stage, key: transient.key });
         }
-        const secret = generatePassword();
-        const alphabet = "34679ACDEFHJKMNPQRTUVWXY";
-        const name = `${new Date().toISOString().slice(0, 10)} · ${Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("")}`;
-        const stage: StagedNodeKey = {
-          version: 1,
-          stageId: randomUUID(),
-          attemptId: state.frozen.attemptId,
-          nodeId: state.frozen.nodeId,
-          frozenDigest: firstSetupFrozenDigest(state),
-          name,
-          verifier: hashSecret(secret),
-        };
-        await writeDurableHostJson(path, stage, 4096);
-        transient = {
-          stage,
-          key: { nodeId: stage.nodeId, name, secret },
-          ownerGeneration: state.ownerGeneration,
-        };
-        return structuredClone({ stage, key: transient.key });
+        return generate(state);
+      });
+    },
+    reissueInitialNodeKey(
+      owner: FirstSetupOwnerAttempt,
+      reconfirmation: string,
+      hold?: FirstSetupHold,
+    ) {
+      return inside(hold, async (held) => {
+        const state = await options.owner.authorize(owner);
+        await options.owner.consumeReconfirmation(owner, reconfirmation, "node-key-reissue", held);
+        if (!["claimed", "consumption-intent"].includes(state.status))
+          throw new AppError("setup.attempt_conflict", {});
+        const prior = (await read(state)) ?? invalid();
+        return generate(state, prior);
       });
     },
     readStage(owner: FirstSetupOwnerAttempt, hold?: FirstSetupHold) {

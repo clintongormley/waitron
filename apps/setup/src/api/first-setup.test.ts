@@ -202,3 +202,21 @@ it("transports opaque preparation proposals with the exact owner binding", async
     },
   ]);
 });
+
+it("requests key reissue with the original password and current owner without another allocation action", async () => {
+  const { api, requests } = transport();
+  await expect(api.reissueFirstSetupNodeKey(owner, "original password")).resolves.toEqual({
+    result: "response",
+  });
+  expect(requests).toEqual([
+    {
+      url: "https://box.test/setup-api/first-setup/node-key-reissue",
+      init: {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({ password: "original password" }),
+      },
+    },
+  ]);
+});

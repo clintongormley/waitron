@@ -1423,3 +1423,30 @@ The first selected-draft check reproduced premature cleanup before PDF confirmat
 nested dirty assertion also caught a missing scope-parent connection. The initial countdown check
 matched the target's ISO time even without a countdown; it is excluded as evidence. The corrected
 check reads only the countdown field and was observed failing before implementation.
+
+## Password-authorised unfinished-key reissue (2026-10-18)
+
+No existing assertion or fixture value changes. New cases in
+`packages/provisioning/src/first-setup-node-key.test.ts` exercise lost transient material,
+password-resumed ownership, purpose-bound one-use authority, expiry, throttling and refusal after
+activation starts. They compare the saved attempt before and after replacement and check both the
+new verifier and the previous backup's retained verifier.
+
+New `first-setup-key-reissue.route.test.ts` cases exercise the original-password endpoint, owner
+headers, actual TLS-socket admission, foreign origins, malformed input and refusal without changing
+the verifier. `first-setup-key-reissue.boot.test.ts` uses certificate-verified HTTPS on the real
+setup listener, stops and restarts that server, resumes with the original password and checks the
+attempt file remains byte-identical after reissue.
+
+A new `first-setup-recovery-delivery.test.ts` case rejects the old kept grant and stale document,
+registers the replacement and requires a new explicit kept confirmation. It checks unchanged setup
+state and fiscal allocation rows, with zero provisioning/publication calls. The setup HTTP-client
+case checks the password and current owner reach only the reissue endpoint. Browser controls and
+completed-manager reissue remain unfinished; this client method alone does not provide either.
+
+The broader server run reports ten failures. An independently installed checkout of starting
+commit `0e1b2a56099ea983b67784e8e5985fb2404c6081` reproduced the same ten names in
+`setup-first-fiscal.route`, `first-fiscal-delivery`, `module-operation-host` and
+`first-fiscal-document.route`. Their complete names and logs remain in the lane's
+`a679-key-reissue-20261018` receipts. They remain branch qualification work before finish-branch;
+no whole-branch passing result is claimed.

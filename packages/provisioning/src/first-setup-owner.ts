@@ -44,7 +44,7 @@ export interface FirstSetupOwnerAttempt {
   ownerGeneration: number;
   capability: string;
 }
-export type ReconfirmationPurpose = "block-use" | "activation";
+export type ReconfirmationPurpose = "block-use" | "activation" | "node-key-reissue";
 export interface PublicFirstSetupState {
   attemptId: string;
   nodeId: string;
@@ -424,29 +424,39 @@ export function createFirstSetupOwner(options: OwnerOptions) {
     },
     reconfirm(owner: FirstSetupOwnerAttempt, password: string, purpose: ReconfirmationPurpose) {
       return inTurn(throttle, "reconfirm", async () => {
-        if (!["block-use", "activation"].includes(purpose)) refuse();
+        if (!["block-use", "activation", "node-key-reissue"].includes(purpose)) refuse();
         const before = await authorize(owner);
-        if (
-          typeof password !== "string" ||
-          Buffer.byteLength(password) > 1024 ||
-          !(await verifyPassword(password, before.ownerVerifier))
-        ) {
-          invalidate(owner.attemptId);
-          refuse();
-        }
-        return coordinator.run(async () => {
-          await authorize(owner);
-          invalidate(owner.attemptId);
-          const nonce = token();
-          grants.set(hash(nonce), {
-            ...owner,
-            capability: "",
-            purpose,
-            bootId: options.bootId,
-            expires: now() + 300000,
+        const finish =
+          purpose === "node-key-reissue" ? passwordThrottle.begin("first-setup") : undefined;
+        let outcome: "success" | "invalid" | "error" = "error";
+        try {
+          if (
+            typeof password !== "string" ||
+            Buffer.byteLength(password) > 1024 ||
+            !(await verifyPassword(password, before.ownerVerifier))
+          ) {
+            invalidate(owner.attemptId);
+            outcome = "invalid";
+            refuse();
+          }
+          const grant = await coordinator.run(async () => {
+            await authorize(owner);
+            invalidate(owner.attemptId);
+            const nonce = token();
+            grants.set(hash(nonce), {
+              ...owner,
+              capability: "",
+              purpose,
+              bootId: options.bootId,
+              expires: now() + 300000,
+            });
+            return nonce;
           });
-          return nonce;
-        });
+          outcome = "success";
+          return grant;
+        } finally {
+          finish?.(outcome);
+        }
       });
     },
     consumeReconfirmation(

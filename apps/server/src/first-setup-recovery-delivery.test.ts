@@ -491,3 +491,55 @@ it("an empty never-activated setup retains its public recovery binding when star
     next.preparation.prepare(owner, MODULE, { action: "compare-clocks", browser: null }),
   ).resolves.toBeDefined();
 });
+
+it("reissues an unfinished key without another hour selection and requires a newly kept document", async () => {
+  const f = await documentFixture();
+  await f.register();
+  await f.kept();
+  const state = await f.host.store.read();
+  const fiscalBefore = await suite.db.select().from(fiscalAllocations);
+  const replacement = await f.host.keys.reissueInitialNodeKey(
+    f.owner,
+    await f.host.owner.reconfirm(f.owner, PASSWORD, "node-key-reissue"),
+  );
+  expect(await f.host.store.read()).toEqual(state);
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual(fiscalBefore);
+  expect(f.counts()).toEqual({ activations: 0, publications: 0 });
+  await expect(f.host.recoveryDelivery.checkKept(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  await expect(f.host.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect(await f.host.recoveryDelivery.readRecoveryDocument(f.owner, MODULE)).toBeNull();
+  const statement = {
+    ...f.statement,
+    nodeKey: { nodeId: replacement.key.nodeId, name: replacement.key.name },
+  };
+  const reference = {
+    ...f.ref,
+    stageId: replacement.stage.stageId,
+    bindingDigest: firstFiscalPublicDigest(statement),
+    documentDigest: "b".repeat(64),
+  };
+  await expect(
+    f.host.recoveryDelivery.registerRecoveryDocumentDelivery(f.owner, {
+      ...reference,
+      statement,
+    }),
+  ).resolves.toBeUndefined();
+  await expect(f.host.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  await expect(f.kept()).rejects.toMatchObject({ code: "setup.not_ready" });
+  await f.host.recoveryDelivery.confirmRecoveryDocumentKept(
+    f.owner,
+    { ...reference, kept: true },
+    await f.host.owner.reconfirm(f.owner, PASSWORD, "activation"),
+  );
+  expect(await f.host.keys.readStage(f.owner)).toEqual(replacement.stage);
+  await expect(f.host.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
+  expect(await f.host.store.read()).toEqual(state);
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual(fiscalBefore);
+  expect(f.counts()).toEqual({ activations: 0, publications: 0 });
+});

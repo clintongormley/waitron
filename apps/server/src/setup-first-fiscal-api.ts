@@ -224,6 +224,31 @@ export function mountSetupFirstFiscalApi(
         });
       });
     });
+  app.post(`${root}/node-key-reissue`, (c) =>
+    boundary(c, log, async () => {
+      const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
+      if (!(socket instanceof TLSSocket) || !socket.encrypted)
+        throw new AppError("setup.owner_required", {});
+      const owner = firstFiscalOwner(c);
+      await host.owner.authorize(owner);
+      const body = exact(await readFirstFiscalBody(c), ["password"]);
+      const reconfirmation = await host.owner.reconfirm(
+        owner,
+        text(body.password),
+        "node-key-reissue",
+      );
+      return host.coordinator.run(async (hold) => {
+        const state = await host.owner.authorize(owner);
+        host.assertSelection(state);
+        const { stage, key } = await host.keys.reissueInitialNodeKey(owner, reconfirmation, hold);
+        host.evidence.invalidate(owner.attemptId);
+        return c.json({
+          stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.name },
+          key,
+        });
+      });
+    }),
+  );
   for (const action of [
     "node-key",
     "document",

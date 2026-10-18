@@ -538,6 +538,18 @@ export class SetupApi {
     );
   }
 
+  reissueFirstSetupNodeKey(
+    owner: FirstSetupOwner,
+    password: string,
+  ): Promise<import("@waitron/module/src/setup-contract.js").InitialSetupNodeKey> {
+    return this.#request(
+      "/setup-api/first-setup/node-key-reissue",
+      "POST",
+      { password },
+      firstSetupHeaders(owner),
+    );
+  }
+
   firstSetupNodeKey(
     owner: FirstSetupOwner,
     reconfirmation: string,

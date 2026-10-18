@@ -209,10 +209,11 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
         if (grant.manifest.attemptId === attemptId) grants.delete(module);
     },
     readRecoveryDocument(owner: FirstSetupOwnerAttempt, module: string) {
-      return inside(undefined, async () => {
+      return inside(undefined, async (held) => {
         const state = await options.owner.authorize(owner);
         const manifest = await read(state, module);
-        if (manifest === null) return null;
+        if (manifest === null || !equal(manifest.stage, await options.keys.readStage(owner, held)))
+          return null;
         return structuredClone({
           module: manifest.module,
           stageId: manifest.stageId,
@@ -274,6 +275,7 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
         const prior = await read(state, supplied.module);
         if (
           prior !== null &&
+          prior.stage.stageId === stage.stageId &&
           !equal(
             { ...prior, revision: manifest.revision, ownerGeneration: manifest.ownerGeneration },
             manifest,

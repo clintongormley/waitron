@@ -327,6 +327,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The owner approved the [design](superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
   on 2026-10-16 at 14:50: four UTC-hour characters replace paper/Cloud name allocation;
   the PDF keeps only the recovery key. Protected-code and fiscal-assertion restrictions remain.
+  Reissue controls, completed-manager reissue, interrupted-page ordering and full installed
+  journeys remain open; the unfinished-key HTTPS service is implemented on the branch.
   Owner acceptance is viewing real generated EN/ES PDFs through Drive; automated
   recovery-field entry checks remain the driver’s work. Preserve existing branch work.
   The selected module now supplies PDF/manual key fields. Local Chromium checks enter rendered
