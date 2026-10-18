@@ -218,7 +218,16 @@ describe("the floor plan sets port", () => {
     );
 
     const read = await inTx(v, (tx) =>
-      sets().readLayouts(tx, [d.dinner, empty], [d.zoneId, other.id]),
+      sets().readLayouts(
+        tx,
+        [d.zoneId, other.id],
+        [
+          { setId: d.dinner, zoneId: d.zoneId },
+          { setId: d.dinner, zoneId: other.id },
+          { setId: empty, zoneId: d.zoneId },
+          { setId: empty, zoneId: other.id },
+        ],
+      ),
     );
 
     expect([...read.tableCounts]).toEqual([
@@ -231,7 +240,7 @@ describe("the floor plan sets port", () => {
       { setId: empty, zoneId: d.zoneId, revision: 0, onPlan: 0, spare: 3 },
       { setId: empty, zoneId: other.id, revision: 0, onPlan: 0, spare: 0 },
     ]);
-    expect(await inTx(v, (tx) => sets().readLayouts(tx, [], [d.zoneId]))).toEqual({
+    expect(await inTx(v, (tx) => sets().readLayouts(tx, [d.zoneId], []))).toEqual({
       tableCounts: new Map([[d.zoneId, 3]]),
       layouts: [],
     });
@@ -239,6 +248,38 @@ describe("the floor plan sets port", () => {
       tableCounts: new Map(),
       layouts: [],
     });
+  });
+
+  it("reads only the layouts of the pairs asked for", async () => {
+    const d = await department();
+    await save(d.dinner, d.zoneId, {
+      revision: 0,
+      tables: [entry("a", fresh("1")), entry("b", fresh("2"), { placement: null })],
+    });
+    const empty = await inTx(v, (tx) => sets().create(tx));
+    const other = await inTx(v, (tx) =>
+      createServiceZone(tx, v.cfg, { name: fresh("Bar"), departmentId: d.departmentId }),
+    );
+
+    const read = await inTx(v, (tx) =>
+      sets().readLayouts(
+        tx,
+        [d.zoneId, other.id],
+        [
+          { setId: empty, zoneId: other.id },
+          { setId: d.dinner, zoneId: d.zoneId },
+        ],
+      ),
+    );
+
+    expect([...read.tableCounts]).toEqual([
+      [d.zoneId, 2],
+      [other.id, 0],
+    ]);
+    expect(read.layouts).toEqual([
+      { setId: empty, zoneId: other.id, revision: 0, onPlan: 0, spare: 0 },
+      { setId: d.dinner, zoneId: d.zoneId, revision: 1, onPlan: 1, spare: 1 },
+    ]);
   });
 
   it("names the zones whose today's record shows a set", async () => {

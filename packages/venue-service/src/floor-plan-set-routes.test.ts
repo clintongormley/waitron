@@ -61,6 +61,7 @@ function fakeCore(locationId: string) {
   const showing = new Map<string, string[]>();
   const copies: [string, string][] = [];
   const removed: string[][] = [];
+  const asked: string[][] = [];
   const floorPlanSetsPort: CoreServices["floorPlanSets"] = {
     async create(tx) {
       const [row] = await tx
@@ -72,7 +73,8 @@ function fakeCore(locationId: string) {
     async copyLayouts(_tx, fromSetId, toSetId) {
       copies.push([fromSetId, toSetId]);
     },
-    async readLayouts(tx, setIds, zoneIds) {
+    async readLayouts(tx, zoneIds, pairs) {
+      asked.push(pairs.map(({ setId, zoneId }) => `${setId}:${zoneId}`));
       const tables =
         zoneIds.length === 0
           ? []
@@ -85,17 +87,15 @@ function fakeCore(locationId: string) {
       );
       return {
         tableCounts,
-        layouts: setIds.flatMap((setId) =>
-          zoneIds.map((zoneId) => ({
-            setId,
-            zoneId,
-            revision: 0,
-            ...(counts.get(`${setId}:${zoneId}`) ?? {
-              onPlan: 0,
-              spare: tableCounts.get(zoneId)!,
-            }),
-          })),
-        ),
+        layouts: pairs.map(({ setId, zoneId }) => ({
+          setId,
+          zoneId,
+          revision: 0,
+          ...(counts.get(`${setId}:${zoneId}`) ?? {
+            onPlan: 0,
+            spare: tableCounts.get(zoneId)!,
+          }),
+        })),
       };
     },
     async zonesShowing(_tx, setId) {
@@ -116,6 +116,7 @@ function fakeCore(locationId: string) {
     showing,
     copies,
     removed,
+    asked,
     core: { floorPlanSets: floorPlanSetsPort, floorDeletion },
   };
 }
@@ -327,6 +328,21 @@ describe("the floor plan sets model", () => {
     expect(read.departments.find((d) => d.id === v.bar)!.sets.map((s) => s.id)).toEqual([
       v.barStandard,
     ]);
+  });
+
+  it("asks core for each set's layouts of its own department's zones only", async () => {
+    const v = await casaMarina();
+    v.asked.length = 0;
+    await model(v);
+    expect(v.asked).toHaveLength(1);
+    expect([...v.asked[0]!].sort()).toEqual(
+      [
+        ...[v.standard, v.dinnerSet, v.privateParty].flatMap((setId) =>
+          [v.inside, v.terrace].map((zoneId) => `${setId}:${zoneId}`),
+        ),
+        `${v.barStandard}:${v.counter}`,
+      ].sort(),
+    );
   });
 });
 

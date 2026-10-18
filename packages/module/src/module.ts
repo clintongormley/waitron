@@ -49,11 +49,11 @@ export interface FloorPlanSets {
   create(tx: Transaction): Promise<string>;
   /** Copies every layout row, placement and kept size of `fromSetId` into `toSetId`, each layout at revision 1. */
   copyLayouts(tx: Transaction, fromSetId: string, toSetId: string): Promise<void>;
-  /** Each zone's table count, and each (set, zone) layout's revision and counts, a missing row as 0/0/all spare. */
+  /** Each of `zoneIds`' table count, and each asked pair's layout revision and counts in the pairs' order, a missing row as 0/0/all spare. */
   readLayouts(
     tx: Transaction,
-    setIds: readonly string[],
     zoneIds: readonly string[],
+    pairs: readonly { setId: string; zoneId: string }[],
   ): Promise<{
     tableCounts: ReadonlyMap<string, number>;
     layouts: readonly {

@@ -127,12 +127,18 @@ async function copyLayouts(
 async function readLayouts(
   tx: Transaction,
   cfg: TillConfig,
-  requestedSets: readonly string[],
   requestedZones: readonly string[],
+  requestedPairs: readonly { setId: string; zoneId: string }[],
 ): ReturnType<FloorPlanSets["readLayouts"]> {
-  const zoneIds = await zonesOfLocation(tx, cfg, requestedZones);
-  const setIds = await setsOfLocation(tx, cfg, requestedSets);
+  const zoneIds = await zonesOfLocation(tx, cfg, [
+    ...new Set([...requestedZones, ...requestedPairs.map((p) => p.zoneId)]),
+  ]);
+  const setIds = await setsOfLocation(tx, cfg, [...new Set(requestedPairs.map((p) => p.setId))]);
   if (zoneIds.length === 0) return { tableCounts: new Map(), layouts: [] };
+  const zoneHeld = new Set(zoneIds);
+  const setHeld = new Set(setIds);
+  const pairs = requestedPairs.filter((p) => zoneHeld.has(p.zoneId) && setHeld.has(p.setId));
+  const asked = new Set(pairs.map((p) => `${p.setId}:${p.zoneId}`));
   const tables = await tx
     .select({
       id: floorPlanTables.id,
@@ -143,17 +149,24 @@ async function readLayouts(
     .leftJoin(floorPlanTableParts, eq(floorPlanTableParts.partTableId, floorPlanTables.id))
     .where(inArray(floorPlanTables.zoneId, zoneIds));
   const plans =
-    setIds.length === 0
+    pairs.length === 0
       ? []
-      : await tx
-          .select({
-            id: floorPlans.id,
-            setId: floorPlans.setId,
-            zoneId: floorPlans.zoneId,
-            revision: floorPlans.revision,
-          })
-          .from(floorPlans)
-          .where(and(inArray(floorPlans.setId, setIds), inArray(floorPlans.zoneId, zoneIds)));
+      : (
+          await tx
+            .select({
+              id: floorPlans.id,
+              setId: floorPlans.setId,
+              zoneId: floorPlans.zoneId,
+              revision: floorPlans.revision,
+            })
+            .from(floorPlans)
+            .where(
+              and(
+                inArray(floorPlans.setId, [...new Set(pairs.map((p) => p.setId))]),
+                inArray(floorPlans.zoneId, [...new Set(pairs.map((p) => p.zoneId))]),
+              ),
+            )
+        ).filter((plan) => asked.has(`${plan.setId}:${plan.zoneId}`));
   const places =
     plans.length === 0
       ? []
@@ -177,19 +190,20 @@ async function readLayouts(
     if (placed === undefined) placedOf.set(row.planId, new Set([row.tableId]));
     else placed.add(row.tableId);
   }
-  const tableCounts = new Map(zoneIds.map((zoneId) => [zoneId, tablesOf.get(zoneId)!.length]));
-  const layouts = setIds.flatMap((setId) =>
-    zoneIds.map((zoneId) => {
-      const plan = planOf.get(`${setId}:${zoneId}`);
-      const placed = (plan === undefined ? undefined : placedOf.get(plan.id)) ?? new Set<string>();
-      const counts = layoutCounts(
-        tablesOf
-          .get(zoneId)!
-          .map((t) => ({ id: t.id, placed: placed.has(t.id), partOf: t.partOf })),
-      );
-      return { setId, zoneId, revision: plan?.revision ?? 0, ...counts };
-    }),
+  const counted = new Set(requestedZones);
+  const tableCounts = new Map(
+    zoneIds
+      .filter((zoneId) => counted.has(zoneId))
+      .map((zoneId) => [zoneId, tablesOf.get(zoneId)!.length]),
   );
+  const layouts = pairs.map(({ setId, zoneId }) => {
+    const plan = planOf.get(`${setId}:${zoneId}`);
+    const placed = (plan === undefined ? undefined : placedOf.get(plan.id)) ?? new Set<string>();
+    const counts = layoutCounts(
+      tablesOf.get(zoneId)!.map((t) => ({ id: t.id, placed: placed.has(t.id), partOf: t.partOf })),
+    );
+    return { setId, zoneId, revision: plan?.revision ?? 0, ...counts };
+  });
   return { tableCounts, layouts };
 }
 
@@ -213,7 +227,7 @@ export function floorPlanSetsFor(cfg: TillConfig): FloorPlanSets {
       return row!.id;
     },
     copyLayouts: (tx, fromSetId, toSetId) => copyLayouts(tx, cfg, fromSetId, toSetId),
-    readLayouts: (tx, setIds, zoneIds) => readLayouts(tx, cfg, setIds, zoneIds),
+    readLayouts: (tx, zoneIds, pairs) => readLayouts(tx, cfg, zoneIds, pairs),
     zonesShowing: (tx, setId) => zonesShowing(tx, cfg, setId),
   };
 }

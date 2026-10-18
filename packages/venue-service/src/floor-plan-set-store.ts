@@ -148,14 +148,16 @@ export async function readFloorPlanSetsModel(
     .from(menuPeriods)
     .where(inArray(menuPeriods.departmentId, departmentIds))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
-  const { tableCounts, layouts } = await core.readLayouts(
-    tx,
-    sets.map((s) => s.setId),
-    zones.map((z) => z.id),
-  );
-  const layoutOf = new Map(layouts.map((l) => [`${l.setId}:${l.zoneId}`, l]));
   const zonesOf = byDepartment(zones);
   const setsOf = byDepartment(sets);
+  const { tableCounts, layouts } = await core.readLayouts(
+    tx,
+    zones.map((z) => z.id),
+    sets.flatMap((set) =>
+      (zonesOf.get(set.departmentId) ?? []).map((z) => ({ setId: set.setId, zoneId: z.id })),
+    ),
+  );
+  const layoutOf = new Map(layouts.map((l) => [`${l.setId}:${l.zoneId}`, l]));
   const periodsOf = byDepartment(periods);
   return {
     departments: departmentRows.map((department) => {
