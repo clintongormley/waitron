@@ -335,7 +335,12 @@ async function chooseReason(el: TillApp, name: string): Promise<void> {
   await press(el, radio);
 }
 
-async function requestComp(el: TillApp, order: TillTableOrderScreen, lineNo = 1) {
+async function requestAdjustment(
+  el: TillApp,
+  order: TillTableOrderScreen,
+  kind: "comp" | "cancel",
+  lineNo: number,
+) {
   const line = order.lines.find((line) => line.lineNo === lineNo)!;
   const parent = order.lines.find((dish) => dish.lineNo === line.parentLineNo);
   const name =
@@ -344,9 +349,14 @@ async function requestComp(el: TillApp, order: TillTableOrderScreen, lineNo = 1)
       : t("table.extra_of")
           .replace("{extra}", () => line.name!)
           .replace("{dish}", () => parent.name!);
-  emit(order, "adjust", { kind: "comp", target: lineAdjustTarget(line, order.lines, name) });
+  emit(order, "adjust", { kind, target: lineAdjustTarget(line, order.lines, name) });
   await flush(el);
 }
+
+const requestComp = (el: TillApp, order: TillTableOrderScreen, lineNo = 1) =>
+  requestAdjustment(el, order, "comp", lineNo);
+const requestCancel = (el: TillApp, order: TillTableOrderScreen, lineNo: number) =>
+  requestAdjustment(el, order, "cancel", lineNo);
 
 /** Opens Give away on the wine, chooses Complaint and presses Continue. */
 async function previewComp(el: TillApp, order: TillTableOrderScreen): Promise<void> {
@@ -955,7 +965,7 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     const order = await openMesa4(el);
     emit(order, "finish-table");
     await flush(el);
-    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="1"]')!);
+    await requestCancel(el, order, 1);
     expect(dialog(el)!.kind).toBe("cancel");
 
     finished.resolve();
@@ -1096,8 +1106,6 @@ describe("till-app: cancelling a dish", () => {
     await flush(el);
     await press(el, inDialog(el, "[data-adjust-continue]"));
   }
-  const cancelButton = (order: TillTableOrderScreen, lineNo: number) =>
-    order.shadowRoot!.querySelector<HTMLElement>(`[data-cancel-line="${lineNo}"]`)!;
   const cancelAsk = {
     expectedEdit: billEdit,
     expectedRevision: 6,
@@ -1117,7 +1125,7 @@ describe("till-app: cancelling a dish", () => {
     const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
 
-    await press(el, cancelButton(order, 1));
+    await requestCancel(el, order, 1);
     expect(dialog(el)!.kind).toBe("cancel");
     expect(dialog(el)!.shadowRoot!.textContent).toContain(t("table.cancel_sent"));
     const names = [
@@ -1135,7 +1143,7 @@ describe("till-app: cancelling a dish", () => {
     ]);
     expect(dialog(el)).toBeNull();
     expect(order.revision).toBe(7);
-    expect(order.shadowRoot!.querySelector('[data-cancel-line="1"]')).toBeNull();
+    expect(order.lines.find((line) => line.id === "line-1")).toBeUndefined();
     expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
     expect(vi.mocked(api.getTablesState).mock.calls.length).toBeGreaterThan(floorReads);
     expect(banner(el)).toBeNull();
@@ -1161,7 +1169,7 @@ describe("till-app: cancelling a dish", () => {
     });
     const order = await openMesa4(el);
 
-    await press(el, cancelButton(order, 1));
+    await requestCancel(el, order, 1);
     await previewCancel(el);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
 
@@ -1171,7 +1179,7 @@ describe("till-app: cancelling a dish", () => {
   it("sends nothing when the cancel dialog is closed", async () => {
     const { el } = await mountApp();
     const order = await openMesa4(el);
-    await press(el, cancelButton(order, 1));
+    await requestCancel(el, order, 1);
     await press(el, inDialog(el, "[data-adjust-close]"));
     await expect.poll(() => dialog(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -1197,7 +1205,7 @@ describe("till-app: cancelling a dish", () => {
     });
     const order = await openMesa4(el);
 
-    await press(el, cancelButton(order, 1));
+    await requestCancel(el, order, 1);
     const names = [
       ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="reason"]'),
     ].map((radio) => radio.closest("label")!.textContent!.trim());
@@ -1241,7 +1249,7 @@ describe("till-app: cancelling a dish", () => {
     it("cancels one of them when One is chosen", async () => {
       const { el } = await mountPair();
       const order = await openMesa4(el);
-      await press(el, cancelButton(order, 1));
+      await requestCancel(el, order, 1);
       await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
       await previewCancel(el);
       await press(el, inDialog(el, "[data-adjust-confirm]"));
@@ -1332,7 +1340,7 @@ describe("till-app: cancelling a dish", () => {
         }),
       });
       const order = await openMesa4(el);
-      await press(el, cancelButton(order, 2));
+      await requestCancel(el, order, 2);
       const shown = dialog(el)!.shadowRoot!.textContent!;
       expect(shown).toContain(t("table.cancel_extra_told"));
       expect(shown).not.toContain(t("table.cancel_started"));
@@ -1358,7 +1366,7 @@ describe("till-app: cancelling a dish", () => {
     it("cancels both, sending no quantity, when All is left chosen", async () => {
       const { el } = await mountPair();
       const order = await openMesa4(el);
-      await press(el, cancelButton(order, 1));
+      await requestCancel(el, order, 1);
       await previewCancel(el);
       await press(el, inDialog(el, "[data-adjust-confirm]"));
 
@@ -1373,7 +1381,7 @@ describe("till-app: cancelling a dish", () => {
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
     });
     const order = await openMesa4(el);
-    await press(el, cancelButton(order, 1));
+    await requestCancel(el, order, 1);
     await previewCancel(el);
     expect(inDialog(el, "[data-needs-approval]").textContent!.trim()).toBe(
       t("adjust.approval_manager"),
