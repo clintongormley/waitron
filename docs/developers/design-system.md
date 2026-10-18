@@ -4959,7 +4959,16 @@ floor plan when no table is placed on the zone's plan. Unassigned zones keep the
 The sidebar returns to the bare list. An editor's deep link keeps that list underneath it;
 closing the editor returns focus to its originating row menu, or Add when that row is gone.
 
-Edit department holds name, trading name, service settings and transfers. Edit zone holds its
+Edit department is tabbed. Details holds name and trading name. Service holds one section per
+topic, each under its own heading; today the one section is “Orders and payment”, with the service
+settings and the zones that differ. Transfers holds the allowed destinations and the receiving
+desk profile, and is offered only while two or more departments are active. One draft and one
+Save cover every tab, and the Save row sits below the strip, so changing tab keeps the draft and
+never asks about unsaved changes. The address keeps the open tab (`view` is `service` or
+`transfers`; Details has none), and an address naming a tab not offered opens Details. A refused
+or invalid Save shows the first tab holding a marked field, and marks every tab that holds one.
+A strip too wide for the dialog scrolls sideways inside it, as every `wt-tabs` strip does. Edit
+zone holds its
 name and four raw service overrides. Each override offers “Same as department (…)”, and saving
 that choice writes null. How orders start chooses Table service or Counter service. Counter
 service has a paid-when choice and a collection-ticket choice. The zone's name and policy save

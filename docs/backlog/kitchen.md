@@ -163,7 +163,9 @@ go-live nothing is carried forward.
 1. **Courses get their own page under Products and menus**, because products name them: a list with
    drag handles, Add course, and Delete in each row's menu (courses already delete through
    `wt-delete-dialog`).
-2. **The department dialog becomes tabbed — Details, Service, Receipts, Transfers.** Service gains
+2. **The department dialog becomes tabbed — Details, Service, Receipts, Transfers.** Details,
+   Service (with its "Orders and payment" section) and Transfers landed in A756's first pull
+   request. Still left: the Receipts tab and the reminder below. Service gains
    "Courses and the kitchen": who sends a held course to the kitchen (today's "Fire control":
    Waiter, Kitchen or Expo) and the reminder to send the next course. A757 adds its optional table
    states there. Receipt editing (`apps/dashboard/src/screens/department-receipt-dialog.ts`) moves
