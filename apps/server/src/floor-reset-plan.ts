@@ -42,7 +42,7 @@ export interface LiveTable {
   clearing: boolean;
   /** It is in a joined group of the reset, a joined table and its parts, with a waiting member (plan decision 8). */
   joinedWithWaiting: boolean;
-  /** Its new place is taken by a table that stays, so it keeps its place for now (A600). */
+  /** Its new place is taken by a table that stays, so it keeps its place for now. */
   blocked: boolean;
 }
 
