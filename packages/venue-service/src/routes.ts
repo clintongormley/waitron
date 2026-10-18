@@ -133,7 +133,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "station.destination_invalid": 400,
   "time_zone.unreadable": 409,
   "hours.invalid": 400,
-  "hours.clock_change_pending": 409,
+  "hours.clock_change_conflict": 409,
   "hours.clock_changed": 409,
   "venue.business_day_hours_conflict": 409,
   "season.not_found": 404,

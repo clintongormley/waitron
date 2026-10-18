@@ -173,6 +173,19 @@ Task 3b confirmed the plan's Task 3b rows, with the corrections marked
 
 No other existing assertion failed (`pnpm --filter @waitron/server exec vitest run` over the nine files of Step 4 plus `business-day-changeover.test.ts`: `Tests  403 passed (403)`).
 
+Task 7a confirmed the plan's 7a row, took the 7a part of the 7a/7b/8 row, and took Task 8's route row
+
+| File:line (base `373b96623`) | Before → after | Why |
+| --- | --- | --- |
+| `packages/venue-service/src/business-day-schedule.test.ts:430-467` ("refuses time writes while pending…", renamed "allows time writes while a change waits…") | `guard("time", 1)` rejects `{ code: "hours.clock_change_pending", params: { effectiveBusinessDay: E } }` → resolves; every other assertion (metadata, stale `hours.clock_changed`, activation, cancellation, bad revisions) unchanged | design rule 5: the guard keeps only its revision check |
+| `business-day-schedule.test.ts:497-505` (special-day menu paint, 07:00 waiting) | `paintDate(… "2026-12-25" …)` rejects pending → `paintDate(… "2026-12-26" …)` resolves | the pending refusal is gone; the date moves because the fixture already holds a special day on 12-25, so a second one is refused `special_day.date_taken` — the base never reached that check. Task 8 adds the clashing refusal |
+| `business-day-schedule.test.ts:506-516` (menu week, 07:00 waiting) | Wed 09:00–17:00 at revision 1 rejects pending → resolves; the empty-week (revision 0) check moved before it, assertion unchanged | the week now fits the waiting start; after it is stored the empty week is a time change, so revision 0 would answer `hours.clock_changed` |
+| `business-day-schedule.test.ts:518-536` (period offsets) | `endOffsetMinutes: 1` at revision 1 rejects pending → resolves; the name/colour/offset-0 update (revision 0) moved before it, assertion unchanged | same ordering reason |
+| `business-day-schedule.test.ts:537-561` (zone week and zone date) | both reject pending → both resolve; the zone date moves 12-25 → 12-26 | as above; Task 7b and 8 add the clashing refusals |
+| `packages/venue-service/src/menu-timetable-routes.test.ts:852-873` (Task 8's row, taken here because 7a's `replaceMenuWeek` change makes the old assertion fail) | `PUT …/menu-week` 09:00–14:00 rev 1 → 409 `{ code: "hours.clock_change_pending", params: { effectiveBusinessDay: "2026-11-04" } }` → 204; added: 06:00–08:00 rev 1 → 409 by `toEqual` `{ code: "hours.clock_change_conflict", params: { dayCutover: "07:00", startsAt: "2026-11-04T06:00:00.000Z", conflictCount: 1, conflicts: [{ departmentId, departmentName "Restaurant", periodId, periodName "Mañanas", seasonId, seasonName "Autumn", weekday 1, startsAt "06:00", endsAt "08:00", rangeIndex 0, reason "range" }] } }` and the model's departments unchanged; stale case (rev 0 → 409 `hours.clock_changed`) unchanged, moved first | the route now accepts a fitting week and names the clash |
+
+No other existing assertion failed (`pnpm exec vitest run --project node` in `packages/venue-service`: `Tests  2510 passed (2510)`).
+
 ## Review focus (inputs no task's main tests reach; each line names the test that pins it)
 
 1. **The rule-2 flip mid-dialog**: a preview taken at 00:20 for 00:30 and a Save at 00:31 must be

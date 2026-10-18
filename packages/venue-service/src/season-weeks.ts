@@ -376,7 +376,6 @@ export async function saveSeasonWeeks(
     [...departmentWeeks, ...zoneWeeks].some((week) => week.changed) ? "time" : "metadata",
     at,
     expectedClockRevision,
-    clock,
   );
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();
   await assertWeekEndOffsets(tx, cfg, clock, departmentWeeks);

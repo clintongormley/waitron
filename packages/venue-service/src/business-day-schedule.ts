@@ -37,7 +37,7 @@ import {
   rangeSpan,
   type ClosedRange,
 } from "./service-day.js";
-import { serviceDayWallContext } from "./service-day-context.js";
+import { serviceDayWallContext, settledClock } from "./service-day-context.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import "./errors.js";
@@ -559,9 +559,8 @@ export async function assertBusinessDayScheduleWrite(
   tx: Transaction,
   cfg: VenueScope,
   changeKind: "time" | "metadata",
-  at: Date,
+  _at: Date,
   expectedClockRevision: number,
-  acquiredClock?: BusinessDayClock,
 ): Promise<void> {
   if (changeKind === "metadata") return;
   const revision = await readBusinessDayScheduleRevision(tx, cfg);
@@ -571,14 +570,37 @@ export async function assertBusinessDayScheduleWrite(
     expectedClockRevision !== revision
   )
     throw new AppError("hours.clock_changed", {});
+}
+/** Checks the venue's hours, as written, against each change still waiting at `at`, in date
+ *  order, each under the starts before it. */
+export async function assertWaitingChangeFits(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+  acquiredClock?: BusinessDayClock,
+): Promise<void> {
   const clock = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
-  const pending = clock.cutoverChanges.find(
-    (change) => businessDayBoundaryAt(clock, change.effectiveBusinessDay) > at.toISOString(),
-  );
-  if (pending !== undefined)
-    throw new AppError("hours.clock_change_pending", {
-      effectiveBusinessDay: pending.effectiveBusinessDay,
-    });
+  let settled = settledClock(clock, at);
+  const waiting = clock.cutoverChanges
+    .filter((change) => !settled.cutoverChanges.includes(change))
+    .sort((a, b) => a.effectiveBusinessDay.localeCompare(b.effectiveBusinessDay));
+  for (const change of waiting) {
+    const next = { ...settled, cutoverChanges: [...settled.cutoverChanges, change] };
+    const result = await businessDayClockConflicts(
+      tx,
+      cfg,
+      settled,
+      next,
+      change.effectiveBusinessDay,
+    );
+    if (result.conflictCount > 0)
+      throw new AppError("hours.clock_change_conflict", {
+        dayCutover: change.dayCutover,
+        startsAt: businessDayBoundaryAt(clock, change.effectiveBusinessDay),
+        ...result,
+      });
+    settled = next;
+  }
 }
 
 export function sameScheduleRanges(

@@ -1,5 +1,6 @@
 import {
   assertBusinessDayScheduleWrite,
+  assertWaitingChangeFits,
   sameScheduleRanges,
   readBusinessDayScheduleRevision,
   readBusinessDayScheduleStatus,
@@ -59,6 +60,7 @@ import { readSeasons } from "./seasons.js";
 import {
   scheduleCutovers,
   serviceDayContext,
+  settledClock,
   type ServiceDayContext,
 } from "./service-day-context.js";
 import "./errors.js";
@@ -526,13 +528,8 @@ async function writeMenuPeriod(
   await assertDepartment(tx, cfg, departmentId);
   const oldOffset =
     periodId === null ? 0 : (await requirePeriod(tx, cfg, periodId)).endOffsetMinutes;
-  await assertBusinessDayScheduleWrite(
-    tx,
-    cfg,
-    oldOffset === endOffsetMinutes ? "metadata" : "time",
-    at,
-    expectedClockRevision,
-  );
+  const changeKind = oldOffset === endOffsetMinutes ? "metadata" : "time";
+  await assertBusinessDayScheduleWrite(tx, cfg, changeKind, at, expectedClockRevision);
   if (
     period.colour !== undefined &&
     (typeof period.colour !== "string" || !CALENDAR_COLOURS.includes(period.colour))
@@ -610,7 +607,8 @@ async function writeMenuPeriod(
         displayOrder,
       })),
     );
-  const clash = await endOffsetClash(tx, cfg, [departmentId]);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const clash = await endOffsetClash(tx, cfg, [departmentId], false, settledClock(clock, at));
   if (clash !== null)
     throw new AppError("menu_period.invalid", {
       field: "endOffsetMinutes",
@@ -622,6 +620,7 @@ async function writeMenuPeriod(
       date: clash.date,
       ...(clash.specialDayId === undefined ? {} : { specialDayId: clash.specialDayId }),
     });
+  if (changeKind === "time") await assertWaitingChangeFits(tx, cfg, at, clock);
   return { id: id! };
 }
 
@@ -674,17 +673,18 @@ export async function replaceMenuWeek(
   options: { seasonId?: string } = {},
 ): Promise<void> {
   const clock = await readLocationClock(tx, cfg.locationId);
-  const staged = await stageMenuWeek(tx, cfg, departmentId, days, clock, options.seasonId);
+  const settled = settledClock(clock, at);
+  const staged = await stageMenuWeek(tx, cfg, departmentId, days, settled, options.seasonId);
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,
     staged.changed ? "time" : "metadata",
     at,
     expectedClockRevision,
-    clock,
   );
   await staged.write();
-  await assertWeekEndOffsets(tx, cfg, clock, [{ departmentId, ...staged }]);
+  await assertWeekEndOffsets(tx, cfg, settled, [{ departmentId, ...staged }]);
+  if (staged.changed) await assertWaitingChangeFits(tx, cfg, at, clock);
 }
 
 /** Refuses the first sending cutoff in the listed departments that runs into what follows it,

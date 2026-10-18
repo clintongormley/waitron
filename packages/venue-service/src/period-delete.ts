@@ -211,7 +211,7 @@ export async function deletePeriod(
       throw new AppError("menu_period.invalid", { field: "replacementPeriodId" });
   }
   const clock = await readLocationClock(tx, cfg.locationId);
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision, clock);
+  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
   const dayIds = (
     await tx
       .selectDistinct({ dayId: departmentDayRanges.dayId })

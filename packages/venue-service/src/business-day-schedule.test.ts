@@ -3,6 +3,7 @@ import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { saveSpecialDay } from "./special-days.js";
 import {
   replaceMenuWeek,
+  saveMenuPeriod,
   updateMenuPeriod,
   readOpeningHoursModel,
   resolveDepartmentService,
@@ -41,6 +42,7 @@ import {
   assertBusinessDayScheduleWrite,
   keptOpenConflicts,
 } from "./business-day-schedule.js";
+import { settledClock } from "./service-day-context.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 
@@ -486,7 +488,7 @@ describe("business-day schedule compatibility", () => {
   });
 });
 describe("schedule clock guard", () => {
-  it("refuses time writes while pending, allows metadata, and retains revision after cancellation", async () => {
+  it("allows time writes while a change waits, allows metadata, and retains revision after cancellation", async () => {
     const v = await fixture([]);
     await withTransaction(suite.db, async (tx) => {
       await tx
@@ -500,10 +502,7 @@ describe("schedule clock guard", () => {
       withTransaction(suite.db, (tx) =>
         assertBusinessDayScheduleWrite(tx, v.cfg, kind, now, revision),
       );
-    await expect(guard("time", 1)).rejects.toMatchObject({
-      code: "hours.clock_change_pending",
-      params: { effectiveBusinessDay: E },
-    });
+    await expect(guard("time", 1)).resolves.toBeUndefined();
     await expect(guard("metadata", 0)).resolves.toBeUndefined();
     await expect(guard("time", 0)).rejects.toMatchObject({
       code: "hours.clock_changed",
@@ -544,7 +543,7 @@ describe("service boundaries remain chronological", () => {
   });
 });
 
-describe("pending guards every time writer", () => {
+describe("every time writer stays open while a change waits", () => {
   async function pending(v: Awaited<ReturnType<typeof fixture>>) {
     await withTransaction(suite.db, async (tx) => {
       await tx
@@ -555,32 +554,27 @@ describe("pending guards every time writer", () => {
         .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
     });
   }
-  it("guards normal and special-day menu ranges but accepts an equivalent week", async () => {
+  it("accepts normal and special-day menu ranges and an equivalent week", async () => {
     const v = await fixture([range("09:00", "17:00")], { date: "2026-12-25" });
     await pending(v);
     await expect(
-      paintDate(v, "menu", "2026-12-25", [range("09:00", "18:00")], at, 1),
-    ).rejects.toMatchObject({ code: "hours.clock_change_pending" });
+      paintDate(v, "menu", "2026-12-26", [range("09:00", "18:00")], at, 1),
+    ).resolves.toBeUndefined();
     const week = Array.from({ length: 7 }, (_, weekday) => ({
       weekday,
       slots: weekday === 3 ? [{ periodId: v.periodId, ...range("09:00", "17:00") }] : [],
     }));
-    await expect(
-      withTransaction(suite.db, (tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, week, at, 1)),
-    ).rejects.toMatchObject({ code: "hours.clock_change_pending" });
     const empty = week.map((day) => ({ ...day, slots: [] }));
     await expect(
       withTransaction(suite.db, (tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, empty, at, 0)),
     ).resolves.toBeUndefined();
+    await expect(
+      withTransaction(suite.db, (tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, week, at, 1)),
+    ).resolves.toBeUndefined();
   });
-  it("guards offsets but accepts names, colours and equivalent offsets", async () => {
+  it("accepts offsets, names, colours and equivalent offsets", async () => {
     const v = await fixture([range("09:00", "17:00")]);
     await pending(v);
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        updateMenuPeriod(tx, v.cfg, v.periodId, { endOffsetMinutes: 1 }, 1, at),
-      ),
-    ).rejects.toMatchObject({ code: "hours.clock_change_pending" });
     await expect(
       withTransaction(suite.db, (tx) =>
         updateMenuPeriod(
@@ -593,8 +587,13 @@ describe("pending guards every time writer", () => {
         ),
       ),
     ).resolves.toBeUndefined();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        updateMenuPeriod(tx, v.cfg, v.periodId, { endOffsetMinutes: 1 }, 1, at),
+      ),
+    ).resolves.toBeUndefined();
   });
-  it("guards zone closed weeks and dates", async () => {
+  it("accepts zone closed weeks and dates", async () => {
     const v = await fixture([range("09:00", "10:00")], { zone: true, date: "2026-12-25" });
     await pending(v);
     await expect(
@@ -611,10 +610,195 @@ describe("pending guards every time writer", () => {
           at,
         ),
       ),
-    ).rejects.toMatchObject({ code: "hours.clock_change_pending" });
+    ).resolves.toBeUndefined();
     await expect(
-      paintDate(v, "zone", "2026-12-25", [range("12:00", "13:00")], at, 1),
-    ).rejects.toMatchObject({ code: "hours.clock_change_pending" });
+      paintDate(v, "zone", "2026-12-26", [range("12:00", "13:00")], at, 1),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("a waiting change checks the hours written while it waits", () => {
+  async function waiting(v: Awaited<ReturnType<typeof fixture>>, dayCutover = "03:00") {
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .insert(locationBusinessDaySettings)
+        .values({ locationId: v.cfg.locationId, revision: 1 });
+      await tx.insert(locationDayCutoverChanges).values({
+        locationId: v.cfg.locationId,
+        effectiveBusinessDay: E,
+        dayCutover: `${dayCutover}:00`,
+      });
+    });
+  }
+  const weekOf = (
+    periodId: string,
+    weekday: number,
+    ranges: { startsAt: string; endsAt: string }[],
+  ) =>
+    Array.from({ length: 7 }, (_, day) => ({
+      weekday: day,
+      slots: day === weekday ? ranges.map((r) => ({ periodId, ...r })) : [],
+    }));
+  const stored = (v: Awaited<ReturnType<typeof fixture>>) =>
+    withTransaction(suite.db, async (tx) =>
+      (
+        await tx
+          .select({
+            weekday: departmentDays.weekday,
+            startsAt: departmentDayRanges.startsAt,
+            endsAt: departmentDayRanges.endsAt,
+          })
+          .from(departmentDayRanges)
+          .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
+          .where(eq(departmentDays.departmentId, v.departmentId))
+      )
+        .map((row) => `${row.weekday} ${row.startsAt}-${row.endsAt}`)
+        .sort(),
+    );
+  const offsetOf = (v: Awaited<ReturnType<typeof fixture>>) =>
+    withTransaction(suite.db, async (tx) => {
+      const [row] = await tx
+        .select({ offset: menuPeriods.endOffsetMinutes })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, v.periodId));
+      return row!.offset;
+    });
+  const writeWeek = (
+    v: Awaited<ReturnType<typeof fixture>>,
+    weekday: number,
+    ranges: { startsAt: string; endsAt: string }[],
+  ) =>
+    withTransaction(suite.db, (tx) =>
+      replaceMenuWeek(tx, v.cfg, v.departmentId, weekOf(v.periodId, weekday, ranges), at, 1),
+    );
+
+  it("stores a week that fits the waiting start", async () => {
+    const v = await fixture([]);
+    await waiting(v);
+    await expect(writeWeek(v, 3, [range("09:00", "17:00")])).resolves.toBeUndefined();
+    expect(await stored(v)).toEqual(["3 09:00:00-17:00:00"]);
+  });
+  it("refuses a week crossing the waiting start, naming the range, and writes nothing", async () => {
+    const v = await fixture([range("12:00", "15:00")]);
+    await waiting(v);
+    const before = await stored(v);
+    await expect(writeWeek(v, 6, [range("21:00", "04:30")])).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            weekday: 6,
+            startsAt: "21:00",
+            endsAt: "04:30",
+            reason: "range",
+          }),
+        ],
+      },
+    });
+    expect(await stored(v)).toEqual(before);
+  });
+  it("refuses last orders running into the waiting start (mockup 06), writing nothing", async () => {
+    const v = await fixture([], { offset: 30 });
+    await waiting(v);
+    await expect(writeWeek(v, 6, [range("21:00", "02:45")])).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        conflicts: [expect.objectContaining({ reason: "transition_strip" })],
+      },
+    });
+    expect(await stored(v)).toEqual([]);
+  });
+  it("refuses an offset that runs a stored range into the waiting start, keeping the old offset", async () => {
+    const v = await fixture([]);
+    await withTransaction(suite.db, (tx) =>
+      seasonDay(tx, { ...v, weekday: 6, ranges: [range("21:00", "02:45")] }),
+    );
+    await waiting(v);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        updateMenuPeriod(tx, v.cfg, v.periodId, { endOffsetMinutes: 30 }, 1, at),
+      ),
+    ).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: { conflicts: [expect.objectContaining({ reason: "transition_strip" })] },
+    });
+    expect(await offsetOf(v)).toBe(0);
+  });
+  it("creates a period with an offset and no ranges while a change waits", async () => {
+    const v = await fixture([]);
+    await waiting(v);
+    const menuId = randomUUID();
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(catalogues).values({ id: menuId, name: "Late" }),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        saveMenuPeriod(
+          tx,
+          v.cfg,
+          v.departmentId,
+          { name: "Late", menuId, staffMenuIds: [], endOffsetMinutes: 15 },
+          1,
+          at,
+        ),
+      ),
+    ).resolves.toMatchObject({ id: expect.any(String) });
+  });
+  it("answers last orders clashing only under the waiting start as a waiting-change conflict", async () => {
+    const v = await fixture([], { offset: 30 });
+    await waiting(v);
+    const week = weekOf(v.periodId, 5, [range("01:00", "03:00")]);
+    week[6]!.slots = [{ periodId: v.periodId, ...range("03:00", "04:00") }];
+    await expect(
+      withTransaction(suite.db, (tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, week, at, 1)),
+    ).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 2,
+        conflicts: [
+          expect.objectContaining({
+            weekday: 5,
+            startsAt: "01:00",
+            endsAt: "03:00",
+            reason: "sending_cutoff",
+          }),
+          expect.objectContaining({
+            weekday: 6,
+            startsAt: "03:00",
+            endsAt: "04:00",
+            reason: "endpoint_day",
+          }),
+        ],
+      },
+    });
+    expect(await stored(v)).toEqual([]);
+  });
+});
+
+describe("settledClock", () => {
+  const clock: BusinessDayClock = {
+    ...before,
+    cutoverChanges: [
+      { effectiveBusinessDay: "2026-11-01", dayCutover: "04:00" },
+      { effectiveBusinessDay: E, dayCutover: "03:00" },
+    ],
+  };
+  it("drops a change whose changeover is after the moment and keeps one at or before it", () => {
+    expect(settledClock(clock, at).cutoverChanges).toEqual([
+      { effectiveBusinessDay: "2026-11-01", dayCutover: "04:00" },
+    ]);
+    expect(settledClock(clock, new Date("2026-11-04T02:00:00.000Z")).cutoverChanges).toEqual(
+      clock.cutoverChanges,
+    );
+    expect(settledClock(clock, new Date("2026-11-04T01:59:59.999Z")).cutoverChanges).toHaveLength(
+      1,
+    );
   });
 });
 

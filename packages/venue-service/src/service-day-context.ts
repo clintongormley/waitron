@@ -1,4 +1,9 @@
-import { businessDayBounds, cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
+import {
+  businessDayBounds,
+  businessDayBoundaryAt,
+  cutoverForBusinessDay,
+  type BusinessDayClock,
+} from "@waitron/shared";
 export interface ServiceDayContext {
   dayCutover: string;
   startAt: string;
@@ -39,4 +44,15 @@ export function scheduleCutovers(clock: BusinessDayClock, day?: string): string[
   return day === undefined
     ? [...new Set([clock.dayCutover, ...clock.cutoverChanges.map((change) => change.dayCutover)])]
     : [cutoverForBusinessDay({ ...clock, timeZone: "UTC" }, day)];
+}
+
+/** The clock without the changes still waiting at `at`. */
+export function settledClock(clock: BusinessDayClock, at: Date): BusinessDayClock {
+  const now = at.toISOString();
+  return {
+    ...clock,
+    cutoverChanges: clock.cutoverChanges.filter(
+      (change) => businessDayBoundaryAt(clock, change.effectiveBusinessDay) <= now,
+    ),
+  };
 }
