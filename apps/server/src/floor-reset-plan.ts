@@ -67,6 +67,8 @@ export function planReset(input: {
   targets: readonly Target[];
   live: readonly LiveTable[];
   takenElsewhere: ReadonlySet<string>;
+  /** Targets with no table yet, a joined table to create whose group waits (plan decision 8). */
+  waitingToCreate?: ReadonlySet<Target>;
 }): ResetPlan {
   const live = new Map(input.live.map((table) => [table.id, table]));
   const plan: ResetPlan = { apply: [], seed: [], create: [], remove: [], hide: [], pending: [] };
@@ -79,7 +81,10 @@ export function planReset(input: {
 
   for (const target of input.targets) {
     const table = target.tableId === null ? undefined : live.get(target.tableId);
-    if (target.tableId !== null && !table) {
+    if (target.tableId === null && input.waitingToCreate?.has(target)) {
+      plan.pending.push(target);
+      fixedInUse.add(target.label);
+    } else if (target.tableId !== null && !table) {
       // The table's state is unknown, so nothing is done to it and no other table takes its target name.
       plan.pending.push(target);
       fixedInUse.add(target.label);

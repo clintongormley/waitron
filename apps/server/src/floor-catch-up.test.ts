@@ -1108,6 +1108,47 @@ describe("the reset waiting rules", () => {
     expect(await resetRowOf(tLong)).toEqual({ pending: true, placed: false });
   });
 
+  it("a joined table the reset creates waits while guests sit at one of its parts", async () => {
+    const zoneId = await zone();
+    const [long, c3, c4, c5] = [
+      fresh("Long"),
+      fresh("Counter 3"),
+      fresh("Counter 4"),
+      fresh("Counter 5"),
+    ];
+    const first = await save(zoneId, 0, [
+      entry("c3", c3, { placement: place(0, 0) }),
+      entry("c4", c4, { placement: place(20, 0) }),
+      entry("c5", c5, { placement: place(40, 0) }),
+    ]);
+    await reset(zoneId);
+    const liveOf = await liveIdsOf(zoneId, first.ids);
+    const parts = [liveOf("c3"), liveOf("c4"), liveOf("c5")];
+    const partyId = await seatAt(parts[0]!);
+    await save(zoneId, first.revision, [
+      entry("c3", c3, { id: first.ids.c3, placement: null }),
+      entry("c4", c4, { id: first.ids.c4, placement: null }),
+      entry("c5", c5, { id: first.ids.c5, placement: null }),
+      entry("long", long, { placement: place(0, 20), partKeys: ["c3", "c4", "c5"] }),
+    ]);
+    const before = await todayRows(parts);
+
+    await reset(zoneId);
+
+    expect((await readFloor()).map((t) => t.label)).not.toContain(long);
+    expect(await todayRows(parts)).toEqual(before);
+    for (const part of parts) {
+      expect(await resetRowOf(part)).toEqual({ pending: true, placed: false });
+    }
+    const joined = await readJoined();
+    for (const part of parts) expect(joined.get(part)).toBeNull();
+
+    await finish(partyId);
+
+    const after = await readJoined();
+    for (const part of parts) expect(after.get(part)).toBe(long);
+  });
+
   it("taking 4 into 4+5 waits while 4 has guests", async () => {
     const z = await fourAndFive();
     await z.onto(z.d.standard);

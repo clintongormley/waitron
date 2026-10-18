@@ -79,6 +79,19 @@ describe("planReset", () => {
     expect(plan.apply).toEqual([]);
   });
 
+  it("a joined table to create waits, keeping its name taken, when its group waits", () => {
+    const long = t(null, "Long");
+    const plan = planReset({
+      targets: [long, t("b", "Bar", { label: "Long" })],
+      live: [l("b", "Bar")],
+      takenElsewhere: none,
+      waitingToCreate: new Set([long]),
+    });
+    expect(plan.create).toEqual([]);
+    expect(plan.pending).toEqual([long, t("b", "Bar", { label: "Long" })]);
+    expect(plan.apply).toEqual([{ target: t("b", "Bar", { label: "Long" }), label: null }]);
+  });
+
   it("a joined group waits whole", () => {
     const plan = planReset({
       targets: [t("a", "4"), t("b", "5"), t("c", "4+5")],
