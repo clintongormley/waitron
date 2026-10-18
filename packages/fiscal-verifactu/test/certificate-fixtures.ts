@@ -6,10 +6,10 @@ import type { MtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import forge from "node-forge";
 
 export interface CandidateOptions {
-  /** `null` leaves the subject's O out. */
-  organisation?: string | null;
-  /** `null` leaves the subject's organizationIdentifier (2.5.4.97) out. */
-  organizationIdentifier?: string | null;
+  /** `null` leaves the subject's O out; an array repeats it. */
+  organisation?: string | string[] | null;
+  /** `null` leaves the subject's organizationIdentifier (2.5.4.97) out; an array repeats it. */
+  organizationIdentifier?: string | string[] | null;
   notBefore?: Date;
   notAfter?: Date;
   passphrase?: string;
@@ -97,19 +97,19 @@ const CA_EXTENSIONS = [
   { name: "keyUsage", keyCertSign: true, digitalSignature: true },
 ];
 
-function certificateAuthority(commonName: string, organisation: string): Signer {
+/** The authority's own name. `null` leaves a part out; with both out the name is `C=ES` alone. */
+export interface AuthorityName {
+  commonName?: string | null;
+  organisation?: string | null;
+}
+
+function certificateAuthority(commonName: string | null, organisation: string | null): Signer {
   const keys = keyPair();
-  const cert = sign(
-    [
-      { name: "commonName", value: commonName },
-      { name: "organizationName", value: organisation },
-    ],
-    keys.publicKey,
-    null,
-    keys.privateKey,
-    AUTHORITY_VALIDITY,
-    CA_EXTENSIONS,
-  );
+  const name: Attribute[] = [];
+  if (commonName !== null) name.push({ name: "commonName", value: commonName });
+  if (organisation !== null) name.push({ name: "organizationName", value: organisation });
+  if (name.length === 0) name.push({ name: "countryName", value: "ES" });
+  const cert = sign(name, keys.publicKey, null, keys.privateKey, AUTHORITY_VALIDITY, CA_EXTENSIONS);
   return { cert, key: keys.privateKey };
 }
 
@@ -135,8 +135,11 @@ function issuedFor(candidate: Candidate): Issued {
   return issued;
 }
 
-export function makeAuthority(): FixtureAuthority {
-  const authority = certificateAuthority("Waitron test FNMT", "Test FNMT");
+export function makeAuthority(name: AuthorityName = {}): FixtureAuthority {
+  const authority = certificateAuthority(
+    name.commonName === undefined ? "Waitron test FNMT" : name.commonName,
+    name.organisation === undefined ? "Test FNMT" : name.organisation,
+  );
   const stranger = certificateAuthority("Waitron stranger CA", "Stranger");
 
   const serverKeys = keyPair();
@@ -182,10 +185,12 @@ export function makeAuthority(): FixtureAuthority {
           : options.organizationIdentifier;
       const commonName = options.commonName ?? "12345678Z ANA GARCIA (R: 89890001K)";
       const subject: Attribute[] = [];
-      if (organizationIdentifier !== null) {
-        subject.push({ type: "2.5.4.97", value: organizationIdentifier });
+      for (const value of [organizationIdentifier ?? []].flat()) {
+        subject.push({ type: "2.5.4.97", value });
       }
-      if (organisation !== null) subject.push({ name: "organizationName", value: organisation });
+      for (const value of [organisation ?? []].flat()) {
+        subject.push({ name: "organizationName", value });
+      }
       subject.push({ name: "commonName", value: commonName });
       subject.push({ name: "serialNumber", value: "IDCES-12345678Z" });
       const signer = options.signedBy === "stranger" ? stranger : authority;
@@ -264,10 +269,13 @@ export async function startAnsweringServer(
     const cn = (req.socket as TLSSocket).getPeerCertificate().subject?.CN;
     lastCn = Array.isArray(cn) ? (cn[0] ?? null) : (cn ?? null);
     answer.onRequest?.();
-    void (answer.hold ?? Promise.resolve()).then(() => {
-      res.writeHead(answer.status, { "Content-Type": "text/xml; charset=utf-8" });
-      res.end(answer.body);
-    });
+    (answer.hold ?? Promise.resolve()).then(
+      () => {
+        res.writeHead(answer.status, { "Content-Type": "text/xml; charset=utf-8" });
+        res.end(answer.body);
+      },
+      (error: unknown) => res.destroy(error instanceof Error ? error : undefined),
+    );
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;

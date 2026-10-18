@@ -1,5 +1,5 @@
 import { X509Certificate } from "node:crypto";
-import { createSecureContext, type PeerCertificate, type SecureContext, TLSSocket } from "node:tls";
+import { createSecureContext, type PeerCertificate, TLSSocket } from "node:tls";
 
 export const CERTIFICATE_MAX_BYTES = 100 * 1024;
 
@@ -32,7 +32,7 @@ function first(names: Names, key: string): string | null {
 // Measured 2026-10-18 on Node v26.11.1 / OpenSSL 4.0.3: a wrong passphrase throws with no code and
 // "mac verify failure", an RC2-encrypted file `ERR_CRYPTO_UNSUPPORTED_OPERATION`, and a file with
 // no key `ERR_CRYPTO_OPERATION_FAILED` "Unable to load private key from PFX data".
-function contextRefusal(error: unknown): OpenRefusal {
+function refusal(error: unknown): OpenRefusal {
   const { code, message } = error as NodeJS.ErrnoException;
   if (code === "ERR_CRYPTO_UNSUPPORTED_OPERATION") return "old_encryption";
   if (code === "ERR_CRYPTO_OPERATION_FAILED" && /private key/i.test(message))
@@ -46,17 +46,15 @@ function contextRefusal(error: unknown): OpenRefusal {
  * CN and serialNumber name a person. Never throws: every failure is a refusal.
  */
 export function openCertificateFile(pfx: Buffer, passphrase: string): OpenResult {
-  let secureContext: SecureContext;
   try {
-    secureContext = createSecureContext({ pfx, passphrase });
-  } catch (error) {
-    return { ok: false, reason: contextRefusal(error) };
-  }
-  try {
+    const secureContext = createSecureContext({ pfx, passphrase });
     const socket = new TLSSocket(null as never, { secureContext });
-    // A null certificate makes the X509Certificate below throw, which is also `unreadable`.
-    const peer = socket.getCertificate() as PeerCertificate;
-    socket.destroy();
+    let peer: PeerCertificate;
+    try {
+      peer = socket.getCertificate() as PeerCertificate;
+    } finally {
+      socket.destroy();
+    }
     const x509 = new X509Certificate(peer.raw);
     const identifier = first(peer.subject as Names, "organizationIdentifier");
     const issuerCn = first(peer.issuer as Names, "CN");
@@ -72,7 +70,7 @@ export function openCertificateFile(pfx: Buffer, passphrase: string): OpenResult
         fingerprint: x509.fingerprint256,
       },
     };
-  } catch {
-    return { ok: false, reason: "unreadable" };
+  } catch (error) {
+    return { ok: false, reason: refusal(error) };
   }
 }

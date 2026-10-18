@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import forge from "node-forge";
 import { makeAuthority } from "../test/certificate-fixtures.js";
 import { KEY_ONLY_CANDIDATE, RC2_CANDIDATE } from "../test/openssl-certificates.js";
 import { normaliseTaxId, openCertificateFile } from "./certificate-file.js";
@@ -26,7 +27,12 @@ describe("openCertificateFile", () => {
 
   it("opens the same certificate re-packed with 3DES", () => {
     const repacked = authority.repack(candidate, "3des");
-    expect(repacked.pfx.equals(candidate.pfx)).toBe(false);
+    const tripleDes = Buffer.from(
+      forge.asn1.oidToDer(forge.pki.oids["pbeWithSHAAnd3-KeyTripleDES-CBC"]!).getBytes(),
+      "binary",
+    );
+    expect(repacked.pfx.includes(tripleDes)).toBe(true);
+    expect(candidate.pfx.includes(tripleDes)).toBe(false);
     const result = openCertificateFile(repacked.pfx, repacked.passphrase);
     expect(result).toMatchObject({ ok: true, details: { fingerprint: candidate.fingerprint } });
   });
@@ -119,6 +125,37 @@ describe("openCertificateFile", () => {
       details: { taxId: "B12345678" },
     });
     expect(normaliseTaxId(" b-1234 5678 ")).toBe("B12345678");
+  });
+
+  it("reads a tax ID without a VAT prefix unchanged", () => {
+    const plain = authority.issue({ organizationIdentifier: "B12345678" });
+    expect(openCertificateFile(plain.pfx, plain.passphrase)).toMatchObject({
+      ok: true,
+      details: { taxId: "B12345678" },
+    });
+  });
+
+  it("takes the first organisation and tax ID when the subject repeats them", () => {
+    const repeated = authority.issue({
+      organisation: ["FIRST SL", "SECOND SL"],
+      organizationIdentifier: ["VATES-A11111111", "VATES-B22222222"],
+    });
+    expect(openCertificateFile(repeated.pfx, repeated.passphrase)).toMatchObject({
+      ok: true,
+      details: { organisation: "FIRST SL", taxId: "A11111111" },
+    });
+  });
+
+  it.each([
+    [{ commonName: "Only CN", organisation: null }, "Only CN"],
+    [{ commonName: null, organisation: "Only O" }, "Only O"],
+    [{ commonName: null, organisation: null }, null],
+  ])("reads the issuer %o as %o", (name, issuer) => {
+    const issued = makeAuthority(name).issue();
+    expect(openCertificateFile(issued.pfx, issued.passphrase)).toMatchObject({
+      ok: true,
+      details: { issuer },
+    });
   });
 
   it("never returns the subject's CN or serialNumber", () => {
