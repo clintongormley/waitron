@@ -68,8 +68,9 @@ export interface FiscalContribution {
      * and writing NOTHING. Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain
      * (CLAUDE.md §5). */
     validate(raw: unknown): void;
-    /** Seal the secret into the venue's vault in its own transaction, re-validating it. */
-    seal(deps: { db: Database; ring: KeyRing }, raw: unknown): Promise<void>;
+    /** Seal the secret into the venue's vault in its own transaction, re-validating it. `nodeId`
+     * is the node whose vault holds the secret. */
+    seal(deps: { db: Database; ring: KeyRing; nodeId: string }, raw: unknown): Promise<void>;
   };
   /** The operator-typed venue fields this regime puts on the wire verbatim, reached through this
    * seat because the host does not know the regime's rules. `validate` throws

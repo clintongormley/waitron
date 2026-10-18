@@ -119,7 +119,7 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
 
   it("seal writes the cert into the venue's fiscal.aeat vault", async () => {
     await seedTenant(suite.db);
-    await secret.seal({ db: suite.db, ring }, goodCert);
+    await secret.seal({ db: suite.db, ring, nodeId: "node-a" }, goodCert);
     const readBack = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     );
