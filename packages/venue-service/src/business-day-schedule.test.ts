@@ -511,17 +511,14 @@ describe("schedule clock guard", () => {
         .insert(locationDayCutoverChanges)
         .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
     });
-    const guard = (kind: "time" | "metadata", revision: number, now = at) =>
-      withTransaction(suite.db, (tx) =>
-        assertBusinessDayScheduleWrite(tx, v.cfg, kind, now, revision),
-      );
+    const guard = (kind: "time" | "metadata", revision: number) =>
+      withTransaction(suite.db, (tx) => assertBusinessDayScheduleWrite(tx, v.cfg, kind, revision));
     await expect(guard("time", 1)).resolves.toBeUndefined();
     await expect(guard("metadata", 0)).resolves.toBeUndefined();
     await expect(guard("time", 0)).rejects.toMatchObject({
       code: "hours.clock_changed",
       params: {},
     });
-    await expect(guard("time", 1, new Date("2026-11-04T06:00:00Z"))).resolves.toBeUndefined();
     await withTransaction(suite.db, (tx) =>
       tx
         .delete(locationDayCutoverChanges)

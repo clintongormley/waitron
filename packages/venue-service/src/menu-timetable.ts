@@ -533,7 +533,7 @@ async function writeMenuPeriod(
   const oldOffset =
     periodId === null ? 0 : (await requirePeriod(tx, cfg, periodId)).endOffsetMinutes;
   const changeKind = oldOffset === endOffsetMinutes ? "metadata" : "time";
-  await assertBusinessDayScheduleWrite(tx, cfg, changeKind, at, expectedClockRevision);
+  await assertBusinessDayScheduleWrite(tx, cfg, changeKind, expectedClockRevision);
   if (
     period.colour !== undefined &&
     (typeof period.colour !== "string" || !CALENDAR_COLOURS.includes(period.colour))
@@ -683,7 +683,6 @@ export async function replaceMenuWeek(
     tx,
     cfg,
     staged.changed ? "time" : "metadata",
-    at,
     expectedClockRevision,
   );
   await staged.write();

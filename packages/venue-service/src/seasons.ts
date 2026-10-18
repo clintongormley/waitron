@@ -144,13 +144,7 @@ export async function saveSeasons(
     deleted.size > 0 ||
     added.length > 0 ||
     changed.some((entry) => entry.startsOn !== stored.get(entry.id!)!.startsOn);
-  await assertBusinessDayScheduleWrite(
-    tx,
-    cfg,
-    timed ? "time" : "metadata",
-    at,
-    expectedClockRevision,
-  );
+  await assertBusinessDayScheduleWrite(tx, cfg, timed ? "time" : "metadata", expectedClockRevision);
 
   const clock = await readLocationClock(tx, cfg.locationId);
   const { dayCutover } = clock;

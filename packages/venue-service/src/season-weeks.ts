@@ -381,7 +381,6 @@ export async function saveSeasonWeeks(
     tx,
     cfg,
     changed ? "time" : "metadata",
-    at,
     expectedClockRevision,
   );
   for (const week of [...departmentWeeks, ...zoneWeeks]) await week.write();

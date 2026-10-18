@@ -51,7 +51,6 @@ export async function replaceZoneClosedWeek(
     tx,
     cfg,
     staged.changed ? "time" : "metadata",
-    at,
     expectedClockRevision,
   );
   await staged.write();

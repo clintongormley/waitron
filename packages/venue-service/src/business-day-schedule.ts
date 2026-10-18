@@ -562,7 +562,6 @@ export async function assertBusinessDayScheduleWrite(
   tx: Transaction,
   cfg: VenueScope,
   changeKind: "time" | "metadata",
-  _at: Date,
   expectedClockRevision: number,
 ): Promise<void> {
   if (changeKind === "metadata") return;

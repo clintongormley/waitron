@@ -717,7 +717,6 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
     changeKind: "time" | "metadata",
-    at: Date,
     expectedClockRevision: number,
   ): Promise<void>;
   assertPeriodEndOffsets(tx: Transaction, cfg: { locationId: LocationId }): Promise<void>;

@@ -1056,7 +1056,7 @@ export async function saveSpecialDay(
   expectedClockRevision: number,
   afterWrite?: (read: ServingRead) => Promise<void>,
 ): Promise<SpecialDayDetail> {
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
+  await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
   const stored = id === null ? null : await readSpecialDay(tx, cfg, id);
   const clock = await readLocationClock(tx, cfg.locationId);
   const inForce = inForceClock(clock, at);
@@ -1217,7 +1217,7 @@ export async function deleteSpecialDay(
   at: Date,
   expectedClockRevision: number,
 ): Promise<void> {
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
+  await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
   await requireSpecialDay(tx, cfg, id);
   await tx.delete(specialDays).where(eq(specialDays.id, id));
   const clock = await readLocationClock(tx, cfg.locationId);
