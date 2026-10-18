@@ -184,7 +184,7 @@ function broken(c: Context, lang: GuideLanguage): Response {
   return answer(c, page(lang, text.brokenTitle, body), 500);
 }
 
-export function mountGuidePages(app: Hono, log: Logger, deps: GuidePagesDeps = {}): void {
+export function mountGuidePages(app: Hono, deps: GuidePagesDeps, log: Logger): void {
   const root = deps.root ?? guideRoot();
 
   app.get("/help/:lang/:page", (c) => {

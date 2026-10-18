@@ -70,7 +70,7 @@ afterAll(() => {
 
 function appFor(dir: string, log: Logger = vi.fn()) {
   const app = new Hono();
-  mountGuidePages(app, log, { root: dir });
+  mountGuidePages(app, { root: dir }, log);
   app.get("*", (c) => c.text("later", 200));
   return app;
 }
@@ -247,7 +247,7 @@ describe("guide pages", () => {
 
   it("serves the guides shipped with the server when no folder is given", async () => {
     const app = new Hono();
-    mountGuidePages(app, vi.fn());
+    mountGuidePages(app, {}, vi.fn());
     const res = await app.request("/help/en/products");
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('<p class="trail">Waitron guide › Products</p>');

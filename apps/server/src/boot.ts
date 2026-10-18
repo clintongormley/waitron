@@ -945,7 +945,7 @@ async function bootServer(
     },
     log,
   );
-  mountGuidePages(app, log);
+  mountGuidePages(app, {}, log);
 
   if (config.till === undefined) {
     // SETUP MODE — this box is bound to no venue. Beyond the routes mounted above, it serves
