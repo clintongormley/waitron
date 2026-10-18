@@ -37,7 +37,9 @@ export default defineConfig({
           fileParallelism: false,
           browser: {
             enabled: true,
-            provider: playwright({}),
+            // West of UTC and of Madrid, so a date or time drawn in the browser's zone instead of
+            // the venue's reads differently. On the provider: Vitest 4 ignores an instance's `context`.
+            provider: playwright({ contextOptions: { timezoneId: "America/New_York" } }),
             headless: true,
             instances: [{ browser: "chromium" }],
             commands: { ...parkPointerCommands },
