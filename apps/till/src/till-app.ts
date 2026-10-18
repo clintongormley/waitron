@@ -9500,11 +9500,6 @@ export class TillApp extends LitElement {
     if (party === null || billId === undefined) return { sync: undefined, read: true };
     const kept = this.#unsavedDrafts.get(party.id);
     this.#unsavedDrafts.delete(party.id);
-    if (kept?.personId === this.#sessionPersonId && kept.billId === billId) {
-      this.#draftSync = kept;
-      void this.#flushDraft();
-      return { sync: kept, read: true };
-    }
     kept?.drop();
     const sync: DraftSync = new DraftSync({
       api: this.api,

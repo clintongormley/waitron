@@ -226,6 +226,7 @@ let server: DraftServer;
 let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
+  for (const id of ["wo-7", "wo-9", "wo-new"]) server.bills.add(id);
   return {
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
@@ -697,7 +698,7 @@ describe("A768 the left draft saves in the background", () => {
       server.personId = sentBy;
       const saved = server.save(partyId, save);
       server.personId = now;
-      return structuredClone(saved);
+      return server.snapshot(saved);
     });
     return answer;
   }
@@ -734,6 +735,28 @@ describe("A768 the left draft saves in the background", () => {
     await flush(el);
     expect(tableOrder(el)!.party?.id).toBe("v7");
     expect(banner(el)!.textContent).toContain(t("table.draft_save_failed"));
+  });
+
+  it("reopening a failed left draft reads the saved bill before offering its local candidate", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToMesa7(el);
+    release(new TypeError("Failed to fetch"));
+    await flush(el, 6);
+    await back(el);
+    const reads = api.listDrafts.mock.calls.length;
+    const saves = api.saveDraft.mock.calls.length;
+    await reopen(el, "t4");
+    await flush(el, 6);
+    expect(api.listDrafts.mock.calls.slice(reads).map(([id]) => id)).toContain("v1");
+    expect(rows(el)).toEqual([]);
+    expect(
+      tableOrder(el)!.retainedDraft?.lines.map((line) => `${line.product.name} ×${line.quantity}`),
+    ).toEqual(["Beer ×1"]);
+    expect(api.saveDraft.mock.calls.length).toBe(saves);
+    expect(savedLines()).toEqual([]);
   });
 
   it("a background save refused for another reason says it on the next table", async () => {
@@ -1374,7 +1397,7 @@ describe("A768 the order screen shows at once", () => {
       server.personId = sentBy;
       const saved = server.save(partyId, save);
       server.personId = now;
-      return structuredClone(saved);
+      return server.snapshot(saved);
     });
     return answer;
   }

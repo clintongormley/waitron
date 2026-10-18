@@ -228,6 +228,7 @@ let server: DraftServer;
 let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
+  for (const id of ["wo-7", "wo-9"]) server.bills.add(id);
   return {
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi

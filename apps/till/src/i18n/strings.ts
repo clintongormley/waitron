@@ -2711,7 +2711,7 @@ export const es: Record<StringKey, string> = {
     "Envía los artículos en espera a cocina antes de pasarlos a otra cuenta",
   "table.round_sending": "Enviando el pedido…",
   "table.draft_actions": "Enviar el pedido",
-  "table.draft_joins_group": "Se une al grupo {n}",
+  "table.draft_joins_group": "Al grupo {n}",
   "table.draft_send_all": "Enviar todo",
   "table.draft_fire_all": "Marchar todo ya",
   "table.draft_send_selected": "Enviar lo elegido",

@@ -2241,8 +2241,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   read-only/local unsaved recovery, first accepted nonempty save and release are per bill; Pay
   checks only its own bill. Shared firing/serving stays shared. Join/move conflicts require explicit
   needed takeovers. T24 and its affected-task map add concrete ownership/version/route/recovery
-  contracts and floor bill/editor pairs. Ownership remains to build; this docs revision verifies
-  no product behavior. The empty-bill first-save rule and three exact EN/ES messages have final
+  contracts and floor bill/editor pairs. Ownership and navigation integration remain incomplete
+  on `feat/a773-1-unsent-list`; its browser failures must be resolved before publication. The empty-bill first-save rule and three exact EN/ES messages have final
   approval after the relay correction; five earlier Pay name/count strings are withdrawn. Twelve
   cancellation translations stay approved; English Void/Comp naming stands.
   The unlanded floor read now keeps every nonempty bill/editor pair separately, even when

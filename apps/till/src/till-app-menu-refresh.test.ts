@@ -343,6 +343,7 @@ beforeEach(() => {
   setLocale("en-GB");
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   drafts = draftServer(() => landed("wo-7"));
+  drafts.bills.add("wo-7");
 });
 afterEach(() => {
   cleanupWidgets();
