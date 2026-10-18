@@ -73,3 +73,16 @@ export function departmentSave(form: HTMLElementTagNameMap["department-settings"
     "[data-test=save-editor]",
   )!;
 }
+export async function selectDepartmentTab(
+  form: HTMLElementTagNameMap["department-settings"],
+  tab: "details" | "service" | "transfers",
+) {
+  await form.updateComplete;
+  const strip = form.shadowRoot!.querySelector("wt-tabs")!;
+  await strip.updateComplete;
+  await userEvent.click(
+    page.elementLocator(strip.shadowRoot!.querySelector(`[role=tab][data-key=${tab}]`)!),
+  );
+  await form.updateComplete;
+  await strip.updateComplete;
+}

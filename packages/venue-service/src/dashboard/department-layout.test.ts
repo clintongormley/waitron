@@ -4,6 +4,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import {
   cleanupDepartmentEditors,
   mountDepartmentEditor,
+  selectDepartmentTab,
 } from "../testing/department-edit-fixture.js";
 import { cleanupZoneEditors, mountZoneEditor } from "../testing/zone-edit-fixture.js";
 
@@ -45,6 +46,7 @@ describe.each(["light", "dark"] as const)("department phone bounds (%s)", (theme
       const fields = form.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
       await fields.updateComplete;
       for (const field of form.shadowRoot!.querySelectorAll("wt-input")) inside(field, bounds);
+      await selectDepartmentTab(form, "service");
       for (const field of fields.shadowRoot!.querySelectorAll("wt-combobox, wt-switch"))
         inside(field, bounds);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);

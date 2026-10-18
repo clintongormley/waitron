@@ -7,6 +7,7 @@ import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import { VenueOperationsLoader } from "./venue-operations-loader.js";
 import { zonesModel } from "../testing/department-zones-fixture.js";
 import type { ServiceSettingsValue } from "./service-settings-fields.js";
+import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
 
 customElements.define("a10-policy-loader", class extends VenueOperationsLoader {});
 class PolicyApp extends LitElement {
@@ -125,6 +126,7 @@ it.each([
         .requestClose("cancel");
       await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
     } else {
+      await selectDepartmentTab(settings, "service");
       await pick(service, field, changed);
       await expect.poll(() => service.value[field]).toBe(changed);
       await settings.updateComplete;

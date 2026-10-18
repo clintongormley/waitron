@@ -6,6 +6,7 @@ import { applyTokens, LeaveController } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import "./department-settings.js";
+import { selectDepartmentTab } from "../testing/department-edit-fixture.js";
 const model: VenueServiceView = {
   departments: [
     {
@@ -381,6 +382,7 @@ async function nativeSettingsDraft(kind: "tradingName" | "receivingProfileId" | 
       : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] };
   }) as DashboardRequest);
   await expect.poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]")).not.toBeNull();
+  if (kind !== "tradingName") await selectDepartmentTab(el, "transfers");
   const field =
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=tradingName]")!;
   await field.updateComplete;
@@ -636,6 +638,7 @@ it("a native receiving-profile edit during Save retains the submitted baseline a
     });
   }) as DashboardRequest);
   await expect.poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]")).not.toBeNull();
+  await selectDepartmentTab(el, "transfers");
   const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
     "[name=receivingProfileId]",
   )!;
@@ -743,4 +746,26 @@ it("Settings left out of the page for a tick protects its retained native draft"
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), "Casa");
   await el.updateComplete;
   expect(unload()).toBe(false);
+});
+it("switching tabs neither asks to leave nor dirties the draft", async () => {
+  const el = await mount();
+  const question = () => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open;
+  await selectDepartmentTab(el, "service");
+  await app.updateComplete;
+  expect(question()).toBe(false);
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(unload()).toBe(false);
+  await selectDepartmentTab(el, "details");
+  el.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Draft" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  await selectDepartmentTab(el, "service");
+  await selectDepartmentTab(el, "details");
+  await app.updateComplete;
+  expect(question()).toBe(false);
+  expect(
+    (el.shadowRoot!.querySelector("[name=name]")! as HTMLElementTagNameMap["wt-input"]).value,
+  ).toBe("Draft");
+  expect(el.hasUnsavedChanges).toBe(true);
 });
