@@ -187,6 +187,11 @@ jobs:
             | openssl x509 > leaf.pem
           openssl verify -CAfile ca.crt leaf.pem
 
+      - name: The image carries the user guides, the Spanish twins included
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+
           code=$(curl -sk -o guide.html -w '%{http_code}' https://127.0.0.1/help/es/products)
           [ "$code" = "200" ]
           # The Products page's section id proves a guide shipped. The page's language proves the

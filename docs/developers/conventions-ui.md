@@ -111,8 +111,8 @@ image the way `src/assets/` does: `apps/server/scripts/copy-migrations.mjs:25` c
 `dist/guide`, `deploy/Dockerfile:196` copies that to `/app/guide/`, and `guideRoot()`
 (`apps/server/src/guide-catalogue.ts:8-10`) finds the folder with
 `new URL("./guide/", import.meta.url)`. The image smoke test fetches `/help/es/products` from a
-blank box and looks for the Spanish page's `id="variants"` and `<html lang="es">`
-(`.github/workflows/image-smoke.yml:190-195`).
+blank box and looks for the Spanish page's `id="variants"` and `<html lang="es">` (the step "The
+image carries the user guides, the Spanish twins included" in `.github/workflows/image-smoke.yml`).
 
 ### What the renderer accepts, and what it refuses
 
