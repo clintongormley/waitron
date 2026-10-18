@@ -4088,6 +4088,18 @@ export class DashboardApi {
     });
   }
 
+  async reissueRecoveryDocument(locale: "en" | "es"): Promise<Blob> {
+    const pdf = await this.#request<Blob>(
+      "/api/box/recovery-document/reissue",
+      "POST",
+      { locale },
+      { as: "blob" },
+    );
+    if (pdf.type !== "application/pdf" || pdf.size === 0 || pdf.size > 8 * 1024 * 1024)
+      throw { code: "recovery.pack_invalid" };
+    return pdf;
+  }
+
   mintBackupKey(): Promise<{ key: string }> {
     return this.#request<{ key: string }>("/api/backup/mint-key", "POST");
   }

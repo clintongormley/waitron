@@ -1900,3 +1900,64 @@ API calls: the test awaited the first inspection instead of the pending one. It 
 latest call before the frame; the inspection and submission omissions each fail that test.
 The final local receipts aggregate nine distinct omissions. Each failed an intended assertion;
 the restored installed suites and source package coverage are recorded separately.
+
+## Completed-manager PDF controls, 2026-10-18
+
+Review this checkpoint against `0a391e6492bef7ddc9d3f3a18fc3d9b874c705c7`.
+In Backups, a session with `system.manage` can explicitly confirm a new recovery key and PDF.
+Download and Open to print use one temporary PDF URL. Printing again sends no replacement request.
+Starting another replacement clears the earlier delivery, including when the request is refused.
+Clear, component removal, a changed API context and removal of the permission release the browser URL.
+The existing HTTPS service remains responsible for authorising the replacement and rendering the
+module-owned PDF. This interface neither accepts nor parses fiscal allocation data.
+
+Changed existing test checks:
+
+- `apps/dashboard/src/screens/backup-screen.test.ts:30`: the off-backups case now expects
+  `dashboard-recovery-document` instead of the old `dashboard-node-recovery` JSON handover.
+  It explicitly supplies `canManage: true`; its non-null and API-identity assertions remain.
+  This follows the hour-code design's recovery-PDF reissue requirement and implementation Task 9.
+  A new denial case checks that neither handover is offered without `system.manage`.
+- `apps/dashboard/src/dashboard-app.backup-unsaved.test.ts:13`: the fixture gains a permissions
+  parameter, retaining its original default values. All earlier draft, navigation and logout checks
+  remain. Two appended cases check that the authenticated permission reaches the Backups screen.
+
+The new suites are `api/recovery-document.test.ts`, `screens/recovery-document-panel.test.ts`
+and `screens/recovery-document-panel.a11y.test.ts` under `apps/dashboard/src`.
+No existing fiscal assertion, guard, writer, SQL, migration or server source changes here.
+Keep every earlier inventory for the eventual whole-branch PR.
+
+Observed RED runs: all nine transport cases lacked the client method, eight panel cases lacked
+controls, and three integration cases failed on the old handover or missing permission wiring.
+The first refused-request probe read a form host's text, which included its buttons; the final
+probe reads the actual form error. Late-response cases await the complete real client promise.
+The initial edit put that observation variable in the wrong test; its two ReferenceError failures
+are retained and provide no behavior evidence. The corrected run and installed omission checks
+are the qualifying receipts. Cancel uses the shared action primitive's real `cancel` slot.
+
+The final surrounding Chromium command passed 722 cases across 12 files, including the dashboard
+shell and retained backup/draft/legacy-panel checks. The three new suites passed 53 cases.
+Scoped coverage of the new panel was 100% statements/functions/lines and 97.36% branches;
+this is not package-wide dashboard coverage. A frozen-installed disposable candidate passed
+155 cases before and after eleven separate omissions. Removing response validation, the reissue
+route, URL release, the duplicate-request guard, permission visibility, disconnect cleanup,
+replacement cleanup, locale selection, shell permission forwarding, API invalidation or Escape
+state handling failed the corresponding assertion. Raw logs and exact mutations are retained.
+
+The existing server command passed 79 cases and failed
+`first-fiscal-delivery.test.ts > the configured host routes the kept-document grant into real module preparation`
+with `sif.allocation_invalid / outside_confirmation_missing`. This failure remains a whole-branch
+gate; it is not waived by this dashboard checkpoint. The unchanged golden/immutability pair passed
+20 cases. Four focused root suites passed 209 cases. Dashboard types, scoped lint, formatting,
+whitespace and production build passed; the build still prints its chunk-size warning. The backup
+clipboard test deliberately emits its retained `marker` rejection while checking unhandled errors;
+its source and all its assertions remain unchanged in this checkpoint.
+
+Thirty-two mounted EN/ES, light/dark, 390/1280 views of idle, confirmation, refusal and delivery
+were inspected. Native buttons, focus, link geometry and axe checks passed. These views use
+synthetic responses; they do not establish an installed browser-to-HTTPS-server journey or actual
+PDF rendering. Those journeys, earlier server/provisioning gaps, retirement/integration, owner PDF
+acceptance, final reviews and current-head CI remain required before A679 can land.
+
+Local receipts: `~/waitron-campaign-e/receipts/a679-manager-ui-20261018/`, including
+`verification.json`, `controls.py`, `controls.json`, `test-preservation.json`, raw logs and captures.

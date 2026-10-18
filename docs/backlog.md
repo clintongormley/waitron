@@ -332,7 +332,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Browser checks require the original password, retain the frozen hour and require the replacement
   PDF to be kept before Review. Completed-manager HTTPS replacement and identical-PDF replay
   now have real trading-listener checks, including retained installation codes. The manager’s
-  dashboard controls and full installed journeys remain open. The interrupted page now offers
+  dashboard now offers a confirmed PDF replacement and one temporary PDF for download or repeat
+  printing. The controls require `system.manage` and clear delivery on exit or permission changes.
+  Mounted-browser checks and the HTTPS service checks remain separate; their combined installed
+  journey is still open. The interrupted page now offers
   password recovery first and confirmed Start again second. Browser checks cover a new tab,
   refused or late answers, uncheckable passwords and missing or uncertain databases. Recovered
   abandoned or partly activated attempts stay on the recovery page. The Finish interface now
@@ -366,7 +369,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   retain independent recovery context, and refusals clear it. First setup now projects the owned
   hour preparation into the combined country/place/time-zone review and generates a key-only PDF
   for explicit kept confirmation. Browser checks use simulated endpoint responses; authorised
-  manager controls, interrupted-page ordering and installed complete journeys remain open.
+  the manager PDF controls and interrupted-page ordering are connected. Installed complete journeys
+  and the earlier whole-branch acceptance gates remain open.
   Hour codec, module admission and clock units pass locally, with source timestamps embedded
   by the Node bundler. History enumeration, durable selection and the shared host store have focused
   local checks. Certificate-free owned preproduction readiness and publication have focused checks;

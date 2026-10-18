@@ -27,13 +27,23 @@ const OFF: BackupStatusView = {
   recoveryKeyTooShort: false,
 };
 
-it("offers the node recovery pack even with archives and bucket streaming off", async () => {
+it("offers the manager recovery PDF even with archives and bucket streaming off", async () => {
   const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
     api: stubApi({}, OFF),
+    canManage: true,
   });
-  const panel = el.shadowRoot!.querySelector("dashboard-node-recovery");
+  const panel = el.shadowRoot!.querySelector("dashboard-recovery-document");
   expect(panel).not.toBeNull();
   expect(panel!.api).toBe(el.api);
+});
+
+it("does not offer key replacement without system.manage", async () => {
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+    api: stubApi({}, OFF),
+    canManage: false,
+  });
+  expect(el.shadowRoot!.querySelector("dashboard-recovery-document")).toBeNull();
+  expect(el.shadowRoot!.querySelector("dashboard-node-recovery")).toBeNull();
 });
 
 const ENABLED: BackupStatusView = {

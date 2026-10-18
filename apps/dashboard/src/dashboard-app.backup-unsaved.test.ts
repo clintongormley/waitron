@@ -10,7 +10,7 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
-async function mount(path = "/manage/backup") {
+async function mount(path = "/manage/backup", permissions = ["venue.view", "venue.configure"]) {
   history.replaceState(null, "", path);
   let logouts = 0;
   const locales: string[] = [];
@@ -25,7 +25,7 @@ async function mount(path = "/manage/backup") {
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
         venueName: "Venue",
-        permissions: ["venue.view", "venue.configure"],
+        permissions,
         modules: [],
       }),
       getLocales: async () => ({
@@ -85,6 +85,20 @@ async function mount(path = "/manage/backup") {
 function backup(app: DashboardApp) {
   return app.shadowRoot!.querySelector("dashboard-backup-screen")!;
 }
+
+it.each([false, true])(
+  "passes system.manage=%s from the authenticated session to recovery PDF controls",
+  async (allowed) => {
+    const { app } = await mount(
+      "/manage/backup",
+      allowed ? ["venue.view", "system.manage"] : ["venue.view"],
+    );
+    const screen = backup(app);
+    expect(screen.canManage).toBe(allowed);
+    await screen.updateComplete;
+    expect(screen.shadowRoot!.querySelector("dashboard-recovery-document") !== null).toBe(allowed);
+  },
+);
 function field(app: DashboardApp, name: string) {
   return backup(app).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
     `[data-test=${name}]`,
