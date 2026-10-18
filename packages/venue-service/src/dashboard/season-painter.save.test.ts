@@ -309,11 +309,22 @@ it("an outside_hours refusal shows the zone, marks the day and says why", async 
   expect(frame(painter).refusal).toBe(`Terrace, Thursday: ${message}`);
 });
 
+it("over a standing Save refusal, a zone stroke cut to nothing says why beside Save", async () => {
+  const { painter, writes } = await mount(thursdayOpen(), [{ code: "hours.clock_changed" }]);
+  await pick(painter, "zone:z2");
+  await drag(painter, "4", 0, 3 * 60);
+  await save(painter, writes);
+  expect(frame(painter).refusal).toBe("The business-day start changed. Reload hours.");
+  await drag(painter, "3", 0, 3 * 60);
+  expect(grid(painter).days.get("3")).toEqual([]);
+  expect(frame(painter).refusal).toBe("A zone can only close while its department is open.");
+});
+
 it("a Save refusal replaces a removal notice, and a save clears one", async () => {
   const { painter, writes } = await mount(thursdayOpen(), [{ code: "hours.clock_changed" }]);
   await paintRestaurantAndTerrace(painter);
   await pick(painter, "d1");
-  const next = withBar();
+  const next = thursdayOpen();
   const restaurant = next.departments[0]!;
   const withoutTerrace = {
     ...next,
@@ -337,7 +348,7 @@ it("a removal notice clears when the picker changes", async () => {
   await drag(painter, "4", 0, 3 * 60);
   await pick(painter, "d1");
   await drag(painter, "3", 7 * 60, 9 * 60);
-  const next = withBar();
+  const next = thursdayOpen();
   const restaurant = next.departments[0]!;
   painter.model = {
     ...next,
@@ -750,7 +761,7 @@ it("a refresh that keeps the department being painted keeps a held stroke", asyn
   ]);
 });
 
-const withoutTerrace = (model = withBar()): OpeningHoursModel => {
+const withoutTerrace = (model = thursdayOpen()): OpeningHoursModel => {
   const restaurant = model.departments[0]!;
   return {
     ...model,
@@ -760,7 +771,7 @@ const withoutTerrace = (model = withBar()): OpeningHoursModel => {
     ],
   };
 };
-const withoutBar = (model = withBar()): OpeningHoursModel => ({
+const withoutBar = (model = thursdayOpen()): OpeningHoursModel => ({
   ...model,
   departments: model.departments.filter(({ id }) => id !== "d3"),
 });

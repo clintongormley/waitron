@@ -616,17 +616,27 @@ export class SeasonPainter extends LitElement {
       }}
     ></wt-combobox>`;
   }
-  /** The weekdays the department's draft leaves closed, labelled as closed behind a zone's paint. */
+  private behind?: {
+    week: ReadonlyMap<string, readonly Paint[]>;
+    label: string;
+    map: ReadonlyMap<string, string>;
+  };
   private closedBehind(
     department: Department,
     week: ReadonlyMap<string, readonly Paint[]>,
   ): ReadonlyMap<string, string> {
     const label = format("painter.department_closed", { department: department.name });
-    return new Map(
-      WEEK_DISPLAY_ORDER.filter((weekday) => !(week.get(String(weekday)) ?? []).length).map(
-        (weekday) => [String(weekday), label],
-      ),
-    );
+    if (this.behind?.week !== week || this.behind.label !== label)
+      this.behind = {
+        week,
+        label,
+        map: new Map(
+          WEEK_DISPLAY_ORDER.filter((weekday) => !(week.get(String(weekday)) ?? []).length).map(
+            (weekday) => [String(weekday), label],
+          ),
+        ),
+      };
+    return this.behind.map;
   }
   private paintRow(department: Department, chosen: string | null, zoned: boolean) {
     return paintRow({
@@ -713,6 +723,7 @@ export class SeasonPainter extends LitElement {
           @paint-change=${(event: CustomEvent<PaintChange>) => this.paint(key, event)}
           @paint-outside=${(event: Event) => {
             event.stopPropagation();
+            this.refused = undefined;
             this.notice = t("opening.closed_outside");
           }}
         ></paint-grid>

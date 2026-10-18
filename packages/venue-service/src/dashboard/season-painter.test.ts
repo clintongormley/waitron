@@ -229,6 +229,36 @@ it("a zone's day with its department closed shows 'Restaurant closed all day' be
   expect(column("1").querySelector(".all-closed.behind")).toBeNull();
 });
 
+it("the label behind a zone's paint follows a refresh of its department's week and a change of language", async () => {
+  const { painter } = await mount();
+  const behind = (key: string) =>
+    grid(painter)
+      .shadowRoot!.querySelector<HTMLElement>(`.day[data-column="${key}"] .all-closed.behind`)
+      ?.textContent?.trim();
+  await pick(painter, "zone:z2");
+  expect(behind("3")).toBe("Restaurant closed all day");
+  painter.model = openOn(3);
+  await settle(painter);
+  expect(behind("3")).toBeUndefined();
+  expect(behind("4")).toBe("Restaurant closed all day");
+  setLocale("es");
+  painter.requestUpdate();
+  await settle(painter);
+  expect(behind("4")).toBe("Restaurant cerrado todo el día");
+});
+
+it("a painter render that changes nothing leaves a zone's grid alone", async () => {
+  const { painter } = await mount();
+  await pick(painter, "zone:z2");
+  const updated = vi.spyOn(grid(painter) as unknown as { updated(): void }, "updated");
+  for (let round = 0; round < 3; round++) {
+    painter.requestUpdate();
+    await painter.updateComplete;
+    await grid(painter).updateComplete;
+  }
+  expect(updated).toHaveBeenCalledTimes(0);
+});
+
 it("widening a department's day leaves its zones unedited", async () => {
   const { painter } = await mount({
     model: withDays(painterModel(), "d1", { 2: [slot("p1", "13:00", "18:00")] }),
