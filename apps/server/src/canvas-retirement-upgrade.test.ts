@@ -92,7 +92,10 @@ import { ALL_MODULES } from "./modules.js";
 import { applyMigrations } from "@waitron/migrations";
 import { provisionOrderVenue, billlessSale } from "./testing/order-venue.js";
 import { seatedWith, send } from "./testing/bill-venue.js";
-import { predecessorAppendOnly } from "./testing/predecessor-append-only.js";
+import {
+  beforeMissingCoreTables,
+  predecessorAppendOnly,
+} from "./testing/predecessor-append-only.js";
 
 const scratch: string[] = [];
 afterAll(() => {
@@ -119,17 +122,19 @@ function predecessor(root: string, ahead: readonly string[] = []) {
       .map((entry, offset) => ({ ...entry, when: last + offset + 1 })),
   ];
   writeFileSync(journalPath, JSON.stringify(journal));
-  return migrationOptionsFor(manifestSets(), null).map((option) =>
-    option.migrationsTable === CORE_MIGRATIONS.migrationsTable
+  const kept = journal.entries.map((entry) => entry.tag);
+  const leftOut = tags.filter((tag) => !kept.includes(tag));
+  const { migrationsTable } = CORE_MIGRATIONS;
+  return beforeMissingCoreTables(
+    migrationOptionsFor(manifestSets(), null),
+    { migrationsTable, folder: core, kept, leftOut },
+    root,
+  ).map((option) =>
+    option.migrationsTable === migrationsTable
       ? {
           ...option,
           migrationsFolder: core,
-          appendOnlyTables: predecessorAppendOnly(
-            option.appendOnlyTables,
-            core,
-            journal.entries.map((entry) => entry.tag),
-            tags.filter((tag) => !journal.entries.some((entry) => entry.tag === tag)),
-          ),
+          appendOnlyTables: predecessorAppendOnly(option.appendOnlyTables, core, kept, leftOut),
         }
       : option,
   );
@@ -399,18 +404,24 @@ it("records the no-holder admission-rule loss and retains every other surviving 
     report("no-holder-outcome", { before: before!, after: actual });
     expect(before!.device_profile_admission_roles).toHaveLength(1);
     expect(actual.device_profile_admission_roles).toEqual([]);
-    const journal = CORE_MIGRATIONS.migrationsTable;
-    const oldJournal = before![journal]! as { created_at: number }[];
-    const oldTimes = new Set(oldJournal.map((row) => row.created_at));
-    const newJournal = actual[journal]! as { created_at: number }[];
-    const currentJournal = JSON.parse(
-      readFileSync(join(CORE_MIGRATIONS.migrationsFolder, "meta", "_journal.json"), "utf8"),
-    ) as { entries: unknown[] };
-    expect(newJournal).toHaveLength(currentJournal.entries.length);
-    expect(newJournal.filter((row) => oldTimes.has(row.created_at))).toEqual(oldJournal);
+    const journals: Record<string, unknown[]> = {};
+    for (const set of [CORE_MIGRATIONS, service.VENUE_SERVICE_MIGRATIONS]) {
+      const journal = set.migrationsTable;
+      const oldJournal = before![journal]! as { created_at: number }[];
+      const oldTimes = new Set(oldJournal.map((row) => row.created_at));
+      const newJournal = actual[journal]! as { created_at: number }[];
+      const currentJournal = JSON.parse(
+        readFileSync(join(set.migrationsFolder, "meta", "_journal.json"), "utf8"),
+      ) as { entries: unknown[] };
+      expect(oldJournal.length, journal).toBeLessThan(currentJournal.entries.length);
+      expect(newJournal, journal).toHaveLength(currentJournal.entries.length);
+      expect(newJournal.filter((row) => oldTimes.has(row.created_at))).toEqual(oldJournal);
+      journals[journal] = newJournal;
+    }
     const retained: Record<string, unknown[]> = {
       ...before!,
-      [journal]: newJournal,
+      ...journals,
+      department_floor_plan_sets: [],
       device_profile_admission_roles: [],
       tender_refunds: [],
       sale_receipt_guests: [],

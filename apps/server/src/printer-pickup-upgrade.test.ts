@@ -8,7 +8,10 @@ import { installChangeFeed, locations, printers, runMigrations } from "@waitron/
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { predecessorAppendOnly } from "./testing/predecessor-append-only.js";
+import {
+  beforeMissingCoreTables,
+  predecessorAppendOnly,
+} from "./testing/predecessor-append-only.js";
 
 const options = migrationOptionsFor(manifestSets(), null);
 const core = options.find((set) => set.migrationsFolder.endsWith("/db/drizzle"))!;
@@ -51,7 +54,16 @@ try {
 }
 const tags = journal.entries.map((entry) => entry.tag);
 const suite = useVenueDb({
-  migrations: options.map((set) =>
+  migrations: beforeMissingCoreTables(
+    options,
+    {
+      migrationsTable: core.migrationsTable,
+      folder: core.migrationsFolder,
+      kept: tags.slice(0, index),
+      leftOut: tags.slice(index),
+    },
+    previousFolder!,
+  ).map((set) =>
     set === core
       ? {
           ...set,
