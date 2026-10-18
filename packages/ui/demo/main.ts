@@ -28,6 +28,7 @@ import "../src/components/wt-segmented-control.js";
 import "../src/components/wt-slider.js";
 import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
+import "../src/components/wt-menu-row.js";
 import "../src/components/wt-combobox.js";
 import "../src/components/wt-colour-chooser.js";
 import "../src/components/wt-count-badge.js";
@@ -234,6 +235,14 @@ const panel = (theme: "light" | "dark") => `
           <h3>Team</h3>
           <wt-row-actions label="Team actions">
             <wt-button align="start" class="create-member">Add team member</wt-button>
+          </wt-row-actions>
+          <wt-row-actions label="Menu with help" align="end">
+            <wt-menu-row help="Changes this person's name, role and PIN." help-label="Help: Edit">
+              <wt-button variant="ghost" align="start">Edit</wt-button>
+            </wt-menu-row>
+            <wt-menu-row help="Removes this person from the team." help-label="Help: Delete">
+              <wt-button variant="ghost" align="start">Delete</wt-button>
+            </wt-menu-row>
           </wt-row-actions>
         </div>
         <wt-data-table class="demo-table" aria-label="Team"></wt-data-table>
