@@ -13,8 +13,13 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { standsIn } from "./joined-split-layout.js";
-import { catchUpZone, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
+import { blocksPlace } from "./joined-split-layout.js";
+import {
+  catchUpZone,
+  layoutPlacesIn,
+  placementOf,
+  refuseDeliveryPending,
+} from "./floor-today-store.js";
 import { refuseUnfree, zoneOfTable } from "./floor-today-table.js";
 import { refusedByAModule } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
@@ -34,8 +39,8 @@ export async function tableNeedsMoving(tx: Transaction, tableId: string): Promis
 /**
  * Applies the change of a table that needs moving, with every row of a pending joined group
  * holding it (plan decision 8), and clears their marks. Refused `table.new_place_taken` while a
- * drawn table outside the group that does not itself need moving stands in one of the group's new
- * places. A table that does not need moving is left as it is (plan decision 11).
+ * drawn table outside the group that does not itself need moving blocks one of the group's new
+ * places (`blocksPlace`). A table that does not need moving is left as it is (plan decision 11).
  */
 export async function markMoved(
   tx: Transaction,
@@ -115,11 +120,14 @@ export async function markMoved(
         ).map((row) => row.id),
   );
   const standing = others.filter(({ today }) => !exempt.has(today.tableId));
+  const layoutPlaces = await layoutPlacesIn(tx, zoneId);
   for (const { row, todayTakenOff } of group) {
     const place = placementOf(row);
     // A marked table taken off goes to its new place still off, so stands in nothing.
     if (row.placed || place === null || todayTakenOff === true) continue;
-    const blocker = standing.find(({ today }) => standsIn(place, placementOf(today)!));
+    const blocker = standing.find(({ today }) =>
+      blocksPlace(place, placementOf(today)!, layoutPlaces.get(today.tableId) ?? null),
+    );
     if (blocker !== undefined) {
       throw new AppError("table.new_place_taken", {
         tableId: row.tableId ?? tableId,

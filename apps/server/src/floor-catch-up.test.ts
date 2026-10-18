@@ -1659,6 +1659,60 @@ describe("no reset puts a table down on another", () => {
     expect(await todayRow(z.t6)).toMatchObject({ x: 40, takenOff: false });
   });
 
+  /** Dinner, as its editor saved it, stands stored 6 at 40 and 8 at 44, over half of 6. */
+  async function sixUnderEight() {
+    const s = await standardAndDinner(
+      [
+        { key: "t6", label: fresh("6") },
+        { key: "t8", label: fresh("8") },
+      ],
+      { standard: { t6: null, t8: 44 }, dinner: { t6: 40, t8: 44 } },
+    );
+    await s.onto(s.d.standard);
+    return { ...s, t6: s.live("t6"), t8: s.live("t8") };
+  }
+
+  it("a stored table is put down where its layout overlaps a table standing in that layout's place for it", async () => {
+    const z = await sixUnderEight();
+
+    await z.onto(z.d.dinner);
+
+    expect(await todayRow(z.t6)).toMatchObject({ x: 40, takenOff: false });
+    expect(await readyOf(z.t6)).toEqual({ pending: false, readyToMove: false });
+    expect(await todayRow(z.t8)).toMatchObject({ x: 44 });
+  });
+
+  it("a stored table waiting behind a table off its own place is caught up once that table stands in it", async () => {
+    await clearingWorkflow(false);
+    // Dinner stands stored 6 at 40 and 8 at 46, over two squares of 6; seated 7 stands at 36.
+    const s = await standardAndDinner(
+      [
+        { key: "t6", label: fresh("6") },
+        { key: "t7", label: fresh("7") },
+        { key: "t8", label: fresh("8") },
+      ],
+      { standard: { t6: null, t7: 36, t8: 120 }, dinner: { t6: 40, t7: 80, t8: 46 } },
+    );
+    await s.onto(s.d.standard);
+    const [t6, t7, t8] = [s.live("t6"), s.live("t7"), s.live("t8")];
+    const partyId = await seatAt(t7);
+    await s.onto(s.d.dinner);
+    expect(await todayRows([t6, t8])).toMatchObject([{ x: null }, { x: 46 }]);
+    await setToday(t8, { x: 45 });
+    await finish(partyId);
+    await readStates();
+    expect(await readyOf(t7)).toEqual({ pending: true, readyToMove: true });
+    expect(await todayRow(t6)).toMatchObject({ x: null });
+    expect(await dueIn(s.d.zoneId)).toBe(0);
+
+    await setToday(t8, { x: 46 });
+    expect(await dueIn(s.d.zoneId)).toBe(1);
+    await readStates();
+
+    expect(await todayRow(t6)).toMatchObject({ x: 40, takenOff: false });
+    expect(await readyOf(t6)).toEqual({ pending: false, readyToMove: false });
+  });
+
   it("a part out of service inside a joined table blocks nothing", async () => {
     await clearingWorkflow(false);
     const z = await sixBehindEight([

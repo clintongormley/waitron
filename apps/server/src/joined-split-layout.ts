@@ -166,7 +166,33 @@ export function standsIn(place: Placement, other: Placement): boolean {
   });
 }
 
+const PLACE_KEYS = ["x", "y", "width", "height", "rotation", "shape"] as const;
+
+/**
+ * Whether a table drawn at `standing` keeps another table out of `place`: it stands in it, unless
+ * it stands exactly where the layout being applied puts it (`own`, null for no place there). A
+ * layout that overlaps its own tables was saved that way, so the overlap blocks nothing.
+ */
+export function blocksPlace(place: Placement, standing: Placement, own: Placement | null): boolean {
+  if (own !== null && PLACE_KEYS.every((key) => own[key] === standing[key])) return false;
+  return standsIn(place, standing);
+}
+
 export type SqlPlace = Record<"x" | "y" | "width" | "height" | "rotation", SQLWrapper>;
+export type SqlShapedPlace = SqlPlace & { shape: SQLWrapper };
+
+/** `blocksPlace` in SQL; `own`'s columns are all null for no place. reset-row-moves.test.ts pins the two agreeing. */
+export function blocksPlaceSql(
+  place: SqlPlace,
+  standing: SqlShapedPlace,
+  own: SqlShapedPlace,
+): SQL {
+  const same = sql.join(
+    PLACE_KEYS.map((key) => sql`${own[key]} is ${standing[key]}`),
+    sql` and `,
+  );
+  return sql`(not (${same}) and ${standsInSql(place, standing)})`;
+}
 
 /**
  * `standsIn` in SQL, on the same four directions. Each overlap is worked out from the boxes'

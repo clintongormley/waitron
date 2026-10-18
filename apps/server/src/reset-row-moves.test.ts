@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import { movesTable, type Placement } from "./floor-reset-plan.js";
 import { placementColumns } from "./floor-today-store.js";
-import { standsIn, standsInSql } from "./joined-split-layout.js";
+import { blocksPlace, blocksPlaceSql, standsIn, standsInSql } from "./joined-split-layout.js";
 import { plannedZone } from "./testing/floor-today-venue.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import "./errors.js";
@@ -228,5 +228,53 @@ describe("standsIn and the SQL the catch-up check reads", () => {
       answers.map((a) => ({ name: a.name, sql: a.js })),
     );
     expect(answers.filter((a) => a.js).length).toBe(10);
+  });
+});
+
+describe("blocksPlace and the SQL the catch-up check reads", () => {
+  const place: Placement = { x: 10, y: 20, width: 6, height: 2, shape: "rect", rotation: 0 };
+  const standing: Placement = { x: 12, y: 20, width: 2, height: 2, shape: "rect", rotation: 30 };
+  const clear: Placement = { ...standing, x: 60 };
+  const OWN: [string, Placement, Placement | null][] = [
+    ["no place of its own", standing, null],
+    ["standing in its own place", standing, standing],
+    ["a square off its own place across", standing, { ...standing, x: 13 }],
+    ["a square off its own place down", standing, { ...standing, y: 21 }],
+    ["wider than its own place", standing, { ...standing, width: 3 }],
+    ["taller than its own place", standing, { ...standing, height: 3 }],
+    ["turned off its own place", standing, { ...standing, rotation: 45 }],
+    ["round in its own place", standing, { ...standing, shape: "round" }],
+    ["clear of the place, in its own place", clear, clear],
+    ["clear of the place, off its own place", clear, null],
+  ];
+
+  it("agree on every case", async () => {
+    const lit = (p: Placement | null) => ({
+      x: sql`${p?.x ?? null}`,
+      y: sql`${p?.y ?? null}`,
+      width: sql`${p?.width ?? null}`,
+      height: sql`${p?.height ?? null}`,
+      rotation: sql`${p?.rotation ?? null}`,
+      shape: sql`${p?.shape ?? null}`,
+    });
+    const answers = [];
+    for (const [name, at, own] of OWN) {
+      const [row] = await v.db.all<{ hit: number }>(
+        sql`select ${blocksPlaceSql(lit(place), lit(at), lit(own))} as hit`,
+      );
+      answers.push({ name, js: blocksPlace(place, at, own), sql: row!.hit === 1 });
+    }
+    expect(answers.map((a) => ({ name: a.name, sql: a.sql }))).toEqual(
+      answers.map((a) => ({ name: a.name, sql: a.js })),
+    );
+    expect(answers.filter((a) => a.js).map((a) => a.name)).toEqual([
+      "no place of its own",
+      "a square off its own place across",
+      "a square off its own place down",
+      "wider than its own place",
+      "taller than its own place",
+      "turned off its own place",
+      "round in its own place",
+    ]);
   });
 });

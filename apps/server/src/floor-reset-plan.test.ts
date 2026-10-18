@@ -470,4 +470,37 @@ describe("blockedMoves", () => {
       }),
     ).toEqual(new Set(["6"]));
   });
+
+  it("is not blocked by a staying table standing where the layout being applied puts it", () => {
+    expect(
+      blockedMoves({
+        moving: [{ tableId: "2", from: box(40), to: box(4) }],
+        staying: [
+          { tableId: "4", place: box(0), own: box(0) },
+          { tableId: "5", place: box(20), own: box(21) },
+        ],
+      }),
+    ).toEqual(new Set());
+  });
+
+  it("is still blocked by a staying table one square off that place", () => {
+    expect(
+      blockedMoves({
+        moving: [{ tableId: "2", from: box(40), to: box(4) }],
+        staying: [{ tableId: "4", place: box(0), own: box(1) }],
+      }),
+    ).toEqual(new Set(["2"]));
+  });
+
+  it("is not blocked by a blocked table whose kept place is its place in that layout", () => {
+    expect(
+      blockedMoves({
+        moving: [
+          { tableId: "1", from: box(4), to: box(4) },
+          { tableId: "6", from: null, to: box(10) },
+        ],
+        staying: [{ tableId: "3", place: box(0) }],
+      }),
+    ).toEqual(new Set(["1"]));
+  });
 });

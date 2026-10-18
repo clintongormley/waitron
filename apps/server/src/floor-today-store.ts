@@ -5,6 +5,7 @@ import {
   exists,
   getTableColumns,
   inArray,
+  isNotNull,
   isNull,
   lt,
   or,
@@ -47,7 +48,7 @@ import {
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { markMoved, tableNeedsMoving } from "./floor-today-mark-moved.js";
-import { standsInSql } from "./joined-split-layout.js";
+import { blocksPlaceSql } from "./joined-split-layout.js";
 import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
 import { leaveMerges } from "./floor-today-merges.js";
@@ -527,6 +528,7 @@ async function catchUpPass(
     ),
   );
   let outOfService: Set<string> | undefined;
+  let layoutPlaces: Map<string, Placement | null> | undefined;
   // Tables whose own move is blocked, and reset rows of tables to create whose place is taken.
   const blocked = new Set<string>();
   const blockedCreates = new Set<string>();
@@ -596,6 +598,8 @@ async function catchUpPass(
     }
     if (drawnMoving.length === 0 && offMoving.length === 0) break;
     outOfService ??= await joinedOutOfServiceIn(tx, ids);
+    layoutPlaces ??= await layoutPlacesIn(tx, zoneId);
+    const own = (tableId: string) => layoutPlaces!.get(tableId) ?? null;
     const leaving = new Set([...drawnMoving.map((m) => m.tableId), ...plan.remove, ...plan.hide]);
     const staying = inZone.flatMap((table) => {
       const place = drawnAt(table.id);
@@ -605,11 +609,11 @@ async function catchUpPass(
         needing.has(table.id) ||
         outOfService!.has(table.id)
         ? []
-        : [{ tableId: table.id, place }];
+        : [{ tableId: table.id, place, own: own(table.id) }];
     });
     const keptPlaces = [...blocked].flatMap((tableId) => {
       const place = drawnAt(tableId);
-      return place === null ? [] : [{ tableId, place }];
+      return place === null ? [] : [{ tableId, place, own: own(tableId) }];
     });
     const newly = [...blockedMoves({ moving: drawnMoving, staying: [...staying, ...keptPlaces] })];
     const newlyOff = [...blockedMoves({ moving: offMoving, staying })];
@@ -1000,6 +1004,27 @@ export async function ensureToday(
   return day;
 }
 
+/** Each table's place in the layout the zone's last reset applies; null where it gives none. */
+export async function layoutPlacesIn(
+  tx: Transaction,
+  zoneId: string,
+): Promise<Map<string, Placement | null>> {
+  const r = floorResetTables;
+  const rows = await tx
+    .select({
+      tableId: r.tableId,
+      x: r.x,
+      y: r.y,
+      width: r.width,
+      height: r.height,
+      shape: r.shape,
+      rotation: r.rotation,
+    })
+    .from(r)
+    .where(and(eq(r.zoneId, zoneId), isNotNull(r.tableId)));
+  return new Map(rows.map((row) => [row.tableId!, placementOf(row)]));
+}
+
 const dueRow = alias(floorResetTables, "due_row");
 const dueMember = alias(floorResetTables, "due_member");
 const dueJoined = alias(floorResetTables, "due_joined");
@@ -1057,15 +1082,25 @@ export function catchUpDue(zoneId: SQLWrapper): SQL {
 /**
  * catchUpPass's rule for a row it would put down off the map, in SQL: the row is not yet placed,
  * has a place, its table is not drawn (and is not a taken-off one its row or its mark keeps off),
- * and a table drawn in the zone stands in that place: not out of service in a joined table, not
- * needing moving, and not a pending member of a joined group holding the row, which moves with it.
+ * and a table drawn in the zone blocks that place (`blocksPlace`): not out of service in a joined
+ * table, not needing moving, and not a pending member of a joined group holding the row, which
+ * moves with it.
  */
 function placeTaken(r: typeof dueRow | typeof dueMember): SQL {
   const own = sql.identifier("place_own");
   const blocker = sql.identifier("place_blocker");
   const blockerTable = sql.identifier("place_blocker_table");
+  const blockerRow = sql.identifier("place_blocker_row");
   const col = (table: SQLWrapper, name: string) => sql`${table}.${sql.identifier(name)}`;
   const b = (name: string) => col(blocker, name);
+  const placeOf = (at: (name: string) => SQL) => ({
+    x: at("x"),
+    y: at("y"),
+    width: at("width"),
+    height: at("height"),
+    rotation: at("rotation"),
+    shape: at("shape"),
+  });
   const [link, joined, sibling, member] = [
     "place_link",
     "place_joined",
@@ -1085,6 +1120,8 @@ function placeTaken(r: typeof dueRow | typeof dueMember): SQL {
     and exists (
       select 1 from ${floorTodayTables} ${blocker}
       inner join ${diningTables} ${blockerTable} on ${col(blockerTable, "id")} = ${b("table_id")}
+      left join ${floorResetTables} ${blockerRow}
+        on ${col(blockerRow, "table_id")} = ${b("table_id")} and ${col(blockerRow, "zone_id")} = ${r.zoneId}
       where ${col(blockerTable, "zone_id")} = ${r.zoneId}
         and ${b("x")} is not null and ${b("taken_off")} = 0
         and not ${joinedOutOfService(b("table_id"))}
@@ -1100,9 +1137,10 @@ function placeTaken(r: typeof dueRow | typeof dueMember): SQL {
           where ${r.id} in (${col(link, "joined_reset_table_id")}, ${col(link, "part_reset_table_id")})
             and ${col(member, "pending")} = 1 and ${col(member, "table_id")} = ${b("table_id")}
         )
-        and ${standsInSql(
+        and ${blocksPlaceSql(
           { x: r.x, y: r.y, width: r.width, height: r.height, rotation: r.rotation },
-          { x: b("x"), y: b("y"), width: b("width"), height: b("height"), rotation: b("rotation") },
+          placeOf((name) => b(name)),
+          placeOf((name) => col(blockerRow, name)),
         )}
     )
   )`;

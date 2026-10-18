@@ -1,4 +1,4 @@
-import { standsIn } from "./joined-split-layout.js";
+import { blocksPlace } from "./joined-split-layout.js";
 
 export type PlanShape = "rect" | "round";
 
@@ -171,20 +171,21 @@ export function movesTable(
 }
 
 /** The moving tables that must keep their place: repeated until a pass blocks nothing new; a
- *  blocked table's current place joins `staying` (spec decision 13). Tables moving together never block each other. */
+ *  blocked table's current place joins `staying` (spec decision 13). Tables moving together never
+ *  block each other, nor does a staying table at `own`, its place in the layout being applied. */
 export function blockedMoves(input: {
   moving: readonly { tableId: string; from: Placement | null; to: Placement | null }[];
-  staying: readonly { tableId: string; place: Placement }[];
+  staying: readonly { tableId: string; place: Placement; own?: Placement | null }[];
 }): Set<string> {
   const blocked = new Set<string>();
-  const places = input.staying.map((table) => table.place);
+  const places = input.staying.map(({ place, own }) => ({ place, own: own ?? null }));
   for (let changed = true; changed;) {
     changed = false;
     for (const { tableId, from, to } of input.moving) {
       if (blocked.has(tableId) || to === null) continue;
-      if (!places.some((place) => standsIn(to, place))) continue;
+      if (!places.some(({ place, own }) => blocksPlace(to, place, own))) continue;
       blocked.add(tableId);
-      if (from !== null) places.push(from);
+      if (from !== null) places.push({ place: from, own: to });
       changed = true;
     }
   }

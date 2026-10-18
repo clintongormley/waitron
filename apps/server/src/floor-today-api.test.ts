@@ -1928,4 +1928,81 @@ describe("Update layout", () => {
     expect(await todayRow(v, live("five"))).toMatchObject({ x: 160, takenOff: true });
     expect(await todayRow(v, live("spare"))).toMatchObject({ x: 160 });
   });
+
+  /**
+   * Dinner, as its editor saved it, stands 2 at 40 and 4 at 44, over half of 2 (both 8 by 8);
+   * Standard stands 2 at 0 and 4 at `fourInStandard`. Read at Lunch, so Standard is recorded.
+   */
+  async function overlappingDinner(fourInStandard: number) {
+    fixedAt = LUNCH;
+    const tag = randomUUID().slice(0, 6);
+    const s = await standardAndDinner(
+      v,
+      LUNCH,
+      [
+        { key: "two", label: `2 ${tag}` },
+        { key: "four", label: `4 ${tag}` },
+      ],
+      { standard: { two: 0, four: fourInStandard }, dinner: { two: 40, four: 44 } },
+    );
+    expect((await send("GET", "/api/tables/state")).status).toBe(200);
+    return s;
+  }
+
+  async function updateToDinner(zoneId: string): Promise<void> {
+    fixedAt = AFTER_LUNCH;
+    const offer = (await offered(zoneId))!;
+    await expectRevision(
+      v,
+      updateLayout(zoneId, { setId: offer.setId, layoutRevision: offer.revision }),
+      zoneId,
+    );
+  }
+
+  it("marks a table moved onto a place its layout overlaps with a table standing where that layout puts it", async () => {
+    const { d, live } = await overlappingDinner(80);
+    const partyId = await seatAt(live("two"));
+    await updateToDinner(d.zoneId);
+    expect(await todayRow(v, live("four"))).toMatchObject({ x: 44 });
+    expect(await todayRow(v, live("two"))).toMatchObject({ x: 0 });
+    await finish(partyId);
+    expect(await floorToday(live("two"))).toMatchObject({ needsMoving: true });
+
+    await expectRevision(v, today(live("two"), "mark-moved"), d.zoneId);
+
+    expect(await todayRow(v, live("two"))).toMatchObject({ x: 40, takenOff: false });
+    expect(await todayRow(v, live("four"))).toMatchObject({ x: 44, takenOff: false });
+    expect(await floorToday(live("two"))).toMatchObject({ needsMoving: false });
+    await seatAt(live("two"));
+  });
+
+  it("puts two free tables down overlapping as their layout has them, one already in its place", async () => {
+    const { d, live } = await overlappingDinner(44);
+
+    await updateToDinner(d.zoneId);
+
+    expect(await todayRow(v, live("two"))).toMatchObject({ x: 40, takenOff: false });
+    expect(await todayRow(v, live("four"))).toMatchObject({ x: 44, takenOff: false });
+    expect(await floorToday(live("two"))).toMatchObject({ needsMoving: false });
+  });
+
+  it("still refuses Mark moved while the overlapping table stands one square off its own place", async () => {
+    const { d, live } = await overlappingDinner(80);
+    const partyId = await seatAt(live("two"));
+    await updateToDinner(d.zoneId);
+    await expectRevision(v, today(live("four"), "move", { x: 45, y: 0 }), d.zoneId);
+    await finish(partyId);
+    expect(await floorToday(live("two"))).toMatchObject({ needsMoving: true });
+
+    expect(await refusal(today(live("two"), "mark-moved"))).toEqual({
+      status: 409,
+      body: {
+        error: {
+          code: "table.new_place_taken",
+          params: { tableId: live("two"), standingId: live("four") },
+        },
+      },
+    });
+    expect(await todayRow(v, live("two"))).toMatchObject({ x: 0 });
+  });
 });
