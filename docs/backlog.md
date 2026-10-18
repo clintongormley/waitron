@@ -341,6 +341,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   use synthetic external certificate, clock and email responses; complete restore and interruption
   journeys remain open. Generated EN/ES A4 setup and replacement PDFs await the owner's viewing
   approval in `~/My Drive/Waitron mockups/2026-10-18 A679 recovery PDF/`.
+  Direct and supervised source-process checks now cover fresh boot/reboot and interrupted entry.
+  The dedicated repair listener serves the built wizard and its public bootstrap reads; trusted
+  HTTPS checks recover ownership without creating a missing database. Installed Chrome reaches
+  that listener's real password controls in English and Spanish, in both themes and at phone and
+  desktop widths. Confirmed Start again selects an isolated workspace, retains the old frozen
+  attempt and requests restart; the replacement's first boot is not part of that browser check.
+  The restore command refuses an outstanding claim; provisioning refuses a
+  changed series request without opening its database. These checks do not qualify a complete
+  archive/bucket/Cloud restore or replace the remaining installed recovery journeys.
   The interrupted page now offers
   password recovery first and confirmed Start again second. Browser checks cover a new tab,
   refused or late answers, uncheckable passwords and missing or uncertain databases. Recovered

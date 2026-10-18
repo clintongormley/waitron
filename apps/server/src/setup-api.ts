@@ -35,7 +35,7 @@ import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
-import { mountSpa } from "./spa-api.js";
+import { mountSetupSpa } from "./setup-spa.js";
 import type { Logger } from "./logger.js";
 import type {
   ActiveSetupOperation,
@@ -1489,29 +1489,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
   app.all("/management-api/*", (c) => directError(c, log, "node.reset", 404));
 
-  // Setup has no URL routes. Registered after the API handlers, this redirects missing browser
-  // navigation while preserving missing assets and API responses.
   if (deps.setupAppDir !== undefined) {
-    app.use("*", async (c, next) => {
-      await next();
-      const segments = c.req.path.split("/").filter(Boolean);
-      const first = segments[0] ?? "";
-      if (
-        c.req.method === "GET" &&
-        c.res.status === 404 &&
-        (c.req.header("Accept") ?? "").includes("text/html") &&
-        first !== "assets" &&
-        first !== "api" &&
-        !first.endsWith("-api") &&
-        !segments.some((segment) => segment.includes("."))
-      )
-        c.res = c.redirect("/", 302);
-    });
-    app.use("/setup-assets/*", async (c, next) => {
-      await next();
-      if (c.res.status === 200) c.header("Content-Disposition", "attachment");
-    });
-    mountSpa(app, { root: deps.setupAppDir, basePath: "" }, log);
+    mountSetupSpa(app, deps.setupAppDir, log);
   } else {
     app.get("*", (c) =>
       c.html(SETUP_PLACEHOLDER_HTML, 200, { "Cache-Control": REVALIDATE_CACHE_CONTROL }),

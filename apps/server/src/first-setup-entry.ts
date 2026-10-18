@@ -1,8 +1,11 @@
+import { mountSetupSpa } from "./setup-spa.js";
+import { isUnset } from "./env-value.js";
+import { access } from "node:fs/promises";
 import { readModuleConfig } from "./module-config.js";
 import { withFirstSetupPublication } from "./first-setup-publication.js";
 import { Hono } from "hono";
 import { isDeepStrictEqual } from "node:util";
-import { lockVenueDatabase } from "@waitron/db";
+import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import {
   assertFirstSetupBootTarget,
@@ -18,6 +21,7 @@ import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
+import { caCertPath } from "./box-secrets.js";
 
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
   const pair = await host.store.readResumable();
@@ -124,6 +128,36 @@ async function resolutionApp(
     moduleConfig,
   });
   const app = new Hono();
+  app.get("/setup-api/status", async (c) => {
+    const pair = await host.store.readResumable().catch(() => null);
+    const frozenEnvironment = pair?.state.frozen.environment;
+    const selectedEnvironment =
+      frozenEnvironment ?? deploymentEnvironmentFor(environment.WAITRON_ENV) ?? "preproduction";
+    return c.json(
+      {
+        provisioned: false,
+        environment: selectedEnvironment,
+        ...(environment.WAITRON_ENV === "dev" && selectedEnvironment === "preproduction"
+          ? { developmentMode: true }
+          : {}),
+        needs: ["first-setup-resolution"],
+      },
+      200,
+      { "Cache-Control": "no-store" },
+    );
+  });
+  app.get("/setup-api/discovery", async (c) =>
+    c.json(
+      {
+        caDownloadAvailable: await access(caCertPath(roots.stateDir)).then(
+          () => true,
+          () => false,
+        ),
+      },
+      200,
+      { "Cache-Control": "no-store" },
+    ),
+  );
   app.get("/setup-api/first-setup/status", (c) =>
     c.json({ claimed: true, resolution: true }, 200, { "Cache-Control": "no-store" }),
   );
@@ -139,5 +173,7 @@ async function resolutionApp(
         }),
     ...(requestRestart === undefined ? {} : { requestRestart }),
   });
+  if (!isUnset(environment.WAITRON_SETUP_APP_DIR))
+    mountSetupSpa(app, environment.WAITRON_SETUP_APP_DIR!, log);
   return app;
 }

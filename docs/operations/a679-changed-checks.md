@@ -2006,3 +2006,73 @@ branch gates. No old test is weakened or described as green.
 
 Receipts and runnable installed-probe overlay: `~/waitron-campaign-e/receipts/a679-entry-integration-20261018/`.
 Preserve all earlier Changed test checks inventories for the eventual whole-branch PR.
+
+## Repair listener and actual entry processes, 2026-10-18
+
+Authority: the approved hour-code implementation plan, Tasks 9–10, requires the interrupted
+wizard and actual entry paths. The earlier mounted browser checks and API-only launch checks
+had not requested the dedicated listener's HTML or its wizard bootstrap reads.
+
+Changed existing test checks: **none**. The new `first-fiscal-hour.e2e.test.ts` launches the actual
+source `bin.ts`, supervised `node-entry.ts`, restore command and provisioning command in owned
+child processes. Fresh boot/reboot retains the box CA. Paired, torn and escalated interrupted
+entry preserves the missing database, retained marker and staged restore/reset files. Public
+reads serve the configured setup bundle and bootstrap the existing wizard; password recovery
+still requires trusted HTTPS and same-origin requests. The TLS checks include the original
+password's success and wrong-password/cross-origin refusals. Restore checks both claimed and
+consumption-intent states. Provisioning submits a deliberately different base, `B`, against the
+retained `A`; it qualifies changed-context refusal, not matching-request command completion.
+
+The new `first-setup-resolution.bootstrap.test.ts` checks frozen environment metadata against
+conflicting process configuration, torn-state display with valid/invalid configuration, public
+certificate availability, unchanged markers and an absent database. Its static-file checks keep
+missing API/assets as refusals, redirect browser navigation and retain attachment delivery for
+public setup downloads. The existing ordinary setup API suite keeps its assertions after moving
+its static-serving code to the shared helper.
+
+Two observed REDs preceded the runtime fixes: all five interrupted process cases received 404
+for the page; after mounting the page, all five received 404 for the bootstrap status read.
+The fix reuses the existing setup SPA serving behavior and supplies public repair metadata.
+The retained attempt's environment wins over the ambient setting; without a readable attempt,
+this display uses the deployment parser's value or preproduction. That fallback grants no setup,
+restore or trading authority: the repair listener retains only its resolution actions.
+
+Initial command probes incorrectly expected `setup.attempt_uncertain` for an unconsumed claim
+and for a conflicting provisioning request. The existing `assertOtherSetupAllowed` and CLI
+request comparison distinguish those cases. The final fixtures state the changed base explicitly
+and check their exact refusals. No production command behavior changed. The first root-check
+command named a nonexistent project and ran no tests; the corrected root invocation is the
+receipt. An early scoped coverage run passed its cases but failed its bar because the subprocess
+execution did not measure the new handlers in the parent. Direct bootstrap checks supplement
+that process evidence; the partial report is retained, not described as package coverage.
+
+Receipts: `~/waitron-campaign-e/receipts/a679-entry-processes-20261018/`, including process REDs,
+installed omission/restoration checks, source checks, the runnable installed-Chrome probe and
+EN/ES light/dark 390/1280 captures. The installed browser uses the actual built setup app and
+trusted HTTPS repair listener. This checkpoint does not qualify full backup restore, resumed
+activation, every interrupted selection/Finish path or the complete branch's package coverage.
+The earlier coverage and legacy-suite failures remain branch gates, as do owner PDF viewing
+approval, retirement/prose/integration work and the final reviews/current-head CI.
+
+Final installed continuation: each locale also submits the native Start again confirmation through
+real HTTPS. The response selects generation 1 of a different workspace and requests one restart;
+the old frozen attempt and absent original database remain. The probe does not boot that
+replacement. Sixteen password/recovered captures and two confirmation captures were inspected.
+The final installed run passes 21 cases across the two new committed suites and the local browser
+probe. Each of five deliberate omissions (shell, bootstrap status, certificate availability,
+HTTPS-only password entry and origin check) fails its intended assertion and passes after
+restoration; the complete installed process suite passes 13 before and after those omissions.
+
+The source behavioral selections pass 432 and 318 cases respectively, with overlapping suites.
+Both scoped coverage commands still exit nonzero: the latter reports 97.22 statements, 91.66
+branches, 84.21 functions and 100 lines across `first-setup-entry.ts` and `setup-spa.ts`. The shared
+SPA helper is 100 in all four measures. These are partial selections, not the package's coverage
+report; no threshold, exclusion or ignore marker changed. This report and the earlier provisioning
+coverage gap remain for the complete branch's validation, rather than being counted as green
+commands. The source compilers, scoped lint/format, unchanged fiscal pair and selected root guards
+are recorded separately.
+
+The fresh-boot/reboot case has a 180-second test bound, covering its initial 45-second CA wait,
+two 45-second listener waits, two ten-second shutdown waits and untimed setup. That test-only
+bound was added after the installed candidate was removed; the two affected source cases were
+rerun. Runtime files and all earlier assertions are unchanged by that final budget adjustment.
