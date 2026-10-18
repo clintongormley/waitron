@@ -49,8 +49,8 @@ function cutDays(
   businessDays: readonly LocalDate[],
   cut: CalendarCut | undefined,
 ): { anchor: string; days: ReadonlyMap<LocalDate, WallDay> } | undefined {
-  // Without start changes every day lasts 1440 minutes from the clock's one start, which is
-  // also the start in force, so no range is cut.
+  // Without start changes every day's clock-face span (endMinute) is 1440 minutes from the
+  // clock's one start, and that start is the anchor, so no range is cut.
   if (cut === undefined || clock.cutoverChanges.length === 0) return undefined;
   return {
     anchor: cut.anchor,

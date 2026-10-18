@@ -837,7 +837,7 @@ describe("the season days read", () => {
   });
 });
 
-describe("a past day's range that misfits its own start", () => {
+describe("a past day's range around a start change", () => {
   const AFTER_RETURN = new Date("2026-11-02T12:00:00Z");
   /** 05:00, then 03:00 from 2026-10-21, then 05:00 again from 2026-10-28, with Sala's dinner
    *  stored at 22:00–04:30 on Tuesdays and Saturdays after the start came back to 05:00, and Terrace closed

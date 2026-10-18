@@ -265,6 +265,7 @@ Review fix round (lines at `1550c16c9`):
 | File:line (at `1550c16c9`) | Before → after | Why |
 | --- | --- | --- |
 | `apps/server/src/business-day-changeover.test.ts:212` ("a day that would end before it starts, where midnight is skipped, is a clocks change", America/Havana) | `clocksChangeOn: "2027-03-13"` → `"2027-03-14"`; `saveFrom` unchanged | the old value was the business date whose bounds fail, the day before Havana's clocks jump from 13 March 23:59:59 to 14 March 01:00; the refusal now names the date the clocks show just after they change. The Europe/Madrid cases (`2026-10-25`, `2027-03-28`) pass unedited |
+| `packages/venue-service/src/business-day-schedule.test.ts:454` (base `373b96623`; `:524` at `1550c16c9`) | `guard("time", 1, new Date("2026-11-04T06:00:00Z"))` resolves → removed | the guard no longer takes a moment (4889a3823), so the call became the case's first check, `guard("time", 1)` |
 
 ## Review focus (inputs no task's main tests reach; each line names the test that pins it)
 
@@ -548,7 +549,8 @@ gets `overlap`. `all_day` keeps priority over both.
   It walks up to 400 years of each yearly special day (`business-day-schedule.ts:216-228`) on every
   call; that cost is paid only while a change waits, and was already paid on every Save preview.
 - `assertBusinessDayScheduleWrite` keeps its revision check and loses the pending refusal; the
-  module seat signature (`module.ts:619`) is unchanged.
+  module seat signature (`module.ts:619`) is unchanged (review fix round, 4889a3823: its unused
+  `at` was then removed from the seat and all eight call sites).
 - Decision: the editors' own parse and last-orders checks run on `settledClock(clock, at)`, so the
   waiting start is checked once, after the write, by the venue-wide checker — which names the
   department, period, weekday and season. A failure under the waiting start alone therefore answers

@@ -165,8 +165,8 @@ export class BusinessDayStartEditor extends LitElement {
     if (!next) return;
     const delay = Date.parse(next.startsAt) - Date.now();
     if (delay <= 0) {
-      // A model read just before the changeover can arrive after it; one re-read per changeover
-      // keeps a model still stale after it from asking again.
+      // A model read just before the changeover can arrive after it; remembering the changeover
+      // keeps a model still stale after that re-read from asking again.
       if (this.#rereadPassed === next.startsAt) return;
       this.#rereadPassed = next.startsAt;
       this.api.liveData.invalidate([{ type: "location_day_cutover_changes" }]);

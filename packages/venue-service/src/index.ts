@@ -39,7 +39,7 @@ export {
   saveHolidayArea,
 } from "./holidays.js";
 export type * from "./holiday-types.js";
-export { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
+export { clockChangesBetween, venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
 export { localTimeOccurrences, offsetMinutes } from "./hours-occurrences.js";
 export { addDays, isLocalDate, parseCalendarMonth, weekdayOf } from "./hours-rules.js";
 export type * from "./hours-types.js";

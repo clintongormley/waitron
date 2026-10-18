@@ -1505,8 +1505,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   - A873. A refused Save's message in the Business-day start dialog stops "The business-day clock
     changed. Close and reopen to review it." from appearing when the clock then changes
     (`business-day-start-editor.ts`, the guard in `willUpdate`).
-  - A874. The Business day card re-reads at a waiting change's moment by the browser's clock; a
-    server clock behind it leaves the New start row up until the next refresh.
+  - A874. The Business day card re-reads at a waiting change's moment by the browser's clock, and
+    once more if that answer still shows the change waiting; a server clock still behind at the
+    second answer leaves the New start row up until the next refresh.
   - A876. On a day a start change makes longer than 24 hours, a season range past the 24th hour
     is cut at it only when a special day is painted on that date (`cutSeason`,
     `packages/venue-service/src/day-resolver.ts`).

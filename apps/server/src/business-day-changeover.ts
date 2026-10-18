@@ -6,7 +6,8 @@ import {
   type BusinessDayClock,
   type CutoverChange,
 } from "@waitron/shared";
-import { addDays, localTimeOccurrences, offsetMinutes } from "@waitron/venue-service";
+import { civilDateOf } from "@waitron/reporting";
+import { addDays, clockChangesBetween, localTimeOccurrences } from "@waitron/venue-service";
 
 export type BusinessDayStartPlan = {
   today: string;
@@ -89,19 +90,8 @@ const HOUR_MS = 60 * MINUTE_MS;
 export function clocksChangeDate(day: string, timeZone: string): string {
   const from = Date.parse(`${addDays(day, -1)}T00:00:00.000Z`) - 14 * HOUR_MS;
   const to = Date.parse(`${addDays(day, 2)}T00:00:00.000Z`) + 14 * HOUR_MS;
-  for (let at = from; at < to; at += HOUR_MS) {
-    const before = offsetMinutes(at, timeZone);
-    if (offsetMinutes(at + HOUR_MS, timeZone) === before) continue;
-    let low = at;
-    let high = at + HOUR_MS;
-    while (high - low > MINUTE_MS) {
-      const mid = low + Math.floor((high - low) / 2 / MINUTE_MS) * MINUTE_MS;
-      if (offsetMinutes(mid, timeZone) === before) low = mid;
-      else high = mid;
-    }
-    return new Date(high + offsetMinutes(high, timeZone) * MINUTE_MS).toISOString().slice(0, 10);
-  }
-  return day;
+  const [change] = clockChangesBetween(new Date(from), new Date(to), timeZone);
+  return change === undefined ? day : civilDateOf(change, timeZone);
 }
 
 export function clockTransitionAt(
