@@ -17,7 +17,6 @@ import {
 } from "@waitron/shared";
 import type { FloorAnnotator, TableRemoval } from "@waitron/module";
 import {
-  floorPlans,
   newId,
   readNodeMembership,
   sales,
@@ -172,6 +171,7 @@ import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
+import { layoutOffer, zoneLayouts } from "./floor-layout-due.js";
 import { refuseTakenOff, zoneOfTable } from "./floor-today-table.js";
 import {
   moveChangedRooms,
@@ -2623,21 +2623,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           ]),
         );
         const states = await VENUE_SERVICE.readZoneClosingStates(tx, deps.cfg, ids, at);
-        const planned = new Set(
-          (
-            await tx
-              .select({ zoneId: floorPlans.zoneId })
-              .from(floorPlans)
-              .where(inArray(floorPlans.zoneId, ids))
-          ).map((row) => row.zoneId),
-        );
+        const sets = await VENUE_SERVICE.readFloorPlanSets(tx, deps.cfg);
+        const planned = new Set(sets.flatMap((set) => set.zoneIds));
+        const setName = new Map(sets.map((set) => [set.setId, set.name]));
+        const layouts = await zoneLayouts(tx, deps.cfg, ids, deps.clock.now().instant);
         return visible.map((zone) => {
           const state = states.get(zone.id)!;
+          const layout = layouts.get(zone.id)!;
+          const recordedSet = layout.recorded?.setId ?? null;
           return {
             ...zone,
             closed: state.closed,
             closesAt: modes.has(zone.id) ? (state.keepOpen?.closesAt ?? null) : null,
             hasPlan: planned.has(zone.id),
+            layoutSetName: recordedSet === null ? null : (setName.get(recordedSet) ?? null),
+            layoutDue: layoutOffer(layout),
             serviceMode: modes.get(zone.id) ?? null,
           };
         });
