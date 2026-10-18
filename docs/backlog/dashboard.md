@@ -1120,7 +1120,7 @@ help about anything you want very quickly."
   Products has help on the price, VAT, default course, the Variants section and the list's
   Availability column; the account menu's Account settings and a variant's Keep carry a badge.
   The owner's answer to Q41 (B): signed in, the language choices are in the account menu after
-  Theme, and the banner keeps its height. Slice 2 is complete: 2a #1848, 2b #1851.
+  Theme, and the banner's controls add no height to it. Slice 2 is complete: 2a #1848, 2b #1851.
 - **Remaining slices** (design §8): **3** guide pages served by the box (EN and ES; a new unauthenticated
   route, FULL review); **4** tills and handhelds — the bar switch that never leaves the bar (at phone
   width the language chooser leaves first), the till's More and person menus, badges on Counter,

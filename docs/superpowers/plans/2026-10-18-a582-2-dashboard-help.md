@@ -886,6 +886,8 @@ What changes:
     and the banner's height is today's, pinned as a number: before writing it, measure today's
     signed-in banner height at each width on the base (`git worktree add --detach` a throwaway at
     `a68cc3661`, never by swapping files here; remove it after) and pin those numbers.
+    (2026-10-18: CI drew the banner 1 px shorter than the pinned numbers, so the case no longer pins
+    them; see `docs/developers/design-system.md`, "add no height to the banner".)
     **What the failing case shows:** without the change the lockup reads about 23 px at 360 and
     53 px at 390 (M6).
   - `"signed in, the banner has no language chooser and the account menu holds the language choices after Theme"`.

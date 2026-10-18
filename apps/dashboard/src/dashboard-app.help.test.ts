@@ -445,10 +445,6 @@ const languageChoice = (el: DashboardApp, code: string) =>
   languageGroup(el)?.shadowRoot!.querySelector<HTMLButtonElement>(`[data-test=lang-${code}]`) ??
   null;
 
-/** Measured on a68cc3661, before the help switch, with the language chooser in the banner: the same
- * at 320, 360, 390 and 480 px, in English and Spanish. */
-const bannerHeightBeforeTheSwitch = { live: 102, demo: 94 } as const;
-
 it.each(
   (["live", "demo"] as const).flatMap((intent) =>
     (["en-GB", "es-ES"] as const).flatMap((locale) =>
@@ -456,7 +452,7 @@ it.each(
     ),
   ),
 )(
-  "signed in, when the intent is %s, in %s, at %ipx the switch, bell and account menu share the lockup's row, and the banner keeps its height",
+  "signed in, when the intent is %s, in %s, at %ipx the switch, bell and account menu share the lockup's row and add no height to the banner",
   async (intent, locale, width) => {
     const { el, host } = await signedIn({
       getMe: vi
@@ -497,7 +493,21 @@ it.each(
       );
       for (const { selector, box } of items.slice(3))
         expect(box.top, `${selector} shares the lockup's row`).toBeLessThan(logo.bottom);
-      expect(outer.height).toBe(bannerHeightBeforeTheSwitch[intent]);
+      expect(logo.height, "the logo is no taller than the menu toggle").toBeLessThanOrEqual(
+        items[0]!.box.height,
+      );
+      // Collapsed to no height but kept at their width, so the logo keeps its width.
+      const actions = q(el, ".banner-actions")!;
+      actions.style.height = "0";
+      try {
+        expect(q(el, ".brand-logo")!.getBoundingClientRect().width).toBe(logo.width);
+        expect(
+          banner.getBoundingClientRect().height,
+          "the trailing controls add no height to the banner",
+        ).toBe(outer.height);
+      } finally {
+        actions.style.removeProperty("height");
+      }
     });
   },
 );

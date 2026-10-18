@@ -3208,10 +3208,14 @@ to 15 px at 360 px and 45 px at 390 px, below the 60 px floor in
 `apps/dashboard/src/dashboard-app.test.ts`. Measured 2026-10-18 in A582's plan (M6, with the
 language chooser still in the banner): a 44 px stand-in for the help switch left the lockup 23 px
 wide at 360 px and 53 px at 390 px, in English. With the language chooser in the account menu
-instead, the signed-in banner keeps the height it had before the switch, 94 px for a Demo venue and
-102 px for a Live one at 320, 360, 390 and 480 px, with the lockup at least 60 px wide at 360, 390
-and 480 px and at least 31 px at 320; the "keeps its height" cases in
-`apps/dashboard/src/dashboard-app.help.test.ts` pin both. In Demo and Preparation, `wt-demo-bar` shows the mode,
+instead, the "add no height to the banner" cases in `apps/dashboard/src/dashboard-app.help.test.ts`
+check, signed in at 320, 360, 390 and 480 px, in English and Spanish, for a Demo and a Live venue,
+that the lockup is at least 60 px wide at 360, 390 and 480 px and at least 31 px at 320, that the
+logo is no taller than the menu toggle, and that the banner's height does not change when the bell,
+the help switch and the account menu are collapsed to no height at their own width. They pin no
+height in pixels: measured locally on a68cc3661, before the switch, the banner was 94 px for a Demo
+venue and 102 px for a Live one, and CI's Chromium drew this branch's banner 1 px shorter than that
+(run 39113231289). In Demo and Preparation, `wt-demo-bar` shows the mode,
 the current dashboard page, a link to the device page, and an "Email inbox" link to `/manage/email`
 (the inbox screen, also linked from setup's done page). Signed out, the inbox link always shows;
 signed in, it shows only to a session that may open the inbox screen (a manager or an admin). The
