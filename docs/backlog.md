@@ -2222,8 +2222,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   no longer repeats the group Fire or serving controls: those commands use Sent and its line window.
   The drawer's held-line Move/Split controls are also gone on that branch: recall a sent dish
   into New order before moving or splitting it. Recall and station moves now use Sent’s More menu
-  without duplicate drawer buttons. The duplicate lists and other old row strips remain to
-  be retired. On the feature branch, a table's open unsent line window closes when editing
+  without duplicate drawer buttons. The drawer's direct Change editor is removed on the branch;
+  note, option and extra edits now use the recalled dish's New order window. Its screen checks
+  retain recorded source and price checks, including retired choices and weighed extras.
+  The duplicate lists and other old row strips remain to be retired. On the feature branch, a table's open unsent line window closes when editing
   becomes locked, so taking the bill back cannot revive its old confirmation. Focused browser
   checks cover fresh and recalled notes, an ordinary availability refresh and reopening after
   takeover. Recalling a dish and editing its note also checks the exact autosaved source reference

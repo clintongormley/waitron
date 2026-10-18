@@ -46,9 +46,7 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
-  multiplyDecimal,
   subtractDecimal,
-  perDishOptionQuantity,
   type Decimal,
 } from "@waitron/shared";
 import { clockTime, countText, currentLocale, named, t } from "../i18n/t.js";
@@ -57,20 +55,8 @@ import type { StringKey } from "../i18n/strings.js";
 import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
-import {
-  WorkingOrderStore,
-  type LineSelection,
-  type OrderLine,
-  type SelectedExtra,
-} from "../state/working-order.js";
-import { deriveExtraSelections } from "../state/held-extras.js";
-import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
-import {
-  offeredListsOf,
-  toWireLineExtras,
-  toWireModifiers,
-  toWireProductIdentity,
-} from "../state/order-line.js";
+import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
+import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import "../widgets/basket.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -110,7 +96,6 @@ import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
 import type { PartyGuestsDetail } from "../widgets/party-guests-dialog.js";
 import type { SplitGuestsDetail } from "../widgets/split-guests-dialog.js";
-import type { ModifierConfirmDetail } from "../widgets/modifier-picker.js";
 import type {
   BillBalance,
   CurrentOrderGroup,
@@ -531,8 +516,6 @@ export class TillTableOrderScreen extends LitElement {
         border-bottom: 1px solid var(--wt-color-border);
       }
 
-      /* The line's actions take a row of their own: Change, Recall and Cancel together do not fit
-         beside the name in the drawer at phone width. */
       .line-actions {
         grid-column: 1 / -1;
         display: flex;
@@ -1346,14 +1329,6 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  /** The line open in the Change editor. */
-  @state() private changeLine: TabLine | null = null;
-  /** Built once when the editor opens, not per render: the picker seeds from these once. */
-  #changeProduct?: TillProduct;
-  #changeSelection?: LineSelection;
-  #changeRevision = 0;
-  #changeExpectedEdit: BillEditExpected | null = null;
-
   @state() private actionStep:
     | "closed"
     | "menu"
@@ -1525,7 +1500,6 @@ export class TillTableOrderScreen extends LitElement {
           this.draftMoveStore = null;
           this.#draftMoveOpening = undefined;
           this.#selected = new WeakSet();
-          this.#closeChange();
         }
         this.#noteDraftStart(store);
         this.requestUpdate();
@@ -1953,9 +1927,6 @@ export class TillTableOrderScreen extends LitElement {
   #payStore?: TabPayStore;
   /** Memoised so a render triggered by a draft change does not recompute every line's gross. */
   #lineGrossByLineNo = new Map<number, Decimal>();
-  /** Built with {@link products}, so each line's Change lookup is not a scan. */
-  #productsByOffer?: Map<string, TillProduct>;
-  #productsById = new Map<string, TillProduct>();
   /** Built with {@link groups}, so each line's Send check is not a scan. */
   #heldGroupIds?: ReadonlySet<string>;
   /** The party's bill on screen, when {@link bills} lists it. */
@@ -2011,7 +1982,6 @@ export class TillTableOrderScreen extends LitElement {
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
-      this.#closeChange();
       this.fireGroupPending = null;
       this.servePending = null;
       this.reviewing = false;
@@ -2025,15 +1995,6 @@ export class TillTableOrderScreen extends LitElement {
       this.#heldGroupIds = heldGroupIds(this.groups);
       this.#groupsInOrder = [...this.groups].sort((a, b) => a.position - b.position);
       this.#heldInOrder = this.#groupsInOrder.filter((group) => group.state === "held");
-    }
-    if (changed.has("products") || this.#productsByOffer === undefined) {
-      this.#productsByOffer = new Map();
-      this.#productsById = new Map();
-      for (const product of this.products) {
-        if (product.menuItemId !== undefined && !this.#productsByOffer.has(product.menuItemId))
-          this.#productsByOffer.set(product.menuItemId, product);
-        if (!this.#productsById.has(product.id)) this.#productsById.set(product.id, product);
-      }
     }
     if (changed.has("nameRefusal") && this.nameRefusal !== null) {
       this.naming = { value: this.nameRefusal.name, refusal: this.nameRefusal.message };
@@ -2211,30 +2172,6 @@ export class TillTableOrderScreen extends LitElement {
     ></wt-combobox>`;
   }
 
-  /** Sent and still holding a ticket item, with the venue's setting off: the server refuses to change
-   * or recall it (`ticket.already_fired`), so it offers Cancel in their place. */
-  #lockedBySetting(line: TabLine): boolean {
-    return !this.editSentLines && line.sentAt !== null && line.state !== null;
-  }
-
-  /** The live product a Change edits against: the offer the line was sold under, else its product (a
-   * variant line's parent). */
-  #liveProduct(line: TabLine): TillProduct | undefined {
-    const byOffer =
-      line.menuItemId === null ? undefined : this.#productsByOffer?.get(line.menuItemId);
-    const productId = line.parentProductId ?? line.productId;
-    return byOffer ?? (productId === null ? undefined : this.#productsById.get(productId));
-  }
-
-  /** A no-route line (no ticket item) is changed whatever its `sentAt`; a line with a ticket item once
-   * it was sent, or while its group is held, because a held line outside one keeps Send alone. */
-  #canChange(line: TabLine): boolean {
-    if (this.#isChild(line) || isStarted(line) || this.#lockedBySetting(line)) return false;
-    if (line.state !== null && line.sentAt === null && !inHeldGroup(line, this.#heldGroupIds!))
-      return false;
-    return this.#liveProduct(line) !== undefined;
-  }
-
   #canRecall(line: TabLine): boolean {
     const served = (row: CurrentOrderRow) =>
       row.lineId === line.id && compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
@@ -2283,19 +2220,6 @@ export class TillTableOrderScreen extends LitElement {
           @click=${() => this.#sendLine(line.lineNo)}
         >
           ${t("table.send_line")}
-        </wt-button>`,
-      );
-    if (this.#canChange(line))
-      actions.push(
-        html`<wt-button
-          class="line-change"
-          size="sm"
-          variant="secondary"
-          data-change-line=${line.lineNo}
-          aria-label=${label("table.change_line")}
-          @click=${() => this.#openChange(line)}
-        >
-          ${t("table.change_line")}
         </wt-button>`,
       );
     if (this.#canCancel(line))
@@ -2411,112 +2335,6 @@ export class TillTableOrderScreen extends LitElement {
         composed: true,
       }),
     );
-  }
-
-  #openChange(line: TabLine): void {
-    const live = this.#liveProduct(line)!;
-    const offered = offeredListsOf(live);
-    const sendsExtras = offered.some((entry) => entry.kind === "extras");
-    const extras: SelectedExtra[] = [];
-    for (const child of this.lines.filter((row) => row.parentLineNo === line.lineNo)) {
-      const held = {
-        productId: child.productId,
-        listId: child.listId,
-        name: this.#nameForLine(child),
-        price: child.unitPriceGross,
-        quantity: perDishOptionQuantity(
-          child.quantity,
-          multiplyDecimal(decimal(line.quantity), decimal(child.priceQuantity ?? "1")),
-        ),
-      };
-      const [kept] = deriveExtraSelections(offered, [held]).extras;
-      // A pick no offered list carries still stands on the line. When the edit sends extras it would
-      // drop it, so it goes in as a stale pick, which the picker names and keeps Save shut on.
-      if (kept !== undefined) extras.push(kept);
-      else if (sendsExtras)
-        extras.push({ ...held, listId: held.listId ?? "", productId: held.productId ?? "" });
-    }
-    this.#changeProduct = {
-      ...live,
-      name: this.#nameForLine(line),
-      unitPrice: line.unitPriceGross,
-      // An edit cannot move a line to another variant.
-      variants: [],
-    };
-    this.#changeSelection = {
-      extras,
-      options: deriveOptionSelections(offered, line.optionSnapshots).options,
-      ...(line.note === null ? {} : { note: line.note }),
-    };
-    this.#changeRevision = this.revision;
-    this.#changeExpectedEdit = this.billEdit === null ? null : { ...this.billEdit };
-    this.changeLine = line;
-  }
-
-  #closeChange(): void {
-    this.changeLine = null;
-    this.#changeProduct = undefined;
-    this.#changeSelection = undefined;
-    this.#changeExpectedEdit = null;
-  }
-
-  /** `options` and `extras` go only when the till offers the dish a list of that kind
-   * (`offeredListsOf`): either, sent, replaces the line's whole set, so an absent one keeps what the
-   * line holds. `options` goes only when the answers differ from those the editor opened with: the
-   * editor holds no answer to a list the dish no longer offers, so sending an unchanged set would
-   * drop that answer. */
-  #confirmChange(detail: ModifierConfirmDetail): void {
-    const line = this.changeLine!;
-    const offered = offeredListsOf(this.#changeProduct!);
-    const opened = this.#changeSelection!.options ?? [];
-    const expectedEdit = this.#changeExpectedEdit;
-    this.#closeChange();
-    const patch: OrderLinePatch = { note: detail.note ?? null };
-    const options = detail.options ?? [];
-    if (offered.some((entry) => entry.kind === "options") && !sameOptionSelections(options, opened))
-      patch.options = options;
-    if (offered.some((entry) => entry.kind === "extras"))
-      patch.extras = toWireModifiers({ extras: detail.extras }).extras ?? [];
-    const change: ChangeLineDetail = {
-      expectedEdit,
-      lineNo: line.lineNo,
-      lineName: this.#nameForLine(line),
-      patch,
-      revision: this.#changeRevision,
-      saleLine: {
-        menuItemId: line.menuItemId ?? undefined,
-        ...(line.parentProductId === null || line.productId === null
-          ? {}
-          : { variantId: line.productId }),
-        quantity: patch.quantity ?? line.quantity,
-        options: detail.options ?? [],
-        extras: toWireModifiers({ extras: detail.extras }).extras ?? [],
-        ...(detail.note ? { note: detail.note } : {}),
-      },
-    };
-    this.dispatchEvent(
-      new CustomEvent("change-line", { detail: change, bubbles: true, composed: true }),
-    );
-  }
-
-  #changeEditor(): TemplateResult | typeof nothing {
-    const line = this.changeLine;
-    if (line === null) return nothing;
-    return html`<till-modifier-picker
-      class="change-editor"
-      withNote
-      .product=${this.#changeProduct}
-      .quantity=${this.#displayQty(line.quantity)}
-      .initialSelections=${this.#changeSelection}
-      @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
-        event.stopPropagation();
-        this.#confirmChange(event.detail);
-      }}
-      @wt-modifier-cancel=${(event: Event) => {
-        event.stopPropagation();
-        this.#closeChange();
-      }}
-    ></till-modifier-picker>`;
   }
 
   #courseName(courseId: string | null, retainedCourse?: TillCourse): string {
@@ -2669,8 +2487,8 @@ export class TillTableOrderScreen extends LitElement {
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
         ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#serveDialog()}
-        ${this.#changeEditor()} ${this.#takeOverDialog()} ${this.#billChoiceDialog()}
-        ${this.#nameDialog()} ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
+        ${this.#takeOverDialog()} ${this.#billChoiceDialog()} ${this.#nameDialog()}
+        ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
       </section>
     `;
   }

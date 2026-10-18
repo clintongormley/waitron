@@ -3,8 +3,9 @@ import {
   currentGroup,
   row as currentRow,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
+import { grossOf } from "@waitron/shared";
 import { DraftStore } from "../state/draft-sync.js";
-import { resized } from "./till-table-order-screen.test-helpers.js";
+import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.js";
 import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -36,7 +37,6 @@ import type {
   AdjustmentReason,
 } from "../api/client.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
-import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 
 const products: TillProduct[] = [
   {
@@ -318,19 +318,46 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await el.updateComplete;
     }
 
-    it("has no violations on a line offering Change, Recall and Cancel with its note shown", async () => {
+    it("has no violations on a sent line with its note shown and no direct Change", async () => {
       const { el, host } = await mountDrawer([sentLine]);
       await settle(el);
+      expect(el.shadowRoot!.querySelector("[data-change-line]")).toBeNull();
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the open Change editor", async () => {
+    it("has no violations in the recalled New order editor", async () => {
       const dish: TillProduct = { ...products[0]!, offeredModifiers: [cookedList, extrasList] };
       const { el, host } = await mountDrawer([sentLine], [dish]);
-      el.shadowRoot!.querySelector<HTMLElement>('[data-change-line="5"]')!.click();
+      const draft = new DraftStore();
+      draft.loadFrom("recalled", [
+        {
+          draftLineId: "source-reference",
+          workingOrderLineId: sentLine.id,
+          source: {
+            line: sentLine,
+            extras: [],
+            netAmount: grossOf(sentLine.unitPriceGross, sentLine.quantity),
+          },
+          product: {
+            ...dish,
+            name: sentLine.name!,
+            variants: [],
+            unitPrice: sentLine.unitPriceGross,
+          },
+          quantity: "2",
+          note: sentLine.note!,
+          noMerge: true,
+        },
+      ]);
+      el.draftStore = draft;
       await el.updateComplete;
-      await el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!
-        .updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await el.updateComplete;
+      const picker = await openDraftLine(el, 0);
+      expect(picker.shadowRoot!.querySelector("#label-list-cooked-label-rare")).not.toBeNull();
+      expect(
+        picker.shadowRoot!.querySelector('[data-test="pick-list-extras-p-cheese-count"]'),
+      ).not.toBeNull();
       await settle(el);
       await expectNoA11yViolations(host);
     });
@@ -598,7 +625,11 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
           product: products[0]!,
           quantity: "2.000",
           place: { kind: "fire" },
-          source: { line: groupLines[0]!, extras: [], netAmount: "3.00" },
+          source: {
+            line: groupLines[0]!,
+            extras: [],
+            netAmount: "3.00",
+          },
         },
       ]);
       el.draftStore = draft;
