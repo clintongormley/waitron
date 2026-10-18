@@ -141,12 +141,14 @@ hook, or how tests are scheduled:
 - **No front-end bundle is built by a pull request that changed no image input**, and wherever one
   is built nothing opens it, so a bundle that renders nothing passes anyway.
 - **esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.** Every
-  Node bundle is built by `scripts/bundle-node.mjs`. Guards: `scripts/deploy-image-env.test.ts` and
+  Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out of all of them, and the
+  box image copies sharp into `/app/node_modules`. Guards: `scripts/deploy-image-env.test.ts` and
   bundle-smoke (weaker than their names: read text, with bundle-smoke limited to `dist/server.js`),
   and image-smoke's sharp step.
   Detail: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **Two pushes to `main` must never share a CI concurrency group.** Cost: a code merge that got NO
-  run at all, so check after a merge that its own run exists. Guards: `scripts/ci-workflow.test.mjs`
+  run at all, so check after a merge that its own run exists. Publishing asks
+  `scripts/main-tag-guard.sh` before moving `:main`. Guards: `scripts/ci-workflow.test.mjs`
   (reads ci.yml alone, as TEXT) and `scripts/main-tag-guard.test.mjs`.
 - **A cheap job can still be the critical path.** Sort a run's jobs by duration before calling one
   cheap enough to leave ungated.
@@ -160,10 +162,11 @@ hook, or how tests are scheduled:
   runs under an outer `timeout`, and is retried when it stalls or exits non-zero**. A workflow's
   `playwright install --with-deps` runs apt too, so it takes the same outer `timeout`. Cost: main run 37771042263's image smoke hit its 15-minute limit. Guards: the apt-wait and `--with-deps` cases in `scripts/ci-workflow.test.mjs`
   and the apt-wait cases in `scripts/deploy-image-env.test.ts`, weaker than their names — they read
-  text and do not check the retries — and the `apt_get` wrapper cases in
-  `scripts/waitron-sh.test.mjs`. Receipt:
+  text and do not check the retries; the `apt_get` wrapper cases in `scripts/waitron-sh.test.mjs` run
+  waitron.sh's retries under stubs. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-apt-wait-is-bounded).
-- **Every pnpm setup in a workflow runs `scripts/ci-setup-pnpm.sh`, never `pnpm/action-setup`,
+- **Every pnpm setup in a workflow runs `scripts/ci-setup-pnpm.sh` — each attempt under `timeout`,
+  three attempts, then fail — never `pnpm/action-setup`,
   whose self-installer has no time limit of its own.** Cost: main run 38799624567's
   `test-dashboard (2)` sat 260 s in it. Guards: the pnpm-setup cases in
   `scripts/ci-workflow.test.mjs`, weaker than their names — they read text — and
@@ -171,7 +174,8 @@ hook, or how tests are scheduled:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **The pnpm changed-since filter silently matches nothing in a `git worktree`**, and all feature work
   happens in one. Verify anything touching the filter in a clone or on a real PR.
-- **`pnpm --filter ""` is a hard error**, and an unquoted `$PACKAGES` expansion still GLOBS.
+- **`pnpm --filter ""` is a hard error**, and an unquoted `$PACKAGES` expansion still GLOBS. Both
+  gates build filters as positional parameters under `set -f … set +f`.
 - **A scoped `pnpm` run that selects nothing REPORTS SUCCESS.** CI checks the selection with
   `scripts/changed-packages.mjs runnable test:coverage`; the hook checks `runnable typecheck`.
   A green selection guard alone does not mean a check ran.
@@ -183,7 +187,9 @@ hook, or how tests are scheduled:
 - **A name-filtered test run does not load the package's guard suites** nor any e2e suite pinning a
   shared wire body with `toEqual`. A focused pass proves only those cases; CI supplies package-wide
   coverage.
-- **Adding a workspace package fails root guards until it is named in the shard lists**. Receipt:
+- **Adding a workspace package fails root guards until it is named in the shard lists**, and
+  one of them CRASHES rather than asserting, so the message names a missing `vitest.config.ts`
+  and reads like a broken checkout. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#adding-a-workspace-package-breaks-the-root-guards-until-it-is-wired-in).
 - **A hardcoded cross-package list goes stale when a manifest or scope changes, and scoped CI hides
   it.** Grep for tests that pin the list, run those guards, and verify CI selects every affected consumer.
@@ -193,7 +199,8 @@ hook, or how tests are scheduled:
   SESSION's browser run when free memory is well above 15% (owner decision 2026-09-24), never beside
   a backgrounded whole-workspace `pnpm -r test:coverage`. Chromium's launch depends on a Codex
   seat's PERMISSIONS, not on Codex.
-- **A migration can fail on a box that already has a trigger naming what it changes.** A rebuild
+- **A migration can fail on a box that already has a trigger naming what it changes.** `applyMigrations` removes the change feed first for
+  that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it); a rebuild
   of a table another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`, weaker
   than its name — its rows are synthetic and counted, not compared, and it installs today's
   change-feed list, and today's append-only list less the tables the previous step lacked, at every
@@ -201,7 +208,8 @@ hook, or how tests are scheduled:
   2026-09-26. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#a-migration-can-fail-on-a-database-that-already-carries-earlier-migrations-and-what-boot-installed-after-them).
 - **The upgrade test makes its scratch directory under `scratchParent()`
-  (`scripts/scratch-dir.mjs`).** Cost: it timed out in CI five times. Nothing guards it. Receipt:
+  (`scripts/scratch-dir.mjs`),
+  which picks `/dev/shm` when it exists, because every commit waits for the disk.** Cost: it timed out in CI five times. Nothing guards it. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 - **The CI steps that run the stream loop and pause tests and each `test-venue-service` shard set
   `TMPDIR=/dev/shm`, in CI only.** Cost: the pause test failed its bound; a venue-service shard
@@ -247,7 +255,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **A screen does not draw its own form field**: a `<select>`, a `<textarea>` or a text `<input>`
   comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Cost:
   a native dropdown cannot take the approved look (A178). Guard: `scripts/native-form-fields.test.ts`,
-  weaker than its name — it reads string literals.
+  weaker than its name — it reads string literals, and holds the files it allows by name only to a
+  line count.
 - **A `wt-help-tooltip` outside the setup wizard carries `mode="help-mode"`**, so it shows only while
   help is on (owner, 2026-10-18, A582 design §7). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads
   literals as text; what it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
@@ -328,7 +337,8 @@ called weaker than its name, the topic file lists what it does not see.
   review found a bill refund route checking no action.
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`**, so the
   menu stays on a phone's screen (owner decision, A155). Guard: `scripts/pinned-actions-column.test.ts`,
-  weaker than its name — it knows a menu column only by the literal `key: "actions"`. See
+  weaker than its name — it knows a menu column only by the literal `key: "actions"`, so every
+  object with that key is held to the rule and a data column must take another key. See
   [design-system.md](docs/developers/design-system.md).
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS
   class.** Cost: the categories screen's swatches and thumbnails never rendered, through review and
@@ -372,7 +382,8 @@ called weaker than its name, the topic file lists what it does not see.
 
 - **Default optional request fields only when absent, and check enum types before comparing values.**
   Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
-  is deliberately outside the rule.
+  is deliberately outside the rule — an extras list's `maxPicks`, an extras item's `maxQuantity`,
+  the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
   `db.series_not_found`. **Before a venue is live, a code may be renamed or deleted freely; once one
   is live, either is a migration** (owner decision 2026-09-26). Either way it is one change in which
@@ -385,7 +396,8 @@ called weaker than its name, the topic file lists what it does not see.
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
 - **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per
   word; a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`, weaker
-  than its name — it finds comments without a parser.
+  than its name — it finds comments without a parser. `apps/*` is out of scope by a recorded
+  decision, so Spanish identifiers in app UI code are caught only by review.
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`,
@@ -399,7 +411,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **A country pack is a browser-safe preset over modules, not a module.** Packs name contribution ids
   as strings and never carry an external-provider credential. Setup derives geography-dependent values
   in the browser and repeats the derivation at the server boundary.
-- **A command name is declared under `waitron.commands`, never `bin`.**
+- **A command name is declared under `waitron.commands`, never `bin`.** Nothing builds at install
+  time, so a `bin` under `dist/` is never linked by the install that reads it.
 - **A change adding third-party code or a binary to the image carries its licence notices, shipped
   in `/app/third-party/`** (owner, 2026-09-24). Cost: Litestream shipped without its Go modules'
   notices. Guard: the third-party blocks in `scripts/deploy-image-env.test.ts`, weaker than their
@@ -424,19 +437,23 @@ called weaker than its name, the topic file lists what it does not see.
   per-line resolver).
 - **The tables `scripts/write-path-tables.json` lists request code may read and never write, and
   the database does not refuse the write.** A write of one of them lives only in the files that
-  JSON names. Guard: `scripts/write-path-tables.test.ts` is
+  JSON names: requests
+  and the paths that write these tables share one venue handle (`ownerDb` is a name, not a separate
+  handle), so that file list is the only separation. Guard: `scripts/write-path-tables.test.ts` is
   the whole of the enforcement, and weaker than its name — it reads TEXT and judges a FILE, not a
   call chain.
 - **Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.**
   Write-path functions take a `tx: Transaction` and never open their own; a route handler opens
   exactly one `withTransaction` per request. This is a convention, not a compiler guarantee. A
   secret check should be the exception: it takes the `Database` and derives its key with no
-  transaction open, and a new route that forgets the early check, or forgets to take turns
+  transaction open (identity's `checkPin`, `checkManagerPassword`,
+  `checkOwnPassword`), and a new route that forgets the early check, or forgets to take turns
   (`inTurn`, `apps/server/src/attempt-turns.ts`), derives
   under the lock or once per attempt in a burst, unnoticed. **Splitting one logical change across
   transactions is a commented decision, never a default.** **Queries on one transaction are awaited
   in turn, never `Promise.all`.** No guard enforces it.
-- **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** A read
+- **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** The
+  store routes by ASYNCHRONOUS CONTEXT and per-body identity, so a read
   written inside the body still sees that body's own rows; three shapes are outside the rule, each
   stated at its site. Cost: a concurrent read returned rows a rollback then removed. Guard: the
   routing cases in `packages/store/src/index.test.ts` and `connections.test.ts`, weaker than the set
@@ -444,8 +461,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **A statement this engine refuses backs out ITSELF, not the transaction around it** — so catching
   a refusal and carrying on in the same `tx` is safe. **A TEST still catches such a
   refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
-- **A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.**
-  `restrictRefused` and `triggerRaised` (`packages/db/src/constraint-target.ts`) read the message
+- **A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.** An
+  `ON DELETE RESTRICT` key and every trigger's `RAISE(ABORT)` share the code; `restrictRefused` and `triggerRaised` (`packages/db/src/constraint-target.ts`) read the message
   too. Nothing guards it.
 - **One process owns a venue folder at a time.** `openVenueStore` holds `venue.lock` and refuses a
   second PROCESS (`provisioning.database_in_use`); opens inside one process share the hold. A tool
@@ -457,7 +474,8 @@ called weaker than its name, the topic file lists what it does not see.
   holder file and the watchdog are in [conventions-data.md](docs/developers/conventions-data.md).
 - **A duty `bootServer` starts pushes its stop onto `undoOnFailure` as soon as it exists, before
   the next step that can throw** (`apps/server/src/boot.ts`), or a failed start leaves it running on
-  a store the unwind has just closed. Guard: `apps/server/src/boot.failed-start.test.ts`, weaker
+  a store the unwind has just closed. The landing listener, started last, is the one step not on the
+  list. Guard: `apps/server/src/boot.failed-start.test.ts`, weaker
   than its name — it covers only the duties it names.
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
   query that wants "this tenant's rows" reads the table.** Guard:
@@ -470,13 +488,16 @@ called weaker than its name, the topic file lists what it does not see.
   weaker than its name — it reads the import line as text and forbids only the builders the
   vocabulary itself imports, so `blob` passes anywhere.
 - **A money column holds a count of whole cents, and the conversion happens AT THE ROW**
-  (`packages/shared/src/cents.ts`). Above the row every amount stays the exact `Decimal`; a money
+  (`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
+  for a raw-SQL read, which casts `cast(x as text)`). Above the row every amount stays the exact `Decimal`; a money
   total summed out of JSON is summed in JavaScript at the money scale. **Nothing guards the boundary
   itself, and there is no LOUD form of getting it wrong**. Guards, both narrower than their names:
   `packages/db/src/schema/columns.test.ts` and `packages/shared/src/conventions.test.ts`.
 - **A quantity column counts whole thousandths and a rate column whole basis points; neither is the
   money scale** (`packages/shared/src/scales.ts`, beside `cents.ts`). A blanket "every numeric
-  becomes cents" does not EMPTY a quantity, it misreads one. A rate's CHECK constraint is written
+  becomes cents" does not EMPTY a quantity, it misreads one. The converters hold the bound, because
+  an integer column does not; the raw quantity reader reads totals, so like the money one it bounds
+  only at what a number counts exactly. A rate's CHECK constraint is written
   against 10000. Guard: the shared schema-conformance suite,
   `packages/db/src/testing/schema-conformance.ts`, which a migration set opts into — a set with none
   is unguarded.
@@ -566,7 +587,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **`applyMigrations` refuses to report success on a short set**, throwing `migrations.incomplete`
   rather than serving a half-migrated schema.
 - **The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating
-  path does, and `waitron.sh install <ref>` is a one-way door.** Every other migrating path runs
+  path does, and `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` throws
+  `provisioning.database_ahead`. Every other migrating path runs
   without the check; the full list is in [conventions-data.md](docs/developers/conventions-data.md).
 - **An empty value is a valid value** — to whatever receives it, so a reader must turn `""` into
   "unset" itself. An env or prompt value set to `""` falls back to its default exactly as an unset
@@ -596,7 +618,9 @@ browser test** — most of these rules exist because a test passed while proving
   `useVenueDb` waits one real timer after every test.** Cost: main run 38932759150's venue-service
   shard 1 lost its worker to the watchdog. Guard: two cases in
   `packages/db/src/testing/venue-db.test.ts`, weaker than the rule — a suite opening its venue
-  folder without `useVenueDb` gets no turn. Guard: the cases under "a holder whose test fakes the
+  folder without `useVenueDb` gets no turn. The watchdog's stamp reads `process.hrtime.bigint` and
+  `setInterval` captured when `@waitron/store` loads, because `vi.useFakeTimers()` fakes both by
+  default. Guard: the cases under "a holder whose test fakes the
   clock" in `packages/store/src/venue-liveness.test.ts`, weaker than their name: default options
   only, and only when the store loads before the clock is faked. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-file-of-synchronous-database-work-gets-no-timer-turn-unless-usevenuedb-yields-one).
@@ -611,7 +635,8 @@ browser test** — most of these rules exist because a test passed while proving
   interrupt suites (`apps/server/src/s3-rehearsal-scenarios.e2e.test.ts`,
   `aws-send-gate.e2e.test.ts`, `aws-rehearsal-interrupt.e2e.test.ts`) need versitygw alone and skip
   and fail the same way. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
-  `ci.yml` as TEXT.
+  `ci.yml` as TEXT, so install
+  commands left only in a YAML comment, or in a step an `if:` switches off, pass it.
 - **On Vitest 4.1.11 a browser's `connectTimeout` is read only from the OUTER config's
   `test.browser` block**; the command-line flag and a project's own `browser` block are ignored
   without a word. Nothing guards it. Cost: A527's first forced-failure control passed. Receipt:
@@ -633,7 +658,7 @@ browser test** — most of these rules exist because a test passed while proving
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
-  `pnpm reap` sweeps these.
+  `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second
   one belongs OUTSIDE the package.** Vitest cleans a shared directory, so two overlapping runs over
   the same package end in `ENOENT`.
@@ -715,7 +740,8 @@ browser test** — most of these rules exist because a test passed while proving
   marker that only provider-verified adoption clears.
 - **Source scanners select files, not just paths ending in `.ts`.** A failing browser test creates a
   screenshot DIRECTORY named `*.test.ts`; `sourceFilesIn` checks `isFile()`.
-- **A guard that reads the whole tree belongs in the ROOT Vitest project**. The root project does
+- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the ungated
+  `root-guards` job and the hook run on every non-docs push. The root project does
   not typecheck, and a module tested only from there must be in the root `coverage.include` to be
   measured at all, and excluded from its own package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.
