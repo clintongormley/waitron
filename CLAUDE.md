@@ -337,9 +337,8 @@ called weaker than its name, the topic file lists what it does not see.
   object with that key is held to the rule and a data column must take another key. See
   [design-system.md](docs/developers/design-system.md).
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS
-  class.** The cell's nodes live in the TABLE's shadow root, so the screen's own class rules reach
-  nothing. Cost: the categories screen's swatches and thumbnails never rendered, through review and
-  a green suite.
+  class.** Cost: the categories screen's swatches and thumbnails never rendered, through review and
+  a green suite. Receipt: [design-system.md](docs/developers/design-system.md#primitives).
 - **Every colour, spacing, radius and font reads a `--wt-*` token**, and the name read must be
   declared. No hex, no named colours, no `rem`/`em`. Guards: `packages/ui/src/no-hardcoded-chrome.test.ts`
   (scans `packages/ui` alone; the rule covers any component or view) and
