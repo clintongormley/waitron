@@ -831,7 +831,9 @@ it inherits `deployment`'s rule and is not in the frozen matrix, which the guard
 `ADDED_SINCE_THE_MATRIX` records. NOTHING BUT `scripts/write-path-tables.test.ts` REFUSES THEM.
 SQLite has no roles and no grants — one process opens one file, and every path, request and
 provisioning alike, shares that one venue handle. So the rule is a convention over source text, and
-that guard is not a second opinion on an engine that would refuse the write anyway.
+that guard is not a second opinion on an engine that would refuse the write anyway. Requests
+and the paths that write these tables share one venue handle (`ownerDb` is a name, not a separate
+handle), so that file list is the only separation.
 
 The list comes from `packages/fiscal-verifactu/src/privileges.expected.ts`, a FROZEN RECORD rather
 than a measurement: nothing checks it against a database. The guard says so itself, and states the

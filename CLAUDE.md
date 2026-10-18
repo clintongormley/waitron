@@ -378,8 +378,7 @@ called weaker than its name, the topic file lists what it does not see.
 
 - **Default optional request fields only when absent, and check enum types before comparing values.**
   Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
-  is deliberately outside the rule — an extras list's `maxPicks`, an extras item's `maxQuantity`,
-  the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
+  is deliberately outside the rule.
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
   `db.series_not_found`. **Before a venue is live, a code may be renamed or deleted freely; once one
   is live, either is a migration** (owner decision 2026-09-26). Either way it is one change in which
@@ -392,8 +391,7 @@ called weaker than its name, the topic file lists what it does not see.
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
 - **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per
   word; a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`, weaker
-  than its name — it finds comments without a parser. `apps/*` is out of scope by a recorded
-  decision, so Spanish identifiers in app UI code are caught only by review.
+  than its name — it finds comments without a parser.
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`,
@@ -407,8 +405,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **A country pack is a browser-safe preset over modules, not a module.** Packs name contribution ids
   as strings and never carry an external-provider credential. Setup derives geography-dependent values
   in the browser and repeats the derivation at the server boundary.
-- **A command name is declared under `waitron.commands`, never `bin`.** Nothing builds at install
-  time, so a `bin` under `dist/` is never linked by the install that reads it.
+- **A command name is declared under `waitron.commands`, never `bin`.**
 - **A change adding third-party code or a binary to the image carries its licence notices, shipped
   in `/app/third-party/`** (owner, 2026-09-24). Cost: Litestream shipped without its Go modules'
   notices. Guard: the third-party blocks in `scripts/deploy-image-env.test.ts`, weaker than their
@@ -417,8 +414,7 @@ called weaker than its name, the topic file lists what it does not see.
   its `errors.ts`.
 - **Never build SQL by string concatenation — except where the engine takes no bound value**: an
   identifier, and the body of a generated trigger. For those, either escape
-  (`quoteIdent`/`quoteLiteral`, as the change feed does, `packages/db/src/change-feed.ts`) or
-  validate and throw (as the append-only installer does, `packages/store/src/append-only.ts`).
+  (`quoteIdent`/`quoteLiteral`) or validate and throw.
   Neither is not acceptable; "the callers only pass safe values" is the §1 defect class.
 - **A `sql` scalar subquery correlated to the OUTER query's table breaks silently when that table is
   the `.from()` base rather than a join** — no error, a wrong answer. Check base-vs-join and READ the
@@ -432,35 +428,30 @@ called weaker than its name, the topic file lists what it does not see.
 - **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
   variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
   per-line resolver).
-- **The tables `scripts/write-path-tables.json` lists — `tenants`, `nodes`, `deployment`,
-  `mirror_config`, `node_roles` — request code may read and never write, and the database does not
-  refuse the write.** A write of one of them lives only in the files that JSON names: requests
-  and the paths that write these tables share one venue handle (`ownerDb` is a name, not a separate
-  handle), so that file list is the only separation. Guard: `scripts/write-path-tables.test.ts` is
+- **The tables `scripts/write-path-tables.json` lists request code may read and never write, and
+  the database does not refuse the write.** A write of one of them lives only in the files that
+  JSON names. Guard: `scripts/write-path-tables.test.ts` is
   the whole of the enforcement, and weaker than its name — it reads TEXT and judges a FILE, not a
   call chain.
-- **Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.** Write-path
-  functions take a `tx: Transaction` and never open their own; a route handler opens exactly one
-  `withTransaction` per request. This is a convention, not a compiler guarantee — `Database` is
-  assignable to `Transaction`. A secret check should be the exception: it takes the `Database` and derives
-  its key with no transaction open (identity's `checkPin`, `checkManagerPassword`,
-  `checkOwnPassword`), and a new route that forgets the early check, or forgets to take turns
-  (`inTurn`, `apps/server/src/attempt-turns.ts`), derives under the lock or once per attempt in a
-  burst, unnoticed. **Splitting one logical change across transactions is a commented decision,
-  never a default.** **Queries on one transaction are awaited in turn, never `Promise.all`.** No
-  guard enforces it.
-- **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** The
-  store routes by ASYNCHRONOUS CONTEXT and per-body identity, so a read written inside the body
-  still sees that body's own rows (`packages/store/src/connections.ts`); three shapes are outside
-  the rule, each stated at its site. Cost: a concurrent read returned rows a rollback then removed.
-  Guard: the routing cases in `packages/store/src/index.test.ts` and `connections.test.ts`, weaker
-  than the set looks.
+- **Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.**
+  Write-path functions take a `tx: Transaction` and never open their own; a route handler opens
+  exactly one `withTransaction` per request. This is a convention, not a compiler guarantee. A
+  secret check should be the exception: it takes the `Database` and derives its key with no
+  transaction open, and a new route that forgets the early check, or forgets to take turns, derives
+  under the lock or once per attempt in a burst, unnoticed. **Splitting one logical change across
+  transactions is a commented decision, never a default.** **Queries on one transaction are awaited
+  in turn, never `Promise.all`.** No guard enforces it.
+- **A read taken while ANOTHER caller's write transaction is open sees committed rows only.** A read
+  written inside the body still sees that body's own rows; three shapes are outside the rule, each
+  stated at its site. Cost: a concurrent read returned rows a rollback then removed. Guard: the
+  routing cases in `packages/store/src/index.test.ts` and `connections.test.ts`, weaker than the set
+  looks.
 - **A statement this engine refuses backs out ITSELF, not the transaction around it** — so catching
   a refusal and carrying on in the same `tx` is safe. **A TEST still catches such a
   refusal OUTSIDE the transaction**, around the whole `withTransaction`, and no guard enforces that.
-- **A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.** An
-  `ON DELETE RESTRICT` key and every trigger's `RAISE(ABORT)` share the code; `restrictRefused` and
-  `triggerRaised` (`packages/db/src/constraint-target.ts`) read the message too. Nothing guards it.
+- **A refusal under result code 1811 is identified by its words, never by `isRefusal` alone.**
+  `restrictRefused` and `triggerRaised` (`packages/db/src/constraint-target.ts`) read the message
+  too. Nothing guards it.
 - **One process owns a venue folder at a time.** `openVenueStore` holds `venue.lock` and refuses a
   second PROCESS (`provisioning.database_in_use`); opens inside one process share the hold. A tool
   documented to run beside the server passes `exclusive: false`; a command that changes the
@@ -471,11 +462,10 @@ called weaker than its name, the topic file lists what it does not see.
   holder file and the watchdog are in [conventions-data.md](docs/developers/conventions-data.md).
 - **A duty `bootServer` starts pushes its stop onto `undoOnFailure` as soon as it exists, before
   the next step that can throw** (`apps/server/src/boot.ts`), or a failed start leaves it running on
-  a store the unwind has just closed. The landing listener, started last, is the one step not on the
-  list. Guard: `apps/server/src/boot.failed-start.test.ts`, weaker
+  a store the unwind has just closed. Guard: `apps/server/src/boot.failed-start.test.ts`, weaker
   than its name — it covers only the duties it names.
 - **There is no tenant column. The taxpayer is the one row in `tenants` (id = 1, singleton check); a
-  query that wants "this tenant's rows" reads the table.** (2026-09-14, #378.) Guard:
+  query that wants "this tenant's rows" reads the table.** Guard:
   `scripts/no-tenant-column.test.ts`, weaker than its name — it matches the column's spellings and
   skips test files.
 - **`packages/db/src/schema/columns.ts` is the only file that names the engine's column and table
@@ -485,24 +475,20 @@ called weaker than its name, the topic file lists what it does not see.
   weaker than its name — it reads the import line as text and forbids only the builders the
   vocabulary itself imports, so `blob` passes anywhere.
 - **A money column holds a count of whole cents, and the conversion happens AT THE ROW**
-  (`packages/shared/src/cents.ts`: `decimalToCents` in, `centsToDecimal` out, `rawCentsToDecimal`
-  for a raw-SQL read, which casts `cast(x as text)`). Above the row every amount stays the exact
-  `Decimal`; a money total summed out of JSON is summed in JavaScript at the money scale. **Nothing
-  guards the boundary itself, and there is no LOUD form of getting it wrong**: a money column
-  accepts `25.00`, `"21.50"` and `"abc"` alike. Guards, both narrower than their names:
+  (`packages/shared/src/cents.ts`). Above the row every amount stays the exact `Decimal`; a money
+  total summed out of JSON is summed in JavaScript at the money scale. **Nothing guards the boundary
+  itself, and there is no LOUD form of getting it wrong**. Guards, both narrower than their names:
   `packages/db/src/schema/columns.test.ts` and `packages/shared/src/conventions.test.ts`.
 - **A quantity column counts whole thousandths and a rate column whole basis points; neither is the
   money scale** (`packages/shared/src/scales.ts`, beside `cents.ts`). A blanket "every numeric
-  becomes cents" does not EMPTY a quantity, it misreads one. The converters hold the bound, because
-  an integer column does not; the raw quantity reader reads totals, so like the money one it bounds
-  only at what a number counts exactly. A rate's CHECK constraint is written against 10000. Guard: the shared
-  schema-conformance suite, `packages/db/src/testing/schema-conformance.ts`, which a migration set
-  opts into — a set with none is unguarded.
+  becomes cents" does not EMPTY a quantity, it misreads one. A rate's CHECK constraint is written
+  against 10000. Guard: the shared schema-conformance suite,
+  `packages/db/src/testing/schema-conformance.ts`, which a migration set opts into — a set with none
+  is unguarded.
 - **The database never rounds a quantity — `decimalToThousandths` owns the third place.** A test
   asking storage to round is testing something no product path does.
-- **A time stored as text and compared or sorted as text is right only while every writer stores
-  one spelling**, because the engine compares characters. Normalise at the writer, as
-  `shiftInterval` (`packages/workforce/src/clocking.ts`) and the `storedTime` helpers do. Cost: W22
+- **A time stored as text and compared or sorted as text is right only while every writer stores one
+  spelling**. Normalise at the writer, as `shiftInterval` and the `storedTime` helpers do. Cost: W22
   (#1134), a valid shift refused or listed out of order. Nothing guards the one-spelling rule across
   the columns.
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
@@ -557,17 +543,14 @@ called weaker than its name, the topic file lists what it does not see.
   Guard: `scripts/schema-constraints.test.ts`, weaker than its name — it reads the built schema
   rather than trying an offending insert, and matches a unique index by NAME.
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
-  snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
-  RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts`,
-  `scripts/behavioural-triggers.test.ts`, `scripts/migrations-match-schema.test.ts` and
-  `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
+  snapshots or `_journal.json`.**
 - **A drizzle table rebuild on this engine runs with foreign keys ON, so its `DROP TABLE` silently
   deletes every cascading child's rows, and fails on a `no action` or `restrict` child holding rows.**
   Before shipping a rebuild, list the foreign keys that point at the table. Cost: rebuilds emptied
   `product_categories` and three menu tables while reporting success.
 - **A drizzle-kit 0.31.10–0.31.11 generation that rebuilds a table must not also add a column to
   it** (`no such column`). Add the column in one generation and its CHECK in the next. Cost: paid
-  three times — #721, #750 and A238's `incidents` migration.
+  three times.
 - **A drizzle-kit 0.31.11 table rebuild writes an expression index back as quoted column names,
   which this engine refuses.** Take the index out of the schema for every generation that rebuilds
   its table and add it back in a generation of its own, with a note at the index.
@@ -575,9 +558,9 @@ called weaker than its name, the topic file lists what it does not see.
   time** (`foreign key mismatch`). So a green migrate is no evidence a new key is sound — write
   through it.
 - **Editing a shipped migration file — even only its comments — makes every venue it already
-  migrated refuse to start** with `provisioning.database_ahead`: drizzle stores a hash of the whole
-  file. Such an edit ships only with a venue reset, said in the PR's first line. Nothing guards it.
-  Cost: #1036 restored two edited files byte for byte.
+  migrated refuse to start** with `provisioning.database_ahead`. Such an edit ships only with a
+  venue reset, said in the PR's first line. Nothing guards it. Cost: #1036 restored two edited files
+  byte for byte.
 - **Drizzle picks what to apply from `max(created_at)` alone**, never from a position in the journal,
   so an entry at or below a recorded watermark never runs and drizzle raises nothing. Guard:
   `scripts/journal-monotonic.test.ts`, which bites only on a set with more than one entry. A drizzle
@@ -585,13 +568,12 @@ called weaker than its name, the topic file lists what it does not see.
 - **`applyMigrations` refuses to report success on a short set**, throwing `migrations.incomplete`
   rather than serving a half-migrated schema.
 - **The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating
-  path does, and `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` throws
-  `provisioning.database_ahead`. Every other migrating path runs without the check; the full list is
-  in [conventions-data.md](docs/developers/conventions-data.md).
+  path does, and `waitron.sh install <ref>` is a one-way door.** Every other migrating path runs
+  without the check; the full list is in [conventions-data.md](docs/developers/conventions-data.md).
 - **An empty value is a valid value** — to whatever receives it, so a reader must turn `""` into
   "unset" itself. An env or prompt value set to `""` falls back to its default exactly as an unset
-  one does (`isUnset`, `apps/server/src/env-value.ts`); a path never goes through `resolve("")`,
-  which is the working directory; and a reader with no default refuses `""` explicitly.
+  one does; a path never goes through `resolve("")`; and a reader with no default refuses `""`
+  explicitly.
 - **No backwards-compatibility or data-migration code until Waitron is in production.** Until then
   any installation may be reset at any time instead of carrying its data forward (owner,
   2026-10-03). This rule expires the day a real venue is live; add its replacement in the same
