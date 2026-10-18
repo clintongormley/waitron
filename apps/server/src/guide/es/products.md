@@ -230,12 +230,12 @@ entonces el producto ya está guardado, así que un sitio que lo rechaza no desh
 ventana nombra los sitios que fallaron y los deja marcados para que puedas volver a intentarlo. Las
 secciones de una carta se crean en **Productos y cartas → Cartas**.
 
-## Reutiliza las opciones {#reusable-choices}
+## Reutiliza las elecciones {#reusable-choices}
 
 Crea listas de extras y listas de opciones reutilizables en las dos pestañas de **Modificadores**, y
 después asígnalas en la propia sección **Modificadores** del producto, en el orden que quieras.
-Consulta [Reutiliza las opciones en todos tus productos](modifiers.md) para saber qué contiene cada
-tipo, sus valores predeterminados y límites, y los precios de los extras.
+Consulta [Reutiliza las mismas elecciones en todos tus productos](modifiers.md) para saber qué
+contiene cada tipo, sus valores predeterminados y límites, y los precios de los extras.
 
 Cuando aparcas o completas un pedido, Waitron guarda los nombres del producto y la variante elegidos,
 el nombre de cocina, los precios y las respuestas de los modificadores. Los cambios posteriores en el

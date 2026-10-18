@@ -112,7 +112,7 @@ image the way `src/assets/` does: `apps/server/scripts/copy-migrations.mjs:25` c
 (`apps/server/src/guide-catalogue.ts:8-10`) finds the folder with
 `new URL("./guide/", import.meta.url)`. The image smoke test fetches `/help/es/products` from a
 blank box and looks for the Spanish page's `id="variants"` and `<html lang="es">`
-(`.github/workflows/image-smoke.yml:190-194`).
+(`.github/workflows/image-smoke.yml:190-195`).
 
 ### What the renderer accepts, and what it refuses
 

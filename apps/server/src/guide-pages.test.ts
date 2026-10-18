@@ -161,7 +161,9 @@ describe("guide pages", () => {
     const log = vi.fn();
     const res = await appFor(empty, log).request("/help/en/products");
     expect(res.status).toBe(500);
-    expect(await res.text()).toContain("This guide page could not be shown.");
+    const english = await res.text();
+    expect(english).toContain("Page unavailable");
+    expect(english).toContain("This guide page could not be shown.");
     expect(log).toHaveBeenCalledWith("error", "guide.page_missing", {
       lang: "en",
       page: "products",
@@ -169,7 +171,9 @@ describe("guide pages", () => {
 
     const spanish = await appFor(empty, log).request("/help/es/products");
     expect(spanish.status).toBe(500);
-    expect(await spanish.text()).toContain("No se ha podido mostrar esta página de la guía.");
+    const spanishText = await spanish.text();
+    expect(spanishText).toContain("Página no disponible");
+    expect(spanishText).toContain("No se ha podido mostrar esta página de la guía.");
     expect(log).toHaveBeenLastCalledWith("error", "guide.page_missing", {
       lang: "es",
       page: "products",

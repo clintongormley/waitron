@@ -98,12 +98,12 @@ changes nothing on an open order by itself: an extras pick is its own order line
 answer is stored as the wording that was chosen. Each published menu keeps the list until you
 publish that menu again. For an options list this matters, because its options are gone: until you
 publish, the till cannot add a dish that carried the list, and saving changes to a parked order that
-holds such a dish is refused. A table's order can still take new rounds and changes to its lines,
-other than a new answer to the deleted list. So publish your menus again straight after deleting an
-options list. After that, the next change saved to a parked order takes off any extra picked from a
-deleted list, and its charge with it, and drops any answer to a deleted options list. On a table's
-order those extras and answers stay, and raising the quantity of a dish that carries such an extra
-is refused.
+holds such a dish is refused. A table's order can still take a new round, and you can still change
+the quantity of one of its lines, but other changes to an order holding such a dish can be refused
+the same way. So publish your menus again straight after deleting an options list. After that, the
+next change saved to a parked order takes off any extra picked from a deleted list, and its charge
+with it, and drops any answer to a deleted options list. On a table's order those extras and answers
+stay, and raising the quantity of a dish that carries such an extra is refused.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from
 that one product's Modifiers section.
