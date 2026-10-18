@@ -1423,7 +1423,8 @@ and mock-ups before anything is built.** The owner: the page is ugly, the edit f
 roles are a ranking, and "does the logic work? are we asking the right questions?"
 
 **Design (2026-10-17, revised the same day with the owner's answers):** [the decisions, the rules, the page and the starter list](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
-with [mock-ups](mockups/a758-adjustment-reasons/). No question is open; the build may start. The
+with [mock-ups](mockups/a758-adjustment-reasons/). Revised 2026-10-18 for food left on the pass after
+a table has paid and finished (§3.8, pictures 06–09); the build waits for the owner's Q40. The
 notes below are the review as written before the answers: where they differ from the design's
 decisions (§1 there) — three kinds, give-away against 100% discount, "Invitación", role lists
 "with or after" editable roles — the design wins.

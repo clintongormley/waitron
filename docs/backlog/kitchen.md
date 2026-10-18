@@ -16,9 +16,10 @@ list does not exist.
 
 - **Task 5 (#750, kitchen, pass and table screen by group; printing problems).** Left open:
   - A party finished while its food is still on the pass keeps its cards there with no group
-    button that works (each is refused `party.not_open`): the owner's answer (2026-10-17, the
-    waiter clears them with Void, choosing refund or no refund) was relayed to lane C as an
-    addition to A758.
+    button that works (each is refused `party.not_open`). Designed in A758 §3.8 (2026-10-18):
+    Finish table asks first, the paid receipt gains Cancel items… with A773-1's keep-the-payment
+    and refund choices, and the card says Table finished. Waits for the owner's Q40 and for
+    A773-1.
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
   - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
     `*** HOLD CANCELLED ***` print in English. Since B11g the extra-cancel slip's header word and

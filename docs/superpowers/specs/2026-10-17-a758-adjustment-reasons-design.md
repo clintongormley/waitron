@@ -1,10 +1,11 @@
 # A758 — Voids and comps: the rules, the owner's answers, and a page of their own
 
-Status: **design, revised 2026-10-17 with the owner's answers to all eight questions. No question is
-open: the build may start.** Backlog entry: `docs/backlog.md` "A758" and
+Status: **design, revised 2026-10-17 with the owner's answers to all eight questions, and on
+2026-10-18 for the owner's addition about food left on the pass after a table has paid and finished
+(§3.8). One question is open, Q40 (§11); the build waits for it.** Backlog entry: `docs/backlog.md` "A758" and
 [its detail](../../backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own).
 Pictures: `docs/backlog/mockups/a758-adjustment-reasons/` (01 and 02 also in dark, `-dark.png`;
-drawn in HTML with the dashboard's colour tokens, not screenshots). The first version of this
+06–09 are §3.8's; all drawn in HTML with the dashboard's colour tokens, not screenshots). The first version of this
 design (main `ed0be7d89`) asked Q1–Q8, which the campaign numbered Q21–Q28; its pictures 01–09 are
 deleted, because every one showed a choice the owner has now made.
 
@@ -198,6 +199,7 @@ So a Void reason applies exactly where money comes off the bill:
 | same | **Cancel, don't charge** | yes | yes; the kitchen has it, so the switch applies | told, marked started | off |
 | Bill paid, any stage | **Cancel, keep the payment** | no | no — no money moves | told | unchanged |
 | same, when the till can take a refund | **Cancel and refund** | no | no: the refund's own rules apply — the `sale.refund` permission (`apps/server/src/tender-refund-authorization.ts:87`, `:129-145`) and a written reason (`apps/server/src/tender-refund-reservation.ts:43-52`) | told | a refund (A737) |
+| Bill paid, the table finishing or finished, dish still in the kitchen | the same two choices, reached from Finish table or the receipt (§3.8) | no | as the two rows above | told | as the two rows above |
 
 "Still charge" and "keep the payment" still need the till's own rights (session, device profile,
 zone and action) under A773-1; A758 adds nothing to them. They are not adjustments, so they appear
@@ -272,6 +274,137 @@ from the reason: the By reason table gains **Asked by** and **Approved by** (nam
 the people table's Approved by column draws them, `adjustment-report-screen.ts:563-572`), and the
 entries list gains a Reason filter, so "Staff meal" lists every staff meal with who gave it and who
 approved it. No new stored field.
+
+### 3.8 Food left on the pass after the table has paid and finished (pictures 06–09)
+
+The owner's addition (2026-10-17): a table pays and leaves while some of its food is still on the
+pass. *"Let the waiter clear them with the cancel item/void functionality.. offer the refund/no
+refund choice."* Read on `main` at `2e997c3ef` and on lane G's `feat/a773-1-unsent-list` at
+`6e6657148` unless marked **(run)**.
+
+**Today.**
+
+- **Paying does not end the party.** The paid bill becomes `settled` (`apps/server/src/bill-payments.ts:751`)
+  and the party keeps its table. **Finish table** ("Cerrar mesa") closes the party and frees the
+  table (`finishTable`, `apps/server/src/parties.ts:675-688`); it refuses only while a bill still
+  owes, and does not look at the kitchen.
+- **The dishes stay on the pass after that.** The pass lists every kitchen dish of an order that is
+  neither abandoned nor collected (`liveKitchenDish`, `apps/server/src/working-order.ts:7313-7318`),
+  and a settled bill is neither. Fire, Group ready and Away need an open party
+  (`checkAndBumpParty(…, "open")` in `apps/server/src/order-groups.ts:307` and `:418`, refusing
+  `party.not_open` at `apps/server/src/parties.ts:408`), and the till words that refusal "This table
+  has changed since you opened it. Reload the floor and try again" (`apps/till/src/i18n/codes.ts:128-131`),
+  which is not what happened. A pass screen (a kitchen display's, or the one a till has chosen) can
+  still mark a dish Done, whose route does not read the party (`markPassItems`,
+  `apps/server/src/pass-board.ts:131`); Done is that device's own mark and moves no money. The
+  till's All stations board has no Done, and the pass monitor has no button of any kind
+  (`apps/till/src/screens/till-expo-screen.ts:74`).
+- **The till cannot reach a finished table's dishes.** Find bill lists a finished table's paid bill
+  only under Transactions (its Bills tab keeps a settled bill only for a counter sale,
+  `apps/server/src/find-bill-bills.ts:72-73`), and that receipt offers Reprint and, while it is still
+  refundable, Refund a payment ("Devolver un pago", `apps/till/src/screens/till-ticket-view.ts:905-911`). Opening a
+  party's bill needs a table that still holds the party (`held.stale`, `apps/till/src/till-app.ts:6160`).
+- **No dish can be voided on a paid bill on `main`:** a change made through an adjustment
+  (`planAdjustment`, `apps/server/src/adjustments-apply.ts:395`) first requires an open bill
+  (`assertTabOpen`, `apps/server/src/working-order.ts:3470`). **(run)** A throwaway test on
+  `2e997c3ef`, Node v26.11.1, using `apps/server/src/testing/order-venue.ts`
+  (`provisionOrderVenue`, `placedIssuedBill(venue, "Croquetas")`, `collect(venue, order, "10.00")`,
+  with the real Veri\*Factu backend): a counter bill issued and paid €10.00 in cash. `planAdjustment`
+  called on it to cancel the line was refused `tab.not_open`. The bill was a counter order, not a
+  seated party's; the check is on the bill's status, which a table's paid bill shares (read).
+- **A refund files nothing.** A refund (A737, `POST /api/transactions/:saleId/refunds`,
+  `apps/server/src/tender-refund-api.ts:154`) gives back an amount of one payment: a card to that
+  card through its provider (a card keyed by hand on a machine Waitron does not talk to is refunded
+  on that machine and confirmed with a PIN, `apps/server/src/tender-refund-authorization.ts:132-146`), cash from the drawer under CLAUDE.md §5's drawer rules, with
+  `sale.refund` (or a PIN of someone holding it) and a written reason. **(run)** In the same test, a
+  €3.00 refund of the €10.00 cash payment completed, and the sale's one filed record (an F2, the
+  simplified invoice, for €10.00), its `sales` row and its `sale_lines` rows were byte-identical
+  before and after. The refund slip says so: "La factura original no cambia"
+  (`apps/server/src/tender-refund-receipt.ts:94`).
+- **Lane G's A773-1 already has the choice the owner asked for**, while the table is still on
+  screen (§3.3's "Bill paid" rows). On a paid bill its Cancel item dialog offers "Cancel, keep the
+  payment" ("Cancelar sin devolver el pago") and, when the till can take a refund, "Cancel and
+  refund" ("Cancelar y devolver el pago") (`apps/till/src/widgets/cancel-item-dialog.ts:150-151`).
+  Both cancel the dish without touching the money (the server's `keep_charge`,
+  `apps/server/src/line-cancel.ts`): its kitchen items go, so its card leaves the pass, and the
+  kitchen gets its VOID slip. The second then opens the refund screen. The dialog ("Cancel item",
+  buttons Close and Continue) handles one order line at a time, through
+  `POST /api/parties/:id/lines/:lineId/cancel-item` (`apps/server/src/line-cancel-api.ts:167`). That
+  route has no party-open check, but nothing on the till opens the dialog once the table is
+  finished.
+
+**Proposed.** No new kind of record and no new fiscal path: A773-1's two choices, made reachable for
+a finished table, and the refund the till already has.
+
+1. **Finish table asks first** (picture 06). While the party has dishes that were fired but are not
+   served or away, Finish table opens **"2 dishes not served yet"** ("2 platos sin servir"),
+   listing them, with **They were served** ("Ya se sirvieron"), which marks them away as the pass's
+   Away does, and **Cancel them…** ("Cancelarlos…"), which opens the paid-bill choices below for
+   those dishes; then the table finishes. **Back** ("Atrás", the till's `action.back`) leaves the
+   table as it was.
+2. **After the table is finished, from its receipt** (picture 07). The receipt Find bill →
+   Transactions opens gains **Cancel items…** ("Cancelar platos…") beside its other actions, shown
+   only while the sale has dishes still in the kitchen (fired, not served, not away). It lists them,
+   each with a count, and offers A773-1's two paid-bill choices in A773-1's words. A773-1's dialog
+   takes one line at a time, so this is a dialog of its own (or that one extended to several lines),
+   sending one cancel per line; the plan decides which. Either one removes the
+   dishes from the kitchen, so their cards leave the pass, the monitor and the All stations board,
+   and the kitchen gets the VOID slip; neither changes the bill.
+3. **The pass says what happened** (picture 09). On a pass screen and the All stations board, a
+   card whose party has finished shows **Table finished** ("Mesa terminada") in place of its group
+   and course buttons, so nobody presses a button that can only be refused; the pass monitor, which
+   has no buttons, shows the same words as a label.
+4. **Cancel and refund** (picture 08) opens today's refund screen with the amount those dishes added
+   to the bill filled in (their price after any comp on them, and their share of a comp on the
+   whole bill) and the reason **Not served** ("No servido"), both editable. The waiter picks the
+   payment as today: a card goes back to that card (or on its own terminal, if keyed by hand); cash
+   comes from the drawer under §5's drawer rules. A bill paid with two payments may need two
+   refunds, as today. Picture 08 shows the fields filled in, not today's layout.
+
+**Who may.** The choices take the rights A773-1's paid-bill choices take (session, device profile,
+zone and action, §3.3) and the refund its own (`sale.refund`). No Void reason: the cancel moves no
+money, so it appears in neither the Voids and comps report nor any reason's limit, as in §3.3; the
+refund appears with the refunds. A finished party holds no table, so its zone reads as none
+(`partyZone`, `apps/server/src/parties.ts:196-210`), and a subject in no zone passes the zone check
+whatever the device's zones (`assertSubjectZones`, `apps/server/src/zone-access.ts:40-55`)
+**(read)**. Closing a party keeps only its tables' names (`closePartyTables`,
+`apps/server/src/parties.ts:738-742`), but each order keeps its recorded zone, and the zone check
+already reads it for an order (`apps/server/src/zone-access.ts:22-25`) **(read)**: the build checks
+the order's zone for a finished table's dishes, with no new stored field, and adds a refusing case.
+
+**The fiscal record.**
+
+- **Keep the payment: nothing is filed.** The customer paid for the dishes and the invoice says what
+  was paid.
+- **Refund:** the invoice still says what was sold before the refund, as every refund does today.
+  Correcting part of a paid invoice is **A802** (lane E, spec first): an R5 corrective invoice
+  (_factura rectificativa_) by differences through `recordCorrection`, whose engine already allows a
+  partial correction (`packages/core/src/record-correction.ts:92`) though no route passes one. **This
+  void needs no correction of its own: its refund is an ordinary refund, and what A802 decides a
+  refund of named dishes files, it files here.** Recommended to A802: a refund that names dishes, as
+  this one does, issues the partial R5 for them in the same step. In the worked example below, the
+  €15.00 returned would be an R5 by differences of −€15.00: base −€13.64 and VAT −€1.36 at 10%.
+- Before A802 lands, this refund behaves as every refund does today.
+
+**Out of scope.** A counter sale: its dishes leave the pass when the order is collected, and Find
+bill's Bills tab keeps a paid counter sale until then (`find-bill-bills.ts:72-73`). A party that has
+paid but not finished: A773-1's dialog on the table screen already covers it.
+
+**Worked example.** Table 4, four guests, €62.00 paid by card at 22:10. 2 × Croquetas (€7.50 each)
+were fired at 21:58 and are on the pass; nobody took them.
+
+- At 22:12 Ana presses Finish table: "2 dishes not served yet — 2 × Croquetas". She picks Cancel
+  them…, then Cancel and refund; the refund screen opens with €15.00 to the card and "Not served".
+  The croquetas leave the pass, the kitchen gets its VOID slip, the card gets €15.00 back, and the
+  table finishes.
+- Or the table was finished at 22:12 without that question, and at 22:30 Luis sees the two cards on
+  the pass monitor marked Table finished. He opens Find bill → Transactions → table 4's receipt →
+  Cancel items…, and picks Cancel, keep the payment: the guests had asked for the croquetas to be
+  forgotten and paid for them anyway. The cards leave the pass; nothing is refunded or filed.
+  (Luis could also have read Table finished on a pass screen or All stations.)
+
+**Order.** This builds on A773-1's dialog and route, so it waits for A773-1 to land. It does not wait
+for A802. Migration: none expected; the build confirms.
 
 ---
 
@@ -391,6 +524,10 @@ today; a full comp leaves the item at zero whether it prints "Invitación" or "D
 - **Order against A773-1.** A773-1 Task 16 builds the single Comp window over today's reasons and
   actions; Task 20 routes "don't charge" through today's cancel adjustment. A758 changes the rules
   behind both, not their shape, so either can land first; whichever lands second adapts.
+- **Food left on the pass (§3.8)**, its own slice after A773-1 lands: Finish table's question, the
+  receipt's Cancel items… (a several-line dialog over A773-1's per-line route, reached for a
+  finished party, checked against the order's zone with a refusing case), Table finished on the pass card, and the refund screen filled in.
+  No fiscal change: the refund files what A802 makes a refund file.
 
 ### 9.1 Changed test checks to list in the pull request
 
@@ -439,9 +576,27 @@ printed on a receipt.
   cancel does"; on lane G's branch the refund goes through A737's flow, whose reason is free text
   and whose rule is the `sale.refund` permission (§3.3), not a void reason. Neither changes what
   lane G builds now.
+- **A773 (lane G), from §3.8.** Its Cancel item route (`line-cancel.ts`) is called for a finished
+  party only by §3.8's slice; nothing for A773-1 to change now.
+- **A802 (lane E).** §3.8's refund names the dishes it pays back. Recommended to A802's spec: a refund
+  that names dishes issues the partial R5 for them in the same step, and §3.8 then files it with no
+  code of its own.
 
 ---
 
 ## 11. Open questions
 
-None. The build may start.
+**Q40 (§3.8, pictures 06–09). Food left on the pass after a table has paid and finished.** Do you
+approve, as recommended:
+
+- (a) **Finish table asks first** while dishes are fired but not served: They were served / Cancel
+  them… / Back.
+- (b) **Cancel items… on the paid receipt** in Find bill → Transactions, with A773-1's two choices,
+  Cancel, keep the payment / Cancel and refund.
+- (c) **Table finished** on the pass card instead of buttons that can only be refused.
+- (d) **The refund is today's refund**, filled in with what those dishes cost and "Not served"; no
+  correction of its own — when A802 lands, it files what A802 makes a refund of named dishes file.
+- (e) **No Void reason** for either choice, as for a paid bill in §3.3.
+
+The rest of A758 (§1–§7) is approved and unchanged. Once this is answered the build starts; §3.8 is
+a slice of its own after A773-1.
