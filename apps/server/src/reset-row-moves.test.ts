@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -13,6 +13,7 @@ import {
 } from "@waitron/db";
 import { movesTable, type Placement } from "./floor-reset-plan.js";
 import { placementColumns } from "./floor-today-store.js";
+import { standsIn, standsInSql } from "./joined-split-layout.js";
 import { plannedZone } from "./testing/floor-today-venue.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import "./errors.js";
@@ -175,5 +176,57 @@ describe("movesTable and the SQL rule the till and the refusals read", () => {
         .where(inArray(floorResetTables.tableId, [tableId])),
     );
     expect(await read()).toEqual([{ moving: true }]);
+  });
+});
+
+describe("standsIn and the SQL the catch-up check reads", () => {
+  const long: Placement = { x: 10, y: 20, width: 6, height: 2, shape: "rect", rotation: 0 };
+  const bar = (x: number, y: number, rotation = 0): Placement => ({
+    x,
+    y,
+    width: 2,
+    height: 2,
+    shape: "rect",
+    rotation,
+  });
+  const PAIRS: [string, Placement, Placement][] = [
+    ["over part of it", long, bar(11, 20)],
+    ["touching its right edge", long, bar(16, 20)],
+    ["touching its left edge", long, bar(8, 20)],
+    ["over one square of its corner", long, bar(15, 21)],
+    ["touching its corner", long, bar(16, 21)],
+    ["turned, centred on it", long, bar(12, 20, 45)],
+    ["turned, a corner on its edge", long, bar(12, 19 - Math.SQRT2, 45)],
+    ["turned, a corner half a square in", long, bar(12, 19.5 - Math.SQRT2, 45)],
+    ["inside its turned bounding box, clear of its sides", { ...long, rotation: 45 }, bar(14, 18)],
+    ["turned 195°, overlapping by exactly one square", long, bar(9, 19, 195)],
+    ["far away", long, bar(60, 60)],
+    ["the same place", long, long],
+  ];
+
+  it("agree on every pair, both ways round", async () => {
+    const lit = (p: Placement) => ({
+      x: sql`${p.x}`,
+      y: sql`${p.y}`,
+      width: sql`${p.width}`,
+      height: sql`${p.height}`,
+      rotation: sql`${p.rotation}`,
+    });
+    const answers = [];
+    for (const [name, a, b] of PAIRS) {
+      for (const [first, second] of [
+        [a, b],
+        [b, a],
+      ] as const) {
+        const [row] = await v.db.all<{ hit: number }>(
+          sql`select ${standsInSql(lit(first), lit(second))} as hit`,
+        );
+        answers.push({ name, js: standsIn(first, second), sql: row!.hit === 1 });
+      }
+    }
+    expect(answers.map((a) => ({ name: a.name, sql: a.sql }))).toEqual(
+      answers.map((a) => ({ name: a.name, sql: a.js })),
+    );
+    expect(answers.filter((a) => a.js).length).toBe(10);
   });
 });

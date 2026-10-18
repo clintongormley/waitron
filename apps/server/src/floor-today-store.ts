@@ -26,6 +26,8 @@ import {
   floorTodayTables,
   floorTodayZones,
   floorZones,
+  joinedOutOfService,
+  needsMoving,
   resetRowMoves,
   workingOrders,
 } from "@waitron/db";
@@ -34,6 +36,7 @@ import type { TableRemoval } from "@waitron/module";
 import { readLocationClock, venueMomentAt } from "@waitron/reporting";
 import { AppError, NEW_TABLE_SIZE, groupStep } from "@waitron/shared";
 import {
+  blockedMoves,
   movesTable,
   planReset,
   targetsFromMaster,
@@ -43,6 +46,7 @@ import {
   type Target,
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
+import { standsInSql } from "./joined-split-layout.js";
 import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
 import { leaveMerges } from "./floor-today-merges.js";
@@ -382,7 +386,7 @@ async function catchUpPass(
   const merges = await mergesOf(tx, ids);
   const merged = new Set(merges.map((m) => m.tableId));
   const splitOff = new Set(inZone.flatMap((t) => (t.splitOffFrom === null ? [] : [t.id])));
-  const moves = (target: Target) => {
+  const moves = (target: Pick<Target, "tableId" | "placement">) => {
     const today = target.tableId === null ? undefined : todayRows.get(target.tableId);
     return movesTable(
       today === undefined
@@ -424,37 +428,139 @@ async function catchUpPass(
     tx,
     inZone.flatMap((table) => (table.splitOffFrom === null ? [] : [table.id, table.splitOffFrom])),
   );
-  const { mergedWithHeld, splitBusy, joinedBusy, waitingRows } = waitingTogether(
-    inZone,
-    merges,
-    [...groupOf.values()],
-    waiting,
-    foodComing,
-  );
   const removing = new Set(targets.filter((target) => target.remove).map((t) => t.tableId));
   const tied = await tablesTied(
     tx,
     ids.filter((id) => removing.has(id) && !waiting.has(id)),
   );
-  const live: LiveTable[] = inZone.map((table) => ({
-    id: table.id,
-    label: table.label,
-    held: held.has(table.id),
-    refused: refused.has(table.id),
-    tied: held.has(table.id) || tied.has(table.id),
-    hasToday: withToday.has(table.id),
-    mergedWithHeld: mergedWithHeld.has(table.id),
-    splitWithBusy: splitBusy.has(table.id),
-    clearing: clearing.has(table.id),
-    joinedWithWaiting: joinedBusy.has(table.id),
-  }));
-
-  const waitingToCreate = new Set(
-    [...rowOf].flatMap(([target, row]) =>
-      target.tableId === null && waitingRows.has(row.id) ? [target] : [],
+  const groups = [...groupOf.values()];
+  const drawnAt = (tableId: string | null): Placement | null => {
+    const today = tableId === null ? undefined : todayRows.get(tableId);
+    return today === undefined || today.takenOff ? null : placementOf(today);
+  };
+  // Rows marked earlier whose table would still move: their tables will be carried by hand, so
+  // they block no table off the map (plan decision 10).
+  const needing = new Set(
+    rows.flatMap((row) =>
+      row.readyToMove &&
+      row.tableId !== null &&
+      moves({ tableId: row.tableId, placement: placementOf(row) })
+        ? [row.tableId]
+        : [],
     ),
   );
-  const plan = planReset({ targets, live, takenElsewhere, waitingToCreate });
+  let outOfService: Set<string> | undefined;
+  // Tables whose own move is blocked, and reset rows of tables to create whose place is taken.
+  const blocked = new Set<string>();
+  const blockedCreates = new Set<string>();
+  let plan: ResetPlan;
+  for (;;) {
+    const createGroups = groups.filter((group) => group.rows.some((r) => blockedCreates.has(r.id)));
+    const { mergedWithHeld, splitBusy, joinedBusy, waitingRows } = waitingTogether(
+      inZone,
+      merges,
+      groups,
+      new Set([
+        ...waiting,
+        ...blocked,
+        ...createGroups.flatMap((group) =>
+          group.rows.flatMap((r) => (r.tableId === null ? [] : [r.tableId])),
+        ),
+      ]),
+      foodComing,
+    );
+    const live: LiveTable[] = inZone.map((table) => ({
+      id: table.id,
+      label: table.label,
+      held: held.has(table.id),
+      refused: refused.has(table.id),
+      tied: held.has(table.id) || tied.has(table.id),
+      hasToday: withToday.has(table.id),
+      mergedWithHeld: mergedWithHeld.has(table.id),
+      splitWithBusy: splitBusy.has(table.id),
+      clearing: clearing.has(table.id),
+      joinedWithWaiting: joinedBusy.has(table.id),
+      blocked: blocked.has(table.id),
+    }));
+    const waitingToCreate = new Set(
+      [...rowOf].flatMap(([target, row]) =>
+        target.tableId === null && (waitingRows.has(row.id) || blockedCreates.has(row.id))
+          ? [target]
+          : [],
+      ),
+    );
+    plan = planReset({ targets, live, takenElsewhere, waitingToCreate });
+
+    const drawnMoving: { tableId: string; from: Placement; to: Placement | null }[] = [];
+    const offMoving: { tableId: string; from: null; to: Placement }[] = [];
+    for (const { target } of plan.apply) {
+      const row = rowOf.get(target)!;
+      if (row.placed || target.placement === null) {
+        if (!row.placed && moves(target)) {
+          drawnMoving.push({ tableId: target.tableId!, from: drawnAt(target.tableId)!, to: null });
+        }
+        continue;
+      }
+      const from = drawnAt(target.tableId);
+      if (from !== null) {
+        if (moves(target))
+          drawnMoving.push({ tableId: target.tableId!, from, to: target.placement });
+        continue;
+      }
+      // A taken-off table that stays off at its new place is put down on nothing.
+      const keepOff = keepTakenOff || row.readyToMove;
+      if (keepOff && todayRows.get(target.tableId!)?.takenOff === true) continue;
+      offMoving.push({ tableId: target.tableId!, from: null, to: target.placement });
+    }
+    for (const target of plan.create) {
+      if (target.placement !== null) {
+        offMoving.push({ tableId: rowOf.get(target)!.id, from: null, to: target.placement });
+      }
+    }
+    if (drawnMoving.length === 0 && offMoving.length === 0) break;
+    outOfService ??= await joinedOutOfServiceIn(tx, ids);
+    const leaving = new Set([...drawnMoving.map((m) => m.tableId), ...plan.remove, ...plan.hide]);
+    const staying = inZone.flatMap((table) => {
+      const place = drawnAt(table.id);
+      return place === null ||
+        leaving.has(table.id) ||
+        blocked.has(table.id) ||
+        needing.has(table.id) ||
+        outOfService!.has(table.id)
+        ? []
+        : [{ tableId: table.id, place }];
+    });
+    const keptPlaces = [...blocked].flatMap((tableId) => {
+      const place = drawnAt(tableId);
+      return place === null ? [] : [{ tableId, place }];
+    });
+    const newly = [...blockedMoves({ moving: drawnMoving, staying: [...staying, ...keptPlaces] })];
+    const newlyOff = [...blockedMoves({ moving: offMoving, staying })];
+    const createIds = new Set(plan.create.map((target) => rowOf.get(target)!.id));
+    const before = blocked.size + blockedCreates.size;
+    for (const id of [...newly, ...newlyOff])
+      (createIds.has(id) ? blockedCreates : blocked).add(id);
+    if (blocked.size + blockedCreates.size === before) break;
+  }
+
+  if (inReset) {
+    const drawnBlocked = [...rowOf].flatMap(([target, row]) =>
+      target.tableId !== null && blocked.has(target.tableId) && drawnAt(target.tableId) !== null
+        ? [row.id]
+        : [],
+    );
+    const marked = new Set(drawnBlocked);
+    for (const group of groups) {
+      if (group.rows.some((r) => marked.has(r.id))) for (const r of group.rows) marked.add(r.id);
+    }
+    const toMark = [...marked].filter((id) => byId.has(id) && !byId.get(id)!.readyToMove);
+    if (toMark.length > 0) {
+      await tx
+        .update(floorResetTables)
+        .set({ readyToMove: true })
+        .where(inArray(floorResetTables.id, toMark));
+    }
+  }
 
   if (!inReset) {
     const marked = readyToMove(plan.apply, rowOf, [...groupOf.values()], moves).filter(
@@ -572,6 +678,18 @@ async function catchUpPass(
       .where(eq(floorResetTables.id, row.id));
   }
   return changed;
+}
+
+/** The tables among `tableIds` out of service because of a joined table. */
+async function joinedOutOfServiceIn(
+  tx: Transaction,
+  tableIds: readonly string[],
+): Promise<Set<string>> {
+  const rows = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(and(inArray(diningTables.id, [...tableIds]), joinedOutOfService(diningTables.id)));
+  return new Set(rows.map((row) => row.id));
 }
 
 /**
@@ -826,7 +944,7 @@ export function catchUpDue(zoneId: SQLWrapper): SQL {
   // group, the joined row and each part, as catchUpPass's groups do.
   return sql`exists (
     select 1 from ${floorResetTables} ${as("due_row")}
-    where ${r.zoneId} = ${zoneId} and ${r.pending} = 1 and (
+    where ${r.zoneId} = ${zoneId} and ${r.pending} = 1 and not ${placeTaken(r)} and (
       ${r.readyToMove} = 0 or (
         not ${resetRowMoves(r)}
         and not exists (
@@ -841,6 +959,43 @@ export function catchUpDue(zoneId: SQLWrapper): SQL {
             and ${m.pending} = 1 and ${m.placed} = 0 and ${resetRowMoves(m)}
         )
       )
+    )
+  )`;
+}
+
+/**
+ * catchUpPass's rule for a row it would put down off the map, in SQL: the row is not yet placed,
+ * has a place, its table is not drawn (and is not a marked one taken off, which stays off), and a
+ * table drawn in the zone, neither out of service in a joined table nor needing moving, stands in
+ * that place.
+ */
+function placeTaken(r: typeof dueRow): SQL {
+  const own = sql.identifier("place_own");
+  const blocker = sql.identifier("place_blocker");
+  const blockerTable = sql.identifier("place_blocker_table");
+  const col = (table: SQLWrapper, name: string) => sql`${table}.${sql.identifier(name)}`;
+  const b = (name: string) => col(blocker, name);
+  return sql`(
+    ${r.placed} = 0 and ${r.x} is not null
+    and not exists (
+      select 1 from ${floorTodayTables} ${own}
+      where ${col(own, "table_id")} = ${r.tableId}
+        and (
+          (${col(own, "x")} is not null and ${col(own, "taken_off")} = 0)
+          or (${r.readyToMove} = 1 and ${col(own, "taken_off")} = 1)
+        )
+    )
+    and exists (
+      select 1 from ${floorTodayTables} ${blocker}
+      inner join ${diningTables} ${blockerTable} on ${col(blockerTable, "id")} = ${b("table_id")}
+      where ${col(blockerTable, "zone_id")} = ${r.zoneId}
+        and ${b("x")} is not null and ${b("taken_off")} = 0
+        and not ${joinedOutOfService(b("table_id"))}
+        and not ${needsMoving(b("table_id"))}
+        and ${standsInSql(
+          { x: r.x, y: r.y, width: r.width, height: r.height, rotation: r.rotation },
+          { x: b("x"), y: b("y"), width: b("width"), height: b("height"), rotation: b("rotation") },
+        )}
     )
   )`;
 }

@@ -1408,3 +1408,196 @@ describe("a table that frees up after a reset needs moving", () => {
     expect(await todayRow(z.t3)).toMatchObject({ x: 40, takenOff: false });
   });
 });
+
+describe("no reset puts a table down on another", () => {
+  const setToday = (tableId: string, values: Partial<typeof floorTodayTables.$inferInsert>) =>
+    inTx(v, (tx) =>
+      tx.update(floorTodayTables).set(values).where(eq(floorTodayTables.tableId, tableId)),
+    );
+  const at = (x: number) => ({ x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 });
+
+  async function dueIn(zoneId: string): Promise<number> {
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ id: floorZones.id })
+        .from(floorZones)
+        .where(and(eq(floorZones.id, zoneId), catchUpDue(floorZones.id))),
+    );
+    return rows.length;
+  }
+
+  /** Stored 6 goes to 40 in Dinner, where 7 stands in Standard; guests sit at 7 across the reset onto Dinner. */
+  async function sixBehindSeven(
+    more: {
+      key: string;
+      standard: number | null;
+      dinner: number | null;
+      partKeys?: string[];
+    }[] = [],
+  ) {
+    const s = await standardAndDinner(
+      [
+        { key: "t6", label: fresh("6") },
+        { key: "t7", label: fresh("7") },
+        ...more.map((m) => ({ key: m.key, label: fresh(m.key), partKeys: m.partKeys })),
+      ],
+      {
+        standard: { t6: null, t7: 40, ...Object.fromEntries(more.map((m) => [m.key, m.standard])) },
+        dinner: { t6: 40, t7: 80, ...Object.fromEntries(more.map((m) => [m.key, m.dinner])) },
+      },
+    );
+    await s.onto(s.d.standard);
+    const [t6, t7] = [s.live("t6"), s.live("t7")];
+    const partyId = await seatAt(t7);
+    await s.onto(s.d.dinner);
+    expect(await todayRow(t6)).toMatchObject({ x: null });
+    expect(await readyOf(t6)).toEqual({ pending: true, readyToMove: false });
+    return { ...s, t6, t7, partyId };
+  }
+
+  it("Update to Dinner keeps 2 and 1 in place while 3 waits", async () => {
+    await clearingWorkflow(false);
+    const s = await standardAndDinner(
+      [
+        { key: "t3", label: fresh("3") },
+        { key: "t2", label: fresh("2") },
+        { key: "t1", label: fresh("1") },
+      ],
+      { standard: { t3: 0, t2: 20, t1: 40 }, dinner: { t3: 80, t2: 0, t1: 20 } },
+    );
+    await s.onto(s.d.standard);
+    const [t3, t2, t1] = [s.live("t3"), s.live("t2"), s.live("t1")];
+    await seatAt(t3);
+
+    await s.onto(s.d.dinner, { keepTakenOff: true });
+
+    expect(await todayRows([t3, t2, t1])).toMatchObject([{ x: 0 }, { x: 20 }, { x: 40 }]);
+    expect(await readyOf(t3)).toEqual({ pending: true, readyToMove: false });
+    expect(await readyOf(t2)).toEqual({ pending: true, readyToMove: true });
+    expect(await readyOf(t1)).toEqual({ pending: true, readyToMove: true });
+    const states = await readStates();
+    expect([t3, t2, t1].map((id) => states.get(id)!.today.needsMoving)).toEqual([
+      false,
+      true,
+      true,
+    ]);
+    expect(await todayRows([t3, t2, t1])).toMatchObject([{ x: 0 }, { x: 20 }, { x: 40 }]);
+  });
+
+  it("a stored table whose new place is taken waits off the map, and a later read places it once the place is clear", async () => {
+    await clearingWorkflow(false);
+    const z = await sixBehindSeven();
+
+    const states = await readStates();
+    expect(states.get(z.t6)!.today.needsMoving).toBe(false);
+    expect(await todayRow(z.t6)).toMatchObject({ x: null });
+    expect(await readyOf(z.t6)).toEqual({ pending: true, readyToMove: false });
+
+    await setToday(z.t7, { x: 100 });
+    await readStates();
+
+    expect(await todayRow(z.t6)).toMatchObject({ x: 40, takenOff: false });
+    expect(await readyOf(z.t6)).toEqual({ pending: false, readyToMove: false });
+  });
+
+  it("a taken-off table blocks nothing", async () => {
+    const s = await standardAndDinner(
+      [
+        { key: "t6", label: fresh("6") },
+        { key: "t7", label: fresh("7") },
+      ],
+      { standard: { t6: null, t7: 40 }, dinner: { t6: 40, t7: 40 } },
+    );
+    await s.onto(s.d.standard);
+    const [t6, t7] = [s.live("t6"), s.live("t7")];
+    await setToday(t7, { takenOff: true });
+
+    await s.onto(s.d.dinner, { keepTakenOff: true });
+
+    expect(await todayRow(t6)).toMatchObject({ x: 40, takenOff: false });
+    expect(await readyOf(t6)).toEqual({ pending: false, readyToMove: false });
+    expect(await todayRow(t7)).toMatchObject({ x: 40, takenOff: true });
+  });
+
+  it("Update layout keeps a taken-off table off at its new place even while another table stands there", async () => {
+    const s = await standardAndDinner(
+      [
+        { key: "t9", label: fresh("9") },
+        { key: "t7", label: fresh("7") },
+      ],
+      { standard: { t9: 0, t7: 40 }, dinner: { t9: 40, t7: 80 } },
+    );
+    await s.onto(s.d.standard);
+    const [t9, t7] = [s.live("t9"), s.live("t7")];
+    await setToday(t9, { takenOff: true });
+    await seatAt(t7);
+
+    await s.onto(s.d.dinner, { keepTakenOff: true });
+
+    expect(await todayRow(t9)).toMatchObject({ x: 40, takenOff: true });
+    expect(await readyOf(t9)).toEqual({ pending: false, readyToMove: false });
+  });
+
+  /** 6 waits behind 8, moved onto its new place by hand; 7 needs moving; nothing else waits. */
+  async function sixBehindEight(
+    more: {
+      key: string;
+      standard: number | null;
+      dinner: number | null;
+      partKeys?: string[];
+    }[] = [],
+  ) {
+    const z = await sixBehindSeven([{ key: "t8", standard: 120, dinner: 120 }, ...more]);
+    const t8 = z.live("t8");
+    await setToday(t8, { x: 40 });
+    await finish(z.partyId);
+    await readStates();
+    expect(await readyOf(z.t7)).toEqual({ pending: true, readyToMove: true });
+    expect(await readyOf(z.t6)).toEqual({ pending: true, readyToMove: false });
+    expect(await dueIn(z.d.zoneId)).toBe(0);
+    return { ...z, t8 };
+  }
+
+  it("a room whose only waiting rows are stored tables with their place taken is caught up only once the place clears", async () => {
+    await clearingWorkflow(false);
+    const z = await sixBehindEight();
+    expect(await todayRow(z.t6)).toMatchObject({ x: null });
+
+    await setToday(z.t8, { x: 120 });
+    expect(await dueIn(z.d.zoneId)).toBe(1);
+    await readStates();
+
+    expect(await todayRow(z.t6)).toMatchObject({ x: 40 });
+    expect(await readyOf(z.t6)).toEqual({ pending: false, readyToMove: false });
+  });
+
+  it("a table taken off after the reset no longer blocks a stored table", async () => {
+    await clearingWorkflow(false);
+    const z = await sixBehindEight();
+
+    await setToday(z.t8, { takenOff: true });
+    expect(await dueIn(z.d.zoneId)).toBe(1);
+    await readStates();
+
+    expect(await todayRow(z.t6)).toMatchObject({ x: 40, takenOff: false });
+  });
+
+  it("a part out of service inside a joined table blocks nothing", async () => {
+    await clearingWorkflow(false);
+    const z = await sixBehindEight([
+      { key: "t4", standard: 0, dinner: null },
+      { key: "t5", standard: 20, dinner: null },
+      { key: "t45", standard: null, dinner: 0, partKeys: ["t4", "t5"] },
+    ]);
+    const t4 = z.live("t4");
+    await setToday(t4, at(40));
+    expect((await readJoined()).get(t4)).not.toBeNull();
+
+    await setToday(z.t8, { x: 120 });
+    expect(await dueIn(z.d.zoneId)).toBe(1);
+    await readStates();
+
+    expect(await todayRow(z.t6)).toMatchObject({ x: 40 });
+    expect(await readyOf(z.t6)).toEqual({ pending: false, readyToMove: false });
+  });
+});

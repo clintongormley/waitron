@@ -1,3 +1,5 @@
+import { standsIn } from "./joined-split-layout.js";
+
 export type PlanShape = "rect" | "round";
 
 export interface Placement {
@@ -40,6 +42,8 @@ export interface LiveTable {
   clearing: boolean;
   /** It is in a joined group of the reset, a joined table and its parts, with a waiting member (plan decision 8). */
   joinedWithWaiting: boolean;
+  /** Its new place is taken by a table that stays, so it keeps its place for now (A600). */
+  blocked: boolean;
 }
 
 export interface ResetPlan {
@@ -95,7 +99,8 @@ export function planReset(input: {
         table.clearing ||
         table.mergedWithHeld ||
         table.splitWithBusy ||
-        table.joinedWithWaiting)
+        table.joinedWithWaiting ||
+        table.blocked)
     ) {
       plan.pending.push(target);
       if ((table.held || table.clearing) && !table.hasToday) plan.seed.push(target);
@@ -163,6 +168,27 @@ export function movesTable(
     from.shape !== to.shape ||
     from.rotation !== to.rotation
   );
+}
+
+/** The moving tables that must keep their place: repeated until a pass blocks nothing new; a
+ *  blocked table's current place joins `staying` (spec decision 13). Tables moving together never block each other. */
+export function blockedMoves(input: {
+  moving: readonly { tableId: string; from: Placement | null; to: Placement | null }[];
+  staying: readonly { tableId: string; place: Placement }[];
+}): Set<string> {
+  const blocked = new Set<string>();
+  const places = input.staying.map((table) => table.place);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const { tableId, from, to } of input.moving) {
+      if (blocked.has(tableId) || to === null) continue;
+      if (!places.some((place) => standsIn(to, place))) continue;
+      blocked.add(tableId);
+      if (from !== null) places.push(from);
+      changed = true;
+    }
+  }
+  return blocked;
 }
 
 export function targetsFromMaster(
