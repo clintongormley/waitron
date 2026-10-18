@@ -58,7 +58,6 @@ export class PeriodDeleteDialog extends LitElement {
   @property() readError = "";
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) refusal?: Refusal;
-  @property() timeZone = "";
   @state() private replacement = "";
   private periodId?: string;
 
@@ -106,7 +105,7 @@ export class PeriodDeleteDialog extends LitElement {
       case "hours.clock_changed":
         return t("period.delete_clock_changed");
       case "hours.clock_change_conflict":
-        return clockChangeConflictText(refusal, this.timeZone)!;
+        return clockChangeConflictText(refusal)!;
       case "menu_period.not_found":
         return t("menu.period_gone");
       case "department.not_found":

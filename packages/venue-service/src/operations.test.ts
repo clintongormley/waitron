@@ -327,6 +327,7 @@ describe("new department service periods", () => {
         code: "hours.clock_change_conflict",
         params: {
           dayCutover: "21:00",
+          timeZone: "Europe/Madrid",
           startsAt: "2026-11-04T20:00:00.000Z",
           conflictCount: 5,
           conflicts: expect.arrayContaining([

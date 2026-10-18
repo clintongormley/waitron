@@ -23,6 +23,7 @@ declare module "@waitron/shared" {
     "hours.clock_change_conflict": {
       dayCutover: string;
       startsAt: string;
+      timeZone: string;
       conflicts: BusinessDayClockConflict[];
       conflictCount: number;
     };

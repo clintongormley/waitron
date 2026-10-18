@@ -306,7 +306,6 @@ export class PeriodEditing implements ReactiveController {
         .seasons=${model.seasons}
         .departmentId=${department?.id ?? ""}
         .departmentName=${department?.name ?? ""}
-        .timeZone=${model.timeZone}
         .colourUsers=${colours.colourUsers}
         .departments=${colours.departments}
         .menus=${model.menus}

@@ -4,6 +4,7 @@ export const clockChangeConflict = {
   params: {
     dayCutover: "03:00",
     startsAt: "2026-10-21T01:00:00.000Z",
+    timeZone: "Europe/Madrid",
     conflicts: [
       {
         departmentId: "d1",

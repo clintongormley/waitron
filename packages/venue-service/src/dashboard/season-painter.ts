@@ -552,7 +552,7 @@ export class SeasonPainter extends LitElement {
       this.refused = { message: t(code) };
       return;
     }
-    const conflict = clockChangeConflictText(refusalOf(error), this.model.timeZone);
+    const conflict = clockChangeConflictText(refusalOf(error));
     if (conflict) {
       this.refused = { message: conflict };
       return;

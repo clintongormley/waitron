@@ -185,7 +185,6 @@ export class SeasonsWindow extends LitElement {
   ];
   @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
   @property({ type: Number }) clockRevision = 0;
-  @property() timeZone = "";
   @property({ attribute: false }) specialDays: readonly { id: string; name: string }[] = [];
   @property({ type: Boolean }) readOnly = false;
   @property({ attribute: false }) draftParent?: object;
@@ -657,7 +656,7 @@ export class SeasonsWindow extends LitElement {
         ? refused
           ? ""
           : t("prep.save_error")
-        : (clockChangeConflictText(this.refusal.refusal, this.timeZone) ??
+        : (clockChangeConflictText(this.refusal.refusal) ??
           seasonRefusalText(this.refusal.refusal, this.seasons, this.specialDays));
     return html`<wt-form-actions
       slot="footer"

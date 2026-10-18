@@ -35,7 +35,6 @@ async function mount(impact?: PeriodDeleteImpact) {
   const el = document.createElement("period-delete-dialog");
   el.period = { id: "p1", name: "Lunch" };
   el.impact = impact;
-  el.timeZone = "Europe/Madrid";
   el.open = true;
   applyTokens(el);
   hosts.push(el);

@@ -480,7 +480,6 @@ export class PeriodsList extends LitElement {
         .impact=${deletion.impact}
         .readError=${deletion.readError}
         .busy=${deletion.busy}
-        .timeZone=${this.model?.timeZone ?? ""}
         @period-delete-confirm=${(
           event: CustomEvent<{ periodId: string; replacementPeriodId: string | null }>,
         ) => void this.confirmDelete(event)}

@@ -689,6 +689,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 1,
         conflicts: [
@@ -710,6 +711,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         conflicts: [expect.objectContaining({ reason: "transition_strip" })],
       },
     });
@@ -746,6 +748,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 2,
         conflicts: [
@@ -809,6 +812,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 2,
         conflicts: [
@@ -911,6 +915,7 @@ describe("a waiting change checks the hours written while it waits", () => {
    *  the waiting 03:00 Friday's runs into the new start and Saturday's opens on the day before. */
   const offsetClash = {
     dayCutover: "03:00",
+    timeZone: "Europe/Madrid",
     startsAt: "2026-11-04T02:00:00.000Z",
     conflictCount: 2,
     conflicts: [
@@ -957,6 +962,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 1,
         conflicts: [
@@ -982,6 +988,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 1,
         conflicts: [
@@ -1007,6 +1014,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         conflictCount: 1,
         conflicts: [
           expect.objectContaining({
@@ -1035,6 +1043,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         conflictCount: 1,
         conflicts: [
           expect.objectContaining({
@@ -1117,6 +1126,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 1,
         conflicts: [
@@ -1167,6 +1177,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 1,
         conflicts: [
@@ -1196,6 +1207,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         conflicts: [
           expect.objectContaining({
             specialDayName: "Special day",
@@ -1217,6 +1229,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 1,
         conflicts: [
@@ -1275,6 +1288,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 2,
         conflicts: expect.arrayContaining([
@@ -1316,6 +1330,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 1,
         conflicts: [
@@ -1359,6 +1374,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: {
         dayCutover: "03:00",
+        timeZone: "Europe/Madrid",
         startsAt: "2026-11-04T02:00:00.000Z",
         conflictCount: 1,
         conflicts: [

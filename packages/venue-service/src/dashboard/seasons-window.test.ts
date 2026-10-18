@@ -32,7 +32,6 @@ async function mount(
   const el = document.createElement("seasons-window");
   el.seasons = seasons;
   el.clockRevision = 3;
-  el.timeZone = "Europe/Madrid";
   el.specialDays = specialDays;
   el.readOnly = readOnly;
   el.api = {

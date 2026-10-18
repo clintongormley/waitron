@@ -954,7 +954,7 @@ export class SpecialDayPainter extends LitElement {
       date !== undefined && this.draft.dates.some((entry) => entry.date === date)
         ? date
         : undefined;
-    const conflict = clockChangeConflictText(refusalOf(error), this.model.timeZone);
+    const conflict = clockChangeConflictText(refusalOf(error));
     if (code === "hours.clock_changed") {
       this.refused = { message: t(code) };
     } else if (conflict) {
@@ -1075,8 +1075,7 @@ export class SpecialDayPainter extends LitElement {
         message:
           code === "hours.clock_changed"
             ? t(code)
-            : (clockChangeConflictText(refusalOf(error), this.model.timeZone) ??
-              t("hours.save_error")),
+            : (clockChangeConflictText(refusalOf(error)) ?? t("hours.save_error")),
       };
       return;
     }

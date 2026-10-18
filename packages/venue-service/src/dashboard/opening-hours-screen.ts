@@ -454,7 +454,6 @@ export class OpeningHoursScreen extends LitElement {
       data-window="seasons"
       .seasons=${this.model.seasons}
       .clockRevision=${this.model.clockRevision}
-      .timeZone=${this.model.timeZone}
       .specialDays=${this.knownSpecialDays}
       .readOnly=${this.readOnly}
       .draftParent=${this.windowDraftRoot}

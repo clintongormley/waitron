@@ -597,6 +597,7 @@ export async function assertWaitingChangeFits(
       throw new AppError("hours.clock_change_conflict", {
         dayCutover: change.dayCutover,
         startsAt: businessDayBoundaryAt(clock, change.effectiveBusinessDay),
+        timeZone: clock.timeZone,
         ...result,
       });
     settled = next;

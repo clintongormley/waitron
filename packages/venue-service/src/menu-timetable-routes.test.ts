@@ -887,6 +887,7 @@ it("accepts a fitting week, refuses a clashing one and a stale one while a chang
     code: "hours.clock_change_conflict",
     params: {
       dayCutover: "07:00",
+      timeZone: "Europe/Madrid",
       startsAt: "2026-11-04T06:00:00.000Z",
       conflictCount: 1,
       conflicts: [

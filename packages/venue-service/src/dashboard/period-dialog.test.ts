@@ -358,7 +358,6 @@ it.each([
 
 it("names the range that clashes with a waiting business-day start at the bottom", async () => {
   const el = await mount(true);
-  el.timeZone = "Europe/Madrid";
   await change(el, "name", { value: "Dinner" });
   el.refusal = clockChangeConflict;
   await el.updateComplete;

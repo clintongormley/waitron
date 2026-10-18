@@ -5,6 +5,10 @@ import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { setLocale } from "@waitron/dashboard-kit";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
+import {
+  clockChangeConflict,
+  clockChangeConflictSentence,
+} from "../testing/clock-change-conflict.js";
 import type { DepartmentDialogs, DepartmentDialog } from "./department-dialogs.js";
 
 const hosts: HTMLElement[] = [];
@@ -207,6 +211,15 @@ it("saves on Enter in the shared name field", async () => {
   });
 });
 
+it("a department add refused by a waiting business-day start names the clashing range at the bottom", async () => {
+  const request = vi.fn().mockRejectedValueOnce(clockChangeConflict);
+  const { el } = await mount(dialogs[0]!, request);
+  await change(el, "name", "Brunch");
+  save(el).click();
+  await expect.poll(() => bottom(el)).toBe(clockChangeConflictSentence);
+  expect(field(el, "name").error).toBe("");
+  expect(save(el).disabled).toBe(false);
+});
 it("keeps a refusal usable and puts only a shown field refusal beside it", async () => {
   const request = vi
     .fn()

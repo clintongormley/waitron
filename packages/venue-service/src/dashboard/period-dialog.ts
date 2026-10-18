@@ -132,7 +132,6 @@ export class PeriodDialog extends LitElement {
   @property({ attribute: false }) paintedIn?: PaintedIn;
   @property({ attribute: false }) seasons: readonly { id: string; colour: string }[] = [];
   @property() departmentId = "";
-  @property() timeZone = "";
   @property({ type: Boolean }) paintedInLinks = false;
   @property({ type: Boolean }) deletable = false;
   /** Given when adding without a fixed department, so the dialog asks for one. */
@@ -480,7 +479,7 @@ export class PeriodDialog extends LitElement {
           ? t("menu.period_gone")
           : this.refusal.code === "department.not_found"
             ? t("menu.department_gone")
-            : (clockChangeConflictText(this.refusal, this.timeZone) ?? t("menu.save_error"))
+            : (clockChangeConflictText(this.refusal) ?? t("menu.save_error"))
         : "";
     const includes = this.menus.find((menu) => menu.id === this.draft.menuId)?.includes ?? [];
     const generation = this.generation;
