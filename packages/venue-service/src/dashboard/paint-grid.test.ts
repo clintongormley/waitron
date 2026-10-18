@@ -1634,3 +1634,44 @@ test("closedBehind draws its label across the whole day behind the column's pain
   await drag(el, "thu", 120, 240);
   expect(seen).toEqual([{ key: "thu", day: [shut("08:00", "10:00"), stored] }]);
 });
+
+test("Copy whose Closed paint lies wholly outside an empty bounded column's hours sends no change for it", async () => {
+  const el = await zoneGrid(
+    { mon: [shut("08:00", "10:00")], tue: [] },
+    { tue: [{ periodId: "dinner", startsAt: "19:30", endsAt: "23:00" }] },
+  );
+  const seen = changes(el);
+  await openChooser(el, "mon");
+  await userEvent.click(choice(el, "tue"));
+  await el.updateComplete;
+  await userEvent.click(chooserButton(el, "Copy"));
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+});
+
+test("a bounded column's emitted day is in time order when Closed paint lands before an open block", async () => {
+  const dinner: Paint = { periodId: "dinner", startsAt: "19:00", endsAt: "23:00" };
+  const el = await zoneGrid(
+    { mon: [dinner] },
+    { mon: [{ periodId: "lunch", startsAt: "13:00", endsAt: "16:00" }] },
+  );
+  const seen = changes(el);
+  await drag(el, "mon", 420, 540);
+  expect(seen).toEqual([{ key: "mon", day: [shut("13:00", "15:00"), dinner] }]);
+});
+
+test("closedBehind's label is drawn below the column's blocks, not above them", async () => {
+  const el = await grid({ thu: [shut("15:00", "17:00")] }, { chosen: null, closedErases: false });
+  el.closedBehind = new Map([["thu", "Restaurant closed all day"]]);
+  await el.updateComplete;
+  const day = el.shadowRoot!.querySelector<HTMLElement>('.day[data-column="thu"]')!;
+  const behind = day.querySelector<HTMLElement>(".all-closed")!;
+  const first = block(el, "thu");
+  expect(behind.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(getComputedStyle(behind).zIndex).toBe("auto");
+  behind.style.pointerEvents = "auto";
+  const box = first.getBoundingClientRect();
+  expect(el.shadowRoot!.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)).toBe(
+    first,
+  );
+});
