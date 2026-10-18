@@ -17,6 +17,8 @@ export interface RenderedGuide {
 
 const SECTION_ID = /^[a-z][a-z0-9-]*$/;
 const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
+const WHITESPACE = /\s/;
+const NOT_EMPHASIS = "an _ that is neither inside a word nor emphasis";
 const NUMBERED_ITEM = /^\d+[.)] /;
 const RULE_OR_UNDERLINE = /^(?:-+|=+|\*+|_+)$/;
 const HTML_ENTITY = /&(?:#[0-9]+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]*);/y;
@@ -85,6 +87,10 @@ function isWordCharacter(character: string | undefined): boolean {
   return character !== undefined && WORD_CHARACTER.test(character);
 }
 
+function isWhitespace(character: string | undefined): boolean {
+  return character !== undefined && WHITESPACE.test(character);
+}
+
 function insideWord(text: string, index: number): boolean {
   return isWordCharacter(text[index - 1]) && isWordCharacter(text[index + 1]);
 }
@@ -98,7 +104,7 @@ function closingEmphasis(text: string, from: number, to: number): number {
   for (let index = text.indexOf("_", from); index !== -1 && index < to;) {
     const closes =
       index > from &&
-      text[index - 1] !== " " &&
+      !isWhitespace(text[index - 1]) &&
       (index + 1 === to || !isWordCharacter(text[index + 1]));
     if (closes) return index;
     index = text.indexOf("_", index + 1);
@@ -139,8 +145,11 @@ function renderInline(
       index = close + 1;
     } else if (character === "*") {
       if (text[index + 1] !== "*") failAt(context, index, "a single * that is not part of **");
+      if (isWhitespace(text[index + 2])) failAt(context, index, "an opening ** before a space");
       const close = findBefore(text, "**", index + 2, to);
       if (close === -1) failAt(context, index, "an unclosed **");
+      if (close === index + 2) failAt(context, index, "an empty **");
+      if (isWhitespace(text[close - 1])) failAt(context, close, "a closing ** after a space");
       out += `<strong>${renderInline(context, index + 2, close, inEmphasis)}</strong>`;
       index = close + 2;
     } else if (character === "!" && text[index + 1] === "[") {
@@ -159,10 +168,13 @@ function renderInline(
       if (inEmphasis) failAt(context, index, "emphasis inside emphasis");
       const opens =
         (index === from || text[index - 1] === " " || text[index - 1] === "(") &&
-        text[index + 1] !== " ";
+        !isWhitespace(text[index + 1]) &&
+        text[index + 1] !== "_";
       const close = opens ? closingEmphasis(text, index + 1, to) : -1;
-      if (close === -1) failAt(context, index, "an _ that is neither inside a word nor emphasis");
-      out += `<em>${renderInline(context, index + 1, close, true)}</em>`;
+      if (close === -1) failAt(context, index, NOT_EMPHASIS);
+      const inner = renderInline(context, index + 1, close, true);
+      if (text[close - 1] === "_") failAt(context, close, NOT_EMPHASIS);
+      out += `<em>${inner}</em>`;
       index = close + 1;
     } else {
       out += escapeHtml(character);

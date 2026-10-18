@@ -173,6 +173,15 @@ describe("renderGuide", () => {
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
+  it("refuses bold inside bold quickly, naming the line", () => {
+    const started = performance.now();
+
+    expect(() => render(`# T\n\n${"**a ".repeat(8000)}b${"**".repeat(8000)}\n`)).toThrow(
+      "line 3: a closing ** after a space",
+    );
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("shortens a long refused line in the message", () => {
     const row = `| ${"a".repeat(100)} |`;
 
@@ -309,6 +318,62 @@ describe("renderGuide", () => {
       "an address in angle brackets",
     ],
     ["a link with no text", "# T\n\n[](products.md)\n", 3, "a link with no text"],
+    ["bold inside bold", "# T\n\n**a **b** c**\n", 3, "a closing ** after a space"],
+    [
+      "a bold whose closing ** follows a space",
+      "# T\n\n**a ** b\n",
+      3,
+      "a closing ** after a space",
+    ],
+    [
+      "a bold whose closing ** follows a tab",
+      "# T\n\nx **a\t** y\n",
+      3,
+      "a closing ** after a space",
+    ],
+    [
+      "a bold whose opening ** is followed by a space",
+      "# T\n\nx ** a** y\n",
+      3,
+      "an opening ** before a space",
+    ],
+    [
+      "a bold whose opening ** is followed by a tab",
+      "# T\n\nx **\ta** y\n",
+      3,
+      "an opening ** before a space",
+    ],
+    ["an empty bold", "# T\n\na **** b\n", 3, "an empty **"],
+    [
+      "an emphasis whose opening _ is followed by a tab",
+      "# T\n\nx _\ta_ y\n",
+      3,
+      "an _ that is neither inside a word nor emphasis",
+    ],
+    [
+      "an emphasis whose closing _ follows a tab",
+      "# T\n\nx _a\t_ y\n",
+      3,
+      "an _ that is neither inside a word nor emphasis",
+    ],
+    [
+      "a double underscore around a word",
+      "# T\n\nx __a__ y\n",
+      3,
+      "an _ that is neither inside a word nor emphasis",
+    ],
+    [
+      "an emphasis closed by a double underscore",
+      "# T\n\nx _a__ y\n",
+      3,
+      "an _ that is neither inside a word nor emphasis",
+    ],
+    [
+      "an emphasis opened by a double underscore",
+      "# T\n\nx __a_ y\n",
+      3,
+      "an _ that is neither inside a word nor emphasis",
+    ],
   ])("refuses %s", (_name, markdown, line, found) => {
     expect(() => render(markdown)).toThrow(`line ${line}: `);
     expect(() => render(markdown)).toThrow(found);
