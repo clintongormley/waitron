@@ -1239,7 +1239,7 @@ describe("Reset table and the room's reset", () => {
     expect(await splitRowsOf(table.long!)).toEqual([table.c3!]);
   });
 
-  it("a room's reset after a partial Reset table waits for the guests left apart, then puts Long table back whole", async () => {
+  it("a room's reset after a partial Reset table waits for the guests left apart, then marks Long table needing moving", async () => {
     const { table, zoneId } = await LONG_TABLE();
     const { partyId } = await seat(v, table.long!);
     await ok(splitOff(table.long!, [table.c4!, table.c5!]));
@@ -1255,10 +1255,16 @@ describe("Reset table and the room's reset", () => {
     await inTx(v, (tx) => finishTable(tx, { partyId, ...command }));
     await inTx(v, (tx) => catchUpZone(tx, v.cfg, REMOVALS, zoneId, NOW));
 
-    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
-    expect(await seatsOf(table.long!)).toBe(10);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await out(table.c3!)).toBe(1);
+    expect(await placeOf(table.long!)).toEqual({ x: 12, y: 20, width: 4, height: 2 });
+    expect(await seatsOf(table.long!)).toBe(8);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!]);
+    const [marked] = await inTx(v, (tx) =>
+      tx
+        .select({ readyToMove: floorResetTables.readyToMove })
+        .from(floorResetTables)
+        .where(eq(floorResetTables.tableId, table.long!)),
+    );
+    expect(marked).toEqual({ readyToMove: true });
   });
 
   it("Back to its saved place works on Long table after Reset table", async () => {

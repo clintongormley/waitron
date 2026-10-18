@@ -248,7 +248,7 @@ async function longWaitsForItsName() {
 }
 
 describe("the till's floor routes catch today's plan up", () => {
-  it("brings a table back to the master on the first floor read after its party finishes", async () => {
+  it("leaves a table where it stands, needing moving, on the first floor read after its party finishes", async () => {
     const label = fresh("T1");
     const { zoneId, tableId, masterId, revision } = await plannedTable(label);
     const partyId = await seatAt(tableId);
@@ -261,7 +261,8 @@ describe("the till's floor routes catch today's plan up", () => {
     expect(await todayRow(tableId)).toMatchObject({ x: 30 });
     await readFloor();
 
-    expect(await todayRow(tableId)).toMatchObject({ x: 50 });
+    expect(await todayRow(tableId)).toMatchObject({ x: 30 });
+    expect(await readyOf(tableId)).toEqual({ pending: true, readyToMove: true });
   });
 
   it("removes a table deleted from the master once its party finishes", async () => {
@@ -326,7 +327,7 @@ describe("the till's floor routes catch today's plan up", () => {
     expect(released).toMatchObject({ deliveryTableId: null, deliveryTableLabel: label });
   });
 
-  it("a table made a part while a party sits at it keeps its joined table waiting until the party finishes", async () => {
+  it("a table made a part while a party sits at it keeps its joined table waiting, then needing moving once the party finishes", async () => {
     const zoneId = await zone();
     const [long, c3, c4, c5] = [
       fresh("Long"),
@@ -364,9 +365,12 @@ describe("the till's floor routes catch today's plan up", () => {
 
     await finish(partyId);
     const after = await readJoined();
-    expect(after.get(t3)).toBe(long);
-    expect(after.get(t4)).toBe(long);
-    expect(after.get(t5)).toBe(long);
+    expect(after.get(t3)).toBeNull();
+    expect(after.get(t4)).toBeNull();
+    expect(after.get(t5)).toBeNull();
+    for (const part of [t3, t4, t5]) {
+      expect(await readyOf(part)).toEqual({ pending: true, readyToMove: true });
+    }
   });
 
   it("parts parties hold when their joined table's name comes free keep it waiting until every party finishes", async () => {
@@ -1006,7 +1010,11 @@ describe("the reset waiting rules", () => {
     await finish(partyId);
 
     const after = await readJoined();
-    for (const part of parts) expect(after.get(part)).toBe(long);
+    for (const part of parts) {
+      expect(after.get(part)).toBeNull();
+      expect(await readyOf(part)).toEqual({ pending: true, readyToMove: true });
+    }
+    expect(await todayRows(parts)).toEqual(before);
   });
 
   it("taking 4 into 4+5 waits while 4 has guests", async () => {

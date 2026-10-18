@@ -875,7 +875,7 @@ describe("a reset clears today's name", () => {
     expect(await nameOf(table.bar!)).toBe(window);
   });
 
-  it("a part the catch-up takes back into Long table loses its name, which is then free (reset clears)", async () => {
+  it("a part a reset takes back into Long table once its guests leave loses its name, which is then free (reset clears)", async () => {
     const { table, zoneId } = await LONG_TABLE();
     const { partyId } = await seat(v, table.long!);
     await resetRoom(zoneId);
@@ -884,7 +884,7 @@ describe("a reset clears today's name", () => {
     await rename(table.c5!, corner);
 
     await finish(partyId);
-    await newDay(new Date());
+    await resetRoom(zoneId);
 
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await nameOf(table.c5!)).toBeNull();

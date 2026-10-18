@@ -459,7 +459,7 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     for (const [id] of counters(table)) expect(await mergeOf(v, id)).toBeNull();
   });
 
-  it("with guests at the group the reset moves nothing in it until they leave, then puts Long table back whole", async () => {
+  it("with guests at the group the reset moves nothing in it, even once they leave", async () => {
     const { table, zoneId } = await LONG_TABLE();
     await push(table.long!, table.bar!, "right");
     const { partyId } = await seat(v, table.bar!);
@@ -473,17 +473,10 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     await inTx(v, (tx) => finishTable(tx, { partyId, ...command }));
     await inTx(v, (tx) => catchUpZone(tx, v.cfg, REMOVALS, zoneId, NOW));
 
-    expect(await todayRow(v, table.long!)).toMatchObject({
-      x: 10,
-      y: 20,
-      width: 6,
-      height: 2,
-      seats: 10,
-      takenOff: false,
-    });
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0 });
-    expect(await mergeOf(v, table.bar!)).toBeNull();
-    for (const [id] of counters(table)) expect(await mergeOf(v, id)).toBeNull();
+    const after = await everything();
+    expect(after.today).toEqual(before.today);
+    expect(after.split).toEqual(before.split);
+    expect(after.joins).toEqual(before.joins);
+    expect(after.joinTables).toEqual(before.joinTables);
   });
 });

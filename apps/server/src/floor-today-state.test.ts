@@ -148,6 +148,7 @@ describe("the till's table-state answer carries today's plan", () => {
       zoneRevision: 1,
       name: null,
       joinName: null,
+      needsMoving: false,
     });
     expect(states.get(b)!.today).toEqual({
       placement: place(20, 5, { width: 10, rotation: 45 }),
@@ -162,6 +163,7 @@ describe("the till's table-state answer carries today's plan", () => {
       zoneRevision: 1,
       name: null,
       joinName: null,
+      needsMoving: false,
     });
     expect(states.get(spare)!.today).toEqual({
       placement: null,
@@ -176,6 +178,7 @@ describe("the till's table-state answer carries today's plan", () => {
       zoneRevision: 1,
       name: null,
       joinName: null,
+      needsMoving: false,
     });
     expect(states.get(off)!.today).toEqual({
       placement: null,
@@ -190,6 +193,7 @@ describe("the till's table-state answer carries today's plan", () => {
       zoneRevision: 1,
       name: null,
       joinName: null,
+      needsMoving: false,
     });
   });
 

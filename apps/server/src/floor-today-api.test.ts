@@ -108,6 +108,7 @@ interface FloorToday {
   seats: number | null;
   takenOff: boolean;
   zoneRevision: number;
+  needsMoving: boolean;
 }
 
 async function floorToday(tableId: string): Promise<FloorToday | null> {
@@ -498,7 +499,7 @@ describe("today's routes", () => {
     expect((await floorToday(table.seated!))?.placement).toMatchObject({ x: 70, y: 70 });
   });
 
-  it("a change sent from a read after the catch-up is applied, and survives the next read", async () => {
+  it("a change sent from a read after the catch-up marks a table is applied, and survives the next read", async () => {
     const { zoneId, table, master, revision } = await plannedZone(v, [
       { key: "t", label: "T", place: { x: 0, y: 0 } },
     ]);
@@ -525,7 +526,8 @@ describe("today's routes", () => {
     await finish(partyId);
     const stored = (await zoneRevisionOf(v, zoneId))!;
     const read = (await floorToday(table.t!))!;
-    expect(read.placement).toMatchObject({ x: 50, y: 0 });
+    expect(read.placement).toMatchObject({ x: 0, y: 0 });
+    expect(read.needsMoving).toBe(true);
     expect(read.zoneRevision).toBe(stored + 1);
 
     await expectRevision(
