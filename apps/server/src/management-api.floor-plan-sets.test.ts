@@ -184,22 +184,19 @@ describe("/management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan", () =
     });
   });
 
-  it("refuses a person without venue.configure on both routes, as the zone route does", async () => {
+  it("refuses a person without venue.configure on both routes", async () => {
     const at = await setAndZone();
     const body = JSON.stringify({ revision: 0, tables: [] });
 
-    const old = await app.request(`/management-api/zones/${at.zoneId}/floor-plan`, {
-      method: "GET",
-      headers: { cookie: staffCookie },
-    });
     const get = await layout(at, { method: "GET" }, staffCookie);
     const put = await layout(at, { method: "PUT", body }, staffCookie);
 
-    expect(old.status).toBe(403);
-    const oldBody = await old.json();
+    const refused = {
+      error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
+    };
     expect(get.status).toBe(403);
-    expect(await get.json()).toEqual(oldBody);
+    expect(await get.json()).toEqual(refused);
     expect(put.status).toBe(403);
-    expect(await put.json()).toEqual(oldBody);
+    expect(await put.json()).toEqual(refused);
   });
 });

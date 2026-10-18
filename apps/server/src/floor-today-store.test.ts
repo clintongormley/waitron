@@ -33,7 +33,7 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "@waitron/venue-service";
-import { readLayout, saveLayout, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import {
   catchUpZone,
@@ -1898,7 +1898,7 @@ describe("resets onto a set's layout", () => {
     expect(await todayRow(await liveOf(ids.a!))).toMatchObject({ x: null });
   });
   it("leaves a zone as it is when its department gains a set with no saved layout", async () => {
-    const zoneId = await inTx(v, async (tx) => {
+    const { zoneId, fromSet } = await inTx(v, async (tx) => {
       const department = await createDepartment(tx, v.cfg, {
         name: `Dept ${randomUUID().slice(0, 8)}`,
         orderStart: "table",
@@ -1907,11 +1907,12 @@ describe("resets onto a set's layout", () => {
         name: `Inside ${randomUUID().slice(0, 8)}`,
         departmentId: department.id,
       });
-      await saveZonePlan(
+      const from = await defaultLayout(tx, v.cfg, zone.id);
+      await saveLayout(
         tx,
         v.cfg,
         REMOVALS,
-        zone.id,
+        from,
         {
           revision: 0,
           tables: [
@@ -1927,21 +1928,29 @@ describe("resets onto a set's layout", () => {
         },
         FRIDAY_NIGHT,
       );
+      const gaining = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      await tx
+        .update(zoneServicePolicies)
+        .set({ departmentId: gaining.id })
+        .where(eq(zoneServicePolicies.zoneId, zone.id));
       const [set] = await tx
         .insert(floorPlanSets)
         .values({ locationId: v.cfg.locationId })
         .returning({ id: floorPlanSets.id });
       await linkFloorPlanSet(tx, v.cfg, {
         setId: set!.id,
-        departmentId: department.id,
+        departmentId: gaining.id,
         name: "Standard",
       });
-      return zone.id;
+      return { zoneId: zone.id, fromSet: from.setId };
     });
     const recordBefore = await todayZone(zoneId);
     const [live] = await liveTablesOf(zoneId);
     const rowBefore = await todayRow(live!.id);
-    expect(recordBefore).toMatchObject({ businessDay: "2026-10-09", setId: null });
+    expect(recordBefore).toMatchObject({ businessDay: "2026-10-09", setId: fromSet });
     expect(rowBefore).toMatchObject({ x: 30 });
 
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
