@@ -32,6 +32,7 @@ function declared(css: string, name: string): string[] {
 const colors = read("colors.css");
 const light = block(colors, ":where([data-wt-theme-root]) {");
 const dark = block(colors, "@media (prefers-color-scheme: dark) {");
+const forcedLight = block(colors, ':where([data-wt-theme-root][data-theme="light"]) {');
 const forcedDark = block(colors, ':where([data-wt-theme-root][data-theme="dark"]) {');
 const structure = read("structure.css");
 
@@ -43,6 +44,7 @@ it("each colour the guide page copies matches the token, light and dark", () => 
   for (const [name, value] of copies) {
     const [lightCopy, darkCopy] = value as readonly [string, string];
     expect(declared(light, name), `${name}, light`).toEqual([lightCopy]);
+    expect(declared(forcedLight, name), `${name}, forced light`).toEqual([lightCopy]);
     expect(declared(dark, name), `${name}, dark`).toEqual([darkCopy]);
     expect(declared(forcedDark, name), `${name}, forced dark`).toEqual([darkCopy]);
   }

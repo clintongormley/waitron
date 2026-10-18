@@ -185,8 +185,9 @@ depend on `@waitron/ui-core`), so `GUIDE_PAGE_TOKENS` (in `guide-pages.ts`) decl
 of the `--wt-*` tokens it reads, each colour as `light-dark(<light>, <dark>)`, and every rule reads
 `var(--wt-…)`. Sizes are in px. Guard: `scripts/guide-page-tokens.test.ts`, weaker than its name: it
 reads `packages/ui-core/src/tokens/colors.css` and `structure.css` as text, finds a declaration by
-its exact name only in the light block, the `prefers-color-scheme: dark` block and the structure
-file, and never renders the page. The "declares every token it reads" case in
+its exact name only in the default light block, the `prefers-color-scheme: dark` block, the
+`[data-theme="light"]` and `[data-theme="dark"]` blocks a chosen theme uses, and the structure file,
+and never renders the page. The "declares every token it reads" case in
 `apps/server/src/guide-pages.test.ts` checks that each `var(--wt-…)` the page reads is one it
 declares.
 
