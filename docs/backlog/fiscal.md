@@ -925,10 +925,11 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
   - Settle in the spec how a correction and the existing Refund relate, by reading the code paths:
     whether money goes back in the same step, and what each files.
   - Asesor Q31 (difference vs. substitution) changes only the filing type; build for differences.
-  - A758 §3.8 (2026-10-18, waiting for the owner's Q40): a dish left on the pass after the table
-    paid and finished is cancelled and refunded through the ordinary refund, with no correction of
-    its own. Recommended to this spec: a refund that names dishes, as that one does, issues the
-    partial R5 for them in the same step.
+  - A758 §3.8 (rewritten 2026-10-18 for the owner's Q40 answer; waiting for Q43): a dish cancelled
+    on a paid bill with its Refund tick on is refunded through the ordinary refund, with no
+    correction of its own. Recommended to this spec: a refund that names dishes, as that one does,
+    issues the partial R5 for them in the same step. §3.8.1 there has a worked example: €5.50 back
+    at 10% is an R5 of −€5.50, base −€5.00, VAT −€0.50.
   - Later fit: the bills-and-tables brainstorm (2026-10-17/18) moves order lines to one portion per
     line; a correction then picks portions the same way staff pick dishes to move.
 

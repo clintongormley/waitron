@@ -469,9 +469,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   simplified invoice: the engine exists and only the whole-order cancel uses it. Staff need an easy
   way to correct a paid receipt when a customer spots an error afterwards. Build on today's
   filing-by-differences now; asesor Q31 may switch the filing type later without changing the
-  screens. Needs a spec first; fiscal, so owner sign-off at land. A758 §3.8 (food left on the pass
-  after a table has paid) refunds named dishes through the ordinary refund and relies on A802 for
-  their correction.
+  screens. Needs a spec first; fiscal, so owner sign-off at land. A758 §3.8 (food cancelled on a
+  paid bill, with a Refund tick per dish) refunds the ticked dishes through the ordinary refund and
+  recommends that A802 issue their partial correction in the same step; its §3.8.1 has a worked
+  example to check against.
   [Detail](backlog/fiscal.md#nothing-in-the-product-can-issue-a-corrective-invoice-r5-_factura-rectificativa_-for-a-vat-error-on-an-issued-simplified-invoice)
 
 - **"No tax (0%)" is an open fiscal question, and it must be answered before the first live
@@ -1839,10 +1840,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group; printing
   problems).** [Detail](backlog/kitchen.md#task-5-750-kitchen-pass-and-table-screen-by-group-printing-problems)
   - A party finished while its food is still on the pass keeps its cards there with no group
-    button that works (each is refused `party.not_open`). Designed in A758 §3.8 (2026-10-18):
-    Finish table asks first, the paid receipt gains Cancel items… with A773-1's keep-the-payment
-    and refund choices, and the card says Table finished. Waits for the owner's Q40 and for
-    A773-1.
+    button that works (each is refused `party.not_open`). Designed in A758 §3.8 (revised
+    2026-10-18 for the owner's Q40 answer): Finish table asks first, cancelling with a reason and a
+    Refund tick per dish; the paid receipt's Cancel items… opens the same dialog; the card says
+    Table finished. Waits for the owner's Q43 and for A773-1.
   - `*** REPRINT ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
     `*** HOLD CANCELLED ***` print in English.
   - A switched-off printer's printing problem keeps showing until the printer is switched on and a
@@ -2067,9 +2068,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   its own approver list; a Void switch "Ask for approval only once the kitchen has it", matched to
   A773-1's Cancel item choices; a seven-reason starter list. Then the page "Voids and comps" under
   Service, with search, drag handles and Delete. **Design revised 2026-10-17, and on 2026-10-18 for
-  food left on the pass after a table has paid and finished (§3.8: the waiter cancels it, keeping
-  the payment or refunding it; no correction of its own — A802's). The build waits for the owner's
-  answer to Q40.**
+  food left on the pass after a table has paid (§3.8), rewritten for the owner's Q40 answer: every
+  cancel on a paid bill takes a Void reason (from the list, or "Other" with a typed note), with a
+  Refund tick per dish — held or not started ticked, being prepared or ready not; unrefunded dishes
+  stay on the bill and the invoice. The build waits for the owner's answer to Q43.**
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)

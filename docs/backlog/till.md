@@ -1409,10 +1409,12 @@ roles are a ranking, and "does the logic work? are we asking the right questions
 
 **Design (2026-10-17, revised the same day with the owner's answers):** [the decisions, the rules, the page and the starter list](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
 with [mock-ups](mockups/a758-adjustment-reasons/). Revised 2026-10-18 for food left on the pass after
-a table has paid and finished (§3.8, pictures 06–09); the build waits for the owner's Q40. The
-notes below are the review as written before the answers: where they differ from the design's
-decisions (§1 there) — three kinds, give-away against 100% discount, "Invitación", role lists
-"with or after" editable roles — the design wins.
+a table has paid (§3.8, pictures 06–09), then rewritten the same day for the owner's Q40 answer:
+the standard cancel with a reason (listed, or "Other" with a typed note) and a Refund tick per dish,
+from Finish table, the table's Cancel item… and the paid receipt; the build waits for the owner's
+Q43. The notes below are the review as written before the answers: where they differ from the
+design's decisions (§1 there) — three kinds, give-away against 100% discount, "Invitación", role
+lists "with or after" editable roles — the design wins.
 
 How a reason works today (`packages/adjustments/src/policy.ts`): it allows one or more of cancel
 (void), give away (comp), a percentage discount and an amount discount; it may cap the percentage
