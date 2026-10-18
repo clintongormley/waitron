@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, getTableColumns } from "drizzle-orm";
+import { and, asc, eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -140,6 +140,15 @@ function save(zoneId: string, revision: number, tables: ZonePlanSave["tables"]) 
 
 function place(x: number, y: number) {
   return { x, y, width: 8, height: 8, shape: "rect" as const, rotation: 0 };
+}
+
+/** Every today's row and merge, to show a refusal wrote nothing. */
+async function everything() {
+  return inTx(v, async (tx) => ({
+    today: await tx.select().from(floorTodayTables).orderBy(asc(floorTodayTables.id)),
+    joins: await tx.select().from(floorTodayJoins).orderBy(asc(floorTodayJoins.id)),
+    joinTables: await tx.select().from(floorTodayJoinTables).orderBy(asc(floorTodayJoinTables.id)),
+  }));
 }
 
 describe("today's changes", () => {
@@ -326,6 +335,59 @@ describe("today's changes", () => {
     expect(await mergeOf(v, table.b!)).toBeNull();
     expect(await todayRow(v, table.a!)).toMatchObject({ x: 0, y: 0 });
     expect(await todayRow(v, table.b!)).toMatchObject({ x: 20, y: 0 });
+  });
+
+  it("refuses Back while a partner still merged in a merge of three stands in its saved place", async () => {
+    const { zoneId, table } = await plannedZone(
+      v,
+      [
+        { key: "a", place: { x: 0, y: 0 } },
+        { key: "b", place: { x: 40, y: 0 } },
+        { key: "c", place: { x: 60, y: 0 } },
+      ],
+      NOW,
+    );
+    await setToday(table.a!, { x: 10 });
+    await setToday(table.b!, { x: 2 });
+    await setToday(table.c!, { x: 18 });
+    await merge(zoneId, [
+      { tableId: table.a!, beforeX: 0, beforeY: 0 },
+      { tableId: table.b!, beforeX: 40, beforeY: 0 },
+      { tableId: table.c!, beforeX: 60, beforeY: 0 },
+    ]);
+    const before = await everything();
+
+    await expect(back(table.a!)).rejects.toMatchObject({
+      code: "table.place_taken",
+      params: { tableId: table.a!, standingId: table.b! },
+    });
+
+    expect(await everything()).toEqual(before);
+  });
+
+  it("refuses Back while the partner of a merge of two would go back into its saved place", async () => {
+    const { zoneId, table } = await plannedZone(
+      v,
+      [
+        { key: "a", place: { x: 0, y: 0 } },
+        { key: "b", place: { x: 40, y: 0 } },
+      ],
+      NOW,
+    );
+    await setToday(table.a!, { x: 30 });
+    await setToday(table.b!, { x: 38 });
+    await merge(zoneId, [
+      { tableId: table.a!, beforeX: 0, beforeY: 0 },
+      { tableId: table.b!, beforeX: 2, beforeY: 0 },
+    ]);
+    const before = await everything();
+
+    await expect(back(table.a!)).rejects.toMatchObject({
+      code: "table.place_taken",
+      params: { tableId: table.a!, standingId: table.b! },
+    });
+
+    expect(await everything()).toEqual(before);
   });
 
   it("sends a table the last reset copied as a spare back to the spares", async () => {

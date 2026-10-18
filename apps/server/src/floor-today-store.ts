@@ -1303,17 +1303,17 @@ export async function backToSaved(
   }
   const members = merge?.members.map((member) => member.tableId) ?? [];
   const place = placementOf(saved);
-  if (place !== null) {
-    await refusePlaceTaken(tx, zoneId, tableId, place, new Set([tableId, ...members]), true);
-  }
   await withMovedSlips(tx, cfg, members.length === 0 ? null : { tables: members }, async () => {
     await leaveMerges(tx, [tableId]);
+    if (place !== null) {
+      await refusePlaceTaken(tx, zoneId, tableId, place, new Set([tableId]), true);
+    }
     await tx
       .update(floorTodayTables)
       .set({
         seats: saved.seats,
         fixed: saved.fixed,
-        ...placementColumns(placementOf(saved)),
+        ...placementColumns(place),
         takenOff: false,
       })
       .where(eq(floorTodayTables.id, row.id));

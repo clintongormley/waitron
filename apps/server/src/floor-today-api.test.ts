@@ -2021,6 +2021,7 @@ describe("Update layout", () => {
     await updateToDinner(d.zoneId);
     await expectRevision(v, today(live("two"), "move", { x: 0, y: 0 }), d.zoneId);
     await expectRevision(v, today(live("four"), "move", { x: 45, y: 0 }), d.zoneId);
+    const before = await everything();
 
     expect(await refusal(today(live("two"), "back"))).toEqual({
       status: 409,
@@ -2031,6 +2032,6 @@ describe("Update layout", () => {
         },
       },
     });
-    expect(await todayRow(v, live("two"))).toMatchObject({ x: 0 });
+    expect(await everything()).toEqual(before);
   });
 });
