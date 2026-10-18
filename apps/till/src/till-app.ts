@@ -863,11 +863,14 @@ interface PayingOrder {
   visit: number;
 }
 
-interface TablePayment {
+interface WholePayment {
   presented: boolean;
+  invoiced: boolean;
+  outstanding: string;
+  bill: BillLookupRow | null;
   tender: Tender;
   guests?: number | null;
-  expectedEdit: BillEditExpected;
+  expectedEdit: BillEditExpected | null;
 }
 
 interface PendingBillPayment extends Submission {
@@ -1488,8 +1491,7 @@ export class TillApp extends LitElement {
       this.#partylessDraft.lines.length > 0 ||
       this.leave.coordinator.isDirty() ||
       this.#unansweredPayments.size > 0 ||
-      this.#unansweredTablePayments.size > 0 ||
-      this.#unansweredCollections.size > 0 ||
+      this.#unansweredWholePayments.size > 0 ||
       this.#unansweredRefund !== null ||
       this.transferLocalCopies.length > 0 ||
       this.#requestsOut()
@@ -2455,15 +2457,7 @@ export class TillApp extends LitElement {
     session: number;
     expectedEdit: BillEditExpected | null | undefined;
   };
-  readonly #unansweredCollections = new Map<
-    string,
-    {
-      tender: Tender;
-      invoiced: boolean;
-      expectedEdit: BillEditExpected | null;
-      bill: BillLookupRow | null;
-    }
-  >();
+  readonly #unansweredWholePayments = new Map<string, WholePayment>();
   @state() private findBillBusy = false;
   #invoiceRecoveryVisit = 0;
   #findBillRead?: AbortController;
@@ -2770,7 +2764,6 @@ export class TillApp extends LitElement {
   #billPays = 0;
   #unansweredPayments = new Map<string, PendingBillPayment>();
   #paymentSends = new Map<string, number>();
-  #unansweredTablePayments = new Map<string, TablePayment>();
   @state() private departing: Departing | null = null;
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
@@ -6307,7 +6300,8 @@ export class TillApp extends LitElement {
         signal: controller.signal,
       });
       if (!current()) return;
-      if (row.collectionStatus !== null) {
+      const pending = this.#unansweredWholePayments.get(row.workingOrderId);
+      if (row.collectionStatus !== null || pending !== undefined) {
         this.#collectionObservation = {
           billId: row.workingOrderId,
           api,
@@ -6324,21 +6318,19 @@ export class TillApp extends LitElement {
                     draftRevision: row.edit.draftRevision,
                   },
         };
-        this.collectionBill = this.#unansweredCollections.get(
-          this.#collectionKey(row.workingOrderId),
-        )?.bill ?? {
+        this.collectionBill = pending?.bill ?? {
           workingOrderId: row.workingOrderId,
           orderNumber: row.orderNumber,
           label: row.label,
           partyName: row.partyName,
           tables: row.tables,
-          invoiceNumber: row.invoiceNumber,
+          invoiceNumber: pending?.invoiced === false ? null : row.invoiceNumber,
           openedAt: row.openedAt,
           departedAt: row.departedAt,
-          status: row.collectionStatus,
-          stillOwed: row.stillOwed,
+          status: row.collectionStatus ?? "waiting_for_payment",
+          stillOwed: pending?.outstanding ?? row.stillOwed,
         };
-        this.findBillError = undefined;
+        this.findBillError = pending === undefined ? undefined : "sale.unconfirmed";
         this.findingBill = true;
         return;
       }
@@ -6832,19 +6824,37 @@ export class TillApp extends LitElement {
     </div>`;
   }
 
-  #collectionKey(billId: string): string {
-    return JSON.stringify([this.operatorPersonId, billId]);
+  #sendWholePayment(api: TillApi, billId: string, payment: WholePayment): Promise<TillSaleResult> {
+    if (!payment.presented)
+      return api.recordSale(
+        [],
+        payment.tender,
+        billId,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        payment.guests,
+        payment.expectedEdit!,
+      );
+    return payment.expectedEdit === null
+      ? api.collectOrder(billId, payment.tender)
+      : api.collectOrder(billId, payment.tender, undefined, payment.guests, payment.expectedEdit);
   }
 
   async #onFindBillPay(event: Event): Promise<void> {
     if (this.submitting) return;
     const { workingOrderId, tender, invoiced } = (event as CustomEvent<FindBillPayDetail>).detail;
+    if (this.#unansweredPayments.get(workingOrderId)?.unconfirmed === true) {
+      this.findBillError = "bill_pay.unconfirmed";
+      return;
+    }
     const observation = this.#collectionObservation;
     const session = this.#operatorSession;
     const api = this.api;
     const visit = this.#invoiceRecoveryVisit;
-    const key = this.#collectionKey(workingOrderId);
-    const unanswered = this.#unansweredCollections.get(key);
+    const key = workingOrderId;
+    const unanswered = this.#unansweredWholePayments.get(key);
     if (
       observation !== undefined &&
       (observation.billId !== workingOrderId ||
@@ -6893,24 +6903,18 @@ export class TillApp extends LitElement {
         }
         if (expectedEdit === undefined) throw { code: "draft.out_of_date" };
         payment = structuredClone({
+          presented: true,
           tender,
           invoiced,
+          outstanding: this.collectionBill?.stillOwed ?? tender.amount,
           expectedEdit,
           bill: this.collectionBill?.workingOrderId === workingOrderId ? this.collectionBill : null,
         });
       }
-      this.#unansweredCollections.set(key, payment);
-      const result =
-        payment.expectedEdit === null
-          ? await api.collectOrder(workingOrderId, payment.tender)
-          : await api.collectOrder(
-              workingOrderId,
-              payment.tender,
-              undefined,
-              undefined,
-              payment.expectedEdit,
-            );
-      if (this.#unansweredCollections.get(key) === payment) this.#unansweredCollections.delete(key);
+      this.#unansweredWholePayments.set(key, payment);
+      const result = await this.#sendWholePayment(api, workingOrderId, payment);
+      if (this.#unansweredWholePayments.get(key) === payment)
+        this.#unansweredWholePayments.delete(key);
       if (!current()) return;
       this.shadowRoot!.querySelector("till-find-bill-dialog")?.closeSaved();
       this.result = result;
@@ -6921,9 +6925,9 @@ export class TillApp extends LitElement {
       if (
         (unanswered === undefined || paymentNotRecorded(error)) &&
         !isNetworkFailure(error) &&
-        this.#unansweredCollections.get(key) === payment
+        this.#unansweredWholePayments.get(key) === payment
       )
-        this.#unansweredCollections.delete(key);
+        this.#unansweredWholePayments.delete(key);
       if (!current()) return;
       this.findBillError = isPermanentSaleRefusal(error)
         ? "sale.refused"
@@ -13196,8 +13200,14 @@ export class TillApp extends LitElement {
   async #onPayTab(event: Event): Promise<void> {
     if (this.submitting || this.activeTabId === undefined) return;
     const id = this.activeTabId;
+    if (this.#unansweredPayments.get(id)?.unconfirmed === true) {
+      this.errorKey = "bill_pay.unconfirmed";
+      return;
+    }
     const bill = this.partyBills.find((row) => row.workingOrderId === id);
-    if (bill !== undefined && paidInPart(bill)) {
+    const key = id;
+    const unanswered = this.#unansweredWholePayments.get(key);
+    if (unanswered === undefined && bill !== undefined && paidInPart(bill)) {
       this.#sayBillPayments(bill.outstanding);
       return;
     }
@@ -13209,8 +13219,6 @@ export class TillApp extends LitElement {
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
     const api = this.api;
-    const key = id;
-    const unanswered = this.#unansweredTablePayments.get(key);
     let payment = unanswered;
     try {
       if (
@@ -13229,30 +13237,20 @@ export class TillApp extends LitElement {
       if (payment === undefined) {
         const expectedEdit = this.#draftSync?.expectedEditFor(id);
         if (expectedEdit == null) throw { code: "draft.out_of_date" };
-        payment = structuredClone({ presented, tender, guests, expectedEdit });
+        payment = structuredClone({
+          presented,
+          tender,
+          guests,
+          expectedEdit,
+          invoiced: bill?.receiptAvailable === true,
+          outstanding: bill?.outstanding ?? tender.amount,
+          bill: null,
+        });
       }
-      this.#unansweredTablePayments.set(key, payment);
-      const result = payment.presented
-        ? await api.collectOrder(
-            id,
-            payment.tender,
-            undefined,
-            payment.guests,
-            payment.expectedEdit,
-          )
-        : await api.recordSale(
-            [],
-            payment.tender,
-            id,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            payment.guests,
-            payment.expectedEdit,
-          );
-      if (this.#unansweredTablePayments.get(key) === payment)
-        this.#unansweredTablePayments.delete(key);
+      this.#unansweredWholePayments.set(key, payment);
+      const result = await this.#sendWholePayment(api, id, payment);
+      if (this.#unansweredWholePayments.get(key) === payment)
+        this.#unansweredWholePayments.delete(key);
       if (
         session !== this.#operatorSession ||
         visit !== this.#orderVisit ||
@@ -13261,14 +13259,14 @@ export class TillApp extends LitElement {
       )
         return;
       this.result = result;
-      this.#showTicket(id, bill?.receiptAvailable !== true);
+      this.#showTicket(id, !payment.invoiced);
     } catch (error) {
       if (
         (unanswered === undefined || paymentNotRecorded(error)) &&
         !isNetworkFailure(error) &&
-        this.#unansweredTablePayments.get(key) === payment
+        this.#unansweredWholePayments.get(key) === payment
       )
-        this.#unansweredTablePayments.delete(key);
+        this.#unansweredWholePayments.delete(key);
       if (
         session !== this.#operatorSession ||
         visit !== this.#orderVisit ||
@@ -13409,6 +13407,10 @@ export class TillApp extends LitElement {
   ): Promise<BillPaying | null> {
     if (order === undefined || this.billPaying !== null) return null;
     const { billId } = order;
+    if (this.#unansweredWholePayments.has(billId)) {
+      this.errorKey = "sale.unconfirmed";
+      return null;
+    }
     const pending = this.#unansweredPayments.get(billId);
     const open: BillPaying = {
       id: ++this.#billPays,
@@ -14569,7 +14571,11 @@ export class TillApp extends LitElement {
           })}
         @find-bill-pay=${(event: Event) => void this.#onFindBillPay(event)}
         @find-bill-selection=${() => {
-          this.findBillError = undefined;
+          this.findBillError =
+            this.collectionBill !== null &&
+            this.#unansweredWholePayments.has(this.collectionBill.workingOrderId)
+              ? "sale.unconfirmed"
+              : undefined;
         }}
         @find-bill-close=${() => {
           this.#invoiceRecoveryVisit++;
@@ -14802,8 +14808,8 @@ export class TillApp extends LitElement {
           this.findingBill
             ? html`<till-find-bill-dialog
                 .bill=${this.collectionBill}
-                .confirmationTender=${this.collectionBill === null ? undefined : this.#unansweredCollections.get(this.#collectionKey(this.collectionBill.workingOrderId))?.tender}
-                .unconfirmed=${this.collectionBill !== null && this.#unansweredCollections.has(this.#collectionKey(this.collectionBill.workingOrderId))}
+                .confirmationTender=${this.collectionBill === null ? undefined : this.#unansweredWholePayments.get(this.collectionBill.workingOrderId)?.tender}
+                .unconfirmed=${this.collectionBill !== null && this.#unansweredWholePayments.has(this.collectionBill.workingOrderId)}
                 .busy=${this.findBillBusy}
                 .error=${this.findBillError}
               ></till-find-bill-dialog>`

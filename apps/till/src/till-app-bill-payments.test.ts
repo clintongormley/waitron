@@ -1,3 +1,5 @@
+import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
+import type { TillFindBillDialog } from "./widgets/find-bill-dialog.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
@@ -1228,6 +1230,306 @@ describe("till-app: a device that does not take cash", () => {
 });
 
 describe("till-app: a bill payment's refusals and retries", () => {
+  it.each([
+    ["open", false],
+    ["placed", false],
+    ["open", true],
+    ["placed", true],
+  ] as const)(
+    "A773 reopens the original %s whole payment in Find a bill after a settled=%s read",
+    async (status, settled) => {
+      const send = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(invoiceOf("120.00"));
+      const selected = {
+        ...billRow({
+          workingOrderId: "wo-4",
+          partyId: "v1",
+          total: "120.00",
+          stillOwed: settled ? "0.00" : "30.00",
+          state: settled ? "paid-not-handed-over" : "unpaid",
+          orderStatus: settled ? "settled" : "placed",
+          collectionStatus: settled ? null : "waiting_for_payment",
+          invoiceNumber: "NEW/99",
+        }),
+        edit: {
+          billId: "wo-4",
+          editorVersion: 9,
+          editorId: null,
+          editorName: null,
+          draftId: null,
+          draftRevision: null,
+        },
+      };
+      const { el } = await mountApp({
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([billOf({ status, receiptAvailable: status === "placed" })]),
+        getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+        listZoneOffers: vi.fn().mockResolvedValue({
+          ...offers,
+          context: { ...offers.context, receiptPrintMode: "on_request" },
+        }),
+        listDefaultZoneOffers: vi.fn().mockResolvedValue({
+          ...offers,
+          context: { ...offers.context, receiptPrintMode: "on_request" },
+        }),
+        getTablesState: vi
+          .fn()
+          .mockResolvedValue([{ ...mesa(), zonePolicy: { receiptPrintMode: "on_request" } }]),
+        ...(status === "open" ? { recordSale: send } : { collectOrder: send }),
+        findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listBills: vi.fn().mockResolvedValue(listPage([selected])),
+        getFindBill: vi.fn().mockResolvedValue(selected),
+      });
+      const order = await openTable(el);
+      emit(order, "pay-tab", { method: "cash", amount: "150.00", guests: 4 });
+      await flush(el);
+      expect(send).toHaveBeenCalledOnce();
+      const original = structuredClone(send.mock.calls[0]);
+      emit(shell(el), "find-bill");
+      await flush(el);
+      emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+        row: selected,
+      });
+      await flush(el);
+      const recovery = el.shadowRoot!.querySelector<TillFindBillDialog>("till-find-bill-dialog");
+      expect(recovery).not.toBeNull();
+      expect(recovery!.unconfirmed).toBe(true);
+      expect(recovery!.error).toBe("sale.unconfirmed");
+      expect(recovery!.bill!.stillOwed).toBe("120.00");
+      expect(recovery!.confirmationTender).toEqual({ method: "cash", amount: "150.00" });
+      expect(send).toHaveBeenCalledOnce();
+      emit(recovery!, "find-bill-pay", {
+        workingOrderId: "wo-4",
+        tender: { method: "card", amount: "30.00", externalRef: "new" },
+        invoiced: true,
+      });
+      await flush(el);
+      expect(send.mock.calls).toEqual([original, original]);
+      expect(status === "open" ? api.collectOrder : api.recordSale).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-ticket-view")!.originalReceiptAvailable).toBe(
+        status === "open",
+      );
+    },
+  );
+  it.each([false, true])(
+    "A773 table Pay replays Find collection after partial=%s refresh",
+    async (partial) => {
+      const send = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(invoiceOf("120.00"));
+      const selected = {
+        ...billRow({
+          workingOrderId: "wo-4",
+          partyId: "v1",
+          total: "120.00",
+          stillOwed: "120.00",
+          collectionStatus: "waiting_for_payment",
+          invoiceNumber: "OLD/7",
+        }),
+        edit: {
+          billId: "wo-4",
+          editorVersion: 7,
+          editorId: null,
+          editorName: null,
+          draftId: null,
+          draftRevision: null,
+        },
+      };
+      const bills = vi
+        .fn()
+        .mockResolvedValue([billOf({ status: "placed", receiptAvailable: true })]);
+      const { el } = await mountApp({
+        getPartyBills: bills,
+        collectOrder: send,
+        findBillOptions: vi.fn().mockResolvedValue(billOptions),
+        listBills: vi.fn().mockResolvedValue(listPage([selected])),
+        getFindBill: vi.fn().mockResolvedValue(selected),
+        getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+        listZoneOffers: vi.fn().mockResolvedValue({
+          ...offers,
+          context: { ...offers.context, receiptPrintMode: "on_request" },
+        }),
+        listDefaultZoneOffers: vi.fn().mockResolvedValue({
+          ...offers,
+          context: { ...offers.context, receiptPrintMode: "on_request" },
+        }),
+        getTablesState: vi
+          .fn()
+          .mockResolvedValue([{ ...mesa(), zonePolicy: { receiptPrintMode: "on_request" } }]),
+      });
+      await openTable(el);
+      emit(shell(el), "find-bill");
+      await flush(el);
+      emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-bill-open", {
+        row: selected,
+      });
+      await flush(el);
+      const recovery = el.shadowRoot!.querySelector<TillFindBillDialog>("till-find-bill-dialog")!;
+      emit(recovery, "find-bill-pay", {
+        workingOrderId: "wo-4",
+        tender: { method: "card", amount: "120.00", externalRef: "original" },
+        invoiced: true,
+      });
+      await flush(el);
+      const original = structuredClone(send.mock.calls[0]);
+      expect(original).toEqual([
+        "wo-4",
+        { method: "card", amount: "120.00", externalRef: "original" },
+        undefined,
+        undefined,
+        { billId: "wo-4", editorVersion: 7, draftId: null, draftRevision: null },
+      ]);
+      bills.mockResolvedValue([
+        billOf({ status: "open", hasPayments: partial, outstanding: "30.00" }),
+      ]);
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el), "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "40.00", guests: 9 });
+      await flush(el);
+      expect(send.mock.calls).toEqual([original, original]);
+      expect(api.recordSale).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("till-ticket-view")!.originalReceiptAvailable).toBe(
+        false,
+      );
+    },
+  );
+
+  it("A773 an unknown whole payment blocks a second partial payment", async () => {
+    const send = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ recordSale: send });
+    const order = await openTable(el);
+    emit(order, "pay-tab", { method: "cash", amount: "120.00", guests: 4 });
+    await flush(el);
+    const reads = vi.mocked(api.getBillBalance).mock.calls.length;
+    emit(order, "bill-pay", { way: "contribution", lines: [], amount: "30.00" });
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(api.getBillBalance).toHaveBeenCalledTimes(reads);
+    expect(api.previewBillPayment).not.toHaveBeenCalled();
+    expect(api.takeBillPayment).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.textContent).toContain(t("sale.unconfirmed"));
+  });
+
+  it.each(["pay-tab", "find-bill-pay"])(
+    "A773 an unknown partial payment blocks a second whole payment through %s",
+    async (event) => {
+      const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({ takeBillPayment });
+      await openTable(el);
+      await openDialog(el, "contribution");
+      await type(el, "amount", "40");
+      await type(el, "tendered", "50");
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      await expect
+        .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+        .toBe(t("bill_pay.unconfirmed"));
+      const original = structuredClone(sent());
+      emit(
+        tableOrder(el),
+        event,
+        event === "pay-tab"
+          ? { method: "cash", amount: "120.00", guests: 4 }
+          : {
+              workingOrderId: "wo-4",
+              tender: { method: "cash", amount: "120.00" },
+              invoiced: true,
+            },
+      );
+      await flush(el);
+      expect(api.recordSale).not.toHaveBeenCalled();
+      expect(api.collectOrder).not.toHaveBeenCalled();
+      expect(sent()).toEqual(original);
+      expect(dialog(el)!.confirmationLocked).toBe(true);
+    },
+  );
+
+  it.each(["open", "placed"] as const)(
+    "A773 an unanswered %s whole payment survives an operator change",
+    async (status) => {
+      const send = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(invoiceOf("120.00"));
+      const { el } = await mountApp({
+        getPartyBills: vi.fn().mockResolvedValue([billOf({ status })]),
+        ...(status === "open" ? { recordSale: send } : { collectOrder: send }),
+      });
+      const order = await openTable(el);
+      emit(order, "pay-tab", {
+        method: "card",
+        amount: "120.00",
+        externalRef: "original",
+        guests: 4,
+      });
+      await flush(el);
+      const original = structuredClone(send.mock.calls[0]);
+      expect(send).toHaveBeenCalledOnce();
+      emit(shell(el), "logout");
+      await flush(el);
+      const question = el.shadowRoot!.querySelector("wt-unsaved-changes");
+      if (question?.open) await discardUnsavedLeave(el);
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
+      await flush(el);
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el), "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "150.00", guests: 9 });
+      await flush(el);
+      expect(send.mock.calls).toEqual([original, original]);
+      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    },
+  );
+
+  it("A773 an unanswered partial payment remains the only request across operator changes", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const recordSale = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ takeBillPayment, recordSale });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    const original = structuredClone(sent()[0]);
+    const signIn = async (personId: string, displayName: string) => {
+      emit(shell(el), "logout");
+      await flush(el);
+      const question = el.shadowRoot!.querySelector("wt-unsaved-changes");
+      if (question?.open) await discardUnsavedLeave(el);
+      emit(lock(el), "logged-in", { personId, displayName, permissions: [] });
+      await flush(el);
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(floor(el), "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+    };
+    await signIn("p2", "Luis");
+    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "140.00", guests: 7 });
+    await flush(el);
+    expect(recordSale).not.toHaveBeenCalled();
+    const before = structuredClone(sent());
+    await signIn("p1", "Ana");
+    emit(tableOrder(el), "bill-pay", { way: "contribution", lines: [], amount: "90.00" });
+    await flush(el);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    await press(el, "[data-pay-confirm]");
+    expect(sent().length).toBeGreaterThan(before.length);
+    for (const request of sent().slice(before.length)) expect(request).toEqual(original);
+    expect(recordSale).not.toHaveBeenCalled();
+  });
+
   it("allows a new confirmed allocation after replaying an unknown payment is refused", async () => {
     const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({ takeBillPayment });
