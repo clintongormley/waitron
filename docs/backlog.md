@@ -3959,12 +3959,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   till's `trimQuantity` removes trailing zeros without localising a fraction's decimal mark. These
   are readings, not browser reproductions; reproduce them before changing their displays.
 
-- **Investigate a product-editor dietary-choice failure in CI.** On 2026-10-18, A828's
-  [dashboard shard 4](https://github.com/clintongormley/waitron/actions/runs/39166930227/job/117791836117)
-  failed `product-editor.test.ts:45`: a native Vegan click left `dietaryDeclarations` empty.
-  The editor, picker and test match main `24477772b`; the complete editor suite and 80 repetitions
-  on that baseline passed locally. The cause remains unknown; retain the existing assertions.
-
 - **Loose ends left by W79 (#1186, the Menus list).**
   - `docs/developers/design-system.md` still says a list's Add action goes in a menu beside the
     table heading, while Menus, Staff and Units put a text Add button at the heading row's

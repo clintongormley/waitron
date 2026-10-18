@@ -33,23 +33,27 @@ useMediaPresentations();
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
 
-it("keeps unreviewed allergens null when only a dietary label is saved", async () => {
-  const el = await mountPricing({ ...saved, allergens: null, dietaryDeclarations: [] });
-  await openSection(el, "nutrition");
-  const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
-  await picker.updateComplete;
-  await userEvent.click(
-    picker.shadowRoot!.querySelector<HTMLElement>('[data-choice="diet-vegan"]')!,
-  );
-  await el.updateComplete;
-  expect(el.currentValue.dietaryDeclarations).toEqual(["vegan"]);
-  const submit = vi.fn();
-  el.addEventListener("wt-submit", submit);
-  save(el);
-  expect(submit).toHaveBeenCalledOnce();
-  expect(submit.mock.calls[0]![0].detail.value.allergens).toBeNull();
-  expect(submit.mock.calls[0]![0].detail.value.dietaryDeclarations).toEqual(["vegan"]);
-});
+it.each([0, 150])(
+  "keeps unreviewed allergens null when only a dietary label is saved (press %s ms)",
+  async (delay) => {
+    const el = await mountPricing({ ...saved, allergens: null, dietaryDeclarations: [] });
+    await openSection(el, "nutrition");
+    const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
+    await picker.updateComplete;
+    await userEvent.click(
+      picker.shadowRoot!.querySelector<HTMLElement>('[data-choice="diet-vegan"]')!,
+      { delay },
+    );
+    await el.updateComplete;
+    expect(el.currentValue.dietaryDeclarations).toEqual(["vegan"]);
+    const submit = vi.fn();
+    el.addEventListener("wt-submit", submit);
+    save(el);
+    expect(submit).toHaveBeenCalledOnce();
+    expect(submit.mock.calls[0]![0].detail.value.allergens).toBeNull();
+    expect(submit.mock.calls[0]![0].detail.value.dietaryDeclarations).toEqual(["vegan"]);
+  },
+);
 
 it("keeps a variant's explicit empty diet when only its allergens change", async () => {
   const el = await mountVariant({ ...glass, dietaryDeclarations: [] });
@@ -291,10 +295,15 @@ function folded(el: ProductEditor, name: string) {
 async function openSection(el: ProductEditor, name: string) {
   const disclosure = section(el, name);
   await disclosure.updateComplete;
-  if (disclosure.open) return;
-  disclosure.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
-  await disclosure.updateComplete;
-  await el.updateComplete;
+  if (!disclosure.open) {
+    disclosure.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+    await disclosure.updateComplete;
+    await el.updateComplete;
+  }
+  // Rendering finishes before the opening animation stops moving pointer targets.
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const body = disclosure.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  await Promise.all(body.getAnimations().map((animation) => animation.finished));
 }
 /** Presses the price field's unit button, which is how the unit dropdown is reached. */
 async function openUnits(el: ProductEditor) {
