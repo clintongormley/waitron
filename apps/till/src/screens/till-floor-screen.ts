@@ -61,6 +61,7 @@ import {
   detailsHeading,
   groupName,
   groupSplitOf,
+  needsMovingToday,
   nextFloorMoment,
   normalGroupName,
   onTodaysPlan,
@@ -606,6 +607,8 @@ export class TillFloorScreen extends LitElement {
   @state() private refusedZoneId: string | null = null;
   /** The table tapped on the map that needs clearing. */
   @state() private clearing: TableState | null = null;
+  /** The table tapped that needs moving. */
+  @state() private moving: TableState | null = null;
   /** The table whose details sheet is open, read afresh from `tables` on each render. */
   @state() private details: { tableId: string } | null = null;
   /** The floor's last refusal, in its code's words. */
@@ -682,6 +685,11 @@ export class TillFloorScreen extends LitElement {
       this.seating = null;
     if (this.clearing !== null && !this.tables.some((table) => table.id === this.clearing!.id))
       this.clearing = null;
+    if (
+      this.moving !== null &&
+      !this.tables.some((table) => table.id === this.moving!.id && needsMovingToday(table))
+    )
+      this.moving = null;
     this.#drawnAt = this.now ?? Date.now();
     if (this.details !== null && !this.tables.some((table) => table.id === this.details!.tableId))
       this.details = null;
@@ -740,8 +748,9 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * A seated table resumes; a table needing clearing offers Mark cleared; a free one asks for guests,
-   * headed and seated beside the other tables `seat` names when a drop gives them.
+   * A seated table resumes; a table needing clearing offers Mark cleared, and one needing moving
+   * Mark moved; a free one asks for guests, headed and seated beside the other tables `seat` names
+   * when a drop gives them.
    */
   #openTable(
     table: TableState,
@@ -750,6 +759,10 @@ export class TillFloorScreen extends LitElement {
     if (!this.tables.some((current) => current.id === table.id)) return;
     if (needsClearing(table)) {
       this.clearing = table;
+      return;
+    }
+    if (needsMovingToday(table)) {
+      this.moving = table;
       return;
     }
     if (table.party === null && !table.hasOpenTab) {
@@ -888,6 +901,16 @@ export class TillFloorScreen extends LitElement {
     if (!this.tables.some((current) => current.id === table.id)) return;
     this.clearing = null;
     this.#emit("mark-cleared", { tableId: table.id });
+  }
+
+  #markMoved(table: TableState): void {
+    this.moving = null;
+    const api = this.api;
+    if (api === undefined || !this.tables.some((current) => current.id === table.id)) return;
+    this.refusal = null;
+    void this.#settle(
+      this.#send(this.#revision(table.zoneId), (sent) => api.markMovedToday(table.id, sent)),
+    );
   }
 
   #emit(type: string, detail: unknown): void {
@@ -1079,7 +1102,7 @@ export class TillFloorScreen extends LitElement {
     const seen = new Set<string>();
     const targets: TableState[] = [];
     for (const each of [...zoneTables].sort((a, b) => inNumberOrder(a.label, b.label))) {
-      if (!onTodaysPlan(each)) continue;
+      if (!onTodaysPlan(each) || needsMovingToday(each)) continue;
       const linkId = this.#linkOf(each);
       const group = drawnGroupKey(each, linkId);
       if (seen.has(group)) continue;
@@ -1258,6 +1281,21 @@ export class TillFloorScreen extends LitElement {
                 conjunctionList(labels, currentLocale()),
               );
         return sentence.replace("{group}", () => group);
+      }
+      case "table.needs_moving": {
+        const table = tableOf(refused.tableId);
+        if (table === undefined) return undefined;
+        return table.today?.name == null
+          ? t("floor.needs_moving_first").replace("{table}", () => table.label)
+          : t("floor.needs_moving_first_named").replace("{table}", () => table.today!.name!);
+      }
+      case "table.new_place_taken": {
+        const other = nameOf(refused.standingId);
+        const table = nameOf(refused.tableId);
+        if (other === undefined || table === undefined) return undefined;
+        return t("floor.new_place_taken")
+          .replaceAll("{other}", () => other)
+          .replace("{table}", () => table);
       }
       case "table.split_off": {
         const from = tableOf(refused.tableId)?.today?.splitOffFrom ?? null;
@@ -1724,13 +1762,21 @@ export class TillFloorScreen extends LitElement {
           ? null
           : table.party.outstanding;
     const status =
-      needsClearing(table) && table.status === null
-        ? {
-            id: "needs-clearing",
-            label: t("floor.needs_clearing"),
-            color: "var(--wt-color-warning)",
-          }
-        : table.status;
+      table.status !== null
+        ? table.status
+        : needsClearing(table)
+          ? {
+              id: "needs-clearing",
+              label: t("floor.needs_clearing"),
+              color: "var(--wt-color-warning)",
+            }
+          : needsMovingToday(table)
+            ? {
+                id: "needs-moving",
+                label: t("floor.needs_moving"),
+                color: "var(--wt-color-warning)",
+              }
+            : null;
     return toFloorTable(
       { id: table.id, label: shownUnder(table), seats: seatsFor(table) },
       {
@@ -1870,9 +1916,9 @@ export class TillFloorScreen extends LitElement {
             ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
             : this.#plannedMap(onMap, unplaced, activeKey)
         }
-        ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
-        ${this.#splitJoined()} ${this.#resetTable()} ${this.#renameWindow()} ${this.#billChoice()}
-        ${this.#joinWith()}
+        ${this.#seatDialog()} ${this.#clearDialog()} ${this.#moveDialog()} ${this.#detailsSheet()}
+        ${this.#seatsPrompt()} ${this.#splitJoined()} ${this.#resetTable()} ${this.#renameWindow()}
+        ${this.#billChoice()} ${this.#joinWith()}
       </section>
     `;
   }
@@ -2001,6 +2047,64 @@ export class TillFloorScreen extends LitElement {
     </wt-dialog>`;
   }
 
+  #moveDialog(): TemplateResult | typeof nothing {
+    const table = this.moving;
+    if (table === null) return nothing;
+    return html`<wt-dialog
+      ${trackDialog()}
+      data-move-dialog
+      .open=${true}
+      .heading=${
+        table.today?.name == null
+          ? t("floor.move_title").replace("{table}", () => table.label)
+          : t("floor.move_title_named").replace("{table}", () => table.today!.name!)
+      }
+      @wt-close=${() => (this.moving = null)}
+    >
+      <p>${t("floor.move_body")}</p>
+      <wt-button
+        slot="footer"
+        data-move-cancel
+        variant="secondary"
+        @click=${() => (this.moving = null)}
+      >
+        ${t("action.cancel")}
+      </wt-button>
+      ${
+        this.canChangeToday
+          ? html`<wt-button
+              slot="footer"
+              data-mark-moved
+              variant="primary"
+              @click=${() => this.#markMoved(table)}
+            >
+              ${t("floor.mark_moved")}
+            </wt-button>`
+          : nothing
+      }
+    </wt-dialog>`;
+  }
+
+  /** A table needing moving has the plain box a table needing clearing has, with Mark moved. */
+  #movingCard(table: TableState): TemplateResult {
+    return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
+      <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
+      <span class="occupancy" data-needs-moving>${t("floor.needs_moving")}</span>
+      ${
+        this.canChangeToday
+          ? html`<wt-button
+              size="sm"
+              variant="secondary"
+              data-mark-moved
+              @click=${() => this.#markMoved(table)}
+            >
+              ${t("floor.mark_moved")}
+            </wt-button>`
+          : nothing
+      }
+    </div>`;
+  }
+
   /** A card is one button, so a table needing clearing, whose card holds its own Mark cleared, is a
    * plain box instead. */
   #clearingCard(table: TableState): TemplateResult {
@@ -2039,6 +2143,7 @@ export class TillFloorScreen extends LitElement {
 
   #card(table: TableState): TemplateResult {
     if (needsClearing(table)) return this.#clearingCard(table);
+    if (needsMovingToday(table)) return this.#movingCard(table);
     return html`<button
       class="card state-${table.state}${this.#timingAccentClass(table.timingBand)}"
       data-table=${table.id}

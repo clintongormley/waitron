@@ -77,7 +77,7 @@ function fillWords(table: TableState, fill: FloorMapFill): string {
     case "reserved":
       return `${t("floor.reserved")} ${table.nextReservation!.time}`;
     case "free":
-      return t("floor.free");
+      return table.today?.needsMoving === true ? t("floor.needs_moving") : t("floor.free");
   }
 }
 

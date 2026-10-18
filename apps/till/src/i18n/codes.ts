@@ -153,6 +153,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table needs clearing first. Mark it cleared, then try again",
     es: "Esa mesa está por recoger. Márcala como recogida e inténtalo de nuevo",
   },
+  "table.needs_moving": {
+    en: "That table needs moving. Mark it moved first",
+    es: "Esa mesa está por mover. Márcala como movida primero",
+  },
+  "table.new_place_taken": {
+    en: "Another table is in its new place. Move it first",
+    es: "Otra mesa ocupa su nuevo sitio. Muévela primero",
+  },
   "table.fixed": {
     en: "That table is fixed in place",
     es: "Esa mesa está fija",

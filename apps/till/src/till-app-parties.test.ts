@@ -583,6 +583,19 @@ describe("till-app: seating a party", () => {
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
   });
 
+  it("says the table needs moving when seating it is refused for that", async () => {
+    const { el } = await mountApp({
+      seatTable: vi.fn().mockRejectedValue({ code: "table.needs_moving", tableId: "t9" }),
+    });
+    const screen = await toFloor(el);
+
+    emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: null });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("table.needs_moving"));
+    expect(tableOrder(el)).toBeNull();
+  });
+
   it("says why when another device seated the table first, and re-reads the floor", async () => {
     const { el } = await mountApp({
       seatTable: vi.fn().mockRejectedValue({ code: "tab.already_open" }),

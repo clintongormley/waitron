@@ -13,7 +13,12 @@ import {
   type SeatedRead,
 } from "./table-targets.js";
 import { paidInPart } from "../state/bill-state.js";
-import { outOfServiceJoined, seatsGuests, shownName } from "../state/floor-today.js";
+import {
+  needsMovingToday,
+  outOfServiceJoined,
+  seatsGuests,
+  shownName,
+} from "../state/floor-today.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import "./bill-choice-dialog.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
@@ -234,6 +239,7 @@ export class TillHeldOrders extends LitElement {
     const tables = this.tables.filter(
       (table) =>
         !outOfServiceJoined(table) &&
+        !needsMovingToday(table) &&
         (table.party !== null || seatsGuests(this.zones.find((zone) => zone.id === table.zoneId))),
     );
     return html`<wt-dialog

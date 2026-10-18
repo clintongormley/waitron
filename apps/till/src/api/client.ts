@@ -1983,6 +1983,9 @@ export interface TableToday {
   name?: string | null;
   /** Its group's name for today, on every member. */
   joinName?: string | null;
+  /** A reset left its change waiting until someone marks it moved. Optional so hand-built fixtures
+   * need not say it; the server always does. */
+  needsMoving?: boolean;
 }
 
 /** A change to today's floor answers its room's new revision. */
@@ -4183,6 +4186,12 @@ export class TillApi {
   /** Put a table back as the last reset left it → `POST /api/tables/:id/today/back`. */
   backToSavedToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
     return this.#todayChange(tableId, "back", {}, zoneRevision);
+  }
+
+  /** Apply the change a reset left waiting for a table that needs moving →
+   * `POST /api/tables/:id/today/mark-moved`. */
+  markMovedToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "mark-moved", {}, zoneRevision);
   }
 
   /** Merge two free tables, `tableId` moving against `targetId` → `POST /api/tables/:id/today/merge`.

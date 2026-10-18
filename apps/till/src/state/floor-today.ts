@@ -274,6 +274,12 @@ export function outOfServiceJoined(table: TableState): boolean {
   );
 }
 
+/** A reset left this table's change waiting: it is not seated, joined or given a party until
+ * someone marks it moved. */
+export function needsMovingToday(table: TableState): boolean {
+  return table.today?.needsMoving === true;
+}
+
 export function onTodaysPlan(table: TableState): boolean {
   return (
     table.today !== null &&
@@ -388,7 +394,7 @@ export function sheetActions(
   const joined = today.joined;
   const splitOff = today.splitOffFrom !== null;
   const applies: [SheetAction, boolean][] = [
-    ["join-with", !merged && !clearing],
+    ["join-with", !merged && !clearing && !needsMovingToday(table)],
     ["split-off", merged || (joined !== null && joined.parts.length >= 2)],
     ["reset-table", resetTableOf(table, zoneTables) !== null],
     ["rotate", !today.fixed && !merged],

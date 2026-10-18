@@ -731,3 +731,20 @@ it.each([
   expect(codeMessage(code, "en")).toBe(en);
   expect(codeMessage(code, "es")).toBe(es);
 });
+
+it("says a table needs moving, and that another table is in its new place, in both languages", () => {
+  expect([
+    codeMessage("table.needs_moving", "en"),
+    codeMessage("table.needs_moving", "es"),
+  ]).toEqual([
+    "That table needs moving. Mark it moved first",
+    "Esa mesa está por mover. Márcala como movida primero",
+  ]);
+  expect([
+    codeMessage("table.new_place_taken", "en"),
+    codeMessage("table.new_place_taken", "es"),
+  ]).toEqual([
+    "Another table is in its new place. Move it first",
+    "Otra mesa ocupa su nuevo sitio. Muévela primero",
+  ]);
+});

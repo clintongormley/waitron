@@ -4233,6 +4233,48 @@ describe("till-table-order-screen", () => {
       expect(targetIds(el).filter((id) => ["c3", "c4", "c5"].includes(id!))).toEqual([]);
     });
 
+    it.each([
+      ["Join a table", "join"],
+      ["Move guests", "move"],
+      ["Move this bill", "move-bill"],
+    ])("%s leaves out a table that needs moving", async (_name, action) => {
+      const onMap = (needsMoving: boolean) => ({
+        placement: { x: 0, y: 0, width: 2, height: 2, shape: "round" as const, rotation: 0 },
+        seats: 2,
+        fixed: false,
+        takenOff: false,
+        joinId: null,
+        joinSeats: null,
+        inJoinedTable: null,
+        joined: null,
+        splitOffFrom: null,
+        zoneRevision: 0,
+        needsMoving,
+      });
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-check",
+        party: anaParty,
+        bills: partyBills().bills,
+        tables: [
+          tableState({
+            id: "t4",
+            label: "Mesa 4",
+            state: "open-tab",
+            condition: "held",
+            party: anaParty,
+          }),
+          tableState({ id: "t5", label: "Mesa 5", today: onMap(true) }),
+          tableState({ id: "t6", label: "Mesa 6", today: onMap(false) }),
+        ],
+      });
+      await toMenu(el);
+      click(el, `[data-action="${action}"]`);
+      await el.updateComplete;
+      expect(targetIds(el)).toContain("t6");
+      expect(targetIds(el)).not.toContain("t5");
+    });
+
     it("offers target tables in number order, a moving party's own tables first", async () => {
       const ana: TableParty = { ...anaParty, tableIds: ["t10", "t2"] };
       const held = (id: string, label: string) =>
