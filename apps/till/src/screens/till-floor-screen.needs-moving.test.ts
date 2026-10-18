@@ -304,6 +304,20 @@ describe("till-floor-screen: a table that needs moving", () => {
     expect(offer(el)).toBeNull();
   });
 
+  it("draws the offer as wide as its words, under the refusal line and starting where it starts", async () => {
+    const api = stubApi();
+    api.markMovedToday.mockRejectedValue(newPlaceTaken);
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    el.style.width = "1200px";
+    await refuseMarkMoved(el);
+
+    const line = el.shadowRoot!.querySelector("[data-floor-refusal]")!.getBoundingClientRect();
+    const button = offer(el)!.getBoundingClientRect();
+    expect(button.width).toBeLessThan(300);
+    expect(button.left).toBe(line.left);
+    expect(button.top).toBeGreaterThanOrEqual(line.bottom);
+  });
+
   it("offers Leave it here in Spanish", async () => {
     setLocale("es");
     const api = stubApi();

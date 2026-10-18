@@ -253,6 +253,10 @@ export class TillFloorScreen extends LitElement {
         }
       }
 
+      [data-leave-here-offer] {
+        align-self: flex-start;
+      }
+
       .head {
         display: flex;
         align-items: center;
