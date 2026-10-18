@@ -1,4 +1,5 @@
 import "./recovery-key.js";
+import "./recovery-hour.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, draftScopeFor, focusFirstInvalid, type DraftScope } from "@waitron/ui";
@@ -542,6 +543,12 @@ export class FirstFiscalScreen extends LitElement {
 }
 export const FISCAL_SETUP: SetupContribution = {
   module: "fiscal-verifactu",
+  createRecovery(context) {
+    const element = document.createElement("vf-recovery-hour");
+    element.context = context;
+    element.locale = context.locale;
+    return element;
+  },
   createRecoveryKey({ locale, selection }) {
     const element = document.createElement("vf-recovery-key");
     element.locale = locale;

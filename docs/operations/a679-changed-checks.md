@@ -1356,3 +1356,40 @@ This step does not replace the pasted-operation screen. The module-owned hour qu
 clock/declaration controls, first-setup screen, reissue and installed complete browser journeys
 remain open. Task 8's proposed protected standby wrapper remains unapplied pending its exact
 approval. No protected writer, SQL, schema, guard or earlier fiscal assertion is changed.
+
+
+## Browser recovery hour controls (2026-10-18)
+
+The hour plan’s Task 9 now connects the selected archive, bucket kit and Cloud point to the
+module-owned printed-key fields, taxpayer-wide question, clock comparison, explicit manual
+confirmation and hour selection. The old-box and sole-recovery declarations travel separately
+from the selected allocation. Editing them or the key invalidates the displayed selection;
+Discard clears the native fields. A request refusal leaves retry available. Release/range blocks
+and an ambiguous box-hour interval keep Select disabled; manual confirmation permits a clock
+disagreement only while the box’s own interval stays within one hour.
+
+The setup shell previously omitted the independent recovery context from its final archive and
+Cloud bodies. New cases observed both missing fields and retained context after archive/bucket
+refusal before the fixes. The real authenticator throws `promotion.break_glass_invalid` without
+a field parameter (`apps/server/src/operation-authentication.ts`); observed browser failures now
+map that code to the key fields in preparation and all three final restore screens.
+
+`apps/setup/src/setup-app-recovery-credentials.test.ts` gains eight cases after its unchanged
+earlier contents. New browser suites cover the module controls, accessibility and generic
+selected-source wiring. Existing fiscal fixtures and assertions, protected writers, SQL, schema,
+root guards and house rules remain unchanged. No earlier test check changes in this step.
+
+These browser checks use the real key decoder, components and HTTP client with simulated endpoint
+responses. They establish the client proposals, displayed states, invalidation and final body
+forwarding; they do not establish a complete browser/server restoration with a real backup.
+The surrounding server preparation/authentication receipts remain separate. The initial visual
+captures clipped tall content; later element captures show complete controls. Vitest scales those
+captures; layout widths and accessibility are checked in the browser at 390 and 1280 pixels.
+
+Local receipts: `receipts/a679-browser-hour-20261018` under the lane folder. The independent
+installed checkout catches and restores omissions of module mounting, selected-source checks,
+isolation, stale-response rejection, edit invalidation, clock confirmation, shell context, refusal
+clearing, operation binding and clock blockers. Later qualification and this step’s exact results stay in the
+local ledger. First-setup/reissue UI, installed complete journeys, package coverage, actual
+generated-PDF owner acceptance and both final reviews remain open. Task 8’s exact protected
+wrapper question is unchanged and the proposed patch remains unapplied.

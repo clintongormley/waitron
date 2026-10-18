@@ -249,10 +249,12 @@ function withoutRecoveryCredentials<T extends Partial<RecoveryRestoreCredentials
   const kept = { ...request };
   delete kept.nodeRecoverySecret;
   delete kept.recoveryOperation;
+  delete kept.recoveryContext;
   return kept;
 }
 
 const RESTORE_FIELD_CODES: Record<string, RestoreField> = {
+  "promotion.break_glass_invalid": "nodeRecoverySecret",
   "recovery.passphrase_invalid": "recoveryKey",
   "restore.environment_mismatch": "environment",
 };
@@ -266,6 +268,7 @@ const RESTORE_FIELD_PATHS: Record<string, RestoreField> = {
 };
 
 const BUCKET_FIELD_CODES: Record<string, BucketField> = {
+  "promotion.break_glass_invalid": "nodeRecoverySecret",
   "backup.stream_kit_invalid": "kit",
   "restore.environment_mismatch": "environment",
 };
@@ -1334,6 +1337,9 @@ export class SetupApp extends LitElement {
               {
                 recoveryOperation: request.recoveryOperation,
                 nodeRecoverySecret: request.nodeRecoverySecret,
+                ...(request.recoveryContext === undefined
+                  ? {}
+                  : { recoveryContext: request.recoveryContext }),
               },
             ]
           : []),
@@ -1448,6 +1454,7 @@ export class SetupApp extends LitElement {
       oldBoxGone?: boolean;
       recoveryOperation?: RecoveryRestoreCredentials["recoveryOperation"];
       nodeRecoverySecret?: string;
+      recoveryContext?: RecoveryRestoreCredentials["recoveryContext"];
     }>,
   ): Promise<void> {
     event.stopPropagation();
@@ -1467,7 +1474,14 @@ export class SetupApp extends LitElement {
     this.cloudRecoveryError = undefined;
     this.cloudInvalidField = undefined;
     try {
-      const { action, pointId, oldBoxGone, recoveryOperation, nodeRecoverySecret } = event.detail;
+      const {
+        action,
+        pointId,
+        oldBoxGone,
+        recoveryOperation,
+        nodeRecoverySecret,
+        recoveryContext,
+      } = event.detail;
       if (action === "restore") {
         if (!pointId || pointId !== this.cloudRecoveryView?.point?.id) throw new Error();
         phase = "provisioning";
@@ -1476,7 +1490,13 @@ export class SetupApp extends LitElement {
           pointId,
           oldBoxGone === true,
           ...(recoveryOperation !== undefined && nodeRecoverySecret !== undefined
-            ? [{ recoveryOperation, nodeRecoverySecret }]
+            ? [
+                {
+                  recoveryOperation,
+                  nodeRecoverySecret,
+                  ...(recoveryContext === undefined ? {} : { recoveryContext }),
+                },
+              ]
             : []),
         );
         if (current()) this.screen = "done";
@@ -1511,6 +1531,9 @@ export class SetupApp extends LitElement {
         ) {
           this.cloudLiveSince = undefined;
           this.cloudLiveUnknown = true;
+        } else if (code === "promotion.break_glass_invalid") {
+          this.cloudInvalidField = "nodeRecoverySecret";
+          this.cloudRecoveryError = say(CLOUD_FIELD_CHECKS.nodeRecoverySecret);
         } else if (code === "setup.request_invalid") {
           this.cloudInvalidField = refusedField(code, params, {}, CLOUD_FIELD_PATHS);
           this.cloudRecoveryError = say(

@@ -7,6 +7,17 @@ export interface InitialSetupActions {
 }
 export interface SetupContribution {
   readonly module: string;
+  createRecovery?(context: {
+    locale: "en" | "es";
+    selection: RecoveryKeySelection & {
+      sourceId: string;
+      country: string;
+      fiscalTerritory: string;
+      timeZone: string;
+    };
+    binding: RecoveryOperationBinding;
+    prepare(request: ModuleRecoveryPreparationRequest): Promise<unknown>;
+  }): ModuleRecoveryEntry;
   createRecoveryKey?(context: {
     locale: "en" | "es";
     selection: RecoveryKeySelection;
@@ -24,4 +35,30 @@ export interface ModuleRecoveryKeyEntry extends HTMLElement {
   locale: "en" | "es";
   errorMessage?: string;
   clear(): void;
+}
+
+export interface RecoveryOperationBinding {
+  module: string;
+  action: string;
+  eventId: string;
+  sourceId: string;
+  targetNodeId: string;
+}
+export interface ModuleRecoveryCredentials {
+  recoveryOperation: { binding: RecoveryOperationBinding; input: unknown };
+  nodeRecoverySecret: string;
+  recoveryContext: { selectedSourceId: string; oldBoxGone: boolean; soleRecovery: boolean };
+}
+export interface ModuleRecoveryPreparationRequest {
+  binding: RecoveryOperationBinding;
+  context: ModuleRecoveryCredentials["recoveryContext"];
+  nodeRecoverySecret: string;
+  proposal: unknown;
+}
+export interface ModuleRecoveryEntry extends HTMLElement {
+  locale: "en" | "es";
+  errorMessage?: string;
+  refusedField?: string;
+  clear(): void;
+  readCredentials(): ModuleRecoveryCredentials | null;
 }

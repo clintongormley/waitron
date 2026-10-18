@@ -58,6 +58,24 @@ export class SetupRecoveryCopy extends LitElement {
   @state() private error?: "key" | "environment" | "file" | "kit" | "failed";
   #attempt = 0;
   #previewCurrent?: () => boolean;
+  #prepare: NonNullable<SetupRecoveryAllocation["prepare"]> = async (request) => {
+    const current = this.#previewCurrent;
+    if (!current?.()) throw new Error("Selected recovery copy changed");
+    const source =
+      this.bucketKit !== undefined
+        ? { kind: "bucket" as const, kit: this.bucketKit, environment: this.environment }
+        : this.cloudPointId !== undefined
+          ? { kind: "cloud" as const, pointId: this.cloudPointId }
+          : {
+              kind: "archive" as const,
+              artifact: this.artifact!,
+              recoveryKey: this.recoveryKey,
+              environment: this.environment,
+            };
+    const result = await this.api.prepareRecovery(source, request);
+    if (!current()) throw new Error("Selected recovery copy changed");
+    return result;
+  };
 
   constructor() {
     super();
@@ -246,6 +264,7 @@ export class SetupRecoveryCopy extends LitElement {
               <p>${t("restore.preview_key_separate")}</p>
               <setup-recovery-allocation
                 .preview=${preview}
+                .prepare=${this.#prepare}
                 .errorMessage=${this.errorMessage}
                 .refusedField=${this.refusedField}
               ></setup-recovery-allocation>

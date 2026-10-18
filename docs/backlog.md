@@ -334,8 +334,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   mismatched PDFs and stale reads refuse. The setup host now accepts module-owned recovery
   proposals for validated archive, bucket and Cloud copies over HTTPS; focused tests carry clock
   comparisons across requests and exercise the real setup listener. The browser transport is
-  present; the hour-selection screen and key reissue still need wiring, followed by installed
-  end-to-end qualification.
+  connected to module-owned recovery hour and isolation controls. The final archive/Cloud requests
+  retain independent recovery context, and refusals clear it. First-setup/reissue UI and installed
+  complete journeys remain open.
   Hour codec, module admission and clock units pass locally, with source timestamps embedded
   by the Node bundler. History enumeration, durable selection and the shared host store have focused
   local checks. Certificate-free owned preproduction readiness and publication have focused checks;
@@ -450,8 +451,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   retains checked replay when its local completion acknowledgement is lost. Repeated completion
   keeps the reported state. Separate child-process checks interrupt the activation transaction and
   refuse publication after restart when no activation committed. These checks use controlled clocks
-  and synthetic external transport. The recovery screen's hour selection, declaration collection
-  and key fields remain Task 9; installed journeys and the remaining hour-plan gates stay open.
+  and synthetic external transport. Module-owned recovery fields now decode the printed key,
+  collect separate isolation declarations and send clock/hour proposals for the selected archive,
+  bucket kit or Cloud point through the browser client. Browser boundary tests use simulated replies;
+  installed complete journeys, first-setup/reissue UI and the remaining hour-plan gates stay open.
   Password recovery after selection but before activation
   now has a separate authenticated same-hour resume, approved by the owner on 2026-10-17.
   Focused checks retain the selected input and exact recovery PDF, refresh the clock comparison,
