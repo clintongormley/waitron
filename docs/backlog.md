@@ -1413,10 +1413,16 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `wt-colour-chooser`. Owner's call: keep, or have the chooser show the tint for seasons. Measured in
   A721's LOOK, 2026-10-18 (#1843). Left open by A721.
 
-- **At phone width the Seasons window cuts longer colour names** ("Oran…", "Turq…"): while the table is
+- **At phone width the Seasons window cuts longer colour names** ("Oran…", "Turq…"; at 390 px on
+  2026-10-18, Magenta and Orange in English, and Magenta, Amarillo, Naranja and Celeste in Spanish): while the table is
   narrower than 480 px, each row's colour button is capped at 120 px so the start date stays clear of the pinned bin column
   (`seasons-window.ts`, #1843). 1280 px is unchanged. Owner's call whether the cut is acceptable or the
   row should stack on a phone. Left open by A721.
+
+- **At 390 px the Seasons window's month picker runs off the right edge.** Seen on the demo venue
+  on 2026-10-18 by A783's look: each row's month select, and the required star on "Starts on", fall
+  past the right edge (`seasons-window-{light,dark}-390[-es].png` in
+  `~/waitron-campaign-b/a783-shots/`; `packages/venue-service/src/dashboard/seasons-window.ts`).
 
 - **The Periods window: two looks from A719's LOOK (#1838).** At 390 px a period's swatch beside a
   name that wraps shrinks to 14.4 px wide (the others are 16 px); at 1280 px the window is full
@@ -2568,6 +2574,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   look passes kept five things as built, as judgement calls.
   Left open by A504.
   [Detail](backlog/till.md#a859-floor-plans-and-the-tills-layout-banner-looks-left-to-the-owner)
+
+- **At 390 px the Floor plans screen cuts period names in its "Used by" column.** Seen on the demo
+  venue on 2026-10-18 by A783's look: a set's period chips are cut off by the column, both themes,
+  English and Spanish (`floor-plans-{light,dark}-390[-es].png` in `~/waitron-campaign-b/a783-shots/`;
+  `packages/venue-service/src/dashboard/floor-plans-screen.ts`).
 
 - **A860. A floor-check rule copied four times (2026-10-18).** Whether a table's new place is
   taken is decided in four places, in TypeScript and in SQL, each excluding a slightly different set
@@ -4588,6 +4599,14 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   innerWidth) and a name with spaces wraps, but one unbroken 46-letter word runs to x=402.9 and its
   chip is cut off (`packages/venue-service/src/dashboard/season-chips.ts`). Next: wrap the chip's
   text with `overflow-wrap: anywhere`.
+
+- **At 390 px the staff role dialog's open colour panel covers its own Colour field.** Seen by
+  A783's look on 2026-10-18 at 390 × 844: the panel, now eight rows of two, is 462 px tall, too tall
+  to fit above or below the field, so it is placed at top 374, over the field at about 376–432.
+  Picking a colour still works. The period, station and season choosers at 390 px still open below
+  their field (`role-chooser-new-*-390*.png` and `role-chooser-edit-host-*-390*.png` in
+  `~/waitron-campaign-b/a783-shots/`; `positionPopup` in
+  `packages/ui/src/components/wt-colour-chooser.ts`).
 
 - **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** When the
   changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25

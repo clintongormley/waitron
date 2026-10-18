@@ -440,7 +440,9 @@ before acting. Next: keep one formatter per time zone. Left open by A504.
   Red, orange, amber, lime, green, teal, cyan, blue, indigo, purple, pink, brown, grey
   (`CALENDAR_COLOURS`, `packages/venue-service/src/hours-types.ts`). The order is the board's; it
   is the order the colour panel shows and the order a new period or staff role takes the first
-  unused colour in.
+  unused colour in. **2026-10-18, A783:** sixteen, adding yellow after amber, sky after cyan and
+  magenta after purple (`packages/shared/src/calendar-colours.ts`); a fourth new period or role
+  now takes yellow.
 
 - **A new staff role's colour is chosen once, when its dialog opens
   ([A753 plan](../superpowers/plans/2026-10-17-a753-calendar-colours.md), Decision 5; plan default,
