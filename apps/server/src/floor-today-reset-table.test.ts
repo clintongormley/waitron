@@ -1061,6 +1061,43 @@ describe("Reset table on a joined table come apart around a part the guests held
   });
 });
 
+describe("Reset table on a joined table come apart around a table with guests a new layout joins to it", () => {
+  it("saved with no place and put out today: Long table comes back off the map, not built out from where its row stood", async () => {
+    const { table, master, zoneId } = await longTableWith(null, [
+      BAR,
+      { key: "c6", label: "Counter 6", seats: 2, place: { x: 60, y: 40 } },
+    ]);
+    await ok(post(`/api/tables/${table.long!}/today/place`, table.long!, { x: 10, y: 20 }));
+    await ok(splitOff(table.long!, [table.c4!, table.c5!]));
+    await seat(v, table.c6!);
+    await inTx(v, async (tx) => {
+      const layout = await defaultLayout(tx, v.cfg, zoneId);
+      const plan = await readLayout(tx, v.cfg, layout);
+      const tables = plan.tables.map((t) => ({
+        id: t.id,
+        key: t.id,
+        label: t.label,
+        seats: t.seats,
+        fixed: t.fixed,
+        placement: t.id === master.c6 ? null : t.placement,
+        partKeys:
+          t.id === master.long ? [master.c3!, master.c4!, master.c5!, master.c6!] : t.partIds,
+      }));
+      await saveLayout(tx, v.cfg, REMOVALS, layout, { revision: plan.revision, tables }, NOW);
+    });
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
+    expect(await apart(table.long!)).toBe(1);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
+
+    await ok(reset(table.long!, [table.c3!, table.c4!, table.c5!]));
+
+    expect(await placeOf(table.long!)).toEqual(NO_PLACE);
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+});
+
 describe("a room's reset while guests sit at a part saved into Long table", () => {
   it("leaves Long table's whole group waiting: Long table cannot be put on the map", async () => {
     const { table } = await longAroundHeldCounter3(null);
