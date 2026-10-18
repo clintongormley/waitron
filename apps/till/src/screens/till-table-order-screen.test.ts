@@ -634,9 +634,12 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({ courses: activeCourses, draftStore });
       const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-round-course="0"]')!;
       await picker.updateComplete;
-      expect(el.shadowRoot!.querySelector('[data-draft-section="retired"] h3')?.textContent).toBe(
-        course.name,
-      );
+      expect(
+        el
+          .shadowRoot!.querySelector("[data-draft-group-name]")
+          ?.textContent?.replace(/[☑☐▣]/g, "")
+          .trim(),
+      ).toBe(`${t("table.destination_fire_now")} · ${course.name}`);
       expect(picker.options.map((option) => option.value)).toEqual([
         "",
         ...activeCourses.map((choice) => choice.id),
@@ -1003,13 +1006,14 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
     }
 
-    it("shows Beer, Croquetas and Steak in three sections in the venue's course order, a dish with no default in the first", async () => {
+    it("shows Fire now before new held groups, with no redundant course headings", async () => {
       const { el } = await mount({ courses: serviceCourses, products: menu });
       await ring(el, [steak, "1"], [beer, "1"], [bread, "1"], [croquetas, "1"]);
       expect(sectionNames(el)).toEqual([
-        { heading: "Drinks", lines: ["Beer ×1", "Bread ×1"] },
-        { heading: "Starters", lines: ["Croquetas ×1"] },
-        { heading: "Mains", lines: ["Steak ×1"] },
+        { heading: null, lines: ["Bread ×1"] },
+        { heading: null, lines: ["Beer ×1"] },
+        { heading: null, lines: ["Croquetas ×1"] },
+        { heading: null, lines: ["Steak ×1"] },
       ]);
     });
 
@@ -1019,13 +1023,13 @@ describe("till-table-order-screen", () => {
       const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-round-course="0"]')!;
       await chooseOption(picker, "drinks");
       await el.updateComplete;
-      expect(sectionNames(el)).toEqual([{ heading: "Drinks", lines: ["Steak ×1", "Beer ×1"] }]);
+      expect(sectionNames(el)).toEqual([{ heading: null, lines: ["Beer ×1", "Steak ×1"] }]);
     });
 
     it("shows one section with no heading when the venue has no courses, and still lets a line be picked", async () => {
       const { el } = await mount({ courses: [], products: menu });
       await ring(el, [steak, "1"], [beer, "1"]);
-      expect(sectionNames(el)).toEqual([{ heading: null, lines: ["Steak ×1", "Beer ×1"] }]);
+      expect(sectionNames(el)).toEqual([{ heading: null, lines: ["Beer ×1", "Steak ×1"] }]);
       await toggle(el, "Beer");
       expect(actionKinds(el)).toEqual(["send-selected", "fire-selected"]);
     });

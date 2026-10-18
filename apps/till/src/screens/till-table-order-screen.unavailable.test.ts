@@ -291,8 +291,8 @@ describe("till-table-order-screen: a dish no longer offered at all", () => {
       t("table.review").replace("{n}", "3"),
     );
     const quantities = [...el.shadowRoot!.querySelectorAll("till-basket")].flatMap((basket) =>
-      [...basket.shadowRoot!.querySelectorAll(".qty")].map((qty) => qty.textContent),
+      [...basket.shadowRoot!.querySelectorAll(".qty:not(.stepper)")].map((qty) => qty.textContent),
     );
-    expect(quantities.at(-1)).toBe("2");
+    expect(quantities).toEqual(["2"]);
   });
 });

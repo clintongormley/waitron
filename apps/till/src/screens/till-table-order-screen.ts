@@ -131,7 +131,6 @@ import type { FireControlMode } from "../widgets/station-queue.js";
 import { heldGroupIds, inHeldGroup, sendsAlone } from "../state/held-groups.js";
 import {
   draftPreview,
-  draftSections,
   draftSubmission,
   itemCount,
   type DraftAction,
@@ -141,7 +140,13 @@ import {
   type DraftSubmission,
 } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
-import { sendAllGroups, type SubmitGroup } from "../state/draft-layout.js";
+import type { Place } from "../state/draft-place.js";
+import {
+  draftLayout,
+  sendAllGroups,
+  type LayoutGroup,
+  type SubmitGroup,
+} from "../state/draft-layout.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuests } from "../state/receipt-guests.js";
@@ -821,10 +826,31 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .draft-section-name {
+      .draft-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+      }
+
+      .draft-group-name {
         margin: 0;
         font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .draft-group-select {
+        width: 100%;
+        text-align: start;
+        min-height: var(--wt-tap-min);
+        overflow-wrap: anywhere;
+      }
+
+      .draft-section-name {
+        margin: 0;
+        padding: var(--wt-space-2);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-normal);
       }
 
       /* Native buttons, not wt-buttons: wt-button does not pass aria-pressed to its inner button. */
@@ -1490,6 +1516,8 @@ export class TillTableOrderScreen extends LitElement {
     const store = this.#draftStore;
     if (this.#watchedDraft !== undefined && this.#watchedDraft.store === store) return;
     this.#watchedDraft?.stop();
+    this.#selected = new WeakSet();
+    this.draftMoveStore = null;
     if (store !== null && store !== this.#shownDraft) {
       if (this.#shownDraft !== undefined) this.#resetDestination();
       this.#shownDraft = store;
@@ -1502,7 +1530,9 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchedDraft = {
       store,
       stop: store.subscribe(() => {
+        if (store.sending) this.draftMoveStore = null;
         if (store.editsLocked) {
+          this.draftMoveStore = null;
           this.#selected = new WeakSet();
           this.pendingDraft = null;
           this.#closeChange();
@@ -1592,6 +1622,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
   #selected = new WeakSet<OrderLine>();
+  @state() private draftMoveStore: WorkingOrderStore | null = null;
   /** Flagged lines the person chose to keep, which no longer ask Remove or Keep. */
   #kept = new WeakSet<OrderLine>();
   @state() private destination: Destination = "fire-now";
@@ -2827,8 +2858,7 @@ export class TillTableOrderScreen extends LitElement {
               : nothing
           }
         </div>
-        ${this.#roundControl(draft, entries)} ${this.#otherDraftPanels(draft)}
-        ${this.#retainedDraftPanel()}
+        ${this.#roundControl(draft)} ${this.#otherDraftPanels(draft)} ${this.#retainedDraftPanel()}
       </section>
     </div>`;
   }
@@ -3110,7 +3140,7 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #roundControl(draft: WorkingOrderStore, entries: readonly DraftEntry[]): TemplateResult {
+  #roundControl(draft: WorkingOrderStore): TemplateResult {
     return html`${
         draft.sending
           ? html`<p class="round-sending" role="status" data-round-sending>
@@ -3134,9 +3164,9 @@ export class TillTableOrderScreen extends LitElement {
             this.orderId,
             draft.lineCount === 0
               ? html`<till-basket .hideKitchenNote=${true} .store=${draft}></till-basket>`
-              : this.#draftSections(draft, entries),
+              : this.#draftSections(draft),
           )}
-          ${this.#draftBar(draft)}
+          ${this.#draftBar(draft)} ${this.#draftMoveDialog(draft)}
           <wt-button
             data-discard-draft
             variant="secondary"
@@ -3189,33 +3219,94 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #draftSections(store: WorkingOrderStore, entries: readonly DraftEntry[]): TemplateResult {
-    const lines = store.lines;
-    const sections = draftSections(entries, this.courses);
+  #draftLayout(store: WorkingOrderStore): LayoutGroup[] {
+    return draftLayout({
+      lines: store.lines,
+      courses: this.courses,
+      groups: this.groups,
+      locale: currentLocale(),
+      nextDisplayNumber: Math.max(0, ...this.groups.map((group) => group.displayNumber)) + 1,
+    });
+  }
+
+  #draftGroupName(group: LayoutGroup): string {
+    const target =
+      group.kind === "join" ? this.groups.find((held) => held.id === group.groupId) : undefined;
+    const number =
+      target === undefined ? String(group.displayNumber ?? "?") : groupNumberText(target);
+    const name =
+      group.kind === "fire"
+        ? t("table.destination_fire_now")
+        : t(group.kind === "join" ? "table.draft_joins_group" : "table.group_n").replace(
+            "{n}",
+            () => number,
+          );
+    return [name, ...group.courseNames].join(" · ");
+  }
+
+  #draftSections(store: WorkingOrderStore): TemplateResult {
     return html`<div class="draft-sections" data-draft-sections>
       ${repeat(
-        sections,
-        (section) => section.course?.id ?? "",
-        (section) =>
-          html`<section
-            class="draft-section"
-            data-draft-section=${section.course?.id ?? ""}
-            aria-label=${section.course?.name ?? nothing}
-          >
-            ${
-              section.course === null
-                ? nothing
-                : html`<h3 class="draft-section-name">${section.course.name}</h3>`
-            }
-            <till-basket
-              .hideKitchenNote=${true}
-              stacked
-              .store=${store}
-              .lineIndexes=${section.lineIndexes}
-            >
-              ${section.lineIndexes.map((index) => this.#draftLine(store, lines[index]!, index))}
-            </till-basket>
-          </section>`,
+        this.#draftLayout(store),
+        (group) => group.key,
+        (group) => {
+          const indexes = group.sections.flatMap((section) => section.indexes);
+          const selected = indexes.filter((index) =>
+            this.#selected.has(store.lines[index]!),
+          ).length;
+          const checked = selected === 0 ? "false" : selected === indexes.length ? "true" : "mixed";
+          const name = this.#draftGroupName(group);
+          return html`<section class="draft-group" data-draft-group=${group.key} aria-label=${name}>
+            <h3 class="draft-group-name" data-draft-group-name>
+              ${
+                store.editsLocked
+                  ? name
+                  : html`<button
+                      type="button"
+                      class="option draft-group-select"
+                      role="checkbox"
+                      data-draft-group-select=${group.key}
+                      aria-checked=${checked}
+                      ?disabled=${store.sending || this.groupCommandBusy}
+                      @click=${() => {
+                        if (store.editsLocked || store.sending || this.groupCommandBusy) return;
+                        for (const index of indexes) {
+                          const line = store.lines[index]!;
+                          if (checked === "true") this.#selected.delete(line);
+                          else this.#selected.add(line);
+                        }
+                        this.requestUpdate();
+                      }}
+                    >
+                      <span aria-hidden="true"
+                        >${checked === "true" ? "☑" : checked === "mixed" ? "▣" : "☐"}</span
+                      >
+                      ${name}
+                    </button>`
+              }
+            </h3>
+            ${repeat(
+              group.sections,
+              (section) => section.course?.id ?? "",
+              (section) =>
+                html`<section class="draft-section" data-draft-section=${section.course?.id ?? ""}>
+                  ${
+                    section.heading && section.course !== null
+                      ? html`<h4 class="draft-section-name">${section.course.name}</h4>`
+                      : nothing
+                  }
+                  <till-basket
+                    .hideKitchenNote=${true}
+                    stacked
+                    .store=${store}
+                    .lineIndexes=${section.indexes}
+                  >
+                    ${section.indexes.map((index) => this.#draftLine(store, store.lines[index]!, index))}
+                  </till-basket>
+                </section>`,
+            )}
+          </section>`;
+        },
       )}
     </div>`;
   }
@@ -3264,6 +3355,10 @@ export class TillTableOrderScreen extends LitElement {
         : []),
       ...(isFlagged ? [this.#flagChoice(store, line, index)] : []),
     ];
+    if (store.editsLocked)
+      return html`<span slot=${`lead-${index}`} class="draft-line-name"
+        >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
+      >`;
     return html`<button
         slot=${`lead-${index}`}
         type="button"
@@ -3362,7 +3457,7 @@ export class TillTableOrderScreen extends LitElement {
     };
     if (this.#isLaterAddition(store)) {
       return html`<div class="draft-bar">
-        ${this.#destinationChoice()}
+        ${this.#draftMoveButton(store)} ${this.#destinationChoice()}
         <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
           ${button(this.#laterAction(), "table.draft_submit", "primary", "submit")}
         </div>
@@ -3370,6 +3465,7 @@ export class TillTableOrderScreen extends LitElement {
     }
     const anySelected = store.lines.some((line) => this.#selected.has(line));
     return html`<div class="draft-bar">
+      ${this.#draftMoveButton(store)}
       <div class="draft-actions" role="group" aria-label=${t("table.draft_actions")}>
         ${
           anySelected
@@ -3380,6 +3476,139 @@ export class TillTableOrderScreen extends LitElement {
         }
       </div>
     </div>`;
+  }
+
+  #draftMoveButton(store: WorkingOrderStore): TemplateResult {
+    const disabled =
+      store.editsLocked ||
+      store.sending ||
+      this.groupCommandBusy ||
+      !store.lines.some((line) => this.#selected.has(line));
+    return html`<wt-button
+      data-draft-move
+      variant=${disabled ? "secondary" : "primary"}
+      ?disabled=${disabled}
+      @click=${() => {
+        if (!disabled) this.draftMoveStore = store;
+      }}
+      >${t("table.move_line")}</wt-button
+    >`;
+  }
+
+  #moveDraftSelection(store: WorkingOrderStore, target: Place | "new"): void {
+    if (
+      store !== this.#draftStore ||
+      store !== this.draftMoveStore ||
+      store.editsLocked ||
+      store.sending ||
+      this.groupCommandBusy
+    )
+      return;
+    const indexes = [...this.#selectedIndexes(store.lines)];
+    if (indexes.length === 0) return;
+    if (target === "new") {
+      const layout = this.#draftLayout(store);
+      const newlyHeld = layout.filter((group) => group.kind === "new");
+      const anchorOf = (group: LayoutGroup): string | undefined => {
+        const index = group.sections[0]!.indexes[0]!;
+        const place = store.lines[index]!.place;
+        return place?.kind === "new" ? place.afterGroupId : undefined;
+      };
+      const heldIds = new Set(this.#heldInOrder.map((group) => group.id));
+      const inFiringOrder = [
+        ...layout.filter((group) => group.kind === "fire"),
+        ...this.#heldInOrder.flatMap((held) => [
+          ...layout.filter((group) => group.groupId === held.id),
+          ...newlyHeld.filter((group) => anchorOf(group) === held.id),
+        ]),
+        ...newlyHeld.filter((group) => !heldIds.has(anchorOf(group) ?? "")),
+        ...layout.filter((group) => group.kind === "join" && !heldIds.has(group.groupId!)),
+      ];
+      const chosen = new Set(indexes);
+      const source = inFiringOrder
+        .reverse()
+        .find((group) =>
+          group.sections.some((section) => section.indexes.some((index) => chosen.has(index))),
+        );
+      if (source === undefined) return;
+      const afterGroupId = source.kind === "join" ? source.groupId! : anchorOf(source);
+      const slot =
+        source.kind === "new"
+          ? source.slot! + 1
+          : source.kind === "fire"
+            ? 1
+            : (newlyHeld.find((group) => anchorOf(group) === afterGroupId)?.slot ??
+              Math.max(0, ...newlyHeld.map((group) => group.slot!)) + 1);
+      store.setLinePlaces(
+        indexes,
+        {
+          kind: "new",
+          slot,
+          ...(afterGroupId === undefined ? {} : { afterGroupId }),
+        },
+        { from: slot },
+      );
+    } else {
+      if (target.kind === "join" && !this.#heldGroupIds?.has(target.groupId)) return;
+      if (
+        target.kind === "new" &&
+        !store.lines.some(
+          ({ place }) =>
+            place?.kind === "new" &&
+            place.slot === target.slot &&
+            place.afterGroupId === target.afterGroupId,
+        )
+      )
+        return;
+      store.setLinePlaces(indexes, target);
+    }
+    this.draftMoveStore = null;
+  }
+
+  #draftMoveDialog(store: WorkingOrderStore): TemplateResult {
+    const layout = this.#draftLayout(store);
+    const option = (key: string, label: string, place: Place | "new") =>
+      html`<wt-button
+        variant="secondary"
+        data-draft-move-to=${key}
+        @click=${() => this.#moveDraftSelection(store, place)}
+        >${label}</wt-button
+      >`;
+    return html`<wt-dialog
+      data-draft-move-dialog
+      .heading=${t("table.move_line")}
+      .open=${this.draftMoveStore === store && !store.editsLocked && !store.sending}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget) this.draftMoveStore = null;
+      }}
+    >
+      <div class="action-options">
+        ${option("fire", t("table.destination_fire_now"), { kind: "fire" })}
+        ${layout
+          .filter((group) => group.kind === "new")
+          .map((group) => {
+            const place = store.lines[group.sections[0]!.indexes[0]!]!.place!;
+            return option(group.key, this.#draftGroupName(group), place);
+          })}
+        ${this.#heldInOrder.map((group) =>
+          option(
+            `join:${group.id}`,
+            t("table.draft_joins_group").replace("{n}", groupNumberText(group)),
+            { kind: "join", groupId: group.id },
+          ),
+        )}
+        ${option("new", `+ ${t("table.move_new_group")}`, "new")}
+      </div>
+      <wt-button
+        slot="footer"
+        variant="secondary"
+        @click=${() => {
+          this.draftMoveStore = null;
+        }}
+        >${t("action.back")}</wt-button
+      >
+    </wt-dialog>`;
   }
 
   #destinationChoice(): TemplateResult {
