@@ -84,44 +84,63 @@ async function copyLayouts(
   for (const setId of [fromSetId, toSetId])
     if (!held.includes(setId)) throw new AppError("floor_plan_set.not_found", { setId });
   const plans = await tx
-    .select()
+    .select({ id: floorPlans.id, zoneId: floorPlans.zoneId, savedAt: floorPlans.savedAt })
     .from(floorPlans)
     .where(eq(floorPlans.setId, fromSetId))
     .orderBy(asc(floorPlans.id));
-  for (const plan of plans) {
-    const [copy] = await tx
-      .insert(floorPlans)
-      .values({ zoneId: plan.zoneId, setId: toSetId, revision: 1, savedAt: plan.savedAt })
-      .returning({ id: floorPlans.id });
-    const places = await tx
-      .select({
-        planTableId: floorPlanPlacements.planTableId,
-        x: floorPlanPlacements.x,
-        y: floorPlanPlacements.y,
-        width: floorPlanPlacements.width,
-        height: floorPlanPlacements.height,
-        shape: floorPlanPlacements.shape,
-        rotation: floorPlanPlacements.rotation,
-      })
-      .from(floorPlanPlacements)
-      .where(eq(floorPlanPlacements.planId, plan.id));
-    if (places.length > 0)
-      await tx
-        .insert(floorPlanPlacements)
-        .values(places.map((place) => ({ ...place, planId: copy!.id })));
-    const sizes = await tx
-      .select({
-        planTableId: floorPlanTableSizes.planTableId,
-        width: floorPlanTableSizes.width,
-        height: floorPlanTableSizes.height,
-      })
-      .from(floorPlanTableSizes)
-      .where(eq(floorPlanTableSizes.planId, plan.id));
-    if (sizes.length > 0)
-      await tx
-        .insert(floorPlanTableSizes)
-        .values(sizes.map((size) => ({ ...size, planId: copy!.id })));
-  }
+  if (plans.length === 0) return;
+  const copies = await tx
+    .insert(floorPlans)
+    .values(
+      plans.map((plan) => ({
+        zoneId: plan.zoneId,
+        setId: toSetId,
+        revision: 1,
+        savedAt: plan.savedAt,
+      })),
+    )
+    .returning({ id: floorPlans.id, zoneId: floorPlans.zoneId });
+  const copyOfZone = new Map(copies.map((copy) => [copy.zoneId, copy.id]));
+  const copyOf = new Map(plans.map((plan) => [plan.id, copyOfZone.get(plan.zoneId)!]));
+  const planIds = plans.map((plan) => plan.id);
+  const places = await tx
+    .select({
+      planId: floorPlanPlacements.planId,
+      planTableId: floorPlanPlacements.planTableId,
+      x: floorPlanPlacements.x,
+      y: floorPlanPlacements.y,
+      width: floorPlanPlacements.width,
+      height: floorPlanPlacements.height,
+      shape: floorPlanPlacements.shape,
+      rotation: floorPlanPlacements.rotation,
+    })
+    .from(floorPlanPlacements)
+    .where(inArray(floorPlanPlacements.planId, planIds));
+  for (const rows of inBatches(places))
+    await tx
+      .insert(floorPlanPlacements)
+      .values(rows.map((place) => ({ ...place, planId: copyOf.get(place.planId)! })));
+  const sizes = await tx
+    .select({
+      planId: floorPlanTableSizes.planId,
+      planTableId: floorPlanTableSizes.planTableId,
+      width: floorPlanTableSizes.width,
+      height: floorPlanTableSizes.height,
+    })
+    .from(floorPlanTableSizes)
+    .where(inArray(floorPlanTableSizes.planId, planIds));
+  for (const rows of inBatches(sizes))
+    await tx
+      .insert(floorPlanTableSizes)
+      .values(rows.map((size) => ({ ...size, planId: copyOf.get(size.planId)! })));
+}
+
+/** Rows per statement, bounded as `packages/catalogue/src/batches.ts` bounds them. */
+function inBatches<T>(rows: readonly T[], size = 1000): T[][] {
+  const result: T[][] = [];
+  for (let start = 0; start < rows.length; start += size)
+    result.push(rows.slice(start, start + size));
+  return result;
 }
 
 async function readLayouts(

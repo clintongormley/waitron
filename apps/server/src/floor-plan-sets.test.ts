@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -186,6 +186,65 @@ describe("the floor plan sets port", () => {
     ).toEqual(dinner.tables);
     const emptyCopy = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: late, zoneId: bar.id }));
     expect(emptyCopy).toMatchObject({ revision: 1, tables: [] });
+  });
+
+  it("copies each zone's layout onto that zone, in statements that do not grow with the zones", async () => {
+    const statementsToCopy = async (zoneCount: number) => {
+      const d = await department();
+      const zoneIds = [d.zoneId];
+      for (let i = 1; i < zoneCount; i++)
+        zoneIds.push(
+          (
+            await inTx(v, (tx) =>
+              createServiceZone(tx, v.cfg, { name: fresh("Room"), departmentId: d.departmentId }),
+            )
+          ).id,
+        );
+      for (const [i, zoneId] of zoneIds.entries()) {
+        await save(d.dinner, zoneId, {
+          revision: 0,
+          tables: [
+            entry("a", fresh(`A${i}`), { placement: { ...PLACE, x: 10 * i } }),
+            entry("b", fresh(`B${i}`), { placement: { ...PLACE, y: 10 * i } }),
+          ],
+        });
+        const saved = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: d.dinner, zoneId }));
+        await save(d.dinner, zoneId, {
+          revision: saved.revision,
+          tables: saved.tables.map((t, n) => ({
+            id: t.id,
+            key: t.id,
+            label: t.label,
+            seats: t.seats,
+            fixed: t.fixed,
+            placement: n === 0 ? null : { ...PLACE, x: 5 + i },
+            partKeys: [],
+          })),
+        });
+      }
+      const { late, statements } = await inTx(v, async (tx) => {
+        const setId = await addSet(tx, d.departmentId, "Late");
+        const session = (
+          tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+        ).session;
+        const spy = vi.spyOn(session, "prepareQuery");
+        try {
+          await sets().copyLayouts(tx, d.dinner, setId);
+          return { late: setId, statements: spy.mock.calls.length };
+        } finally {
+          spy.mockRestore();
+        }
+      });
+      for (const zoneId of zoneIds) {
+        const source = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: d.dinner, zoneId }));
+        const copied = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId: late, zoneId }));
+        expect(copied.revision).toBe(1);
+        expect(copied.tables).toEqual(source.tables);
+        expect(source.tables.some((t) => t.keptSize !== null)).toBe(true);
+      }
+      return statements;
+    };
+    expect(await statementsToCopy(3)).toBe(await statementsToCopy(1));
   });
 
   it("refuses a copy from or to a set the location does not hold", async () => {
