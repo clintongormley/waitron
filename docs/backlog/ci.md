@@ -369,7 +369,7 @@ failure log is `push-final-attempt.log` in Lane G's A668-5 receipts.
   2026-10-17). The gate lives in `.github/workflows/mutation.yml`, which runs nightly or by hand,
   so a pull request that thins a `packages/db` test merges green and the score drops the next
   night. No cheaper per-pull-request signal is wanted; `ui` and `ui-core` work the same way, and
-  [ci-and-gates.md](../developers/ci-and-gates.md#mutation-testing-runs-nightly-at-0500-utc) says
+  [ci-and-gates.md](../developers/ci-and-gates.md#mutation-floors-and-where-each-one-actually-bites) says
   so where a reader meets the gate.
 
 **The development stack:**
