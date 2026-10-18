@@ -30,6 +30,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
 import "@waitron/ui/src/components/wt-help-switch.js";
@@ -1787,12 +1788,17 @@ export class DashboardApp extends LitElement {
                   label=${t("nav.account_menu")}
                   data-test="account-menu"
                 >
-                  <wt-button
-                    variant="ghost"
-                    align="start"
-                    data-test="profile"
-                    @click=${() => this.#openProfile()}
-                    >${t("action.account_settings")}</wt-button
+                  <wt-menu-row
+                    data-test="profile-row"
+                    help=${t("help.account.settings")}
+                    help-label=${fill("help.badge_label", { part: t("action.account_settings") })}
+                    ><wt-button
+                      variant="ghost"
+                      align="start"
+                      data-test="profile"
+                      @click=${() => this.#openProfile()}
+                      >${t("action.account_settings")}</wt-button
+                    ></wt-menu-row
                   >
                   ${themeChoices({
                     active: this.#theme.choice,

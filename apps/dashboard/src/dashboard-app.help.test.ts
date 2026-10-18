@@ -1,8 +1,9 @@
-import { currentHelpMode, setHelpMode, type WtRowActions } from "@waitron/ui";
+import { currentHelpMode, setHelpMode, type WtHelpTooltip, type WtRowActions } from "@waitron/ui";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi, type MockInstance } from "vitest";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
@@ -344,5 +345,82 @@ it("has no accessibility violations with help on, in both themes", async () => {
     await expectNoA11yViolations(q(el, "[data-test=brand-banner]")!);
     setHelpMode(false);
     cleanupWidgets();
+  }
+});
+
+const profileRow = (el: DashboardApp) => q(el, "[data-test=profile-row]");
+const profileBadge = (el: DashboardApp) =>
+  profileRow(el)!.shadowRoot!.querySelector<WtHelpTooltip>("wt-help-tooltip")!;
+const badgeButton = (badge: WtHelpTooltip) => badge.shadowRoot!.querySelector("button")!;
+
+async function openAccountMenu(el: DashboardApp): Promise<void> {
+  accountMenu(el).shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  await vi.waitFor(() => expect(menuPopup(el).matches(":popover-open")).toBe(true));
+}
+
+function deepActiveElement(): Element | null {
+  let focused = document.activeElement;
+  while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+  return focused;
+}
+
+it("with help on, the account menu shows a badge beside Account settings", async () => {
+  const { el } = await signedIn();
+  await openAccountMenu(el);
+  expect(profileRow(el)!.contains(q(el, "[data-test=profile]"))).toBe(true);
+  expect(profileBadge(el).checkVisibility()).toBe(false);
+
+  await turnHelpOn(el);
+  const badge = profileBadge(el);
+  await badge.updateComplete;
+  expect(badge.checkVisibility()).toBe(true);
+  await expect.element(badgeButton(badge)).toHaveAccessibleName("Help: Account settings");
+  expect(badge.textContent!.trim()).toBe(t("help.account.settings"));
+
+  await userEvent.click(badgeButton(badge));
+  const box = badge.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await vi.waitFor(() => expect(box.matches(":popover-open")).toBe(true));
+  await flush(el);
+  expect(menuPopup(el).matches(":popover-open")).toBe(true);
+  expect(q(el, "dashboard-profile-screen")).toBeNull();
+
+  await userEvent.click(q(el, "[data-test=profile]")!.shadowRoot!.querySelector("button")!);
+  await vi.waitFor(() => expect(q(el, "dashboard-profile-screen")).not.toBeNull());
+});
+
+it("a keyboard user can turn help on with the account menu open, and the menu stays open and inside the window", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  const errors: string[] = [];
+  const onError = (event: ErrorEvent) => errors.push(String(event.message));
+  window.addEventListener("error", onError);
+  await page.viewport(390, 844);
+  try {
+    const { el } = await signedIn();
+    const trigger = accountMenu(el).shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+    trigger.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(menuPopup(el).matches(":popover-open")).toBe(true));
+
+    for (let step = 0; step < 10 && deepActiveElement() !== switchButton(el); step++)
+      await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(deepActiveElement()).toBe(switchButton(el));
+    expect(menuPopup(el).matches(":popover-open")).toBe(true);
+
+    await userEvent.keyboard(" ");
+    await flush(el);
+    expect(currentHelpMode()).toBe(true);
+    expect(menuPopup(el).matches(":popover-open")).toBe(true);
+    await vi.waitFor(() => expect(profileBadge(el).checkVisibility()).toBe(true));
+    await vi.waitFor(() =>
+      expect(menuPopup(el).getBoundingClientRect().right).toBeLessThanOrEqual(
+        window.innerWidth - 8,
+      ),
+    );
+    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+    expect(errors.filter((message) => /ResizeObserver/.test(message))).toEqual([]);
+  } finally {
+    window.removeEventListener("error", onError);
+    await page.viewport(width, height);
   }
 });

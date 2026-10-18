@@ -183,7 +183,7 @@ it("signed in, the banner has no theme chooser and the account menu holds the Th
   expect(q(el, "[data-test=account-menu]")).not.toBeNull();
   expect(bannerChooser(el)).toBeNull();
   expect([...accountMenu(el).children].map((child) => child.getAttribute("data-test"))).toEqual([
-    "profile",
+    "profile-row",
     "theme-choices",
     "logout",
   ]);

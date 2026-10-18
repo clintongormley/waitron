@@ -6,6 +6,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-menu-row.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 import { priceText } from "./form-fields.js";
@@ -422,7 +423,11 @@ export class VariantTable extends LitElement {
                   t(variant.id === undefined ? "action.remove" : "product.archive"),
                   "danger",
                 )
-              : this.#action("restore", index, t("product.keep_variant"), "secondary")
+              : html`<wt-menu-row
+                  help=${t("help.products.keep_variant")}
+                  help-label=${fill("help.badge_label", { part: t("product.keep_variant") })}
+                  >${this.#action("restore", index, t("product.keep_variant"), "secondary")}</wt-menu-row
+                >`
           }</wt-row-actions
         >
       </td>

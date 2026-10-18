@@ -775,6 +775,10 @@ export const en = {
   "nav.account_menu": "Account menu",
   "help.label": "Help",
   "help.badge_label": "Help: {part}",
+  "help.account.settings":
+    "Your name, display name, email, phone and language; your password, PIN and passkeys; an authenticator app for an extra sign-in check; and, where available, signing in with Google.",
+  "help.products.keep_variant":
+    "Cancels archiving this variant. Archiving happens only when you save the product.",
   // Theme choice. light/dark/device also name the icon-only buttons in the account menu.
   "theme.label": "Theme",
   "theme.light": "Light",
@@ -3751,6 +3755,10 @@ export const es: Record<StringKey, string> = {
   "nav.account_menu": "Menú de cuenta",
   "help.label": "Ayuda",
   "help.badge_label": "Ayuda: {part}",
+  "help.account.settings":
+    "Tu nombre, nombre visible, correo electrónico, teléfono e idioma; tu contraseña, PIN y passkeys; una aplicación de autenticación como comprobación adicional; y, si está disponible, el inicio de sesión con Google.",
+  "help.products.keep_variant":
+    "Cancela el archivado de esta variante. Se archiva solo al guardar el producto.",
   "theme.label": "Tema",
   "theme.light": "Claro",
   "theme.dark": "Oscuro",
