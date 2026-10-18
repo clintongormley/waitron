@@ -482,6 +482,8 @@ export const QUERY_DEPENDENCIES = {
     "floor_plans",
     "floor_plan_sets",
     "department_floor_plan_sets",
+    "departments",
+    "zone_service_policies",
     "floor_plan_placements",
     "floor_plan_tables",
     "floor_plan_table_parts",
