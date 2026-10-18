@@ -72,21 +72,6 @@ Proposed build (owner question Q44 decides the first two points):
 
 Picture: `mockups/a846-held-card-payments/01-record-what-was-done.png` (also `-dark`).
 
-## A847. Allow joining and unjoining tables during a pending card refund
-
-- **A847. Allow joining and unjoining tables during a pending card refund.** Today a pending card
-  refund does not refuse joining or unjoining tables, though the bill payments design says it does.
-  The design's §5.2 list ("each payment, refund, void, quantity change,
-  adjustment, split, transfer, join and unjoin … are refused with `bill.refund_in_progress`",
-  [bill payments design](../superpowers/specs/2026-09-26-bill-payments-design.md)) names join and
-  unjoin. The run-it review of #851 (2026-09-29) reported that joining a free table to the party
-  and unjoining a table without moving any dishes both succeeded while a card refund of the bill
-  was pending; its probes were temporary and are not in the tree. Nobody has yet checked whether
-  either can change what the bill charges. **Owner, 2026-10-17: allow them and fix the design.**
-  First a test that joins and unjoins during a pending refund and shows neither changes what the
-  bill charges; then drop join and unjoin from §5.2's list. If either can change the charge, stop
-  and ask the owner.
-
 ## The SumUp Solo experiments
 
 - **The SumUp Solo experiments** ([runbook](../research/2026-09-10-sumup-solo-experiments.md)). Question

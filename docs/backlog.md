@@ -3574,12 +3574,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   the same column. Left open by the table actions plan.
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
-- **A847. Allow joining and unjoining tables during a pending card refund, and drop them from the
-  bill payments design's refused list** (owner, 2026-10-17). First a test that joins and unjoins
-  during a pending refund and shows neither changes what the bill charges; then take join and
-  unjoin out of the design's §5.2 list. If either can change the charge, stop and ask the owner.
-  [Detail](backlog/payments.md#a847-allow-joining-and-unjoining-tables-during-a-pending-card-refund)
-
 - **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Still
   open: whether we may supply the idempotency key, whether reader webhooks are signed, and whether
   `void` maps onto the refund endpoint. [Detail](backlog/payments.md#the-sumup-solo-experiments)
