@@ -8951,6 +8951,10 @@ export class TillApp extends LitElement {
     this.#draftSync = undefined;
     this.#draftReady = false;
     this.requestUpdate();
+    if (sync.edit === null) {
+      sync.drop();
+      return;
+    }
     const session = this.#operatorSession;
     this.#leavingDrafts.set(
       sync,
@@ -8958,7 +8962,7 @@ export class TillApp extends LitElement {
         if (!this.#leavingDrafts.delete(sync)) return;
         if (saved === "failed" && session === this.#operatorSession)
           this.#unsavedDrafts.set(sync.partyId, sync);
-        else sync.drop();
+        sync.drop();
         if (session !== this.#operatorSession || saved === "saved") return;
         if (saved === "failed") {
           if (this.errorKey === undefined) this.errorKey = "table.draft_save_failed";
@@ -12022,7 +12026,11 @@ export class TillApp extends LitElement {
       outcome = { error };
     }
     if (!identity()) return;
-    if (this.activeTabId === orderId && !this.#billChoiceCurrent(change.expectedEdit)) {
+    if (
+      this.activeTabId === orderId &&
+      this.#draftReady &&
+      !this.#billChoiceCurrent(change.expectedEdit)
+    ) {
       if (
         "saved" in outcome &&
         this.#draftSync === composition.sync &&
@@ -12810,6 +12818,8 @@ export class TillApp extends LitElement {
     let destination: BillEditExpected[] = [];
     if (target !== undefined && target !== null && target.id !== source.partyId) {
       try {
+        await this.#savesOutFor(target.id);
+        if (!this.#billCompositionUnchanged(source)) return null;
         const snapshot = await source.api.listDrafts(target.id);
         destination = snapshot.billEdits.map(
           ({ billId, editorVersion, draftId, draftRevision }) => ({

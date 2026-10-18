@@ -2895,7 +2895,8 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     expect(api.seatTable.mock.calls).toEqual([["t9", 2]]);
     expect(api.getTabLines.mock.calls.slice(tabReads)).toEqual([["wo-new"]]);
     expect(api.listZoneOffers.mock.calls.length).toBe(offerReads);
-    expect(who.calls).toEqual([]);
+    expect(who.calls).toEqual(["listDrafts(v-new) as p1"]);
+    who.calls.length = 0;
     const seatCalls = api.seatTable.mock.calls.length;
     const tabCalls = api.getTabLines.mock.calls.length;
 

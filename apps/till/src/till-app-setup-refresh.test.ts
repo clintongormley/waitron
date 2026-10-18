@@ -687,9 +687,9 @@ describe("A768 the till follows the venue's setup revision", () => {
     expect(tableOrder(el)!.draftStore!.lines.map((line) => line.courseId)).toEqual(["mains"]);
     const order = tableOrder(el)!.shadowRoot!;
     expect(order.querySelector("[data-round-course]")!.getAttribute("placeholder")).toBe("Mains");
-    expect(
-      order.querySelector('[data-draft-section="mains"] .draft-section-name')?.textContent,
-    ).toBe("Mains");
+    expect(order.querySelector('[data-draft-group="fire"]')?.getAttribute("aria-label")).toBe(
+      "Fire now · Mains",
+    );
   });
 });
 
