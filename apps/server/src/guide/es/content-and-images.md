@@ -2,7 +2,7 @@
 
 Puedes añadir texto en francés a una carta en español sin cambiar el idioma del panel de gestión ni
 el de tus tickets. Empieza eligiendo los idiomas que admite tu contenido y después añade las
-traducciones a medida que las necesites. La biblioteca de imágenes usa las mismas opciones que tus
+traducciones a medida que las necesites. La biblioteca de imágenes usa los mismos idiomas que tus
 productos, tus secciones y tus [modificadores](modifiers.md). Una lista de opciones, cada una de sus
 opciones y una lista de extras entran en la comprobación de traducciones del idioma predeterminado.
 Un elemento de una lista de extras no: no tiene nombre propio y toma el del producto.
@@ -16,8 +16,8 @@ Valenciana y las Islas Baleares, y el gallego en Galicia; allí ese idioma regio
 predeterminado. En el resto de España el predeterminado es el español. Un local de otro país empieza
 con el idioma de su país y el inglés. Para añadir otro, abre **Ajustes** y después **Idiomas del
 contenido**, que muestra en una tabla tus idiomas y cuántos nombres faltan en cada uno, con el
-predeterminado primero. Selecciona **Añadir idioma** y elige el idioma para añadirlo. Las opciones
-muestran primero los idiomas oficiales de tu país, bajo **Idiomas oficiales**, mientras falte por
+predeterminado primero. Selecciona **Añadir idioma** y elige el idioma para añadirlo. La lista
+muestra primero los idiomas oficiales de tu país, bajo **Idiomas oficiales**, mientras falte por
 añadir alguno de ellos. Los campos de traducción del idioma añadido quedan entonces disponibles en
 todos tus editores de contenido. Para cambiar el predeterminado, abre el menú ⋮ de ese idioma y
 selecciona **Hacer predeterminado**.
@@ -52,12 +52,12 @@ impide. Los nombres para el cliente de una sección se editan en la pestaña **E
 carta, en **Productos y cartas**, **Cartas**. Los nombres para el cliente de la propia carta se
 editan con **Cambiar nombre** en la fila de la carta en esa lista, no en su pestaña **Estructura**,
 aunque el enlace de **Traducciones que faltan** para el nombre de una carta abre esa pestaña. Una
-carta incluida en otra puede dar a su carpeta nombres para el cliente propios: elige **Editar** en el
-⋮ de esa inclusión, en la pestaña **Estructura** de la carta que la incluye. Cuando los nombres de
-esa carpeta, los suyos junto con los que toma de la carta incluida, están rellenos en algunos idiomas
-pero no en el nuevo predeterminado, también impide el cambio, y **Traducciones que faltan** la
-muestra como **Carpeta de carta incluida**. Esto vale también mientras la inclusión muestra sus
-secciones directamente; activa **Mostrar como carpeta** para ver los nombres.
+carta incluida en otra puede dar a su carpeta nombres para el cliente propios: elige **Editar** en
+el ⋮ de esa inclusión, en la pestaña **Estructura** de la carta que la incluye. Cuando los nombres
+de esa carpeta, los suyos junto con los que toma de la carta incluida, están rellenos en algunos
+idiomas pero no en el nuevo predeterminado, esa carpeta también impide el cambio, y **Traducciones
+que faltan** la muestra como **Carpeta de carta incluida**. Esto vale también mientras la inclusión
+muestra sus secciones directamente; activa **Mostrar como carpeta** para ver los nombres.
 
 **Editar traducciones** abre una ventana que muestra las traducciones que faltan en tus idiomas de
 contenido. Se abre en el idioma que elegiste; los idiomas marcados como **Obligatorio** van primero
@@ -84,8 +84,8 @@ Los ajustes del idioma de los tickets siguen siendo independientes. Un ticket se
 idioma. El predeterminado de cada ubicación se elige en la tarjeta **Valores predeterminados** de
 **Ajustes del local**, que en Cataluña lo fija en catalán, y el personal puede elegir otro idioma
 para una venta, o para una copia, en la caja. La caja ofrece el idioma de tickets de la ubicación y,
-en España, los que de entre español, catalán, gallego y euskera estén entre tus idiomas de
-contenido, así que añadir contenido en inglés no añade un ticket en inglés.
+en España, los idiomas de tu contenido que sean español, catalán, gallego o euskera, así que añadir
+contenido en inglés no añade un ticket en inglés.
 
 Los nombres de los productos, las unidades y las respuestas de las opciones se imprimen en tu idioma
 de contenido predeterminado, o en otro de tus idiomas de contenido donde un nombre está en blanco en
@@ -96,7 +96,7 @@ predeterminados de Ajustes del local muestran una nota que lo indica.
 
 Las pantallas de cocina, los pedidos que recuperas y los informes de ventas conservan los nombres
 registrados, aunque más tarde quites ese idioma de tus ajustes de contenido. El idioma de los
-botones y las pantallas de Waitron sigue siendo tu preferencia de interfaz, aparte. Estos ajustes de
+botones y las pantallas de Waitron sigue siendo una preferencia de interfaz aparte. Estos ajustes de
 contenido también dan las opciones de idioma para el futuro contenido en línea; no crean un sitio de
 pedidos en línea.
 
@@ -121,9 +121,9 @@ las copias de seguridad y todas las restauraciones, así que Waitron reduce cada
 de 1600 píxeles en su lado más largo, conserva su forma y la guarda en formato WebP. Una foto que ya
 es más pequeña nunca se amplía. Waitron también quita los datos ocultos que añaden las cámaras, como
 dónde y cuándo se hizo la foto, porque cualquiera que tenga la dirección de una foto puede abrirla.
-Se aceptan archivos de hasta 20 MB. Si se rechaza una foto por demasiado grande, por tener demasiados
-píxeles o porque no se puede leer, exporta una copia más pequeña desde tu aplicación de fotos y sube
-esa.
+Se aceptan archivos de hasta 20 MB. Si se rechaza una foto por ser demasiado grande, por tener
+demasiados píxeles o porque no se puede leer, exporta una copia más pequeña desde tu aplicación de
+fotos y sube esa.
 
 En la ventana de subida, para la fotografía del pan, podrías escribir **Pan de verano** como nombre
 en español. Deja en blanco el nombre en inglés hasta que tengas una traducción. Elige **Guardar**
@@ -133,10 +133,10 @@ para añadir la foto a la biblioteca; si cancelas antes de Guardar, no se añade
 
 **Buscar imágenes** encuentra fotografías por las palabras de sus nombres, en cualquier orden, y
 busca mientras escribes: la palabra que aún estás escribiendo puede ser cualquier parte de una
-palabra, así que **vera** encuentra **Pan de verano**. En cuanto escribes un espacio tras una palabra,
-solo coincide esa palabra entera. Los acentos y las mayúsculas no cuentan, así que **cafe** encuentra
-**Café con leche**. Todas las palabras tienen que estar en el nombre en un mismo idioma. Elige
-**Relevancia** para ver primero lo que más se parece, **Fecha** para repasar las subidas o
+palabra, así que **rano** encuentra **Pan de verano**. En cuanto escribes un espacio tras una
+palabra, solo coincide esa palabra entera. Los acentos y las mayúsculas no cuentan, así que **cafe**
+encuentra **Café con leche**. Todas las palabras tienen que estar en el nombre en un mismo idioma.
+Elige **Relevancia** para ver primero lo que más se parece, **Fecha** para repasar las subidas o
 **Nombre** para recorrer los nombres. Fecha empieza por las subidas más recientes; cambia a **Más
 antiguas primero** cuando necesites las primeras. Nombre empieza por **A–Z** y también ofrece
 **Z–A**. Usa los controles de página cuando coinciden más fotografías de las que caben en la página
@@ -215,9 +215,9 @@ bloqueando la eliminación mientras la inclusión muestra sus secciones directam
 Una carta publicada también retiene todas las fotografías que incluía su última publicación, aunque
 quites la fotografía de un producto o de una sección. La biblioteca muestra esa carta por su nombre,
 seguido de **(Carta publicada)**, y su enlace abre la carta. Vuelve a publicar la carta sin la
-fotografía para liberarla. Si la carta tiene además una versión programada para entrar en vigor más
-tarde, se rechaza publicar ahora mientras esa versión espera, así que cancélala primero, como se
-explica más abajo.
+fotografía para liberarla. Si la carta tiene además versiones programadas para entrar en vigor más
+tarde, se rechaza publicar ahora mientras alguna de ellas espera, así que cancélalas primero, como
+se explica más abajo.
 
 Una carta con una versión programada para entrar en vigor más tarde también retiene todas las
 fotografías que incluye esa versión. La biblioteca muestra esa carta por su nombre, seguido de

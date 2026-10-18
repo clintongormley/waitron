@@ -42,10 +42,10 @@ de uno en uno con cada toque. El ticket imprime la cantidad con la abreviatura d
 
 ## Da a un producto hasta tres nombres {#names}
 
-El nombre que acabas de escribir es el nombre del **personal**. Es texto sin formato, en ningún idioma
-concreto, y es lo que ves tú y lo que ve tu personal: la lista de Productos, los botones de la caja, la cesta,
-las líneas de una mesa abierta, un pedido recuperado y tus informes de ventas. Usa el nombre con el que
-el local llama de verdad al plato.
+El nombre que acabas de escribir es el nombre del **personal**. Es texto sin formato, en ningún
+idioma concreto, y es lo que ves tú y lo que ve tu personal: la lista de Productos, los botones de
+la caja, la cesta, las líneas de una mesa abierta, un pedido recuperado y tus informes de ventas.
+Usa el nombre con el que el local llama de verdad al plato.
 
 Dos nombres opcionales tienen su propia sección. **Descriptores** empieza plegada y **Cocina** empieza
 abierta:
@@ -147,12 +147,12 @@ Modificadores ni Variantes, porque una variante siempre usa las listas de extras
 producto. **Abrir** aparece cuando la variante se ha guardado, y espera mientras el producto tiene
 cambios sin guardar, porque salir del producto los perdería: guarda primero el producto.
 
-**Archivar** en una variante guardada deja preparado un archivado permanente. La fila sigue visible con
-**Se archivará al guardar** y **Conservar** hasta que guardas el producto. Elige Conservar para
+**Archivar** en una variante guardada deja preparado un archivado permanente. La fila sigue visible
+con **Se archivará al guardar** y **Conservar** hasta que guardas el producto. Elige Conservar para
 cancelar ese cambio preparado. Una vez guardado, la caja deja de ofrecer la variante, se borran sus
 precios en las cartas y se conservan sus ventas pasadas. No puedes recuperarla. Una variante ya
-archivada no aparece en el editor. Para verla, activa **Mostrar archivados** en la lista de **Productos**. **Eliminar**
-quita una variante que aún no has guardado.
+archivada no aparece en el editor. Para verla, activa **Mostrar archivados** en la lista de
+Productos. **Eliminar** quita una variante que aún no has guardado.
 
 Si una carta publicada o programada incluye la variante, el guardado se rechaza y nombra las cartas.
 Quita la variante de esas cartas y publica antes de archivarla. No puedes añadir una variante activa a
