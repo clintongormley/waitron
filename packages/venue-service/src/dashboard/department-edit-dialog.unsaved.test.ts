@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import {
   cleanupDepartmentEditors,
@@ -98,4 +99,14 @@ it("a pending receipt Save blocks Escape and Cancel", async () => {
   expect(modal.open).toBe(true);
   editor.finish!();
   await expect.poll(() => modal.open).toBe(false);
+});
+it("untouched Escape on the Receipts tab closes without a leave question", async () => {
+  const { el, app, form, modal } = await mountDepartmentEditor();
+  const editor = await supplyReceiptEditor(el, form);
+  await selectDepartmentTab(form, "receipt");
+  editor.shadowRoot!.querySelector("input")!.focus();
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(() => modal.open).toBe(false);
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });

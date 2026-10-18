@@ -332,7 +332,15 @@ it("/view/receipt opens the department dialog on its Receipts tab", async () => 
   expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d1");
   expect(form.tab).toBe("receipt");
   expect(form.shadowRoot!.querySelector("[data-test=receipt-panel]")!.textContent).toBe("d1");
-  expect(shell.shadowRoot!.querySelector(":scope > div > [data-test=receipt-panel]")).toBeNull();
+  const panels = (root: ShadowRoot): Element[] => [
+    ...root.querySelectorAll("[data-test=receipt-panel]"),
+    ...[...root.querySelectorAll("*")].flatMap((node) =>
+      node.shadowRoot ? panels(node.shadowRoot) : [],
+    ),
+  ];
+  expect(panels(shell.shadowRoot!)).toEqual([
+    form.shadowRoot!.querySelector("[data-test=receipt-panel]"),
+  ]);
   expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/receipt");
 });
 it("navigationScopes is [] for another offered tab of the open department and undefined for another department, a zone or receipt", async () => {

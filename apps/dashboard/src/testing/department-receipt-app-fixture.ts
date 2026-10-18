@@ -3,8 +3,8 @@ import { createRequest } from "@waitron/dashboard-kit";
 import { DashboardApi, type VenueDefaults } from "../api/client.js";
 import type { DashboardApp } from "../dashboard-app.js";
 import "../dashboard-app.js";
-import { mountWidget } from "../widgets/test-helpers.js";
-import { receiptModel, preview } from "./department-receipt-dialog-fixture.js";
+import { mountWidget, type Theme } from "../widgets/test-helpers.js";
+import { receiptModel, preview } from "./department-receipt-editor-fixture.js";
 import { venueDetailsFixture } from "./venue-details-fixture.js";
 
 export function deep(root: ShadowRoot | Element, selector: string): Element | null {
@@ -19,7 +19,14 @@ export function deep(root: ShadowRoot | Element, selector: string): Element | nu
   return null;
 }
 export async function mountReceiptApp(
-  options: { permissions?: string[]; required?: boolean; path?: string } = {},
+  options: {
+    permissions?: string[];
+    required?: boolean;
+    path?: string;
+    locale?: string;
+    theme?: Theme;
+    respond?: (path: string, init: RequestInit) => Promise<Response> | undefined;
+  } = {},
 ) {
   const permissions = options.permissions ?? [
     "venue_service.manage",
@@ -58,6 +65,8 @@ export async function mountReceiptApp(
     clearingWorkflow: false,
   };
   const fetchImpl = vi.fn(async (path: string, init: RequestInit) => {
+    const answer = options.respond?.(path, init);
+    if (answer) return answer;
     if (init.method === "PUT") {
       if (path.endsWith("/bar/receipt")) {
         const input = JSON.parse(init.body as string);
@@ -73,7 +82,7 @@ export async function mountReceiptApp(
         personId: "p1",
         role: "manager",
         email: null,
-        locale: "en-GB",
+        locale: options.locale ?? "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
         venueName: "Casa SL",
@@ -132,10 +141,11 @@ export async function mountReceiptApp(
     );
   });
   const api = new DashboardApi("", fetchImpl);
-  const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
-    api,
-    request: createRequest({ fetchImpl }),
-  });
+  const { el: app, host } = await mountWidget<DashboardApp>(
+    "dashboard-app",
+    { api, request: createRequest({ fetchImpl }) },
+    options.theme,
+  );
   await expect
     .poll(() =>
       deep(
@@ -144,7 +154,17 @@ export async function mountReceiptApp(
       ),
     )
     .toBeTruthy();
-  return { app, api, fetchImpl };
+  return { app, host, api, fetchImpl };
+}
+export async function mountReceiptTab(options: Parameters<typeof mountReceiptApp>[0] = {}) {
+  const mounted = await mountReceiptApp(options);
+  await expect
+    .poll(() => receiptTabEditor(mounted.app)?.shadowRoot?.querySelector("[name=email]"))
+    .toBeTruthy();
+  const editor = receiptTabEditor(mounted.app)!;
+  const modal = departmentDialog(mounted.app)!.shadowRoot!.querySelector("wt-modal")!;
+  await expect.poll(() => modal.shadowRoot?.querySelector("dialog")?.matches(":modal")).toBe(true);
+  return { ...mounted, editor, modal };
 }
 export function receiptTabEditor(app: DashboardApp) {
   return deep(app.shadowRoot!, "dashboard-department-receipt-editor") as

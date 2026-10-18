@@ -6,14 +6,14 @@ import { setLocale, t } from "../i18n/t.js";
 import {
   deferred,
   editReceipt,
-  mountReceiptDialog,
+  mountReceiptEditor,
   preview,
   receiptApi,
   receiptField,
   receiptModel,
   receiptSave,
   receiptRoot,
-} from "../testing/department-receipt-dialog-fixture.js";
+} from "../testing/department-receipt-editor-fixture.js";
 
 beforeEach(() => setLocale("en-GB"));
 afterEach(() => {
@@ -26,7 +26,7 @@ it.each([
   ["phone", "1".repeat(31)],
   ["email", "a".repeat(249) + "@b.com"],
 ] as const)("previews other authored fields while %s is incomplete", async (field, value) => {
-  const { el, api } = await mountReceiptDialog();
+  const { el, api } = await mountReceiptEditor();
   await editReceipt(el, field, value);
   await editReceipt(el, "footerMessage-es-ES", "Thanks");
   await expect
@@ -44,7 +44,7 @@ it("coalesces edits behind one in-flight preview and sends only the latest draft
   api.previewReceiptDraft
     .mockImplementationOnce(() => old.promise)
     .mockImplementationOnce(() => latest.promise);
-  const { el } = await mountReceiptDialog(api);
+  const { el } = await mountReceiptEditor(api);
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
   await editReceipt(el, "email", "first@example.com");
   await editReceipt(el, "email", "last@example.com");
@@ -64,7 +64,7 @@ it("an unchanged live snapshot leaves an in-flight preview current and does not 
   const api = receiptApi();
   const held = deferred<ReturnType<typeof preview>>();
   api.previewReceiptDraft.mockImplementationOnce(() => held.promise);
-  const { el } = await mountReceiptDialog(api);
+  const { el } = await mountReceiptEditor(api);
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
   api.liveData.invalidate([{ type: "department_receipts" }]);
   await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
@@ -76,7 +76,7 @@ it("an unchanged live snapshot leaves an in-flight preview current and does not 
   expect(api.previewReceiptDraft).toHaveBeenCalledTimes(1);
 });
 it("keeps the last paper when the newest preview refuses, then recovers without clearing a save refusal", async () => {
-  const { el, api } = await mountReceiptDialog();
+  const { el, api } = await mountReceiptEditor();
   await expect.poll(() => receiptRoot(el).querySelector(".paper")?.textContent).toContain("Sample");
   api.previewReceiptDraft.mockRejectedValueOnce({ code: "server.internal" });
   await editReceipt(el, "email", "draft@example.com");
@@ -89,7 +89,7 @@ it("keeps the last paper when the newest preview refuses, then recovers without 
   await expect.poll(() => receiptRoot(el).querySelector(".preview [role=alert]")).toBeNull();
 });
 it("keeps the chosen preview language and width through typed text and passive live snapshots", async () => {
-  const { el, api, app } = await mountReceiptDialog();
+  const { el, api, app } = await mountReceiptEditor();
   await expect.poll(() => receiptRoot(el).querySelector("[name=previewWidth]")).toBeTruthy();
   await chooseOption(receiptRoot(el).querySelector("wt-combobox[name=previewLanguage]")!, "ca-ES");
   await chooseOption(receiptRoot(el).querySelector("wt-combobox[name=previewWidth]")!, "58mm");
@@ -117,7 +117,7 @@ it.each([{ widths: [] }, { widths: ["80mm"] }])(
       ...preview(),
       paperWidths: widths as ("58mm" | "80mm")[],
     });
-    const { el } = await mountReceiptDialog(api);
+    const { el } = await mountReceiptEditor(api);
     await expect.poll(() => receiptRoot(el).querySelector(".paper")).toBeTruthy();
     expect(receiptRoot(el).querySelector("[name=previewWidth]")).toBeNull();
   },
@@ -126,11 +126,11 @@ it("a dismissed preview cannot replace the paper after reopening the same depart
   const api = receiptApi();
   const held = deferred<ReturnType<typeof preview>>();
   api.previewReceiptDraft.mockImplementationOnce(() => held.promise);
-  const { el, dialog } = await mountReceiptDialog(api);
+  const { el } = await mountReceiptEditor(api);
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
-  el.dismiss();
-  await expect.poll(() => dialog.open).toBe(false);
-  el.show({ id: "bar", name: "Bar" });
+  el.subject = undefined;
+  await el.updateComplete;
+  el.subject = { id: "bar", name: "Bar" };
   await expect.poll(() => receiptRoot(el).querySelector(".paper")?.textContent).toContain("Sample");
   held.resolve(preview("OLD OPENING"));
   await held.promise;
@@ -140,7 +140,7 @@ it("a dismissed preview cannot replace the paper after reopening the same depart
 
 it.each(["en-GB", "es-ES"] as const)("labels paper widths in %s", async (locale) => {
   setLocale(locale);
-  const { el } = await mountReceiptDialog();
+  const { el } = await mountReceiptEditor();
   await expect.poll(() => receiptRoot(el).querySelector("[name=previewWidth]")).toBeTruthy();
   const widths =
     receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=previewWidth]")!;
@@ -150,7 +150,7 @@ it.each(["en-GB", "es-ES"] as const)("labels paper widths in %s", async (locale)
   ]);
 });
 it("an implicit preview language follows the saved venue language while retaining a dirty receipt", async () => {
-  const { el, api } = await mountReceiptDialog();
+  const { el, api } = await mountReceiptEditor();
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
   await editReceipt(el, "email", "bar@example.com");
   api.getDepartmentReceipt.mockResolvedValue({ ...receiptModel, receiptLanguage: "ca-ES" });
@@ -177,7 +177,7 @@ it.each([
       ...preview("Printed content"),
       marks: { ...preview().marks, [mark]: { start: 0, end: 1 } },
     });
-    const { el } = await mountReceiptDialog(api);
+    const { el } = await mountReceiptEditor(api);
     await expect.poll(() => receiptRoot(el).querySelector(`[data-mark=${mark}]`)).toBeTruthy();
     const control = receiptRoot(el).querySelector<
       HTMLElement & { updateComplete: Promise<unknown> }
@@ -212,7 +212,7 @@ it("renders chosen paper dimensions and preserves the old paper after a width re
         }
       : answer;
   });
-  const { el, app } = await mountReceiptDialog(api);
+  const { el, app } = await mountReceiptEditor(api);
   await expect
     .poll(() => receiptRoot(el).querySelector<HTMLElement>(".paper")?.style.width)
     .toBe("42ch");
@@ -235,7 +235,7 @@ it("renders chosen paper dimensions and preserves the old paper after a width re
 });
 
 it("choosing a width sends the latest staged text immediately and cancels its older quiet timer", async () => {
-  const { el, api } = await mountReceiptDialog();
+  const { el, api } = await mountReceiptEditor();
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
@@ -262,7 +262,7 @@ it("choosing a width sends the latest staged text immediately and cancels its ol
 });
 
 it("labels the preview before the width chooser and paper without adding another page title", async () => {
-  const { el } = await mountReceiptDialog();
+  const { el } = await mountReceiptEditor();
   await expect.poll(() => receiptRoot(el).querySelector("[name=previewWidth]")).toBeTruthy();
   const heading = receiptRoot(el).querySelector(".preview h3")!;
   expect(heading?.textContent).toBe(t("receipts.preview"));

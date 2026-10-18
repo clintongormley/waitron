@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController, type WtButton, type WtCombobox } from "@waitron/ui";
 import type { DashboardApi, VenueDefaults } from "../api/client.js";
-import { mountWidget, cleanupWidgets, dialogClosed } from "../widgets/test-helpers.js";
+import { mountWidget, cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
   editReceipt,
@@ -13,15 +13,16 @@ import {
   clickReceiptSave,
   deferred,
   receiptRoot,
-} from "../testing/department-receipt-dialog-fixture.js";
+} from "../testing/department-receipt-editor-fixture.js";
 import "./venue-defaults-panel.js";
+import "./department-receipt-editor.js";
 
 class ReceiptBoundaryHost extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
   override render() {
     return html`<dashboard-venue-defaults-panel .api=${this.api}></dashboard-venue-defaults-panel>
-      <dashboard-department-receipt-dialog .api=${this.api}></dashboard-department-receipt-dialog>
+      <dashboard-department-receipt-editor .api=${this.api}></dashboard-department-receipt-editor>
       ${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
 }
@@ -77,18 +78,13 @@ async function mount() {
     api: api as unknown as DashboardApi,
   });
   const language = app.shadowRoot!.querySelector("dashboard-venue-defaults-panel")!;
-  const el = app.shadowRoot!.querySelector("dashboard-department-receipt-dialog")!;
+  const el = app.shadowRoot!.querySelector("dashboard-department-receipt-editor")!;
   await expect.poll(() => language.shadowRoot!.querySelector("[data-test=edit]")).toBeTruthy();
   language.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
   await expect.poll(() => languageField(language)).toBeTruthy();
   async function openReceipt() {
-    el.show({ id: "bar", name: "Bar" });
+    el.subject = { id: "bar", name: "Bar" };
     await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
-    const dialog = el.shadowRoot!.querySelector("wt-modal")!;
-    await expect
-      .poll(() => dialog.shadowRoot!.querySelector("dialog")?.matches(":modal"))
-      .toBe(true);
-    return dialog;
   }
   return {
     app,
@@ -126,11 +122,13 @@ it.each(["success", "refusal"] as const)(
 it("a receipt save commits only its authored draft and leaves a staged Defaults draft protected", async () => {
   const { language, el, receipt, languageWrites, openReceipt } = await mount();
   await pick(language, "ca-ES");
-  const dialog = await openReceipt();
+  await openReceipt();
   await editReceipt(el, "email", "bar@example.com");
-  const closed = dialogClosed(dialog);
+  const saved = new Promise((resolve) =>
+    el.addEventListener("department-receipt-saved", resolve, { once: true }),
+  );
   await clickReceiptSave(el);
-  await closed;
+  await saved;
   expect(receipt.putDepartmentReceipt).toHaveBeenCalledTimes(1);
   expect(languageWrites).toEqual([]);
   expect(unload()).toBe(true);

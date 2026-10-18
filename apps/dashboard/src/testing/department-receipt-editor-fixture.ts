@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { LiveData } from "@waitron/dashboard-kit";
-import { LeaveController, type WtInput, type WtTextarea, type WtDialog } from "@waitron/ui";
+import { LeaveController, type WtInput, type WtTextarea } from "@waitron/ui";
 import { expect, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { DepartmentReceiptWrite } from "@waitron/shared";
@@ -8,13 +8,13 @@ import type { ReceiptPreview } from "../api/client.js";
 import { mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import type {
-  DepartmentReceiptDialog,
-  DepartmentReceiptDialogApi,
-  DepartmentReceiptDialogModel,
-} from "../screens/department-receipt-dialog.js";
-import "../screens/department-receipt-dialog.js";
+  DepartmentReceiptClient,
+  DepartmentReceiptModel,
+} from "../api/department-receipts.js";
+import type { DepartmentReceiptEditor } from "../screens/department-receipt-editor.js";
+import "../screens/department-receipt-editor.js";
 
-export const receiptModel: DepartmentReceiptDialogModel = {
+export const receiptModel: DepartmentReceiptModel = {
   receipt: {
     operationDescription: "Dining service",
     headerSubtitle: { "es-ES": "Bar", "eu-ES": "Retained" },
@@ -54,56 +54,61 @@ export function receiptApi(model = receiptModel) {
   let stored = structuredClone(model);
   return {
     liveData: new LiveData(),
-    getDepartmentReceipt: vi.fn<DepartmentReceiptDialogApi["getDepartmentReceipt"]>(async () =>
+    getDepartmentReceipt: vi.fn<DepartmentReceiptClient["getDepartmentReceipt"]>(async () =>
       structuredClone(stored),
     ),
     putDepartmentReceipt: vi.fn(async (_id: string, input: DepartmentReceiptWrite) => {
       void _id;
       stored = { ...stored, ...structuredClone(input) };
     }),
-    previewReceiptDraft: vi.fn<DepartmentReceiptDialogApi["previewReceiptDraft"]>(async () =>
+    previewReceiptDraft: vi.fn<DepartmentReceiptClient["previewReceiptDraft"]>(async () =>
       preview(),
     ),
     imageLibraryRequest: async <T>() => ({ images: [], total: 0 }) as T,
   };
 }
-class ReceiptDialogHost extends LitElement {
+class ReceiptEditorHost extends LitElement {
   readonly leave = new LeaveController(this);
   api = receiptApi();
   override render() {
-    return html`<dashboard-department-receipt-dialog
+    return html`<dashboard-department-receipt-editor
         .api=${this.api}
-      ></dashboard-department-receipt-dialog
+        .subject=${{ id: "bar", name: "Bar" }}
+      ></dashboard-department-receipt-editor
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
 }
-customElements.define("receipt-dialog-test-host", ReceiptDialogHost);
-export async function mountReceiptDialog(api = receiptApi(), theme: "light" | "dark" = "light") {
-  const { el: app, host } = await mountWidget<ReceiptDialogHost>(
-    "receipt-dialog-test-host",
+customElements.define("receipt-editor-fixture-host", ReceiptEditorHost);
+export async function mountReceiptEditor(api = receiptApi(), theme: "light" | "dark" = "light") {
+  const { el: app, host } = await mountWidget<ReceiptEditorHost>(
+    "receipt-editor-fixture-host",
     { api },
     theme,
   );
-  const el = app.shadowRoot!.querySelector<DepartmentReceiptDialog>(
-    "dashboard-department-receipt-dialog",
+  const el = app.shadowRoot!.querySelector<DepartmentReceiptEditor>(
+    "dashboard-department-receipt-editor",
   )!;
-  await el.updateComplete;
-  el.show({ id: "bar", name: "Bar" });
+  const events: string[] = [];
+  for (const type of [
+    "department-receipt-saved",
+    "department-receipt-cancel",
+    "department-receipt-closed",
+  ])
+    el.addEventListener(type, (event) =>
+      events.push(
+        `${type}:${(event as CustomEvent<{ departmentId: string }>).detail.departmentId}`,
+      ),
+    );
   await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
-  const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-modal")!;
-  await expect.poll(() => dialog.shadowRoot?.querySelector("dialog")?.matches(":modal")).toBe(true);
-  return { app, host, el, dialog, api };
+  return { app, host, el, api, events };
 }
-export function receiptRoot(el: DepartmentReceiptDialog): ShadowRoot {
-  return (
-    el.shadowRoot!.querySelector("dashboard-department-receipt-editor")?.shadowRoot ??
-    el.shadowRoot!
-  );
+export function receiptRoot(el: DepartmentReceiptEditor): ShadowRoot {
+  return el.shadowRoot!;
 }
-export function receiptField(el: DepartmentReceiptDialog, name: string) {
+export function receiptField(el: DepartmentReceiptEditor, name: string) {
   return receiptRoot(el).querySelector<WtInput | WtTextarea>(`[name="${name}"]`)!;
 }
-export async function editReceipt(el: DepartmentReceiptDialog, name: string, value: string) {
+export async function editReceipt(el: DepartmentReceiptEditor, name: string, value: string) {
   const field = receiptField(el, name);
   await field.updateComplete;
   await userEvent.fill(
@@ -114,12 +119,12 @@ export async function editReceipt(el: DepartmentReceiptDialog, name: string, val
   );
   await el.updateComplete;
 }
-export function receiptSave(el: DepartmentReceiptDialog) {
+export function receiptSave(el: DepartmentReceiptEditor) {
   return receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-button"]>(
     "[data-test=save-receipt]",
   )!;
 }
-export async function clickReceiptSave(el: DepartmentReceiptDialog) {
+export async function clickReceiptSave(el: DepartmentReceiptEditor) {
   await userEvent.click(page.elementLocator(receiptSave(el)));
 }
 export function deferred<T>() {

@@ -15,20 +15,19 @@ import { DashboardApp } from "./dashboard-app.js";
 import { setLocale } from "./i18n/t.js";
 import { receiptLanguageName } from "./widgets/receipt-language.js";
 import {
-  mountReceiptDialog,
+  mountReceiptEditor,
   receiptApi,
   receiptField,
   editReceipt,
   preview,
   receiptRoot,
-} from "./testing/department-receipt-dialog-fixture.js";
+} from "./testing/department-receipt-editor-fixture.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 import {
   departmentDialog,
   mountReceiptApp,
   receiptTabEditor,
 } from "./testing/department-receipt-app-fixture.js";
-import type { DepartmentReceiptDialog } from "./screens/department-receipt-dialog.js";
 
 afterEach(() => {
   cleanupWidgets();
@@ -514,7 +513,7 @@ for (const locale of ["en-GB", "es-ES"]) {
           api.previewReceiptDraft.mockImplementation(async (draft) =>
             preview(draft.receipt.headerSubtitle?.["es-ES"] ?? "Bar"),
           );
-          const { app, host, el } = await mountReceiptDialog(api, theme);
+          const { app, host, el } = await mountReceiptEditor(api, theme);
           const input = receiptField(el, "headerSubtitle-es-ES");
           await editReceipt(el, "headerSubtitle-es-ES", "Edited heading");
           expect(input.value).toBe("Edited heading");
@@ -566,7 +565,7 @@ for (const locale of ["en-GB", "es-ES"]) {
 it("the Receipts tab's Cancel protects the appearance before closing", async () => {
   const { app } = await mountReceiptApp();
   await expect.poll(() => receiptTabEditor(app)).toBeTruthy();
-  const el = receiptTabEditor(app)! as unknown as DepartmentReceiptDialog;
+  const el = receiptTabEditor(app)!;
   await expect.poll(() => receiptRoot(el).querySelector("[name=email]")).toBeTruthy();
   const dialog = departmentDialog(app)!.shadowRoot!.querySelector("wt-modal")!;
   await editReceipt(el, "headerSubtitle-es-ES", "Edited heading");
