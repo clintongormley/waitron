@@ -501,9 +501,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A852. Setup accepts certificate files filing cannot use** (found by A795's design). The wizard
   never opens the file, so a wrong passphrase, a file that is not a certificate, one with no private
-  key and an expired one are all accepted; a preproduction setup seals them as given, and a
-  production setup's fiscal test can never accept them (for a wrong passphrase it says "uncertain,
-  retry").
+  key and an expired one are all accepted; a preproduction setup seals them as given. A
+  production setup needs its fiscal test to pass, which the first three cannot (their connection
+  fails before it reaches AEAT; for a wrong passphrase the test says "uncertain, retry"); that AEAT
+  refuses an expired one is assumed.
   [Detail](backlog/setup.md#a852-setup-accepts-certificate-files-filing-cannot-use)
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.

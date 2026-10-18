@@ -13,7 +13,9 @@ their full text.
   expired certificate were all accepted by `parseAeatCert`. A preproduction setup then seals them as
   given (`setup-api.ts`, the seal step, read). A production setup cannot finish with one: it requires
   an accepted fiscal test (`assertFiscalReady`, which throws `setup.fiscal_test_required` otherwise,
-  `apps/server/src/fiscal-readiness.ts:129-135`, read), and the test can never accept such a file.
+  `apps/server/src/fiscal-readiness.ts:129-135`, read). For a wrong passphrase and random bytes the
+  test's filing pass fails before it reaches AEAT (measured, P5 against a local server), and a file
+  with no key cannot be opened at all (measured, P2); that AEAT refuses an expired one is assumed.
 - For a wrong passphrase, a production setup's fiscal test then seals it, records a test sale and
   runs a filing pass; the connection fails with `mac verify failure` (measured with `mtlsFetch`
   against a local server), the pass backs the record off without a skip (measured through the real
