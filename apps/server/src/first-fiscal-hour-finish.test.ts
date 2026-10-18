@@ -1,4 +1,6 @@
 import * as filesystem from "node:fs/promises";
+import { loadBoxEnv } from "./box-env.js";
+import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { Hono } from "hono";
@@ -842,5 +844,115 @@ it("real HTTPS resolution boot finishes the retained hour database without docum
   } finally {
     await agent.close();
     await server.close();
+  }
+});
+
+it("real HTTPS hour Finish survives a discarded answer and two trading boots without another identity", async () => {
+  const f = await fixture();
+  await expect(f.activate()).rejects.toThrow("synthetic after commit");
+  await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+  await ensureBoxSecrets({
+    stateDir: f.stateDir,
+    hostnames: ["localhost"],
+    now: () => new Date(),
+    listIpv4: () => ["127.0.0.1"],
+  });
+  const migrations = join(f.root, "migrations");
+  await copyMigrationsRoot(migrations);
+  const before = await f.facts();
+  const staged = await readFile(join(f.stateDir, "first-setup-node-key.json"));
+  const [port] = await freePorts(1);
+  const origin = `https://127.0.0.1:${port}`;
+  const env = {
+    WAITRON_ENV: "dev",
+    WAITRON_STATE_DIR: f.stateDir,
+    WAITRON_VENUE_DIR: f.venueDir,
+    WAITRON_MIGRATIONS_DIR: migrations,
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 21).toString("base64"),
+    WAITRON_HTTP_PORT: String(port),
+    WAITRON_HTTP_HOST: "127.0.0.1",
+    WAITRON_HTTP_LANDING_PORT: "0",
+    WAITRON_MANAGEMENT_RP_ID: "localhost",
+    WAITRON_MANAGEMENT_ORIGIN: origin,
+  };
+  let restarts = 0;
+  let server: { close(): Promise<void> } | undefined;
+  const agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
+  const post = (action: string, body: unknown, headers: Record<string, string> = {}) =>
+    fetch(`${origin}/setup-api/first-setup/resolution/${action}`, {
+      dispatcher: agent,
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: origin, ...headers },
+      body: JSON.stringify(body),
+    } as RequestInit);
+  const snapshot = async () => {
+    const inspected = await f.host.resolution.inspectFirstSetupResolution();
+    return {
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision,
+      ownerGeneration: inspected.ownerGeneration,
+    };
+  };
+  try {
+    server = await startServerOrFirstSetupResolution(
+      env,
+      {},
+      {
+        requestRestart: () => {
+          restarts++;
+        },
+      },
+    );
+    const recovered = await post("recover", {
+      ...(await snapshot()),
+      password: PASSWORD,
+      clientClaimNonce: randomBytes(32).toString("base64url"),
+    });
+    expect(recovered.status).toBe(200);
+    const owner = await recovered.json();
+    const finished = await post(
+      "finish",
+      { ...(await snapshot()), publication: f.publication },
+      {
+        "X-Waitron-Setup-Owner": owner.capability,
+        "X-Waitron-Setup-Attempt": owner.state.attemptId,
+        "X-Waitron-Setup-Revision": String(owner.state.revision),
+        "X-Waitron-Setup-Generation": String(owner.state.ownerGeneration),
+      },
+    );
+    expect(finished.status).toBe(200);
+    await finished.body?.cancel();
+    await vi.waitFor(() => expect(restarts).toBe(1));
+    await server.close();
+    server = undefined;
+    const published = await readFile(join(f.stateDir, "trading.env")).catch(() => null);
+    expect(published).not.toBeNull();
+    expect(parseEnvFile(published!.toString())).toMatchObject({
+      WAITRON_TILL_NODE_ID: owner.state.nodeId,
+      WAITRON_ENV: "dev",
+      WAITRON_ONBOARDING_INTENT: "live",
+    });
+    for (let boot = 0; boot < 2; boot++) {
+      server = await startServerOrFirstSetupResolution(await loadBoxEnv(env, f.stateDir));
+      const health = await fetch(`${origin}/health`, { dispatcher: agent } as RequestInit);
+      expect(health.status).toBe(200);
+      expect((await health.json()).ok).toBe(true);
+      expect((await f.host.store.read())?.status).toBe("complete");
+      await server.close();
+      server = undefined;
+      const opened = await openVenueDatabase(f.venueDir);
+      try {
+        expect(await f.facts(opened.venue)).toEqual(before);
+      } finally {
+        await opened.close();
+      }
+      expect(await readFile(join(f.stateDir, "trading.env"))).toEqual(published);
+      expect(await readFile(join(f.stateDir, "first-setup-node-key.json"))).toEqual(staged);
+    }
+    expect(f.counts().activations).toBe(1);
+    expect(restarts).toBe(1);
+  } finally {
+    await server?.close();
+    await agent.close();
   }
 });

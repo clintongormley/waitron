@@ -353,8 +353,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   certificate and staged requests retain their bytes, and its missing database remains missing.
   A later installed-Chrome journey also completes password-led interrupted selection and opens
   normal setup in that replacement, through the secure-connection Continue action. Its English
-  and Spanish views were checked in both themes at phone and desktop widths. Complete backup
-  restore, promotion and exact Finish remain separate acceptance work.
+  and Spanish views were checked in both themes at phone and desktop widths. Installed Chrome
+  also completes publication-only Finish after a real database commit and an interrupted identity
+  publication. A new browser session rejects a wrong password, accepts the original password,
+  re-enters the saved certificate/email settings and reaches trading after restart. The fiscal
+  rows, counters, hour journal and staged key retain their values. Complete backup restore and
+  promotion remain separate acceptance work.
   The restore command refuses an outstanding claim; provisioning refuses a
   changed series request without opening its database. These checks do not qualify a complete
   archive/bucket/Cloud restore or replace the remaining installed recovery journeys.
@@ -363,8 +367,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   refused or late answers, uncheckable passwords and missing or uncertain databases. Recovered
   abandoned or partly activated attempts stay on the recovery page. The Finish interface now
   re-enters the original certificate and email settings through the dedicated resolution route.
-  Mounted-browser checks and the existing real HTTPS route suites run separately; the complete
-  installed browser-to-server journey remains open. Missing-database repair now keeps the wizard
+  The installed browser-to-HTTPS Finish journey now runs through those controls; its certificate,
+  clock and email providers use synthetic responses. Missing-database repair now keeps the wizard
   on its repair page after password recovery. Confirmed retirement checks fresh evidence and sends
   recovered ownership; a refused or lost answer requires password recovery again. Mounted browser
   checks and the existing HTTPS retirement suites run separately. Interrupted workspace selection

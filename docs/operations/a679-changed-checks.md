@@ -2144,3 +2144,46 @@ Receipts: `~/waitron-campaign-e/receipts/a679-selected-reboot-20261018/`. This c
 complete A679. Preserve the earlier package coverage gaps, retained policy-suite failures,
 remaining installed restore/promotion/Finish acceptance, owner PDF viewing approval,
 retirement/prose/main integration and final review/current-head CI gates.
+
+
+## Installed publication Finish and trading reboot, 2026-10-18
+
+No existing test check or fixture value changes. `first-fiscal-hour-finish.test.ts` gains one
+case and two imports. The case completes a real HTTPS Finish after the fixture interrupts
+identity publication following the database commit. It discards the response body, starts the
+real trading server twice, and compares the fiscal rows, counters, hour journal, staged key and
+published settings. It checks development Live, whose fiscal environment is preproduction.
+The first new fixture used ordinary preproduction Live, which the existing configuration parser
+refuses with `intent_environment_mismatch`; the corrected fixture explicitly uses `WAITRON_ENV=dev`.
+This is a fixture correction, not a product fix. Cancelling the received response body does not
+simulate losing the request before commitment or killing the process during publication.
+
+The retained installed-Chrome probe supplies the production Live journey in English and Spanish.
+It runs the real built wizard over HTTPS, downloads and keeps its recovery PDF, then interrupts
+identity publication after the real database commit. A new listener and a fresh browser context
+refuse a wrong password, accept the original setup password, and complete Finish through the
+native certificate, email and review controls. It then boots trading and opens the dashboard.
+Full fiscal-table snapshots, the module preparation journal and staged key retain their values.
+The browser sends one Finish request and no selection, preparation, provisioning or kept-document
+request during that resumed flow. Certificate validation/sealing, email delivery and internet-clock
+observations use synthetic providers. The initial activation and Finish use the actual local
+provisioning and publication paths.
+
+The first probe incorrectly waited for an authenticated Finish button immediately after its
+interruption. The wizard was correctly showing password recovery; both cases timed out. After
+that wait was corrected, both installed journeys passed. Initial type checking also found unused
+imports and an overly narrow server type in the local probe, which were corrected. An early
+English desktop capture included a transition snapshot; the final probe waits for animations and
+frames before capture. Those attempts are retained separately from final qualification.
+
+The four complete selected source suites pass 120 cases, including the existing boot suite.
+The 20 unedited fiscal invariant cases pass. In an independently installed complete candidate,
+three omissions each fail the new case's intended assertion: missing trading publication,
+missing terminal completion and missing restart request. Each restored case passes. Server,
+setup and dashboard builds pass. These are focused results, not package coverage or branch CI.
+
+Receipts: `~/waitron-campaign-e/receipts/a679-installed-finish-20261018/`. No runtime, schema,
+migration, guard, fiscal writer or earlier assertion changes in this checkpoint. Complete
+archive/bucket/Cloud recovery, remaining admission/promotion acceptance, old policy-suite and
+coverage gaps, active protocol retirement, current-main integration, owner PDF viewing approval
+and the final installed reviews/current-head CI remain separate A679 gates.
