@@ -504,7 +504,9 @@ empieza a las" (`:3794`), changes to match.
 | `hours.clock_change_conflict` | {range} clashes with the new business-day start, {time} from {when}: {reason}. | {range} choca con el nuevo inicio del día de trabajo, {time} desde {when}: {reason}. |
 
 `{reason}` comes from venue-service's own copy of those labels, `hours.conflict.<reason>` in
-`packages/venue-service/src/dashboard/strings.ts`; reword both tables together. Removed:
+`packages/venue-service/src/dashboard/strings.ts`; reword both tables together
+(`apps/dashboard/src/i18n/business-day-conflict-labels.test.ts` fails when the six shared reasons
+differ, in English or Spanish). Removed:
 `business_day.scheduled`, `business_day.none`, `business_day.locks`, `business_day.locked`,
 `business_day.date`, `business_day.date_invalid`, `business_day.replace`,
 `business_day.cancel_pending`, `business_day.acknowledge`, `business_day.transition`, and
