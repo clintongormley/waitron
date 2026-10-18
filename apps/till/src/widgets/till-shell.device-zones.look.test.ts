@@ -51,6 +51,8 @@ for (const locale of ["en-GB", "es-ES"]) {
               closed: false,
               closesAt: null,
               hasPlan: true,
+              layoutSetName: null,
+              layoutDue: null,
               serviceMode: "table_tab",
             },
             {
@@ -61,6 +63,8 @@ for (const locale of ["en-GB", "es-ES"]) {
               closed: false,
               closesAt: null,
               hasPlan: true,
+              layoutSetName: null,
+              layoutDue: null,
               serviceMode: "table_tab",
             },
           ],

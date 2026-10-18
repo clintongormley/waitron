@@ -1834,6 +1834,10 @@ export interface FloorZone {
   active: boolean;
   /** The zone has a saved plan, which may have no tables. */
   hasPlan: boolean;
+  /** The name of the set today's plan was last reset from; null before the day's first reset. */
+  layoutSetName: string | null;
+  /** The layout Update layout offers; null when today's plan already follows the due one. */
+  layoutDue: { setId: string; revision: number; periodName: string | null } | null;
   /** Null for a zone with no service policy. */
   serviceMode: ServiceZoneSummary["serviceMode"] | null;
 }
@@ -4240,6 +4244,19 @@ export class TillApi {
    * the floor read held no table of the zone with a today's row. */
   resetZoneToday(zoneId: string, zoneRevision: number | null): Promise<FloorAnswer> {
     return this.#request<FloorAnswer>(`/api/zones/${zoneId}/today/reset`, "POST", {
+      zoneRevision,
+    });
+  }
+
+  /** Reset a zone onto the layout its banner offers → `POST /api/zones/:id/today/update-layout`. */
+  updateLayoutToday(
+    zoneId: string,
+    offer: { setId: string; revision: number },
+    zoneRevision: number | null,
+  ): Promise<FloorAnswer> {
+    return this.#request<FloorAnswer>(`/api/zones/${zoneId}/today/update-layout`, "POST", {
+      setId: offer.setId,
+      layoutRevision: offer.revision,
       zoneRevision,
     });
   }

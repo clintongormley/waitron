@@ -8485,10 +8485,11 @@ export class TillApp extends LitElement {
     }
   }
 
-  #onFloorRefresh(poll = false): void {
+  #onFloorRefresh({ poll, zones }: FloorRefreshDetail = {}): void {
     if (!this.#inShell()) return;
-    if (poll) void this.#pollFloor();
+    if (poll === true) void this.#pollFloor();
     else void this.#refreshFloor();
+    if (zones === true) void this.#refreshFloorZones();
   }
 
   /** The floor poll's read now out, cancelled when the operator's session ends or the api is
@@ -13152,7 +13153,7 @@ export class TillApp extends LitElement {
           this.#requestLeave(() => this.#onShowSchedule());
         }}
         @floor-refresh=${(event: CustomEvent<FloorRefreshDetail | null>) =>
-          this.#onFloorRefresh(event.detail?.poll === true)}
+          this.#onFloorRefresh(event.detail ?? {})}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
         @check-dead-ends=${(event: Event) => void this.#onCheckDeadEnds(event)}

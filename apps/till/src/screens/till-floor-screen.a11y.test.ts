@@ -15,6 +15,8 @@ const zones: FloorZone[] = [
     closesAt: null,
     closed: false,
     hasPlan: false,
+    layoutSetName: null,
+    layoutDue: null,
     serviceMode: "table_tab",
   },
   {
@@ -25,6 +27,8 @@ const zones: FloorZone[] = [
     closesAt: null,
     closed: false,
     hasPlan: false,
+    layoutSetName: null,
+    layoutDue: null,
     serviceMode: "table_tab",
   },
 ];
@@ -392,6 +396,29 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     expect(el.shadowRoot!.querySelectorAll("[data-table]").length).toBe(3);
     await expectNoA11yViolations(host);
   });
+
+  it.each(["map", "list"] as const)(
+    "has no violations with the layout banner over a planned zone's %s",
+    async (view) => {
+      const offered: FloorZone = {
+        ...zones[0]!,
+        hasPlan: true,
+        layoutSetName: "Lunch",
+        layoutDue: { setId: "set-dinner", revision: 3, periodName: "Dinner" },
+      };
+      const { el, host } = await mountWidget<TillFloorScreen>(
+        "till-floor-screen",
+        { zones: [offered, zones[1]!], tables: plannedTables, canChangeToday: true },
+        theme,
+      );
+      if (view === "list") {
+        el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+        await el.updateComplete;
+      }
+      expect(el.shadowRoot!.querySelector("[data-layout-due] [data-update-layout]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("has no violations with the seat dialog open", async () => {
     const { el, host } = await mountWidget<TillFloorScreen>(

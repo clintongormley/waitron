@@ -17,6 +17,8 @@ const zone = (id: string, over: Partial<FloorZone> = {}): FloorZone => ({
   closed: false,
   closesAt: null,
   hasPlan: false,
+  layoutSetName: null,
+  layoutDue: null,
   serviceMode: "table_tab",
   ...over,
 });

@@ -4045,6 +4045,8 @@ describe("till-table-order-screen", () => {
         displayOrder: 0,
         active: true,
         hasPlan: true,
+        layoutSetName: null,
+        layoutDue: null,
         serviceMode,
       });
       /** Ana at Mesa 4 in the dining room; Luis holds Mesa 7 at the bar, where Mesa 8 is free. */

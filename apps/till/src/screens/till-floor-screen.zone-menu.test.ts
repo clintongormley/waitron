@@ -15,6 +15,8 @@ function zone(id: string, name: string, hasPlan = true): FloorZone {
     closesAt: null,
     closed: false,
     hasPlan,
+    layoutSetName: null,
+    layoutDue: null,
     serviceMode: "table_tab",
   };
 }

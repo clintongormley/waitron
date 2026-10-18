@@ -378,6 +378,8 @@ describe("till-held-orders: moving a counter order to a table", () => {
         closesAt: null,
         closed: false,
         hasPlan: true,
+        layoutSetName: null,
+        layoutDue: null,
         serviceMode,
       };
       const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {

@@ -638,6 +638,15 @@ it("says the floor changed under a till, in English and Spanish", () => {
   );
 });
 
+it("says the layout changed under a till, in English and Spanish", () => {
+  expect(codeMessage("floor_today.layout_changed", "en")).toBe(
+    "The layout has changed. Check the floor and try again",
+  );
+  expect(codeMessage("floor_today.layout_changed", "es")).toBe(
+    "El plano ha cambiado. Revisa la sala e inténtalo de nuevo",
+  );
+});
+
 it("says Reset table's refusals, and Back's and Take off's on a table split off, in English and Spanish", () => {
   const words: [string, string, string][] = [
     ["joined_table.nothing_to_join", "Nothing to reset now", "Ahora no hay nada que restablecer"],

@@ -209,6 +209,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The floor has changed. Check and try again",
     es: "La sala ha cambiado. Revísala y vuelve a intentarlo",
   },
+  "floor_today.layout_changed": {
+    en: "The layout has changed. Check the floor and try again",
+    es: "El plano ha cambiado. Revisa la sala e inténtalo de nuevo",
+  },
   "table.split_off": {
     en: "That table was split off. Reset its table first",
     es: "Esa mesa está separada. Restablece su mesa primero",

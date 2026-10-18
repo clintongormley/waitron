@@ -113,9 +113,11 @@ function tableChips(table: TableState) {
   return signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
 }
 
-/** Sent by the 15-second re-read; an action's `floor-refresh` carries no detail. */
+/** `poll` is the 15-second re-read; `zones` asks for the zones as well as the tables. An action
+ * that changes neither sends no detail. */
 export interface FloorRefreshDetail {
-  poll: true;
+  poll?: true;
+  zones?: true;
 }
 
 type JoinAction = Extract<DropAction, { kind: "join" }>;
@@ -254,6 +256,17 @@ export class TillFloorScreen extends LitElement {
         min-width: 0;
         align-items: center;
         gap: var(--wt-space-2);
+      }
+
+      .layout-due {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      .layout-due p {
+        margin: 0;
       }
 
       .tabs {
@@ -1194,6 +1207,7 @@ export class TillFloorScreen extends LitElement {
   async #settle(
     call: Promise<FloorAnswer | null>,
     asks: (refused: { code?: string; field?: unknown }) => boolean = () => false,
+    refresh?: FloorRefreshDetail,
   ): Promise<void> {
     try {
       this.#carry(await call);
@@ -1203,7 +1217,7 @@ export class TillFloorScreen extends LitElement {
       this.refusal = this.#refusalText(refused);
       this.#setPending(null);
     }
-    this.#requestFloorRefresh();
+    this.#requestFloorRefresh(refresh);
   }
 
   #refusalText(refused: Refused): string {
@@ -1650,16 +1664,52 @@ export class TillFloorScreen extends LitElement {
     event: Event,
     zoneId: string,
     call: (api: TillApi, revision: number | null) => Promise<FloorAnswer>,
+    refresh?: FloorRefreshDetail,
   ): void {
     event.stopPropagation();
     this.refusal = null;
     const api = this.api;
     if (api === undefined) return;
-    void this.#settle(call(api, this.#revision(zoneId)));
+    void this.#settle(call(api, this.#revision(zoneId)), undefined, refresh);
   }
 
-  #requestFloorRefresh(): void {
-    this.dispatchEvent(new CustomEvent("floor-refresh", { bubbles: true, composed: true }));
+  #requestFloorRefresh(detail?: FloorRefreshDetail): void {
+    this.dispatchEvent(new CustomEvent("floor-refresh", { detail, bubbles: true, composed: true }));
+  }
+
+  /** The zones read says which layout is due, so after Update layout the zones are read again too. */
+  #layoutBanner(activeKey: string | undefined): TemplateResult | typeof nothing {
+    const zone = this.zones.find((each) => each.id === activeKey);
+    const offer = zone?.layoutDue ?? null;
+    if (zone === undefined || offer === null || !this.canChangeToday) return nothing;
+    const { periodName } = offer;
+    return html`<div class="layout-due" data-layout-due>
+      <p role="status">
+        ${
+          periodName === null
+            ? t("floor.layout_newer")
+            : t("floor.layout_ready").replace("{period}", () => periodName)
+        }
+      </p>
+      <wt-button
+        data-update-layout
+        variant="primary"
+        @click=${(event: Event) =>
+          this.#onZoneChange(
+            event,
+            zone.id,
+            (api, revision) =>
+              api.updateLayoutToday(
+                zone.id,
+                { setId: offer.setId, revision: offer.revision },
+                revision,
+              ),
+            { zones: true },
+          )}
+      >
+        ${t("floor.update_layout")}
+      </wt-button>
+    </div>`;
   }
 
   /**
@@ -1789,6 +1839,7 @@ export class TillFloorScreen extends LitElement {
             ${this.#zoneMenu(planned, activeKey)}
           </div>
         </div>
+        ${this.#layoutBanner(activeKey)}
         ${
           refusedZone === undefined
             ? nothing

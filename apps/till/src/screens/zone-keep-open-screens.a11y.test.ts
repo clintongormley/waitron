@@ -97,6 +97,8 @@ for (const locale of ["en", "es"] as const)
                                 closed,
                                 closesAt: state === "open" ? null : closesAt,
                                 hasPlan: false,
+                                layoutSetName: null,
+                                layoutDue: null,
                                 serviceMode: "table_tab",
                               },
                             ],

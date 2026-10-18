@@ -17,6 +17,8 @@ const terrace: FloorZone = {
   closesAt: null,
   closed: false,
   hasPlan: false,
+  layoutSetName: null,
+  layoutDue: null,
   serviceMode: "table_tab",
 };
 
