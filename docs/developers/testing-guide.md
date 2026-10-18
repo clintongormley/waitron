@@ -1302,6 +1302,16 @@ disabled. Waiting for that animation kept the existing expectations and the dela
 The normal 12-case file and the same 69-case repetition passed with the wait. The trace identifies a mechanism that reproduces the
 CI symptom; the original CI run did not retain pointer geometry.
 
+A882, measured 2026-10-18 in real Chromium on macOS, Vitest 4.1.11: the separate
+`product-editor.test.ts` opening helper still awaited rendering alone. Twenty repetitions of
+its Vegan-only save case with a 150 ms pointer press produced three failures at the unchanged
+`dietaryDeclarations` assertion. In those three traces the chip moved from y=631 to 756,
+y=631 to 793, and y=647 to 810 between press and release. Each press path contained the chip;
+none of the release or click paths did. The disclosure's height animation was running throughout.
+That helper now also waits for the opening animation, and the case covers immediate and 150 ms
+presses with the same draft and submitted-value assertions. This reproduces a mechanism for
+A828's CI failure; that CI run retained no pointer trace.
+
 ## A test waits for a browser grant by tracking the request, never by a fixed sleep.
 
 Where the browser has Web Locks, the Payments screen asks for one before it reads a card reader's
