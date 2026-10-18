@@ -63,6 +63,30 @@ describe.each(["en", "es"] as const)("Split quantity %s", (locale) => {
         "No ice, please",
       ]);
       expect(pane.querySelectorAll("[data-split-draft-line]")).toHaveLength(0);
+      const header = pane.querySelector<HTMLButtonElement>("[data-fold-draft-family]")!;
+      expect(header.checkVisibility()).toBe(true);
+      expect(header.assignedSlot?.name).toBe("before-0");
+      expect(header.getAttribute("aria-expanded")).toBe("true");
+      expect(header.textContent!.replace(/\s+/g, " ").trim()).toBe("Beer ×3 ⌃");
+      const headerBox = header.getBoundingClientRect();
+      const firstRow = header.assignedSlot!.nextElementSibling!.getBoundingClientRect();
+      expect(headerBox.height).toBeGreaterThanOrEqual(44);
+      expect(headerBox.bottom).toBeLessThanOrEqual(firstRow.top);
+      expect(headerBox.left).toBeGreaterThanOrEqual(0);
+      expect(headerBox.right).toBeLessThanOrEqual(width);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        element: pane,
+        path: `__screenshots__/a773-unit-family-${locale}-${theme}-${width}.png`,
+      });
+      await userEvent.click(header);
+      await el.updateComplete;
+      expect(draft.lines.map((line) => [line.quantity, line.note])).toEqual([
+        ["3", "No ice, please"],
+      ]);
+      expect(pane.querySelector("[data-fold-draft-family]")).toBeNull();
+      expect(pane.querySelector("[data-split-draft-line]")).not.toBeNull();
       await expectNoA11yViolations(host);
     });
   });

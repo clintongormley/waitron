@@ -2224,7 +2224,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   headings. A whole-unit quantity opens into individual lines from a full-height trailing chevron;
   it looks up the current row and refuses a click while the screen has another draft or editing is locked.
   Recalled quantities still split through the server command, preserving their priced sources.
-  A header for folding split lines back remains open. This is an intermediate panel step:
+  Fresh split lines have a header that folds the original family back only while its contents,
+  prices and group still match. Folding clears a partial selection; a fully selected family stays
+  selected. Recalled source identities remain separate. This is an intermediate panel step:
   direct Send all/selected Fire, removal of the old
   destination/preview controls, the Sent panel and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through

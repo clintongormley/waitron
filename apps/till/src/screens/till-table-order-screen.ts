@@ -864,6 +864,16 @@ export class TillTableOrderScreen extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      .draft-family-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        min-height: var(--wt-tap-min);
+        text-align: start;
+        overflow-wrap: anywhere;
+      }
+
       .draft-unit-chevron {
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
@@ -3333,6 +3343,7 @@ export class TillTableOrderScreen extends LitElement {
   #draftLine(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
     const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
+    const family = store.splitFamily(line);
     const splits =
       soldByTheUnit(line.product) &&
       Number.isInteger(Number(line.quantity)) &&
@@ -3360,7 +3371,26 @@ export class TillTableOrderScreen extends LitElement {
       return html`<span slot=${`lead-${index}`} class="draft-line-name"
         >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
       >`;
-    return html`<button
+    return html`${
+        family?.[0] === line
+          ? html`<button
+              type="button"
+              slot=${`before-${index}`}
+              class="option draft-family-header"
+              data-fold-draft-family
+              aria-expanded="true"
+              ?disabled=${store.sending || this.groupCommandBusy}
+              @click=${() => this.#foldDraftFamily(store, line)}
+            >
+              <span
+                >${name}
+                ×${this.#displayQty(family.reduce((total, member) => addDecimal(total, decimal(member.quantity)), decimal("0")))}</span
+              >
+              <span aria-hidden="true">⌃</span>
+            </button>`
+          : nothing
+      }
+      <button
         slot=${`lead-${index}`}
         type="button"
         class="option draft-select"
@@ -3414,6 +3444,29 @@ export class TillTableOrderScreen extends LitElement {
       return;
     if (line.source === undefined) store.splitLine(index);
     else this.#dispatch("split-draft-source", { store, line } satisfies SplitDraftSourceDetail);
+  }
+
+  #foldDraftFamily(store: WorkingOrderStore, line: OrderLine): void {
+    if (
+      !this.isConnected ||
+      store !== this.#draftStore ||
+      store.sending ||
+      store.editsLocked ||
+      this.groupCommandBusy
+    )
+      return;
+    const family = store.splitFamily(line);
+    if (family === undefined) return;
+    const selected = family.every((member) => this.#selected.has(member));
+    store.foldSplitFamily(line);
+    if (
+      store.lines.includes(family[0]!) &&
+      family.slice(1).every((member) => !store.lines.includes(member))
+    ) {
+      for (const member of family) this.#selected.delete(member);
+      if (selected) this.#selected.add(family[0]!);
+      this.requestUpdate();
+    }
   }
 
   /** A line that cannot be sold now asks whether it goes or stays; kept, it says it stays. Its

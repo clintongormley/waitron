@@ -196,6 +196,7 @@ function applySelection(line: OrderLine, selection: LineSelection | undefined): 
 export class WorkingOrderStore {
   protected placer?: (courseId: string | null, exceptIndex?: number) => ReturnType<typeof placeFor>;
   readonly #lines: OrderLine[] = [];
+  readonly #splitFamilies = new WeakMap<OrderLine, readonly OrderLine[]>();
   readonly #listeners = new Map<WorkingOrderEvent, Set<WorkingOrderListener>>();
   /** The idempotency key park and pay send, so a retried request settles the order once. */
   #id: string = crypto.randomUUID();
@@ -605,6 +606,45 @@ export class WorkingOrderStore {
       return copy;
     });
     this.#lines.splice(index + 1, 0, ...rest);
+    const family = [line, ...rest];
+    for (const member of family) this.#splitFamilies.set(member, family);
+    this.#changedLines();
+  }
+
+  splitFamily(line: OrderLine): readonly OrderLine[] | undefined {
+    const family = this.#splitFamilies.get(line);
+    if (family === undefined) return undefined;
+    const mergeable = { ...line };
+    delete mergeable.noMerge;
+    const key = orderLineMergeKey(mergeable);
+    if (key === null) return undefined;
+    const unitGross = lineGross({ ...line, quantity: "1" });
+    for (const member of family) {
+      if (!this.#lines.includes(member) || !soldByTheUnit(member.product)) return undefined;
+      const candidate = { ...member };
+      delete candidate.noMerge;
+      if (
+        orderLineMergeKey(candidate) !== key ||
+        lineGross({ ...member, quantity: "1" }) !== unitGross
+      )
+        return undefined;
+    }
+    return family;
+  }
+
+  foldSplitFamily(line: OrderLine): void {
+    if (this.#refusesEdits) return;
+    const family = this.splitFamily(line);
+    if (family === undefined) return;
+    const first = family[0]!;
+    const quantity = sumDecimals(family.map((member) => decimal(member.quantity)));
+    if (lineGross({ ...first, quantity }) !== sumDecimals(family.map(lineGross))) return;
+    first.quantity = quantity;
+    delete first.noMerge;
+    for (const member of family) {
+      this.#splitFamilies.delete(member);
+      if (member !== first) this.#lines.splice(this.#lines.indexOf(member), 1);
+    }
     this.#changedLines();
   }
 

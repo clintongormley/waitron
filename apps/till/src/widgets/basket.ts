@@ -545,6 +545,7 @@ export class TillBasket extends LitElement {
         const listed = this.#listed(line, listing);
         const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);
         return html`
+          <slot name=${`before-${index}`}></slot>
           <div class="entry">
             <div class="entry-body">
               <div class="line">

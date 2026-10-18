@@ -42,6 +42,16 @@ afterEach(cleanupWidgets);
 const split = (el: TillTableOrderScreen, index = 0) =>
   el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-split-draft-line="${index}"]`);
 
+const fold = (el: TillTableOrderScreen) =>
+  el.shadowRoot!.querySelector<HTMLButtonElement>("[data-fold-draft-family]");
+
+async function expandedUnits() {
+  const result = await draftWithUnits();
+  await userEvent.click(split(result.el)!);
+  await result.el.updateComplete;
+  return result;
+}
+
 async function draftWithUnits() {
   const { el } = await mount();
   const draft = store(el);
@@ -166,3 +176,131 @@ it.each(["sending", "locked", "group-command"] as const)(
     expect(line.quantity).toBe("3");
   },
 );
+
+it("folds the expanded family's header into one priced line, retaining its saved identity", async () => {
+  const { el, draft } = await expandedUnits();
+  draft.lines[0]!.draftLineId = "saved-first";
+  draft.markPersisted();
+  const changed = vi.fn();
+  draft.subscribe(changed);
+  const header = fold(el);
+  expect(header).not.toBeNull();
+  expect(header!.textContent!.replace(/\s+/g, " ").trim()).toBe("Beer ×3 ⌃");
+  expect(header!.getAttribute("aria-expanded")).toBe("true");
+  await userEvent.click(header!);
+  await el.updateComplete;
+  expect(
+    draft.lines.map((line) => [line.product.id, line.quantity, line.noMerge, line.draftLineId]),
+  ).toEqual([["beer", "3", undefined, "saved-first"]]);
+  expect(draft.total).toBe("9.00");
+  expect(draft.dirty).toBe(true);
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(fold(el)).toBeNull();
+  expect(split(el)).not.toBeNull();
+});
+
+it("does not absorb an identical later addition into the split family", async () => {
+  const { el, draft } = await expandedUnits();
+  draft.addMerging(beer, "2");
+  await el.updateComplete;
+  expect(fold(el)).not.toBeNull();
+  await userEvent.click(fold(el)!);
+  expect(draft.lines.map((line) => line.quantity)).toEqual(["3", "2"]);
+  expect(draft.total).toBe("15.00");
+});
+
+it.each([
+  "move",
+  "note",
+  "station",
+  "course",
+  "remove",
+  "source",
+  "price",
+  "unit",
+  "options",
+  "extras",
+  "variant",
+  "fraction",
+] as const)("a family changed by %s cannot fold through its old header", async (change) => {
+  const { el, draft } = await expandedUnits();
+  const header = fold(el);
+  expect(header).not.toBeNull();
+  if (change === "move") draft.setLinePlaces([1], { kind: "new", slot: 1 });
+  else if (change === "note") draft.lines[1]!.note = "No ice";
+  else if (change === "station") draft.lines[1]!.makeAt = "bar";
+  else if (change === "course") draft.lines[1]!.courseId = "mains";
+  else if (change === "remove") draft.removeLine(1);
+  else if (change === "source") draft.lines[1]!.source = source;
+  else if (change === "price") draft.lines[1]!.product = { ...beer, unitPrice: "4.00" };
+  else if (change === "unit") {
+    for (const line of draft.lines) line.product = jamon;
+  } else if (change === "options") draft.lines[1]!.options = [{ listId: "ice", labelId: "none" }];
+  else if (change === "extras")
+    draft.lines[1]!.extras = [
+      { listId: "pick", productId: "lime", name: "Lime", price: "0.50", quantity: 1 },
+    ];
+  else if (change === "variant") draft.lines[1]!.product = { ...beer, variantId: "large" };
+  else draft.lines[1]!.quantity = "1.5";
+  const before = draft.lines.map((line) => [line.quantity, line.note, line.place, line.source]);
+  header!.click();
+  expect(draft.lines.map((line) => [line.quantity, line.note, line.place, line.source])).toEqual(
+    before,
+  );
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(fold(el)).toBeNull();
+});
+
+it("folds a complete family after all its rows move to the same new group", async () => {
+  const { el, draft } = await expandedUnits();
+  draft.setLinePlaces([0, 1, 2], { kind: "new", slot: 1 });
+  await el.updateComplete;
+  expect(fold(el)).not.toBeNull();
+  await userEvent.click(fold(el)!);
+  expect(draft.lines.map((line) => [line.quantity, line.place])).toEqual([
+    ["3", { kind: "new", slot: 1 }],
+  ]);
+});
+
+it.each(["sending", "locked", "group-command", "other-bill", "removed-screen"] as const)(
+  "an old family header cannot fold after %s takes authority",
+  async (busy) => {
+    const { el, draft } = await expandedUnits();
+    const header = fold(el);
+    expect(header).not.toBeNull();
+    if (busy === "sending") draft.sending = true;
+    else if (busy === "locked") draft.lockEdits();
+    else if (busy === "group-command") el.groupCommandBusy = true;
+    else if (busy === "other-bill") el.draftStore = new DraftStore();
+    else el.remove();
+    header!.click();
+    expect(draft.lines.map((line) => line.quantity)).toEqual(["1", "1", "1"]);
+  },
+);
+
+it("clears a partial family selection when folding so Fire cannot select extra units", async () => {
+  const { el, draft } = await expandedUnits();
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="2"]')!);
+  await el.updateComplete;
+  expect(fold(el)).not.toBeNull();
+  await userEvent.click(fold(el)!);
+  await el.updateComplete;
+  expect(draft.lines.map((line) => line.quantity)).toEqual(["3"]);
+  expect(
+    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-pressed"),
+  ).toBe("false");
+});
+
+it("keeps the folded line selected when every expanded unit was ticked", async () => {
+  const { el, draft } = await expandedUnits();
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-draft-group-select]")!);
+  await el.updateComplete;
+  expect(fold(el)).not.toBeNull();
+  await userEvent.click(fold(el)!);
+  await el.updateComplete;
+  expect(draft.lines.map((line) => line.quantity)).toEqual(["3"]);
+  expect(
+    el.shadowRoot!.querySelector('[data-draft-select="0"]')!.getAttribute("aria-pressed"),
+  ).toBe("true");
+});
