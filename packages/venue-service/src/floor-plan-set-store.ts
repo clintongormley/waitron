@@ -3,13 +3,13 @@ import { floorZones, type Transaction } from "@waitron/db";
 import type { FloorDeletion, FloorPlanSets, FloorPlanSetSummary } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import type { FloorPlanSetsModel } from "./floor-plan-set-types.js";
+import type { FloorPlanSetsModel, PeriodFloorPlans } from "./floor-plan-set-types.js";
 import { listDepartments, type VenueScope } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 
-export type { FloorPlanSetsModel };
+export type { FloorPlanSetsModel, PeriodFloorPlans };
 
 /** Gives a core floor plan set to a department under `name`; the department's first set is its default. */
 export async function linkFloorPlanSet(
@@ -171,6 +171,60 @@ export async function readFloorPlanSetsModel(
         })),
       };
     }),
+  };
+}
+
+export async function readPeriodFloorPlans(
+  tx: Transaction,
+  cfg: VenueScope,
+  core: FloorPlanSets,
+): Promise<PeriodFloorPlans> {
+  const departmentIds = (await listDepartments(tx, cfg)).map((d) => d.id);
+  const zones =
+    departmentIds.length === 0
+      ? []
+      : await tx
+          .select({ id: floorZones.id, departmentId: zoneServicePolicies.departmentId })
+          .from(zoneServicePolicies)
+          .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
+          .where(
+            and(
+              eq(zoneServicePolicies.locationId, cfg.locationId),
+              eq(floorZones.active, true),
+              inArray(zoneServicePolicies.departmentId, departmentIds),
+            ),
+          );
+  if (zones.length === 0) return { departments: [] };
+  const { tableCounts } = await core.readLayouts(
+    tx,
+    zones.map((z) => z.id),
+    [],
+  );
+  const planned = new Set(
+    zones.filter((z) => tableCounts.get(z.id)! > 0).map((z) => z.departmentId),
+  );
+  const shown = departmentIds.filter((id) => planned.has(id));
+  if (shown.length === 0) return { departments: [] };
+  const sets = await tx
+    .select({
+      id: departmentFloorPlanSets.setId,
+      departmentId: departmentFloorPlanSets.departmentId,
+      name: departmentFloorPlanSets.name,
+      isDefault: departmentFloorPlanSets.isDefault,
+    })
+    .from(departmentFloorPlanSets)
+    .where(inArray(departmentFloorPlanSets.departmentId, shown))
+    .orderBy(desc(departmentFloorPlanSets.isDefault), asc(departmentFloorPlanSets.name));
+  const setsOf = byDepartment(sets);
+  return {
+    departments: shown.map((id) => ({
+      id,
+      sets: (setsOf.get(id) ?? []).map(({ id: setId, name, isDefault }) => ({
+        id: setId,
+        name,
+        isDefault,
+      })),
+    })),
   };
 }
 

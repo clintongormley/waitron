@@ -1,4 +1,4 @@
-import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import { type DashboardRequest, type LiveData } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "../dashboard/opening-hours-client.js";
 import type { SpecialDayPainter } from "../dashboard/special-day-painter.js";
@@ -29,7 +29,7 @@ export function storedDay(over: Partial<SpecialDayDetail> = {}): SpecialDayDetai
 
 export interface SpecialDayAnswers {
   /** What the floor plan sets read answers; by default the opening-hours model, as before. */
-  floorPlans?: () => FloorPlanSetsModel;
+  floorPlans?: () => PeriodFloorPlans;
   /** The stored special days a read can find, by id. */
   days?: Record<string, SpecialDayDetail>;
   /** Awaited before a special day read answers with the day as it was when asked. */
@@ -98,7 +98,8 @@ export function specialDayApi(writes: Write[] = [], answers: SpecialDayAnswers =
     (async (url, method, body) => {
       if (method === "GET") {
         if (url.includes("/menu-periods/painted-in")) return [];
-        if (answers.floorPlans && url.endsWith("/floor-plan-sets")) return answers.floorPlans();
+        if (answers.floorPlans && url.endsWith("/floor-plan-sets/period-choices"))
+          return answers.floorPlans();
         if (/\/special-days$/.test(url)) {
           await answers.listAfter;
           if (answers.failingList) throw { code: "server.internal" };

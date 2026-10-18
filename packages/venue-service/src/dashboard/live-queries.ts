@@ -107,6 +107,13 @@ export const QUERY_DEPENDENCIES = {
     "zone_service_policies",
     "floor_zones",
   ],
+  "period-floor-plans": [
+    "departments",
+    "zone_service_policies",
+    "floor_zones",
+    "floor_plan_tables",
+    "department_floor_plan_sets",
+  ],
   "prep-stations-list": ["kitchen_stations"],
   routing: [
     "kitchen_timing_defaults",

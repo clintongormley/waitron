@@ -20,7 +20,7 @@ import "@waitron/ui/src/components/wt-colour-chooser.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "../hours-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
-import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import {
   firstUnusedCalendarColour,
   NO_COLOUR_USERS,
@@ -135,8 +135,8 @@ export class PeriodDialog extends LitElement {
   @property({ type: Boolean }) deletable = false;
   /** Given when adding without a fixed department, so the dialog asks for one. */
   @property({ attribute: false }) departments?: readonly Department[];
-  /** The departments' zones and floor plan sets; absent draws no Floor plan field. */
-  @property({ attribute: false }) floorPlans?: FloorPlanSetsModel["departments"];
+  /** The departments that offer a Floor plan field, with their sets; absent draws none. */
+  @property({ attribute: false }) floorPlans?: PeriodFloorPlans["departments"];
   @state() private draft: Draft = empty();
   private colourPicked = false;
   @state() private attempted = false;
@@ -241,11 +241,10 @@ export class PeriodDialog extends LitElement {
   /** The sets offered, the default first; undefined when the field is not drawn. */
   private get floorPlanSets() {
     const departmentId = this.choosesDepartment ? this.draft.departmentId : this.departmentId;
-    const department = this.floorPlans?.find(({ id }) => id === departmentId);
-    if (!department?.zones.some(({ tableCount }) => tableCount > 0)) return undefined;
-    const fallback = department.sets.find(({ isDefault }) => isDefault);
+    const sets = this.floorPlans?.find(({ id }) => id === departmentId)?.sets ?? [];
+    const fallback = sets.find(({ isDefault }) => isDefault);
     if (!fallback) return undefined;
-    return { fallback, others: department.sets.filter((set) => set !== fallback) };
+    return { fallback, others: sets.filter((set) => set !== fallback) };
   }
   /** The field's value: a set that is the department's default now reads as the empty choice. */
   private shownPlan(setId: string): string {

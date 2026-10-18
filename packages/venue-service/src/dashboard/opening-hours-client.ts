@@ -2,7 +2,7 @@ import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { SEASON_DAYS_MAX_DATES, type LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth, OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
-import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { PaintedIn, PeriodDeleteImpact } from "../period-delete.js";
 import type { Season, SeasonChange } from "../season-rules.js";
 import type { ClosedRange } from "../service-day.js";
@@ -51,17 +51,17 @@ export class OpeningHoursApi {
       recovered,
     );
   }
-  /** The departments' zones and floor plan sets, for a period's Floor plan field and column. */
-  watchFloorPlanSets(
-    apply: (model: FloorPlanSetsModel) => void,
+  /** A period's Floor plan field and column choices. */
+  watchPeriodFloorPlans(
+    apply: (model: PeriodFloorPlans) => void,
     failed: (error: unknown) => void,
     recovered: () => void,
   ): () => void {
     return this.#watches.watch(
-      "venue-service:floor-plan-sets",
-      QUERY_DEPENDENCIES["floor-plan-sets"],
+      "venue-service:period-floor-plans",
+      QUERY_DEPENDENCIES["period-floor-plans"],
       () =>
-        this.request<FloorPlanSetsModel>(`${BASE}/floor-plan-sets`, "GET", undefined, {
+        this.request<PeriodFloorPlans>(`${BASE}/floor-plan-sets/period-choices`, "GET", undefined, {
           passive: true,
         }),
       apply,

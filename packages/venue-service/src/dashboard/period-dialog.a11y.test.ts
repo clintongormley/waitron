@@ -74,11 +74,9 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
       el.floorPlans = [
         {
           id: "restaurant",
-          name: "Restaurant",
-          zones: [{ id: "inside", name: "Inside", tableCount: 6 }],
           sets: [
-            { id: "house", name: "House", isDefault: true, usedBy: [], layouts: [] },
-            { id: "late", name: "Late", isDefault: false, usedBy: [], layouts: [] },
+            { id: "house", name: "House", isDefault: true },
+            { id: "late", name: "Late", isDefault: false },
           ],
         },
       ];

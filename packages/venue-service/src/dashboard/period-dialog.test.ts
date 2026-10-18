@@ -1232,27 +1232,18 @@ it("typing a name before a department is chosen keeps the chooser's choices", as
   expect(chooser(el).choices).toBe(before);
 });
 
+/** As the server lists them: Bar has no zone with a table, so it is absent. */
 const floorPlans = [
   {
     id: "restaurant",
-    name: "Restaurant",
-    zones: [
-      { id: "terrace", name: "Terrace", tableCount: 0 },
-      { id: "inside", name: "Inside", tableCount: 12 },
-    ],
     sets: [
-      { id: "house", name: "House", isDefault: true, usedBy: [], layouts: [] },
-      { id: "banquet", name: "Banquet", isDefault: false, usedBy: [], layouts: [] },
-      { id: "dinner", name: "Dinner", isDefault: false, usedBy: [], layouts: [] },
+      { id: "house", name: "House", isDefault: true },
+      { id: "banquet", name: "Banquet", isDefault: false },
+      { id: "dinner", name: "Dinner", isDefault: false },
     ],
-  },
-  {
-    id: "bar",
-    name: "Bar",
-    zones: [{ id: "counter", name: "Counter", tableCount: 0 }],
-    sets: [{ id: "bar-standard", name: "Standard", isDefault: true, usedBy: [], layouts: [] }],
   },
 ];
+const barSets = [{ id: "bar-standard", name: "Standard", isDefault: true }];
 async function mountPlanned(floorPlanSetId: string | null = null, departmentId = "restaurant") {
   return mountEdit((el) => {
     el.period = { ...structuredClone(period), floorPlanSetId };
@@ -1315,9 +1306,7 @@ it("offers the default first by its own name, muted, then the other sets in the 
 
 it("names a default called Standard in English and Spanish", async () => {
   const el = await mountPlanned(null, "bar");
-  el.floorPlans = [
-    { ...floorPlans[1]!, zones: [{ id: "counter", name: "Counter", tableCount: 3 }] },
-  ];
+  el.floorPlans = [{ id: "bar", sets: barSets }];
   await el.updateComplete;
   expect(field(el, "floorPlanSetId").options).toEqual([
     { value: "", label: "Standard (default)", muted: true },

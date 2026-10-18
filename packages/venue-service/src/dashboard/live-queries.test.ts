@@ -193,3 +193,13 @@ it("reads the Opening hours month again on a change to anything its plan reads",
   const watched: readonly string[] = QUERY_DEPENDENCIES["opening-hours-month"];
   expect(CALENDAR_MONTH_PLAN_READS.filter((table) => !watched.includes(table))).toEqual([]);
 });
+
+it("reads a period's floor plan choices again on a set, zone or table change, not on a layout save", () => {
+  expect(QUERY_DEPENDENCIES["period-floor-plans"]).toEqual([
+    "departments",
+    "zone_service_policies",
+    "floor_zones",
+    "floor_plan_tables",
+    "department_floor_plan_sets",
+  ]);
+});

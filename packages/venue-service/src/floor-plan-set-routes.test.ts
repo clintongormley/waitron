@@ -233,7 +233,7 @@ async function casaMarina() {
     .update(menuPeriods)
     .set({ floorPlanSetId: dinnerSet })
     .where(eq(menuPeriods.id, made.dinner));
-  return { ...made, ...fake, send, standard, dinnerSet, privateParty, barStandard };
+  return { ...made, ...fake, cfg, send, standard, dinnerSet, privateParty, barStandard };
 }
 type Venue = Awaited<ReturnType<typeof casaMarina>>;
 
@@ -606,5 +606,48 @@ describe("who may use the routes", () => {
       (await v.send("GET", `/${v.dinnerSet}/delete-impact`, undefined, v.supervisor)).status,
     ).toBe(200);
     expect(await linkOf(v.dinnerSet)).toHaveLength(1);
+  });
+});
+
+describe("a period's floor plan choices", () => {
+  const choices = async (v: Venue, cookie = v.manager) => {
+    const res = await v.send("GET", "/period-choices", undefined, cookie);
+    expect(res.status).toBe(200);
+    return (await res.json()) as {
+      departments: { id: string; sets: { id: string; name: string; isDefault: boolean }[] }[];
+    };
+  };
+
+  it("lists each department with a zone holding a table, and its sets with the default first", async () => {
+    const v = await casaMarina();
+    const garden = await withTransaction(db, async (tx) => {
+      const id = (await createDepartment(tx, v.cfg, { name: "Garden", orderStart: "table" })).id;
+      await createServiceZone(tx, v.cfg, { name: "Lawn", departmentId: id });
+      return id;
+    });
+    expect((await v.send("POST", "", { departmentId: garden, name: "Lawn" })).status).toBe(201);
+
+    const read = await choices(v);
+
+    expect(read.departments.map((d) => d.id).sort()).toEqual([v.restaurant, v.bar].sort());
+    expect(read.departments.find((d) => d.id === v.restaurant)).toEqual({
+      id: v.restaurant,
+      sets: [
+        { id: v.standard, name: "Standard", isDefault: true },
+        { id: v.dinnerSet, name: "Dinner", isDefault: false },
+        { id: v.privateParty, name: "Private party", isDefault: false },
+      ],
+    });
+    expect(read.departments.find((d) => d.id === v.bar)).toEqual({
+      id: v.bar,
+      sets: [{ id: v.barStandard, name: "Standard", isDefault: true }],
+    });
+  });
+
+  it("asks core for table counts and no layout, and lets a venue.view person read it", async () => {
+    const v = await casaMarina();
+    v.asked.length = 0;
+    expect((await choices(v, v.supervisor)).departments.length).toBe(2);
+    expect(v.asked).toEqual([[]]);
   });
 });

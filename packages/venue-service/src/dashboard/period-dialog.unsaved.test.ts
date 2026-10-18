@@ -362,11 +362,9 @@ it("a Floor plan-only change protects navigation and choosing the default back m
   el.floorPlans = [
     {
       id: "restaurant",
-      name: "Restaurant",
-      zones: [{ id: "inside", name: "Inside", tableCount: 4 }],
       sets: [
-        { id: "house", name: "House", isDefault: true, usedBy: [], layouts: [] },
-        { id: "dinner", name: "Dinner", isDefault: false, usedBy: [], layouts: [] },
+        { id: "house", name: "House", isDefault: true },
+        { id: "dinner", name: "Dinner", isDefault: false },
       ],
     },
   ];

@@ -145,18 +145,11 @@ async function mount(state: string, theme: "light" | "dark", inWindow = false) {
       return paintedIn(state === "not-painted");
     }
     if (state === "load-failed") throw new Error("offline");
-    if (path.endsWith("/floor-plan-sets"))
+    if (path.endsWith("/floor-plan-sets/period-choices"))
       return {
         departments:
           state === "floor-plan"
-            ? [
-                {
-                  id: "restaurant",
-                  name: "Restaurant",
-                  zones: [{ id: "inside", name: "Inside", tableCount: 6 }],
-                  sets: [{ id: "house", name: "House", isDefault: true, usedBy: [], layouts: [] }],
-                },
-              ]
+            ? [{ id: "restaurant", sets: [{ id: "house", name: "House", isDefault: true }] }]
             : [],
       };
     return model(state === "empty");

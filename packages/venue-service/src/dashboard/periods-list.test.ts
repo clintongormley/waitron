@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, type WtDataTable, type WtModal } from "@waitron/ui";
 import { CALENDAR_COLOURS } from "../hours-types.js";
-import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
 import type { PeriodDialog } from "./period-dialog.js";
@@ -101,19 +101,19 @@ function paintedIn(): PaintedInRow[] {
 }
 
 /** No department has a zone with tables, so neither the column nor the field shows. */
-function noTables(): FloorPlanSetsModel {
+function noTables(): PeriodFloorPlans {
   return { departments: [] };
 }
 
 function answering(
   read: () => OpeningHoursModel | Promise<OpeningHoursModel> = model,
   painted: () => PaintedInRow[] | Promise<PaintedInRow[]> = paintedIn,
-  floorPlans: () => FloorPlanSetsModel | Promise<FloorPlanSetsModel> = noTables,
+  floorPlans: () => PeriodFloorPlans | Promise<PeriodFloorPlans> = noTables,
 ): DashboardRequest {
   return (async (path: string) =>
     path.endsWith("/menu-periods/painted-in")
       ? structuredClone(await painted())
-      : path.endsWith("/floor-plan-sets")
+      : path.endsWith("/floor-plan-sets/period-choices")
         ? structuredClone(await floorPlans())
         : structuredClone(await read())) as DashboardRequest;
 }
@@ -597,28 +597,12 @@ it.each(
   },
 );
 
-function withTables(): FloorPlanSetsModel {
-  const set = (id: string, name: string, isDefault = false) => ({
-    id,
-    name,
-    isDefault,
-    usedBy: [],
-    layouts: [],
-  });
+/** As the server lists them: Bar has no zone with a table, so it is absent. */
+function withTables(): PeriodFloorPlans {
+  const set = (id: string, name: string, isDefault = false) => ({ id, name, isDefault });
   return {
     departments: [
-      {
-        id: "restaurant",
-        name: "Restaurant",
-        zones: [{ id: "inside", name: "Inside", tableCount: 8 }],
-        sets: [set("house", "House", true), set("dinner", "Dinner")],
-      },
-      {
-        id: "bar",
-        name: "Bar",
-        zones: [{ id: "counter", name: "Counter", tableCount: 0 }],
-        sets: [set("bar-standard", "Standard", true)],
-      },
+      { id: "restaurant", sets: [set("house", "House", true), set("dinner", "Dinner")] },
     ],
   };
 }
@@ -680,8 +664,7 @@ it("a Floor plan column after Staff-only menus shows the set, or the default's n
 });
 
 it("no Floor plan column while no department has a zone with tables", async () => {
-  const empty = withTables();
-  empty.departments[0]!.zones[0]!.tableCount = 0;
+  const empty = noTables();
   const grid = await loaded(await mount(answering(model, paintedIn, () => empty)));
   await new Promise((resolve) => setTimeout(resolve, 50));
   await grid.updateComplete;

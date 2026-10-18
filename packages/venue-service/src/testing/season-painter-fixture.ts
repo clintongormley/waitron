@@ -1,4 +1,4 @@
-import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import { vi } from "vitest";
 import { type DashboardRequest } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
@@ -91,10 +91,11 @@ export type Write = { url: string; method: string; body: unknown };
 export function painterApi(
   writes: Write[] = [],
   answer: (write: Write) => unknown = () => ({}),
-  floorPlans?: () => FloorPlanSetsModel,
+  floorPlans?: () => PeriodFloorPlans,
 ) {
   return new OpeningHoursApi((async (url, method, body) => {
-    if (method === "GET" && floorPlans && url.endsWith("/floor-plan-sets")) return floorPlans();
+    if (method === "GET" && floorPlans && url.endsWith("/floor-plan-sets/period-choices"))
+      return floorPlans();
     if (method === "GET") return url.includes("/menu-periods/painted-in") ? [] : painterModel();
     const write = { url, method, body };
     writes.push(write);
@@ -196,17 +197,15 @@ export const slot = (periodId: string, startsAt: string, endsAt: string): Slot =
   endsAt,
 });
 
-/** Department d1 with a zone holding tables and two sets, House the default. */
-export function painterFloorPlans(): FloorPlanSetsModel {
+/** Department d1, which has a zone holding tables, with two sets, House the default. */
+export function painterFloorPlans(): PeriodFloorPlans {
   return {
     departments: [
       {
         id: "d1",
-        name: "Restaurant",
-        zones: [{ id: "z1", name: "Inside", tableCount: 6 }],
         sets: [
-          { id: "house", name: "House", isDefault: true, usedBy: [], layouts: [] },
-          { id: "late", name: "Late", isDefault: false, usedBy: [], layouts: [] },
+          { id: "house", name: "House", isDefault: true },
+          { id: "late", name: "Late", isDefault: false },
         ],
       },
     ],

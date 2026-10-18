@@ -6,7 +6,7 @@ import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
-import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
@@ -223,10 +223,10 @@ export class PeriodsList extends LitElement {
       )}</span
     >`;
   }
-  /** Each department with a zone holding tables, by id, with its sets; others are absent. */
+  /** Each department offering a floor plan, by id, with its sets; others are absent. */
   private planned?: {
-    floorPlans: FloorPlanSetsModel;
-    departments: Map<string, FloorPlanSetsModel["departments"][number]>;
+    floorPlans: PeriodFloorPlans;
+    departments: Map<string, PeriodFloorPlans["departments"][number]>;
   };
   private plannedDepartments() {
     const floorPlans = this.periods.floorPlans;
@@ -235,9 +235,7 @@ export class PeriodsList extends LitElement {
       this.planned = {
         floorPlans,
         departments: new Map(
-          floorPlans.departments
-            .filter(({ zones }) => zones.some(({ tableCount }) => tableCount > 0))
-            .map((department) => [department.id, department]),
+          floorPlans.departments.map((department) => [department.id, department]),
         ),
       };
     return this.planned.departments;

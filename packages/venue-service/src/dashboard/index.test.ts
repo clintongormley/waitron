@@ -418,7 +418,7 @@ it("the Calendar's Periods window is read-only for a viewer and editable for a m
             path.endsWith("/menu-periods/painted-in") ||
             path.endsWith("/special-days")
             ? []
-            : path.endsWith("/floor-plan-sets")
+            : path.endsWith("/floor-plan-sets/period-choices")
               ? { departments: [] }
               : path.includes("/opening-hours/year?")
                 ? yearRead(Number(new URL(path, location.href).searchParams.get("year")))

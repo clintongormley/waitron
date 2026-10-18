@@ -19,6 +19,7 @@ import {
   makeDefaultFloorPlanSet,
   readFloorPlanSetDeleteImpact,
   readFloorPlanSetsModel,
+  readPeriodFloorPlans,
   renameFloorPlanSet,
 } from "./floor-plan-set-store.js";
 import { onlyKeys } from "./request-keys.js";
@@ -62,6 +63,12 @@ export function mountFloorPlanSetRoutes(
   app.get(BASE, (c) =>
     run(c, log, async () =>
       c.json(await viewed(c, (tx) => readFloorPlanSetsModel(tx, ctx.cfg, ctx.core.floorPlanSets))),
+    ),
+  );
+
+  app.get(`${BASE}/period-choices`, (c) =>
+    run(c, log, async () =>
+      c.json(await viewed(c, (tx) => readPeriodFloorPlans(tx, ctx.cfg, ctx.core.floorPlanSets))),
     ),
   );
 

@@ -1,6 +1,6 @@
 import { html, nothing, type ReactiveController, type ReactiveControllerHost } from "lit";
 import { keyed } from "lit/directives/keyed.js";
-import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { NO_COLOUR_USERS, type ColourUser } from "./calendar-colours.js";
@@ -94,12 +94,12 @@ export class PeriodEditing implements ReactiveController {
     host.addController(this);
   }
 
-  #floorPlans?: FloorPlanSetsModel;
+  #floorPlans?: PeriodFloorPlans;
   #floorPlansFailed = false;
   #stopFloorPlans?: () => void;
 
-  /** The departments' zones and floor plan sets, for the dialog's Floor plan field. */
-  get floorPlans(): FloorPlanSetsModel | undefined {
+  /** The departments' floor plan choices, for the dialog's Floor plan field. */
+  get floorPlans(): PeriodFloorPlans | undefined {
     return this.#floorPlans;
   }
   /** Whether the latest floor plan sets read failed. */
@@ -113,7 +113,7 @@ export class PeriodEditing implements ReactiveController {
   /** Starts reading the floor plan sets, unless already reading or the host is not connected. */
   watchFloorPlans() {
     if (this.#stopFloorPlans || !this.host.isConnected) return;
-    this.#stopFloorPlans = this.options.api().watchFloorPlanSets(
+    this.#stopFloorPlans = this.options.api().watchPeriodFloorPlans(
       (model) => {
         this.#floorPlans = model;
         this.#floorPlansFailed = false;

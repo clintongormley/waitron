@@ -16,6 +16,12 @@ export interface FloorPlanSetsModel {
   }[];
 }
 
+/** A period's Floor plan choices: each department with a zone that has a table, and its sets in
+ *  the order the Floor plans page lists them. */
+export interface PeriodFloorPlans {
+  departments: { id: string; sets: { id: string; name: string; isDefault: boolean }[] }[];
+}
+
 /** What deleting a set changes: the periods that name it, and the zones showing it today. */
 export interface FloorPlanSetDeleteImpact {
   periods: { id: string; name: string }[];
