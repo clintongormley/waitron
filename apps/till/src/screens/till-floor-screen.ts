@@ -932,7 +932,7 @@ export class TillFloorScreen extends LitElement {
 
   #markMoved(table: TableState): void {
     this.#sendTodayAction(table, (api, sent) => api.markMovedToday(table.id, sent), {
-      tableId: table.id,
+      offersLeaveHere: true,
     });
   }
 
@@ -944,7 +944,7 @@ export class TillFloorScreen extends LitElement {
   #sendTodayAction(
     table: TableState,
     call: (api: TillApi, revision: number) => Promise<FloorAnswer>,
-    written?: { tableId: string },
+    { offersLeaveHere = false }: { offersLeaveHere?: boolean } = {},
   ): void {
     this.moving = null;
     const api = this.api;
@@ -952,9 +952,7 @@ export class TillFloorScreen extends LitElement {
     this.refusal = null;
     void this.#settle(
       this.#send(this.#revision(table.zoneId), (sent) => call(api, sent)),
-      undefined,
-      undefined,
-      written,
+      offersLeaveHere ? { written: { tableId: table.id } } : {},
     );
   }
 
@@ -1137,9 +1135,7 @@ export class TillFloorScreen extends LitElement {
       case "back":
         void this.#settle(
           this.#send(revision, (sent) => api.backToSavedToday(table.id, sent)),
-          undefined,
-          undefined,
-          { tableId: table.id, back: true },
+          { written: { tableId: table.id, back: true } },
         );
         return;
       case "take-off":
@@ -1238,15 +1234,17 @@ export class TillFloorScreen extends LitElement {
             const revision = answer.zoneRevisions?.[room.zoneId];
             return revision === undefined ? null : { zoneId: room.zoneId, revision };
           });
-    await this.#settle(call, (refused) => {
-      if (merge === null || seats !== undefined || !asksSeats(refused)) return false;
-      this.askingSeats = {
-        heading: action.heading,
-        seats: this.#joinSeats(merge.moving, merge.target),
-        action: "join",
-        resend: (chosen) => void this.#join(api, action, room, bills, chosen),
-      };
-      return true;
+    await this.#settle(call, {
+      asks: (refused) => {
+        if (merge === null || seats !== undefined || !asksSeats(refused)) return false;
+        this.askingSeats = {
+          heading: action.heading,
+          seats: this.#joinSeats(merge.moving, merge.target),
+          action: "join",
+          resend: (chosen) => void this.#join(api, action, room, bills, chosen),
+        };
+        return true;
+      },
     });
   }
 
@@ -1269,15 +1267,17 @@ export class TillFloorScreen extends LitElement {
           sent,
         ),
       ),
-      (refused) => {
-        if (seats !== undefined || !asksSeats(refused)) return false;
-        this.askingSeats = {
-          heading: action.heading,
-          seats: this.#joinSeats(action.tableId, action.targetId),
-          action: "join",
-          resend: (chosen) => void this.#merge(api, action, revision, chosen),
-        };
-        return true;
+      {
+        asks: (refused) => {
+          if (seats !== undefined || !asksSeats(refused)) return false;
+          this.askingSeats = {
+            heading: action.heading,
+            seats: this.#joinSeats(action.tableId, action.targetId),
+            action: "join",
+            resend: (chosen) => void this.#merge(api, action, revision, chosen),
+          };
+          return true;
+        },
       },
     );
   }
@@ -1293,9 +1293,15 @@ export class TillFloorScreen extends LitElement {
 
   async #settle(
     call: Promise<FloorAnswer | null>,
-    asks: (refused: { code?: string; field?: unknown }) => boolean = () => false,
-    refresh?: FloorRefreshDetail,
-    written?: { tableId: string; back?: true },
+    {
+      asks = () => false,
+      refresh,
+      written,
+    }: {
+      asks?: (refused: { code?: string; field?: unknown }) => boolean;
+      refresh?: FloorRefreshDetail;
+      written?: { tableId: string; back?: true };
+    } = {},
   ): Promise<void> {
     try {
       this.#carry(await call);
@@ -1803,7 +1809,7 @@ export class TillFloorScreen extends LitElement {
     this.refusal = null;
     const api = this.api;
     if (api === undefined) return;
-    void this.#settle(call(api, this.#revision(zoneId)), undefined, refresh);
+    void this.#settle(call(api, this.#revision(zoneId)), { refresh });
   }
 
   #requestFloorRefresh(detail?: FloorRefreshDetail): void {

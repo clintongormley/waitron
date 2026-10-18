@@ -360,6 +360,20 @@ describe("till-floor-screen: a table that needs moving", () => {
     expect(offer(el)).toBeNull();
   });
 
+  it("drops the offer once a later write succeeds and clears the refusal", async () => {
+    const api = stubApi();
+    api.markMovedToday.mockRejectedValue(newPlaceTaken);
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await refuseMarkMoved(el);
+    expect(offer(el)).not.toBeNull();
+
+    send(mapOf(el), "wt-table-drag-end", { tableId: "t4", x: 30, y: 3, targetId: "t3" });
+    await settle(el);
+    expect(api.mergeToday).toHaveBeenCalledOnce();
+    expect(refusal(el)).toBeNull();
+    expect(offer(el)).toBeNull();
+  });
+
   it("drops the offer once a read no longer has the table needing moving, or the device can no longer change today's plan", async () => {
     const api = stubApi();
     api.markMovedToday.mockRejectedValue(newPlaceTaken);
