@@ -92,11 +92,10 @@ export function wireTime(value: string): string {
   return value.slice(0, 5);
 }
 
-/** The default list is restricted to zones that can start a new order. */
 export async function listServiceZones(
   tx: Transaction,
   cfg: VenueScope,
-  options: { includeInactive?: boolean } = {},
+  options: { withActiveFlag?: boolean } = {},
 ) {
   const rows = await tx
     .select({
@@ -137,7 +136,7 @@ export async function listServiceZones(
         (zoneOrderStart ?? departmentOrderStart ?? "counter") === "table" ? "table_tab" : paidWhen;
       return {
         ...row,
-        ...(options.includeInactive ? { active } : {}),
+        ...(options.withActiveFlag ? { active } : {}),
         serviceMode,
       };
     },

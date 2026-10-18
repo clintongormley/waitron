@@ -2085,12 +2085,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-10-18-a803-bills-and-tables-design.md);
   [mockups](backlog/mockups/a803-bills-and-tables/).
 
-- **A752. Device profile form: an empty starting-zone list and errors that cannot be cleared
-  (owner, 2026-10-16).** On Santet, "Every zone in this department" is on, the Starting zone list
-  says "No results" although the department's five zones are active, and two errors ask for things
-  already done or impossible. Find why the list is empty; word a department with no zones plainly.
-  [Detail](backlog/till.md#a752-device-profile-form-an-empty-starting-zone-list-and-errors-that-cannot-be-cleared)
-
 - **A757. Table states: review the lifecycle, then retire the Tables tab (owner, 2026-10-16).**
   Design first. Decided: the Tables tab goes; optional states are switched per department; an
   optional state is one the code understands, not a label the venue makes up. A773 adds a Requested

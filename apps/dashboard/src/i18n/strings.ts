@@ -2319,6 +2319,8 @@ export const en = {
     "Check the department: it may have been switched off. Choose another.",
   "device_profiles.err_zones_required":
     "Choose at least one zone, or switch on Every zone in this department",
+  "device_profiles.err_department_no_zones":
+    "This department has no zones. Add one in Departments and zones.",
   "device_profiles.err_zones": "Check the zones: each must be switched on and in this department.",
   "device_profiles.err_starting_zone_required": "Choose the zone a device starts in",
   "device_profiles.err_starting_zone":
@@ -5334,6 +5336,8 @@ export const es: Record<StringKey, string> = {
     "Revisa el departamento: puede que se haya desactivado. Elige otro.",
   "device_profiles.err_zones_required":
     "Elige al menos una zona, o activa Todas las zonas de este departamento",
+  "device_profiles.err_department_no_zones":
+    "Este departamento no tiene zonas. Añade una en Departamentos y zonas.",
   "device_profiles.err_zones":
     "Revisa las zonas: cada una debe estar activada y ser de este departamento.",
   "device_profiles.err_starting_zone_required": "Elige la zona en la que empieza un dispositivo",

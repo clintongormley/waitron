@@ -419,7 +419,7 @@ describe("the device profile editor's Save", () => {
       }),
     );
     expect(q(el, "profile-zones-error")?.textContent?.trim()).toBe(
-      t("device_profiles.err_zones_required"),
+      t("device_profiles.err_department_no_zones"),
     );
     expect(await state(el)).toEqual(quiet);
     await change(el, "profile-department", "d2");

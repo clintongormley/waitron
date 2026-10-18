@@ -2225,8 +2225,9 @@ format. Keep the conversion in the browser so a Spanish keyboard does not change
 
 A form says nothing about errors until the operator first presses its primary action (owner rule,
 2026-09-28). A device profile whose department has no active allowed zone left shows its
-zones and starting-zone errors on open, with the bottom correction message (owner, 2026-10-08,
-A396). Its unchanged Save stays quiet and disabled; an edit stays blocked until its scope is fixed. There is no error summary at the top of a form: it makes the page jump when it clears.
+zones error on open, with the bottom correction message (owner, 2026-10-08, A396). It also shows
+its starting-zone error, unless the department has no active zone at all: then the zones error says
+so and points to Departments and zones, and no starting zone is asked for (owner, 2026-10-16, A752). Its unchanged Save stays quiet and disabled; an edit stays blocked until its scope is fixed. There is no error summary at the top of a form: it makes the page jump when it clears.
 Besides an unchanged draft, a save already in progress or a nested window open (below), only the
 form's own checks disable the action; an error that comes back from a request never does (owner rule, 2026-09-29).
 

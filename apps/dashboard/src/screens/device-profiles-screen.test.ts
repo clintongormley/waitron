@@ -1872,6 +1872,57 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(bottom(el)).toBe(t("form.fix_fields"));
   });
 
+  it("says a chosen department has no zones and where to add one, and asks for no starting zone", async () => {
+    const api = stubApi({
+      getProfileScopeChoices: vi.fn().mockResolvedValue({
+        departments: [...scopeChoices.departments, { id: "d2", name: "Deli", active: true }],
+        zones: scopeChoices.zones,
+      }),
+    });
+    const el = await openCreate(api);
+    await chooseOption(q(el, "profile-department")!, "d2");
+    await flush(el);
+    expect(q(el, "profile-every-zone")!.checked).toBe(true);
+    await save(el);
+    expect(api.createDeviceProfile).not.toHaveBeenCalled();
+    expect(text(el, "profile-zones-error")).toBe(t("device_profiles.err_department_no_zones"));
+    expect(q(el, "profile-starting-zone")!.error).toBe("");
+    expect(bottom(el)).toBe(t("form.fix_fields"));
+  });
+
+  it("offers every zone of the department as the starting zone from the reply the venue sends", async () => {
+    const reply = {
+      departments: [{ id: "d2", name: "Santet Deli Co", active: true, isDefault: true }],
+      zones: ["Counter", "Front Bar", "Main Bar", "Saloon", "Terrace"].map((name, index) => ({
+        id: `dz${index}`,
+        name,
+        departmentId: "d2",
+        departmentName: "Santet Deli Co",
+        serviceMode: "prepay",
+        active: true,
+      })),
+    };
+    const real = new RealDashboardApi(
+      "",
+      async () =>
+        new Response(JSON.stringify(reply), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const api = stubApi({ getProfileScopeChoices: () => real.getProfileScopeChoices() });
+    const el = await openCreate(api);
+    await vi.waitFor(() => expect(q(el, "profile-every-zone")?.checked).toBe(true));
+    expect(options(el, "profile-starting-zone")).toEqual(["dz0", "dz1", "dz2", "dz3", "dz4"]);
+    expect(q(el, "profile-starting-zone")!.value).toBe("dz0");
+    await save(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![5]).toEqual({
+      departmentId: "d2",
+      allowedZoneIds: null,
+      startingZoneId: "dz0",
+    });
+  });
+
   it("lists who can sign in, following the roles and each person's own rule", async () => {
     const { api, el } = await openEdit(profiles[0]!);
     expect(text(el, "admitted-people")).toBe(
