@@ -367,6 +367,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   before the first Restore request. Changes to the kit, environment or reviewed copy clear it.
   Synthetic external services and source-host execution qualify these local checks; installed
   admission/promotion and the remaining entry, coverage and retirement gates stay open.
+  Installed source-host checks also promote over verified HTTPS with either recovery-key or
+  administrator credentials, reboot one hour later and retain fiscal rows, counters and the hour
+  journal. These do not qualify browser adoption/promotion or the bundled server.
   The restore command refuses an outstanding claim; provisioning refuses a
   changed series request without opening its database. These checks do not qualify a complete
   archive/bucket/Cloud restore or replace the remaining installed recovery journeys.

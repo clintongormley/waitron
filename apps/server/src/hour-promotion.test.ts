@@ -671,6 +671,143 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
   expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("primary");
 }, 120_000);
 
+it.each(["key", "manager"])(
+  "reboots a promoted mirror in a later hour without allocating again or resetting counters, with %s authority",
+  async (method) => {
+    const auth = method === "key" ? { breakGlass: key.secret } : credentials;
+    const s = await service();
+    await admit(s);
+    await compare(s, auth);
+    const selected = (await s.prepare(binding, auth, context, {
+      action: "select",
+      answer: "no",
+      installationCodes: ["06RB"],
+    })) as { input: unknown };
+    expect(selected).toMatchObject({ identity: "06RC" });
+    await writeMirrorConfig(suite.db, standby.nodeId, {
+      relayUrl: "https://127.0.0.1:1/",
+      boxHostname: "box.test",
+      boxCaPem: "unused-ca",
+      originNodeId: primary.nodeId,
+    });
+    for (const [index, set] of manifestSets().entries())
+      await cp(migrations[index]!.migrationsFolder, join(root, "migrations", set.name), {
+        recursive: true,
+      });
+    const stateDir = join(root, "state");
+    await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-verifactu": true, "fiscal-none": false } }),
+    );
+    const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+    const [port] = await freePorts(1);
+    const env = {
+      WAITRON_VENUE_DIR: dirname(database),
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_MIGRATIONS_DIR: join(root, "migrations"),
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_TILL_NODE_ID: standby.nodeId,
+      WAITRON_TILL_LOCATION_ID: standby.locationId,
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      WAITRON_ENV: "dev",
+      WAITRON_MANAGEMENT_RP_ID: "localhost",
+      WAITRON_MANAGEMENT_ORIGIN: `https://localhost:${port}`,
+    };
+    let server: StartedServer | undefined;
+    let agent: Agent | undefined;
+    const kill = vi.spyOn(process, "kill").mockImplementation(() => true);
+    const send = async () => {
+      const response = await fetch(`https://127.0.0.1:${port}/management-api/promote`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Origin: `https://127.0.0.1:${port}`,
+          "Sec-Fetch-Site": "same-origin",
+        },
+        body: JSON.stringify({
+          ...context,
+          ...auth,
+          moduleOperation: { binding, input: selected.input },
+        }),
+        dispatcher: agent,
+      } as RequestInit);
+      const body = await response.json();
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      return body;
+    };
+    try {
+      // The listener owns a new preparation service, so it must compare again before consuming intent.
+      server = await startServer(env);
+      agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
+      const post = async (proposal: unknown) => {
+        const response = await fetch(
+          `https://127.0.0.1:${port}/management-api/promote/preparation`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              ...context,
+              ...auth,
+              moduleOperation: { binding, input: null },
+              proposal,
+            }),
+            dispatcher: agent,
+          } as RequestInit,
+        );
+        const body = await response.json();
+        expect(response.status, JSON.stringify(body)).toBe(200);
+        return body;
+      };
+      const challenge = await post({ action: "clock-challenge" });
+      await post({
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      });
+      expect(await send()).toEqual({ alreadyPrimary: false, restarting: true });
+      await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM"));
+      await agent.close();
+      agent = undefined;
+      await server.close();
+      server = undefined;
+      await suite.db
+        .update(invoiceSeries)
+        .set({ nextNumber: 47 })
+        .where(eq(invoiceSeries.nodeId, standby.nodeId));
+      const before = await rows();
+      expect(before.series.filter((row) => row.nodeId === standby.nodeId)).toHaveLength(3);
+      expect(before.allocations).toHaveLength(2);
+      expect(before.series.filter((row) => row.nodeId === standby.nodeId)).toEqual(
+        expect.arrayContaining(
+          ["A-06RC", "FF-06RC", "R-06RC"].map((code) =>
+            expect.objectContaining({ code, nextNumber: 47 }),
+          ),
+        ),
+      );
+      const journal = await readFile(join(stateDir, "module-preparation-state.json"), "utf8");
+      kill.mockClear();
+      vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
+      server = await startServer(env);
+      agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
+      expect(await send()).toEqual({ alreadyPrimary: true, restarting: false });
+      expect(kill).not.toHaveBeenCalled();
+      expect(await rows()).toEqual(before);
+      expect(await readFile(join(stateDir, "module-preparation-state.json"), "utf8")).toBe(journal);
+      expect(await readDeploymentMode(suite.db, standby.nodeId)).toBe("primary");
+      expect(await readSingletonRole(suite.db, standby.nodeId)).toBe("primary");
+    } finally {
+      await agent?.close();
+      await server?.close();
+      kill.mockRestore();
+    }
+  },
+  120_000,
+);
+
 it("establishes the real reserved node and identity while keeping its fiscal state dormant", async () => {
   const identity = generateStandbyIdentity();
   const target = { ...standby, nodeId: brandNodeId(identity.nodeId) };

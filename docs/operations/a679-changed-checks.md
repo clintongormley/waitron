@@ -2290,3 +2290,43 @@ recorded under “two PDF revision dependencies” in the lane. The current chec
 and recovery currently consumes a reported code list. Neither dependent behavior is changed here.
 A679 remains incomplete and unpublished; earlier legacy/coverage/entry/retirement/integration gates,
 owner PDF acceptance, both final reviews and current-head CI still apply.
+
+
+## Promotion reboot qualification, 2026-10-19
+
+You can run the two new cases with:
+
+```sh
+pnpm --filter @waitron/server exec vitest run src/hour-promotion.test.ts -t 'reboots a promoted'
+```
+
+Both cases use the real HTTPS listener and database. One authenticates promotion with the node
+recovery key; the other uses administrator credentials. Dormant admission and hour selection
+precede listener startup. The listener compares clocks again, consumes the selected `06RC` hour,
+and requests restart. After shutdown, the fixture sets the standby counters to 47 and reboots
+at the next hour. Repeating the HTTPS promotion returns `alreadyPrimary: true` and
+`restarting: false`; fiscal allocations, SIF rows, all invoice-series rows and the hour journal
+retain their exact snapshots. This qualifies installed source execution with a synthetic internet
+clock, not a browser adoption flow, a real process restart or `dist/server.js`.
+
+Changed existing checks: none. Removing only the new `it.each` block reconstructs the exact
+starting bytes of `hour-promotion.test.ts` at `4d34f72a600cef98c0279cdb07e622ce6dae497d`.
+No runtime, fiscal-writer, SQL, migration, guard or configuration source changes in this checkpoint.
+Preserve the earlier inventories in this document.
+
+The nine surrounding server suites pass 94 cases. Server types, scoped lint, formatting,
+the unedited fiscal golden/immutability pair (20 cases), and the selected database-helper and
+teardown guards (33 cases) pass. These focused checks do not establish package-wide coverage
+or branch readiness.
+
+In an independently frozen-installed candidate, returning an incorrect restart flag after reboot
+fails both new cases. Separately skipping the module activation fails both with the expected
+`series.no_standard_for_node` response instead of HTTP 200. Each restored candidate passes both
+cases. The restored installed whole file also passes all 36 cases. An earlier omission of the
+mirror helper's already-primary return passed both cases;
+that is an unqualified control. Tracing `boot.ts` showed the rebooted primary endpoint uses its
+own status-only delegate, so that omission did not reach the replay path under test.
+
+Receipts: `~/waitron-campaign-e/receipts/a679-promotion-reboot-20261019/`. The owner PDF revisions
+and viewing acceptance, retained legacy-suite failures, remaining entry/coverage/retirement
+checks, main integration, both final reviews and current-head CI still gate the complete item.
