@@ -287,6 +287,7 @@ beforeEach(() => {
   setLocale("en-GB");
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   drafts = draftServer(() => ({ tabId: "wo-7", revision: 2, groups: [] }));
+  drafts.bills.add("wo-7");
 });
 afterEach(() => {
   cleanupWidgets();

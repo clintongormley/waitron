@@ -553,6 +553,7 @@ describe("live device zones", () => {
 
   it("a narrowed table keeps its real draft and bill while refusing new product picks", async () => {
     const drafts = draftServer(() => ({ tabId: "bill", revision: 1, groups: [] }));
+    drafts.bills.add("bill");
     const table = {
       id: "table",
       label: "1",

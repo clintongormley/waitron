@@ -629,6 +629,7 @@ it("waits for the kitchen note before saving only a held label", async () => {
   expect(api.setWorkingOrderLabel).toHaveBeenCalledWith("wo-9", {
     label: "New label",
     revision: 4,
+    expectedEdit: null,
   });
   expect(api.updateWorkingOrder).not.toHaveBeenCalled();
 });

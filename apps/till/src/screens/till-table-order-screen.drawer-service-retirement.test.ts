@@ -96,7 +96,10 @@ it.each([null, "fired-group"])(
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
     await el.updateComplete;
     const drawer = el.shadowRoot!.querySelector("[data-drawer]")!;
-    expect(drawer.textContent).toContain("Recorded dish");
+    expect(el.shadowRoot!.querySelector("[data-sent-fallback]")!.textContent).toContain(
+      "Recorded dish",
+    );
+    expect(drawer.textContent).not.toContain("Recorded dish");
     expect(drawer.querySelector("[data-send-line]")).toBeNull();
     expect(commands).toEqual([]);
   },
@@ -157,7 +160,21 @@ it.each(["fired", "served"] as const)(
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
     await el.updateComplete;
     const drawer = el.shadowRoot!.querySelector("[data-drawer]")!;
-    expect(drawer.textContent).toContain("Recorded dish");
+    const panel = await sentPanelFor(el);
+    for (const section of [
+      "[data-sent-toggle]",
+      ...(kind === "served" ? ["[data-served-toggle]"] : []),
+    ]) {
+      const toggle = panel.shadowRoot!.querySelector<HTMLElement>(section)!;
+      if (toggle.getAttribute("aria-expanded") === "false") {
+        await userEvent.click(toggle);
+        await panel.updateComplete;
+      }
+    }
+    const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="${line.id}"]`)!;
+    expect(shown.checkVisibility()).toBe(true);
+    expect(shown.textContent).toContain("Recorded dish");
+    expect(drawer.textContent).not.toContain("Recorded dish");
     expect(drawer.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
     await el.updateComplete;

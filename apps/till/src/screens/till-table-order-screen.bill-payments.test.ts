@@ -235,7 +235,6 @@ describe("till-table-order-screen: items already paid for", () => {
         text(mark),
       );
     const sent = inList("[data-sent-fallback]");
-    expect(inList("[data-drawer] .pending")).toEqual(sent);
     return sent;
   };
 
