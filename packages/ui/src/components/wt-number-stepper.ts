@@ -24,8 +24,20 @@ export class WtNumberStepper extends LitElement {
       }
 
       .control {
+        position: relative;
         display: grid;
         grid-template-columns: minmax(var(--wt-stepper-field-width), max-content);
+        grid-auto-flow: column;
+        column-gap: var(--wt-space-2);
+        align-items: center;
+      }
+
+      /* .control can be wider than the field (a stretching parent, a long error), so a help-mode
+         badge is placed in the field's grid cell, which makes that cell its containing block. Both
+         lines are given: an absolutely positioned item's auto line is the container's edge. */
+      ::slotted([mode="help-mode"]) {
+        grid-column: 1 / 2;
+        grid-row: 1 / 2;
       }
 
       .field {
@@ -233,6 +245,7 @@ export class WtNumberStepper extends LitElement {
             <wt-icon name="plus"></wt-icon>
           </button>
         </div>
+        <slot name="help"></slot>
       </div>
       ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}

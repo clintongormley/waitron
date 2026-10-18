@@ -184,58 +184,62 @@ export class WtFileInput extends LitElement {
     const described = [this.hint ? this.#hintId : "", this.error ? this.#errorId : ""]
       .filter(Boolean)
       .join(" ");
-    return html`<div
-        class="field"
-        part="field"
-        data-label="float"
-        ?data-invalid=${this.invalid || Boolean(this.error)}
-        ?data-disabled=${this.disabled}
-        ?data-dragging=${this.dragging}
-        @dragenter=${this.#enter}
-        @dragleave=${this.#leave}
-        @dragover=${this.#over}
-        @drop=${this.#drop}
-      >
-        ${this.label ? fieldLabel(id, this.label, this.required) : nothing}
-        <div class="content">
-          ${
-            !this.compact && this.files.length
-              ? this.files.map(
-                  (file) =>
-                    html`<div class="selected">
-                      ${this.#previews.has(file) ? html`<img src=${this.#previews.get(file)!} alt=${this.copy.previewAlt} />` : nothing}
-                      <div class="details">
-                        <strong>${file.name}</strong>
-                        <div class="size">${this.#size(file)}</div>
-                        <span class="choose">${this.copy.replace}</span>
-                      </div>
-                    </div>`,
-                )
-              : html`<span>${this.copy.drop}</span> <span class="choose">${this.copy.choose}</span>`
-          }
-          ${this.hint ? html`<div class="guidance" id=${this.#hintId}>${this.hint}</div>` : nothing}
+    return html`<div class="row">
+        <div
+          class="field"
+          part="field"
+          data-label="float"
+          ?data-invalid=${this.invalid || Boolean(this.error)}
+          ?data-disabled=${this.disabled}
+          ?data-dragging=${this.dragging}
+          @dragenter=${this.#enter}
+          @dragleave=${this.#leave}
+          @dragover=${this.#over}
+          @drop=${this.#drop}
+        >
+          ${this.label ? fieldLabel(id, this.label, this.required) : nothing}
+          <div class="content">
+            ${
+              !this.compact && this.files.length
+                ? this.files.map(
+                    (file) =>
+                      html`<div class="selected">
+                        ${this.#previews.has(file) ? html`<img src=${this.#previews.get(file)!} alt=${this.copy.previewAlt} />` : nothing}
+                        <div class="details">
+                          <strong>${file.name}</strong>
+                          <div class="size">${this.#size(file)}</div>
+                          <span class="choose">${this.copy.replace}</span>
+                        </div>
+                      </div>`,
+                  )
+                : html`<span>${this.copy.drop}</span>
+                    <span class="choose">${this.copy.choose}</span>`
+            }
+            ${this.hint ? html`<div class="guidance" id=${this.#hintId}>${this.hint}</div>` : nothing}
+          </div>
+          <input
+            class="field-control"
+            id=${id}
+            name=${this.name || nothing}
+            type="file"
+            accept=${this.accept || nothing}
+            ?multiple=${this.multiple}
+            ?required=${this.required}
+            ?disabled=${this.disabled}
+            aria-label=${this.label ? nothing : this.copy.choose}
+            aria-invalid=${this.invalid || Boolean(this.error)}
+            aria-describedby=${described || nothing}
+            @input=${(event: Event) => event.stopPropagation()}
+            @cancel=${(event: Event) => event.stopPropagation()}
+            @change=${(event: Event) => {
+              const input = event.target as HTMLInputElement;
+              const files = [...(input.files ?? [])];
+              input.value = "";
+              this.#change(event, files);
+            }}
+          />
         </div>
-        <input
-          class="field-control"
-          id=${id}
-          name=${this.name || nothing}
-          type="file"
-          accept=${this.accept || nothing}
-          ?multiple=${this.multiple}
-          ?required=${this.required}
-          ?disabled=${this.disabled}
-          aria-label=${this.label ? nothing : this.copy.choose}
-          aria-invalid=${this.invalid || Boolean(this.error)}
-          aria-describedby=${described || nothing}
-          @input=${(event: Event) => event.stopPropagation()}
-          @cancel=${(event: Event) => event.stopPropagation()}
-          @change=${(event: Event) => {
-            const input = event.target as HTMLInputElement;
-            const files = [...(input.files ?? [])];
-            input.value = "";
-            this.#change(event, files);
-          }}
-        />
+        <slot name="help"></slot>
       </div>
       ${this.error ? html`<p class="error" data-error id=${this.#errorId}>${this.error}</p>` : nothing}`;
   }

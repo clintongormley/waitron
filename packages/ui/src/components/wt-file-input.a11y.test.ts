@@ -2,7 +2,9 @@ import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "../index.js";
+import { setHelpMode } from "../help-mode.js";
 afterEach(cleanup);
+afterEach(() => setHelpMode(false));
 describe.each(["light", "dark"] as const)("file field accessibility (%s)", (theme) => {
   test.each([
     "empty",
@@ -34,5 +36,27 @@ describe.each(["light", "dark"] as const)("file field accessibility (%s)", (them
     }
     if (state === "focused") el.focus();
     await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help off", async () => {
+    await mountThemed(
+      '<wt-file-input name="photo" label="Photo"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Photo">Shown on the menu.</wt-help-tooltip></wt-file-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help on", async () => {
+    await mountThemed(
+      '<wt-file-input name="photo" label="Photo"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Photo">Shown on the menu.</wt-help-tooltip></wt-file-input>',
+      theme,
+    );
+    const badge = host.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-help-tooltip",
+    )!;
+    setHelpMode(true);
+    await badge.updateComplete;
+    expect(badge.checkVisibility()).toBe(true);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });

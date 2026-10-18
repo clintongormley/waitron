@@ -117,6 +117,12 @@ export {
   subscribeThemeChoice,
 } from "./theme-choice.js";
 export type { ThemeChoice } from "./theme-choice.js";
+export {
+  HelpModeController,
+  currentHelpMode,
+  setHelpMode,
+  subscribeHelpMode,
+} from "./help-mode.js";
 export { themeChoices, themeChoicesStyles, themeLabelsPerLocale } from "./theme-choices.js";
 
 export {

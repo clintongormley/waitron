@@ -5,8 +5,11 @@ import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "./wt-combobox.js";
 import type { ComboboxOption, WtCombobox } from "./wt-combobox.js";
 import { registerIcons } from "./wt-icon.js";
+import "./wt-help-tooltip.js";
+import { setHelpMode } from "../help-mode.js";
 
 afterEach(cleanup);
+afterEach(() => setHelpMode(false));
 
 registerIcons({
   check: "M2 8 L6 12 L14 4",
@@ -477,5 +480,27 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
       el.shadowRoot!.querySelector(".search")!.getAttribute("aria-activedescendant"),
     ).not.toBeNull();
     await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help off", async () => {
+    await mountThemed(
+      '<wt-combobox label="Dietary tags"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Dietary tags">What the menu shows.</wt-help-tooltip></wt-combobox>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help on", async () => {
+    await mountThemed(
+      '<wt-combobox label="Dietary tags"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Dietary tags">What the menu shows.</wt-help-tooltip></wt-combobox>',
+      theme,
+    );
+    const badge = host.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-help-tooltip",
+    )!;
+    setHelpMode(true);
+    await badge.updateComplete;
+    expect(badge.checkVisibility()).toBe(true);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });

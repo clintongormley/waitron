@@ -36,6 +36,16 @@ export class WtDisclosure extends LitElement {
         padding-block: var(--wt-space-3);
       }
 
+      .head {
+        position: relative;
+        display: flex;
+      }
+
+      .head > .header {
+        flex: 1;
+        min-width: 0;
+      }
+
       .body {
         transition: height var(--wt-duration-disclosure) ease;
       }
@@ -277,17 +287,20 @@ export class WtDisclosure extends LitElement {
   override render() {
     return html`
       <div class="section" part="section">
-        <button
-          type="button"
-          class="header"
-          part="header"
-          aria-expanded=${this.open ? "true" : "false"}
-          aria-controls=${this.bodyId}
-          @click=${this.onToggle}
-        >
-          ${this.ruled ? html`<span class="title"><span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon></span>` : html`<span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon>`}
-          ${this.open ? nothing : html`<span class="summary-slot" part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
-        </button>
+        <div class="head">
+          <button
+            type="button"
+            class="header"
+            part="header"
+            aria-expanded=${this.open ? "true" : "false"}
+            aria-controls=${this.bodyId}
+            @click=${this.onToggle}
+          >
+            ${this.ruled ? html`<span class="title"><span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon></span>` : html`<span class="heading">${this.heading}</span><wt-icon class="chevron" name="chevron-down"></wt-icon>`}
+            ${this.open ? nothing : html`<span class="summary-slot" part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
+          </button>
+          <slot name="help"></slot>
+        </div>
         <div
           id=${this.bodyId}
           class="body"

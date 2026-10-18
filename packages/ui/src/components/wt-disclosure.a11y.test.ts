@@ -3,8 +3,11 @@ import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import type { WtDisclosure } from "./wt-disclosure.js";
 import "./wt-disclosure.js";
+import "./wt-help-tooltip.js";
+import { setHelpMode } from "../help-mode.js";
 
 afterEach(cleanup);
+afterEach(() => setHelpMode(false));
 
 describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (theme) => {
   test.each(["", "open", "has-error"])("ruled section %s", async (state) => {
@@ -95,5 +98,27 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll(".summary-row .summary-placeholder")).toHaveLength(1);
     await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help off", async () => {
+    await mountThemed(
+      '<wt-disclosure heading="Selling" summary="Available"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Selling">Who can order it.</wt-help-tooltip><p>Anyone can order</p></wt-disclosure>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("with a help-mode badge, help on", async () => {
+    await mountThemed(
+      '<wt-disclosure heading="Selling" summary="Available"><wt-help-tooltip slot="help" mode="help-mode" aria-label="Help: Selling">Who can order it.</wt-help-tooltip><p>Anyone can order</p></wt-disclosure>',
+      theme,
+    );
+    const badge = host.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-help-tooltip",
+    )!;
+    setHelpMode(true);
+    await badge.updateComplete;
+    expect(badge.checkVisibility()).toBe(true);
+    await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });
