@@ -73,10 +73,7 @@ unbroken names and at 700 px with spaced and unbroken ones, where a hyphenated o
 overflow), so the end of the live version's time scrolls under the pinned Actions column; the link
 and the row menu stay in view. The existing 600 px case "keeps every menu row's menu on screen and
 uncovered while the other columns scroll sideways" in
-`apps/dashboard/src/screens/menus-screen.test.ts` requires that overflow. In that middle layout the
-Status column, and on a phone the Name column, hold the Unpublished changes link but do not set
-`activatesRow: false`, so a click beside the link opens the menu; the design system records this as
-a deviation from its `activatesRow` rule, and whether it stays is the owner's call. The contrast of
+`apps/dashboard/src/screens/menus-screen.test.ts` requires that overflow. The contrast of
 that link, and of the product list's maker link, on a highlighted row is fixed (A306, #1336).
 
 ## A menu's Structure tab is one tree (W88, #1209): not checked
@@ -431,16 +428,6 @@ the 2026-09-30 folders design; what remains:
   added again until the product is switched back on. How the Home page tab's preview draws such a
   shortcut was not checked.
 
-## Copying some of a section's products into another section is not built
-
-**Copying some of a section's products into another section is not built** (found by the menus
-plan's closing sweep, 2026-09-27). The menus spec §2 asks to select all, almost all or some of a
-section's products and add them to another section, creating it in the same flow if needed, with
-the selection telling the section's own members apart from products reached through a nested
-section. What landed is duplicating a section and §10.2's Add products flow. Since slice 2 any such
-follow-up belongs in the owning menu editor. **Next action:** the owner decides whether §10.2's
-flow replaces §2's copy.
-
 ## Content languages and the image library (#339, #344) — what is left open
 
 **Content languages and the image library (#339, #344) — what is left open.**
@@ -467,9 +454,6 @@ flow replaces §2's copy.
 **Extras and Options — deliberate limits, and what is left open.**
 [integration contract](../developers/modifiers.md).
 
-- **Clearing the Extras editor's Minimum choices box saves 0** (the save format's own default); the
-  A66 plan's Review Focus item 3 reads as if a cleared minimum should be refused. Open for the
-  owner.
 - **The Options list's rows centre their contents rather than lining up by text baseline (D6).**
   When a server refusal adds an error line under an option's name, the dot and menu centre on the
   name and the error together. Expected from the CSS in `option-list-form.ts`, not looked at on
@@ -535,16 +519,6 @@ Product editor keeps a private `text()` helper doing what `languageText` does, a
 `product-list.ts` and `extra-list-form.ts` make the same `resolveContentText` call inline for unit
 names; folding them into the one helper was not part of W77a.
 
-## A product literally named `Gin (Double)` and `Gin`'s `Double` variant have the same display label
-
-From A357 (relative variant names, #1381):
-
-Known edge from the second review: a product literally named `Gin (Double)` and `Gin`'s
-`Double` variant have the same display label; saved/imported raw names satisfy the requested
-scopes. A held-group summary combines their displayed quantities, retaining both line ids.
-Choose distinct saved names for now. Any future restriction on composed labels needs an owner
-decision about the naming policy; this change adds no such restriction.
-
 ## In Spanish a range's placeholder reads "8.00 – 12.00" with full stops, and a refused field is drawn about 14 px wider than the others
 
 - Open, seen in #1368's screenshots on code this branch does not change (`wt-price-input`,
@@ -565,14 +539,6 @@ decision about the naming policy; this change adds no such restriction.
   worktree `waitron-feat-menu-preview-undo` (no push, no pull request): the plan, and the scalar
   and presentation Undo checkpoint. What was left at the park: the rest of its Task 2's controls,
   the structural Undo commands, and the server and dashboard wiring.
-
-## `MenuPriceRow.active` and `MenuPriceVariant.active` are always true since A347 (#1392)
-
-- Open, for the owner: `MenuPriceRow.active` and `MenuPriceVariant.active` are always true since
-  A347 (#1392), so the dashboard's Inactive branches (`#active` and `activeOffer` in
-  `menu-prices-table.ts`, the `active` conditions in `menu-price-inheritance.ts`) cannot be
-  reached. Retiring them deletes the tests whose subject is an Inactive row, so it waits for the
-  owner.
 
 ## In the real dashboard at a 390px window the table is 358px wide
 
@@ -813,20 +779,6 @@ focus to the "Scheduled versions" heading, which may no longer be there.
   (`apps/server/test/translation-cloud-fixture.ts`), so a venue with Valencian (`ca-ES-valencia`)
   enabled would have every job refused; the contract's own words ("language tags (`ca`, `es`,
   `pt-BR`)") do not settle whether the real Cloud does the same. Not run against Cloud.
-
-## Translate all wording in the translations dialog that reads wrongly for some counts
-
-- **Translate all wording in the translations dialog that reads wrongly for some counts.** A count
-  of one reads "1 suggestions" — `suggestions.waiting`, `suggestions.capacity`, `suggestions.fits`
-  and, in Spanish, `suggestions.partly` have no `_one` forms, unlike their siblings in
-  `apps/dashboard/src/i18n/strings.ts` (the plan's wording, left unchanged by A689's fourth PR). And the
-  dialog's counters still say "edited" for every row Save would send, untouched suggestions
-  included: `translations.edited`, `translations.hidden`, `translations.show_edited`,
-  `translations.help` and `translations.capacity` (100 untouched suggestions read "100 items are
-  edited"). Owner to choose the wording. The bell's Translate all notice has the same gap: one
-  suggestion reads "1 suggestions are waiting" / "1 sugerencias pendientes"
-  (`content.suggestions_ready`, `apps/dashboard/src/i18n/alert-messages.ts`), because the alert
-  formatter has no plural forms.
 
 ## Translate all: three limits the translations dialog accepts for now (A689's fourth PR, 2026-10-15)
 
@@ -1172,3 +1124,21 @@ From A335 (#1457, the menu editor's heading):
 - **When the venue needs a reset, the menu editor shows the "reset the venue" sentence inside the
   brackets beside the menu's name**, where the live version normally sits, in muted text. A review
   suggested a line of its own; kept in the brackets by decision. (A335, #1457.)
+
+From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
+
+- **Spanish is required everywhere** (owner, 2026-10-17): in a Spanish venue, Spanish names are
+  required whatever the province, including a venue with no known province. Relayed to A682, which
+  must reconcile its "nothing required" with this. Whether receipts outside Catalonia stay free to
+  choose was not answered and stays open.
+- **Clearing the Extras editor's Minimum choices box saves 0, and that is right** (owner,
+  2026-10-17): an empty box means no minimum, so a cleared minimum is not refused.
+- **A product literally named `Gin (Double)` and `Gin`'s `Double` variant may show the same label**
+  (owner, 2026-10-17): no naming rule is added; distinct saved names are the answer. (A357, #1381.)
+- **The Pricing fold does not name an empty base price or VAT** (owner, 2026-10-17): a new product
+  already starts with the venue's default VAT, and a variant's empty VAT shows its parent's as its
+  hint.
+- **Accepted as built: Save turns active only for a refusal an option's window holds when it opens**
+  (owner, 2026-10-17). One handed to it while it is already open leaves Save as it was, and it
+  stays active for the whole time that window is open, even once the refused field is edited back.
+  (A410, #1434.)
