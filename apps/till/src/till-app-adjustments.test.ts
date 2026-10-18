@@ -330,7 +330,10 @@ async function previewComp(el: TillApp, order: TillTableOrderScreen): Promise<vo
   await press(el, inDialog(el, "[data-adjust-continue]"));
 }
 
+const billEdit = { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null };
+
 const ask = {
+  expectedEdit: billEdit,
   expectedRevision: 6,
   lineId: "line-1",
   reasonId: "r-complaint",
@@ -455,6 +458,7 @@ describe("till-app: giving away a dish", () => {
     await press(el, inDialog(el, "[data-adjust-continue]"));
 
     expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", {
+      expectedEdit: billEdit,
       expectedRevision: 6,
       lineId: null,
       reasonId: "r-complaint",
@@ -1066,6 +1070,7 @@ describe("till-app: cancelling a dish", () => {
   const cancelButton = (order: TillTableOrderScreen, lineNo: number) =>
     order.shadowRoot!.querySelector<HTMLElement>(`[data-cancel-line="${lineNo}"]`)!;
   const cancelAsk = {
+    expectedEdit: billEdit,
     expectedRevision: 6,
     lineId: "line-1",
     reasonId: "r-mistake",
@@ -2445,5 +2450,196 @@ describe("till-app: service cancellation consent", () => {
         cancelDialog(el)!.shadowRoot!.querySelector('input[value="keep_charge"]'),
       ).not.toBeNull();
     });
+  });
+});
+
+describe("table adjustments retain bill editing authority", () => {
+  const expectedEdit = {
+    billId: "wo-4",
+    editorVersion: 0,
+    draftId: null,
+    draftRevision: null,
+  };
+
+  it("sends the shown bill observation with both the comp preview and apply", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", { ...ask, expectedEdit });
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(api.applyAdjustment).toHaveBeenCalledWith(
+      "wo-4",
+      { ...ask, expectedEdit, submissionId: expect.any(String) },
+      expect.any(Object),
+    );
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("refuses to open an adjustment without authoritative bill metadata", async () => {
+    const { el } = await mountApp({
+      listDrafts: vi.fn().mockResolvedValue({ drafts: [], billEdits: [] }),
+    });
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    expect(dialog(el)).toBeNull();
+    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+    expect(api.previewAdjustment).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toBe(codeMessage("draft.out_of_date"));
+  });
+
+  it("does not open old reasons after the API changes", async () => {
+    let resolve!: (value: AdjustmentReason[]) => void;
+    const promise = new Promise<AdjustmentReason[]>((answer) => {
+      resolve = answer;
+    });
+    const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => promise) });
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    el.api = stubApi();
+    await flush(el);
+    resolve([complaint]);
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(el.api.previewAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("does not submit an old confirmation through a replacement API", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    const original = api;
+    const replacement = stubApi();
+    el.api = replacement;
+    await flush(el);
+    if (dialog(el) !== null) await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(original.applyAdjustment).not.toHaveBeenCalled();
+    expect(replacement.applyAdjustment).not.toHaveBeenCalled();
+  });
+});
+
+describe("table adjustment editing recovery", () => {
+  it("refreshes bill authority after a refused preview without saving or taking over", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockRejectedValue({ code: "draft.taken_over" }),
+    });
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await chooseReason(el, "Complaint");
+    drafts.listDrafts.mockClear();
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+    expect(bottomMessage(el)).toBe(codeMessage("draft.taken_over"));
+    expect(drafts.listDrafts).toHaveBeenCalledWith("v1", expect.any(Object));
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("retains the shown observation through manager approval", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    await pinPad(el, "1234");
+    expect(api.applyAdjustment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        ...ask,
+        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+        submissionId: expect.any(String),
+        approver: { personId: "m-1", pin: "1234" },
+      },
+      expect.any(Object),
+    );
+    expect(lock(el)).toBeNull();
+  });
+
+  it("ignores an apply answer after the API is replaced", async () => {
+    let resolve!: (value: {
+      adjustmentIds: string[];
+      revision: number;
+      party: { id: string; revision: number };
+    }) => void;
+    const promise = new Promise<{
+      adjustmentIds: string[];
+      revision: number;
+      party: { id: string; revision: number };
+    }>((answer) => {
+      resolve = answer;
+    });
+    const { el } = await mountApp({ applyAdjustment: vi.fn(() => promise) });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    const replacement = stubApi();
+    el.api = replacement;
+    await flush(el);
+    const before = tableOrder(el)!.party!.revision;
+    resolve({ adjustmentIds: ["old-adjustment"], revision: 99, party: { id: "v1", revision: 99 } });
+    await flush(el);
+    expect(tableOrder(el)!.party!.revision).toBe(before);
+    expect(replacement.getTabLines).not.toHaveBeenCalled();
+    expect(replacement.applyAdjustment).not.toHaveBeenCalled();
+  });
+});
+
+describe("table adjustment confirmation observations", () => {
+  it.each(["wo-4", "wo-check"])(
+    "refreshing %s does not replace the previewed bill observation",
+    async (changedBill) => {
+      let version = 0;
+      const listDrafts = vi.fn(async (partyId: string) => {
+        const snapshot = await drafts.listDrafts(partyId);
+        return {
+          ...snapshot,
+          billEdits: snapshot.billEdits.map((edit) =>
+            edit.billId === changedBill ? { ...edit, editorVersion: version } : edit,
+          ),
+        };
+      });
+      const { el } = await mountApp({ listDrafts });
+      const order = await openMesa4(el);
+      await previewComp(el, order);
+      const calls = listDrafts.mock.calls.length;
+      version = 1;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(calls);
+      await flush(el);
+      await press(el, inDialog(el, "[data-adjust-confirm]"));
+      if (changedBill === "wo-4") {
+        expect(api.applyAdjustment).not.toHaveBeenCalled();
+        expect(bottomMessage(el)).toBe(codeMessage("draft.out_of_date"));
+        expect(drafts.saveDraft).not.toHaveBeenCalled();
+      } else {
+        expect(api.applyAdjustment).toHaveBeenCalledWith(
+          "wo-4",
+          { ...ask, submissionId: expect.any(String) },
+          expect.any(Object),
+        );
+        expect(dialog(el)).toBeNull();
+      }
+    },
+  );
+});
+
+describe("table adjustment reason-read identity", () => {
+  it("drops a failed reasons read after the API is replaced", async () => {
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<AdjustmentReason[]>((_resolve, refuse) => {
+      reject = refuse;
+    });
+    const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => promise) });
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    const replacement = stubApi();
+    el.api = replacement;
+    await flush(el);
+    expect(banner(el)).toBeNull();
+    reject(new TypeError("Old server offline"));
+    await flush(el);
+    expect(banner(el)).toBeNull();
+    expect(dialog(el)).toBeNull();
+    expect(replacement.listAdjustmentReasons).not.toHaveBeenCalled();
   });
 });

@@ -4876,6 +4876,7 @@ describe("till-app: the order's groups", () => {
         submissionId: expect.any(String),
         expectedPartyRevision: 3,
         draftRevision: 1,
+        expectedEdit: { billId: "wo-4", editorVersion: 1, draftId: "draft-1", draftRevision: 1 },
         groups: [
           { release: "fire", lineIds: [expect.any(String)] },
           { release: "hold", lineIds: [expect.any(String)] },
@@ -6325,11 +6326,11 @@ describe("till-app: the order's groups", () => {
 
 describe("till-app: submitting the draft", () => {
   const serviceCourses = [
-    { id: "drinks", name: "Drinks", displayOrder: 0 },
-    { id: "cold", name: "Cold starters", displayOrder: 1 },
-    { id: "warm", name: "Warm starters", displayOrder: 2 },
-    { id: "mains", name: "Mains", displayOrder: 3 },
-    { id: "desserts", name: "Desserts", displayOrder: 4 },
+    { id: "drinks", name: "Drinks", displayOrder: 0, heldUntilFired: true },
+    { id: "cold", name: "Cold starters", displayOrder: 1, heldUntilFired: true },
+    { id: "warm", name: "Warm starters", displayOrder: 2, heldUntilFired: true },
+    { id: "mains", name: "Mains", displayOrder: 3, heldUntilFired: true },
+    { id: "desserts", name: "Desserts", displayOrder: 4, heldUntilFired: true },
   ];
   const dish = (id: string, name: string, courseId: string): TillProduct => ({
     id,
@@ -6394,6 +6395,20 @@ describe("till-app: submitting the draft", () => {
   const withCourses = () => ({
     getTill: vi.fn().mockResolvedValue({ ...till, courses: serviceCourses }),
   });
+  const firstOrderHistory = () => ({
+    readCurrentOrders: vi
+      .fn()
+      .mockRejectedValue({ code: "server.internal" })
+      .mockResolvedValueOnce({
+        revision: 3,
+        hasGroups: false,
+        nextDisplayNumber: 1,
+        retainedCourses: [],
+        reminder: null,
+        groups: [],
+        ungrouped: [],
+      }),
+  });
 
   const draftOf = (order: TillTableOrderScreen) =>
     order.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
@@ -6424,7 +6439,7 @@ describe("till-app: submitting the draft", () => {
 
   it("files the spec's five groups from one draft, then returns to the floor saying what it did", async () => {
     const server = groupsServer();
-    const { el } = await mountApp({ ...withCourses(), ...server });
+    const { el } = await mountApp({ ...withCourses(), ...server, ...firstOrderHistory() });
     const order = await openMesa(el);
     await ring(el, order, beer, salad, croquetas, steak, flan);
 
@@ -6532,6 +6547,7 @@ describe("till-app: submitting the draft", () => {
     it("keeps the rest of a first order a first order, with its course choice and its count, on its recorded bill, though the party now has a group", async () => {
       const { el } = await mountApp(
         onRecordedBill({
+          ...firstOrderHistory(),
           submitDraft: vi.fn(async (...args: SubmitArgs) => {
             vi.mocked(api.listGroups).mockResolvedValue({
               revision: 4,
@@ -6681,7 +6697,7 @@ describe("till-app: submitting the draft", () => {
 
   it("does not count a draft added to a held group as a new group", async () => {
     const server = groupsServer();
-    const { el } = await mountApp({ ...withCourses(), ...server });
+    const { el } = await mountApp({ ...withCourses(), ...server, ...firstOrderHistory() });
     let order = await openMesa(el);
     await ring(el, order, steak);
     await act(el, order, "send-all");
@@ -6697,6 +6713,7 @@ describe("till-app: submitting the draft", () => {
       submissionId: expect.any(String),
       expectedPartyRevision: 4,
       draftRevision: expect.any(Number),
+      expectedEdit: { billId: "wo-4", editorVersion: 3, draftId: "draft-3", draftRevision: 1 },
       joinGroupId: "g1",
       groups: [{ release: "hold", lineIds: [expect.any(String)] }],
     });
@@ -6965,8 +6982,6 @@ describe("till-app: a party's kitchen tickets that have not printed", () => {
   });
 });
 
-// The shared stub has no `readCurrentOrders`, so every other suite here sees the read fail and the
-// groups fall back to this bill's lines.
 describe("till-app: Current orders", () => {
   const noCurrentOrders = () => ({
     readCurrentOrders: vi.fn().mockResolvedValue({

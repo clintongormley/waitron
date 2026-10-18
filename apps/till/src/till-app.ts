@@ -866,6 +866,7 @@ interface CancellingItem {
 
 interface Adjusting {
   id: number;
+  bill?: BillComposition;
   /** The table's open bill, or the stored order in the counter's basket. */
   surface: "table" | "counter";
   orderId: string;
@@ -11338,8 +11339,12 @@ export class TillApp extends LitElement {
       this.#cancelItemRead !== undefined
     )
       return;
+    const partyBill = surface === "table" && this.orderParty !== null;
+    const bill = partyBill ? this.#billComposition([orderId]) : null;
+    if (partyBill && bill === null) return;
     const session = this.#operatorSession;
     const opened = {
+      ...(bill === null ? {} : { bill }),
       surface,
       orderId,
       revision: surface === "counter" ? this.#store.revision : this.tabRevision,
@@ -11353,13 +11358,18 @@ export class TillApp extends LitElement {
     try {
       reasons = await this.api.listAdjustmentReasons();
     } catch {
-      if (session === this.#operatorSession) this.errorKey = "adjust.reasons_error";
+      if (
+        session === this.#operatorSession &&
+        (bill === null || this.#billCompositionCurrent(bill))
+      )
+        this.errorKey = "adjust.reasons_error";
       return;
     } finally {
       this.#adjustOpening = false;
     }
     if (
       session !== this.#operatorSession ||
+      (bill !== null && !this.#billCompositionUnchanged(bill)) ||
       this.#hasLeftAdjusted(opened) ||
       (surface === "counter" && !this.#counterStillAdjustable(opened))
     )
@@ -11503,6 +11513,7 @@ export class TillApp extends LitElement {
 
   #adjustAsk(open: Adjusting, choice: AdjustmentChoice): AdjustmentAsk {
     return {
+      ...(open.bill === undefined ? {} : { expectedEdit: open.bill.expectedEdits[0]! }),
       expectedRevision: open.revision,
       lineId: open.target.lineId,
       ...choice,
@@ -11520,21 +11531,36 @@ export class TillApp extends LitElement {
     };
   }
 
-  /** The dialog as it is now, when it is still the one `id` names. */
   #adjustingNow(id: number): Adjusting | null {
-    return this.adjusting?.id === id ? this.adjusting : null;
+    const open = this.adjusting;
+    if (open?.id !== id) return null;
+    if (open.bill !== undefined && !this.#billCompositionCurrent(open.bill)) {
+      this.#closeAdjust();
+      return null;
+    }
+    return open;
+  }
+
+  #adjustmentReady(open: Adjusting): boolean {
+    if (this.#adjustingNow(open.id) === null) return false;
+    if (open.bill === undefined || this.#billCompositionUnchanged(open.bill)) return true;
+    this.#closeApprovers();
+    this.adjusting = { ...open, busy: false, refusal: "draft.out_of_date", preview: null };
+    return false;
   }
 
   async #onAdjustPreview(event: Event): Promise<void> {
     const choice = (event as CustomEvent<AdjustmentChoice>).detail;
-    // The dialog's events come only while it is open. A press while a request is out is dropped.
-    const open = this.adjusting!;
-    if (open.busy) return;
+    const open = this.adjusting;
+    if (open === null || open.busy || !this.#adjustmentReady(open)) return;
     this.adjusting = { ...open, choice, refusal: null, busy: true };
     try {
       let preview: AdjustmentPreview;
       if (open.source?.discard === undefined) {
-        preview = await this.api.previewAdjustment(open.orderId, this.#adjustAsk(open, choice));
+        preview = await (open.bill?.api ?? this.api).previewAdjustment(
+          open.orderId,
+          this.#adjustAsk(open, choice),
+        );
       } else {
         const previews: AdjustmentPreview[] = [];
         for (const lineId of open.source.discard) {
@@ -11567,10 +11593,9 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** Confirmed: applied at once, or first the approver's PIN when the preview asked for it. */
   async #onAdjustConfirm(): Promise<void> {
-    const open = this.adjusting!;
-    if (open.busy) return;
+    const open = this.adjusting;
+    if (open === null || open.busy || !this.#adjustmentReady(open)) return;
     const role = open.preview!.needsApproval;
     if (role === null) {
       await this.#applyAdjustment(open);
@@ -11578,7 +11603,7 @@ export class TillApp extends LitElement {
     }
     this.adjusting = { ...open, refusal: null, busy: true };
     try {
-      const approvers = await this.api.listAdjustmentApprovers(role);
+      const approvers = await (open.bill?.api ?? this.api).listAdjustmentApprovers(role);
       const now = this.#adjustingNow(open.id);
       if (now === null) return;
       this.adjusting = { ...now, busy: false };
@@ -11589,30 +11614,16 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** The approver's PIN leaves in the request and is never kept. */
   async #onAdjustApproverConfirm(event: Event): Promise<void> {
     event.stopPropagation();
     const { personId, pin } = (event as CustomEvent<{ personId: string; pin: string }>).detail;
-    // The PIN prompt is drawn only over an open dialog.
-    const open = this.adjusting!;
-    if (open.busy) return;
+    const open = this.adjusting;
+    if (open === null || open.busy || !this.#adjustmentReady(open)) return;
     this.adjustApproverError = null;
     await this.#applyAdjustment(open, { personId, pin });
   }
 
-  /**
-   * A fresh submission id for each confirmation, sent again unchanged only while a request gets no
-   * answer (plan D8). Applied, the dialog closes if still open, the party's new revision is noted
-   * ({@link #noteBillParty}) and, unless the waiter has left the order, it is read again
-   * ({@link #rereadAdjusted}). With no answer at all while the dialog is open, it closes, the order
-   * is read again too, and unless the waiter has left the order by then the message says the change
-   * may have been made, and when that read failed or its answer was dropped, to hold and retrieve
-   * the order to check; an order found gone is said to be gone, and nothing more. Once the dialog
-   * is gone, no answer on a table's bill only reads the floor again and takes the party from it
-   * ({@link #retakePartyFromFloor}) while the operator session that sent it lasts, and a refusal
-   * changes nothing. On the counter nothing is sent once the basket no longer holds the order as
-   * the dialog opened on it: the dialog closes and says so.
-   */
+  // Retries retain the original command, including its bill observation and submission ID.
   async #applyAdjustment(
     open: Adjusting,
     approver?: { personId: string; pin: string },
@@ -11630,6 +11641,7 @@ export class TillApp extends LitElement {
       await this.#applySourceCancellation(open, approver);
       return;
     }
+    if (!this.#adjustmentReady(open)) return;
     if (open.surface === "counter" && !this.#counterStillAdjustable(open)) {
       this.#closeAdjust();
       this.errorKey = "adjust.basket_changed";
@@ -11643,12 +11655,17 @@ export class TillApp extends LitElement {
     this.adjusting = { ...open, refusal: null, busy: true };
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    const api = open.bill?.api ?? this.api;
+    const live = () =>
+      session === this.#operatorSession &&
+      (open.bill === undefined || this.#billCompositionCurrent(open.bill));
     try {
       const answer = await this.#resend(
-        (signal) => this.api.applyAdjustment(open.orderId, command, { signal }),
+        (signal) => api.applyAdjustment(open.orderId, command, { signal }),
         limit.signal,
-        () => session === this.#operatorSession,
+        live,
       );
+      if (!live()) return;
       this.#noteBillParty(answer.party);
       if (this.#adjustingNow(open.id) !== null) {
         this.shadowRoot!.querySelector<TillAdjustmentDialog>(
@@ -11660,6 +11677,7 @@ export class TillApp extends LitElement {
       if (this.#hasLeftAdjusted(open)) return;
       await this.#rereadAdjusted(open);
     } catch (error) {
+      if (!live()) return;
       if (this.#adjustingNow(open.id) === null) {
         if (
           open.surface === "table" &&
@@ -11672,6 +11690,7 @@ export class TillApp extends LitElement {
       await this.#onAdjustRefused(error, approver === undefined ? "apply" : "approved");
     } finally {
       limit.done();
+      if (open.bill !== undefined && live()) await this.#refreshBillDraft();
     }
   }
 
@@ -11830,6 +11849,7 @@ export class TillApp extends LitElement {
       !this.#hasLeftAdjusted(open)
     )
       await this.#rereadAdjusted(open);
+    if (open.bill !== undefined && DRAFT_REFUSALS.has(refusal)) await this.#refreshBillDraft();
   }
 
   /**
