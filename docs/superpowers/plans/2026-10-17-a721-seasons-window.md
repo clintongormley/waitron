@@ -1,5 +1,7 @@
 # A721 — a Seasons window edited in its table, and a stored colour for each season — Implementation Plan
 
+> 2026-10-18, A788: `hours.clock_change_pending` is retired; a clash with a waiting start is refused `hours.clock_change_conflict` — see `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as

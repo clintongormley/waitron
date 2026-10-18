@@ -1,5 +1,7 @@
 # A495: change the business-day start without regrouping history
 
+> 2026-10-18, A788: dated scheduling, Replace, Cancel and `hours.clock_change_pending` are replaced: a new start takes effect at the next changeover — see `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`.
+
 You can schedule a new business-day start for a future date. Reports use the start belonging to each date, rather than applying today's setting to every sale. The preceding day becomes shorter or longer once; existing historical windows and recorded closes stay unchanged.
 
 **Planning authority:** the owner authorized unattended design defaults on 2026-10-11. The choices below are the planner's defaults, not separately approved owner decisions. Implementation stays inline with the driver. This is fiscal-adjacent; the owner must approve landing. This document does not authorize a merge.

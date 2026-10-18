@@ -1,8 +1,8 @@
 # A788: the business day's start changes at the next changeover
 
-**Status:** design, answered by the owner on 2026-10-18 (all four questions answered A; section 9);
-build planned in `docs/superpowers/plans/2026-10-18-a788-business-day-next-changeover.md`. No product
-code is changed by this document.
+**Status:** built on branch `feat/a788-business-day-next-changeover` (2026-10-18), to the plan
+`docs/superpowers/plans/2026-10-18-a788-business-day-next-changeover.md`; answered by the owner on
+2026-10-18 (all four questions answered A; section 9). No product code is changed by this document.
 
 **Inspected base:** `ee59f461c` (main, 2026-10-18). Every `file:line` below is at that commit.
 "Probe" means a script or a temporary test that was run on 2026-10-18 on Node v26.11.1 against

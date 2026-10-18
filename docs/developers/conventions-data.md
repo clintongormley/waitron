@@ -657,8 +657,8 @@ season are refused `season.invalid` naming the `field`; an add, a move or a dele
 department's end offsets and refuses a clash with `season.invalid`, reason `end_offset`. Every write
 must send `expectedClockRevision`; a stale one refuses an add, a move or a delete with
 `hours.clock_changed`, but not a rename. An unknown or another venue's `seasonId` is refused
-`season.not_found`, and while a day-cutover change is pending an add, a move or a delete is refused
-`hours.clock_change_pending`.
+`season.not_found`, and while a day-cutover change was pending an add, a move or a delete was refused
+`hours.clock_change_pending` (retired 2026-10-18, A788: see A721 below).
 
 **2026-10-17, A721.** `saveSeasons` (`packages/venue-service/src/seasons.ts`), behind
 `PUT …/seasons` (`routes.ts`), replaced `addSeason`, `saveSeason` and `deleteSeason` and their three
@@ -673,8 +673,12 @@ its place in the request, as `saveSeasonWeeks`' do: `season.invalid` with `field
 another season holds), `delete` (reason `last`), or `seasons` (reason `end_offset`). Every entry is
 checked before the clock: a call that only renames or recolours skips the clock check, and one with
 an add, a delete or a moved start is refused `hours.clock_changed` on a stale
-`expectedClockRevision` and `hours.clock_change_pending` while a day-cutover change is pending
-(`assertBusinessDayScheduleWrite`). It is one transaction. Changed names and starts are written in two passes, first to temporary values no real season can
+`expectedClockRevision` (`assertBusinessDayScheduleWrite`). Since 2026-10-18 (A788) such a call is
+not refused because a business-day start change is waiting: after writing, it checks the venue's
+hours as written against each waiting start and refuses `hours.clock_change_conflict` on a clash
+(`assertWaitingChangeFits`, `packages/venue-service/src/business-day-schedule.ts`); case "refuses
+adding a season while a stored range clashes, since the new season copies it, and adds one when
+none does" in `business-day-schedule.test.ts`. It is one transaction. Changed names and starts are written in two passes, first to temporary values no real season can
 hold, so a swap of two names or two starts never meets the unique indexes; ids are kept, so each
 season's weeks stay with it. A new season copies the weeks of the season that held its start
 before the call, read before any delete. It answers the venue's seasons by start.
@@ -1202,9 +1206,37 @@ in the sweep below are retired. The booking writer remains; the account below re
 - **`locations.day_cutover`** keeps the initial business-day start, written by
   `normalizeDayCutover` during provisioning. Dated starts live in `location_day_cutover_changes`;
   `readLocationClock` returns both, and the shared resolver selects each date's boundary. The
-  general venue-details PATCH refuses a changed start. The dated writer stores `HH:MM:00` and
-  validates its effective date, revision, retained history and authored schedules inside the
-  write transaction. Unrelated venue edits preserve the baseline spelling. The editor shows an
+  general venue-details PATCH refuses a changed start. Since 2026-10-18 (A788) a new start is not
+  scheduled for a chosen date: `writeBusinessDayStart` (`apps/server/src/business-day-start.ts`)
+  takes it from the next changeover, or from the one after when the new time has already passed
+  today (`planBusinessDayStart`, `apps/server/src/business-day-changeover.ts`; the cases under "a
+  Save takes the next changeover" and "the preview chooses the changeover itself" in
+  `apps/server/src/business-day-start.test.ts`). The PUT still carries the date its preview showed,
+  and one that no longer matches is refused `venue.business_day_invalid`, reason
+  `changeover_passed` ("replaces a waiting change up to its changeover, and after it the next Save
+  takes the following one"). A waiting change that already ends today stays and the new one follows
+  it; any other waiting change is removed, and saving the start in force removes it (cases (a)–(d)
+  under "while tonight's 21:00 waits and the 05:00 changeover has passed", and "Example 5: 05:00
+  undoes tonight's 03:00"). There is no cancel route ("answers a removed cancel route as it answers
+  any unknown route, writing nothing"). The writer stores `HH:MM:00` and checks the revision,
+  retained history and authored schedules inside the write transaction. Unrelated venue edits
+  preserve the baseline spelling.
+- **Hours writes and the business-day start (A788, 2026-10-18).** A write that changes opening
+  hours checks its weekly ranges against the start in force (the cases under "undated hours are
+  checked against the start in force" in `packages/venue-service/src/business-day-schedule.test.ts`)
+  and a one-off date's against that date's own start ("accepts a one-off menu day under its own
+  07:00 start"), then, after
+  writing, against each start change still waiting, and refuses `hours.clock_change_conflict` (409)
+  on a clash, with the waiting `dayCutover`, its `startsAt`, the venue's `timeZone` and the clashing
+  ranges (`assertWaitingChangeFits`; the cases under "a waiting change checks the hours written
+  while it waits"). It checks the venue's hours as written, so a clash in another department refuses
+  an unrelated write ("refuses a clean season week while another department holds a clash, naming
+  that department"). A period rename is not checked ("accepts a period rename beside a stored range
+  that clashes with the waiting start"), but a special day's save is checked even when it changes
+  only the name (`saveSpecialDay`, `packages/venue-service/src/special-days.ts`). The Calendar cuts a weekly range at a past
+  day's own changeover when the range misfits that day's start but fits the start in force
+  (`cutToOwnDay`, `packages/venue-service/src/calendar-cut.ts`; "a past day's range that misfits its
+  own start" in `opening-hours-calendar.test.ts`). The editor shows an
   unreadable clock but provides no repair path. The request cases are in
   `apps/server/src/business-day-start.test.ts`; historical reports and frozen close/fiscal rows
   are compared in `apps/server/src/business-day-history.test.ts`.

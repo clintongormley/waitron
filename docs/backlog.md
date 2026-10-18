@@ -1456,11 +1456,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Left open by A759.
 
 - **Loose ends left by A755 (#1809).**
-  - The Business day card's actions with a scheduled change: queued as A788 (owner, 2026-10-17: no
-    scheduling; a change applies at the next changeover).
-    [Design](superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md); the owner
-    answered its four questions on 2026-10-18 (all A), and the build is planned in
-    [the plan](superpowers/plans/2026-10-18-a788-business-day-next-changeover.md).
   - The Venue card says nothing about a time zone locked by a past business-day change. The server
     gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
     `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
@@ -1475,6 +1470,43 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
     card's values shown and nothing editable.
 
   [Mockups](backlog/mockups/a755-venue-settings/)
+
+- **Loose ends left by A788 (the business-day start changes at the next changeover).**
+  [Detail](backlog/service-periods.md#loose-ends-left-by-a788)
+  - A862. Two Calendar reads draw a past day's range uncut where the Calendar cuts it: the
+    special-day painter's season days (`readSeasonDays`,
+    `packages/venue-service/src/opening-hours-calendar.ts`, passes no cut) and the named days'
+    closed flag (`packages/venue-service/src/named-days.ts`).
+  - A863. A clash sentence names a range by its period, zone or department and its times only
+    (`clockChangeConflictText`, `packages/venue-service/src/dashboard/clock-change-conflict.ts`), so
+    a range in another department or on another weekday reads as if it were the one being edited.
+  - A864. The Business-day start dialog's clash list can run to dozens of lines with no "and N
+    more": the server caps the list at 20 ranges but lists each once per season it is painted in.
+  - A865. The clash list's order between departments, and between one special day's dates, is not
+    fixed (reported by A788's implementers, not reproduced since).
+  - A866. A keep-open saved for tonight by a deactivated department still blocks a start change
+    (`keptOpenConflicts`, `packages/venue-service/src/business-day-schedule.ts`, reads every
+    department).
+  - A867. A day where one range crosses the new start and two others overlap lists only the
+    crossing one; the overlap appears only on the next Save. No test pins either half.
+  - A868. Renaming a special day is refused while any stored range clashes with a waiting start,
+    though renaming a period or a season is not (`saveSpecialDay`,
+    `packages/venue-service/src/special-days.ts`).
+  - A869. While a start change waits, a one-off special day dated after it, with hours that fit
+    the start it will have, is refused `special_day.invalid`: one-off dates are read under the
+    starts already in force.
+  - A870. A past one-off special day is checked for last orders over an empty day on a venue that
+    holds any start change, but over its season's ranges on a venue that holds none.
+  - A871. Branches no test pins in A788's hours writers: an unchanged week resubmitted beside a
+    stored clash (`menu-timetable.ts`), a season delete while a change waits (`seasons.ts`), and an
+    all-day range or two waiting changes in the menu-week check.
+  - A872. A preview or a Save works out the next-changeover plan at least twice
+    (`planBusinessDayStart`, then again in `clockTransitionAt`).
+  - A873. A refused Save's message in the Business-day start dialog stops "The business-day clock
+    changed. Close and reopen to review it." from appearing when the clock then changes
+    (`business-day-start-editor.ts`, the guard in `willUpdate`).
+  - A874. The Business day card re-reads at a waiting change's moment by the browser's clock; a
+    server clock behind it leaves the New start row up until the next refresh.
 
 - **Eleven `receipts.*` strings in `apps/dashboard/src/i18n/strings.ts` have no reader** — found
   while doing A755 (#1809); none had one before it either: `departments_zones`,
@@ -1568,8 +1600,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
     [Detail](backlog/service-periods.md#the-business-day-start-dialog-repeats-the-servers-conflict-counting-rule)
 
 - **Loose ends left by A506-4 (#1597).**
-  - A business-day changeover conflict reports "Invalid or overlapping range" before "Range crosses
-    the new start" (`packages/venue-service/src/business-day-schedule.ts`, season lines too).
   - A special-day line in the Business day start dialog shows its date unformatted ("2026-11-03").
   - `assertOwnPeriods` names a refused slot by its sorted position, not its position in the request
     (`packages/venue-service/src/menu-timetable.ts`; read in the code, not run).

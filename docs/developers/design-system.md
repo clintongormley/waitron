@@ -3622,7 +3622,13 @@ tab draws four cards — Business, Venue, Business day and Defaults — with
 `apps/dashboard/src/widgets/settings-card.ts`. Each card's heading is inside the card and its
 action sits in the card's header. The Venue and Defaults cards edit in place rather than in a
 modal, each on its own while the others stay in view mode; the Business card's Change legal name
-and the Business day card's change of start open dialogs. Inside each card a row puts its label
+and the Business day card's change of start open dialogs. Since 2026-10-18 (A788) the Business day
+card's one action is Change start, even while a change waits, and it shows one New start row per
+waiting change ("offers only Change start while a change waits, and opens the dialog from it" and
+"shows one New start row per waiting change after a Save while one already waits" in
+`apps/dashboard/src/screens/business-day-start-editor.test.ts`); its dialog has no date field and
+says when the change takes effect ("previews when the change takes effect and how long today's
+business day runs"). Inside each card a row puts its label
 beside its value, the label muted and the value in normal weight, and stacks them on a phone
 (`settingsRows`), as the owner's approved mock-ups draw (`docs/backlog/mockups/a755-venue-settings/`).
 
@@ -5204,7 +5210,10 @@ names a saved entry's field (`season.invalid`, field `save.<i>.<field>`) is show
 of the row the request named, wherever that row now sits, with the bottom message; binning that row
 takes both away, and a field refusal naming an entry the request did not hold says "The change could
 not be saved." A refusal that names no field is worded beside Save: the business-day start changed,
-a pending business-day change, the last season, or a period's end offset running into a season on a
+a clash with a waiting business-day start, named in one sentence by its first clashing range
+(`clockChangeConflictText`, `clock-change-conflict.ts`; the "says an end-offset clash, a changed
+business-day start, a clash with a waiting one and the last season at the bottom" cases in
+`seasons-window.test.ts`), the last season, or a period's end offset running into a season on a
 weekday or into a date, with its special day's name when the screen knows it. A Save refused with
 `season.not_found` for a season the person changed marks that row "This season no longer exists.",
 and Save stays disabled until the row is binned; binning it sends no delete.

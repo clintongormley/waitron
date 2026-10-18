@@ -1,5 +1,7 @@
 # A755: Venue settings as four cards — implementation plan
 
+> 2026-10-18, A788: the Business day card's Replace and Cancel actions and its Editable until row are gone — see `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (or
 > superpowers:executing-plans when running inline). Dispatch each task as
 > `subagent_type: "implementer"`. Steps use checkbox (`- [ ]`) syntax. The owner approved the
