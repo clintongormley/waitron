@@ -69,6 +69,11 @@ function expectReadableDisabledRow(el: WtCombobox): void {
   }
 }
 
+const MUTED_FIRST: ComboboxOption[] = [
+  { value: "", label: "Default set", muted: true },
+  { value: "terrace", label: "Terrace" },
+];
+
 const WITH_DISABLED: ComboboxOption[] = [
   { value: "pan", label: "Pan de centeno" },
   {
@@ -502,5 +507,26 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     await badge.updateComplete;
     expect(badge.checkVisibility()).toBe(true);
     await expectNoA11yViolations(host, { enable: ["target-size"] });
+  });
+
+  test("closed, showing a muted choice", async () => {
+    const el = (await mountThemed(
+      '<wt-combobox label="Floor plan" show-empty-option></wt-combobox>',
+      theme,
+    )) as WtCombobox;
+    el.options = MUTED_FIRST;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".value")!.textContent).toBe("Default set");
+    await expectNoA11yViolations(host);
+  });
+
+  test("open, with a muted first option", async () => {
+    const el = await openThemed(
+      '<wt-combobox label="Floor plan" show-empty-option value="terrace"></wt-combobox>',
+      theme,
+      MUTED_FIRST,
+    );
+    expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    await expectNoA11yViolations(host);
   });
 });
