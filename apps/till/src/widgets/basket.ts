@@ -96,6 +96,19 @@ export class TillBasket extends LitElement {
         display: block;
       }
 
+      .entry {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      .entry-body {
+        min-width: 0;
+      }
+
+      .entry-end {
+        display: flex;
+      }
+
       .line-actions,
       .bill-adjust {
         display: flex;
@@ -271,9 +284,9 @@ export class TillBasket extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
 
   /**
-   * The lines shown, by their place in {@link store}; unset shows every line. Each shown line has two
+   * The lines shown, by their place in {@link store}; unset shows every line. Each shown line has three
    * slots named by that place: `lead-<n>` replaces the line's name, and `after-<n>` sits under the
-   * line's row.
+   * line's row; `end-<n>` spans the row and its details at the trailing edge.
    */
   @property({ attribute: false }) lineIndexes?: readonly number[];
 
@@ -532,124 +545,129 @@ export class TillBasket extends LitElement {
         const listed = this.#listed(line, listing);
         const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);
         return html`
-          <div class="line">
-            <span class="name" part="name"
-              ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot
-              >${this.#nutrition(line)}${
-                line.notOffered ? notOfferedMarker() : nothing
-              }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
-                line.unavailableOnServer === true &&
-                line.blocked === undefined &&
-                line.notOffered === undefined
-                  ? html` <span class="not-offered">${t("basket.blocked.server")}</span>`
-                  : nothing
-              }</span
-            >
-            ${this.#quantityCell(line, index, sent)} ${this.#dishTotal(line, listed)}
-            <wt-button
-              class="note-toggle"
-              variant="ghost"
-              size="md"
-              data-test=${`line-note-button-${index}`}
-              aria-expanded=${this.editingLine === line}
-              aria-label=${`${t("line.note.button")} ${this.#lineName(line)}`}
-              @click=${() => this.#toggleEditor(line)}
-            >
-              ${t("line.note.button")}
-            </wt-button>
-            ${
-              sent
-                ? html`<wt-button class="remove-gap" variant="ghost" size="md" inert
-                    ><span aria-hidden="true">×</span></wt-button
-                  >`
-                : html`<wt-button
-                    class="remove"
-                    variant="ghost"
-                    size="md"
-                    aria-label=${`${t("action.remove")} ${this.#lineName(line)}`}
-                    @click=${() => this.store.removeLine(index)}
-                  >
-                    <span aria-hidden="true">×</span>
-                  </wt-button>`
-            }
-          </div>
-          ${
-            !sent && this.makeAtStations.length > 1
-              ? html`<div class="line-actions">
-                  <wt-button
-                    size="sm"
-                    variant="ghost"
-                    data-make-at=${index}
-                    @click=${() => this.dispatchEvent(new CustomEvent("open-make-at", { detail: index, bubbles: true, composed: true }))}
-                    >${this.#makeAtLabel(line)}</wt-button
-                  >
-                </div>`
-              : nothing
-          }
-          ${
-            // Each row's actions sit straight under it, so a dish's are not read as its extra's.
-            adjustable !== null && listed !== undefined
-              ? this.#lineActions(line, index, listed, sent, adjustable)
-              : nothing
-          }
-          ${
-            // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
-            // answers and never its product, so a dish whose only question is its variant gets no
-            // Edit button rather than a dialog whose save would carry nothing. The MIXED case —
-            // variants AND an offered list — still re-asks the variant and discards it; open in
-            // `docs/backlog.md`.
-            offeredListsOf(line.product).length > 0
-              ? html`<wt-button
-                  class="edit-modifiers"
-                  size="sm"
+          <div class="entry">
+            <div class="entry-body">
+              <div class="line">
+                <span class="name" part="name"
+                  ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot
+                  >${this.#nutrition(line)}${
+                    line.notOffered ? notOfferedMarker() : nothing
+                  }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
+                    line.unavailableOnServer === true &&
+                    line.blocked === undefined &&
+                    line.notOffered === undefined
+                      ? html` <span class="not-offered">${t("basket.blocked.server")}</span>`
+                      : nothing
+                  }</span
+                >
+                ${this.#quantityCell(line, index, sent)} ${this.#dishTotal(line, listed)}
+                <wt-button
+                  class="note-toggle"
                   variant="ghost"
-                  @click=${() => this.#openModifierPicker(line)}
-                  >${t("modifier.edit")}</wt-button
-                >`
-              : nothing
-          }
-          ${this.#extrasRow(line, index)} ${this.#extrasEditor(line)}
-          ${(line.extras ?? []).map(
-            // No remove control: a pick goes only with its dish. Its own allergens and diet sit
-            // beside the dish's rows, never folded into them.
-            (extra, i) => {
-              const own = this.#extraOwnNutrition(line, extra.productId);
-              const listedExtra = this.#listedExtra(listed, extra);
-              return html`
-                <div class="option">
-                  <span class="name">${extra.name}${pickQuantityBadge(extra.quantity)}</span>
-                  ${this.#extraTotal(line, extra, listedExtra)}
-                </div>
-                ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
+                  size="md"
+                  data-test=${`line-note-button-${index}`}
+                  aria-expanded=${this.editingLine === line}
+                  aria-label=${`${t("line.note.button")} ${this.#lineName(line)}`}
+                  @click=${() => this.#toggleEditor(line)}
+                >
+                  ${t("line.note.button")}
+                </wt-button>
                 ${
-                  adjustable !== null && listedExtra !== undefined
-                    ? this.#extraActions(
-                        line,
-                        extra,
-                        `${index}-${i}`,
-                        listedExtra,
-                        sent,
-                        adjustable,
-                      )
-                    : nothing
+                  sent
+                    ? html`<wt-button class="remove-gap" variant="ghost" size="md" inert
+                        ><span aria-hidden="true">×</span></wt-button
+                      >`
+                    : html`<wt-button
+                        class="remove"
+                        variant="ghost"
+                        size="md"
+                        aria-label=${`${t("action.remove")} ${this.#lineName(line)}`}
+                        @click=${() => this.store.removeLine(index)}
+                      >
+                        <span aria-hidden="true">×</span>
+                      </wt-button>`
                 }
-              `;
-            },
-          )}
-          ${(line.notOfferedExtras ?? []).map(
-            (extra) => html`
-              <div class="option">
-                <span class="name"
-                  >${extra.name}${pickQuantityBadge(extra.quantity)}${notOfferedMarker()}</span
-                >
-                <span class="option-total"
-                  >${formatMoney(extraGross(line, extra), currentLocale())}</span
-                >
               </div>
-            `,
-          )}
-          ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
-          <div class="line-after"><slot name=${`after-${index}`}></slot></div>
+              ${
+                !sent && this.makeAtStations.length > 1
+                  ? html`<div class="line-actions">
+                      <wt-button
+                        size="sm"
+                        variant="ghost"
+                        data-make-at=${index}
+                        @click=${() => this.dispatchEvent(new CustomEvent("open-make-at", { detail: index, bubbles: true, composed: true }))}
+                        >${this.#makeAtLabel(line)}</wt-button
+                      >
+                    </div>`
+                  : nothing
+              }
+              ${
+                // Each row's actions sit straight under it, so a dish's are not read as its extra's.
+                adjustable !== null && listed !== undefined
+                  ? this.#lineActions(line, index, listed, sent, adjustable)
+                  : nothing
+              }
+              ${
+                // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
+                // answers and never its product, so a dish whose only question is its variant gets no
+                // Edit button rather than a dialog whose save would carry nothing. The MIXED case —
+                // variants AND an offered list — still re-asks the variant and discards it; open in
+                // `docs/backlog.md`.
+                offeredListsOf(line.product).length > 0
+                  ? html`<wt-button
+                      class="edit-modifiers"
+                      size="sm"
+                      variant="ghost"
+                      @click=${() => this.#openModifierPicker(line)}
+                      >${t("modifier.edit")}</wt-button
+                    >`
+                  : nothing
+              }
+              ${this.#extrasRow(line, index)} ${this.#extrasEditor(line)}
+              ${(line.extras ?? []).map(
+                // No remove control: a pick goes only with its dish. Its own allergens and diet sit
+                // beside the dish's rows, never folded into them.
+                (extra, i) => {
+                  const own = this.#extraOwnNutrition(line, extra.productId);
+                  const listedExtra = this.#listedExtra(listed, extra);
+                  return html`
+                    <div class="option">
+                      <span class="name">${extra.name}${pickQuantityBadge(extra.quantity)}</span>
+                      ${this.#extraTotal(line, extra, listedExtra)}
+                    </div>
+                    ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
+                    ${
+                      adjustable !== null && listedExtra !== undefined
+                        ? this.#extraActions(
+                            line,
+                            extra,
+                            `${index}-${i}`,
+                            listedExtra,
+                            sent,
+                            adjustable,
+                          )
+                        : nothing
+                    }
+                  `;
+                },
+              )}
+              ${(line.notOfferedExtras ?? []).map(
+                (extra) => html`
+                  <div class="option">
+                    <span class="name"
+                      >${extra.name}${pickQuantityBadge(extra.quantity)}${notOfferedMarker()}</span
+                    >
+                    <span class="option-total"
+                      >${formatMoney(extraGross(line, extra), currentLocale())}</span
+                    >
+                  </div>
+                `,
+              )}
+              ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
+              <div class="line-after"><slot name=${`after-${index}`}></slot></div>
+            </div>
+            <slot class="entry-end" name=${`end-${index}`}></slot>
+          </div>
         `;
       })}
       ${adjustable === null ? nothing : this.#billAdjust()}

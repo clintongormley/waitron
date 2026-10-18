@@ -864,6 +864,24 @@ export class TillTableOrderScreen extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      .draft-unit-chevron {
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        align-self: stretch;
+        border: 0;
+        border-inline-start: 1px solid var(--wt-color-border);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        font: inherit;
+        font-size: var(--wt-font-size-xl);
+        cursor: pointer;
+      }
+
+      .draft-unit-chevron:disabled {
+        color: var(--wt-color-text-muted);
+        cursor: default;
+      }
+
       .draft-bar {
         display: flex;
         flex-direction: column;
@@ -3315,7 +3333,10 @@ export class TillTableOrderScreen extends LitElement {
   #draftLine(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
     const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
-    const splits = soldByTheUnit(line.product) && Number(line.quantity) > 1;
+    const splits =
+      soldByTheUnit(line.product) &&
+      Number.isInteger(Number(line.quantity)) &&
+      Number(line.quantity) > 1;
     const isFlagged = flagged(line);
     if (!isFlagged) this.#kept.delete(line);
     const tools = [
@@ -3333,26 +3354,6 @@ export class TillTableOrderScreen extends LitElement {
             ),
           ]),
       ...(this.stations.length > 1 ? [this.#makeAtPicker(store, line, index, name)] : []),
-      ...(splits
-        ? [
-            html`<wt-button
-              variant="secondary"
-              data-split-draft-line=${index}
-              aria-label=${`${t("table.split_group_line")} · ${name}`}
-              ?disabled=${store.sending || store.editsLocked || this.groupCommandBusy}
-              @click=${() => {
-                if (line.source === undefined) store.splitLine(index);
-                else
-                  this.#dispatch("split-draft-source", {
-                    store,
-                    line,
-                  } satisfies SplitDraftSourceDetail);
-              }}
-            >
-              ${t("table.split_group_line")}
-            </wt-button>`,
-          ]
-        : []),
       ...(isFlagged ? [this.#flagChoice(store, line, index)] : []),
     ];
     if (store.editsLocked)
@@ -3376,10 +3377,43 @@ export class TillTableOrderScreen extends LitElement {
         >
       </button>
       ${
+        splits
+          ? html`<button
+              type="button"
+              slot=${`end-${index}`}
+              class="draft-unit-chevron"
+              data-split-draft-line=${index}
+              aria-label=${`${t("table.split_group_line")} · ${name}`}
+              ?disabled=${store.sending || store.editsLocked || this.groupCommandBusy}
+              @click=${() => this.#splitDraftLine(store, line)}
+            >
+              <span aria-hidden="true">›</span>
+            </button>`
+          : nothing
+      }
+      ${
         tools.length === 0
           ? nothing
           : html`<span slot=${`after-${index}`} class="draft-line-tools">${tools}</span>`
       }`;
+  }
+
+  #splitDraftLine(store: WorkingOrderStore, line: OrderLine): void {
+    const index = store.lines.indexOf(line);
+    if (
+      !this.isConnected ||
+      store !== this.#draftStore ||
+      index < 0 ||
+      store.sending ||
+      store.editsLocked ||
+      this.groupCommandBusy ||
+      !soldByTheUnit(line.product) ||
+      !Number.isInteger(Number(line.quantity)) ||
+      Number(line.quantity) <= 1
+    )
+      return;
+    if (line.source === undefined) store.splitLine(index);
+    else this.#dispatch("split-draft-source", { store, line } satisfies SplitDraftSourceDetail);
   }
 
   /** A line that cannot be sold now asks whether it goes or stays; kept, it says it stays. Its

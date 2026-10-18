@@ -4045,6 +4045,23 @@ describe("till-app: a table open whose last wait outlives the session", () => {
 });
 
 describe("till-app: another device's save arriving while the draft is shown", () => {
+  // Pre-save reads keep their opening snapshot so the conflict is answered by Save.
+  async function mountBeforeSave() {
+    const read = server.listDrafts.getMockImplementation()!;
+    const save = server.saveDraft.getMockImplementation()!;
+    const opening = await read("v1");
+    let saving = false;
+    return mountApp({
+      listDrafts: vi.fn((...args: Parameters<typeof read>) =>
+        saving ? read(...args) : Promise.resolve(structuredClone(opening)),
+      ),
+      saveDraft: vi.fn((...args: Parameters<typeof save>) => {
+        saving = true;
+        return save(...args);
+      }),
+    });
+  }
+
   const steakLine = {
     slot: 0,
     joinGroupId: null,
@@ -4066,14 +4083,16 @@ describe("till-app: another device's save arriving while the draft is shown", ()
       .shadowRoot!.querySelector<HTMLElement>("[data-last-added]")
       ?.textContent?.replace(/\s+/g, " ")
       .trim();
-  const ticks = (el: TillApp) =>
-    [...tableOrder(el)!.shadowRoot!.querySelectorAll("[data-draft-select]")].map((tick) =>
-      tick.textContent!.replace(/[☑☐]/g, "").replace(/\s+/g, " ").trim(),
-    );
+  const displayedLines = (el: TillApp) =>
+    [
+      ...tableOrder(el)!.shadowRoot!.querySelectorAll(
+        "[data-draft-select], span.draft-line-name[slot]",
+      ),
+    ].map((line) => line.textContent!.replace(/[☑☐]/g, "").replace(/\s+/g, " ").trim());
   const saveWait = () => new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
 
   it("on Review, shows the server's draft there, says so, and sends nothing again", async () => {
-    const { el } = await mountApp();
+    const { el } = await mountBeforeSave();
     await openMesa(el);
     server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [steakLine] });
     await tap(el, "Beer");
@@ -4085,14 +4104,15 @@ describe("till-app: another device's save arriving while the draft is shown", ()
 
     expect(banner(el)!.textContent).toContain(t("table.draft_changed_elsewhere"));
     expect(visible(el, "[data-draft-pane]")).toBe(true);
-    expect(ticks(el)).toEqual(["Steak ×2"]);
+    expect(displayedLines(el)).toEqual(["Steak ×2"]);
+    expect(tableOrder(el)!.shadowRoot!.querySelectorAll("[data-draft-select]")).toHaveLength(0);
     expect(bar(el)).toBeUndefined();
     expect(api.saveDraft).toHaveBeenCalledOnce();
     expect(api.submitDraft).not.toHaveBeenCalled();
   });
 
   it("keeps the bar on the dish tapped when the server's draft still orders it", async () => {
-    const { el } = await mountApp();
+    const { el } = await mountBeforeSave();
     await openMesa(el);
     server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [steakLine] });
     await tap(el, "Steak");
@@ -7123,7 +7143,9 @@ describe("recalled draft source splitting", () => {
     const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
     if (review?.checkVisibility()) await userEvent.click(review);
     await order.updateComplete;
-    const button = order.shadowRoot!.querySelector<HTMLElement>("[data-split-draft-line='0']")!;
+    const button = order.shadowRoot!.querySelector<HTMLButtonElement>(
+      "[data-split-draft-line='0']",
+    )!;
     expect(button).not.toBeNull();
     return { ...mounted, order, button };
   }
@@ -7235,7 +7257,7 @@ describe("recalled draft source splitting", () => {
     await flush(el);
     expect(split).toHaveBeenCalledOnce();
     expect(line.note).toBe("Recorded note");
-    expect(button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(true);
+    expect(button.disabled).toBe(true);
     answer();
     await flush(el, 6);
     expect(rows(el)).toEqual(["Recorded steak ×1", "Recorded steak ×1"]);
@@ -7314,10 +7336,10 @@ describe("recalled draft source splitting", () => {
     expect(banner(el)?.textContent).toBe(messageOnNewTable);
     expect(tableOrder(el)?.party?.revision).toBe(9);
     expect(draft(el).lines[0]!.workingOrderLineId).toBe("source-7");
-    const next = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>(
+    const next = tableOrder(el)!.shadowRoot!.querySelector<HTMLButtonElement>(
       "[data-split-draft-line='0']",
     )!;
-    expect(next.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(false);
+    expect(next.disabled).toBe(false);
     emit(tableOrder(el)!, "split-draft-source", old);
     await flush(el);
     expect(split).toHaveBeenCalledOnce();
@@ -8313,11 +8335,9 @@ describe("A773 retained bill candidates in the app", () => {
     expect(candidate(el)!.querySelector("[data-candidate-apply]")!.hasAttribute("disabled")).toBe(
       true,
     );
-    const selection =
-      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-draft-select]")!;
-    selection.click();
+    expect(tableOrder(el)!.shadowRoot!.querySelectorAll("[data-draft-select]")).toHaveLength(0);
     await flush(el);
-    expect(selection.getAttribute("aria-pressed")).toBe("false");
+    expect(tableOrder(el)!.shadowRoot!.querySelectorAll("[data-draft-select]")).toHaveLength(0);
     expect(api.saveDraft).toHaveBeenCalledOnce();
   });
 

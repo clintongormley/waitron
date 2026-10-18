@@ -2221,7 +2221,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   **A773-1**, the table screen's Sent/New order panel, remains unlanded. On its feature branch,
   you can select an unsent group and use Move to to keep its saved placement or choose another
   group. Fire now, new groups and joins have separate headings; only mixed groups repeat course
-  headings. This is an intermediate panel step: direct Send all/selected Fire, removal of the old
+  headings. A whole-unit quantity opens into individual lines from a full-height trailing chevron;
+  it looks up the current row and refuses a click while the screen has another draft or editing is locked.
+  Recalled quantities still split through the server command, preserving their priced sources.
+  A header for folding split lines back remains open. This is an intermediate panel step:
+  direct Send all/selected Fire, removal of the old
   destination/preview controls, the Sent panel and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and
