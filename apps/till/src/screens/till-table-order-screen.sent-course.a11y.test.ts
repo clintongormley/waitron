@@ -65,6 +65,7 @@ describe.each(["en", "es"] as const)("Sent course in %s", (locale) => {
           "[data-drawer] [data-line-course], [data-drawer] [data-line-course-static]",
         ),
       ).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-group-up], [data-group-down]")).toBeNull();
       await expectNoA11yViolations(host);
       await page.screenshot({
         element: el,

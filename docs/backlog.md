@@ -2338,6 +2338,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   before using its old controls; Move retains the edit version read when its picker opened.
   The primary progress and clock checks now use Sent, including ready age, the pass's recorded
   en-route fact in the dish window and stopping the age clocks when Sent folds.
+  Reorder held groups through Sent’s More menu; the old drawer’s ↑/↓ buttons and their unused
+  labels are removed on the feature branch. Repeated presses send one command, and the controls
+  wait while that command is unanswered on till and handheld layouts.
   The duplicate course picker and static course labels are removed from the remaining drawer.
   Sent retains the recorded course. Recalled dishes edit their course in New order, staging the
   choice until Save; focused checks retain the source identity and quantity through submission.

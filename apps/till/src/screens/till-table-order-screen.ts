@@ -4541,13 +4541,6 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /**
-   * Current orders: every group of the party in position order, then the rows in no group. A held
-   * group can be moved among the held ones, have its rows moved or split, and be fired where
-   * `fireControl` gives the waiter the release. With {@link currentOrders} read, each group lists the
-   * party's rows on every bill, with what is known of each, and released rows can be marked served;
-   * without it, a group lists only this bill's lines and the server's summary.
-   */
   #groupsSection(): TemplateResult | typeof nothing {
     const ungrouped = this.currentOrders?.ungrouped ?? [];
     if (this.groups.length === 0 && ungrouped.length === 0 && !this.currentOrdersUnread)
@@ -4578,11 +4571,9 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #groupRow(group: OrderGroup): TemplateResult {
-    const held = this.#heldInOrder;
     const isHeld = group.state === "held";
     const name = groupName(group);
     const label = (key: StringKey) => `${t(key)} · ${name}`;
-    const place = held.indexOf(group);
     const shown = this.currentOrders?.groups.find((candidate) => candidate.id === group.id);
     const current = this.currentOrders === null ? null : (shown?.rows ?? []);
     const fires = this.fireControl === "waiter";
@@ -4605,24 +4596,6 @@ export class TillTableOrderScreen extends LitElement {
       ${
         isHeld
           ? html`<div class="group-actions">
-              <wt-button
-                variant="secondary"
-                data-group-up=${group.id}
-                aria-label=${label("table.group_up")}
-                ?disabled=${this.groupCommandBusy || place === 0}
-                @click=${() => this.#reorderHeld(held, place, place - 1)}
-              >
-                <span aria-hidden="true">↑</span>
-              </wt-button>
-              <wt-button
-                variant="secondary"
-                data-group-down=${group.id}
-                aria-label=${label("table.group_down")}
-                ?disabled=${this.groupCommandBusy || place === held.length - 1}
-                @click=${() => this.#reorderHeld(held, place, place + 1)}
-              >
-                <span aria-hidden="true">↓</span>
-              </wt-button>
               ${
                 fires
                   ? html`<wt-button
@@ -5055,12 +5028,6 @@ export class TillTableOrderScreen extends LitElement {
       this.billEdits.find((edit) => edit.billId === billId) ??
       (this.billEdit?.billId === billId ? this.billEdit : null);
     return edit == null ? null : [{ ...edit }];
-  }
-
-  #reorderHeld(held: OrderGroup[], from: number, to: number): void {
-    const ids = held.map((group) => group.id);
-    [ids[from], ids[to]] = [ids[to]!, ids[from]!];
-    this.#dispatch("reorder-groups", { heldGroupIds: ids } satisfies ReorderGroupsDetail);
   }
 
   #moveTo(target: MoveGroupLineDetail["target"]): void {

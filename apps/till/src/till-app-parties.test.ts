@@ -5,7 +5,7 @@ import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { page, userEvent } from "vitest/browser";
-import type { WtCombobox } from "@waitron/ui";
+import type { WtCombobox, WtRowActions } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import {
   adjustmentStubs,
@@ -19,7 +19,7 @@ import {
 } from "./widgets/test-helpers.js";
 import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, grossOf } from "@waitron/shared";
 import { currentLocale, differentPeopleText, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -398,13 +398,15 @@ const floor = (el: TillApp) =>
 const tableOrder = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen");
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
-/** The party's groups as the open order's Tab drawer lists them. */
+/** Group rows, retaining the server summary when the detailed read replaces it. */
 const heldGroupsList = (el: TillApp) =>
   [...(tableOrder(el)?.shadowRoot?.querySelectorAll<HTMLElement>("[data-group]") ?? [])].map(
     (row) => ({
       position: row.querySelector("[data-group-position]")!.textContent!.trim(),
       state: row.dataset.groupState,
-      summary: row.querySelector("[data-group-summary]")!.textContent!.trim(),
+      summary:
+        row.querySelector("[data-group-summary]")?.textContent!.trim() ??
+        tableOrder(el)!.groups.find((group) => group.id === row.dataset.group)!.summary,
       lines: [...row.querySelectorAll(".group-line-name")].map((name) =>
         name.textContent!.replace(/\s+/g, " ").trim(),
       ),
@@ -5456,6 +5458,49 @@ describe("till-app: the order's groups", () => {
           editSentLines: true,
         })),
         listGroups: vi.fn(async () => ({ revision, groups: listed() })),
+        readCurrentOrders: vi.fn(async (): Promise<CurrentOrders> => ({
+          revision,
+          hasGroups: listed().length > 0,
+          nextDisplayNumber: Math.max(0, ...groups.map((group) => group.displayNumber)) + 1,
+          retainedCourses: [],
+          reminder: null,
+          ungrouped: [],
+          groups: listed().map((group) => ({
+            ...group,
+            sentAt: at,
+            sentBy: "Ana",
+            rows: lines
+              .filter((line) => line.groupId === group.id)
+              .map((line) => ({
+                billStatus: "open",
+                netAmount: grossOf(line.unitPriceGross, line.quantity),
+                readyAt: null,
+                firedAt: line.firedAt,
+                lineId: line.id,
+                workingOrderId: "wo-4",
+                lineNo: line.lineNo,
+                courseId: line.courseId,
+                name: line.name!,
+                quantity: line.quantity,
+                unitPrecision: line.unitPrecision!,
+                servedQuantity: "0.000",
+                servedAt: line.servedAt,
+                released: group.state === "fired",
+                kitchen:
+                  line.state === null
+                    ? null
+                    : {
+                        stationId: line.stationId,
+                        movable: line.movable,
+                        state: line.state,
+                        firedAt: line.firedAt,
+                        awayAt: null,
+                      },
+                note: line.note,
+                extras: [],
+              })),
+          })),
+        })),
         fireGroup: vi.fn(
           async (_partyId: string, groupId: string, command: { expectedPartyRevision: number }) => {
             check(command);
@@ -5546,6 +5591,47 @@ describe("till-app: the order's groups", () => {
       await flush(el);
     }
 
+    async function groupMenu(el: TillApp, id: string) {
+      const order = tableOrder(el)!;
+      if (order.shadowRoot!.querySelector("[data-drawer]") !== null) {
+        await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+        await flush(el);
+      }
+      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      if (review?.checkVisibility()) {
+        await userEvent.click(review);
+        await flush(el);
+      }
+      const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+      await panel.updateComplete;
+      for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
+        const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
+        if (toggle.getAttribute("aria-expanded") === "false") {
+          await userEvent.click(toggle);
+          await panel.updateComplete;
+        }
+      }
+      const more = panel.shadowRoot!.querySelector<WtRowActions>(`[data-group-more="${id}"]`)!;
+      await more.updateComplete;
+      await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+      return more;
+    }
+
+    async function reopenDrawer(el: TillApp) {
+      const order = tableOrder(el)!;
+      if (order.shadowRoot!.querySelector("[data-drawer]") === null) {
+        await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+        await flush(el);
+      }
+    }
+
+    async function reorderFromSent(el: TillApp, id: string, direction: "earlier" | "later") {
+      const more = await groupMenu(el, id);
+      await userEvent.click(more.querySelector<HTMLElement>(`[data-group-${direction}]`)!);
+      await flush(el);
+      await reopenDrawer(el);
+    }
+
     const command = (revision: number) => ({
       submissionId: expect.any(String),
       expectedPartyRevision: revision,
@@ -5590,7 +5676,7 @@ describe("till-app: the order's groups", () => {
       const { el } = await mountApp(server);
       await openGroups(el);
 
-      await press(el, '[data-group-down="g2"]');
+      await reorderFromSent(el, "g2", "later");
 
       expect(server.reorderGroups.mock.calls).toEqual([["v1", ["g3", "g2", "g4"], command(3)]]);
       expect(heldGroupsList(el).map((group) => group.summary)).toEqual([
@@ -5688,7 +5774,7 @@ describe("till-app: the order's groups", () => {
         ]);
         expect(tableOrder(el)!.shadowRoot!.querySelector("[data-split-group-line]")).toBeNull();
         expect(banner(el)).toBeNull();
-        await press(el, '[data-group-up="g3"]');
+        await reorderFromSent(el, "g3", "earlier");
         expect(heldGroupsList(el)[1]!.lines).toEqual([
           ...Array<string>(quantity).fill("Steak ×1"),
           "Fish ×1",
@@ -5848,15 +5934,17 @@ describe("till-app: the order's groups", () => {
       expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
     });
 
-    it("two presses of ↑ in one turn move the group once, and show no message", async () => {
+    it("two presses of Move earlier in one turn move the group once, and show no message", async () => {
       const server = editServer();
       const { el } = await mountApp(server);
       await openGroups(el);
-      const up = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-group-up="g4"]')!;
+      const more = await groupMenu(el, "g4");
+      const up = more.querySelector<HTMLElement>("[data-group-earlier]")!;
 
       up.click();
       up.click();
       await flush(el);
+      await reopenDrawer(el);
 
       expect(server.reorderGroups.mock.calls).toEqual([["v1", ["g2", "g4", "g3"], command(3)]]);
       expect(banner(el)).toBeNull();
@@ -5940,16 +6028,28 @@ describe("till-app: the order's groups", () => {
         });
         const { el } = await mountApp({ ...server, ...over });
         const order = await open(el);
-        const disabled = () =>
-          ['[data-group-up="g4"]', '[data-group-fire="g4"]', '[data-move-line="line-flan"]'].map(
-            (selector) =>
-              order.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(selector)!
-                .disabled,
-          );
+        await groupMenu(el, "g4");
+        await reopenDrawer(el);
+        const disabled = () => {
+          const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+          return [
+            panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+              '[data-group-more="g4"] [data-group-earlier]',
+            )!.disabled,
+            panel.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+              '[data-group-fire="g4"]',
+            )!.disabled,
+            order.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+              '[data-move-line="line-flan"]',
+            )!.disabled,
+          ];
+        };
         expect(disabled()).toEqual([false, false, false]);
 
-        order.shadowRoot!.querySelector<HTMLElement>('[data-group-down="g2"]')!.click();
+        const more = await groupMenu(el, "g2");
+        await userEvent.click(more.querySelector<HTMLElement>("[data-group-later]")!);
         await flush(el);
+        await reopenDrawer(el);
         expect(disabled()).toEqual([true, true, true]);
 
         answer();
