@@ -169,16 +169,16 @@ once per frame and again when its own size changes, which `CalendarDayBox` does 
 swipe with `SWIPE_PX` and `PHONE_WIDTH` (of `opening-hours-week.ts`). Next: move `stepMonth` and the
 limits, and these, into browser-safe venue-service files and export them.
 
-## A703. Keeping a Calendar view's address words is a special case named in the app
+## Decisions and deliberate limits
 
-**A703. Keeping a Calendar view's address words is a special case named in the app.**
+### A703. Keeping a Calendar view's address words stays a special case named in the app (owner, 2026-10-17)
+
 `apps/dashboard/src/navigation.ts` names `opening-hours` in `keepUnlisted`
 (`packages/ui/src/url-state.ts`), and the screen re-reads and re-builds the path itself
-(`moduleParams`, `calendarViewPath`). A585-3's review offered two general forms: keep unknown pairs
-for every destination while it stays the same, or let a screen's own address config declare a
-destination open-ended and hand back its unknown pairs. Next: owner to choose, or keep as is.
-
-## Decisions and deliberate limits
+(`moduleParams`, `calendarViewPath`). The owner kept it as it is, turning down the two general
+forms A585-3's review offered: keep unknown pairs for every destination while it stays the same,
+or let a screen's own address config declare a destination open-ended and hand back its unknown
+pairs.
 
 ### Whole-day staffing overview (A710, owner 2026-10-16)
 

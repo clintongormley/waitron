@@ -4336,7 +4336,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
   hours, rate overrides by condition of the hour, paid non-worked states) turning recorded and
   scheduled hours into accrued-versus-pending money. Rates are editable data, never hardcoded convenio
-  numbers; needs a public-holidays calendar. Gated on the labour advisor; not fiscal.
+  numbers; needs public holidays for every year it pays (today only 2026 exists), national,
+  regional and local. Gated on the labour advisor; not fiscal.
 
 - **Inspector remote access to working-time records.** Add authenticated read-only access when
   Cloud can reach the box. Until then, download the record on request.
@@ -4419,12 +4420,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   innerWidth) and a name with spaces wraps, but one unbroken 46-letter word runs to x=402.9 and its
   chip is cut off (`packages/venue-service/src/dashboard/season-chips.ts`). Next: wrap the chip's
   text with `overflow-wrap: anywhere`.
-
-- **A703. Keeping a Calendar view's address words is a special case named in the app.**
-  `apps/dashboard/src/navigation.ts` names `opening-hours` in `keepUnlisted`
-  (`packages/ui/src/url-state.ts`). A585-3's review offered two general forms. Next: owner to
-  choose, or keep as is.
-  [Detail](backlog/workforce.md#a703-keeping-a-calendar-views-address-words-is-a-special-case-named-in-the-app)
 
 - **A644. Staffing slots stop at minute 1440 on a business day longer than a day.** When the
   changeover moves later between two days (02:00 one day, 04:00 the next), that business day runs 25
