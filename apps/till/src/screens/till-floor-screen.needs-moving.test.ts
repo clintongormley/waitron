@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { WtDialog, WtFloorMap } from "@waitron/ui";
+import { userEvent } from "vitest/browser";
+import type { WtButton, WtDialog, WtFloorMap } from "@waitron/ui";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
@@ -97,6 +98,23 @@ const offer = (el: TillFloorScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-leave-here-offer]");
 const card = (el: TillFloorScreen, id: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-table="${id}"]`)!;
+
+const cardButton = (el: TillFloorScreen, id: string, which: "leave-here" | "mark-moved") =>
+  card(el, id).querySelector<WtButton>(`[data-${which}]`)!;
+
+function deferred(): {
+  promise: Promise<{ zoneId: string; revision: number }>;
+  answer: () => void;
+  refuse: () => void;
+} {
+  let answer!: () => void;
+  let refuse!: () => void;
+  const promise = new Promise<{ zoneId: string; revision: number }>((resolve, reject) => {
+    answer = () => resolve({ zoneId: "z1", revision: 7 });
+    refuse = () => reject({ code: "floor_today.out_of_date" });
+  });
+  return { promise, answer, refuse };
+}
 
 function send(target: Element, type: string, detail?: unknown): void {
   target.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -617,5 +635,95 @@ describe("till-floor-screen: a table that needs moving", () => {
     const sheet = el.shadowRoot!.querySelector("till-table-details-sheet")!;
     await sheet.updateComplete;
     expect(sheet.shadowRoot!.querySelector('[data-today-action="join-with"]')).not.toBeNull();
+  });
+  it("on the list sends Leave it here once while it is being sent, however often it is pressed", async () => {
+    const api = stubApi();
+    api.leaveHereToday.mockReturnValue(new Promise(() => {}));
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await toList(el);
+
+    await userEvent.click(cardButton(el, "t3", "leave-here"));
+    await settle(el);
+    await userEvent.click(cardButton(el, "t3", "leave-here"));
+    await settle(el);
+
+    expect(api.leaveHereToday).toHaveBeenCalledExactlyOnceWith("t3", 6);
+  });
+
+  it("on the list sends no Mark moved while the card's Leave it here is being sent", async () => {
+    const api = stubApi();
+    api.leaveHereToday.mockReturnValue(new Promise(() => {}));
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await toList(el);
+
+    await userEvent.click(cardButton(el, "t3", "leave-here"));
+    await settle(el);
+    await userEvent.click(cardButton(el, "t3", "mark-moved"));
+    await settle(el);
+
+    expect(api.markMovedToday).not.toHaveBeenCalled();
+  });
+
+  it("on the list ignores a press that reaches either card button while one is being sent", async () => {
+    const api = stubApi();
+    api.markMovedToday.mockReturnValue(new Promise(() => {}));
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await toList(el);
+
+    cardButton(el, "t3", "mark-moved").click();
+    await settle(el);
+    cardButton(el, "t3", "mark-moved").click();
+    cardButton(el, "t3", "leave-here").click();
+    await settle(el);
+
+    expect(api.markMovedToday).toHaveBeenCalledOnce();
+    expect(api.leaveHereToday).not.toHaveBeenCalled();
+  });
+
+  it("on the list draws the pressed card button busy in its own colour and the other one off while it is sent", async () => {
+    const api = stubApi();
+    api.leaveHereToday.mockReturnValue(new Promise(() => {}));
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await toList(el);
+    expect(cardButton(el, "t3", "leave-here").loading).toBe(false);
+    expect(cardButton(el, "t3", "mark-moved").disabled).toBe(false);
+
+    await userEvent.click(cardButton(el, "t3", "leave-here"));
+    await settle(el);
+
+    const leave = cardButton(el, "t3", "leave-here");
+    const moved = cardButton(el, "t3", "mark-moved");
+    expect(leave.loading).toBe(true);
+    expect(leave.variant).toBe("secondary");
+    expect(moved.loading).toBe(false);
+    expect(moved.disabled).toBe(true);
+  });
+
+  it("on the list lets the card's buttons act again once Leave it here is answered or refused", async () => {
+    const api = stubApi();
+    const first = deferred();
+    const second = deferred();
+    api.leaveHereToday.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const el = await mount([moving("t3", 12), planned("t4", 30)], api);
+    await toList(el);
+
+    await userEvent.click(cardButton(el, "t3", "leave-here"));
+    await settle(el);
+    first.answer();
+    await settle(el);
+    expect(cardButton(el, "t3", "leave-here").loading).toBe(false);
+    expect(cardButton(el, "t3", "mark-moved").disabled).toBe(false);
+
+    await userEvent.click(cardButton(el, "t3", "leave-here"));
+    await settle(el);
+    expect(api.leaveHereToday).toHaveBeenCalledTimes(2);
+    second.refuse();
+    await settle(el);
+    expect(refusal(el)).toBe(codeMessage("floor_today.out_of_date"));
+    expect(cardButton(el, "t3", "leave-here").loading).toBe(false);
+
+    await userEvent.click(cardButton(el, "t3", "mark-moved"));
+    await settle(el);
+    expect(api.markMovedToday).toHaveBeenCalledOnce();
   });
 });

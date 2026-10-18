@@ -120,6 +120,7 @@ const WAITING = {
 } as const satisfies Record<string, Record<string, StringKey>>;
 
 type Waiting = keyof typeof WAITING;
+type TodayAction = "leave-here" | "mark-moved";
 
 function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
@@ -638,6 +639,8 @@ export class TillFloorScreen extends LitElement {
   @state() private refusal: string | null = null;
   /** Drawn only while `refusal` still reads `message` and the table still needs moving. */
   @state() private leaveOffer: { tableId: string; message: string } | null = null;
+  /** A table's Leave it here or Mark moved being sent; any other press for it is ignored meanwhile. */
+  @state() private sendingToday: ReadonlyMap<string, TodayAction> = new Map();
   /** A merge's seats, or Change seats, waiting for the seats prompt. */
   @state() private askingSeats: {
     heading: string;
@@ -931,29 +934,36 @@ export class TillFloorScreen extends LitElement {
   }
 
   #markMoved(table: TableState): void {
-    this.#sendTodayAction(table, (api, sent) => api.markMovedToday(table.id, sent), {
+    this.#sendTodayAction(table, "mark-moved", (api, sent) => api.markMovedToday(table.id, sent), {
       offersLeaveHere: true,
     });
   }
 
   #leaveHere(table: TableState): void {
     this.leaveOffer = null;
-    this.#sendTodayAction(table, (api, sent) => api.leaveHereToday(table.id, sent));
+    this.#sendTodayAction(table, "leave-here", (api, sent) => api.leaveHereToday(table.id, sent));
   }
 
   #sendTodayAction(
     table: TableState,
+    action: TodayAction,
     call: (api: TillApi, revision: number) => Promise<FloorAnswer>,
     { offersLeaveHere = false }: { offersLeaveHere?: boolean } = {},
   ): void {
     this.moving = null;
     const api = this.api;
     if (api === undefined || !this.tables.some((current) => current.id === table.id)) return;
+    if (this.sendingToday.has(table.id)) return;
     this.refusal = null;
+    this.sendingToday = new Map(this.sendingToday).set(table.id, action);
     void this.#settle(
       this.#send(this.#revision(table.zoneId), (sent) => call(api, sent)),
       offersLeaveHere ? { written: { tableId: table.id } } : {},
-    );
+    ).finally(() => {
+      const sending = new Map(this.sendingToday);
+      sending.delete(table.id);
+      this.sendingToday = sending;
+    });
   }
 
   #leaveHereOffer(): TemplateResult | typeof nothing {
@@ -2174,6 +2184,7 @@ export class TillFloorScreen extends LitElement {
   #waitingCard(table: TableState, kind: Waiting): TemplateResult {
     const words = WAITING[kind];
     const clear = kind === "clear";
+    const sending = this.sendingToday.get(table.id);
     return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
       <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
       <span class="occupancy" ?data-needs-clearing=${clear} ?data-needs-moving=${!clear}
@@ -2185,6 +2196,8 @@ export class TillFloorScreen extends LitElement {
               size="sm"
               variant="secondary"
               data-leave-here
+              .loading=${sending === "leave-here"}
+              .disabled=${sending !== undefined}
               @click=${() => this.#leaveHere(table)}
             >
               ${t("floor.leave_here")}
@@ -2198,6 +2211,8 @@ export class TillFloorScreen extends LitElement {
               variant="secondary"
               ?data-mark-cleared=${clear}
               ?data-mark-moved=${!clear}
+              .loading=${!clear && sending === "mark-moved"}
+              .disabled=${!clear && sending !== undefined}
               @click=${() => this.#markWaiting(kind, table)}
             >
               ${t(words.action)}
