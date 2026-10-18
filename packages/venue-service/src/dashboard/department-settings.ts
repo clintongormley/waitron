@@ -565,7 +565,7 @@ export class DepartmentSettings extends LitElement {
           : nothing
       }
       <wt-tabs
-        label=${t("venue.department_tabs")}
+        label=${t("venue.department")}
         .items=${tabs}
         .value=${this.tab}
         @wt-tab-change=${(e: CustomEvent<{ value: DepartmentTab }>) => {

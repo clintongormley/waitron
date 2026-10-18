@@ -4744,8 +4744,9 @@ Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`. Departments always opens its list
 at `/manage/venue-operations`. A department opens at
-`/manage/venue-operations/department/<id>` in its edit dialog; a zone editor adds
-`/view/zones/zone/<id>` and the receipt editor adds `/view/receipt`. The list stays beneath
+`/manage/venue-operations/department/<id>` in its edit dialog; its Service and Transfers tabs add
+`/view/service` and `/view/transfers`, a zone editor adds `/view/zones/zone/<id>` and the receipt
+editor adds `/view/receipt`. The list stays beneath
 these dialogs. Closing one returns to the list; a removed subject closes its editor.
 Old top-level tab addresses are replaced with the list URL. Venue settings
 (`/manage/venue-settings`) starts with `venue-details`, followed by `tables`,
@@ -4969,7 +4970,7 @@ an address change between the open department's offered tabs through. The addres
 tab (`view` is `service` or `transfers`; Details has none), and an address naming a tab not
 offered opens Details. A refusal naming a field, or an invalid Save, shows the first tab holding a
 marked field, and marks every tab that holds one. A strip too wide for the dialog scrolls sideways
-inside it, as every `wt-tabs` strip does. Edit zone holds its name and four raw service
+inside it. Edit zone holds its name and four raw service
 overrides. Each override offers “Same as department (…)”, and saving that choice writes null. How
 orders start chooses Table service or Counter service. Counter service has a paid-when choice and
 a collection-ticket choice. The zone's name and policy save in one request. Edit department preserves the department's receipt policy.
