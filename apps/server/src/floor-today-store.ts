@@ -1032,11 +1032,40 @@ export async function layoutPlacesIn(
   return new Map(rows.map((row) => [row.tableId!, placementOf(row)]));
 }
 
-const dueRow = alias(floorResetTables, "due_row");
-const dueMember = alias(floorResetTables, "due_member");
-const dueJoined = alias(floorResetTables, "due_joined");
-const dueLink = alias(floorResetTableParts, "due_link");
-const dueSibling = alias(floorResetTableParts, "due_sibling");
+const resetAlias = (name: string) => alias(floorResetTables, name);
+type ResetAlias = ReturnType<typeof resetAlias>;
+const dueRow = resetAlias("due_row");
+
+/**
+ * Whether a pending row of a pending joined group holding reset row `rowId` meets `where`. `link`
+ * finds the joined row of a group holding the row; `sibling` then walks every row of that group,
+ * the joined row and each part, as catchUpPass's groups do. `prefix` names the aliases, so a
+ * `where` may nest another of these.
+ */
+function pendingGroupMember(
+  rowId: SQLWrapper,
+  prefix: string,
+  where: (member: ResetAlias) => SQL,
+): SQL {
+  const names = ["link", "joined", "sibling", "member"].map((name) => `${prefix}_${name}`);
+  const [linkName, joinedName, siblingName, memberName] = names as [string, string, string, string];
+  const link = alias(floorResetTableParts, linkName);
+  const joined = resetAlias(joinedName);
+  const sibling = alias(floorResetTableParts, siblingName);
+  const member = resetAlias(memberName);
+  const as = (name: string) => sql.identifier(name);
+  return sql`exists (
+    select 1 from ${floorResetTableParts} ${as(linkName)}
+    inner join ${floorResetTables} ${as(joinedName)}
+      on ${joined.id} = ${link.joinedResetTableId} and ${joined.pending} = 1
+    inner join ${floorResetTableParts} ${as(siblingName)}
+      on ${sibling.joinedResetTableId} = ${link.joinedResetTableId}
+    inner join ${floorResetTables} ${as(memberName)}
+      on ${member.id} in (${sibling.joinedResetTableId}, ${sibling.partResetTableId})
+    where ${rowId} in (${link.joinedResetTableId}, ${link.partResetTableId})
+      and ${member.pending} = 1 and ${where(member)}
+  )`;
+}
 
 /**
  * Whether the zone holds a pending reset row a catch-up could apply, whose place, and the place of
@@ -1047,40 +1076,14 @@ const dueSibling = alias(floorResetTableParts, "due_sibling");
  */
 export function catchUpDue(zoneId: SQLWrapper): SQL {
   const r = dueRow;
-  const m = dueMember;
-  const j = dueJoined;
-  const link = dueLink;
-  const sibling = dueSibling;
-  const as = (name: string) => sql.identifier(name);
-  // `link` finds the joined row of a group holding `r`; `sibling` then walks every row of that
-  // group, the joined row and each part, as catchUpPass's groups do.
   return sql`exists (
-    select 1 from ${floorResetTables} ${as("due_row")}
+    select 1 from ${floorResetTables} ${sql.identifier("due_row")}
     where ${r.zoneId} = ${zoneId} and ${r.pending} = 1 and not ${placeTaken(r)}
-    and not exists (
-      select 1 from ${floorResetTableParts} ${as("due_link")}
-      inner join ${floorResetTables} ${as("due_joined")}
-        on ${j.id} = ${link.joinedResetTableId} and ${j.pending} = 1
-      inner join ${floorResetTableParts} ${as("due_sibling")}
-        on ${sibling.joinedResetTableId} = ${link.joinedResetTableId}
-      inner join ${floorResetTables} ${as("due_member")}
-        on ${m.id} in (${sibling.joinedResetTableId}, ${sibling.partResetTableId})
-      where ${r.id} in (${link.joinedResetTableId}, ${link.partResetTableId})
-        and ${m.id} <> ${r.id} and ${m.pending} = 1 and ${placeTaken(m)}
-    ) and (
+    and not ${pendingGroupMember(r.id, "due", (m) => sql`${m.id} <> ${r.id} and ${placeTaken(m)}`)}
+    and (
       ${r.readyToMove} = 0 or (
         not ${resetRowMoves(r)}
-        and not exists (
-          select 1 from ${floorResetTableParts} ${as("due_link")}
-          inner join ${floorResetTables} ${as("due_joined")}
-            on ${j.id} = ${link.joinedResetTableId} and ${j.pending} = 1
-          inner join ${floorResetTableParts} ${as("due_sibling")}
-            on ${sibling.joinedResetTableId} = ${link.joinedResetTableId}
-          inner join ${floorResetTables} ${as("due_member")}
-            on ${m.id} in (${sibling.joinedResetTableId}, ${sibling.partResetTableId})
-          where ${r.id} in (${link.joinedResetTableId}, ${link.partResetTableId})
-            and ${m.pending} = 1 and ${m.placed} = 0 and ${resetRowMoves(m)}
-        )
+        and not ${pendingGroupMember(r.id, "due", (m) => sql`${m.placed} = 0 and ${resetRowMoves(m)}`)}
       )
     )
   )`;
@@ -1093,7 +1096,7 @@ export function catchUpDue(zoneId: SQLWrapper): SQL {
  * table, not needing moving, and not a pending member of a joined group holding the row, which
  * moves with it.
  */
-function placeTaken(r: typeof dueRow | typeof dueMember): SQL {
+function placeTaken(r: ResetAlias): SQL {
   const own = sql.identifier("place_own");
   const blocker = sql.identifier("place_blocker");
   const blockerTable = sql.identifier("place_blocker_table");
@@ -1108,12 +1111,6 @@ function placeTaken(r: typeof dueRow | typeof dueMember): SQL {
     rotation: at("rotation"),
     shape: at("shape"),
   });
-  const [link, joined, sibling, member] = [
-    "place_link",
-    "place_joined",
-    "place_sibling",
-    "place_member",
-  ].map((name) => sql.identifier(name));
   return sql`(
     ${r.placed} = 0 and ${r.x} is not null
     and not exists (
@@ -1133,17 +1130,7 @@ function placeTaken(r: typeof dueRow | typeof dueMember): SQL {
         and ${b("x")} is not null and ${b("taken_off")} = 0
         and not ${joinedOutOfService(b("table_id"))}
         and not ${needsMoving(b("table_id"))}
-        and not exists (
-          select 1 from ${floorResetTableParts} ${link}
-          inner join ${floorResetTables} ${joined}
-            on ${col(joined, "id")} = ${col(link, "joined_reset_table_id")} and ${col(joined, "pending")} = 1
-          inner join ${floorResetTableParts} ${sibling}
-            on ${col(sibling, "joined_reset_table_id")} = ${col(link, "joined_reset_table_id")}
-          inner join ${floorResetTables} ${member}
-            on ${col(member, "id")} in (${col(sibling, "joined_reset_table_id")}, ${col(sibling, "part_reset_table_id")})
-          where ${r.id} in (${col(link, "joined_reset_table_id")}, ${col(link, "part_reset_table_id")})
-            and ${col(member, "pending")} = 1 and ${col(member, "table_id")} = ${b("table_id")}
-        )
+        and not ${pendingGroupMember(r.id, "place", (member) => sql`${member.tableId} = ${b("table_id")}`)}
         and ${blocksPlaceSql(
           { x: r.x, y: r.y, width: r.width, height: r.height, rotation: r.rotation },
           placeOf((name) => b(name)),

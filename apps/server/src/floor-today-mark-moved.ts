@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, or, type SQLWrapper } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   diningTables,
@@ -55,28 +55,10 @@ export async function markMoved(
     .select({ id: floorResetTables.id })
     .from(floorResetTables)
     .where(and(eq(floorResetTables.tableId, tableId), eq(floorResetTables.pending, true)));
-  const links = await tx
-    .select({ joinedId: floorResetTableParts.joinedResetTableId })
-    .from(floorResetTableParts)
-    .innerJoin(
-      joinedRow,
-      and(eq(joinedRow.id, floorResetTableParts.joinedResetTableId), eq(joinedRow.pending, true)),
-    )
-    .where(
-      or(
-        eq(floorResetTableParts.joinedResetTableId, own!.id),
-        eq(floorResetTableParts.partResetTableId, own!.id),
-      ),
-    );
-  const joinedIds = [...new Set(links.map((link) => link.joinedId))];
-  const parts =
-    joinedIds.length === 0
-      ? []
-      : await tx
-          .select({ id: floorResetTableParts.partResetTableId })
-          .from(floorResetTableParts)
-          .where(inArray(floorResetTableParts.joinedResetTableId, joinedIds));
-  const groupIds = new Set([own!.id, ...joinedIds, ...parts.map((part) => part.id)]);
+  const groupIds = new Set([
+    own!.id,
+    ...(await pendingGroupRows(tx, [own!.id])).map((member) => member.id),
+  ]);
   const group = await tx
     .select({
       row: floorResetTables,
@@ -224,6 +206,15 @@ async function pendingGroupTables(tx: Transaction, tableIds: readonly string[]):
     .where(
       and(inArray(floorResetTables.tableId, [...tableIds]), eq(floorResetTables.pending, true)),
     );
+  const members = await pendingGroupRows(tx, rows);
+  return members.flatMap((member) => (member.tableId === null ? [] : [member.tableId]));
+}
+
+/** The pending rows of every pending joined group holding one of the reset rows `rowIds`. */
+async function pendingGroupRows(
+  tx: Transaction,
+  rowIds: string[] | SQLWrapper,
+): Promise<{ id: string; tableId: string | null }[]> {
   const links = await tx
     .select({ joinedId: floorResetTableParts.joinedResetTableId })
     .from(floorResetTableParts)
@@ -233,8 +224,8 @@ async function pendingGroupTables(tx: Transaction, tableIds: readonly string[]):
     )
     .where(
       or(
-        inArray(floorResetTableParts.joinedResetTableId, rows),
-        inArray(floorResetTableParts.partResetTableId, rows),
+        inArray(floorResetTableParts.joinedResetTableId, rowIds),
+        inArray(floorResetTableParts.partResetTableId, rowIds),
       ),
     );
   const joinedIds = [...new Set(links.map((link) => link.joinedId))];
@@ -243,8 +234,8 @@ async function pendingGroupTables(tx: Transaction, tableIds: readonly string[]):
     .select({ id: floorResetTableParts.partResetTableId })
     .from(floorResetTableParts)
     .where(inArray(floorResetTableParts.joinedResetTableId, joinedIds));
-  const members = await tx
-    .select({ tableId: floorResetTables.tableId })
+  return tx
+    .select({ id: floorResetTables.id, tableId: floorResetTables.tableId })
     .from(floorResetTables)
     .where(
       and(
@@ -252,5 +243,4 @@ async function pendingGroupTables(tx: Transaction, tableIds: readonly string[]):
         eq(floorResetTables.pending, true),
       ),
     );
-  return members.flatMap((member) => (member.tableId === null ? [] : [member.tableId]));
 }
