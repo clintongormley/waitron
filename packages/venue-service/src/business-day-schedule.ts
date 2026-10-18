@@ -31,7 +31,15 @@ import {
   specialDateIn,
   specialDatesStandingIn,
 } from "./special-days.js";
-import { parseClosedRanges, rangeSpan, type ClosedRange } from "./service-day.js";
+import {
+  minuteOfServiceDay,
+  parseClosedRanges,
+  rangeSpan,
+  type ClosedRange,
+} from "./service-day.js";
+import { serviceDayWallContext } from "./service-day-context.js";
+import { periodExtensions } from "./schema/period-extensions.js";
+import { zoneExtensions } from "./schema/zone-extensions.js";
 import "./errors.js";
 
 export type { BusinessDayClockConflict } from "@waitron/module";
@@ -472,6 +480,60 @@ export async function businessDayClockConflicts(
     conflictCount: ranges.length,
   };
 }
+/** A keep-open saved for the night before the change runs under the old changeover. */
+export async function keptOpenConflicts(
+  tx: Transaction,
+  cfg: VenueScope,
+  before: BusinessDayClock,
+  candidate: BusinessDayClock,
+  effectiveBusinessDay: string,
+): Promise<BusinessDayClockConflict[]> {
+  const tonight = addDays(effectiveBusinessDay, -1);
+  const periods = await tx
+    .select({
+      departmentId: periodExtensions.departmentId,
+      departmentName: departments.name,
+      periodId: periodExtensions.periodId,
+      periodName: menuPeriods.name,
+      endsAt: periodExtensions.endsAt,
+    })
+    .from(periodExtensions)
+    .innerJoin(departments, eq(departments.id, periodExtensions.departmentId))
+    .innerJoin(menuPeriods, eq(menuPeriods.id, periodExtensions.periodId))
+    .where(
+      and(eq(departments.locationId, cfg.locationId), eq(periodExtensions.businessDay, tonight)),
+    )
+    .orderBy(asc(periodExtensions.id));
+  const zones = await tx
+    .select({
+      departmentId: zoneServicePolicies.departmentId,
+      departmentName: departments.name,
+      zoneId: zoneExtensions.zoneId,
+      zoneName: floorZones.name,
+      endsAt: zoneExtensions.endsAt,
+    })
+    .from(zoneExtensions)
+    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneExtensions.zoneId))
+    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .innerJoin(floorZones, eq(floorZones.id, zoneExtensions.zoneId))
+    .where(
+      and(
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+        eq(zoneExtensions.businessDay, tonight),
+      ),
+    )
+    .orderBy(asc(zoneExtensions.id));
+  const oldCutover = cutoverForBusinessDay(before, tonight);
+  const newEnd = serviceDayWallContext(candidate, tonight).endMinute;
+  return [...periods, ...zones]
+    .filter((row) => (minuteOfServiceDay(row.endsAt, oldCutover) || 1440) > newEnd)
+    .map((row) => ({
+      ...row,
+      endsAt: row.endsAt.slice(0, 5),
+      rangeIndex: 0,
+      reason: "kept_open" as const,
+    }));
+}
 export async function assertBusinessDayClockChange(
   tx: Transaction,
   cfg: VenueScope,
@@ -480,7 +542,13 @@ export async function assertBusinessDayClockChange(
   effectiveBusinessDay: string,
 ): Promise<void> {
   const result = await businessDayClockConflicts(tx, cfg, before, candidate, effectiveBusinessDay);
-  if (result.conflictCount > 0) throw new AppError("venue.business_day_hours_conflict", result);
+  const keptOpen = await keptOpenConflicts(tx, cfg, before, candidate, effectiveBusinessDay);
+  const conflictCount = result.conflictCount + keptOpen.length;
+  if (conflictCount > 0)
+    throw new AppError("venue.business_day_hours_conflict", {
+      conflicts: [...result.conflicts, ...keptOpen],
+      conflictCount,
+    });
 }
 export async function assertBusinessDayScheduleWrite(
   tx: Transaction,

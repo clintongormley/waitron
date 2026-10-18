@@ -1214,3 +1214,40 @@ describe("a Save takes the next changeover", () => {
     });
   });
 });
+
+describe("a keep-open for tonight past the new changeover", () => {
+  it("lists it in the preview and refuses the Save", async () => {
+    const { department, period } = await authorRange("13:00", "16:00");
+    await inTx((tx) =>
+      tx.execute(
+        sql`insert into period_extensions (id, department_id, business_day, period_id, starts_at, ends_at)
+            values (${randomUUID()}, ${department.id}, '2026-10-20', ${period.id}, '22:00:00', '04:30:00')`,
+      ),
+    );
+    at = new Date("2026-10-20T20:00:00Z");
+    const query = new URLSearchParams({ dayCutover: "03:00", expectedClockRevision: "0" });
+    const preview = await request("GET", `/business-day-start/preview?${query}`);
+    expect(preview.status).toBe(200);
+    expect(await preview.json()).toMatchObject({
+      conflictCount: 1,
+      conflicts: [expect.objectContaining({ reason: "kept_open", endsAt: "04:30" })],
+    });
+    const saved = await clockRows();
+    const response = await request(
+      "PUT",
+      "/business-day-start",
+      proposal({ effectiveBusinessDay: "2026-10-21", dayCutover: "03:00" }),
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: {
+        code: "venue.business_day_hours_conflict",
+        params: {
+          conflictCount: 1,
+          conflicts: [expect.objectContaining({ reason: "kept_open", endsAt: "04:30" })],
+        },
+      },
+    });
+    expect(await clockRows()).toEqual(saved);
+  });
+});
