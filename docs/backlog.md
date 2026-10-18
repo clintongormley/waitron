@@ -1371,6 +1371,20 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 ### Service periods, opening hours and departments
 
+- **The departments list's "Also edit" column is empty on every row** (left by #1858, 2026-10-18):
+  A504 (#1857) removed the zones' Floor plan link and #1858 the departments' Receipt link, so the
+  column draws blank cells. Owner to decide whether it goes
+  (`packages/venue-service/src/dashboard/departments-list.ts`).
+
+- **A receipt refusal that names no field, arriving while another tab of the department dialog
+  shows, brings nothing back** (left by #1858): it appears only in the receipt editor's own error
+  line on the hidden Receipts tab. A refusal naming a field already brings Receipts back and focuses
+  the field.
+
+- **The department dialog reads the department's receipt as it opens, even if Receipts is never
+  shown** (left by #1858). Reading it when the tab is first chosen would save the request, but
+  design-system.md keeps hidden tabs loaded; owner to decide.
+
 - **The owner has not yet confirmed the Seasons window's plan defaults** (A721, sent as an FYI,
   2026-10-17): Decisions 2, 12, 13, 14, 15 and 17 of the
   [A721 plan](superpowers/plans/2026-10-17-a721-seasons-window.md), each in
@@ -2037,7 +2051,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
   and whole-table status on the map; the design is revised and six new questions, Q29–Q34, are
-  open.** The build waits for those answers and for A756.
+  open.** The build waits for those answers (A756's department Service tab, which it builds on, landed
+  in #1852).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
   [mockups](backlog/mockups/a757-table-states/)
