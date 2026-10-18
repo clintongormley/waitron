@@ -1410,10 +1410,14 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
     gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
     `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
   - A824. Show Venue settings' Defaults card read-only to supervisors (owner, 2026-10-17). As
-    built, only a session holding `venue.configure` sees it
-    (`apps/dashboard/src/screens/venue-defaults-panel.ts`); a supervisor, who holds `venue.view`
-    alone, sees the other three cards read-only and no Defaults card. Done when a dashboard test
-    signed in with `venue.view` alone finds the Defaults card's values shown and nothing editable.
+    built, only a session holding `venue.configure` sees it (the `defaults` entry of
+    `CORE_SETTINGS_PANELS`, `apps/dashboard/src/dashboard-app.ts`), and the server's
+    `GET /management-api/venue-defaults` (`apps/server/src/location-settings-api.ts`) also needs
+    `venue.configure`; a supervisor, who holds `venue.view` alone, sees the other three cards
+    read-only and no Defaults card. Done when a server test reads
+    `GET /management-api/venue-defaults` with `venue.view` alone and is answered, a test finds the
+    `PUT` still refused, and a dashboard test signed in with `venue.view` alone finds the Defaults
+    card's values shown and nothing editable.
 
   [Mockups](backlog/mockups/a755-venue-settings/)
 
@@ -1653,12 +1657,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Served at a table or counter; payment due before the kitchen, at collection or at the end of
   the tab. Slice 6 keeps the three-value order record and its behaviour.
   [Detail](backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts)
-
-- **A826. Run the prep station drag-scroll test once (A366-4B; owner, 2026-10-17).** The full-screen
-  `edge scroll carries a held station past the visible summary and persists on release` failure's
-  cause was never found, and A725 removed the station drag handles since. Run it once: if the test is
-  gone or passes, delete this entry; if it fails, fix it, keeping its scroll-distance and
-  saved-order assertions.
 
 - **Compare computed station weeks with live routing on a painted special-day date without zone paint.**
   The slice 4 review read the planning and zone-week paths but did not compare the real sale
@@ -3223,7 +3221,8 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - Read-back gap: the printer editor cannot change a printer's connection type (`transport`),
   though the API's printer update accepts it (`PATCH /management-api/printers/:id`,
-  `apps/server/src/print-api.ts`). A261 step 8 retired the location print-mode and drawer-policy toggles.
+  `apps/server/src/print-api.ts`); nor does it send a USB or Bluetooth `localKey` or a cloud
+  `pollId`. A261 step 8 retired the location print-mode and drawer-policy toggles.
 
 - **One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still
   open:** No test pins what the two removed addresses, `/manage/receipt` and

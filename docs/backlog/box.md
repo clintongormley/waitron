@@ -457,9 +457,9 @@ step-name checks compare against hand-written lists, so a step added later is no
 `apps/server/src/testing/aws-rehearsal.ts`, `testing/aws-pause-gate.ts` and
 `aws-stream-pause.aws-rehearsal.test.ts` (its bucket-policy method is A822): (1) the scenario's
 `beforeRestart` hook is called only by the AWS file, so no local test fails if the call goes (the
-AWS run would stop with "step 7's restart was never watched"); (2) the held-check evidence counts a held call at
-the server's own proxy but cannot say which call it is (TLS hides it) — the later logged 403 is what
-ties the refusal to the pause check.
+AWS run would stop with "step 7's restart was never watched"); (2) the held-check evidence counts
+a held call at the server's own proxy but cannot say which call it is (TLS hides it) — the later
+logged 403 is what ties the refusal to the pause check.
 
 ## The Amazon S3 rehearsal runner's open edges (A538-7)
 
