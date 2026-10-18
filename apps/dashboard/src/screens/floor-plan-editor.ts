@@ -183,7 +183,7 @@ function trimLabels(draft: FloorPlanDraft, sent: FloorPlanDraft = draft): FloorP
 
 /** A set deleted, or no longer holding the zone, reads as the zone gone: the editor has nothing to
  *  open either way. */
-const SET_GONE = new Set(["floor_plan_set.not_found", "floor_plan_set.invalid"]);
+const SET_GONE = new Set(["zone.not_found", "floor_plan_set.not_found", "floor_plan_set.invalid"]);
 
 /** `back` when it is a dashboard path on this origin, else the dashboard's home. */
 function closeHref(back: string | null): string {

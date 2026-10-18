@@ -210,9 +210,11 @@ const deletedSet = [
   ["es-ES", "floor_plan_set.not_found", "Esa zona ya no existe"],
   ["en-GB", "floor_plan_set.invalid", "That zone no longer exists"],
   ["es-ES", "floor_plan_set.invalid", "Esa zona ya no existe"],
+  ["en-GB", "zone.not_found", "That zone no longer exists"],
+  ["es-ES", "zone.not_found", "Esa zona ya no existe"],
 ] as const;
 it.each(deletedSet)(
-  "a Save refused because the set is gone shows the zone gone (%s, %s)",
+  "a Save refused because the set or zone is gone shows the zone gone (%s, %s)",
   async (locale, code, text) => {
     setLocale(locale);
     const editor = await mount();
@@ -222,7 +224,7 @@ it.each(deletedSet)(
   },
 );
 it.each(deletedSet)(
-  "a Reload refused because the set is gone shows the zone gone (%s, %s)",
+  "a Reload refused because the set or zone is gone shows the zone gone (%s, %s)",
   async (locale, code, text) => {
     setLocale(locale);
     const editor = await mount();
@@ -237,7 +239,7 @@ it.each(deletedSet)(
   },
 );
 it.each(deletedSet)(
-  "the read after a save, refused because the set is gone, shows the zone gone (%s, %s)",
+  "the read after a save, refused because the set or zone is gone, shows the zone gone (%s, %s)",
   async (locale, code, text) => {
     setLocale(locale);
     const editor = await mount();

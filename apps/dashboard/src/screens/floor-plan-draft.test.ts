@@ -851,5 +851,15 @@ describe("floor plan draft", () => {
     const placed = new Set(sent.filter((t) => t.placement !== null).map((t) => t.id));
     expect(placed.has("long")).toBe(true);
     expect(["c3", "c4", "c5"].filter((key) => placed.has(key))).toEqual([]);
+
+    const opened = partsStanding();
+    const restored = restoreTable(
+      placeTable(deleteTable(opened, "c3"), "long"),
+      table(opened, "c3"),
+      opened,
+    );
+    const resent = saveFromDraft(3, restored).tables;
+    expect(resent.find((t) => t.id === "long")!.partKeys).toContain("c3");
+    expect(resent.filter((t) => t.placement !== null).map((t) => t.id)).toEqual(["m1", "long"]);
   });
 });
