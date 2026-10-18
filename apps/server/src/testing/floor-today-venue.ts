@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { expect } from "vitest";
 import {
   diningTables,
+  floorPlans,
+  floorPlanSets,
+  floorPlanTables,
   floorPlanTableSizes,
   floorTodayJoinTables,
   floorTodayJoins,
@@ -11,10 +14,29 @@ import {
   floorTodayZones,
   floorZones,
 } from "@waitron/db";
-import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "../floor-plan.js";
+import { createCatalogue } from "@waitron/catalogue";
+import {
+  createDepartment,
+  createServiceZone,
+  linkFloorPlanSet,
+  menuPeriods,
+  replaceMenuWeek,
+  saveMenuPeriod,
+  zoneSalePolicies,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
+import { readLayout, saveLayout, type ZonePlanSave } from "../floor-plan.js";
+import { defaultLayout } from "./floor-sets.js";
+import {
+  ensureToday,
+  resetZone,
+  todayBusinessDay,
+  updateLayout,
+  type ResetOnto,
+} from "../floor-today-store.js";
+import { finishTable, markTableCleared } from "../parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
-import { inTx, type PartyVenue } from "./party-venue.js";
+import { inTx, OPERATOR, seat, type PartyVenue } from "./party-venue.js";
 
 export interface PlannedEntry {
   key: string;
@@ -87,23 +109,251 @@ export async function plannedZone(
       partKeys: entry.partKeys ?? [],
     });
   }
+  const layout = await inTx(v, (tx) => defaultLayout(tx, v.cfg, zoneId));
   const { revision, ids } = await inTx(v, (tx) =>
-    saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables }, now),
+    saveLayout(tx, v.cfg, REMOVALS, layout, { revision: 0, tables }, now),
   );
-  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, layout));
   for (const entry of entries) {
     table[entry.key] = plan.tables.find((t) => t.id === ids[entry.key])!.liveTableId!;
   }
   return { zoneId, table, master: ids, revision };
 }
 
-/** Gives master table `masterId` the size it keeps while off the plan. */
+/**
+ * Gives master table `masterId` the size it keeps while off its zone's layout in `setId`, by
+ * default its department's default set.
+ */
 export async function giveKeptSize(
   v: PartyVenue,
   masterId: string,
   size: { width: number; height: number },
+  setId?: string,
 ): Promise<void> {
-  await inTx(v, (tx) => tx.insert(floorPlanTableSizes).values({ planTableId: masterId, ...size }));
+  await inTx(v, async (tx) => {
+    const [master] = await tx
+      .select({ zoneId: floorPlanTables.zoneId })
+      .from(floorPlanTables)
+      .where(eq(floorPlanTables.id, masterId));
+    const inSet = setId ?? (await defaultLayout(tx, v.cfg, master!.zoneId!)).setId;
+    const [plan] = await tx
+      .select({ id: floorPlans.id })
+      .from(floorPlans)
+      .where(and(eq(floorPlans.zoneId, master!.zoneId!), eq(floorPlans.setId, inSet)));
+    await tx
+      .insert(floorPlanTableSizes)
+      .values({ planId: plan!.id, planTableId: masterId, ...size });
+  });
+}
+
+/**
+ * A fresh department with one zone, Lunch (12:00-15:00) and Dinner (20:00-23:00) painted every
+ * day from `paintedAt`, and sets Standard (its default) and Dinner, which Dinner's period picks.
+ */
+export async function setsDepartment(
+  v: PartyVenue,
+  paintedAt: Date,
+): Promise<{
+  departmentId: string;
+  zoneId: string;
+  standard: string;
+  dinner: string;
+  lunchPeriod: string;
+  dinnerPeriod: string;
+}> {
+  const name = (base: string) => `${base} ${randomUUID().slice(0, 8)}`;
+  return inTx(v, async (tx) => {
+    const department = await createDepartment(tx, v.cfg, {
+      name: name("Dept"),
+      orderStart: "table",
+    });
+    const zone = await createServiceZone(tx, v.cfg, {
+      name: name("Inside"),
+      departmentId: department.id,
+    });
+    const menu = await createCatalogue(tx, { name: name("Menu") });
+    const period = async (periodName: string) =>
+      (
+        await saveMenuPeriod(
+          tx,
+          v.cfg,
+          department.id,
+          { name: periodName, menuId: menu.id, staffMenuIds: [] },
+          0,
+        )
+      ).id;
+    const lunchPeriod = await period("Lunch");
+    const dinnerPeriod = await period("Dinner");
+    await replaceMenuWeek(
+      tx,
+      v.cfg,
+      department.id,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: [
+          { periodId: lunchPeriod, startsAt: "12:00", endsAt: "15:00" },
+          { periodId: dinnerPeriod, startsAt: "20:00", endsAt: "23:00" },
+        ],
+      })),
+      paintedAt,
+      0,
+    );
+    const set = async (setName: string) => {
+      const [row] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await linkFloorPlanSet(tx, v.cfg, {
+        setId: row!.id,
+        departmentId: department.id,
+        name: setName,
+      });
+      return row!.id;
+    };
+    const standard = await set("Standard");
+    const dinner = await set("Dinner");
+    await tx
+      .update(menuPeriods)
+      .set({ floorPlanSetId: dinner })
+      .where(eq(menuPeriods.id, dinnerPeriod));
+    return {
+      departmentId: department.id,
+      zoneId: zone.id,
+      standard,
+      dinner,
+      lunchPeriod,
+      dinnerPeriod,
+    };
+  });
+}
+
+/**
+ * A department with Standard and Dinner holding the same tables, `placedIn` naming each table's
+ * place (x, at y 0, 8 by 8) in each; answers the live tables by key and a reset onto either set.
+ */
+export async function standardAndDinner(
+  v: PartyVenue,
+  now: Date,
+  tables: { key: string; label: string; partKeys?: string[] }[],
+  placedIn: { standard: Record<string, number | null>; dinner: Record<string, number | null> },
+) {
+  type Entry = ZonePlanSave["tables"][number];
+  const d = await setsDepartment(v, new Date("2026-10-09T06:00:00Z"));
+  const saveSet = async (setId: string, entries: Entry[]) => {
+    const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId: d.zoneId }));
+    return inTx(v, (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        { setId, zoneId: d.zoneId },
+        { revision: plan.revision, tables: entries },
+        now,
+      ),
+    );
+  };
+  const at = (x: number | null | undefined) =>
+    x == null ? null : { x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 };
+  const { ids } = await saveSet(
+    d.standard,
+    tables.map((t) => ({
+      key: t.key,
+      label: t.label,
+      seats: 4,
+      fixed: false,
+      placement: at(placedIn.standard[t.key]),
+      partKeys: t.partKeys ?? [],
+    })),
+  );
+  const standard = await inTx(v, (tx) =>
+    readLayout(tx, v.cfg, { setId: d.standard, zoneId: d.zoneId }),
+  );
+  const keyOf = new Map(Object.entries(ids).map(([key, id]) => [id, key]));
+  await saveSet(
+    d.dinner,
+    standard.tables.map((t) => ({
+      id: t.id,
+      key: t.id,
+      label: t.label,
+      seats: t.seats,
+      fixed: t.fixed,
+      placement: at(placedIn.dinner[keyOf.get(t.id)!]),
+      partKeys: t.partIds,
+    })),
+  );
+  const live = (key: string) => standard.tables.find((t) => t.id === ids[key])!.liveTableId!;
+  const onto = (setId: string) =>
+    inTx(v, (tx) =>
+      resetZone(tx, v.cfg, REMOVALS, d.zoneId, now, {
+        setId,
+        occurrence: null,
+      } satisfies ResetOnto),
+    );
+  /** Update layout onto `setId`, which Lunch, the period running at `now`, is made to pick. */
+  const update = (setId: string) =>
+    inTx(v, async (tx) => {
+      await tx
+        .update(menuPeriods)
+        .set({ floorPlanSetId: setId })
+        .where(eq(menuPeriods.id, d.lunchPeriod));
+      const { revision } = await readLayout(tx, v.cfg, { setId, zoneId: d.zoneId });
+      const day = await todayBusinessDay(tx, v.cfg, now);
+      return updateLayout(tx, v.cfg, REMOVALS, d.zoneId, day, now, {
+        setId,
+        layoutRevision: revision,
+      });
+    });
+  return { d, live, onto, update };
+}
+
+/**
+ * A table that needs moving: guests sit at it, its zone's layout moves it from x 0 to 40 and is
+ * reset onto, the guests leave, and a read marks its reset row. `spare` stands free at x 80.
+ */
+export async function needingMoving(v: PartyVenue, now: Date = new Date()) {
+  const z = await plannedZone(
+    v,
+    [
+      { key: "moving", place: { x: 0, y: 0 } },
+      { key: "spare", place: { x: 80, y: 0 } },
+    ],
+    now,
+  );
+  const [tableId, spare] = [z.table.moving!, z.table.spare!];
+  const { partyId, revision } = await seat(v, tableId);
+  await inTx(v, async (tx) => {
+    const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+    const plan = await readLayout(tx, v.cfg, layout);
+    await saveLayout(
+      tx,
+      v.cfg,
+      REMOVALS,
+      layout,
+      {
+        revision: plan.revision,
+        tables: plan.tables.map((t) => ({
+          id: t.id,
+          key: t.id,
+          label: t.label,
+          seats: t.seats,
+          fixed: t.fixed,
+          placement:
+            t.id === z.master.moving && t.placement !== null
+              ? { ...t.placement, x: 40 }
+              : t.placement,
+          partKeys: t.partIds,
+        })),
+      },
+      now,
+    );
+    await resetZone(tx, v.cfg, REMOVALS, z.zoneId, now, "due");
+  });
+  await inTx(v, async (tx) => {
+    await finishTable(tx, { partyId, expectedPartyRevision: revision, operatorId: OPERATOR });
+    await markTableCleared(tx, tableId);
+    await ensureToday(tx, v.cfg, REMOVALS, now);
+  });
+  return { ...z, tableId, spare };
 }
 
 /** Records `partTableId` as split off joined table `joinedTableId` today, as the split route will. */
@@ -203,7 +453,7 @@ export async function withFloorRevision(
 ): Promise<unknown> {
   const table = /^\/api\/tables\/([^/]+)\/today\//.exec(path)?.[1];
   if (table !== undefined) return withRevision(v, table, body);
-  const zone = /^\/api\/zones\/([^/]+)\/today\/reset$/.exec(path)?.[1];
+  const zone = /^\/api\/zones\/([^/]+)\/today\/(?:reset|update-layout)$/.exec(path)?.[1];
   return zone === undefined ? body : withZoneRevision(v, zone, body);
 }
 

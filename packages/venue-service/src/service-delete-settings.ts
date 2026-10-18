@@ -13,6 +13,7 @@ import {
 import { routingCells, routingCellPeriods } from "./schema/routing.js";
 import { deviceZoneSelections, deviceZoneSelectionZones } from "./schema/device-zone-selection.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
+import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { departmentDayRanges, departmentDays, zoneDayRanges, zoneDays } from "./schema/seasons.js";
@@ -177,6 +178,10 @@ async function settings(
     .select()
     .from(menuPeriods)
     .where(eq(menuPeriods.departmentId, departmentId ?? ""));
+  const floorPlanSets = await tx
+    .select()
+    .from(departmentFloorPlanSets)
+    .where(eq(departmentFloorPlanSets.departmentId, departmentId ?? ""));
   const staff = await tx
     .select()
     .from(menuPeriodStaffMenus)
@@ -322,6 +327,7 @@ async function settings(
     { key: "zone_policies", count: policies.length + overrides.length, targets: [] },
     { key: "zone_extensions", count: extensions.length, targets: [] },
     { key: "department_periods", count: departmentPeriods.length, targets: [] },
+    { key: "floor_plan_sets", count: floorPlanSets.length, targets: [] },
     { key: "staff_menus", count: staff.length, targets: [] },
     {
       key: "seasons",

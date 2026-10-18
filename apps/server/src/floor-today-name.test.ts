@@ -11,6 +11,7 @@ import {
 } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
+import { markMoved } from "./floor-today-mark-moved.js";
 import { nameToday, sameName } from "./floor-today-name.js";
 import { resetTable } from "./floor-today-reset-table.js";
 import { splitJoinedTable } from "./floor-today-split.js";
@@ -599,7 +600,7 @@ describe("what moves, ends or keeps today's name", () => {
     await rename(table.bar!, suffixed("Pair"));
     const { joinId } = (await mergeOf(v, table.bar!))!;
 
-    await inTx(v, (tx) => backToSaved(tx, v.cfg, table.bar!));
+    await inTx(v, (tx) => backToSaved(tx, v.cfg, [], table.bar!, new Date()));
 
     expect(await joinRow(joinId)).toEqual([]);
   });
@@ -723,7 +724,7 @@ describe("what moves, ends or keeps today's name", () => {
     const window = suffixed("Window");
     await rename(table.window!, window);
 
-    await inTx(v, (tx) => backToSaved(tx, v.cfg, table.window!));
+    await inTx(v, (tx) => backToSaved(tx, v.cfg, [], table.window!, new Date()));
     expect(await nameOf(table.window!)).toBe(window);
     await inTx(v, (tx) => takeOffToday(tx, v.cfg, table.window!));
     await inTx(v, (tx) => putBackToday(tx, v.cfg, table.window!));
@@ -766,7 +767,7 @@ describe("a reset clears today's name", () => {
 
   const nameOf = async (tableId: string) => (await todayRow(v, tableId))!.name;
   const resetRoom = (zoneId: string, now = new Date()) =>
-    inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, now));
+    inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, now, "due"));
   const newDay = (now: Date) => inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, now));
   const finish = async (partyId: string) => {
     const command = await commandFor(v, partyId);
@@ -790,7 +791,7 @@ describe("a reset clears today's name", () => {
   const joinRow = (joinId: string) =>
     inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.id, joinId)));
 
-  it("Reset to saved plan clears a free table's name and moves the revision (reset clears)", async () => {
+  it("Reset to {set} plan clears a free table's name and moves the revision (reset clears)", async () => {
     const { table, zoneId } = await LONG_TABLE();
     await rename(table.bar!, suffixed("Window"));
     const before = (await zoneRevisionOf(v, zoneId))!;
@@ -875,7 +876,7 @@ describe("a reset clears today's name", () => {
     expect(await nameOf(table.bar!)).toBe(window);
   });
 
-  it("a part the catch-up takes back into Long table loses its name, which is then free (reset clears)", async () => {
+  it("a part a reset takes back into Long table once its guests leave loses its name, which is then free (reset clears)", async () => {
     const { table, zoneId } = await LONG_TABLE();
     const { partyId } = await seat(v, table.long!);
     await resetRoom(zoneId);
@@ -884,7 +885,27 @@ describe("a reset clears today's name", () => {
     await rename(table.c5!, corner);
 
     await finish(partyId);
-    await newDay(new Date());
+    await resetRoom(zoneId);
+
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await nameOf(table.c5!)).toBeNull();
+    await rename(table.bar!, corner);
+    expect(await nameOf(table.bar!)).toBe(corner);
+  });
+
+  it("a part Mark moved takes back into Long table once its guests leave loses its name, which is then free", async () => {
+    const { table, zoneId } = await LONG_TABLE();
+    const { partyId } = await seat(v, table.long!);
+    await resetRoom(zoneId);
+    await splitOffLong(table, [table.c5!], 6);
+    const corner = suffixed("Corner");
+    await rename(table.c5!, corner);
+    await finish(partyId);
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, REMOVALS, new Date()));
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await nameOf(table.c5!)).toBe(corner);
+
+    await inTx(v, (tx) => markMoved(tx, v.cfg, REMOVALS, table.long!, new Date()));
 
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await nameOf(table.c5!)).toBeNull();

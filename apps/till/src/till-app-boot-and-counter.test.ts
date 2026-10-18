@@ -6116,6 +6116,8 @@ for (const locale of ["en-GB", "es-ES"] as const)
                   displayOrder: 0,
                   active: true,
                   hasPlan: false,
+                  layoutSetName: null,
+                  layoutDue: null,
                   serviceMode: "table_tab",
                   closesAt: null,
                   closed: false,

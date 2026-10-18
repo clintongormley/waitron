@@ -46,6 +46,9 @@ import {
 } from "./routing-store.js";
 import { stationDestinations, closeStationForToday, openStationForToday } from "./station-times.js";
 import type { VenueServiceContribution } from "@waitron/module";
+import { readServiceDay } from "./day-resolver.js";
+import { dueFloorLayouts } from "./floor-layout-due.js";
+import { readFloorPlanSets } from "./floor-plan-set-store.js";
 import { kitchenNoteKey, readKitchenNotes, writeKitchenNote } from "./order-kitchen-notes.js";
 import {
   assertPeriodEndOffsets,
@@ -122,6 +125,9 @@ import {
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
+  dueFloorLayouts,
+  readServiceDay,
+  readFloorPlanSets,
   readPartyAllergy,
   savePartyAllergy,
   setAllergyLineTicks,

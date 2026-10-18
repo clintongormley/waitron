@@ -4,12 +4,14 @@ import { startManagementSession, persons, registerModulePermissions } from "@wai
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountManagementApi } from "./management-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bookings, BOOKINGS_ROUTES, BOOKINGS_PERMISSIONS } from "@waitron/bookings";
 import {
+  catalogues,
   deviceProfiles,
   diningTables,
+  floorPlanSets,
   floorPlanTables,
   floorResetTables,
   floorTodayTables,
@@ -31,7 +33,10 @@ import {
   createServiceZone,
   configureZone,
   departments,
+  departmentFloorPlanSets,
   departmentReceipts,
+  linkFloorPlanSet,
+  menuPeriods,
   departmentTransferRequests,
   requestDepartmentTransfer,
   readDepartmentDeleteImpact,
@@ -54,7 +59,8 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { createTable } from "./testing/live-table.js";
-import { readZonePlan, saveZonePlan } from "./floor-plan.js";
+import { readLayout, saveLayout } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { handOverOrder, listTablesWithState, parkOrder, placeOrder } from "./working-order.js";
 import { catchUpZone, ensureToday, resetZone } from "./floor-today-store.js";
 import { collectOrder } from "./till-sale.js";
@@ -151,6 +157,63 @@ describe("real module floor deletion", () => {
         await run((tx) => tx.select().from(departments).where(eq(departments.id, f.departmentId)))
       )[0]?.active,
     ).toBe(true);
+  });
+
+  it("deleting a department removes its sets", async () => {
+    const f = await target();
+    const service = core().floorDeletion;
+    const { standard, dinner } = await run(async (tx) => {
+      const standard = (await defaultLayout(tx, venue.cfg, f.zoneId)).setId;
+      const dinner = await core().floorPlanSets.create(tx);
+      await linkFloorPlanSet(tx, venue.cfg, {
+        setId: dinner,
+        departmentId: f.departmentId,
+        name: "Dinner",
+      });
+      const [menu] = await tx.insert(catalogues).values({ name: "Menu" }).returning();
+      await tx.insert(menuPeriods).values([
+        { departmentId: f.departmentId, name: "Lunch", menuId: menu!.id, floorPlanSetId: standard },
+        { departmentId: f.departmentId, name: "Dinner", menuId: menu!.id, floorPlanSetId: dinner },
+      ]);
+      return { standard, dinner };
+    });
+    await run((tx) =>
+      saveLayout(
+        tx,
+        venue.cfg,
+        enabledTableRemovals(ALL_MODULES),
+        { setId: dinner, zoneId: f.zoneId },
+        { revision: 0, tables: [] },
+        NOW,
+      ),
+    );
+    const setIds = [standard, dinner];
+    expect(
+      await run((tx) => tx.select().from(floorPlans).where(inArray(floorPlans.setId, setIds))),
+    ).not.toEqual([]);
+
+    const impact = await run((tx) =>
+      readDepartmentDeleteImpact(tx, venue.cfg, service, f.departmentId, NOW),
+    );
+    expect(impact.removes).toContainEqual(
+      expect.objectContaining({ key: "floor_plan_sets", count: 2 }),
+    );
+
+    await run((tx) => deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW));
+
+    const after = await run(async (tx) => ({
+      periods: await tx
+        .select()
+        .from(menuPeriods)
+        .where(inArray(menuPeriods.floorPlanSetId, setIds)),
+      links: await tx
+        .select()
+        .from(departmentFloorPlanSets)
+        .where(eq(departmentFloorPlanSets.departmentId, f.departmentId)),
+      sets: await tx.select().from(floorPlanSets).where(inArray(floorPlanSets.id, setIds)),
+      plans: await tx.select().from(floorPlans).where(inArray(floorPlans.setId, setIds)),
+    }));
+    expect(after).toEqual({ periods: [], links: [], sets: [], plans: [] });
   });
 
   it("rechecks a booking committed after preview when deletion reaches the write queue", async () => {
@@ -273,6 +336,7 @@ describe("real module floor deletion", () => {
             .returning({ id: deviceProfiles.id })
         )[0]!.id,
     );
+    const layout = await run((tx) => defaultLayout(tx, venue.cfg, f.zoneId));
     const service = core().floorDeletion;
     const held = gate();
     const release = gate();
@@ -301,11 +365,11 @@ describe("real module floor deletion", () => {
     });
     const save = run(async (tx) => {
       enteredSave = true;
-      return saveZonePlan(
+      return saveLayout(
         tx,
         venue.cfg,
         enabledTableRemovals(ALL_MODULES),
-        f.zoneId,
+        layout,
         { revision: 0, tables: [] },
         NOW,
       );
@@ -519,6 +583,8 @@ describe("mounted authenticated service deletion races", () => {
         );
         sourceDepartmentId = source!.departmentId;
       }
+      const layout =
+        kind === "master" ? await run((tx) => defaultLayout(tx, venue.cfg, zoneId)) : undefined;
       const preview = await request("GET", id, targetKind);
       expect(preview.status).toBe(200);
       expect((await preview.json()).refusals).toEqual([]);
@@ -580,11 +646,11 @@ describe("mounted authenticated service deletion races", () => {
                   });
                 }
                 if (kind === "master")
-                  await saveZonePlan(
+                  await saveLayout(
                     tx,
                     venue.cfg,
                     enabledTableRemovals(ALL_MODULES),
-                    zoneId,
+                    layout!,
                     {
                       revision: 0,
                       tables: [
@@ -699,6 +765,7 @@ describe("mounted authenticated service deletion races", () => {
         .from(zoneServicePolicies)
         .where(eq(zoneServicePolicies.zoneId, venue.tables.zoneId)),
     );
+    const layout = await run((tx) => defaultLayout(tx, venue.cfg, f.zoneId));
     const held = gate();
     const release = gate();
     const first = run(async () => {
@@ -744,11 +811,11 @@ describe("mounted authenticated service deletion races", () => {
         }),
       ),
       run((tx) =>
-        saveZonePlan(
+        saveLayout(
           tx,
           venue.cfg,
           enabledTableRemovals(ALL_MODULES),
-          f.zoneId,
+          layout,
           { revision: 0, tables: [] },
           NOW,
         ),
@@ -868,13 +935,18 @@ it.each(["zone", "department"] as const)(
     const master = await run(async (tx) => {
       const [plan] = await tx
         .insert(floorPlans)
-        .values({ zoneId: f.zoneId, revision: 1, savedAt: NOW.toISOString() })
+        .values({
+          zoneId: f.zoneId,
+          setId: (await defaultLayout(tx, venue.cfg, f.zoneId)).setId,
+          revision: 1,
+          savedAt: NOW.toISOString(),
+        })
         .returning();
       const masters = await tx
         .insert(floorPlanTables)
         .values([
-          { planId: plan!.id, label, seats: 4 },
-          { planId: plan!.id, label: `Saved ${randomUUID()}`, seats: 4 },
+          { zoneId: f.zoneId, label, seats: 4 },
+          { zoneId: f.zoneId, label: `Saved ${randomUUID()}`, seats: 4 },
         ])
         .returning();
       for (const [i, tableId] of [f.tableId, second].entries())
@@ -882,7 +954,7 @@ it.each(["zone", "department"] as const)(
           .update(diningTables)
           .set({ planTableId: masters[i]!.id })
           .where(eq(diningTables.id, tableId));
-      await resetZone(tx, venue.cfg, removals, f.zoneId, NOW);
+      await resetZone(tx, venue.cfg, removals, f.zoneId, NOW, "due");
       return { plan: plan!, masters };
     });
     const seated = await seat(venue, f.tableId);
@@ -901,12 +973,23 @@ it.each(["zone", "department"] as const)(
       partKeys: [],
     };
     const save = (revision: number) =>
-      run((tx) =>
-        saveZonePlan(tx, venue.cfg, removals, f.zoneId, { revision, tables: [kept] }, NOW),
+      run(async (tx) =>
+        saveLayout(
+          tx,
+          venue.cfg,
+          removals,
+          await defaultLayout(tx, venue.cfg, f.zoneId),
+          { revision, tables: [kept] },
+          NOW,
+        ),
       );
     await expect(save(1)).resolves.toEqual({ revision: 2, ids: { kept: kept.id } });
     expect(
-      (await run((tx) => readZonePlan(tx, venue.cfg, f.zoneId))).tables.map((table) => table.id),
+      (
+        await run(async (tx) =>
+          readLayout(tx, venue.cfg, await defaultLayout(tx, venue.cfg, f.zoneId)),
+        )
+      ).tables.map((table) => table.id),
     ).toEqual([kept.id]);
     expect(
       (
@@ -930,7 +1013,7 @@ it.each(["zone", "department"] as const)(
     expect(await run(completeSnapshot)).toEqual(unchanged);
     await join(venue, seated.partyId, second);
     await run((tx) => leaveTables(tx, [f.tableId]));
-    await run((tx) => resetZone(tx, venue.cfg, removals, f.zoneId, NOW));
+    await run((tx) => resetZone(tx, venue.cfg, removals, f.zoneId, NOW, "due"));
     expect(
       await run((tx) =>
         tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, f.tableId)),
@@ -1057,12 +1140,12 @@ it.each(["zone", "department"] as const)(
       });
     });
     const replacementSave = () =>
-      run((tx) =>
-        saveZonePlan(
+      run(async (tx) =>
+        saveLayout(
           tx,
           venue.cfg,
           removals,
-          replacementZone.id,
+          await defaultLayout(tx, venue.cfg, replacementZone.id),
           {
             revision: 0,
             tables: [{ key: "new", label, seats: 4, fixed: false, placement: null, partKeys: [] }],
@@ -1187,14 +1270,18 @@ it.each(["zone", "department"] as const)(
       }),
     ).toEqual([]);
     expect(await run(completeSnapshot)).toEqual(after);
-    await expect(run((tx) => readZonePlan(tx, venue.cfg, f.zoneId))).rejects.toMatchObject({
+    await expect(
+      run((tx) => readLayout(tx, venue.cfg, { setId: master.plan.setId!, zoneId: f.zoneId })),
+    ).rejects.toMatchObject({
       code: "zone.not_found",
     });
     await expect(
       run((tx) => catchUpZone(tx, venue.cfg, removals, f.zoneId, NOW)),
     ).rejects.toMatchObject({ code: "zone.not_found" });
     await replacementSave();
-    const replacementPlan = await run((tx) => readZonePlan(tx, venue.cfg, replacementZone.id));
+    const replacementPlan = await run(async (tx) =>
+      readLayout(tx, venue.cfg, await defaultLayout(tx, venue.cfg, replacementZone.id)),
+    );
     const replacementId = replacementPlan.tables[0]!.liveTableId!;
     expect(replacementId).not.toBe(f.tableId);
     expect(replacementPlan.tables[0]!.label).toBe(label);
@@ -1213,34 +1300,38 @@ it("rechecks an upcoming booking added after the master editor opened, but allow
   const removals = enabledTableRemovals(ALL_MODULES);
   const masterId = await run(async (tx) => {
     const [table] = await tx.select().from(diningTables).where(eq(diningTables.id, f.tableId));
-    const [plan] = await tx
-      .insert(floorPlans)
-      .values({ zoneId: f.zoneId, revision: 1, savedAt: NOW.toISOString() })
-      .returning();
+    await tx.insert(floorPlans).values({
+      zoneId: f.zoneId,
+      setId: (await defaultLayout(tx, venue.cfg, f.zoneId)).setId,
+      revision: 1,
+      savedAt: NOW.toISOString(),
+    });
     const [master] = await tx
       .insert(floorPlanTables)
-      .values({ planId: plan!.id, label: table!.label, seats: 4 })
+      .values({ zoneId: f.zoneId, label: table!.label, seats: 4 })
       .returning();
     await tx
       .update(diningTables)
       .set({ planTableId: master!.id })
       .where(eq(diningTables.id, f.tableId));
-    await resetZone(tx, venue.cfg, removals, f.zoneId, NOW);
+    await resetZone(tx, venue.cfg, removals, f.zoneId, NOW, "due");
     return master!.id;
   });
-  const opened = await run((tx) => readZonePlan(tx, venue.cfg, f.zoneId));
+  const opened = await run(async (tx) =>
+    readLayout(tx, venue.cfg, await defaultLayout(tx, venue.cfg, f.zoneId)),
+  );
   expect(opened.tables[0]!.id).toBe(masterId);
   const http = await mounted();
   const response = await http.book(f.tableId, "2026-10-12");
   expect(response.status).toBe(201);
   const bookingId = (await response.json()).id as string;
   const save = () =>
-    run((tx) =>
-      saveZonePlan(
+    run(async (tx) =>
+      saveLayout(
         tx,
         venue.cfg,
         removals,
-        f.zoneId,
+        await defaultLayout(tx, venue.cfg, f.zoneId),
         { revision: opened.revision, tables: [] },
         NOW,
       ),

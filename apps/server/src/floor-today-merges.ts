@@ -11,6 +11,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError, freeSide, touchingPlace, type JoinPlace, type JoinSide } from "@waitron/shared";
 import {
   refuseInJoinedTable,
+  refuseNeedsMoving,
   refuseUnfree,
   refuseUnmovable,
   todayOf,
@@ -100,7 +101,8 @@ export async function mergeMembers(tx: Transaction, tableId: string): Promise<st
 
 /**
  * The party just seated at `tableId` takes every other member of its merge: refused
- * `tab.already_open` for a member a party holds, `table.needs_clearing` for one needing clearing.
+ * `tab.already_open` for a member a party holds, `table.needs_clearing` for one needing clearing,
+ * `table.needs_moving` for one needing moving.
  */
 export async function seatMergeMembers(
   tx: Transaction,
@@ -109,6 +111,7 @@ export async function seatMergeMembers(
 ): Promise<void> {
   const others = (await mergeMembers(tx, tableId)).filter((id) => id !== tableId);
   await refuseUnfree(tx, others);
+  await refuseNeedsMoving(tx, others);
   for (const other of others) {
     await tx.insert(partyTables).values({ partyId, tableId: other });
   }
@@ -137,7 +140,8 @@ export async function joinMergeMembers(
 
 /**
  * `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table,
- * nor a table still joined in either that goes in the merge, may be held or need clearing.
+ * nor a table still joined in either that goes in the merge, may be held, need clearing or need
+ * moving.
  * This never puts a joined table in a merge: its tables still joined are split off it and go in
  * instead, and its guests pass to them; the caller tells the kitchen. A joined `target` a reset
  * already left in a merge stays whole in it, and a joined `moving` table in one is refused
@@ -157,7 +161,10 @@ export async function writeMerge(
   refuseUnmovable(moving, target);
   await refuseInJoinedTable(tx, [moving.tableId, target.tableId]);
   if (moving.merge !== null) throw new AppError("table.merged", { tableId: moving.tableId });
-  if (args.free) await refuseUnfree(tx, [moving.tableId, target.tableId]);
+  if (args.free) {
+    await refuseUnfree(tx, [moving.tableId, target.tableId]);
+    await refuseNeedsMoving(tx, [moving.tableId, target.tableId]);
+  }
   if (zoneId !== moving.zoneId) {
     throw new AppError("service_zone.join_mismatch", {
       orderZoneId: zoneId,
@@ -177,6 +184,7 @@ export async function writeMerge(
       part.stillJoined ? [part.tableId] : [],
     );
     await refuseUnfree(tx, joining);
+    await refuseNeedsMoving(tx, joining);
   }
   await splitInUse(tx, moving.tableId, movingParts);
   await splitInUse(tx, target.tableId, targetParts);

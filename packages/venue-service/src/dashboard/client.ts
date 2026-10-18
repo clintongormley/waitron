@@ -1,4 +1,5 @@
 import type { DeleteImpact } from "@waitron/shared";
+import type { FloorPlanSetDeleteImpact, FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import type { LocalDate } from "../hours-types.js";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -89,7 +90,6 @@ export interface NamedRow {
 }
 export interface FloorZone extends NamedRow {
   active?: boolean;
-  hasPlacedTables?: boolean;
 }
 export interface VenueServiceModel {
   departments: Department[];
@@ -129,6 +129,8 @@ export interface DepartmentTransfersView {
   destinationDepartmentIds: string[];
   profiles: NamedRow[];
 }
+
+const FLOOR_PLAN_SETS = "/management-api/venue-service/floor-plan-sets";
 
 export class VenueServiceApi {
   readonly openingHours: OpeningHoursApi;
@@ -205,6 +207,71 @@ export class VenueServiceApi {
       failed,
       recovered,
     );
+  }
+
+  floorPlanSets(): Promise<FloorPlanSetsModel> {
+    return this.request<FloorPlanSetsModel>(FLOOR_PLAN_SETS, "GET", undefined, { passive: true });
+  }
+
+  /** Keeps `apply` fed with the Floor plans page's model; every read is passive. */
+  watchFloorPlanSets(
+    apply: (model: FloorPlanSetsModel) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      "venue-service:floor-plan-sets",
+      QUERY_DEPENDENCIES["floor-plan-sets"],
+      () => this.floorPlanSets(),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+
+  /** A department's first set takes no `fromSetId`; a later one starts as a copy of it. */
+  createFloorPlanSet(input: {
+    departmentId: string;
+    name: string;
+    fromSetId?: string;
+  }): Promise<{ setId: string }> {
+    return this.request(FLOOR_PLAN_SETS, "POST", input);
+  }
+
+  renameFloorPlanSet(setId: string, name: string): Promise<void> {
+    return this.request(`${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}`, "PATCH", { name });
+  }
+
+  copyFloorPlanSet(setId: string, name: string): Promise<{ setId: string }> {
+    return this.request(`${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}/copy`, "POST", { name });
+  }
+
+  makeDefaultFloorPlanSet(setId: string): Promise<void> {
+    return this.request(`${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}/make-default`, "POST");
+  }
+
+  readFloorPlanSetDeleteImpact(
+    setId: string,
+    options?: { passive?: boolean },
+  ): Promise<FloorPlanSetDeleteImpact> {
+    return this.request(
+      `${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}/delete-impact`,
+      "GET",
+      undefined,
+      options,
+    );
+  }
+
+  /** A null `replaceWith` hands the set's periods to the department's default. */
+  deleteFloorPlanSet(setId: string, replaceWith: string | null): Promise<void> {
+    return this.request(`${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}/delete`, "POST", {
+      replaceWith,
+    });
+  }
+
+  /** After a set write, so the page shows it even when the change feed delivers nothing. */
+  rereadFloorPlanSets(): void {
+    this.#watches.reread(QUERY_DEPENDENCIES["floor-plan-sets"]);
   }
 
   get background(): VenueServiceApi {

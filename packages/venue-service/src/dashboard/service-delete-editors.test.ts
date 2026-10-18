@@ -139,6 +139,7 @@ function hoursFixture(): OpeningHoursModel {
           menuId: "m1",
           staffMenuIds: [],
           endOffsetMinutes: 0,
+          floorPlanSetId: null,
           weekdays: [1],
           routingUses: [],
         },

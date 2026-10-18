@@ -42,6 +42,7 @@ const HIERARCHY_DELETE_READS = [
   "department_transfer_desks",
   "department_transfer_destinations",
   "department_transfer_requests",
+  "department_floor_plan_sets",
 ] as const;
 
 /** Every table `readCalendarMonthPlan` reads, the holiday tables and the special days' paint included. */
@@ -94,6 +95,25 @@ export const QUERY_DEPENDENCIES = {
     "floor_today_joins",
   ],
   settings: ["service_settings"],
+  "floor-plan-sets": [
+    "floor_plan_sets",
+    "floor_plans",
+    "floor_plan_placements",
+    "floor_plan_tables",
+    "floor_plan_table_parts",
+    "department_floor_plan_sets",
+    "menu_periods",
+    "departments",
+    "zone_service_policies",
+    "floor_zones",
+  ],
+  "period-floor-plans": [
+    "departments",
+    "zone_service_policies",
+    "floor_zones",
+    "floor_plan_tables",
+    "department_floor_plan_sets",
+  ],
   "prep-stations-list": ["kitchen_stations"],
   routing: [
     "kitchen_timing_defaults",
@@ -224,8 +244,6 @@ export const QUERY_DEPENDENCIES = {
     "categories",
     "kitchen_stations",
     "floor_zones",
-    "floor_plans",
-    "floor_plan_tables",
     "products",
     "content_languages",
     "menu_details",

@@ -41,6 +41,7 @@ const period = (id: string, name: string, colour: Period["colour"], menuId: stri
   menuId,
   staffMenuIds: id === "p2" ? ["staff", "wine"] : [],
   endOffsetMinutes: 0,
+  floorPlanSetId: null,
   weekdays: [],
   routingUses: [],
 });
@@ -144,6 +145,13 @@ async function mount(state: string, theme: "light" | "dark", inWindow = false) {
       return paintedIn(state === "not-painted");
     }
     if (state === "load-failed") throw new Error("offline");
+    if (path.endsWith("/floor-plan-sets/period-choices"))
+      return {
+        departments:
+          state === "floor-plan"
+            ? [{ id: "restaurant", sets: [{ id: "house", name: "House", isDefault: true }] }]
+            : [],
+      };
     return model(state === "empty");
   }) as DashboardRequest);
   screen.readOnly = state === "viewer";
@@ -163,6 +171,10 @@ async function mount(state: string, theme: "light" | "dark", inWindow = false) {
     await expect.poll(() => screen.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
     const table = screen.shadowRoot!.querySelector("wt-data-table")!;
     await expect.poll(() => table.shadowRoot!.querySelector("[part~=chip]")).not.toBeNull();
+    if (state === "floor-plan")
+      await expect
+        .poll(() => table.shadowRoot!.querySelector("[part~=default-mark]"))
+        .not.toBeNull();
   }
   await screen.updateComplete;
   if (state.startsWith("delete")) {
@@ -207,6 +219,7 @@ describe.each(["light", "dark"] as const)("Periods (%s)", (theme) => {
     "delete",
     "delete-routing",
     "delete-refused",
+    "floor-plan",
   ])("%s", async (state) => {
     setLocale("en");
     await mount(state, theme);

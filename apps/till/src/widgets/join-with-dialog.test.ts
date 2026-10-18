@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import "./join-with-dialog.js";
 import type { TillJoinWithDialog } from "./join-with-dialog.js";
 import type { TableParty, TableState } from "../api/client.js";
@@ -94,6 +95,39 @@ it("lists the zone's other tables with their condition and sends the pick", asyn
   el.shadowRoot!.querySelector<HTMLElement>('[data-target="t3"]')!.click();
 
   expect(seen).toEqual([{ pick: { tableId: "t1", targetId: "t3" } }, "close"]);
+});
+
+it("lists a table that needs moving but cannot pick it, saying why, and Needs clearing first", async () => {
+  const today = {
+    placement: { x: 0, y: 0, width: 2, height: 2, shape: "round" as const, rotation: 0 },
+    seats: 2,
+    fixed: false,
+    takenOff: false,
+    joinId: null,
+    joinSeats: null,
+    inJoinedTable: null,
+    joined: null,
+    splitOffFrom: null,
+    zoneRevision: 0,
+    needsMoving: true,
+  };
+  const el = await mount({
+    targets: [table("t7", { today }), table("t8", { today, condition: "needs_clearing" })],
+  });
+  const seen = captured(el);
+
+  expect(rows(el)).toEqual([
+    { id: "t7", text: "7 Needs moving", disabled: true },
+    { id: "t8", text: "8 Needs clearing", disabled: true },
+  ]);
+  expect(el.shadowRoot!.querySelector('[data-target-reason="t7"]')!.textContent!.trim()).toBe(
+    codeMessage("table.needs_moving"),
+  );
+  expect(el.shadowRoot!.querySelector('[data-target-reason="t8"]')!.textContent!.trim()).toBe(
+    codeMessage("table.needs_clearing"),
+  );
+  el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
+  expect(seen).toEqual([]);
 });
 
 it("says so when there is no other table", async () => {

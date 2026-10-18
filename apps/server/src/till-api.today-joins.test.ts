@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { saveZonePlan } from "./floor-plan.js";
+import { saveLayout } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import {
   diningTables,
   floorTodayJoins,
@@ -749,8 +750,8 @@ describe("a party change that changes a room answers its revision", () => {
       placement: { x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
       partKeys: [],
     });
-    await inTx(v, (tx) =>
-      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, {
+    await inTx(v, async (tx) =>
+      saveLayout(tx, v.cfg, REMOVALS, await defaultLayout(tx, v.cfg, zoneId), {
         revision: planRevision,
         tables: [
           entry("a", labels[0]!, 0),

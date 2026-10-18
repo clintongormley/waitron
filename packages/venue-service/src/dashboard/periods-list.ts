@@ -6,6 +6,7 @@ import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { format } from "./hours-view.js";
@@ -115,6 +116,9 @@ export class PeriodsList extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
       ${chipTints}
+      wt-data-table::part(default-mark) {
+        color: var(--wt-color-text-muted);
+      }
     `,
   ];
   @property({ attribute: false }) api!: OpeningHoursApi;
@@ -134,6 +138,7 @@ export class PeriodsList extends LitElement {
     readOnly: () => this.readOnly,
     draftParent: () => this.draftParent,
     onDelete: (_department, period) => this.askDelete(period),
+    keepFloorPlans: true,
   });
   @state() private deleting?: Deletion;
   private detach?: () => void;
@@ -167,6 +172,7 @@ export class PeriodsList extends LitElement {
         this.paintedInError = "";
       },
     );
+    this.periods.watchFloorPlans();
   }
   override disconnectedCallback() {
     this.detach?.();
@@ -216,6 +222,33 @@ export class PeriodsList extends LitElement {
           >`,
       )}</span
     >`;
+  }
+  /** Each department offering a floor plan, by id, with its sets; others are absent. */
+  private planned?: {
+    floorPlans: PeriodFloorPlans;
+    departments: Map<string, PeriodFloorPlans["departments"][number]>;
+  };
+  private plannedDepartments() {
+    const floorPlans = this.periods.floorPlans;
+    if (!floorPlans) return undefined;
+    if (this.planned?.floorPlans !== floorPlans)
+      this.planned = {
+        floorPlans,
+        departments: new Map(
+          floorPlans.departments.map((department) => [department.id, department]),
+        ),
+      };
+    return this.planned.departments;
+  }
+  private floorPlanCell(row: PeriodRow) {
+    if (row.kind !== "period") return nothing;
+    const sets = this.plannedDepartments()?.get(row.departmentId)?.sets ?? [];
+    const chosen = sets.find(({ id, isDefault }) => !isDefault && id === row.floorPlanSetId);
+    if (chosen) return chosen.name;
+    const fallback = sets.find(({ isDefault }) => isDefault);
+    if (!fallback) return nothing;
+    return html`<span part="set-name">${fallback.name}</span>
+      <span part="default-mark">${t("period.default_mark")}</span>`;
   }
   private bin(row: PeriodRow) {
     if (row.kind !== "period") return nothing;
@@ -276,6 +309,15 @@ export class PeriodsList extends LitElement {
               ? row.staffMenuIds.map((id) => this.menuName(id)).join(", ")
               : "—",
       },
+      ...(this.plannedDepartments()?.size
+        ? [
+            {
+              key: "floorPlan",
+              label: t("period.floor_plan"),
+              cell: (row: PeriodRow) => this.floorPlanCell(row),
+            } satisfies DataTableColumn<PeriodRow>,
+          ]
+        : []),
       {
         key: "paintedIn",
         label: t("period.painted_in"),
@@ -307,6 +349,7 @@ export class PeriodsList extends LitElement {
       </div>
       ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}
       ${this.paintedInError ? html`<p role="alert" data-test="painted-in-error">${this.paintedInError}</p>` : nothing}
+      ${this.periods.floorPlansFailed ? html`<p role="alert" data-test="floor-plans-error">${t("floor_plans.load_error")}</p>` : nothing}
       ${
         !model
           ? nothing

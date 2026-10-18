@@ -346,6 +346,45 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
   });
 });
 
+it("registers Floor plans in Operations, configured with venue.configure and read with venue.view", async () => {
+  const fetchImpl = vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ departments: [] }),
+    } as Response),
+  );
+  const entry = VENUE_SERVICE_DASHBOARD.moreScreens!.find((x) => x.screen.id === "floor-plans")!;
+  expect(entry.screen).toEqual({
+    id: "floor-plans",
+    navLabelKey: "nav.floor_plans",
+    group: "operations",
+    order: 13,
+    requiresPermission: "venue.configure",
+    readPermission: "venue.view",
+  });
+  expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.floor_plans"]).toBe("Floor plans");
+  expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.floor_plans"]).toBe("Planos de sala");
+  const liveData = new LiveData();
+  const handle = entry.create({
+    request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+    liveData,
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  containers.push(container);
+  render(handle.render(true), container);
+  const screen = container.querySelector("dashboard-floor-plans-screen")!;
+  expect(screen.api.liveData).toBe(liveData);
+  expect(screen.readOnly).toBe(true);
+  render(handle.render(), container);
+  expect(screen.readOnly).toBe(false);
+  await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalled());
+  const [path, init] = (fetchImpl.mock.calls as unknown as [string, RequestInit][])[0]!;
+  expect(path).toBe("/management-api/venue-service/floor-plan-sets");
+  expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+});
+
 it("the Calendar's Periods window is read-only for a viewer and editable for a manager", async () => {
   const model = {
     dayCutover: "06:00",
@@ -379,9 +418,11 @@ it("the Calendar's Periods window is read-only for a viewer and editable for a m
             path.endsWith("/menu-periods/painted-in") ||
             path.endsWith("/special-days")
             ? []
-            : path.includes("/opening-hours/year?")
-              ? yearRead(Number(new URL(path, location.href).searchParams.get("year")))
-              : model,
+            : path.endsWith("/floor-plan-sets/period-choices")
+              ? { departments: [] }
+              : path.includes("/opening-hours/year?")
+                ? yearRead(Number(new URL(path, location.href).searchParams.get("year")))
+                : model,
         ),
     } as Response),
   );
@@ -421,6 +462,7 @@ it("registers Opening hours without a separate Station hours page", () => {
   expect(screens.map((screen) => screen.id)).toEqual([
     "venue-operations",
     "prep-stations",
+    "floor-plans",
     "opening-hours",
   ]);
   expect(customElements.get("dashboard-hours-screen")).toBeUndefined();
@@ -515,6 +557,7 @@ it("A725 puts Prep stations immediately after Departments and zones, before Cale
   expect(screens.map(({ id }) => id)).toEqual([
     "venue-operations",
     "prep-stations",
+    "floor-plans",
     "opening-hours",
   ]);
 });

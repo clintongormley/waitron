@@ -1655,7 +1655,11 @@ describe("departments", () => {
             deleteDepartment(
               tx,
               here,
-              { readImpact: async () => ({ refusals: [], removes: [] }), clear: async () => {} },
+              {
+                removeSets: async () => {},
+                readImpact: async () => ({ refusals: [], removes: [] }),
+                clear: async () => {},
+              },
               departmentId,
               new Date("2026-10-11T12:00:00Z"),
             ),
@@ -1682,7 +1686,11 @@ describe("departments", () => {
         deleteDepartment(
           tx,
           cfg,
-          { readImpact: async () => ({ refusals: [], removes: [] }), clear: async () => {} },
+          {
+            removeSets: async () => {},
+            readImpact: async () => ({ refusals: [], removes: [] }),
+            clear: async () => {},
+          },
           department.id,
           new Date("2026-10-11T12:00:00Z"),
         ),

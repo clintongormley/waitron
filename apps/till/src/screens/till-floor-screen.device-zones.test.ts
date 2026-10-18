@@ -17,6 +17,8 @@ const zone = (id: string, over: Partial<FloorZone> = {}): FloorZone => ({
   closed: false,
   closesAt: null,
   hasPlan: false,
+  layoutSetName: null,
+  layoutDue: null,
   serviceMode: "table_tab",
   ...over,
 });
@@ -32,7 +34,12 @@ it("a single table zone has no pills and a zone without a plan stays in list vie
     zones: [zone("Terrace")],
   });
   expect(el.shadowRoot!.querySelector(".tabs")).toBeNull();
-  expect(el.shadowRoot!.querySelector("[data-view-toggle]")).not.toBeNull();
+  // At this file's phone width the toggle is the zone menu's first item.
+  const menu = el.shadowRoot!.querySelector("till-floor-zone-menu")!;
+  await menu.updateComplete;
+  expect(menu.shadowRoot!.querySelector('[data-menu-item="view"]')?.textContent?.trim()).toBe(
+    "Map",
+  );
   expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
 });
 

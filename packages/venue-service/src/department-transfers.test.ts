@@ -621,7 +621,11 @@ describe("departmental tab transfers", () => {
         service.deleteDepartment(
           tx,
           v.cfg,
-          { readImpact: async () => ({ refusals: [], removes: [] }), clear: async () => {} },
+          {
+            removeSets: async () => {},
+            readImpact: async () => ({ refusals: [], removes: [] }),
+            clear: async () => {},
+          },
           v.a,
           new Date("2026-10-11T12:00:00Z"),
         ),

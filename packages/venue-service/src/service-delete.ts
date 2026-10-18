@@ -17,6 +17,9 @@ import {
   zoneServicePolicies,
 } from "./schema/service.js";
 import { departmentTransferRequests } from "./schema/department-transfers.js";
+import { removeFloorPlanSets } from "./floor-plan-set-store.js";
+import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
+import { menuPeriods } from "./schema/menus.js";
 import {
   clearServiceDeleteSettings,
   readServiceDeleteSettings,
@@ -322,6 +325,19 @@ async function remove(
       first.params as never,
     );
   await floor.clear(tx, zoneIds, now);
+  if (departmentId !== null) {
+    const links = await tx
+      .select({ setId: departmentFloorPlanSets.setId })
+      .from(departmentFloorPlanSets)
+      .where(eq(departmentFloorPlanSets.departmentId, departmentId));
+    await removeFloorPlanSets(
+      tx,
+      floor,
+      links.map((link) => link.setId),
+      eq(menuPeriods.departmentId, departmentId),
+      null,
+    );
+  }
   await clearServiceDeleteSettings(tx, cfg, zoneIds, departmentId);
   if (zoneIds.length > 0)
     await tx.update(floorZones).set({ active: false }).where(inArray(floorZones.id, zoneIds));

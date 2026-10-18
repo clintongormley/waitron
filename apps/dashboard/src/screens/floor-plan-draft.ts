@@ -201,28 +201,38 @@ export function changePlacement(
 }
 
 /** Puts a spare table at `at` as given, overlaps included, or else at the first free spot; with
- *  none it returns `draft` itself, which the tables list reads as no room. */
+ *  none it returns `draft` itself, which the tables list reads as no room. A joined table takes its
+ *  parts off in the same change, and a part whose joined table stands is not placed: a layout never
+ *  places both. */
 export function placeTable(draft: FloorPlanDraft, key: string, at?: PlanPlacement): FloorPlanDraft {
-  if (draft.tables.find((t) => t.key === key)?.placement != null) return draft;
-  if (at !== undefined) return patchTable(draft, key, { placement: at });
-  const size = draft.tables.find((t) => t.key === key)?.keptSize ?? {
-    width: NEW_TABLE_SIZE,
-    height: NEW_TABLE_SIZE,
-  };
+  const table = draft.tables.find((t) => t.key === key);
+  if (table === undefined || table.placement !== null) return draft;
+  if (joinedTableOf(draft, key)?.placement != null) return draft;
+  const parts = new Set(table.parts ?? []);
+  const place = (placement: PlanPlacement): FloorPlanDraft => ({
+    ...draft,
+    tables: draft.tables.map((t) =>
+      t.key === key
+        ? { ...t, placement: { ...placement } }
+        : parts.has(t.key) && t.placement !== null
+          ? { ...t, placement: null }
+          : t,
+    ),
+  });
+  if (at !== undefined) return place(at);
+  const size = table.keptSize ?? { width: NEW_TABLE_SIZE, height: NEW_TABLE_SIZE };
   const placed = draft.tables.flatMap((t) =>
-    t.placement === null || t.key === key ? [] : [t.placement],
+    t.placement === null || t.key === key || parts.has(t.key) ? [] : [t.placement],
   );
   const spot = firstFreeSpot(placed, size);
   if (spot === null) return draft;
-  return patchTable(draft, key, {
-    placement: {
-      x: clampToGrid(spot.x),
-      y: clampToGrid(spot.y),
-      width: size.width,
-      height: size.height,
-      shape: "rect",
-      rotation: 0,
-    },
+  return place({
+    x: clampToGrid(spot.x),
+    y: clampToGrid(spot.y),
+    width: size.width,
+    height: size.height,
+    shape: "rect",
+    rotation: 0,
   });
 }
 
@@ -244,19 +254,21 @@ export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft 
 }
 
 /** Puts a table back, as given, after the others. A part re-joins the joined table that held it
- *  in `opened` when that table is in the draft and no other joined table holds the part; a joined
- *  table keeps only the parts `freeTables` would still offer it. */
+ *  in `opened` when that table is in the draft and no other joined table holds the part, off the
+ *  layout when that joined table stands; a joined table keeps only the parts `freeTables` would
+ *  still offer it. */
 export function restoreTable(
   draft: FloorPlanDraft,
   table: DraftTable,
   opened: FloorPlanDraft,
 ): FloorPlanDraft {
   if (draft.tables.some((t) => t.key === table.key)) return draft;
-  const placement = table.placement === null ? null : { ...table.placement };
   const free = new Set(freeTables(draft).map((t) => t.key));
   const parts = table.parts === null ? null : table.parts.filter((part) => free.has(part));
   const heldBy = joinedTableOf(opened, table.key)?.key;
   const rejoins = heldBy !== undefined && joinedTableOf(draft, table.key) === undefined;
+  const joinedStands = rejoins && draft.tables.find((t) => t.key === heldBy)?.placement != null;
+  const placement = table.placement === null || joinedStands ? null : { ...table.placement };
   const tables = draft.tables.map((t) =>
     rejoins && t.key === heldBy && t.parts !== null ? { ...t, parts: [...t.parts, table.key] } : t,
   );

@@ -10,6 +10,7 @@ import {
   unsafeCSS,
 } from "lit";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import { MediaQueryController } from "../state/media-query-controller.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import type { TimingBand } from "@waitron/shared";
@@ -34,6 +35,7 @@ import {
   partyTablesName,
 } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
 import "../widgets/bill-choice-dialog.js";
@@ -61,6 +63,7 @@ import {
   detailsHeading,
   groupName,
   groupSplitOf,
+  needsMovingToday,
   nextFloorMoment,
   normalGroupName,
   onTodaysPlan,
@@ -74,6 +77,7 @@ import {
   shownName,
   shownUnder,
   spareSpot,
+  tableSentence,
   withoutTodaysNames,
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
@@ -97,6 +101,26 @@ import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 
+/** The words of a table that needs clearing or moving. */
+const WAITING = {
+  clear: {
+    state: "floor.needs_clearing",
+    title: "floor.clear_title",
+    titleNamed: "floor.clear_title_named",
+    body: "floor.clear_body",
+    action: "floor.mark_cleared",
+  },
+  move: {
+    state: "floor.needs_moving",
+    title: "floor.move_title",
+    titleNamed: "floor.move_title_named",
+    body: "floor.move_body",
+    action: "floor.mark_moved",
+  },
+} as const satisfies Record<string, Record<string, StringKey>>;
+
+type Waiting = keyof typeof WAITING;
+
 function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
 }
@@ -113,9 +137,10 @@ function tableChips(table: TableState) {
   return signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
 }
 
-/** Sent by the 15-second re-read; an action's `floor-refresh` carries no detail. */
+/** `poll` is the 15-second re-read; `zones` asks for the zones as well as the tables. */
 export interface FloorRefreshDetail {
-  poll: true;
+  poll?: true;
+  zones?: true;
 }
 
 type JoinAction = Extract<DropAction, { kind: "join" }>;
@@ -254,6 +279,17 @@ export class TillFloorScreen extends LitElement {
         min-width: 0;
         align-items: center;
         gap: var(--wt-space-2);
+      }
+
+      .layout-due {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      .layout-due p {
+        margin: 0;
       }
 
       .tabs {
@@ -594,6 +630,8 @@ export class TillFloorScreen extends LitElement {
   @state() private refusedZoneId: string | null = null;
   /** The table tapped on the map that needs clearing. */
   @state() private clearing: TableState | null = null;
+  /** The table tapped that needs moving. */
+  @state() private moving: TableState | null = null;
   /** The table whose details sheet is open, read afresh from `tables` on each render. */
   @state() private details: { tableId: string } | null = null;
   /** The floor's last refusal, in its code's words. */
@@ -640,6 +678,8 @@ export class TillFloorScreen extends LitElement {
   #reminderTimer?: ReturnType<typeof setTimeout>;
   #rereadTimer?: ReturnType<typeof setInterval>;
 
+  readonly #phone = new MediaQueryController(this, PHONE_WIDTH);
+
   override connectedCallback(): void {
     super.connectedCallback();
     // The timers stopped while the screen was off the page. A reminder that fell due meanwhile
@@ -670,6 +710,11 @@ export class TillFloorScreen extends LitElement {
       this.seating = null;
     if (this.clearing !== null && !this.tables.some((table) => table.id === this.clearing!.id))
       this.clearing = null;
+    if (
+      this.moving !== null &&
+      !this.tables.some((table) => table.id === this.moving!.id && needsMovingToday(table))
+    )
+      this.moving = null;
     this.#drawnAt = this.now ?? Date.now();
     if (this.details !== null && !this.tables.some((table) => table.id === this.details!.tableId))
       this.details = null;
@@ -728,8 +773,9 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * A seated table resumes; a table needing clearing offers Mark cleared; a free one asks for guests,
-   * headed and seated beside the other tables `seat` names when a drop gives them.
+   * A seated table resumes; a table needing clearing offers Mark cleared, and one needing moving
+   * Mark moved; a free one asks for guests, headed and seated beside the other tables `seat` names
+   * when a drop gives them.
    */
   #openTable(
     table: TableState,
@@ -738,6 +784,10 @@ export class TillFloorScreen extends LitElement {
     if (!this.tables.some((current) => current.id === table.id)) return;
     if (needsClearing(table)) {
       this.clearing = table;
+      return;
+    }
+    if (needsMovingToday(table)) {
+      this.moving = table;
       return;
     }
     if (table.party === null && !table.hasOpenTab) {
@@ -878,6 +928,16 @@ export class TillFloorScreen extends LitElement {
     this.#emit("mark-cleared", { tableId: table.id });
   }
 
+  #markMoved(table: TableState): void {
+    this.moving = null;
+    const api = this.api;
+    if (api === undefined || !this.tables.some((current) => current.id === table.id)) return;
+    this.refusal = null;
+    void this.#settle(
+      this.#send(this.#revision(table.zoneId), (sent) => api.markMovedToday(table.id, sent)),
+    );
+  }
+
   #emit(type: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
@@ -930,8 +990,8 @@ export class TillFloorScreen extends LitElement {
     return this.zones.find((zone) => zone.id === zoneId);
   }
 
-  /** A null revision is answered here as a stale one is, without being sent: only the zone reset's
-   * route accepts null. */
+  /** A null revision is answered here as a stale one is, without being sent: only the zone routes
+   * accept null. */
   #send<T>(revision: number | null, call: (revision: number) => Promise<T>): Promise<T> {
     return revision === null ? Promise.reject({ code: "floor_today.out_of_date" }) : call(revision);
   }
@@ -1194,6 +1254,7 @@ export class TillFloorScreen extends LitElement {
   async #settle(
     call: Promise<FloorAnswer | null>,
     asks: (refused: { code?: string; field?: unknown }) => boolean = () => false,
+    refresh?: FloorRefreshDetail,
   ): Promise<void> {
     try {
       this.#carry(await call);
@@ -1203,7 +1264,7 @@ export class TillFloorScreen extends LitElement {
       this.refusal = this.#refusalText(refused);
       this.#setPending(null);
     }
-    this.#requestFloorRefresh();
+    this.#requestFloorRefresh(refresh);
   }
 
   #refusalText(refused: Refused): string {
@@ -1245,6 +1306,26 @@ export class TillFloorScreen extends LitElement {
                 conjunctionList(labels, currentLocale()),
               );
         return sentence.replace("{group}", () => group);
+      }
+      case "table.needs_moving": {
+        const table = tableOf(refused.tableId);
+        return table === undefined
+          ? undefined
+          : tableSentence(table, "floor.needs_moving_first", "floor.needs_moving_first_named");
+      }
+      case "table.booked": {
+        const table = tableOf(refused.tableId);
+        return table === undefined
+          ? undefined
+          : tableSentence(table, "floor.booked_first", "floor.booked_first_named");
+      }
+      case "table.new_place_taken": {
+        const other = nameOf(refused.standingId);
+        const table = nameOf(refused.tableId);
+        if (other === undefined || table === undefined) return undefined;
+        return t("floor.new_place_taken")
+          .replaceAll("{other}", () => other)
+          .replace("{table}", () => table);
       }
       case "table.split_off": {
         const from = tableOf(refused.tableId)?.today?.splitOffFrom ?? null;
@@ -1619,47 +1700,100 @@ export class TillFloorScreen extends LitElement {
 
   /**
    * Every action is a write through a `take-orders` route, so the menu needs `canChangeToday`. A zone
-   * with a saved plan and no tables is offered it too, since only a reset brings in tables its plan
-   * has gained. `planned` covers a zone list read before the plan was saved: a floor refresh re-reads
-   * the tables, not the zones.
+   * whose department has a set and no tables is offered it too, since only a reset brings in tables its
+   * plan has gained. `planned` covers a zone list read before its department had a set: a floor refresh re-reads
+   * the tables, not the zones. On a phone the menu also holds List or Map, so it shows whenever the floor
+   * does.
    */
-  #zoneMenu(planned: boolean, activeKey: string | undefined): TemplateResult | typeof nothing {
-    const zone = this.zones.find((each) => each.id === activeKey);
-    if (zone === undefined || !(planned || zone.hasPlan) || !this.canChangeToday) return nothing;
+  #zoneMenu(
+    planned: boolean,
+    activeKey: string | undefined,
+    view: "map" | "list",
+  ): TemplateResult | typeof nothing {
+    const zone = this.zones.find((each) => each.id === activeKey) ?? null;
+    const zoneId = zone?.id ?? null;
+    const canChange = zone !== null && (planned || zone.hasPlan) && this.canChangeToday;
+    if (!canChange && !this.#phone.matches) return nothing;
     return html`<till-floor-zone-menu
       .zone=${zone}
       .tables=${this.#zone.visible}
+      .phone=${this.#phone.matches}
+      .view=${view}
+      .canChangeToday=${canChange}
+      @zone-toggle-view=${(event: Event) => {
+        event.stopPropagation();
+        this.#toggleView(view);
+      }}
       @zone-place-spare=${(event: CustomEvent<{ tableId: string }>) =>
-        this.#onZoneChange(event, zone.id, (api, revision) =>
+        this.#onZoneChange(event, zoneId, (api, revision) =>
           this.#send(revision, (sent) =>
             api.placeSpareToday(event.detail.tableId, spareSpot(this.#zone.visible), sent),
           ),
         )}
       @zone-put-back=${(event: CustomEvent<{ tableId: string }>) =>
-        this.#onZoneChange(event, zone.id, (api, revision) =>
+        this.#onZoneChange(event, zoneId, (api, revision) =>
           this.#send(revision, (sent) => api.putBackToday(event.detail.tableId, sent)),
         )}
       @zone-reset=${(event: CustomEvent<{ zoneId: string }>) =>
-        this.#onZoneChange(event, event.detail.zoneId, (api, revision) =>
-          api.resetZoneToday(event.detail.zoneId, revision),
+        this.#onZoneChange(
+          event,
+          event.detail.zoneId,
+          (api, revision) => api.resetZoneToday(event.detail.zoneId, revision),
+          { zones: true },
         )}
     ></till-floor-zone-menu>`;
   }
 
   #onZoneChange(
     event: Event,
-    zoneId: string,
+    zoneId: string | null,
     call: (api: TillApi, revision: number | null) => Promise<FloorAnswer>,
+    refresh?: FloorRefreshDetail,
   ): void {
     event.stopPropagation();
     this.refusal = null;
     const api = this.api;
     if (api === undefined) return;
-    void this.#settle(call(api, this.#revision(zoneId)));
+    void this.#settle(call(api, this.#revision(zoneId)), undefined, refresh);
   }
 
-  #requestFloorRefresh(): void {
-    this.dispatchEvent(new CustomEvent("floor-refresh", { bubbles: true, composed: true }));
+  #requestFloorRefresh(detail?: FloorRefreshDetail): void {
+    this.dispatchEvent(new CustomEvent("floor-refresh", { detail, bubbles: true, composed: true }));
+  }
+
+  /** The zones read says which layout is due, so after Update layout the zones are read again too. */
+  #layoutBanner(activeKey: string | undefined): TemplateResult | typeof nothing {
+    const zone = this.zones.find((each) => each.id === activeKey);
+    const offer = zone?.layoutDue ?? null;
+    if (zone === undefined || offer === null || !this.canChangeToday) return nothing;
+    const { periodName } = offer;
+    return html`<div class="layout-due" data-layout-due>
+      <p role="status">
+        ${
+          periodName === null
+            ? t("floor.layout_newer")
+            : t("floor.layout_ready").replace("{period}", () => periodName)
+        }
+      </p>
+      <wt-button
+        data-update-layout
+        variant="primary"
+        @click=${(event: Event) =>
+          this.#onZoneChange(
+            event,
+            zone.id,
+            (api, revision) =>
+              api.updateLayoutToday(
+                zone.id,
+                { setId: offer.setId, revision: offer.revision },
+                revision,
+              ),
+            { zones: true },
+          )}
+      >
+        ${t("floor.update_layout")}
+      </wt-button>
+    </div>`;
   }
 
   /**
@@ -1675,13 +1809,15 @@ export class TillFloorScreen extends LitElement {
           ? null
           : table.party.outstanding;
     const status =
-      needsClearing(table) && table.status === null
-        ? {
-            id: "needs-clearing",
-            label: t("floor.needs_clearing"),
-            color: "var(--wt-color-warning)",
-          }
-        : table.status;
+      table.status !== null
+        ? table.status
+        : needsClearing(table)
+          ? {
+              id: "needs-clearing",
+              label: t("floor.needs_clearing"),
+              color: "var(--wt-color-warning)",
+            }
+          : null;
     return toFloorTable(
       { id: table.id, label: shownUnder(table), seats: seatsFor(table) },
       {
@@ -1778,17 +1914,22 @@ export class TillFloorScreen extends LitElement {
               : nothing
           }
           <div class="actions">
-            <wt-button
-              class="view-toggle"
-              data-view-toggle
-              variant="secondary"
-              @click=${() => this.#toggleView(view)}
-            >
-              ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
-            </wt-button>
-            ${this.#zoneMenu(planned, activeKey)}
+            ${
+              this.#phone.matches
+                ? nothing
+                : html`<wt-button
+                    class="view-toggle"
+                    data-view-toggle
+                    variant="secondary"
+                    @click=${() => this.#toggleView(view)}
+                  >
+                    ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
+                  </wt-button>`
+            }
+            ${this.#zoneMenu(planned, activeKey, view)}
           </div>
         </div>
+        ${this.#layoutBanner(activeKey)}
         ${
           refusedZone === undefined
             ? nothing
@@ -1820,9 +1961,9 @@ export class TillFloorScreen extends LitElement {
             ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
             : this.#plannedMap(onMap, unplaced, activeKey)
         }
-        ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
-        ${this.#splitJoined()} ${this.#resetTable()} ${this.#renameWindow()} ${this.#billChoice()}
-        ${this.#joinWith()}
+        ${this.#seatDialog()} ${this.#waitingDialog("clear")} ${this.#waitingDialog("move")}
+        ${this.#detailsSheet()} ${this.#seatsPrompt()} ${this.#splitJoined()} ${this.#resetTable()}
+        ${this.#renameWindow()} ${this.#billChoice()} ${this.#joinWith()}
       </section>
     `;
   }
@@ -1917,55 +2058,84 @@ export class TillFloorScreen extends LitElement {
     ></till-seat-dialog>`;
   }
 
-  #clearDialog(): TemplateResult | typeof nothing {
-    const table = this.clearing;
+  /** The question a table that needs clearing or moving asks when it is tapped. */
+  #waitingDialog(kind: Waiting): TemplateResult | typeof nothing {
+    const table = kind === "clear" ? this.clearing : this.moving;
     if (table === null) return nothing;
+    const words = WAITING[kind];
+    const clear = kind === "clear";
+    const close = () => {
+      if (clear) this.clearing = null;
+      else this.moving = null;
+    };
     return html`<wt-dialog
       ${trackDialog()}
-      data-clear-dialog
+      ?data-clear-dialog=${clear}
+      ?data-move-dialog=${!clear}
       .open=${true}
-      .heading=${
-        table.today?.name == null
-          ? t("floor.clear_title").replace("{table}", () => table.label)
-          : t("floor.clear_title_named").replace("{table}", () => table.today!.name!)
-      }
-      @wt-close=${() => (this.clearing = null)}
+      .heading=${tableSentence(table, words.title, words.titleNamed)}
+      @wt-close=${close}
     >
-      <p>${t("floor.clear_body")}</p>
+      <p>${t(words.body)}</p>
       <wt-button
         slot="footer"
-        data-clear-cancel
+        ?data-clear-cancel=${clear}
+        ?data-move-cancel=${!clear}
         variant="secondary"
-        @click=${() => (this.clearing = null)}
+        @click=${close}
       >
         ${t("action.cancel")}
       </wt-button>
-      <wt-button
-        slot="footer"
-        data-mark-cleared
-        variant="primary"
-        @click=${() => this.#markCleared(table)}
-      >
-        ${t("floor.mark_cleared")}
-      </wt-button>
+      ${
+        this.#actsOn(kind)
+          ? html`<wt-button
+              slot="footer"
+              ?data-mark-cleared=${clear}
+              ?data-mark-moved=${!clear}
+              variant="primary"
+              @click=${() => this.#markWaiting(kind, table)}
+            >
+              ${t(words.action)}
+            </wt-button>`
+          : nothing
+      }
     </wt-dialog>`;
   }
 
-  /** A card is one button, so a table needing clearing, whose card holds its own Mark cleared, is a
-   * plain box instead. */
-  #clearingCard(table: TableState): TemplateResult {
+  /** A card is one button, so a table needing clearing or moving, whose card holds its own Mark
+   * cleared or Mark moved, is a plain box instead. */
+  #waitingCard(table: TableState, kind: Waiting): TemplateResult {
+    const words = WAITING[kind];
+    const clear = kind === "clear";
     return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
       <span class="card-head">${this.#cardName(table)} ${this.#seats(table)}</span>
-      <span class="occupancy" data-needs-clearing>${t("floor.needs_clearing")}</span>
-      <wt-button
-        size="sm"
-        variant="secondary"
-        data-mark-cleared
-        @click=${() => this.#markCleared(table)}
+      <span class="occupancy" ?data-needs-clearing=${clear} ?data-needs-moving=${!clear}
+        >${t(words.state)}</span
       >
-        ${t("floor.mark_cleared")}
-      </wt-button>
+      ${
+        this.#actsOn(kind)
+          ? html`<wt-button
+              size="sm"
+              variant="secondary"
+              ?data-mark-cleared=${clear}
+              ?data-mark-moved=${!clear}
+              @click=${() => this.#markWaiting(kind, table)}
+            >
+              ${t(words.action)}
+            </wt-button>`
+          : nothing
+      }
     </div>`;
+  }
+
+  /** Mark moved changes today's plan, so it needs a device that may; Mark cleared does not. */
+  #actsOn(kind: Waiting): boolean {
+    return kind === "clear" || this.canChangeToday;
+  }
+
+  #markWaiting(kind: Waiting, table: TableState): void {
+    if (kind === "clear") this.#markCleared(table);
+    else this.#markMoved(table);
   }
 
   /** Today's name, with the saved name small after it when they differ. */
@@ -1988,7 +2158,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   #card(table: TableState): TemplateResult {
-    if (needsClearing(table)) return this.#clearingCard(table);
+    if (needsClearing(table)) return this.#waitingCard(table, "clear");
+    if (needsMovingToday(table)) return this.#waitingCard(table, "move");
     return html`<button
       class="card state-${table.state}${this.#timingAccentClass(table.timingBand)}"
       data-table=${table.id}

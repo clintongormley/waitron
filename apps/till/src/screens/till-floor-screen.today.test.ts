@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FloorMapDrop, WtDialog, WtFloorMap } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type {
@@ -24,6 +24,8 @@ function zone(over: Partial<FloorZone> = {}): FloorZone {
     closesAt: null,
     closed: false,
     hasPlan: false,
+    layoutSetName: null,
+    layoutDue: null,
     serviceMode: "table_tab",
     ...over,
   };
@@ -619,8 +621,7 @@ describe("till-floor-screen: today's names", () => {
     sheet.shadowRoot!.querySelector("[data-saved-name]")?.textContent?.trim() ?? null;
 
   async function listView(el: TillFloorScreen): Promise<void> {
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
+    await toggleFloorView(el);
   }
 
   const card = (el: TillFloorScreen, tableId: string) =>

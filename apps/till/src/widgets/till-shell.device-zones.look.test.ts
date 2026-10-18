@@ -5,6 +5,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TillShell } from "./till-shell.js";
 import type { TillFloorScreen } from "../screens/till-floor-screen.js";
 import type { TableState } from "../api/client.js";
+import { PHONE_WIDTH } from "./language-chooser-styles.js";
 import "../till-app.js";
 import "./till-shell.js";
 import "../screens/till-floor-screen.js";
@@ -51,6 +52,8 @@ for (const locale of ["en-GB", "es-ES"]) {
               closed: false,
               closesAt: null,
               hasPlan: true,
+              layoutSetName: null,
+              layoutDue: null,
               serviceMode: "table_tab",
             },
             {
@@ -61,6 +64,8 @@ for (const locale of ["en-GB", "es-ES"]) {
               closed: false,
               closesAt: null,
               hasPlan: true,
+              layoutSetName: null,
+              layoutDue: null,
               serviceMode: "table_tab",
             },
           ],
@@ -98,18 +103,29 @@ for (const locale of ["en-GB", "es-ES"]) {
         });
         el.appendChild(floor);
         await floor.updateComplete;
-        const view = floor.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!;
-        await (view as TillShell).updateComplete;
-        await userEvent.click(view);
-        await floor.updateComplete;
-        expect(floor.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
-        await userEvent.click(view);
-        await floor.updateComplete;
-        expect(floor.shadowRoot!.querySelector("wt-floor-map")).not.toBeNull();
         const zoneMenu = floor.shadowRoot!.querySelector("till-floor-zone-menu")!;
         await zoneMenu.updateComplete;
         const zoneActions = zoneMenu.shadowRoot!.querySelector("wt-row-actions")!;
         await zoneActions.updateComplete;
+        // Below the phone width the List/Map toggle is the zone menu's first item.
+        const pressView = async () => {
+          if (matchMedia(PHONE_WIDTH).matches) {
+            await userEvent.click(zoneActions.shadowRoot!.querySelector("button")!);
+            await userEvent.click(
+              zoneMenu.shadowRoot!.querySelector<HTMLElement>('[data-menu-item="view"]')!,
+            );
+          } else {
+            const view = floor.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!;
+            await (view as TillShell).updateComplete;
+            await userEvent.click(view);
+          }
+          await floor.updateComplete;
+          await zoneMenu.updateComplete;
+        };
+        await pressView();
+        expect(floor.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
+        await pressView();
+        expect(floor.shadowRoot!.querySelector("wt-floor-map")).not.toBeNull();
         await userEvent.click(zoneActions.shadowRoot!.querySelector("button")!);
         expect(zoneActions.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(
           true,

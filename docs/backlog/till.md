@@ -302,15 +302,21 @@ as its own floor answers are, or confirm the window cannot be hit and close this
 
 ## A591. A split down to one loses a table that had guests when its joined table went live
 
-**A591 (2026-10-13).** A table of a joined table that holds guests when the reset puts the joined
-table on the map is not a part still joined (`stillJoinedPart`, `packages/db/src/joined-parts.ts`).
-Splitting the joined table down to one (`splitJoinedTable`, `apps/server/src/floor-today-split.ts`)
-writes split rows only for the parts still joined, so when that table's guests leave it becomes a
-part still joined of a joined table that has come apart: off the map, and seating it is refused
-`table.in_joined_table`. Run on main 42ca8b30b and on A579 part 3a's branch (Counter 3 seated before
-Long table went live, Counter 4 split off, Counter 3's party finished). Part 3a fixed the same case
-for a push into a group (`writeMerge` writes a split row for such a table and marks its reset row
-placed). Next: do the same in the split down to one.
+**A591 (2026-10-13).** A table that holds guests when its joined table is put on the map is not a
+part still joined (`stillJoinedPart`, `packages/db/src/joined-parts.ts`), and splitting the joined
+table down to one (`splitJoinedTable`, `apps/server/src/floor-today-split.ts`) writes split rows
+only for the parts still joined. A room's reset no longer puts a joined table on the map while one of
+its tables has guests: it leaves the whole group waiting (the case "leaves Long table's whole group
+waiting: Long table cannot be put on the map", `apps/server/src/floor-today-reset-table.test.ts`).
+Reset table still does. A throwaway case run on A504's branch (2026-10-18), built on that file's
+`longAroundHeldCounter3`: Long table over Counter 4 and 5, guests at Counter 3, a layout joining
+Counter 3 into Long table, the room's reset (the group waits), Counter 5 split off, Reset table
+taking back Counter 4 and 5 (Long table back while Counter 3's guests stay), then Counter 5 split off
+again. The split wrote rows for Counter 4 and 5 only. Once Counter 3's party finished and the zone
+caught up, Counter 3 had no place on today's map and seating it was refused `table.in_joined_table`;
+a further Reset table taking back Counter 4 and 5 left it so. Next: write a split row for such a
+table in the split down to one, as `writeMerge` (`apps/server/src/floor-today-merges.ts`) does for a
+push into a group.
 
 ## A592. A party that joins a group's table names the group's other tables in random order
 
@@ -370,43 +376,35 @@ till send too few and be refused `joined_table.out_of_date` every time. Join aga
 A579 part 4b's review found it by reading; whether a split-off table can be out of service was not
 checked. Next: find whether that state can be reached, and if so make the two lists agree.
 
-## A600. The floor-wide reset and its catch-up do not look at what stands in a saved place
-
-**A600 (2026-10-13).** Reset table (A579 part 4a) refuses to put a joined table back over another
-table standing in its saved place (`table.place_taken`). Reset to saved plan and the catch-up that
-applies it decide each table from its own state only (`planReset`,
-`apps/server/src/floor-reset-plan.ts`; `catchUpPass`, `apps/server/src/floor-today-store.ts`). From
-reading them, not running them, the A579 design believes a table that waited (guests, or held by a
-module) can be put back over a free table moved into its place, and that the reset can put a table
-back over one that waits there. Next: reproduce both in a test, then decide what the reset does with
-a table in the way.
-
 ## A598. A table held by guests when its joined table went live is neither joined nor split off
 
 **A598 (2026-10-13).** Split tables… on a joined table leaves a table that a party held when the
-joined table went live out of both its still-joined and its split-off lists, while a merge records
-such a table as split off (`splitInUse`, `apps/server/src/floor-today-merges.ts`). A group of the
-other split-off tables then never rejoins (`rejoining` needs every part split off), but the till's
-data cannot show why, so its Split tables… window asks no Seats and the server refuses
-`merge.seats_required`; the window then asks Seats (A579 part 3c). A reviewer's probe on
-`counter3HeldAsLongGoesLive` (`apps/server/src/floor-catch-up.test.ts`) showed the refusal. Same shape
-as A591. Next: record the held table as split off on that path too, as the merge does.
+joined table went live out of its split-off list, while a merge records such a table as split off
+(`splitInUse`, `apps/server/src/floor-today-merges.ts`). A group of the other split-off tables then
+never rejoins (`rejoining` needs every part split off, `apps/server/src/floor-today-split-group.ts`),
+but the till's data cannot show why, so its Split tables… window asks no Seats and the server refuses
+`merge.seats_required`; the window then asks Seats (A579 part 3c). A room's reset no longer reaches
+this state; Reset table does: the throwaway case described under A591 split Counter 5 off Long table
+after Reset table had put it back around Counter 3's guests, and the split rows named Counter 4 and 5
+only. Nothing after the split rows was re-run on that path. Same shape as A591. Next:
+record the held table as split off on that path too, as the merge does.
 
 ## A593. A table the reset turns into a joined table inside a waiting group keeps its old outline
 
-**A593 (2026-10-13).** Bar pushed onto an ordinary Long table, guests seated, then the saved plan makes
+**A593 (2026-10-13).** Bar pushed onto an ordinary Long table, guests seated, then a layout makes
 Long table of Counter 3, 4 and 5: the reset makes Long a joined table while the seated group waits, and
 Long keeps today's 8-wide row rather than its joined outline. A split that leaves two counters joined
 then lays them side by side from Long's left edge (the case in `apps/server/src/floor-catch-up.test.ts`
 matched by `-t "the reset leaves in one"` reads Long 16 wide after the split). Seen by A579 part 3a's
 finish-branch worker (#1626) and left as it is. Next: decide whether the reset should apply the joined
-outline when the group ends, or the split should lay out from the saved outline.
+outline when the group ends, or the split should lay out from the layout's outline.
 
-## A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
+## A565. A reset does not wait for food on its way to an ordinary table
 
-**A565 (2026-10-13).** A reset applies a free table's saved place without asking about food on its
-way: a plain table the saved plan turns into a part of a joined table, or drops, loses its place on
-today's map while a kitchen order still names it. #1604 made a split joined table's group wait for
+**A565 (2026-10-13).** Any reset (Update layout, Reset to {set} plan, the day's first reset, the
+dashboard's first save) moves a free table to its place in the layout it applies without asking
+about food on its way: a plain table the layout turns into a part of a joined table, or drops, loses
+its place on today's map while a kitchen order still names it. #1604 made a split joined table's group wait for
 food on its way (`foodComingTo`, `apps/server/src/floor-today-store.ts`); ordinary tables were left
 as they were. It was reproduced with a throwaway test in #1604's finish run; the behaviour dates from
 `29801d74a` (floor plans, slice 1). Next: decide whether a reset holds such a table back, as it now
@@ -415,15 +413,16 @@ holds a split group.
 ## A566. An open order with nothing sent yet does not hold a split group back at a reset
 
 **A566 (2026-10-13).** A split joined table's group waits at a reset while one of its tables has
-guests, food on its way or a guest-holding merge (#1604); an open order at a split-off table with no
+guests, needs clearing, has food on its way or is in a guest-holding merge (#1604, and
+`splitWithBusy` in `apps/server/src/floor-reset-plan.ts`); an open order at a split-off table with no
 food sent yet does not count, so the reset can put the joined table back whole over it. Noted by the
 fix worker in #1604's finish run and not changed. Next: decide whether an open order counts as busy
 here, and check what the reset does with that order's table.
 
-## A567. A saved-plan edit to a waiting joined table can shift where its tables land
+## A567. An edit to the recorded layout of a waiting joined table can shift where its tables land
 
 **A567 (2026-10-13).** A split joined table waits for the reset while one of its tables is busy.
-An edit to the saved plan that changes its tables meanwhile can shift where later tables land when
+An edit to the recorded set's layout of the zone that changes its tables meanwhile can shift where later tables land when
 it is split or joined again. #1604 accepted it for now; #1608's plan notes that Join again lays
 out from the same slots, and Reset table, which replaced Join again in A579, does too (`slotStart`, `apps/server/src/joined-split-layout.ts`). Left open by A503
 (#1604, #1608). Next: decide whether such an edit waits for the reset, or the layout keeps the
@@ -483,14 +482,17 @@ free split-off tables, Reset table (Join again before A579) is offered nowhere; 
 found this state made by Back or Take off on a split-off table, which #1608 now refuses (design gap
 7). Left open by A503 part 4 (#1608). Next: decide whether the zone menu offers Reset table.
 
-## A572. Reset table counts a joined table whole while a table added to it still has guests
+## A572. Reset table puts back a joined table with its full seats while a table its layout adds still has guests
 
-**A572 (2026-10-13).** A table the saved plan adds to a joined table while guests sit at it is left
-separate by the reset, with no split record. Reset table (Join again before A579) then counts the
-joined table whole: it gives it its full saved seats and asks for none, while that table still holds
-its guests — the same state the reset produces. The case "brings Long table back at its saved place,
-not where staff moved it" (`apps/server/src/floor-today-reset-table.test.ts`) expects those 10 seats.
-#1608's first Codex review found it again (design gap 8). Left open by A503 part 4 (#1608). Next: decide whether that table counts as staying apart.
+**A572 (2026-10-13).** A room's reset while guests sit at a table the recorded layout adds to a
+joined table leaves the joined table's whole group waiting (the case "leaves Long table's whole group
+waiting: Long table cannot be put on the map", `apps/server/src/floor-today-reset-table.test.ts`).
+Reset table on that joined table, once it has come apart, puts it back as the recorded layout has
+it, with its full seats, and asks for none, while the added table still has guests: the case "brings
+Long table back at its saved place, not where staff moved it" in the same file expects Long table's
+10 seats while Counter 3's guests stay. #1608's first Codex review found the earlier form of this
+(design gap 8). Left open by A503 part 4 (#1608). Next: decide whether that table counts as staying
+apart.
 
 ## A575. Reset table's window: two things seen in #1608's look
 
@@ -508,27 +510,6 @@ not where staff moved it" (`apps/server/src/floor-today-reset-table.test.ts`) ex
 
 Take off for today on a joined table with tables split off, the third point, is allowed by the
 owner's A579 design and left as it is.
-
-## A504. Floor plan sets, one per service period
-
-**A504 (owner, 2026-10-11; design revised to the owner's answers of 2026-10-17).** Design:
-[2026-10-17-a504-floor-plans-design.md](../superpowers/specs/2026-10-17-a504-floor-plans-design.md);
-pictures in [mockups/a504-floor-plans/](mockups/a504-floor-plans/).
-
-- **Floor plans get a page of their own (owner, 2026-10-16).** What is edited is a named set of
-  floor plans, one layout per zone, per department, and a period picks the set it uses; an empty
-  choice means the department's default set. The departments table's per-zone floor-plan link
-  (`packages/venue-service/src/dashboard/departments-list.ts:236-240`) goes when that page lands. A504
-  adds the Floor plan column to the Periods window and the field to the period dialog.
-- **A change of layout is offered, never applied by itself (owner, 2026-10-17).** When a period
-  ends, or a dashboard change makes another layout due, the till shows a banner with Update layout;
-  tables with guests show "Needs moving" once free, and move on the map when marked moved.
-- **On a phone, List goes into the floor's ⋮ menu (owner, 2026-10-17).**
-- **No publication dates for layouts** (owner, 2026-10-17, dropping the 2026-10-11 wish). A change
-  that comes back every year is done with seasons.
-
-Next: the plan. Build after A719 (landed), and before or after the A760 migration squash, never
-across it.
 
 ## A508. A table's QR code: order, call a waiter, ask for the bill or pay
 
@@ -1508,6 +1489,27 @@ What a cancel, a give-away and a 100% discount do (`apps/server/src/adjustments-
   reasons among the things switched off.
 - **The edit form** asks only what applies to the reason's kind, with the role lists.
 
+## A859. Floor plans and the till's layout banner: looks left to the owner
+
+**A859 (2026-10-18).** A504's LOOK passes kept these as built, as judgement calls: the solid
+"Default" badge (the mock-up's is a pale pill); no explanation line in the Add set dialog; the
+Delete dialog's "Used by Dinner." reads oddly when a set and a period share a name; the till's
+banner is a plain line where the mock-up draws a tinted box (`wt-banner` would be close); the 390 px
+floor menu's heading is in sentence case, not small capitals. Mock-ups:
+[a504-floor-plans](mockups/a504-floor-plans/). Left open by A504.
+
+## A860. A floor-check rule copied four times
+
+**A860 (2026-10-18).** The rule for whether a table's new place is taken lives in four copies:
+TypeScript in `catchUpPass` (`apps/server/src/floor-today-store.ts`), `markMoved`'s `standing` and
+`exempt` lists (`apps/server/src/floor-today-mark-moved.ts`), `refusePlaceTaken`
+(`apps/server/src/floor-today-reset-table.ts`), and SQL in `catchUpDue` and `placeTaken`
+(`apps/server/src/floor-today-store.ts`). A504's convention review read each as excluding a
+slightly different set of tables; that was read, not run. Only the geometry is pinned across
+TypeScript and SQL (`apps/server/src/reset-row-moves.test.ts`). Next: have the catch-up pass save
+its verdict on each waiting reset row and the others read it, or at least share the exclusions and
+pin the TypeScript and SQL copies as matching. Left open by A504.
+
 ## Decisions and deliberate limits
 
 ### Device zones and period menu memory (A740)
@@ -2192,9 +2194,6 @@ build after A757's board if it has been decided, else name the table alone.
 - **`wt-floor-plan-preview` has no product user.** It remains in `packages/ui/demo/main.ts`, with
   its `--wt-floor-plan-preview-max-height` token in `packages/ui-core/src/tokens/structure.css` and
   its row in `docs/developers/design-system.md`. Retire it, or record why it is kept. Left open by A718.
-- **The zones list's placed-table query has two untested properties.** `zonesWithPlacedTables`
-  (`apps/server/src/floor-plan.ts`) reads only the listed zones and makes one query for all of
-  them; a review dropped the zone filter and every test still passed. Pin both. Left open by A718.
 - **Check "closing the editor returns focus to its originating row menu"** in
   `docs/developers/design-system.md` (Departments and zones) now that Edit receipt opens from the
   Receipt link: a review saw focus return to the link. Left open by A718.

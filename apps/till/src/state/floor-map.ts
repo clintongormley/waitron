@@ -1,7 +1,7 @@
 import type { FloorMapDot, FloorMapFill, FloorMapTable } from "@waitron/ui";
 import type { TableState } from "../api/client.js";
 import { countText, t } from "../i18n/t.js";
-import { onTodaysPlan } from "./floor-today.js";
+import { needsMovingToday, onTodaysPlan } from "./floor-today.js";
 import { signalOf } from "./table-signals.js";
 
 export interface StandInStatus {
@@ -9,12 +9,14 @@ export interface StandInStatus {
   dot: FloorMapDot | null;
 }
 
-/** Most urgent last. */
+/** Most urgent last. A table that needs moving takes `clearing` too: staff must act on it before it
+ * is seated, as for one needing clearing. */
 const FILL_RANK: readonly FloorMapFill[] = ["free", "reserved", "seated", "bill", "clearing"];
 const DOT_RANK: readonly (FloorMapDot | null)[] = [null, "ready", "forgotten"];
 
 function fillOf(table: TableState): FloorMapFill {
   if (table.condition === "needs_clearing") return "clearing";
+  if (needsMovingToday(table)) return "clearing";
   if (signalOf(table.signals, "bill_requested")) return "bill";
   if (table.state !== "free") return "seated";
   return table.nextReservation === null ? "free" : "reserved";
@@ -58,7 +60,11 @@ function sources(tables: TableState | readonly TableState[]): Sources {
   const members: readonly TableState[] = Array.isArray(tables) ? tables : [tables as TableState];
   const statuses = members.map(standInStatus);
   const status = combinedStatus(statuses);
-  const fillFrom = members[statuses.findIndex((each) => each.fill === status.fill)]!;
+  // Needs clearing's words win over Needs moving's: it must be cleared first.
+  const fillFrom =
+    (status.fill === "clearing"
+      ? members.find((each) => each.condition === "needs_clearing")
+      : undefined) ?? members[statuses.findIndex((each) => each.fill === status.fill)]!;
   const dotFrom =
     status.dot === null
       ? undefined
@@ -69,7 +75,9 @@ function sources(tables: TableState | readonly TableState[]): Sources {
 function fillWords(table: TableState, fill: FloorMapFill): string {
   switch (fill) {
     case "clearing":
-      return t("floor.needs_clearing");
+      return table.condition === "needs_clearing"
+        ? t("floor.needs_clearing")
+        : t("floor.needs_moving");
     case "bill":
       return t("signal.bill_requested");
     case "seated":

@@ -19,6 +19,7 @@ const period = (id: string, name: string, colour: "amber" | "green" | "red" | "p
   menuId: "m",
   staffMenuIds: [],
   endOffsetMinutes: 0,
+  floorPlanSetId: null,
   weekdays: [0, 1, 2, 3, 4, 5, 6],
   routingUses: [],
 });

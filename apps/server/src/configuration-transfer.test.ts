@@ -143,7 +143,8 @@ import {
 import { decimal, locationId, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { moduleCoreServices } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
-import { saveZonePlan } from "./floor-plan.js";
+import { saveLayout } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals, VENUE_SERVICE } from "./modules.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { drawLogoRasters } from "./receipt-logo.js";
@@ -6293,11 +6294,11 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       .insert(departmentReceipts)
       .values({ departmentId: live.id, receipt: { headerSubtitle: { "es-ES": "Live subtitle" } } });
     await createTable(tx, cfg, { label: "Live table", zoneId: liveZone.id });
-    await saveZonePlan(
+    await saveLayout(
       tx,
       cfg,
       removals,
-      liveZone.id,
+      await defaultLayout(tx, cfg, liveZone.id),
       {
         revision: 0,
         tables: [
@@ -6376,7 +6377,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
   expect(imported.table_id).not.toBe(ids.table);
   expect(imported.receipt).toBe(JSON.stringify({ headerSubtitle: { "es-ES": "Live subtitle" } }));
   const links = await targetSuite.db.execute(
-    sql`select f.zone_id, t.id table_id from floor_plans f join floor_plan_tables p on p.plan_id=f.id join dining_tables t on t.plan_table_id=p.id where f.zone_id=${imported.zone}`,
+    sql`select f.zone_id, t.id table_id from floor_plans f join floor_plan_tables p on p.zone_id=f.zone_id join dining_tables t on t.plan_table_id=p.id where f.zone_id=${imported.zone}`,
   );
   expect(links.rows).toEqual([{ zone_id: imported.zone, table_id: imported.table_id }]);
   expect(target.locationId).not.toBe(source.locationId);
@@ -6410,11 +6411,11 @@ it("carries Long table's parts, naming the imported tables", async () => {
       name: "Joined zone",
       departmentId: department.id,
     });
-    const { ids } = await saveZonePlan(
+    const { ids } = await saveLayout(
       tx,
       cfg,
       removals,
-      zone.id,
+      await defaultLayout(tx, cfg, zone.id),
       {
         revision: 0,
         tables: [
@@ -6457,7 +6458,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
     part_id: string;
     part: string;
   }>(
-    sql`select x.id, j.id joined_id, j.label joined, p.id part_id, p.label part from floor_plan_table_parts x join floor_plan_tables j on j.id=x.joined_table_id join floor_plan_tables p on p.id=x.part_table_id join floor_plans f on f.id=j.plan_id join floor_zones z on z.id=f.zone_id where z.name='Joined zone' order by p.label`,
+    sql`select x.id, j.id joined_id, j.label joined, p.id part_id, p.label part from floor_plan_table_parts x join floor_plan_tables j on j.id=x.joined_table_id join floor_plan_tables p on p.id=x.part_table_id join floor_zones z on z.id=j.zone_id where z.name='Joined zone' order by p.label`,
   );
   expect(rows.rows.map((row) => [row.joined, row.part])).toEqual([
     ["Long table", "Counter 3"],
@@ -6487,11 +6488,11 @@ it("carries a kept size, naming the imported table", async () => {
       name: "Sized zone",
       departmentId: department.id,
     });
-    const { ids } = await saveZonePlan(
+    const { ids } = await saveLayout(
       tx,
       cfg,
       enabledTableRemovals(ALL_MODULES),
-      zone.id,
+      await defaultLayout(tx, cfg, zone.id),
       {
         revision: 0,
         tables: [
@@ -6501,7 +6502,7 @@ it("carries a kept size, naming the imported table", async () => {
       new Date("2026-10-11T12:00:00Z"),
     );
     await tx.execute(
-      sql`insert into floor_plan_table_sizes (id, plan_table_id, width, height) values (${randomUUID()}, ${ids.c3!}, 2, 2)`,
+      sql`insert into floor_plan_table_sizes (id, plan_id, plan_table_id, width, height) values (${randomUUID()}, (select id from floor_plans where zone_id = ${zone.id}), ${ids.c3!}, 2, 2)`,
     );
     return Object.values(ids);
   });

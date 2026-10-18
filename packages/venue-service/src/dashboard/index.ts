@@ -11,6 +11,7 @@ import "./venue-operations-screen.js";
 import "./service-settings-panel.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
+import "./floor-plans-screen.js";
 
 export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
   module: "venue-service",
@@ -87,6 +88,26 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
         return {
           render: () =>
             html`<dashboard-prep-stations-screen .api=${api}></dashboard-prep-stations-screen>`,
+        };
+      },
+    },
+    {
+      screen: {
+        id: "floor-plans",
+        navLabelKey: "nav.floor_plans",
+        group: "operations",
+        order: 13,
+        requiresPermission: "venue.configure",
+        readPermission: "venue.view",
+      },
+      create(ctx) {
+        const api = new VenueServiceApi(ctx.request, ctx.liveData);
+        return {
+          render: (readOnly = false) =>
+            html`<dashboard-floor-plans-screen
+              .api=${api}
+              .readOnly=${readOnly}
+            ></dashboard-floor-plans-screen>`,
         };
       },
     },

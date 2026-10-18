@@ -2,7 +2,7 @@ import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cropToTables } from "@waitron/ui";
 import type { WtFloorMap } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
 import { mapTables } from "../state/floor-map.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
@@ -18,6 +18,8 @@ function zone(over: Partial<FloorZone> = {}): FloorZone {
     closesAt: null,
     closed: false,
     hasPlan: false,
+    layoutSetName: null,
+    layoutDue: null,
     serviceMode: "table_tab",
     ...over,
   };
@@ -137,7 +139,7 @@ describe("till-floor-screen on the new map", () => {
     expect(el.shadowRoot!.querySelector("wt-floor-canvas")).toBeNull();
     expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
     expect(el.shadowRoot!.querySelector('.grid [data-table="t1"]')).not.toBeNull();
-    await click(el, "[data-view-toggle]");
+    await toggleFloorView(el);
     expect(mapOf(el)).not.toBeNull();
     expect(mapOf(el).tables).toEqual([]);
     expect(el.shadowRoot!.querySelector('[data-tray-table="t1"]')).not.toBeNull();
@@ -194,7 +196,7 @@ describe("till-floor-screen on the new map", () => {
     });
     expect(mapOf(el).tables.map((t) => t.id)).toEqual(["t1"]);
     expect(el.shadowRoot!.querySelector("[data-tray-table]")).toBeNull();
-    await click(el, "[data-view-toggle]");
+    await toggleFloorView(el);
     const listed = [...el.shadowRoot!.querySelectorAll("[data-table]")].map((card) =>
       card.getAttribute("data-table"),
     );
@@ -207,7 +209,7 @@ describe("till-floor-screen on the new map", () => {
     });
     expect(mapOf(el).tables.map((t) => t.id)).toEqual(["t1"]);
     expect(el.shadowRoot!.querySelector("[data-tray-table=t4]")).not.toBeNull();
-    await click(el, "[data-view-toggle]");
+    await toggleFloorView(el);
     expect(el.shadowRoot!.querySelector("[data-table=t4]")).not.toBeNull();
   });
 
@@ -217,20 +219,20 @@ describe("till-floor-screen on the new map", () => {
     });
     expect(mapOf(el).tables.map((t) => t.id)).toEqual(["t1"]);
     expect(el.shadowRoot!.querySelector("[data-tray-table=t5]")).not.toBeNull();
-    await click(el, "[data-view-toggle]");
+    await toggleFloorView(el);
     expect(el.shadowRoot!.querySelector("[data-table=t5]")).not.toBeNull();
   });
 
   it("lists a never-planned table of a planned zone", async () => {
     const el = await mount({ tables: [planned("t1"), table({ id: "t7", label: "7" })] });
     expect(el.shadowRoot!.querySelector("[data-tray-table=t7]")).not.toBeNull();
-    await click(el, "[data-view-toggle]");
+    await toggleFloorView(el);
     expect(el.shadowRoot!.querySelector("[data-table=t7]")).not.toBeNull();
   });
 
   it("shows today's seats on a planned table's card", async () => {
     const el = await mount({ tables: [planned("t1", { today: today({ seats: 6 }) })] });
-    await click(el, "[data-view-toggle]");
+    await toggleFloorView(el);
     expect(el.shadowRoot!.querySelector("[data-table=t1] .capacity")?.textContent?.trim()).toBe(
       "6 pax",
     );
@@ -240,7 +242,7 @@ describe("till-floor-screen on the new map", () => {
     const el = await mount({
       tables: [planned("t1", { condition: "needs_clearing", today: today({ seats: 6 }) })],
     });
-    await click(el, "[data-view-toggle]");
+    await toggleFloorView(el);
     expect(el.shadowRoot!.querySelector("[data-table=t1] .capacity")?.textContent?.trim()).toBe(
       "6 pax",
     );
@@ -374,8 +376,7 @@ for (const theme of ["light", "dark"] as const) {
       },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
+    await toggleFloorView(el);
     const chip = el.shadowRoot!.querySelector("[data-chip='bill-requested']")!;
     const control = document.createElement("span");
     control.style.backgroundColor = "var(--wt-color-table-bill)";

@@ -113,12 +113,7 @@ import {
 } from "./kitchen.js";
 import { parseProfileKitchenScreens } from "./device.js";
 import type { NarrowedDevice, TableRemoval } from "@waitron/module";
-import {
-  readZonePlan,
-  saveZonePlan,
-  zonesWithPlacedTables,
-  type ZonePlanSave,
-} from "./floor-plan.js";
+import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import type { TillConfig } from "./till-config.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
@@ -286,6 +281,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.booked": 409,
   "floor_plan.out_of_date": 409,
   "floor_plan.invalid": 400,
+  "floor_plan_set.not_found": 404,
+  "floor_plan_set.invalid": 400,
   "station.not_found": 404,
   "station.name_taken": 409,
   "station.is_default": 409,
@@ -325,6 +322,11 @@ function requireStatusId(id: string): string {
 
 function requireZoneId(id: string): string {
   if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
+  return id;
+}
+
+function requireSetId(id: string): string {
+  if (!isUuid(id)) throw new AppError("floor_plan_set.not_found", { setId: id });
   return id;
 }
 
@@ -412,7 +414,7 @@ function optionalId(value: unknown, field: string): string | undefined {
 }
 
 /**
- * The shape of a floor-plan save; `checkZonePlanSave` checks the values. A null id or live table
+ * The shape of a floor-plan save; `saveLayout` checks the values. A null id or live table
  * is absent, as the read shape sends them.
  */
 function parseZonePlanSave(body: unknown): ZonePlanSave {
@@ -1581,14 +1583,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const zones = await withVenueAuth(deps, sessionId, async (tx) => {
-        const listed = await listZones(tx, cfg);
-        const placed = await zonesWithPlacedTables(
-          tx,
-          listed.map((zone) => zone.id),
-        );
-        return listed.map((zone) => ({ ...zone, hasPlacedTables: placed.has(zone.id) }));
-      });
+      const zones = await withVenueAuth(deps, sessionId, (tx) => listZones(tx, cfg));
       return c.json(zones);
     }),
   );
@@ -1664,24 +1659,30 @@ export function mountManagementApi(
     }),
   );
 
-  app.get("/management-api/zones/:id/floor-plan", (c) =>
+  app.get("/management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = requireZoneId(c.req.param("id"));
+      const at = {
+        setId: requireSetId(c.req.param("setId")),
+        zoneId: requireZoneId(c.req.param("zoneId")),
+      };
       const cfg = requireVenueCfg(deps);
-      return c.json(await withVenueAuth(deps, sessionId, (tx) => readZonePlan(tx, cfg, id)));
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => readLayout(tx, cfg, at)));
     }),
   );
 
-  app.put("/management-api/zones/:id/floor-plan", (c) =>
+  app.put("/management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const id = requireZoneId(c.req.param("id"));
+      const at = {
+        setId: requireSetId(c.req.param("setId")),
+        zoneId: requireZoneId(c.req.param("zoneId")),
+      };
       const cfg = requireVenueCfg(deps);
       const input = parseZonePlanSave(await readJsonBody<unknown>(c));
       const now = new Date();
       const saved = await withVenueAuth(deps, sessionId, (tx) =>
-        saveZonePlan(tx, cfg, deps.tableRemovals ?? [], id, input, now),
+        saveLayout(tx, cfg, deps.tableRemovals ?? [], at, input, now),
       );
       return c.json(saved);
     }),
@@ -1692,7 +1693,9 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
       const tables = await withVenueAuth(deps, sessionId, (tx) =>
-        listTables(tx, cfg, { includeDisabled: c.req.query("includeDisabled") === "true" }),
+        listTables(tx, cfg, new Date(), {
+          includeDisabled: c.req.query("includeDisabled") === "true",
+        }),
       );
       return c.json(tables);
     }),

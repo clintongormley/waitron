@@ -9,6 +9,8 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 const originalUrl = location.href;
 const plan: FloorPlan = {
   zoneId: "z1",
+  setId: "s1",
+  setName: "Standard",
   revision: 3,
   savedAt: "2026-10-01T10:00:00Z",
   tables: [
@@ -61,7 +63,7 @@ afterEach(() => {
   history.replaceState(null, "", originalUrl);
 });
 async function mount() {
-  history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
   app = document.createElement("deleted-floor-owner-app") as App;
   applyTokens(app);
   document.body.append(app);
@@ -141,7 +143,7 @@ it("deleting another zone keeps the floor move and Save/Undo", async () => {
   ).toBe(2);
 });
 it("a plan read that finishes after deletion cannot reopen the same owner", async () => {
-  history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
   app = document.createElement("deleted-floor-owner-app") as App;
   let finish!: (value: FloorPlan) => void;
   app.read.mockReturnValueOnce(
@@ -190,5 +192,60 @@ it.each([false, true])(
       await editor.updateComplete;
       expect(message()).toBe(refusal);
     } else await expect.poll(message).toBe("");
+  },
+);
+const goneText = (editor: Element) =>
+  editor.shadowRoot!.querySelector("[data-load-error]")?.textContent?.trim() ?? "";
+async function expectRetired(editor: Element, text: string) {
+  await expect.poll(() => goneText(editor)).toBe(text);
+  expect(editor.shadowRoot!.querySelector("wt-floor-plan-canvas")).toBeNull();
+  const actions = editor.shadowRoot!.querySelector("wt-form-actions")!;
+  expect(actions.error).toBe("");
+  expect(actions.querySelector("[data-action=load-newer]")).toBeNull();
+  expect(actions.querySelector<HTMLButtonElement>("[data-action=save]")!.disabled).toBe(true);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+}
+const deletedSet = [
+  ["en-GB", "floor_plan_set.not_found", "That zone no longer exists"],
+  ["es-ES", "floor_plan_set.not_found", "Esa zona ya no existe"],
+  ["en-GB", "floor_plan_set.invalid", "That zone no longer exists"],
+  ["es-ES", "floor_plan_set.invalid", "Esa zona ya no existe"],
+  ["en-GB", "zone.not_found", "That zone no longer exists"],
+  ["es-ES", "zone.not_found", "Esa zona ya no existe"],
+] as const;
+it.each(deletedSet)(
+  "a Save refused because the set or zone is gone shows the zone gone (%s, %s)",
+  async (locale, code, text) => {
+    setLocale(locale);
+    const editor = await mount();
+    app.save.mockRejectedValueOnce({ code });
+    editor.shadowRoot!.querySelector<HTMLElement>("[data-action=save]")!.click();
+    await expectRetired(editor, text);
+  },
+);
+it.each(deletedSet)(
+  "a Reload refused because the set or zone is gone shows the zone gone (%s, %s)",
+  async (locale, code, text) => {
+    setLocale(locale);
+    const editor = await mount();
+    app.save.mockRejectedValueOnce({ code: "floor_plan.out_of_date" });
+    editor.shadowRoot!.querySelector<HTMLElement>("[data-action=save]")!.click();
+    await expect
+      .poll(() => editor.shadowRoot!.querySelector("[data-action=load-newer]"))
+      .not.toBeNull();
+    app.read.mockRejectedValueOnce({ code });
+    editor.shadowRoot!.querySelector<HTMLElement>("[data-action=load-newer]")!.click();
+    await expectRetired(editor, text);
+  },
+);
+it.each(deletedSet)(
+  "the read after a save, refused because the set or zone is gone, shows the zone gone (%s, %s)",
+  async (locale, code, text) => {
+    setLocale(locale);
+    const editor = await mount();
+    app.read.mockRejectedValueOnce({ code });
+    editor.shadowRoot!.querySelector<HTMLElement>("[data-action=save]")!.click();
+    await expect.poll(() => app.read.mock.calls.length).toBe(2);
+    await expectRetired(editor, text);
   },
 );

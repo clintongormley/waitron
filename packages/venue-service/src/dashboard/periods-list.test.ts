@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens, type WtDataTable, type WtModal } from "@waitron/ui";
 import { CALENDAR_COLOURS } from "../hours-types.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
 import type { PeriodDialog } from "./period-dialog.js";
@@ -27,6 +28,7 @@ const period = (id: string, name: string, overrides: Partial<Period> = {}): Peri
   menuId: "lunch",
   staffMenuIds: [],
   endOffsetMinutes: 0,
+  floorPlanSetId: null,
   weekdays: [],
   routingUses: [],
   ...overrides,
@@ -98,14 +100,22 @@ function paintedIn(): PaintedInRow[] {
   ];
 }
 
+/** No department has a zone with tables, so neither the column nor the field shows. */
+function noTables(): PeriodFloorPlans {
+  return { departments: [] };
+}
+
 function answering(
   read: () => OpeningHoursModel | Promise<OpeningHoursModel> = model,
   painted: () => PaintedInRow[] | Promise<PaintedInRow[]> = paintedIn,
+  floorPlans: () => PeriodFloorPlans | Promise<PeriodFloorPlans> = noTables,
 ): DashboardRequest {
   return (async (path: string) =>
     path.endsWith("/menu-periods/painted-in")
       ? structuredClone(await painted())
-      : structuredClone(await read())) as DashboardRequest;
+      : path.endsWith("/floor-plan-sets/period-choices")
+        ? structuredClone(await floorPlans())
+        : structuredClone(await read())) as DashboardRequest;
 }
 
 async function mount(request: DashboardRequest = answering(), readOnly = false) {
@@ -586,3 +596,143 @@ it.each(
     }
   },
 );
+
+/** As the server lists them: Bar has no zone with a table, so it is absent. */
+function withTables(): PeriodFloorPlans {
+  const set = (id: string, name: string, isDefault = false) => ({ id, name, isDefault });
+  return {
+    departments: [
+      { id: "restaurant", sets: [set("house", "House", true), set("dinner", "Dinner")] },
+    ],
+  };
+}
+function plannedModel(): OpeningHoursModel {
+  const read = model();
+  return {
+    ...read,
+    departments: read.departments.map((department) =>
+      department.id === "restaurant"
+        ? {
+            ...department,
+            periods: department.periods.map((entry) =>
+              entry.id === "p1" ? { ...entry, floorPlanSetId: "dinner" } : entry,
+            ),
+          }
+        : department,
+    ),
+  };
+}
+
+it("a Floor plan column after Staff-only menus shows the set, or the default's name with (default) muted, and nothing without tables", async () => {
+  const el = await mount(answering(plannedModel, paintedIn, withTables));
+  const grid = await loaded(el);
+  await expect.poll(() => grid.columns.map((c) => c.key)).toContain("floorPlan");
+  await grid.updateComplete;
+  expect(grid.columns.map((c) => c.key)).toEqual([
+    "period",
+    "customerMenu",
+    "staffMenus",
+    "floorPlan",
+    "paintedIn",
+    "actions",
+  ]);
+  expect(grid.columns.find((c) => c.key === "floorPlan")!.label).toBe("Floor plan");
+  expect(cell(grid, "period:p1", "floorPlan")!.textContent!.trim()).toBe("Dinner");
+  expect(cell(grid, "period:p1", "floorPlan")!.querySelector("[part~=default-mark]")).toBeNull();
+  const fallback = cell(grid, "period:p2", "floorPlan")!;
+  expect(fallback.textContent!.replace(/\s+/g, " ").trim()).toBe("House (default)");
+  const mark = fallback.querySelector<HTMLElement>("[part~=default-mark]")!;
+  expect(mark.textContent!.trim()).toBe("(default)");
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-text-muted)";
+  el.shadowRoot!.append(probe);
+  expect(getComputedStyle(mark).color).toBe(getComputedStyle(probe).color);
+  expect(getComputedStyle(mark).color).not.toBe(
+    getComputedStyle(fallback.querySelector("[part~=set-name]")!).color,
+  );
+  probe.remove();
+  expect(cell(grid, "period:p3", "floorPlan")!.textContent!.trim()).toBe("");
+  expect(cell(grid, "department:restaurant", "floorPlan")!.textContent!.trim()).toBe("");
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  await grid.updateComplete;
+  expect(grid.columns.find((c) => c.key === "floorPlan")!.label).toBe("Plano de sala");
+  expect(cell(grid, "period:p2", "floorPlan")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "House (predeterminado)",
+  );
+});
+
+it("no Floor plan column while no department has a zone with tables", async () => {
+  const empty = noTables();
+  const grid = await loaded(await mount(answering(model, paintedIn, () => empty)));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await grid.updateComplete;
+  expect(grid.columns.map((c) => c.key)).not.toContain("floorPlan");
+});
+
+it("the period dialog opened from a row offers the department's sets and sends the chosen one", async () => {
+  const writes: { path: string; body: Record<string, unknown> }[] = [];
+  const read = answering(plannedModel, paintedIn, withTables);
+  const el = await mount((async (
+    path: string,
+    method: string,
+    body: unknown,
+    ...rest: unknown[]
+  ) => {
+    if (method === "PATCH") {
+      writes.push({ path, body: body as Record<string, unknown> });
+      return undefined;
+    }
+    return (read as (...args: unknown[]) => unknown)(path, method, body, ...rest);
+  }) as DashboardRequest);
+  const grid = await loaded(el);
+  await expect.poll(() => grid.columns.map((c) => c.key)).toContain("floorPlan");
+  await userEvent.click(cell(grid, "period:p1", "customerMenu")!, { force: true });
+  await expect.poll(() => dialogOf(el)?.period?.id).toBe("p1");
+  const dialog = dialogOf(el)!;
+  await dialog.updateComplete;
+  const plan =
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=floorPlanSetId]",
+    )!;
+  expect(plan.value).toBe("dinner");
+  expect(plan.options.map((o) => o.label)).toEqual(["House (default)", "Dinner"]);
+  plan.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "" }, bubbles: true, composed: true }),
+  );
+  await dialog.updateComplete;
+  dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=save-period]")!.click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.path).toMatch(/\/menu-periods\/p1$/);
+  expect(writes[0]!.body.floorPlanSetId).toBeNull();
+});
+
+it("says when the floor plan sets cannot be read", async () => {
+  const el = await mount(answering(model, paintedIn, () => Promise.reject(new Error("down"))));
+  await loaded(el);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("[data-test=floor-plans-error]")?.textContent)
+    .toBe("Floor plans could not be loaded. It will be tried again.");
+});
+
+it("a period naming the department's default set reads as the default, (default) muted", async () => {
+  const read = () => {
+    const base = plannedModel();
+    return {
+      ...base,
+      departments: base.departments.map((department) => ({
+        ...department,
+        periods: department.periods.map((entry) =>
+          entry.id === "p1" ? { ...entry, floorPlanSetId: "house" } : entry,
+        ),
+      })),
+    };
+  };
+  const grid = await loaded(await mount(answering(read, paintedIn, withTables)));
+  await expect.poll(() => grid.columns.map((c) => c.key)).toContain("floorPlan");
+  await grid.updateComplete;
+  const shown = cell(grid, "period:p1", "floorPlan")!;
+  expect(shown.textContent!.replace(/\s+/g, " ").trim()).toBe("House (default)");
+  expect(shown.querySelector("[part~=default-mark]")!.textContent!.trim()).toBe("(default)");
+});

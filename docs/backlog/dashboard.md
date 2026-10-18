@@ -1140,6 +1140,8 @@ help about anything you want very quickly."
   hint, never a "?" button. Help mode fits beside it: hints stay where they are, and help mode is the
   place for the longer explanation. Decided with the design (owner, 2026-10-18; design §7): the
   dashboard's remaining "?" buttons become help-mode badges, and the setup wizard keeps its own.
+- **The till's floor (A504, spec §11).** Help mode should explain the Update layout banner and what
+  "Needs moving" and Mark moved mean.
 
 
 ## A653 — every long dashboard table scrolls the same way, with less above it

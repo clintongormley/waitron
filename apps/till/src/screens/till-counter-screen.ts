@@ -1,7 +1,7 @@
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { MenuState } from "../api/client.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -10,6 +10,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { type DietPredicate, hasDietData, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { formatMoney } from "@waitron/shared";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import { MediaQueryController } from "../state/media-query-controller.js";
 import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
 import "../widgets/menu-browser.js";
 import "../widgets/basket.js";
@@ -244,24 +245,7 @@ export class TillCounterScreen extends LitElement {
   /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
 
-  @state() private phone = false;
-  #phoneWidth?: MediaQueryList;
-  readonly #onPhoneWidth = (event: MediaQueryListEvent) => {
-    this.phone = event.matches;
-  };
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    this.#phoneWidth = window.matchMedia(PHONE_WIDTH);
-    this.phone = this.#phoneWidth.matches;
-    this.#phoneWidth.addEventListener("change", this.#onPhoneWidth);
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this.#phoneWidth?.removeEventListener("change", this.#onPhoneWidth);
-    this.#phoneWidth = undefined;
-  }
+  readonly #phone = new MediaQueryController(this, PHONE_WIDTH);
 
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
@@ -380,11 +364,11 @@ export class TillCounterScreen extends LitElement {
       <div class="sale-grid">
         <div class="menu-cell">
           <div class="menu-controls">${this.#menuControls()}</div>
-          ${this.#menu()}${this.phone ? nothing : this.#lists()}
+          ${this.#menu()}${this.#phone.matches ? nothing : this.#lists()}
         </div>
         <div class="basket-cell">
           <till-basket
-            ?stacked=${this.phone}
+            ?stacked=${this.#phone.matches}
             .store=${this.store}
             .storedLines=${this.storedLines}
             .makeAtStations=${this.makeAtStations}
@@ -414,7 +398,7 @@ export class TillCounterScreen extends LitElement {
             .receiptGuests=${this.receiptGuests}
           ></till-tender-pay>
         </div>
-        ${this.phone ? this.#lists() : nothing}
+        ${this.#phone.matches ? this.#lists() : nothing}
       </div>
     </div>`;
   }

@@ -638,6 +638,15 @@ it("says the floor changed under a till, in English and Spanish", () => {
   );
 });
 
+it("says the layout changed under a till, in English and Spanish", () => {
+  expect(codeMessage("floor_today.layout_changed", "en")).toBe(
+    "The layout has changed. Check the floor and try again",
+  );
+  expect(codeMessage("floor_today.layout_changed", "es")).toBe(
+    "El plano ha cambiado. Revisa la sala e inténtalo de nuevo",
+  );
+});
+
 it("says Reset table's refusals, and Back's and Take off's on a table split off, in English and Spanish", () => {
   const words: [string, string, string][] = [
     ["joined_table.nothing_to_join", "Nothing to reset now", "Ahora no hay nada que restablecer"],
@@ -721,4 +730,28 @@ it.each([
 ])("explains device zone refusal %s", (code, en, es) => {
   expect(codeMessage(code, "en")).toBe(en);
   expect(codeMessage(code, "es")).toBe(es);
+});
+
+it("says a table needs moving, and that another table is in its new place, in both languages", () => {
+  expect([
+    codeMessage("table.needs_moving", "en"),
+    codeMessage("table.needs_moving", "es"),
+  ]).toEqual([
+    "That table needs moving. Mark it moved first",
+    "Esa mesa está por mover. Márcala como movida primero",
+  ]);
+  expect([
+    codeMessage("table.new_place_taken", "en"),
+    codeMessage("table.new_place_taken", "es"),
+  ]).toEqual([
+    "Another table is in its new place. Move it first",
+    "Otra mesa ocupa su nuevo sitio. Muévela primero",
+  ]);
+});
+
+it("says a booking holds a table back, in both languages", () => {
+  expect([codeMessage("table.booked", "en"), codeMessage("table.booked", "es")]).toEqual([
+    "That table has a booking. Move or cancel it first",
+    "Esa mesa tiene una reserva. Muévela o cancélala primero",
+  ]);
 });

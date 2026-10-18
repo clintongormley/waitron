@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { TillSeatDialog } from "../widgets/seat-dialog.js";
@@ -14,6 +14,8 @@ function zone(over: Partial<FloorZone> = {}): FloorZone {
     closesAt: null,
     closed: false,
     hasPlan: false,
+    layoutSetName: null,
+    layoutDue: null,
     serviceMode: "table_tab",
     ...over,
   };
@@ -142,7 +144,7 @@ describe("till-floor-screen's guest count and re-read", () => {
   it("polls an empty map with no today's rows after the view is chosen", async () => {
     const el = await mount({ tables: [table()] });
     const seen = countRefreshes(el);
-    await click(el, "[data-view-toggle]");
+    await toggleFloorView(el);
     vi.advanceTimersByTime(15_000);
     expect(seen.count).toBe(1);
   });
@@ -160,7 +162,7 @@ describe("till-floor-screen's guest count and re-read", () => {
     const el = await mount();
     const seen = countRefreshes(el);
 
-    await click(el, "[data-view-toggle]");
+    await toggleFloorView(el);
     expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
     vi.advanceTimersByTime(30_000);
     expect(seen.count).toBe(0);
@@ -181,8 +183,8 @@ describe("till-floor-screen's guest count and re-read", () => {
     const el = await mount();
     const seen = countRefreshes(el);
 
-    await click(el, "[data-view-toggle]");
-    await click(el, "[data-view-toggle]");
+    await toggleFloorView(el);
+    await toggleFloorView(el);
     vi.advanceTimersByTime(15_000);
     expect(seen.count).toBe(1);
 
@@ -274,7 +276,7 @@ describe("hierarchy deletion snapshots", () => {
 
 it("refuses a retained table card after the table is removed", async () => {
   const el = await mount();
-  await click(el, "[data-view-toggle]");
+  await toggleFloorView(el);
   const card = el.shadowRoot!.querySelector<HTMLElement>('[data-table="t1"]')!;
   el.tables = [];
   await el.updateComplete;

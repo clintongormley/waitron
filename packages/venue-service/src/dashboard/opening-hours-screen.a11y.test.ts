@@ -22,6 +22,7 @@ function request(state: string): DashboardRequest {
     if (path === "/management-api/stations") return [];
     if (path.endsWith("/menu-periods/painted-in")) return [];
     if (path.endsWith("/special-days")) return [];
+    if (path.endsWith("/floor-plan-sets/period-choices")) return { departments: [] };
     if (path.includes("/opening-hours/year?"))
       return {
         businessDayClock: {

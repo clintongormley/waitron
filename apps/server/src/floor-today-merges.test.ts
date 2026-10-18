@@ -6,7 +6,7 @@ import { diningTables, floorTodayJoins, floorTodayTables } from "@waitron/db";
 import type { JoinSide } from "@waitron/shared";
 import { leaveMergesRestoring, mergeMembers, writeMerge } from "./floor-today-merges.js";
 import { inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";
+import { mergeOf, needingMoving, plannedZone, todayRow } from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -235,6 +235,21 @@ describe("today's merges", () => {
     await merge(table.c!, table.b!, "bottom", 12, false);
 
     expect((await mergeOf(v, table.a!))!.members).toHaveLength(3);
+  });
+
+  it("refuses a table needing moving, either way round, and merges nothing", async () => {
+    const { tableId, spare } = await needingMoving(v, NOW);
+
+    await expect(merge(tableId, spare, "right", 8)).rejects.toMatchObject({
+      code: "table.needs_moving",
+      params: { tableId },
+    });
+    await expect(merge(spare, tableId, "right", 8)).rejects.toMatchObject({
+      code: "table.needs_moving",
+      params: { tableId },
+    });
+    expect(await mergeOf(v, tableId)).toBeNull();
+    expect(await mergeOf(v, spare)).toBeNull();
   });
 
   it("puts each table that leaves back where it stood before, and ends a merge left with one", async () => {

@@ -24,6 +24,7 @@ import {
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { floorDeletionFor } from "./floor-delete.js";
+import { floorPlanSetsFor } from "./floor-plan-sets.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
@@ -124,6 +125,7 @@ export function moduleCoreServices(
   return {
     seatTable: (tx, req) => seatTable(tx, dashboard, req),
     floorDeletion: floorDeletionFor(cfg, removals),
+    floorPlanSets: floorPlanSetsFor(cfg),
   };
 }
 

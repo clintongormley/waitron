@@ -49,12 +49,18 @@ const zone = {
   closesAt: null,
   closed: false,
   hasPlan: false,
+  layoutSetName: "Cena",
+  layoutDue: null,
   serviceMode: "table_tab" as const,
 };
 
 async function mount(theme: "light" | "dark", tables: TableState[]) {
   setLocale("es-ES");
-  return mountWidget<TillFloorZoneMenu>("till-floor-zone-menu", { zone, tables }, theme);
+  return mountWidget<TillFloorZoneMenu>(
+    "till-floor-zone-menu",
+    { zone, tables, canChangeToday: true },
+    theme,
+  );
 }
 
 async function open(el: TillFloorZoneMenu, item: string, dialog: string): Promise<void> {

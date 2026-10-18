@@ -21,6 +21,9 @@ export interface ComboboxOption {
    * row that makes or opens something, rather than choosing a value, does not read as one more
    * item of the list. */
   primary?: true;
+  /** Drawn in `--wt-color-text-muted` in the open list and on the closed field when chosen;
+   * `primary` wins on a row that sets both. */
+  muted?: true;
   /** A second, muted line under the label in the open list; the row's name holds both lines.
    * Never shown on the closed trigger. */
   description?: string;
@@ -61,6 +64,7 @@ interface TriggerParts {
   describedBy: string[];
   selectedText: string;
   shownText: string;
+  muted: boolean;
 }
 
 const NAVIGATION_KEYS = ["ArrowDown", "ArrowUp", "Home", "End"] as const;
@@ -147,6 +151,10 @@ export class WtCombobox extends LitElement {
         overflow: hidden;
         text-overflow: ellipsis;
         text-wrap: nowrap;
+      }
+
+      .value.muted {
+        color: var(--wt-color-text-muted);
       }
 
       .value.placeholder {
@@ -274,6 +282,11 @@ export class WtCombobox extends LitElement {
       .option.active {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
+      .option.muted,
+      .option.muted .icon {
+        color: var(--wt-color-text-muted);
       }
 
       /* The icon names its own colour, so it is painted here too rather than inheriting. */
@@ -485,22 +498,21 @@ export class WtCombobox extends LitElement {
     return options.findIndex((option) => this.isSelected(option));
   }
 
+  /** The one option the closed trigger names, if it names one rather than a count or nothing. */
+  private get chosenOption(): ComboboxOption | undefined {
+    const find = (value: string) => this.options.find((o) => !o.action && o.value === value);
+    if (this.multiple) {
+      if (this.values.length === 0) return this.showEmptyOption ? find("") : undefined;
+      return this.values.length === 1 ? find(this.values[0]!) : undefined;
+    }
+    if (this.value === "" && !this.showEmptyOption) return undefined;
+    return find(this.value);
+  }
+
   /** The closed-state trigger text: the chosen option's `valueLabel`, else its `label`, or a count
    * once more than one is chosen. */
-  private get selectedText(): string {
-    if (this.multiple) {
-      if (this.values.length === 0) {
-        const empty = this.showEmptyOption && this.options.find((o) => !o.action && o.value === "");
-        return empty ? closedText(empty) : "";
-      }
-      if (this.values.length === 1) {
-        const chosen = this.options.find((o) => !o.action && o.value === this.values[0]);
-        return chosen ? closedText(chosen) : "";
-      }
-      return this.countLabel(this.values.length);
-    }
-    if (this.value === "" && !this.showEmptyOption) return "";
-    const chosen = this.options.find((o) => !o.action && o.value === this.value);
+  private selectedText(chosen: ComboboxOption | undefined): string {
+    if (this.multiple && this.values.length > 1) return this.countLabel(this.values.length);
     return chosen ? closedText(chosen) : "";
   }
 
@@ -894,7 +906,7 @@ export class WtCombobox extends LitElement {
       <li
         id=${rowId}
         style=${depth > 0 ? `--option-depth: ${depth}` : nothing}
-        class=${classMap({ option: true, active: index === this.activeIndex, primary: Boolean(option.primary) })}
+        class=${classMap({ option: true, active: index === this.activeIndex, primary: Boolean(option.primary), muted: Boolean(option.muted) })}
         role="option"
         aria-selected=${selected}
         aria-disabled=${option.disabled ? "true" : nothing}
@@ -970,6 +982,7 @@ export class WtCombobox extends LitElement {
     describedBy,
     selectedText,
     shownText,
+    muted,
   }: TriggerParts) {
     const showLabel = this.label !== "" && !this.hideLabel;
     const triggerName = this.hideLabel && this.label ? this.label : !this.label && this.ariaLabel;
@@ -1031,7 +1044,9 @@ export class WtCombobox extends LitElement {
               ? html`<span id=${`${this.labelId}-name`} hidden>${triggerName}</span>`
               : nothing
           }
-          <span class=${selectedText ? "value" : "value placeholder"}>${shownText}</span>
+          <span class=${classMap({ value: true, placeholder: !selectedText, muted })}
+            >${shownText}</span
+          >
           ${guard([this.reservedTexts], () =>
             this.reservedTexts.map(
               (text) => html`<span class="width-option" aria-hidden="true">${text}</span>`,
@@ -1077,13 +1092,15 @@ export class WtCombobox extends LitElement {
   override render() {
     const hasError = this.error !== "";
     const hasHint = this.hint !== "";
-    const selectedText = this.selectedText;
+    const chosen = this.chosenOption;
+    const selectedText = this.selectedText(chosen);
     const trigger: TriggerParts = {
       id: this.name || this.generatedTriggerId,
       invalid: this.invalid || hasError,
       describedBy: [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])],
       selectedText,
       shownText: selectedText || this.placeholder || this.hint,
+      muted: Boolean(chosen?.muted),
     };
     return html`
       <div class="row">

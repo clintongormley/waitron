@@ -34,11 +34,23 @@ export class TillFloorZoneMenu extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
       }
+
+      .heading {
+        margin: 0;
+        padding: var(--wt-space-2) var(--wt-space-4) 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
 
   @property({ attribute: false }) zone: FloorZone | null = null;
   @property({ attribute: false }) tables: TableState[] = [];
+  /** Below the till's phone width the List/Map toggle lives here, above a heading for the zone's items. */
+  @property({ type: Boolean }) phone = false;
+  @property() view: "map" | "list" = "map";
+  /** Whether this device may change this zone's plan today; without it only a phone's toggle is offered. */
+  @property({ type: Boolean }) canChangeToday = false;
   @state() private open: Dialog | null = null;
 
   #emit(type: string, detail: object): void {
@@ -130,42 +142,78 @@ export class TillFloorZoneMenu extends LitElement {
       </wt-button>`;
   }
 
+  #planItems(zone: FloorZone): TemplateResult {
+    const setName = zone.layoutSetName;
+    return html`${
+        this.phone
+          ? html`<p class="heading" data-menu-heading>
+              ${t("floor.zone_menu_heading").replace("{zone}", () => zone.name)}
+            </p>`
+          : nothing
+      }
+      <wt-button
+        data-menu-item="spares"
+        variant="secondary"
+        align="start"
+        @click=${() => (this.open = "spares")}
+      >
+        ${t("floor.add_spare")}
+      </wt-button>
+      <wt-button
+        data-menu-item="taken-off"
+        variant="secondary"
+        align="start"
+        @click=${() => (this.open = "taken-off")}
+      >
+        ${t("floor.taken_off")}
+      </wt-button>
+      ${
+        setName === null
+          ? nothing
+          : html`<wt-button
+              data-menu-item="reset"
+              variant="secondary"
+              align="start"
+              @click=${() => (this.open = "reset")}
+            >
+              ${t("floor.reset_plan").replace("{set}", () => setName)}
+            </wt-button>`
+      }`;
+  }
+
   override render() {
     const zone = this.zone;
-    if (zone === null) return nothing;
-    return html`<wt-row-actions label=${t("floor.zone_menu")} align="end">
-        <wt-button
-          data-menu-item="spares"
-          variant="secondary"
-          align="start"
-          @click=${() => (this.open = "spares")}
-        >
-          ${t("floor.add_spare")}
-        </wt-button>
-        <wt-button
-          data-menu-item="taken-off"
-          variant="secondary"
-          align="start"
-          @click=${() => (this.open = "taken-off")}
-        >
-          ${t("floor.taken_off")}
-        </wt-button>
-        <wt-button
-          data-menu-item="reset"
-          variant="secondary"
-          align="start"
-          @click=${() => (this.open = "reset")}
-        >
-          ${t("floor.reset_plan")}
-        </wt-button>
+    const planned = zone !== null && this.canChangeToday;
+    if (!planned && !this.phone) return nothing;
+    return html`<wt-row-actions
+        label=${planned ? t("floor.zone_menu") : t("floor.view_menu")}
+        align="end"
+      >
+        ${
+          this.phone
+            ? html`<wt-button
+                data-menu-item="view"
+                variant="secondary"
+                align="start"
+                @click=${() => this.#emit("zone-toggle-view", {})}
+              >
+                ${this.view === "map" ? t("floor.view_list") : t("floor.view_map")}
+              </wt-button>`
+            : nothing
+        }
+        ${planned ? this.#planItems(zone) : nothing}
       </wt-row-actions>
-      ${this.#dialog("spares", t("floor.add_spare"), this.#spares())}
-      ${this.#dialog("taken-off", t("floor.taken_off"), this.#takenOff())}
-      ${this.#dialog(
-        "reset",
-        t("floor.reset_title").replace("{zone}", () => zone.name),
-        this.#reset(zone),
-      )}`;
+      ${
+        planned
+          ? html`${this.#dialog("spares", t("floor.add_spare"), this.#spares())}
+            ${this.#dialog("taken-off", t("floor.taken_off"), this.#takenOff())}
+            ${this.#dialog(
+              "reset",
+              t("floor.reset_title").replace("{zone}", () => zone.name),
+              this.#reset(zone),
+            )}`
+          : nothing
+      }`;
   }
 }
 

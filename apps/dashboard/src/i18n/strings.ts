@@ -1205,6 +1205,9 @@ export const en = {
   "status.new_label": "New status",
   "status.new_color": "Colour",
   "floor_plan_editor.title": "Floor plan",
+  "floor_plan_editor.layout_title": "{zone} · {set}",
+  "floor_plan_editor.shared_tables":
+    "Tables are shared by every set. Adding, renaming or deleting one here does it in every set.",
   "floor_plan_editor.undo": "Undo",
   "floor_plan_editor.redo": "Redo",
   "floor_plan_editor.tables": "Tables",
@@ -4206,6 +4209,9 @@ export const es: Record<StringKey, string> = {
   "status.new_label": "Nuevo estado",
   "status.new_color": "Color",
   "floor_plan_editor.title": "Plano de sala",
+  "floor_plan_editor.layout_title": "{zone} · {set}",
+  "floor_plan_editor.shared_tables":
+    "Las mesas son comunes a todos los conjuntos. Añadir, renombrar o eliminar una aquí lo hace en todos.",
   "floor_plan_editor.undo": "Deshacer",
   "floor_plan_editor.redo": "Rehacer",
   "floor_plan_editor.tables": "Mesas",

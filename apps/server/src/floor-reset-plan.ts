@@ -1,3 +1,5 @@
+import { blocksPlace } from "./joined-split-layout.js";
+
 export type PlanShape = "rect" | "round";
 
 export interface Placement {
@@ -36,12 +38,18 @@ export interface LiveTable {
   mergedWithHeld: boolean;
   /** It is in a split group, a joined table and the parts split off it today, one of whose members waits or has food on its way. */
   splitWithBusy: boolean;
+  /** It needs clearing, so it waits as a held table does, and is seeded as one is. */
+  clearing: boolean;
+  /** It is in a joined group of the reset, a joined table and its parts, with a waiting member. */
+  joinedWithWaiting: boolean;
+  /** Its new place is taken by a table that stays, so it keeps its place for now. */
+  blocked: boolean;
 }
 
 export interface ResetPlan {
   /** `label` null: keep the current name, the target's is still in use. */
   apply: { target: Target; label: string | null }[];
-  /** Held tables with no today's row: today's row from the target, name kept; the target stays pending. */
+  /** Held tables, or ones needing clearing, with no today's row: today's row from the target, name kept; the target stays pending. */
   seed: Target[];
   /** Tables to create, whose names are free. */
   create: Target[];
@@ -63,6 +71,8 @@ export function planReset(input: {
   targets: readonly Target[];
   live: readonly LiveTable[];
   takenElsewhere: ReadonlySet<string>;
+  /** Targets with no table yet, a joined table to create whose group waits. */
+  waitingToCreate?: ReadonlySet<Target>;
 }): ResetPlan {
   const live = new Map(input.live.map((table) => [table.id, table]));
   const plan: ResetPlan = { apply: [], seed: [], create: [], remove: [], hide: [], pending: [] };
@@ -75,16 +85,25 @@ export function planReset(input: {
 
   for (const target of input.targets) {
     const table = target.tableId === null ? undefined : live.get(target.tableId);
-    if (target.tableId !== null && !table) {
+    if (target.tableId === null && input.waitingToCreate?.has(target)) {
+      plan.pending.push(target);
+      fixedInUse.add(target.label);
+    } else if (target.tableId !== null && !table) {
       // The table's state is unknown, so nothing is done to it and no other table takes its target name.
       plan.pending.push(target);
       fixedInUse.add(target.label);
     } else if (
       table &&
-      (table.held || table.refused || table.mergedWithHeld || table.splitWithBusy)
+      (table.held ||
+        table.refused ||
+        table.clearing ||
+        table.mergedWithHeld ||
+        table.splitWithBusy ||
+        table.joinedWithWaiting ||
+        table.blocked)
     ) {
       plan.pending.push(target);
-      if (table.held && !table.hasToday) plan.seed.push(target);
+      if ((table.held || table.clearing) && !table.hasToday) plan.seed.push(target);
       fixedInUse.add(table.label);
     } else if (target.remove) {
       if (!table) continue;
@@ -126,6 +145,51 @@ export function planReset(input: {
     if (!wantsNew) plan.pending.push(target);
   }
   return plan;
+}
+
+/** Whether applying `target` would carry a table drawn on today's map somewhere else. */
+export function movesTable(
+  today: {
+    placement: Placement | null;
+    takenOff: boolean;
+    inMerge: boolean;
+    splitOff: boolean;
+  } | null,
+  target: { placement: Placement | null },
+): boolean {
+  if (today === null || today.placement === null || today.takenOff) return false;
+  if (today.inMerge || today.splitOff || target.placement === null) return true;
+  const [from, to] = [today.placement, target.placement];
+  return (
+    from.x !== to.x ||
+    from.y !== to.y ||
+    from.width !== to.width ||
+    from.height !== to.height ||
+    from.shape !== to.shape ||
+    from.rotation !== to.rotation
+  );
+}
+
+/** The moving tables that must keep their place: repeated until a pass blocks nothing new; a
+ *  blocked table's current place joins `staying`. Tables moving together never
+ *  block each other, nor does a staying table at `own`, its place in the layout being applied. */
+export function blockedMoves(input: {
+  moving: readonly { tableId: string; from: Placement | null; to: Placement | null }[];
+  staying: readonly { tableId: string; place: Placement; own?: Placement | null }[];
+}): Set<string> {
+  const blocked = new Set<string>();
+  const places = input.staying.map(({ place, own }) => ({ place, own: own ?? null }));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const { tableId, from, to } of input.moving) {
+      if (blocked.has(tableId) || to === null) continue;
+      if (!places.some(({ place, own }) => blocksPlace(to, place, own))) continue;
+      blocked.add(tableId);
+      if (from !== null) places.push({ place: from, own: to });
+      changed = true;
+    }
+  }
+  return blocked;
 }
 
 export function targetsFromMaster(

@@ -26,6 +26,7 @@ import {
   type ErrorParams,
 } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
+import { deletePlans, removeSets } from "./floor-plan-sets.js";
 import { removeLiveTables, tableDeleteRefusals } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -61,11 +62,7 @@ async function inventory(tx: Transaction, cfg: TillConfig, zoneIds: readonly str
     .where(and(eq(diningTables.locationId, cfg.locationId), inArray(diningTables.zoneId, ids)));
   tables.sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
   const plans = await tx.select().from(floorPlans).where(inArray(floorPlans.zoneId, ids));
-  const planIds = plans.map((plan) => plan.id);
-  const saved = await tx
-    .select()
-    .from(floorPlanTables)
-    .where(inArray(floorPlanTables.planId, planIds));
+  const saved = await tx.select().from(floorPlanTables).where(inArray(floorPlanTables.zoneId, ids));
   const todayJoins = await tx
     .select()
     .from(floorTodayJoins)
@@ -152,6 +149,7 @@ export function floorDeletionFor(
   removals: readonly TableRemoval[],
 ): FloorDeletion {
   return {
+    removeSets: (tx, setIds) => removeSets(tx, cfg, setIds),
     async readImpact(tx, zoneIds, now) {
       const floor = await inventory(tx, cfg, zoneIds);
       return {
@@ -227,13 +225,11 @@ export function floorDeletionFor(
       await tx
         .delete(floorPlanTableSizes)
         .where(inArray(floorPlanTableSizes.planTableId, masterIds));
-      await tx.delete(floorPlanTables).where(inArray(floorPlanTables.id, masterIds));
-      await tx.delete(floorPlans).where(
-        inArray(
-          floorPlans.id,
-          floor.plans.map((plan) => plan.id),
-        ),
+      await deletePlans(
+        tx,
+        floor.plans.map((plan) => plan.id),
       );
+      await tx.delete(floorPlanTables).where(inArray(floorPlanTables.id, masterIds));
     },
   };
 }

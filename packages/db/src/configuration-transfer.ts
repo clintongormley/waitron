@@ -50,8 +50,10 @@ export const CORE_CONFIGURATION_TRANSFER = {
       locationColumns: ["location_id"],
       omit: ["needs_clearing_since"],
     },
+    { name: "floor_plan_sets", locationColumns: ["location_id"] },
     { name: "floor_plans" },
     { name: "floor_plan_tables" },
+    { name: "floor_plan_placements" },
     { name: "floor_plan_table_parts" },
     { name: "floor_plan_table_sizes" },
     {

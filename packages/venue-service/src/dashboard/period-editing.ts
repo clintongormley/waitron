@@ -1,5 +1,6 @@
 import { html, nothing, type ReactiveController, type ReactiveControllerHost } from "lit";
 import { keyed } from "lit/directives/keyed.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { MenuPeriodInput, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { PaintedIn } from "../period-delete.js";
 import { NO_COLOUR_USERS, type ColourUser } from "./calendar-colours.js";
@@ -85,9 +86,55 @@ export class PeriodEditing implements ReactiveController {
       /** Offers Delete… in the dialog; called once the dialog has closed itself to hand over. */
       onDelete?: (department: Department, period: Period) => void;
       draftParent?: () => object | undefined;
+      /** Keeps reading the floor plan sets after a dialog closes, once the host has called
+       *  `watchFloorPlans`; otherwise they are read only while a dialog is open. */
+      keepFloorPlans?: boolean;
     },
   ) {
     host.addController(this);
+  }
+
+  #floorPlans?: PeriodFloorPlans;
+  #floorPlansFailed = false;
+  #stopFloorPlans?: () => void;
+
+  /** The departments' floor plan choices, for the dialog's Floor plan field. */
+  get floorPlans(): PeriodFloorPlans | undefined {
+    return this.#floorPlans;
+  }
+  /** Whether the latest floor plan sets read failed. */
+  get floorPlansFailed(): boolean {
+    return this.#floorPlansFailed;
+  }
+
+  hostConnected() {
+    if (this.editor) this.watchFloorPlans();
+  }
+  /** Starts reading the floor plan sets, unless already reading or the host is not connected. */
+  watchFloorPlans() {
+    if (this.#stopFloorPlans || !this.host.isConnected) return;
+    this.#stopFloorPlans = this.options.api().watchPeriodFloorPlans(
+      (model) => {
+        this.#floorPlans = model;
+        this.#floorPlansFailed = false;
+        this.host.requestUpdate();
+      },
+      () => {
+        this.#floorPlansFailed = true;
+        this.host.requestUpdate();
+      },
+      () => {
+        this.#floorPlansFailed = false;
+        this.host.requestUpdate();
+      },
+    );
+  }
+  hostDisconnected() {
+    this.#unwatchFloorPlans();
+  }
+  #unwatchFloorPlans() {
+    this.#stopFloorPlans?.();
+    this.#stopFloorPlans = undefined;
   }
 
   hostUpdate() {
@@ -101,6 +148,7 @@ export class PeriodEditing implements ReactiveController {
         (editor.period && !department?.periods.some(({ id }) => id === editor.period!.id))
       ) {
         this.editor = undefined;
+        if (!this.options.keepFloorPlans) this.#unwatchFloorPlans();
         this.busy = false;
       }
     }
@@ -147,6 +195,7 @@ export class PeriodEditing implements ReactiveController {
       clockRevision: this.options.model().clockRevision,
     };
     this.editor = editor;
+    this.watchFloorPlans();
     this.host.requestUpdate();
     if (period && !this.options.paintedIn) void this.readPaintedIn(editor, period.id);
   }
@@ -206,6 +255,7 @@ export class PeriodEditing implements ReactiveController {
   }
   private close() {
     this.editor = undefined;
+    if (!this.options.keepFloorPlans) this.#unwatchFloorPlans();
     this.host.requestUpdate();
   }
 
@@ -259,6 +309,7 @@ export class PeriodEditing implements ReactiveController {
         .colourUsers=${colours.colourUsers}
         .departments=${colours.departments}
         .menus=${model.menus}
+        .floorPlans=${this.#floorPlans?.departments}
         .busy=${this.busy}
         .deletable=${this.options.onDelete !== undefined}
         .draftParent=${this.options.draftParent?.()}

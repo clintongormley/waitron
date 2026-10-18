@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
   floorZones,
+  floorPlanPlacements,
   floorPlanTables,
   floorResetTables,
   floorTodayJoinTables,
@@ -15,7 +16,8 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { foodOnItsWay } from "./delivery-release.js";
-import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import {
   backToSaved,
   moveToday,
@@ -55,8 +57,9 @@ useVenueDb({
 const takeOff = (tableId: string) => inTx(v, (tx) => takeOffToday(tx, v.cfg, tableId));
 const putBack = (tableId: string) => inTx(v, (tx) => putBackToday(tx, v.cfg, tableId));
 const seats = (tableId: string, n: number) => inTx(v, (tx) => seatsToday(tx, v.cfg, tableId, n));
-const back = (tableId: string) => inTx(v, (tx) => backToSaved(tx, v.cfg, tableId));
-const reset = (zoneId: string) => inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+const back = (tableId: string) => inTx(v, (tx) => backToSaved(tx, v.cfg, REMOVALS, tableId, NOW));
+const reset = (zoneId: string) =>
+  inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 
 async function setToday(
   tableId: string,
@@ -88,9 +91,22 @@ async function merge(
   });
 }
 
+/** The master table, with its place on the zone's plan. */
 async function masterRow(id: string) {
   const [row] = await inTx(v, (tx) =>
-    tx.select().from(floorPlanTables).where(eq(floorPlanTables.id, id)),
+    tx
+      .select({
+        ...getTableColumns(floorPlanTables),
+        x: floorPlanPlacements.x,
+        y: floorPlanPlacements.y,
+        width: floorPlanPlacements.width,
+        height: floorPlanPlacements.height,
+        shape: floorPlanPlacements.shape,
+        rotation: floorPlanPlacements.rotation,
+      })
+      .from(floorPlanTables)
+      .leftJoin(floorPlanPlacements, eq(floorPlanPlacements.planTableId, floorPlanTables.id))
+      .where(eq(floorPlanTables.id, id)),
   );
   return row;
 }
@@ -110,7 +126,16 @@ async function labelOf(tableId: string): Promise<string | undefined> {
 }
 
 function save(zoneId: string, revision: number, tables: ZonePlanSave["tables"]) {
-  return inTx(v, (tx) => saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables }, NOW));
+  return inTx(v, async (tx) =>
+    saveLayout(
+      tx,
+      v.cfg,
+      REMOVALS,
+      await defaultLayout(tx, v.cfg, zoneId),
+      { revision, tables },
+      NOW,
+    ),
+  );
 }
 
 function place(x: number, y: number) {

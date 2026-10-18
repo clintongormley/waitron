@@ -10,8 +10,8 @@ it.each([
   ["tables", "Deletes {count} tables. {names}", "Elimina {count} mesas. {names}"],
   [
     "saved_tables",
-    "Removes {count} tables from the saved plan. {names}",
-    "Quita {count} mesas del plano guardado. {names}",
+    "Removes {count} tables from the floor plans. {names}",
+    "Quita {count} mesas de los planos. {names}",
   ],
   ["zones", "Deletes {count} zones. {names}", "Elimina {count} zonas. {names}"],
   [
@@ -205,7 +205,7 @@ it("counts physical tables independently of today placement and discloses retain
     }),
   ).toBe("Deletes 3 tables. Never placed today");
   expect(c.item({ key: "saved_tables", count: 1, targets: [] })).toBe(
-    "Removes 1 tables from the saved plan.",
+    "Removes 1 tables from the floor plans.",
   );
 });
 it.each(["zone", "department"] as const)(
@@ -256,3 +256,11 @@ it.each([
     expect(serviceDeleteError("zone", new Error("private diagnostic"))).toBe(fallback);
   },
 );
+it.each([
+  ["en", "Removes 2 floor plan sets."],
+  ["es", "Quita 2 conjuntos de planos de sala."],
+] as const)("counts a department's floor plan sets in %s", async (locale, line) => {
+  setLocale(locale);
+  const c = await copy("department");
+  expect(c.item({ key: "floor_plan_sets", count: 2, targets: [] })).toBe(line);
+});

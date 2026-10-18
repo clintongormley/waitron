@@ -1,5 +1,5 @@
 import { rangeSpanInDay } from "./service-day.js";
-import { readServiceDayPlan } from "./day-resolver.js";
+import { readServiceDayPlan, serviceDayOf } from "./day-resolver.js";
 import { specialDayReadiness } from "./special-days.js";
 import type { LocalDate } from "./hours-types.js";
 import {
@@ -35,7 +35,7 @@ import {
   type MenuOffer,
   type ServedMenu,
 } from "@waitron/catalogue";
-import type { ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
+import type { PreparedServiceDay, ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
 import { AppError, type LocationId } from "@waitron/shared";
 import {
   departmentSalePolicies,
@@ -1465,9 +1465,10 @@ export async function readZoneClosingStates(
   cfg: VenueScope,
   zoneIds: readonly string[],
   at: Date,
+  prepared?: PreparedServiceDay,
 ): Promise<Map<string, { closed: boolean; keepOpen: ZoneKeepOpenState | null }>> {
   if (zoneIds.length === 0) return new Map();
-  const days = await zoneClosureDays(tx, cfg, zoneIds, at);
+  const days = await zoneClosureDays(tx, cfg, zoneIds, at, serviceDayOf(prepared));
   const closed = closedZoneIdsIn(days);
   const keepOpen = await keepOpenStatesIn(tx, days);
   return new Map(

@@ -263,10 +263,11 @@ it("declares no Station hours destination while retaining Opening hours navigati
 });
 
 it("reads the floor plan editor's zone from its path", () => {
-  history.replaceState(null, "", "/manage/floor-plan/zone/z1");
+  history.replaceState(null, "", "/manage/floor-plan/set/s1/zone/z1");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   document.body.append(host);
   expect(url.read("zone")).toBe("z1");
+  expect(url.read("set")).toBe("s1");
 });

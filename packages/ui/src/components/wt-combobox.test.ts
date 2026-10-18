@@ -12,6 +12,7 @@ import { registerIcons } from "./wt-icon.js";
 import "./wt-dialog.js";
 import type { WtDialog } from "./wt-dialog.js";
 import "./wt-input.js";
+import { mountThemed } from "../a11y-helpers.js";
 import { focusFirstInvalid } from "../interactive.js";
 import { submitOnEnter } from "../submit-on-enter.js";
 
@@ -3753,4 +3754,67 @@ test("removal during opening does not let a pending toggle report a closed popup
   expect(popup.matches(":popover-open")).toBe(true);
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+});
+
+const MUTED_DEFAULT: ComboboxOption[] = [
+  { value: "", label: "Default set", icon: "leaf", muted: true },
+  { value: "terrace", label: "Terrace", icon: "leaf" },
+];
+
+/** What `--wt-color-text-muted` resolves to under the host's theme. */
+function mutedTokenColour(): string {
+  const probe = document.createElement("span");
+  probe.style.color = "var(--wt-color-text-muted)";
+  host.append(probe);
+  const colour = getComputedStyle(probe).color;
+  probe.remove();
+  return colour;
+}
+
+test("a multi-select's count is not muted when its first choice is", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Floor plans" multiple show-empty-option></wt-combobox>',
+    [...MUTED_DEFAULT, { value: "garden", label: "Garden" }],
+  );
+  el.countLabel = (count) => `${count} plans`;
+  el.values = ["", "terrace"];
+  await el.updateComplete;
+  expect(fieldParts(el).value.textContent).toBe("2 plans");
+  expect(fieldParts(el).value.classList.contains("muted")).toBe(false);
+  expect(getComputedStyle(fieldParts(el).value).color).not.toBe(mutedTokenColour());
+});
+
+describe.each(["light", "dark"] as const)("a muted option (%s theme)", (theme) => {
+  async function mountMuted(attributes: string): Promise<WtCombobox> {
+    const el = (await mountThemed(
+      `<wt-combobox label="Floor plan" show-empty-option ${attributes}></wt-combobox>`,
+      theme,
+    )) as WtCombobox;
+    el.options = MUTED_DEFAULT;
+    await el.updateComplete;
+    return el;
+  }
+
+  test("its row is drawn in the muted token and a plain row is not", async () => {
+    const el = await mountMuted("");
+    await userEvent.click(fieldParts(el).trigger);
+    const [muted, plain] = optionRows(el);
+    const colour = mutedTokenColour();
+    expect(getComputedStyle(muted!.querySelector(".option-label")!).color).toBe(colour);
+    expect(getComputedStyle(muted!.querySelector("wt-icon")!).color).toBe(colour);
+    expect(getComputedStyle(plain!.querySelector(".option-label")!).color).not.toBe(colour);
+    expect(getComputedStyle(plain!.querySelector("wt-icon")!).color).not.toBe(colour);
+  });
+
+  test("the closed field draws a muted choice in the muted token, upright, and a plain choice not", async () => {
+    const el = await mountMuted("");
+    const colour = mutedTokenColour();
+    expect(fieldParts(el).value.textContent).toBe("Default set");
+    expect(getComputedStyle(fieldParts(el).value).color).toBe(colour);
+    expect(getComputedStyle(fieldParts(el).value).fontStyle).toBe("normal");
+    el.value = "terrace";
+    await el.updateComplete;
+    expect(fieldParts(el).value.textContent).toBe("Terrace");
+    expect(getComputedStyle(fieldParts(el).value).color).not.toBe(colour);
+  });
 });

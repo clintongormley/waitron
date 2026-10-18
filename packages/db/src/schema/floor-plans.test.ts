@@ -11,7 +11,9 @@ import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { diningTables } from "./dining-tables.js";
 import {
+  floorPlanPlacements,
   floorPlans,
+  floorPlanSets,
   floorPlanTableParts,
   floorPlanTableSizes,
   floorPlanTables,
@@ -32,12 +34,13 @@ const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 const ZONE = "bbbbbbbb-0000-4000-8000-000000000001";
 const OTHER_ZONE = "bbbbbbbb-0000-4000-8000-000000000002";
 const PLAN = "cccccccc-0000-4000-8000-000000000001";
+const SET = "cccccccc-0000-4000-8000-000000000009";
 const TABLE_1 = "dddddddd-0000-4000-8000-000000000001";
 const TABLE_2 = "dddddddd-0000-4000-8000-000000000002";
 const PERSON = "eeeeeeee-0000-4000-8000-000000000001";
 
 const PLACED = { x: 10, y: 20, width: 4, height: 4, shape: "rect", rotation: 0 } as const;
-const GOOD_MASTER_TABLE = { planId: PLAN, label: "T9", seats: 4, ...PLACED };
+const GOOD_MASTER_TABLE = { zoneId: ZONE, label: "T9", seats: 4 };
 const NO_PLACE = { x: null, y: null, width: null, height: null, shape: null, rotation: null };
 
 describe("floor plan tables", () => {
@@ -61,7 +64,10 @@ describe("floor plan tables", () => {
       { id: ZONE, locationId: LOCATION, name: "Comedor" },
       { id: OTHER_ZONE, locationId: LOCATION, name: "Terraza" },
     ]);
-    await db.insert(floorPlans).values({ id: PLAN, zoneId: ZONE, savedAt: "2026-10-08T10:00:00Z" });
+    await db.insert(floorPlanSets).values({ id: SET, locationId: LOCATION });
+    await db
+      .insert(floorPlans)
+      .values({ id: PLAN, zoneId: ZONE, setId: SET, savedAt: "2026-10-08T10:00:00Z" });
     await db.insert(diningTables).values([
       { id: TABLE_1, locationId: LOCATION, label: "T1", zoneId: ZONE },
       { id: TABLE_2, locationId: LOCATION, label: "T2", zoneId: ZONE },
@@ -75,43 +81,50 @@ describe("floor plan tables", () => {
     );
   }
 
+  async function insertSet(): Promise<string> {
+    return inTx(async (tx) => {
+      const [row] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: LOCATION })
+        .returning({ id: floorPlanSets.id });
+      return row!.id;
+    });
+  }
+
+  async function insertPlanTable(label: string): Promise<string> {
+    return inTx(async (tx) => {
+      const [row] = await tx
+        .insert(floorPlanTables)
+        .values({ ...GOOD_MASTER_TABLE, label })
+        .returning({ id: floorPlanTables.id });
+      return row!.id;
+    });
+  }
+
   it.each([
-    ["rotation 20", { rotation: 20 }, "floor_plan_tables_rotation_ck"],
-    ["rotation 360", { rotation: 360 }, "floor_plan_tables_rotation_ck"],
-    ["rotation -15", { rotation: -15 }, "floor_plan_tables_rotation_ck"],
-    ["x -1", { x: -1 }, "floor_plan_tables_x_ck"],
-    ["x 1000", { x: 1000 }, "floor_plan_tables_x_ck"],
-    ["y 1000", { y: 1000 }, "floor_plan_tables_y_ck"],
-    ["width 0", { width: 0 }, "floor_plan_tables_width_ck"],
-    ["height 100", { height: 100 }, "floor_plan_tables_height_ck"],
-    ["shape square", { shape: "square" }, "floor_plan_tables_shape_ck"],
     ["seats 1000", { seats: 1000 }, "floor_plan_tables_seats_ck"],
     ["seats -1", { seats: -1 }, "floor_plan_tables_seats_ck"],
-    ["a position without a size", { width: null }, "floor_plan_tables_placement_ck"],
-    ["a size without a position", { x: null, y: null }, "floor_plan_tables_placement_ck"],
-    ["no shape", { shape: null }, "floor_plan_tables_placement_ck"],
   ] as const)("refuses a master table with %s", async (_name, patch, constraint) => {
     const error = await captureError(() => insertMasterTable({ ...GOOD_MASTER_TABLE, ...patch }));
     expect(checkFailed(error, constraint)).toBe(true);
   });
 
   it.each([
-    ["the bounds' low ends", { x: 0, y: 0, width: 1, height: 1, rotation: 0, seats: 0 }],
-    ["the bounds' high ends", { x: 999, y: 999, width: 99, height: 99, rotation: 345, seats: 999 }],
-    ["a round table turned 15", { shape: "round", rotation: 15, seats: null }],
+    ["the bounds' low ends", { seats: 0 }],
+    ["the bounds' high ends", { seats: 999 }],
   ] as const)("accepts a master table at %s (the control)", async (name, patch) => {
     await insertMasterTable({ ...GOOD_MASTER_TABLE, label: `ok ${name}`, ...patch });
   });
 
-  it("accepts a master spare with no position at all", async () => {
-    await insertMasterTable({ planId: PLAN, label: "spare", ...NO_PLACE });
+  it("accepts a master table with no seat count, not fixed unless asked", async () => {
+    await insertMasterTable({ zoneId: ZONE, label: "spare" });
     const [row] = await inTx((tx) =>
       tx.select().from(floorPlanTables).where(eq(floorPlanTables.label, "spare")),
     );
-    expect(row).toMatchObject({ ...NO_PLACE, seats: null, fixed: false });
+    expect(row).toMatchObject({ seats: null, fixed: false });
   });
 
-  it("keeps names unique within a plan", async () => {
+  it("keeps names unique within a zone", async () => {
     await insertMasterTable({ ...GOOD_MASTER_TABLE, label: "dup" });
     const error = await captureError(() =>
       insertMasterTable({ ...GOOD_MASTER_TABLE, label: "dup" }),
@@ -119,18 +132,22 @@ describe("floor plan tables", () => {
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "floor_plan_tables",
-        columns: ["plan_id", "label"],
+        columns: ["zone_id", "label"],
       }),
     ).toBe(true);
   });
 
-  it("keeps one plan, and one today's row, per zone", async () => {
+  it("keeps one plan per zone in a set, and one today's row per zone", async () => {
+    const setId = await insertSet();
+    await inTx((tx) => tx.update(floorPlans).set({ setId }).where(eq(floorPlans.id, PLAN)));
     const plan = await captureError(() =>
-      inTx((tx) => tx.insert(floorPlans).values({ zoneId: ZONE, savedAt: "2026-10-08T11:00:00Z" })),
+      inTx((tx) =>
+        tx.insert(floorPlans).values({ zoneId: ZONE, setId, savedAt: "2026-10-08T11:00:00Z" }),
+      ),
     );
-    expect(refusalOn(plan, UNIQUE_VIOLATION, { table: "floor_plans", columns: ["zone_id"] })).toBe(
-      true,
-    );
+    expect(
+      refusalOn(plan, UNIQUE_VIOLATION, { table: "floor_plans", columns: ["set_id", "zone_id"] }),
+    ).toBe(true);
 
     await inTx((tx) =>
       tx.insert(floorTodayZones).values({ zoneId: OTHER_ZONE, businessDay: "2026-10-08" }),
@@ -288,7 +305,7 @@ describe("floor plan tables", () => {
     const masterId = await inTx(async (tx) => {
       const [row] = await tx
         .insert(floorPlanTables)
-        .values({ ...GOOD_MASTER_TABLE, label: "T1", fixed: true, rotation: 345 })
+        .values({ ...GOOD_MASTER_TABLE, label: "T1", fixed: true })
         .returning({ id: floorPlanTables.id });
       return row!.id;
     });
@@ -313,6 +330,7 @@ describe("floor plan tables", () => {
     expect(plan).toEqual({
       id: PLAN,
       zoneId: ZONE,
+      setId: SET,
       revision: 0,
       savedAt: "2026-10-08T10:00:00Z",
     });
@@ -321,12 +339,10 @@ describe("floor plan tables", () => {
     );
     expect(master).toEqual({
       id: masterId,
-      planId: PLAN,
+      zoneId: ZONE,
       label: "T1",
       seats: 4,
       fixed: true,
-      ...PLACED,
-      rotation: 345,
     });
     const live = await inTx((tx) =>
       tx
@@ -397,9 +413,9 @@ describe("floor plan tables", () => {
         .insert(floorPlanTables)
         .values([
           { ...GOOD_MASTER_TABLE, label: "Long table", seats: 10 },
-          { planId: PLAN, label: "Counter 3", seats: 2, ...NO_PLACE },
-          { planId: PLAN, label: "Counter 4", seats: 6, ...NO_PLACE },
-          { planId: PLAN, label: "Counter 5", seats: 4, ...NO_PLACE },
+          { zoneId: ZONE, label: "Counter 3", seats: 2 },
+          { zoneId: ZONE, label: "Counter 4", seats: 6 },
+          { zoneId: ZONE, label: "Counter 5", seats: 4 },
         ])
         .returning({ id: floorPlanTables.id });
       return {
@@ -620,31 +636,39 @@ describe("floor plan tables", () => {
     ]);
   });
 
-  it("keeps one size per master table, 1 to 99 squares each way", async () => {
+  it("keeps one size per master table in a layout, 1 to 99 squares each way", async () => {
     const t = await insertCounterTables();
     await inTx((tx) =>
-      tx.insert(floorPlanTableSizes).values({ planTableId: t.counter3, width: 2, height: 2 }),
+      tx
+        .insert(floorPlanTableSizes)
+        .values({ planId: PLAN, planTableId: t.counter3, width: 2, height: 2 }),
     );
     const duplicate = await captureError(() =>
       inTx((tx) =>
-        tx.insert(floorPlanTableSizes).values({ planTableId: t.counter3, width: 3, height: 3 }),
+        tx
+          .insert(floorPlanTableSizes)
+          .values({ planId: PLAN, planTableId: t.counter3, width: 3, height: 3 }),
       ),
     );
     expect(
       refusalOn(duplicate, UNIQUE_VIOLATION, {
         table: "floor_plan_table_sizes",
-        columns: ["plan_table_id"],
+        columns: ["plan_id", "plan_table_id"],
       }),
     ).toBe(true);
     const narrow = await captureError(() =>
       inTx((tx) =>
-        tx.insert(floorPlanTableSizes).values({ planTableId: t.counter4, width: 0, height: 2 }),
+        tx
+          .insert(floorPlanTableSizes)
+          .values({ planId: PLAN, planTableId: t.counter4, width: 0, height: 2 }),
       ),
     );
     expect(checkFailed(narrow, "floor_plan_table_sizes_width_ck")).toBe(true);
     const deep = await captureError(() =>
       inTx((tx) =>
-        tx.insert(floorPlanTableSizes).values({ planTableId: t.counter4, width: 2, height: 100 }),
+        tx
+          .insert(floorPlanTableSizes)
+          .values({ planId: PLAN, planTableId: t.counter4, width: 2, height: 100 }),
       ),
     );
     expect(checkFailed(deep, "floor_plan_table_sizes_height_ck")).toBe(true);
@@ -655,7 +679,9 @@ describe("floor plan tables", () => {
   it("refuses deleting a master table that keeps a size", async () => {
     const t = await insertCounterTables();
     await inTx((tx) =>
-      tx.insert(floorPlanTableSizes).values({ planTableId: t.counter3, width: 2, height: 2 }),
+      tx
+        .insert(floorPlanTableSizes)
+        .values({ planId: PLAN, planTableId: t.counter3, width: 2, height: 2 }),
     );
     const error = await captureError(() =>
       inTx((tx) => tx.delete(floorPlanTables).where(eq(floorPlanTables.id, t.counter3))),
@@ -749,7 +775,7 @@ describe("floor plan tables", () => {
     await inTx(async (tx) => {
       await tx
         .insert(floorPlanTableSizes)
-        .values({ planTableId: plan.counter3, width: 2, height: 3 });
+        .values({ planId: PLAN, planTableId: plan.counter3, width: 2, height: 3 });
       await tx
         .insert(floorTodaySplitParts)
         .values({ joinedTableId: live.long, partTableId: live.counter5 });
@@ -784,6 +810,120 @@ describe("floor plan tables", () => {
     expect(names).toEqual([]);
   });
 
+  it("keeps one placement per table in a layout", async () => {
+    const tableId = await insertPlanTable("P1");
+    await inTx((tx) =>
+      tx.insert(floorPlanPlacements).values({ planId: PLAN, planTableId: tableId, ...PLACED }),
+    );
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(floorPlanPlacements)
+          .values({ planId: PLAN, planTableId: tableId, ...PLACED, x: 30 }),
+      ),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_plan_placements",
+        columns: ["plan_id", "plan_table_id"],
+      }),
+    ).toBe(true);
+  });
+
+  it("refuses a placement out of range", async () => {
+    const tableId = await insertPlanTable("P1");
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(floorPlanPlacements)
+          .values({ planId: PLAN, planTableId: tableId, ...PLACED, x: 1000 }),
+      ),
+    );
+    expect(checkFailed(error, "floor_plan_placements_x_ck")).toBe(true);
+  });
+
+  it("allows a zone a layout in each set", async () => {
+    const lunch = await insertSet();
+    const dinner = await insertSet();
+    await inTx((tx) =>
+      tx.insert(floorPlans).values([
+        { zoneId: OTHER_ZONE, setId: lunch, savedAt: "2026-10-08T10:00:00Z" },
+        { zoneId: OTHER_ZONE, setId: dinner, savedAt: "2026-10-08T10:00:00Z" },
+      ]),
+    );
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(floorPlans)
+          .values({ zoneId: OTHER_ZONE, setId: lunch, savedAt: "2026-10-08T11:00:00Z" }),
+      ),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, { table: "floor_plans", columns: ["set_id", "zone_id"] }),
+    ).toBe(true);
+  });
+
+  it("starts a reset row not ready to move", async () => {
+    await inTx((tx) => tx.insert(floorResetTables).values({ zoneId: ZONE, label: "R1" }));
+    const [row] = await inTx((tx) => tx.select().from(floorResetTables));
+    expect(row!.readyToMove).toBe(false);
+  });
+
+  it("keeps a table's off-plan size in each layout", async () => {
+    const lunch = await insertSet();
+    const dinner = await insertSet();
+    const [lunchPlan, dinnerPlan] = await inTx(async (tx) => {
+      const rows = await tx
+        .insert(floorPlans)
+        .values([
+          { zoneId: OTHER_ZONE, setId: lunch, savedAt: "2026-10-08T10:00:00Z" },
+          { zoneId: OTHER_ZONE, setId: dinner, savedAt: "2026-10-08T10:00:00Z" },
+        ])
+        .returning({ id: floorPlans.id });
+      return [rows[0]!.id, rows[1]!.id];
+    });
+    const tableId = await insertPlanTable("S1");
+    await inTx((tx) =>
+      tx.insert(floorPlanTableSizes).values([
+        { planId: lunchPlan, planTableId: tableId, width: 2, height: 2 },
+        { planId: dinnerPlan, planTableId: tableId, width: 3, height: 3 },
+      ]),
+    );
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(floorPlanTableSizes)
+          .values({ planId: lunchPlan, planTableId: tableId, width: 4, height: 4 }),
+      ),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_plan_table_sizes",
+        columns: ["plan_id", "plan_table_id"],
+      }),
+    ).toBe(true);
+  });
+
+  it("floor_plan_tables has no place columns and needs a zone", async () => {
+    const columns = await suite.db.execute<{ name: string }>(
+      sql`select name from pragma_table_info('floor_plan_tables')`,
+    );
+    const names = columns.rows.map((row) => row.name);
+    for (const gone of ["plan_id", "x", "y", "width", "height", "shape", "rotation"]) {
+      expect(names).not.toContain(gone);
+    }
+    expect(names).toContain("seats");
+    const seats = await captureError(() =>
+      insertMasterTable({ zoneId: ZONE, label: "Too many", seats: 1000 }),
+    );
+    expect(checkFailed(seats, "floor_plan_tables_seats_ck")).toBe(true);
+
+    const zoneless = await captureError(() => insertMasterTable({ label: "Nowhere", seats: 4 }));
+    expect(String((zoneless as Error).message)).toContain(
+      "NOT NULL constraint failed: floor_plan_tables.zone_id",
+    );
+  });
+
   it("starts a today's zone at revision 0", async () => {
     const zone = await inTx(async (tx) => {
       const [row] = await tx
@@ -807,15 +947,15 @@ describe("rangeCheck", () => {
     new SQLiteSyncDialect().sqlToQuery(fragment).sql;
 
   it("writes whole-number bounds into the check as they are", () => {
-    expect(render(rangeCheck(floorPlanTables.x, 0, 999))).toBe(
-      '"floor_plan_tables"."x" is null or "floor_plan_tables"."x" between 0 and 999',
+    expect(render(rangeCheck(floorPlanPlacements.x, 0, 999))).toBe(
+      '"floor_plan_placements"."x" is null or "floor_plan_placements"."x" between 0 and 999',
     );
   });
 
   it("refuses a bound that is not a whole number, since it is pasted into the SQL", () => {
-    expect(() => rangeCheck(floorPlanTables.x, 0.5, 999)).toThrow(/whole/);
-    expect(() => rangeCheck(floorPlanTables.x, 0, Number.NaN)).toThrow(/whole/);
-    expect(() => rangeCheck(floorPlanTables.x, 0, "1) or (1" as unknown as number)).toThrow(
+    expect(() => rangeCheck(floorPlanPlacements.x, 0.5, 999)).toThrow(/whole/);
+    expect(() => rangeCheck(floorPlanPlacements.x, 0, Number.NaN)).toThrow(/whole/);
+    expect(() => rangeCheck(floorPlanPlacements.x, 0, "1) or (1" as unknown as number)).toThrow(
       /whole/,
     );
   });

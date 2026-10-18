@@ -72,6 +72,7 @@ const HIERARCHY_DELETE_READS = [
   "department_transfer_desks",
   "department_transfer_destinations",
   "department_transfer_requests",
+  "department_floor_plan_sets",
 ] as const;
 
 export const QUERY_DEPENDENCIES = {
@@ -480,6 +481,11 @@ export const QUERY_DEPENDENCIES = {
   listZones: ["floor_zones"],
   getFloorPlan: [
     "floor_plans",
+    "floor_plan_sets",
+    "department_floor_plan_sets",
+    "departments",
+    "zone_service_policies",
+    "floor_plan_placements",
     "floor_plan_tables",
     "floor_plan_table_parts",
     "floor_plan_table_sizes",

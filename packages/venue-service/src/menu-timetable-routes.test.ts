@@ -12,6 +12,7 @@ import {
   CORE_MIGRATIONS,
   locationBusinessDaySettings,
   locationDayCutoverChanges,
+  floorPlanSets,
   floorZones,
   kitchenStations,
   locations,
@@ -33,6 +34,7 @@ import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { readOpeningHoursModel, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot, OpeningHoursModel } from "./menu-timetable-types.js";
 import { saveSpecialDay } from "./special-days.js";
+import { linkFloorPlanSet } from "./floor-plan-set-store.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
@@ -523,6 +525,7 @@ describe("the opening-hours period API", () => {
           colour: "red",
           staffMenuIds: [],
           endOffsetMinutes: 0,
+          floorPlanSetId: null,
           weekdays: [],
           routingUses: [],
         },
@@ -552,6 +555,7 @@ describe("the opening-hours period API", () => {
       menuId: r.almuerzo,
       staffMenuIds: [r.cafe, r.deliParaLlevar],
       endOffsetMinutes: 0,
+      floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
     });
@@ -566,6 +570,7 @@ describe("the opening-hours period API", () => {
       menuId: r.almuerzo,
       staffMenuIds: [r.cafe, r.deliParaLlevar],
       endOffsetMinutes: 0,
+      floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
     });
@@ -582,6 +587,7 @@ describe("the opening-hours period API", () => {
       menuId: r.almuerzo,
       staffMenuIds: [r.deliParaLlevar, r.cafe],
       endOffsetMinutes: 0,
+      floorPlanSetId: null,
       weekdays: [],
       routingUses: [],
     });
@@ -1286,5 +1292,117 @@ describe("the season weeks route", () => {
     ])
       await answers(await r.send("PUT", path, r.supervisor, malformed), 403, error);
     expect(await r.model()).toEqual(before);
+  });
+});
+
+describe("a period's Floor plan field", () => {
+  async function withSets() {
+    const r = await routed();
+    const set = (departmentId: string, name: string) =>
+      scoped(async (tx) => {
+        const [row] = await tx
+          .insert(floorPlanSets)
+          .values({ locationId: r.cfg.locationId })
+          .returning({ id: floorPlanSets.id });
+        await linkFloorPlanSet(tx, r.cfg, { setId: row!.id, departmentId, name });
+        return row!.id;
+      });
+    const standard = await set(r.restaurant, "Standard");
+    const dinner = await set(r.restaurant, "Dinner");
+    const deliSet = await set(r.deli, "Counter");
+    const stored = async (periodId: string) =>
+      restaurantOf(await r.model(), r).periods.find((p) => p.id === periodId)!.floorPlanSetId;
+    return { ...r, standard, dinner, deliSet, stored };
+  }
+
+  it("stores a set on create, keeps it when absent, and empties it on null", async () => {
+    const r = await withSets();
+    const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+      name: "Dinner",
+      menuId: r.almuerzo,
+      staffMenuIds: [],
+      floorPlanSetId: r.dinner,
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    expect(await r.stored(id)).toBe(r.dinner);
+    await answers(await r.send("PATCH", `/menu-periods/${id}`, r.manager, { name: "Late" }), 204);
+    expect(await r.stored(id)).toBe(r.dinner);
+    await answers(
+      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { floorPlanSetId: null }),
+      204,
+    );
+    expect(await r.stored(id)).toBeNull();
+    await answers(
+      await r.send("PATCH", `/menu-periods/${id}`, r.manager, { floorPlanSetId: r.standard }),
+      204,
+    );
+    expect(await r.stored(id)).toBe(r.standard);
+  });
+
+  it("leaves the field empty on a create that does not send it", async () => {
+    const r = await withSets();
+    expect(await r.stored(r.mananas)).toBeNull();
+    const created = await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+      name: "Dinner",
+      menuId: r.almuerzo,
+      staffMenuIds: [],
+    });
+    expect(await r.stored(((await created.json()) as { id: string }).id)).toBeNull();
+  });
+
+  it("refuses another department's set on create and on PATCH, changing nothing", async () => {
+    const r = await withSets();
+    const before = await r.model();
+    await answers(
+      await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+        name: "Dinner",
+        menuId: r.almuerzo,
+        staffMenuIds: [],
+        floorPlanSetId: r.deliSet,
+      }),
+      400,
+      { code: "menu_period.invalid", params: { field: "floorPlanSetId" } },
+    );
+    await answers(
+      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
+        floorPlanSetId: r.deliSet,
+      }),
+      400,
+      { code: "menu_period.invalid", params: { field: "floorPlanSetId" } },
+    );
+    await answers(
+      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, {
+        floorPlanSetId: randomUUID(),
+      }),
+      400,
+      { code: "menu_period.invalid", params: { field: "floorPlanSetId" } },
+    );
+    expect(await r.model()).toEqual(before);
+  });
+
+  it("refuses a value that is neither an id nor null, changing nothing", async () => {
+    const r = await withSets();
+    for (const floorPlanSetId of [7, "", "x", false, [r.dinner]])
+      await answers(
+        await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, { floorPlanSetId }),
+        400,
+        { code: "management.request_invalid", params: { field: "floorPlanSetId" } },
+      );
+    expect(await r.stored(r.mananas)).toBeNull();
+  });
+
+  it("cannot move a period that names a set into another department", async () => {
+    const r = await withSets();
+    await answers(
+      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, { floorPlanSetId: r.dinner }),
+      204,
+    );
+    await answers(
+      await r.send("PATCH", `/menu-periods/${r.mananas}`, r.manager, { departmentId: r.deli }),
+      400,
+      { code: "management.request_invalid", params: { field: "departmentId" } },
+    );
+    expect(await r.stored(r.mananas)).toBe(r.dinner);
   });
 });

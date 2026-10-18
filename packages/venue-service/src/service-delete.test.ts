@@ -33,6 +33,7 @@ const suite = useVenueDb({
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const NOW = new Date("2026-10-11T12:00:00Z");
 const noFloor: FloorDeletion = {
+  removeSets: async () => {},
   readImpact: async () => ({ refusals: [], removes: [] }),
   clear: async () => {},
 };
@@ -104,6 +105,7 @@ describe("service deletion", () => {
       targets: [],
     };
     const floor: FloorDeletion = {
+      removeSets: async () => {},
       readImpact: async () => ({ refusals: [first, second, first], removes: [] }),
       clear: async () => {
         throw Error("must not clear");
@@ -138,6 +140,7 @@ describe("service deletion", () => {
     const f = await fixture();
     const params = { zoneId: f.alpha, tableId: "shared-table", tableName: "Shared" };
     const floor: FloorDeletion = {
+      removeSets: async () => {},
       readImpact: async () => ({
         refusals: [
           { code: "zone.table_in_use", params, targets: [{ id: "party-2", name: "B" }] },
@@ -498,6 +501,7 @@ describe("service deletion", () => {
   it("rolls back floor and service cleanup when a later step throws", async () => {
     const f = await fixture();
     const floor: FloorDeletion = {
+      removeSets: async () => {},
       readImpact: async () => ({ refusals: [], removes: [] }),
       clear: async (tx) => {
         await tx
@@ -532,6 +536,7 @@ describe("service deletion", () => {
       return table!.id;
     });
     const floor: FloorDeletion = {
+      removeSets: async () => {},
       readImpact: async () => ({ refusals: [], removes: [] }),
       clear: async (tx) => {
         const [zone] = await tx
@@ -551,6 +556,7 @@ describe("service deletion", () => {
   it("rolls back a floor write when floor cleanup throws", async () => {
     const f = await fixture();
     const floor: FloorDeletion = {
+      removeSets: async () => {},
       readImpact: async () => ({ refusals: [], removes: [] }),
       clear: async (tx) => {
         await tx.update(floorZones).set({ name: "Temporary" }).where(eq(floorZones.id, f.alpha));

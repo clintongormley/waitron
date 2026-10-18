@@ -17,7 +17,6 @@ import {
 } from "@waitron/shared";
 import type { FloorAnnotator, TableRemoval } from "@waitron/module";
 import {
-  floorPlans,
   newId,
   readNodeMembership,
   sales,
@@ -172,6 +171,7 @@ import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
+import { layoutOffer, zoneLayouts } from "./floor-layout-due.js";
 import { refuseTakenOff, zoneOfTable } from "./floor-today-table.js";
 import {
   moveChangedRooms,
@@ -411,7 +411,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "locale.unsupported": 400,
   "sale.empty_basket": 400,
   "product.variant_required": 400,
-  // A line never sent whose product sold out, refused at send and at pay (spec §11.3).
+  // A line never sent whose product sold out, refused at send and at pay.
   "product.unavailable": 409,
   "product.not_sold_separately": 409,
   // A basket priced against a menu version that is no longer live: nothing was priced or written.
@@ -525,6 +525,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.split_off": 409,
   "table.delivery_pending": 409,
   "table.place_taken": 409,
+  "table.new_place_taken": 409,
   "table.label_taken": 409,
   "floor_plan.invalid": 400,
   "merge.seats_required": 400,
@@ -540,11 +541,13 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "joined_table.out_of_date": 409,
   "joined_table.tables_in_group": 409,
   "floor_today.out_of_date": 409,
+  "floor_today.layout_changed": 409,
   "zone.not_found": 404,
   "tab.already_open": 409,
   "tab.not_open": 409,
   "tab.line_not_found": 404,
   "table.needs_clearing": 409,
+  "table.needs_moving": 409,
   "table.already_in_party": 409,
   "tab.merge_self": 400,
   "tab.transfer_self": 400,
@@ -2584,7 +2587,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = await requireSession(deps, c);
       const tables = await withTransaction(deps.db, async (tx) => {
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
-        return (await listTables(tx, deps.cfg)).filter((table) => inScope(scope, table.zoneId));
+        return (await listTables(tx, deps.cfg, deps.clock.now().instant)).filter((table) =>
+          inScope(scope, table.zoneId),
+        );
       });
       return c.json(tables);
     }),
@@ -2611,29 +2616,27 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
         const visible = (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
         const ids = visible.map((zone) => zone.id);
-        const at = new Date();
+        if (ids.length === 0) return [];
+        const at = deps.clock.now().instant;
         const modes = new Map(
           (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).map((zone) => [
             zone.id,
             zone.serviceMode,
           ]),
         );
-        const states = await VENUE_SERVICE.readZoneClosingStates(tx, deps.cfg, ids, at);
-        const planned = new Set(
-          (
-            await tx
-              .select({ zoneId: floorPlans.zoneId })
-              .from(floorPlans)
-              .where(inArray(floorPlans.zoneId, ids))
-          ).map((row) => row.zoneId),
-        );
+        const day = await VENUE_SERVICE.readServiceDay(tx, deps.cfg, at);
+        const states = await VENUE_SERVICE.readZoneClosingStates(tx, deps.cfg, ids, at, day);
+        const layouts = await zoneLayouts(tx, deps.cfg, ids, at, day);
         return visible.map((zone) => {
           const state = states.get(zone.id)!;
+          const layout = layouts.get(zone.id)!;
           return {
             ...zone,
             closed: state.closed,
             closesAt: modes.has(zone.id) ? (state.keepOpen?.closesAt ?? null) : null,
-            hasPlan: planned.has(zone.id),
+            hasPlan: layout.planned,
+            layoutSetName: layout.recordedSetName,
+            layoutDue: layoutOffer(layout),
             serviceMode: modes.get(zone.id) ?? null,
           };
         });

@@ -46,13 +46,15 @@ function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
 
+/** `bookingDate` stands in for the business day `savedPart` is asked about. */
 async function requireActiveTable(
   tx: Transaction,
   locationId: LocationId,
   tableId: string,
+  bookingDate: string | null,
 ): Promise<void> {
   const [table] = await tx
-    .select({ part: sql<number>`${savedPart(diningTables.id)}` })
+    .select({ part: sql<number>`${savedPart(diningTables.id, bookingDate)}` })
     .from(diningTables)
     .where(
       and(
@@ -78,7 +80,7 @@ export async function createBooking(
     throw new AppError("booking.invalid", { partySize: input.partySize });
   }
   if (input.tableId !== undefined) {
-    await requireActiveTable(tx, cfg.locationId, input.tableId);
+    await requireActiveTable(tx, cfg.locationId, input.tableId, input.bookingDate);
   }
   const [row] = await tx
     .insert(bookings)
@@ -128,8 +130,24 @@ export async function updateBooking(
   if (patch.partySize !== undefined && patch.partySize <= 0) {
     throw new AppError("booking.invalid", { partySize: patch.partySize });
   }
-  if (patch.tableId !== undefined && patch.tableId !== null) {
-    await requireActiveTable(tx, cfg.locationId, patch.tableId);
+  const tableChanges = patch.tableId !== undefined && patch.tableId !== null;
+  if (tableChanges || patch.bookingDate !== undefined) {
+    const [stored] = await tx
+      .select({ bookingDate: bookings.bookingDate, tableId: bookings.tableId })
+      .from(bookings)
+      .where(eq(bookings.id, id));
+    // Whether a table may be booked depends on the date, so a new date re-judges the kept table.
+    const tableId = patch.tableId === undefined ? (stored?.tableId ?? null) : patch.tableId;
+    const dateChanges =
+      patch.bookingDate !== undefined && patch.bookingDate !== stored?.bookingDate;
+    if (tableId !== null && (tableChanges || dateChanges)) {
+      await requireActiveTable(
+        tx,
+        cfg.locationId,
+        tableId,
+        patch.bookingDate ?? stored?.bookingDate ?? null,
+      );
+    }
   }
   const updated = await tx
     .update(bookings)

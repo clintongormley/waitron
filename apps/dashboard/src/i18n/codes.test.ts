@@ -457,6 +457,15 @@ it("says a booking's table needs clearing on the till first, in both languages",
   );
 });
 
+it("says a booking's table needs moving on the till first, in both languages", () => {
+  expect(codeMessage("table.needs_moving", "en")).toBe(
+    "That table needs moving first. Mark it moved on the till, then try again",
+  );
+  expect(codeMessage("table.needs_moving", "es")).toBe(
+    "Esa mesa está por mover. Márcala como movida en la caja e inténtalo de nuevo",
+  );
+});
+
 it("has a sentence of its own for an unsupported language, in both languages", () => {
   expect(codeMessage("locale.unsupported", "en")).toBe(
     "That language isn't available. Choose another.",

@@ -387,7 +387,7 @@ describe("a group renamed for today, where saved names stay", () => {
 });
 
 describe("a group renamed for today, in the copies bills store", () => {
-  it("a bill taken to the counter is labelled by the name, and keeps it after Reset to saved plan", async () => {
+  it("a bill taken to the counter is labelled by the name, and keeps it after Reset to {set} plan", async () => {
     const { zoneId, table, guests } = await seatedGroup();
     const name = suffixed("García birthday");
     await rename(table.c3!, name);

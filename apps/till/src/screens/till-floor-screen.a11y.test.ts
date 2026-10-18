@@ -1,7 +1,12 @@
 import { page } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  toggleFloorView,
+} from "../widgets/test-helpers.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState } from "../api/client.js";
@@ -15,6 +20,8 @@ const zones: FloorZone[] = [
     closesAt: null,
     closed: false,
     hasPlan: false,
+    layoutSetName: null,
+    layoutDue: null,
     serviceMode: "table_tab",
   },
   {
@@ -25,6 +32,8 @@ const zones: FloorZone[] = [
     closesAt: null,
     closed: false,
     hasPlan: false,
+    layoutSetName: null,
+    layoutDue: null,
     serviceMode: "table_tab",
   },
 ];
@@ -387,11 +396,32 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       { zones, tables: plannedTables },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
+    await toggleFloorView(el);
     expect(el.shadowRoot!.querySelectorAll("[data-table]").length).toBe(3);
     await expectNoA11yViolations(host);
   });
+
+  it.each(["map", "list"] as const)(
+    "has no violations with the layout banner over a planned zone's %s",
+    async (view) => {
+      const offered: FloorZone = {
+        ...zones[0]!,
+        hasPlan: true,
+        layoutSetName: "Lunch",
+        layoutDue: { setId: "set-dinner", revision: 3, periodName: "Dinner" },
+      };
+      const { el, host } = await mountWidget<TillFloorScreen>(
+        "till-floor-screen",
+        { zones: [offered, zones[1]!], tables: plannedTables, canChangeToday: true },
+        theme,
+      );
+      if (view === "list") {
+        await toggleFloorView(el);
+      }
+      expect(el.shadowRoot!.querySelector("[data-layout-due] [data-update-layout]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("has no violations with the seat dialog open", async () => {
     const { el, host } = await mountWidget<TillFloorScreen>(
@@ -526,6 +556,47 @@ for (const locale of ["en-GB", "es-ES"]) {
           }
         });
       }
+    }
+  }
+}
+
+for (const theme of ["light", "dark"] as const) {
+  for (const width of [390, 1280]) {
+    for (const canChangeToday of [true, false]) {
+      it(`has no violations with the zone menu open in ${theme}/${width}, ${canChangeToday ? "able" : "unable"} to change today's plan`, async () => {
+        try {
+          await page.viewport(width, 844);
+          expect(window.innerWidth).toBe(width);
+          const { el, host } = await mountWidget<TillFloorScreen>(
+            "till-floor-screen",
+            {
+              zones: [{ ...zones[0]!, hasPlan: true, layoutSetName: "Cena" }, zones[1]!],
+              tables: plannedTables,
+              canChangeToday,
+            },
+            theme,
+          );
+          const zoneMenu = el.shadowRoot!.querySelector("till-floor-zone-menu");
+          if (width === 1280 && !canChangeToday) {
+            expect(zoneMenu).toBeNull();
+            await expectNoA11yViolations(host);
+            return;
+          }
+          await zoneMenu!.updateComplete;
+          const menu =
+            zoneMenu!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+              "wt-row-actions",
+            )!;
+          menu.show();
+          await menu.updateComplete;
+          expect(menu.querySelector("[data-menu-heading]") !== null).toBe(
+            width === 390 && canChangeToday,
+          );
+          await expectNoA11yViolations(host);
+        } finally {
+          await page.viewport(1280, 768);
+        }
+      });
     }
   }
 }

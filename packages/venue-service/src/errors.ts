@@ -74,7 +74,8 @@ declare module "@waitron/shared" {
     "menu_period.not_found": { periodId: string };
     "menu_period.not_running": { departmentId: string; menuId: string };
     "menu_period.invalid": {
-      field: "staffMenuIds" | "colour" | "endOffsetMinutes" | "replacementPeriodId";
+      field:
+        "staffMenuIds" | "colour" | "endOffsetMinutes" | "replacementPeriodId" | "floorPlanSetId";
       reason?: "whole_minutes" | "range" | "placement";
       periodId?: string;
       departmentId?: string;
@@ -85,6 +86,14 @@ declare module "@waitron/shared" {
     };
     /** Another of the department's named periods already has `name`, as trimmed. */
     "menu_period.name_taken": { departmentId: string; name: string };
+    /** Another of the department's floor plan sets already has `name`. */
+    "floor_plan_set.name_taken": { departmentId: string; name: string };
+    /** No floor plan set with this id among the venue's active departments' sets. */
+    "floor_plan_set.not_found": { setId: string };
+    /** A floor plan set request names something the set cannot take; `field` names it. */
+    "floor_plan_set.invalid": { field: string };
+    /** A department's default set cannot be deleted; another set is made the default first. */
+    "floor_plan_set.is_default": { setId: string };
     "menu_timetable.invalid": {
       field: string;
       periodId?: string;

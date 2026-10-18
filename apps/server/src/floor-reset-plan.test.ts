@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { type LiveTable, planReset, type Target, targetsFromMaster } from "./floor-reset-plan.js";
+import {
+  blockedMoves,
+  type LiveTable,
+  movesTable,
+  planReset,
+  type Target,
+  targetsFromMaster,
+} from "./floor-reset-plan.js";
 
 const t = (tableId: string | null, label: string, over: Partial<Target> = {}): Target => ({
   tableId,
@@ -20,6 +27,9 @@ const l = (id: string, label: string, over: Partial<LiveTable> = {}): LiveTable 
   hasToday: true,
   mergedWithHeld: false,
   splitWithBusy: false,
+  clearing: false,
+  joinedWithWaiting: false,
+  blocked: false,
   ...over,
 });
 const none = new Set<string>();
@@ -31,6 +41,17 @@ describe("planReset", () => {
     expect(
       planReset({ targets: [t("a", "T1")], live: [l("a", "T1")], takenElsewhere: none }).apply,
     ).toEqual([{ target: t("a", "T1"), label: "T1" }]);
+  });
+
+  it("leaves a blocked table pending, and its name stays taken", () => {
+    const plan = planReset({
+      targets: [t("a", "T2"), t("b", "T1")],
+      live: [l("a", "T1", { blocked: true }), l("b", "T2")],
+      takenElsewhere: none,
+    });
+    expect(plan.pending.map((x) => x.tableId)).toEqual(["a", "b"]);
+    expect(plan.apply).toEqual([{ target: t("b", "T1"), label: null }]);
+    expect(plan.seed).toEqual([]);
   });
 
   it("leaves a seated table, and the free table merged with it, pending", () => {
@@ -53,6 +74,55 @@ describe("planReset", () => {
     expect(plan.apply).toEqual([{ target: t("b", "T2"), label: "T2" }]);
     expect(plan.pending).toEqual([t("a", "T1")]);
     expect(plan.seed).toEqual([]);
+  });
+
+  it("a table that needs clearing waits", () => {
+    const plan = planReset({
+      targets: [t("a", "T1", { label: "T9" }), t("b", "T2")],
+      live: [l("a", "T1", { clearing: true }), l("b", "T2")],
+      takenElsewhere: none,
+    });
+    expect(plan.apply).toEqual([{ target: t("b", "T2"), label: "T2" }]);
+    expect(plan.pending).toEqual([t("a", "T1", { label: "T9" })]);
+    expect(plan.seed).toEqual([]);
+  });
+
+  it("seeds a table that needs clearing and has no today's row, keeping its name, as a held one", () => {
+    const plan = planReset({
+      targets: [t("a", "Patio 1")],
+      live: [l("a", "T1", { clearing: true, hasToday: false })],
+      takenElsewhere: none,
+    });
+    expect(plan.seed).toEqual([t("a", "Patio 1")]);
+    expect(plan.pending).toEqual([t("a", "Patio 1")]);
+    expect(plan.apply).toEqual([]);
+  });
+
+  it("a joined table to create waits, keeping its name taken, when its group waits", () => {
+    const long = t(null, "Long");
+    const plan = planReset({
+      targets: [long, t("b", "Bar", { label: "Long" })],
+      live: [l("b", "Bar")],
+      takenElsewhere: none,
+      waitingToCreate: new Set([long]),
+    });
+    expect(plan.create).toEqual([]);
+    expect(plan.pending).toEqual([long, t("b", "Bar", { label: "Long" })]);
+    expect(plan.apply).toEqual([{ target: t("b", "Bar", { label: "Long" }), label: null }]);
+  });
+
+  it("a joined group waits whole", () => {
+    const plan = planReset({
+      targets: [t("a", "4"), t("b", "5"), t("c", "4+5")],
+      live: [
+        l("a", "4", { held: true, tied: true, joinedWithWaiting: true }),
+        l("b", "5", { joinedWithWaiting: true }),
+        l("c", "4+5", { joinedWithWaiting: true }),
+      ],
+      takenElsewhere: none,
+    });
+    expect(plan.apply).toEqual([]);
+    expect(plan.pending.map((x) => x.tableId)).toEqual(["a", "b", "c"]);
   });
 
   it("seeds a seated table that has no today's row, keeping its name", () => {
@@ -279,5 +349,158 @@ describe("targetsFromMaster", () => {
         remove: true,
       },
     ]);
+  });
+});
+
+describe("movesTable", () => {
+  const at = (x: number) => ({ x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 });
+  const drawn = (
+    x: number,
+    over: { takenOff?: boolean; inMerge?: boolean; splitOff?: boolean } = {},
+  ) => ({
+    placement: at(x),
+    takenOff: false,
+    inMerge: false,
+    splitOff: false,
+    ...over,
+  });
+
+  it("is true for a new place, a new size, store, a table in a merge and a split-off table", () => {
+    expect(movesTable(drawn(0), t("a", "T1", { placement: at(20) }))).toBe(true);
+    expect(movesTable(drawn(0), t("a", "T1", { placement: { ...at(0), width: 10 } }))).toBe(true);
+    expect(movesTable(drawn(0), t("a", "T1", { placement: null }))).toBe(true);
+    expect(movesTable(drawn(0, { inMerge: true }), t("a", "T1", { placement: at(0) }))).toBe(true);
+    expect(movesTable(drawn(0, { splitOff: true }), t("a", "T1", { placement: at(0) }))).toBe(true);
+  });
+
+  it("is true for each placement field alone: y, height, shape and rotation", () => {
+    for (const change of [
+      { y: 5 },
+      { height: 10 },
+      { shape: "round" as const },
+      { rotation: 15 },
+    ]) {
+      expect(movesTable(drawn(0), t("a", "T1", { placement: { ...at(0), ...change } }))).toBe(true);
+    }
+  });
+
+  it("is false for a seats-only change, a table not drawn and a taken-off table", () => {
+    expect(movesTable(drawn(0), t("a", "T1", { placement: at(0), seats: 8, fixed: true }))).toBe(
+      false,
+    );
+    expect(movesTable(null, t("a", "T1", { placement: at(20) }))).toBe(false);
+    expect(movesTable({ ...drawn(0), placement: null }, t("a", "T1", { placement: at(20) }))).toBe(
+      false,
+    );
+    expect(movesTable(drawn(0, { takenOff: true }), t("a", "T1", { placement: at(20) }))).toBe(
+      false,
+    );
+  });
+});
+
+describe("blockedMoves", () => {
+  const box = (x: number) => ({
+    x,
+    y: 0,
+    width: 8,
+    height: 8,
+    shape: "rect" as const,
+    rotation: 0,
+  });
+
+  it("keeps 2 in place when its new place is where waiting 3 stands", () => {
+    expect(
+      blockedMoves({
+        moving: [{ tableId: "2", from: box(20), to: box(0) }],
+        staying: [{ tableId: "3", place: box(0) }],
+      }),
+    ).toEqual(new Set(["2"]));
+  });
+
+  it("then keeps 1 in place when its new place is 2's current place", () => {
+    expect(
+      blockedMoves({
+        moving: [
+          { tableId: "1", from: box(40), to: box(20) },
+          { tableId: "2", from: box(20), to: box(0) },
+        ],
+        staying: [{ tableId: "3", place: box(0) }],
+      }),
+    ).toEqual(new Set(["1", "2"]));
+  });
+
+  it("lets 2 and 3 swap places when both move", () => {
+    expect(
+      blockedMoves({
+        moving: [
+          { tableId: "2", from: box(20), to: box(0) },
+          { tableId: "3", from: box(0), to: box(20) },
+        ],
+        staying: [],
+      }),
+    ).toEqual(new Set());
+  });
+
+  it("never blocks a table moving into store", () => {
+    expect(
+      blockedMoves({
+        moving: [{ tableId: "2", from: box(0), to: null }],
+        staying: [{ tableId: "3", place: box(0) }],
+      }),
+    ).toEqual(new Set());
+  });
+
+  it("is not blocked by a staying table that only touches the new place's edge", () => {
+    expect(
+      blockedMoves({
+        moving: [{ tableId: "2", from: box(40), to: box(8) }],
+        staying: [{ tableId: "3", place: box(0) }],
+      }),
+    ).toEqual(new Set());
+  });
+
+  it("blocks a table not drawn, whose current place then blocks nothing", () => {
+    expect(
+      blockedMoves({
+        moving: [
+          { tableId: "6", from: null, to: box(0) },
+          { tableId: "1", from: box(40), to: box(60) },
+        ],
+        staying: [{ tableId: "3", place: box(0) }],
+      }),
+    ).toEqual(new Set(["6"]));
+  });
+
+  it("is not blocked by a staying table standing where the layout being applied puts it", () => {
+    expect(
+      blockedMoves({
+        moving: [{ tableId: "2", from: box(40), to: box(4) }],
+        staying: [
+          { tableId: "4", place: box(0), own: box(0) },
+          { tableId: "5", place: box(20), own: box(21) },
+        ],
+      }),
+    ).toEqual(new Set());
+  });
+
+  it("is still blocked by a staying table one square off that place", () => {
+    expect(
+      blockedMoves({
+        moving: [{ tableId: "2", from: box(40), to: box(4) }],
+        staying: [{ tableId: "4", place: box(0), own: box(1) }],
+      }),
+    ).toEqual(new Set(["2"]));
+  });
+
+  it("is not blocked by a blocked table whose kept place is its place in that layout", () => {
+    expect(
+      blockedMoves({
+        moving: [
+          { tableId: "1", from: box(4), to: box(4) },
+          { tableId: "6", from: null, to: box(10) },
+        ],
+        staying: [{ tableId: "3", place: box(0) }],
+      }),
+    ).toEqual(new Set(["1"]));
   });
 });

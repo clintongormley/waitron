@@ -756,7 +756,6 @@ export interface UnsentDraft {
  * bill with no party. */
 export type BillParty = { id: string; revision: number } | null;
 
-/** What an adjustment does to a bill (service plan Task 11, spec §7). */
 export type AdjustmentAction = "cancel" | "comp" | "discount_percent" | "discount_amount";
 
 /** A person's role, lowest first. */
@@ -1832,8 +1831,12 @@ export interface FloorZone {
   name: string;
   displayOrder: number;
   active: boolean;
-  /** The zone has a saved plan, which may have no tables. */
+  /** The zone's department has a floor plan set. */
   hasPlan: boolean;
+  /** The name of the set today's plan was last reset from; null before the day's first reset. */
+  layoutSetName: string | null;
+  /** The layout Update layout offers; null when today's plan already follows the due one. */
+  layoutDue: { setId: string; revision: number; periodName: string | null } | null;
   /** Null for a zone with no service policy. */
   serviceMode: ServiceZoneSummary["serviceMode"] | null;
 }
@@ -1979,6 +1982,9 @@ export interface TableToday {
   name?: string | null;
   /** Its group's name for today, on every member. */
   joinName?: string | null;
+  /** A reset left its change waiting until someone marks it moved. Optional so hand-built fixtures
+   * need not say it; the server always does. */
+  needsMoving?: boolean;
 }
 
 /** A change to today's floor answers its room's new revision. */
@@ -4181,6 +4187,12 @@ export class TillApi {
     return this.#todayChange(tableId, "back", {}, zoneRevision);
   }
 
+  /** Apply the change a reset left waiting for a table that needs moving →
+   * `POST /api/tables/:id/today/mark-moved`. */
+  markMovedToday(tableId: string, zoneRevision: number): Promise<FloorAnswer> {
+    return this.#todayChange(tableId, "mark-moved", {}, zoneRevision);
+  }
+
   /** Merge two free tables, `tableId` moving against `targetId` → `POST /api/tables/:id/today/merge`.
    * `seats` is left out when unset: the server refuses a null. */
   mergeToday(
@@ -4236,10 +4248,23 @@ export class TillApi {
     );
   }
 
-  /** Reset a zone to its saved plan → `POST /api/zones/:id/today/reset`. `zoneRevision` is null when
+  /** Reset a zone onto the set today's plan was last made from → `POST /api/zones/:id/today/reset`. `zoneRevision` is null when
    * the floor read held no table of the zone with a today's row. */
   resetZoneToday(zoneId: string, zoneRevision: number | null): Promise<FloorAnswer> {
     return this.#request<FloorAnswer>(`/api/zones/${zoneId}/today/reset`, "POST", {
+      zoneRevision,
+    });
+  }
+
+  /** Reset a zone onto the layout its banner offers → `POST /api/zones/:id/today/update-layout`. */
+  updateLayoutToday(
+    zoneId: string,
+    offer: { setId: string; revision: number },
+    zoneRevision: number | null,
+  ): Promise<FloorAnswer> {
+    return this.#request<FloorAnswer>(`/api/zones/${zoneId}/today/update-layout`, "POST", {
+      setId: offer.setId,
+      layoutRevision: offer.revision,
       zoneRevision,
     });
   }

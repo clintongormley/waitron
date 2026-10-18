@@ -7,6 +7,8 @@ import {
   deviceProfiles,
   diningTables,
   floorTodayTables,
+  floorPlanPlacements,
+  floorPlanSets,
   floorPlans,
   floorPlanTables,
   floorZones,
@@ -35,7 +37,7 @@ import {
   VENUE_SERVICE_PERMISSIONS,
   zoneServicePolicies,
 } from "@waitron/venue-service";
-import { readZonePlan, saveZonePlan } from "./floor-plan.js";
+import { readLayout, saveLayout } from "./floor-plan.js";
 import {
   resetZone,
   catchUpZone,
@@ -479,13 +481,21 @@ describe("stale floor identifiers", () => {
         shape: "rect",
         rotation: 0,
       });
+      const [set] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning();
       const [plan] = await tx
         .insert(floorPlans)
-        .values({ zoneId: f.zoneId, savedAt: now.toISOString() })
+        .values({ zoneId: f.zoneId, setId: set!.id, savedAt: now.toISOString() })
         .returning();
-      await tx.insert(floorPlanTables).values({
+      const [master] = await tx
+        .insert(floorPlanTables)
+        .values({ zoneId: f.zoneId, label: table!.label })
+        .returning();
+      await tx.insert(floorPlanPlacements).values({
         planId: plan!.id,
-        label: table!.label,
+        planTableId: master!.id,
         x: 1,
         y: 1,
         width: 2,
@@ -517,20 +527,36 @@ describe("stale floor identifiers", () => {
           typeof updateZone
         >[3]),
     ],
-    ["floor read", "zone.not_found", (tx, f) => readZonePlan(tx, v.cfg, f.zoneId)],
+    [
+      "floor read",
+      "zone.not_found",
+      (tx, f) => readLayout(tx, v.cfg, { setId: randomUUID(), zoneId: f.zoneId }),
+    ],
     [
       "floor save",
       "zone.not_found",
-      (tx, f) => saveZonePlan(tx, v.cfg, [], f.zoneId, { revision: 1, tables: [] }, now),
+      (tx, f) =>
+        saveLayout(
+          tx,
+          v.cfg,
+          [],
+          { setId: randomUUID(), zoneId: f.zoneId },
+          { revision: 1, tables: [] },
+          now,
+        ),
     ],
-    ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, v.cfg, [], f.zoneId, now)],
+    ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, v.cfg, [], f.zoneId, now, "due")],
     ["floor catch-up", "zone.not_found", (tx, f) => catchUpZone(tx, v.cfg, [], f.zoneId, now)],
     ["table move", "table.not_found", (tx, f) => moveToday(tx, v.cfg, f.tableId, { x: 2, y: 2 })],
     ["table rotate", "table.not_found", (tx, f) => rotateToday(tx, v.cfg, f.tableId)],
     ["table take off", "table.not_found", (tx, f) => takeOffToday(tx, v.cfg, f.tableId)],
     ["table put back", "table.not_found", (tx, f) => putBackToday(tx, v.cfg, f.tableId)],
     ["table seats", "table.not_found", (tx, f) => seatsToday(tx, v.cfg, f.tableId, 4)],
-    ["table back to saved", "table.not_found", (tx, f) => backToSaved(tx, v.cfg, f.tableId)],
+    [
+      "table back to saved",
+      "table.not_found",
+      (tx, f) => backToSaved(tx, v.cfg, [], f.tableId, new Date()),
+    ],
     [
       "table spare placement",
       "table.not_found",
@@ -558,7 +584,7 @@ describe("stale floor identifiers", () => {
     const deleted = await floorTarget();
     const live = await floorTarget(false);
     await run((tx) => takeOffToday(tx, v.cfg, live.tableId));
-    const tables = await run((tx) => listTables(tx, v.cfg, { includeDisabled: true }));
+    const tables = await run((tx) => listTables(tx, v.cfg, new Date(), { includeDisabled: true }));
     expect(tables).not.toContainEqual(expect.objectContaining({ id: deleted.tableId }));
     expect(tables).toContainEqual(expect.objectContaining({ id: live.tableId }));
     expect(await run((tx) => listZones(tx, v.cfg, { includeInactive: true }))).not.toContainEqual(

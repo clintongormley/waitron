@@ -40,6 +40,32 @@ export interface CoreServices {
     req: { tableId: string; guestCount: number | null; operatorId: string },
   ): Promise<{ tabId: string; partyId: string }>;
   floorDeletion: FloorDeletion;
+  floorPlanSets: FloorPlanSets;
+}
+
+/** Core's floor plan sets: the layout rows a set holds, made and read for the module that names it. */
+export interface FloorPlanSets {
+  /** A new empty set of the location (no layout rows); answers its id. */
+  create(tx: Transaction): Promise<string>;
+  /** Copies every layout row, placement and kept size of `fromSetId` into `toSetId`, each layout at revision 1. */
+  copyLayouts(tx: Transaction, fromSetId: string, toSetId: string): Promise<void>;
+  /** Each of `zoneIds`' table count, and each asked pair's layout revision and counts in the pairs' order, a missing row as 0/0/all spare. */
+  readLayouts(
+    tx: Transaction,
+    zoneIds: readonly string[],
+    pairs: readonly { setId: string; zoneId: string }[],
+  ): Promise<{
+    tableCounts: ReadonlyMap<string, number>;
+    layouts: readonly {
+      setId: string;
+      zoneId: string;
+      revision: number;
+      onPlan: number;
+      spare: number;
+    }[];
+  }>;
+  /** The zones whose today's record names the set, for the delete dialog's line. */
+  zonesShowing(tx: Transaction, setId: string): Promise<string[]>;
 }
 
 /**
@@ -98,6 +124,12 @@ export interface FloorDeletion {
     now: Date,
   ): Promise<{ refusals: DeleteImpactRefusal[]; removes: DeleteImpactItem[] }>;
   clear(tx: Transaction, zoneIds: readonly string[], now: Date): Promise<void>;
+  /**
+   * Deletes the sets' placements, sizes, layouts and rows; a today's record naming one keeps its
+   * today's rows and loses its set. The caller first removes the department links and the
+   * periods' references to the sets, which name them by plain foreign keys.
+   */
+  removeSets(tx: Transaction, setIds: readonly string[]): Promise<void>;
 }
 
 /** A module's part in removing a live table. */
@@ -607,8 +639,66 @@ export interface BusinessDayClockConflict {
   reason: "range" | "endpoint_day" | "all_day" | "sending_cutoff" | "transition_strip";
 }
 
+export interface FloorPlanSetSummary {
+  setId: string;
+  departmentId: string;
+  name: string;
+  isDefault: boolean;
+  /** The department's zones, in display order. */
+  zoneIds: readonly string[];
+}
+
+export interface DueFloorLayout {
+  setId: string | null;
+  setName: string | null;
+  /** The due run's occurrence key; null on a day with no period, or when the clock names no day. */
+  occurrence: string | null;
+  /** The due run's period name; null with no occurrence. */
+  periodName: string | null;
+}
+
+export interface ZoneFloorLayout {
+  due: DueFloorLayout;
+  /** Whether the zone's department has a set. */
+  planned: boolean;
+  /** The name of the set `recordedSetId` names; null with none, or when that set is gone. */
+  recordedSetName: string | null;
+}
+
+declare const preparedServiceDay: unique symbol;
+/** The venue clock and the plan of the business day one instant falls in, read once by
+ *  `readServiceDay` for the reads that take it; a read for another business day reuses only the
+ *  clock. Only venue-service reads what it holds. */
+export interface PreparedServiceDay {
+  /** Null when the clock names no business day at that instant. */
+  readonly businessDay: string | null;
+  readonly [preparedServiceDay]: true;
+}
+
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
+  readServiceDay(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    at: Date,
+  ): Promise<PreparedServiceDay>;
+  /** One entry per zone named; each department's day is read once. */
+  dueFloorLayouts(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zones: readonly {
+      zoneId: string;
+      recordedOccurrence: string | null;
+      recordedSetId?: string | null;
+    }[],
+    at: Date,
+    prepared?: PreparedServiceDay,
+  ): Promise<ReadonlyMap<string, ZoneFloorLayout>>;
+  readFloorPlanSets(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    filter?: { setIds?: readonly string[]; departmentId?: string },
+  ): Promise<readonly FloorPlanSetSummary[]>;
   assertBusinessDayClockChange(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -736,6 +826,7 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneIds: readonly string[],
     at: Date,
+    prepared?: PreparedServiceDay,
   ): Promise<
     ReadonlyMap<
       string,

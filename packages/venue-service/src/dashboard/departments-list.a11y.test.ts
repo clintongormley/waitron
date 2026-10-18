@@ -77,7 +77,6 @@ describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
         expect(
           table!.shadowRoot!.querySelector('[data-test="receipt-department-d1"]'),
         ).not.toBeNull();
-        expect(table!.shadowRoot!.querySelector('[data-test="floor-plan-zone-z1"]')).not.toBeNull();
       }
       if (state === "deleted-row")
         expect(table!.shadowRoot!.querySelector("wt-row-actions")).toBeNull();

@@ -40,6 +40,7 @@ import { createTable, switchOff } from "./testing/live-table.js";
 import type { TillConfig } from "./till-config.js";
 import { mountManagementApi } from "./management-api.js";
 import { generateSync } from "otplib";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
 import { writerBesideRequest, whileSuspendingOnLockRequest } from "./testing/watched-scrypt.js";
 
@@ -3023,10 +3024,14 @@ describe("floor plans", () => {
     placement: PLACE,
     partKeys: [] as string[],
   });
-  const put = (zoneId: string, body: unknown, cookie: string | undefined = managerCookie) =>
-    req(`/zones/${zoneId}/floor-plan`, { method: "PUT", body: JSON.stringify(body) }, cookie);
-  const get = (zoneId: string, cookie: string | undefined = managerCookie) =>
-    req(`/zones/${zoneId}/floor-plan`, { method: "GET" }, cookie);
+  const layoutAt = (zoneId: string) =>
+    withTransaction(suite.db, (tx) => defaultLayout(tx, tillConfigFromVenue(venue), zoneId));
+  const planPath = async (zoneId: string) =>
+    `/floor-plan-sets/${(await layoutAt(zoneId)).setId}/zones/${zoneId}/floor-plan`;
+  const put = async (zoneId: string, body: unknown, cookie: string | undefined = managerCookie) =>
+    req(await planPath(zoneId), { method: "PUT", body: JSON.stringify(body) }, cookie);
+  const get = async (zoneId: string, cookie: string | undefined = managerCookie) =>
+    req(await planPath(zoneId), { method: "GET" }, cookie);
 
   it("accepts a save whose master entry carries another table's liveTableId, and ignores it", async () => {
     const zoneId = await createZone(unique("IgnoreLiveId"));
@@ -3059,22 +3064,19 @@ describe("floor plans", () => {
     const zoneId = await createZone(unique("PlanFirst"));
     const res = await get(zoneId);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ zoneId, revision: 0, savedAt: null, tables: [] });
+    expect(await res.json()).toEqual({
+      zoneId,
+      setId: (await layoutAt(zoneId)).setId,
+      setName: "Standard",
+      revision: 0,
+      savedAt: null,
+      tables: [],
+    });
   });
 
-  it("the zones list says which zones' plans have a placed table, and still leaves out an inactive zone", async () => {
-    const noPlan = await createZone(unique("HasPlacedNone"));
-    const unplaced = await createZone(unique("HasPlacedOff"));
+  it("the zones list leaves out an inactive zone and says nothing about placed tables", async () => {
     const placed = await createZone(unique("HasPlacedOn"));
     const inactive = await createZone(unique("HasPlacedGone"));
-    expect(
-      (
-        await put(unplaced, {
-          revision: 0,
-          tables: [{ ...entry("a", unique("U")), placement: null }],
-        })
-      ).status,
-    ).toBe(200);
     expect(
       (
         await put(placed, {
@@ -3090,9 +3092,8 @@ describe("floor plans", () => {
 
     const response = await req("/zones", { method: "GET" }, managerCookie);
     expect(response.status).toBe(200);
-    const zones = (await response.json()) as { id: string; hasPlacedTables: boolean }[];
-    const flag = (id: string) => zones.find((zone) => zone.id === id)?.hasPlacedTables;
-    expect([flag(noPlan), flag(unplaced), flag(placed)]).toEqual([false, false, true]);
+    const zones = (await response.json()) as Record<string, unknown>[];
+    expect(zones.find((zone) => zone.id === placed)).not.toHaveProperty("hasPlacedTables");
     expect(zones.find((zone) => zone.id === inactive)).toBeUndefined();
   });
 
@@ -3172,7 +3173,14 @@ describe("floor plans", () => {
     });
     expect(res.status).toBe(200);
     const read = (await (await get(zoneId)).json()) as Record<string, unknown>;
-    expect(Object.keys(read).sort()).toEqual(["revision", "savedAt", "tables", "zoneId"]);
+    expect(Object.keys(read).sort()).toEqual([
+      "revision",
+      "savedAt",
+      "setId",
+      "setName",
+      "tables",
+      "zoneId",
+    ]);
   });
 
   it("refuses a rotation off the 15-degree steps", async () => {
@@ -3263,6 +3271,8 @@ describe("floor plans", () => {
     });
     expect(await (await get(zoneId)).json()).toEqual({
       zoneId,
+      setId: (await layoutAt(zoneId)).setId,
+      setName: "Standard",
       revision: 0,
       savedAt: null,
       tables: [],
@@ -3303,7 +3313,13 @@ describe("floor plans", () => {
   });
 
   it.each([randomUUID(), "not-a-uuid"])("answers an unknown zone %s with 404", async (zoneId) => {
-    for (const res of [await get(zoneId), await put(zoneId, { revision: 0, tables: [] })]) {
+    const { setId } = await layoutAt(await createZone(unique("PlanKnown")));
+    const path = `/floor-plan-sets/${setId}/zones/${zoneId}/floor-plan`;
+    const body = JSON.stringify({ revision: 0, tables: [] });
+    for (const res of [
+      await req(path, { method: "GET" }, managerCookie),
+      await req(path, { method: "PUT", body }, managerCookie),
+    ]) {
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
     }

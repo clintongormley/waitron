@@ -4,6 +4,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodaySplitParts,
@@ -438,11 +439,11 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     expect(await splitRowsOf(table.long!)).toEqual(sorted([table.c3!, table.c4!, table.c5!]));
   });
 
-  it("Reset to saved plan ends a flattened group nobody sits at and puts Long table back whole", async () => {
+  it("Reset to {set} plan ends a flattened group nobody sits at and puts Long table back whole", async () => {
     const { table, zoneId } = await LONG_TABLE();
     await push(table.bar!, table.long!, "left");
 
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 
     expect(await todayRow(v, table.long!)).toMatchObject({
       x: 10,
@@ -459,13 +460,13 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     for (const [id] of counters(table)) expect(await mergeOf(v, id)).toBeNull();
   });
 
-  it("with guests at the group the reset moves nothing in it until they leave, then puts Long table back whole", async () => {
+  it("with guests at the group the reset moves nothing in it, even once they leave", async () => {
     const { table, zoneId } = await LONG_TABLE();
     await push(table.long!, table.bar!, "right");
     const { partyId } = await seat(v, table.bar!);
     const before = await everything();
 
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 
     expect(await everything()).toEqual(before);
 
@@ -473,17 +474,19 @@ describe("Split a table and the floor-wide reset on a flattened group", () => {
     await inTx(v, (tx) => finishTable(tx, { partyId, ...command }));
     await inTx(v, (tx) => catchUpZone(tx, v.cfg, REMOVALS, zoneId, NOW));
 
-    expect(await todayRow(v, table.long!)).toMatchObject({
-      x: 10,
-      y: 20,
-      width: 6,
-      height: 2,
-      seats: 10,
-      takenOff: false,
-    });
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0 });
-    expect(await mergeOf(v, table.bar!)).toBeNull();
-    for (const [id] of counters(table)) expect(await mergeOf(v, id)).toBeNull();
+    const after = await everything();
+    expect(after.today).toEqual(before.today);
+    expect(after.split).toEqual(before.split);
+    expect(after.joins).toEqual(before.joins);
+    expect(after.joinTables).toEqual(before.joinTables);
+    const marked = await inTx(v, (tx) =>
+      tx
+        .select({ tableId: floorResetTables.tableId })
+        .from(floorResetTables)
+        .where(and(eq(floorResetTables.zoneId, zoneId), eq(floorResetTables.readyToMove, true))),
+    );
+    expect(marked.map((row) => row.tableId).sort()).toEqual(
+      [table.long!, table.bar!, ...counters(table).map(([id]) => id)].sort(),
+    );
   });
 });

@@ -290,6 +290,7 @@ describe("the menu timetable rows of a bundle", () => {
           name: "Mañanas",
           colour: "blue",
           menu_id: "m-desayunos",
+          floor_plan_set_id: "s-dinner",
         },
         {
           id: MADRUGADA,
@@ -309,6 +310,11 @@ describe("the menu timetable rows of a bundle", () => {
       menu_period_staff_menus: [
         { period_id: MANANAS, department_id: RESTAURANT, menu_id: "m-cafe", display_order: 0 },
       ],
+      department_floor_plan_sets: [
+        { set_id: "s-standard", department_id: RESTAURANT, name: "Standard", is_default: 1 },
+        { set_id: "s-dinner", department_id: RESTAURANT, name: "Dinner", is_default: 0 },
+        { set_id: "s-deli", department_id: DELI, name: "Standard", is_default: 1 },
+      ],
     };
   }
   const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
@@ -323,6 +329,14 @@ describe("the menu timetable rows of a bundle", () => {
     const at = names.indexOf("menu_periods");
     expect(names.slice(at, at + 2)).toEqual(["menu_periods", "menu_period_staff_menus"]);
     expect(at).toBeGreaterThan(names.indexOf("zone_sale_policies"));
+  });
+
+  it("transfer a department's floor plan sets before the periods that name them", () => {
+    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    expect(names.indexOf("department_floor_plan_sets")).toBeGreaterThan(
+      names.indexOf("departments"),
+    );
+    expect(names.indexOf("department_floor_plan_sets")).toBeLessThan(names.indexOf("menu_periods"));
   });
 
   it("accept rows a writer could have written, and a bundle with none", () => {
@@ -387,6 +401,48 @@ describe("the menu timetable rows of a bundle", () => {
         t.menu_period_staff_menus![0]!.menu_id = "m-gone";
       },
       "menu_period_staff_menus.menu_id",
+    ],
+    [
+      "a floor plan set of a department the bundle lacks",
+      (t: Tables) => {
+        t.department_floor_plan_sets![2]!.department_id = "d-gone";
+      },
+      "department_floor_plan_sets.department_id",
+    ],
+    [
+      "a floor plan set name its department uses twice",
+      (t: Tables) => {
+        t.department_floor_plan_sets![1]!.name = "Standard";
+      },
+      "department_floor_plan_sets.name",
+    ],
+    [
+      "a department whose floor plan sets have no default",
+      (t: Tables) => {
+        t.department_floor_plan_sets![0]!.is_default = 0;
+      },
+      "department_floor_plan_sets.is_default",
+    ],
+    [
+      "a department with two default floor plan sets",
+      (t: Tables) => {
+        t.department_floor_plan_sets![1]!.is_default = 1;
+      },
+      "department_floor_plan_sets.is_default",
+    ],
+    [
+      "a period naming another department's floor plan set",
+      (t: Tables) => {
+        t.menu_periods![0]!.floor_plan_set_id = "s-deli";
+      },
+      "menu_periods.floor_plan_set_id",
+    ],
+    [
+      "a period naming a floor plan set no department holds",
+      (t: Tables) => {
+        t.menu_periods![0]!.floor_plan_set_id = "s-gone";
+      },
+      "menu_periods.floor_plan_set_id",
     ],
   ])("refuse %s", (_, edit, field) => {
     const tables = menuTables();

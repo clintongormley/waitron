@@ -2,6 +2,7 @@ import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { SEASON_DAYS_MAX_DATES, type LocalDate } from "../hours-types.js";
 import type { OpeningHoursMonth, OpeningHoursYear, SeasonDays } from "../opening-hours-calendar.js";
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import type { PaintedIn, PeriodDeleteImpact } from "../period-delete.js";
 import type { Season, SeasonChange } from "../season-rules.js";
 import type { ClosedRange } from "../service-day.js";
@@ -43,6 +44,24 @@ export class OpeningHoursApi {
       QUERY_DEPENDENCIES["opening-hours"],
       () =>
         this.request<OpeningHoursModel>(`${BASE}/opening-hours`, "GET", undefined, {
+          passive: true,
+        }),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+  /** A period's Floor plan field and column choices. */
+  watchPeriodFloorPlans(
+    apply: (model: PeriodFloorPlans) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      "venue-service:period-floor-plans",
+      QUERY_DEPENDENCIES["period-floor-plans"],
+      () =>
+        this.request<PeriodFloorPlans>(`${BASE}/floor-plan-sets/period-choices`, "GET", undefined, {
           passive: true,
         }),
       apply,

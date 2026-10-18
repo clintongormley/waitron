@@ -3744,6 +3744,8 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       closed: false,
       closesAt: null,
       hasPlan: false,
+      layoutSetName: null,
+      layoutDue: null,
       serviceMode: "table_tab",
     });
 

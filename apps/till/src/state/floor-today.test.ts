@@ -314,6 +314,8 @@ describe("seatsGuests", () => {
     closesAt: null,
     closed: false,
     hasPlan: true,
+    layoutSetName: null,
+    layoutDue: null,
     serviceMode,
   });
 

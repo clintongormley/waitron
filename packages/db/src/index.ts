@@ -33,6 +33,8 @@ export { tableInService } from "./table-in-service.js";
 export {
   joinedOutOfService,
   joinedTableApart,
+  needsMoving,
+  resetRowMoves,
   savedPart,
   stillJoinedPart,
 } from "./joined-parts.js";
@@ -90,6 +92,8 @@ export type {
 } from "./order-amendment-hash.js";
 export { diningTables } from "./schema/dining-tables.js";
 export {
+  floorPlanPlacements,
+  floorPlanSets,
   floorPlanShape,
   floorPlans,
   floorPlanTableParts,

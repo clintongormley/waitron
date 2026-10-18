@@ -1,3 +1,4 @@
+import type { PeriodFloorPlans } from "../floor-plan-set-types.js";
 import { vi } from "vitest";
 import { type DashboardRequest } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
@@ -15,6 +16,7 @@ export function painterModel(): OpeningHoursModel {
     menuId: "m1",
     staffMenuIds: [],
     endOffsetMinutes: 0,
+    floorPlanSetId: null,
     weekdays: [1],
     routingUses: [],
   });
@@ -86,8 +88,14 @@ export function painterModel(): OpeningHoursModel {
 }
 
 export type Write = { url: string; method: string; body: unknown };
-export function painterApi(writes: Write[] = [], answer: (write: Write) => unknown = () => ({})) {
+export function painterApi(
+  writes: Write[] = [],
+  answer: (write: Write) => unknown = () => ({}),
+  floorPlans?: () => PeriodFloorPlans,
+) {
   return new OpeningHoursApi((async (url, method, body) => {
+    if (method === "GET" && floorPlans && url.endsWith("/floor-plan-sets/period-choices"))
+      return floorPlans();
     if (method === "GET") return url.includes("/menu-periods/painted-in") ? [] : painterModel();
     const write = { url, method, body };
     writes.push(write);
@@ -188,3 +196,18 @@ export const slot = (periodId: string, startsAt: string, endsAt: string): Slot =
   startsAt,
   endsAt,
 });
+
+/** Department d1, which has a zone holding tables, with two sets, House the default. */
+export function painterFloorPlans(): PeriodFloorPlans {
+  return {
+    departments: [
+      {
+        id: "d1",
+        sets: [
+          { id: "house", name: "House", isDefault: true },
+          { id: "late", name: "Late", isDefault: false },
+        ],
+      },
+    ],
+  };
+}

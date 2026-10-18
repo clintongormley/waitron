@@ -10,6 +10,7 @@ import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
 
+import { occurrenceKey } from "./floor-layout-due.js";
 import { addDays } from "./hours-rules.js";
 import {
   parseServiceDay,
@@ -38,6 +39,7 @@ import {
   readSpecialDaySchedules,
   specialDateIn,
 } from "./special-days.js";
+import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
@@ -108,6 +110,7 @@ export async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: 
       name: menuPeriods.name,
       menuId: menuPeriods.menuId,
       endOffsetMinutes: menuPeriods.endOffsetMinutes,
+      floorPlanSetId: menuPeriods.floorPlanSetId,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
@@ -459,7 +462,7 @@ export async function resolveDepartmentService(
     periodOccurrenceKey:
       period === undefined || running === null
         ? null
-        : JSON.stringify([departmentId, moment.businessDay, period.id, running.startsAt]),
+        : occurrenceKey(departmentId, moment.businessDay, running),
     periodName: period?.name ?? null,
     customerMenuId: period?.menuId ?? null,
     orderableMenuIds,
@@ -573,7 +576,20 @@ async function writeMenuPeriod(
     period.colour ??
     CALENDAR_COLOURS.find((value) => !used.some((row) => row.colour === value)) ??
     CALENDAR_COLOURS[0];
-  const values = { name, menuId: period.menuId, colour, endOffsetMinutes };
+  const floorPlanSetId = period.floorPlanSetId ?? null;
+  if (floorPlanSetId !== null) {
+    const [own] = await tx
+      .select({ setId: departmentFloorPlanSets.setId })
+      .from(departmentFloorPlanSets)
+      .where(
+        and(
+          eq(departmentFloorPlanSets.setId, floorPlanSetId),
+          eq(departmentFloorPlanSets.departmentId, departmentId),
+        ),
+      );
+    if (own === undefined) throw new AppError("menu_period.invalid", { field: "floorPlanSetId" });
+  }
+  const values = { name, menuId: period.menuId, colour, endOffsetMinutes, floorPlanSetId };
   let id = periodId;
   if (periodId === null) {
     const [row] = await tx
@@ -640,6 +656,8 @@ export async function updateMenuPeriod(
         period.staffMenuIds === undefined ? staff.map((row) => row.menuId) : period.staffMenuIds,
       endOffsetMinutes:
         period.endOffsetMinutes === undefined ? stored.endOffsetMinutes : period.endOffsetMinutes,
+      floorPlanSetId:
+        period.floorPlanSetId === undefined ? stored.floorPlanSetId : period.floorPlanSetId,
     },
     expectedClockRevision,
     at,
@@ -903,6 +921,7 @@ export async function readActivePeriods(tx: Transaction, cfg: VenueScope) {
       colour: menuPeriods.colour,
       menuId: menuPeriods.menuId,
       endOffsetMinutes: menuPeriods.endOffsetMinutes,
+      floorPlanSetId: menuPeriods.floorPlanSetId,
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
@@ -967,12 +986,13 @@ export async function readOpeningHoursModel(
           .map(({ id, name, seasonWeeks }) => ({ id, name, seasonWeeks })),
         periods: periods
           .filter((period) => period.departmentId === department.id)
-          .map(({ id, name, colour, menuId, endOffsetMinutes }) => ({
+          .map(({ id, name, colour, menuId, endOffsetMinutes, floorPlanSetId }) => ({
             id,
             name,
             colour,
             menuId,
             endOffsetMinutes,
+            floorPlanSetId,
             staffMenuIds: staff
               .filter((entry) => entry.periodId === id)
               .map((entry) => entry.menuId),

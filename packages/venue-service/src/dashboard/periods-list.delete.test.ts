@@ -26,6 +26,7 @@ const lunch = (): Period => ({
   menuId: "lunch",
   staffMenuIds: [],
   endOffsetMinutes: 0,
+  floorPlanSetId: null,
   weekdays: [],
   routingUses: [],
 });

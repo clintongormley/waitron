@@ -188,7 +188,7 @@ export class FloorPlanTablesPanel extends LitElement {
   }
 
   #press(table: DraftTable): void {
-    if (joinedTableOf(this.draft, table.key) !== undefined) return;
+    if (joinedTableOf(this.draft, table.key)?.placement != null) return;
     if (table.placement === null) {
       const next = placeTable(this.draft, table.key, this.places.get(table.key));
       if (next === this.draft) {
@@ -221,7 +221,8 @@ export class FloorPlanTablesPanel extends LitElement {
     const mark = this.marks.get(table.key);
     const markId = `mark-${index}`;
     const joined = joinedTableOf(this.draft, table.key);
-    const marker = joined !== undefined ? "joined" : placed ? "placed" : "spare";
+    const held = joined?.placement != null;
+    const marker = held ? "joined" : placed ? "placed" : "spare";
     return html`<li
       data-table=${table.key}
       aria-current=${this.selected === table.key ? "true" : nothing}
@@ -233,7 +234,7 @@ export class FloorPlanTablesPanel extends LitElement {
           data-action="toggle"
           aria-labelledby=${`name-${index}`}
           aria-pressed=${placed ? "true" : "false"}
-          aria-disabled=${joined === undefined ? nothing : "true"}
+          aria-disabled=${held ? "true" : nothing}
           aria-describedby=${mark === undefined ? nothing : markId}
           @click=${() => this.#press(table)}
         >
@@ -244,11 +245,11 @@ export class FloorPlanTablesPanel extends LitElement {
           type="button"
           class="select"
           data-action="select"
-          ?data-joined=${joined !== undefined}
-          aria-disabled=${joined !== undefined ? "true" : nothing}
+          ?data-joined=${held}
+          aria-disabled=${held ? "true" : nothing}
           aria-describedby=${mark === undefined ? nothing : markId}
           @click=${() => {
-            if (placed && joined === undefined)
+            if (placed && !held)
               this.#send<FloorPlanSelect>("floor-plan-select", { key: table.key });
           }}
         >

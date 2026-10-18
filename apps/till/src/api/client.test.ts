@@ -2057,6 +2057,8 @@ describe("TillApi", () => {
         closesAt: null,
         closed: false,
         hasPlan: false,
+        layoutSetName: null,
+        layoutDue: null,
         serviceMode: "table_tab",
       },
       {
@@ -2067,6 +2069,8 @@ describe("TillApi", () => {
         closesAt: null,
         closed: false,
         hasPlan: false,
+        layoutSetName: null,
+        layoutDue: null,
         serviceMode: "table_tab",
       },
     ];
@@ -2734,6 +2738,21 @@ describe("TillApi", () => {
     ]);
   });
 
+  it("sends Mark moved to its route with the room's revision, and returns the answer", async () => {
+    const answer = { zoneId: "z1", revision: 8 };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.markMovedToday("t1", 7)).resolves.toEqual(answer);
+
+    const [path, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+    expect([path, init.method, JSON.parse(String(init.body))]).toEqual([
+      "/api/tables/t1/today/mark-moved",
+      "POST",
+      { zoneRevision: 7 },
+    ]);
+  });
+
   it("sends each of today's changes to its route, with the room's revision, and returns the answer", async () => {
     const answer = { zoneId: "z1", revision: 8 };
     const fetchStub = vi.fn(async () => jsonResponse(answer));
@@ -2775,6 +2794,23 @@ describe("TillApi", () => {
       ["/api/tables/t1/today/merge", "POST", { targetId: "t2", side: "bottom", zoneRevision: 7 }],
       ["/api/zones/z1/today/reset", "POST", { zoneRevision: 7 }],
       ["/api/zones/z1/today/reset", "POST", { zoneRevision: null }],
+    ]);
+  });
+
+  it("sends Update layout's offered set and revision with the room's revision", async () => {
+    const answer = { zoneId: "z1", revision: 8 };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+    const api = new TillApi("", fetchStub);
+
+    await expect(
+      api.updateLayoutToday("z1", { setId: "set-dinner", revision: 3 }, 7),
+    ).resolves.toEqual(answer);
+
+    const [path, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+    expect([path, init.method, JSON.parse(String(init.body))]).toEqual([
+      "/api/zones/z1/today/update-layout",
+      "POST",
+      { setId: "set-dinner", layoutRevision: 3, zoneRevision: 7 },
     ]);
   });
 

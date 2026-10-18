@@ -153,6 +153,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table needs clearing first. Mark it cleared, then try again",
     es: "Esa mesa está por recoger. Márcala como recogida e inténtalo de nuevo",
   },
+  "table.needs_moving": {
+    en: "That table needs moving. Mark it moved first",
+    es: "Esa mesa está por mover. Márcala como movida primero",
+  },
+  "table.new_place_taken": {
+    en: "Another table is in its new place. Move it first",
+    es: "Otra mesa ocupa su nuevo sitio. Muévela primero",
+  },
+  "table.booked": {
+    en: "That table has a booking. Move or cancel it first",
+    es: "Esa mesa tiene una reserva. Muévela o cancélala primero",
+  },
   "table.fixed": {
     en: "That table is fixed in place",
     es: "Esa mesa está fija",
@@ -208,6 +220,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "floor_today.out_of_date": {
     en: "The floor has changed. Check and try again",
     es: "La sala ha cambiado. Revísala y vuelve a intentarlo",
+  },
+  "floor_today.layout_changed": {
+    en: "The layout has changed. Check the floor and try again",
+    es: "El plano ha cambiado. Revisa la sala e inténtalo de nuevo",
   },
   "table.split_off": {
     en: "That table was split off. Reset its table first",

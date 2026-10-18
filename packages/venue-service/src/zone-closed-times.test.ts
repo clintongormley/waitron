@@ -475,6 +475,40 @@ describe("zones closed at an instant", () => {
     expect([...closedOnly.answers]).toEqual([v.terrace]);
     // Beyond the closed check, the summaries cost only the read of the closing zones' names.
     expect(three.texts).toHaveLength(closedOnly.texts.length + 1);
+    const prepared = await counted(async (db) => {
+      const day = await VENUE_SERVICE.readServiceDay(db, v.cfg, instant);
+      const before = (
+        db as unknown as { session: { prepareQuery: { mock?: { calls: unknown[] } } } }
+      ).session.prepareQuery.mock!.calls.length;
+      return {
+        before,
+        states: await VENUE_SERVICE.readZoneClosingStates(db, v.cfg, ids, instant, day),
+      };
+    });
+    expect(prepared.answers.states).toEqual(three.answers);
+    const afterDay = prepared.texts.slice(prepared.answers.before);
+    expect(afterDay.filter((q) => /from "(locations|seasons)"/.test(q))).toEqual([]);
+    expect(three.texts.filter((q) => /from "(locations|seasons)"/.test(q))).toHaveLength(2);
+  });
+  it("reads the day afresh when handed a day read for another business day", async () => {
+    const v = await venue();
+    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(), 0));
+    const mondayLate = new Date("2030-10-07T21:45:00Z");
+    const states = await tx(async (db) =>
+      VENUE_SERVICE.readZoneClosingStates(
+        db,
+        v.cfg,
+        [v.terrace, v.bar],
+        mondayLate,
+        await VENUE_SERVICE.readServiceDay(db, v.cfg, new Date("2030-10-08T10:00:00Z")),
+      ),
+    );
+    expect(new Map([...states].map(([id, state]) => [id, state.closed]))).toEqual(
+      new Map([
+        [v.terrace, true],
+        [v.bar, false],
+      ]),
+    );
   });
 });
 

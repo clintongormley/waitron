@@ -60,6 +60,8 @@ const floorZones: FloorZone[] = zones.map((zone) => ({
   closed: false,
   closesAt: null,
   hasPlan: false,
+  layoutSetName: null,
+  layoutDue: null,
 }));
 const catalogue = (id: string): ZoneOfferCatalogue => ({
   service: {

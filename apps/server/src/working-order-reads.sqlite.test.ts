@@ -134,8 +134,8 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       .values([{ tableId: closed!.id }, { tableId: takenOff!.id, takenOff: true }]);
     await withTransaction(db, async (tx) => {
       const floor = await listTablesWithState(tx, cfg);
-      const plain = await listTables(tx, cfg);
-      const all = await listTables(tx, cfg, { includeDisabled: true });
+      const plain = await listTables(tx, cfg, new Date());
+      const all = await listTables(tx, cfg, new Date(), { includeDisabled: true });
       expect(floor.map((t) => t.id).sort()).toEqual([tableId, takenOff!.id].sort());
       expect(plain.map((t) => t.id).sort()).toEqual([tableId, takenOff!.id].sort());
       expect(all.map((t) => t.id).sort()).toEqual([tableId, absent!.id, takenOff!.id].sort());

@@ -50,6 +50,8 @@ const zone: FloorZone = {
   closesAt: null,
   closed: false,
   hasPlan: false,
+  layoutSetName: null,
+  layoutDue: null,
   serviceMode: "table_tab",
 };
 
@@ -579,6 +581,60 @@ describe("till-app: seating a party", () => {
     expect(banner(el)!.textContent).toContain(codeMessage("table.needs_clearing"));
     expect(tableOrder(el)).toBeNull();
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("says the table needs moving when seating it is refused for that", async () => {
+    const { el } = await mountApp({
+      seatTable: vi.fn().mockRejectedValue({ code: "table.needs_moving", tableId: "t9" }),
+    });
+    const screen = await toFloor(el);
+
+    emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: null });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain("Table 9 needs moving. Mark it moved first.");
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("names the table that needs moving by today's name when moving guests to it is refused", async () => {
+    const today = {
+      placement: { x: 0, y: 0, width: 2, height: 2, shape: "round" as const, rotation: 0 },
+      seats: 4,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      inJoinedTable: null,
+      joined: null,
+      splitOffFrom: null,
+      zoneRevision: 0,
+      needsMoving: true,
+      name: "Ventana",
+    };
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([mesa4, mesa7, table({ id: "t9", label: "9", today })]),
+      moveGuests: vi.fn().mockRejectedValue({ code: "table.needs_moving", tableId: "t9" }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "move-guests", { toTableId: "t9", bills: "merge" });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain("Ventana needs moving. Mark it moved first.");
+  });
+
+  it("says the code's words when the table a needs-moving refusal names is not on the floor read", async () => {
+    const { el } = await mountApp({
+      moveBill: vi.fn().mockRejectedValue({ code: "table.needs_moving", tableId: "t99" }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("table.needs_moving"));
   });
 
   it("says why when another device seated the table first, and re-reads the floor", async () => {

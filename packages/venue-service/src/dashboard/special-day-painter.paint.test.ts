@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
+import { painterFloorPlans } from "../testing/season-painter-fixture.js";
 import type { LocalDate } from "../hours-types.js";
 import type { SpecialDayPainter } from "./special-day-painter.js";
 import { t } from "./strings.js";
@@ -595,6 +596,19 @@ describe("periods from the painter", () => {
     expect(chip(painter, "paint-p-new").getAttribute("aria-pressed")).toBe("true");
     expect(grid(painter).days.get(DEC_14)).toEqual([dinner("19:00", "22:00")]);
     expect(saveButton(painter).disabled).toBe(false);
+  });
+
+  it("✎ opens the period dialog with the department's Floor plan field", async () => {
+    const { painter } = await mount({ floorPlans: painterFloorPlans });
+    const editor = await openEditor(painter, "edit-p2");
+    await expect
+      .poll(() => editor.shadowRoot!.querySelector("[name=floorPlanSetId]"))
+      .not.toBeNull();
+    const plan =
+      editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        "[name=floorPlanSetId]",
+      )!;
+    expect(plan.options.map((option) => option.label)).toEqual(["House (default)", "Late"]);
   });
 
   it("✎ on a period chip opens the period dialog with that period", async () => {

@@ -21,9 +21,11 @@ import { writeClearingWorkflow } from "@waitron/venue-service";
 import type { ModuleRouteContext } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
-import { finishTable, moduleCoreServices, seatTable } from "./parties.js";
+import { finishTable, markTableCleared, moduleCoreServices, seatTable } from "./parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
+import { ensureToday, resetZone } from "./floor-today-store.js";
 import "./errors.js";
 
 // The `seatBooking ↔ seatTable` edge with the REAL `apps/server` `seatTable` — the one seam the
@@ -262,6 +264,85 @@ describe("bookings seat route → real seatTable", () => {
     });
   });
 
+  it("refuses seating a booking at a table that needs moving with 409 table.needs_moving", async () => {
+    const v = await setupVenue();
+    const app = mountApp(v.ctx);
+    const removals = enabledTableRemovals(ALL_MODULES);
+    const now = new Date();
+    const tableId = await withTransaction(db, async (tx: Transaction) => {
+      const { id: zoneId } = await createZone(tx, v.tillCfg, { name: "Terrace" });
+      const layout = await defaultLayout(tx, v.tillCfg, zoneId);
+      const at = (x: number) => ({
+        x,
+        y: 0,
+        width: 8,
+        height: 8,
+        shape: "rect" as const,
+        rotation: 0,
+      });
+      const { ids, revision } = await saveLayout(tx, v.tillCfg, removals, layout, {
+        revision: 0,
+        tables: [{ key: "t", label: "9", seats: 4, fixed: false, placement: at(0), partKeys: [] }],
+      });
+      const plan = await readLayout(tx, v.tillCfg, layout);
+      const id = plan.tables.find((t) => t.id === ids.t)!.liveTableId!;
+      const seated = await seatTable(
+        tx,
+        { ...v.tillCfg, origin: jobOrigin("dashboard") },
+        { tableId: id, guestCount: 2, operatorId: v.managerId },
+      );
+      await saveLayout(tx, v.tillCfg, removals, layout, {
+        revision,
+        tables: [
+          {
+            id: ids.t,
+            key: "t",
+            label: "9",
+            seats: 4,
+            fixed: false,
+            placement: at(40),
+            partKeys: [],
+          },
+        ],
+      });
+      await resetZone(tx, v.tillCfg, removals, zoneId, now, "due");
+      await finishTable(tx, {
+        partyId: seated.partyId,
+        expectedPartyRevision: seated.revision,
+        operatorId: v.managerId,
+      });
+      await markTableCleared(tx, id);
+      await ensureToday(tx, v.tillCfg, removals, now);
+      return id;
+    });
+    const created = await post(app, "/management-api/bookings", v.managerCookie, {
+      bookingDate: "2026-08-20",
+      bookingTime: "21:00",
+      partySize: 2,
+      contactName: "López",
+      tableId,
+    });
+    expect(created.status).toBe(201);
+    const bookingId = ((await created.json()) as { id: string }).id;
+
+    const res = await post(app, `/management-api/bookings/${bookingId}/seat`, v.managerCookie);
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "table.needs_moving", params: { tableId } },
+    });
+    await withTransaction(db, async (tx) => {
+      const booking = await tx.execute<{ status: string; tab_id: string | null }>(
+        sql`select status, tab_id from bookings where id = ${bookingId}`,
+      );
+      expect(booking.rows[0]).toEqual({ status: "booked", tab_id: null });
+      const open = await tx.execute<{ n: number }>(
+        sql`select count(*) as n from parties where state = 'open'`,
+      );
+      expect(open.rows[0]!.n).toBe(0);
+    });
+  });
+
   it("refuses seating a booking at a part still in a joined table with 409 table.in_joined_table", async () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
@@ -283,7 +364,8 @@ describe("bookings seat route → real seatTable", () => {
             : { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
         partKeys,
       });
-      const { ids } = await saveZonePlan(tx, v.tillCfg, enabledTableRemovals(ALL_MODULES), zoneId, {
+      const layout = await defaultLayout(tx, v.tillCfg, zoneId);
+      const { ids } = await saveLayout(tx, v.tillCfg, enabledTableRemovals(ALL_MODULES), layout, {
         revision: 0,
         tables: [
           entry("c3", "Counter 3", 2),
@@ -292,7 +374,7 @@ describe("bookings seat route → real seatTable", () => {
           entry("long", "Long table", 10, ["c3", "c4", "c5"]),
         ],
       });
-      const plan = await readZonePlan(tx, v.tillCfg, zoneId);
+      const plan = await readLayout(tx, v.tillCfg, layout);
       const live = (key: string) => plan.tables.find((t) => t.id === ids[key])!.liveTableId!;
       return { long: live("long"), c3: live("c3") };
     });

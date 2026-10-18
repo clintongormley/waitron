@@ -1177,6 +1177,27 @@
       "when": 1792240316739,
       "tag": "0167_retire_station_order",
       "breakpoints": true
+    },
+    {
+      "idx": 168,
+      "version": "6",
+      "when": 1792277836426,
+      "tag": "0168_floor_plan_sets",
+      "breakpoints": true
+    },
+    {
+      "idx": 169,
+      "version": "6",
+      "when": 1792291488663,
+      "tag": "0169_floor_tables_keep_no_place",
+      "breakpoints": true
+    },
+    {
+      "idx": 170,
+      "version": "6",
+      "when": 1792308206454,
+      "tag": "0170_floor_reset_tables_taken_off",
+      "breakpoints": true
     }
   ]
 }

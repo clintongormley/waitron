@@ -63,8 +63,9 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
    §9 left this open with "the proposal is yes". Without it, an editor open on another set could
    save a stale table list and delete a table the first editor added (`checkSave` deletes every
    table missing from the draft, `apps/server/src/floor-plan.ts:301-302`, `352`).
-3. **The Floor plans page is venue-service's** (screen `floor-plans`, Operations group, order 11,
-   between Departments and zones at 10 and Prep stations at 12,
+3. **The Floor plans page is venue-service's** (screen `floor-plans`, Operations group, order 13,
+   after Prep stations at 12 and before the Calendar at 15, so Prep stations still follows
+   Departments and zones as A725 decided (ruling 2026-10-18, Task 20),
    `packages/venue-service/src/dashboard/index.ts:16-21`, `75-79`), needing `venue.configure` with
    `venue.view` reading it. Its routes are venue-service's; the layout rows they make and copy go
    through a new core port, `CoreServices.floorPlanSets`, and every removal of a set goes through
@@ -108,6 +109,9 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
    part too, so under Standard 4+5 is neither listed nor bookable, as the till cannot seat it.
    With no usable record the pre-A504 reading holds. A part's place in a layout that places its joined table
    reads as off, so a change of parts saved in one set never makes another set's layout invalid.
+   (2026-10-18, finish review: `savedPart` now reads what the zone's last reset copied
+   (`floor_reset_tables` and their copied parts), so a layout saved after the reset changes nothing
+   until a reset applies it.)
 10. **A table off today's map never shows "Needs moving".** A table in store, or taken off for
     today, is not drawn, so there is nothing to carry. Such a table whose new place is taken waits
     for that place, and a later read puts it on the map once nothing stands there that does not
@@ -131,6 +135,8 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
     `"name"`, `"departmentId"`, `"fromSetId"` and `"replaceWith"`.
 16. **The zones read works the due layout out at `deps.clock.now().instant`**, so tests can fix
     the moment; its closing states keep their `new Date()` (`apps/server/src/till-api.ts:2614`).
+    (2026-10-18, finish review: the closing states now read the same `deps.clock.now().instant`,
+    once per request, sharing one clock and day plan with the due layout.)
 17. **The grey default is a new `muted` flag on `wt-combobox` options** (`ComboboxOption`,
     `packages/ui/src/components/wt-combobox.ts:11-34`): a muted option is drawn in
     `--wt-color-text-muted` in the list and, when chosen, on the closed field. Its value is `""`.
@@ -180,7 +186,8 @@ The owner confirms or overrides these when reviewing the plan; each names the DE
     its time: one for tonight made while Lunch's layout is recorded is judged by Lunch's. A
     booking for another day, or for today before the day's first till read, gets the pre-A504
     reading (every part refused, a joined table bookable). Spec §11 leaves bookings across layouts
-    to the bookings work.
+    to the bookings work. (2026-10-18, finish review: "the recorded layout" now means what the
+    zone's last reset copied; see decision 9's note.)
 
 ## Global constraints
 
@@ -681,8 +688,9 @@ export async function saveLayout(
   Inside, sets Standard and Dinner linked with Task 3's `linkFloorPlanSet` after inserting
   `floorPlanSets` rows):
   - "shares tables and keeps places per set": save tables 1–3 placed in Standard; read Dinner:
-    the same three ids, every `placement` null, revision 0.
-  - "moves only its own layout for a move": move table 1 in Dinner → Dinner revision 1, Standard
+    the same three ids, every `placement` null, revision 1 (Standard's first save added tables,
+    a shared change, so decision 2 writes Dinner's row at revision 1).
+  - "moves only its own layout for a move": move table 1 in Dinner → Dinner revision 2, Standard
     revision still 1.
   - "moves every layout of the department for a shared change": add table 4 in Dinner → Standard's
     revision moves too, and a Standard row for a set that had none is written (decision 2).
@@ -1382,7 +1390,7 @@ state in both themes.
   `packages/venue-service/src/dashboard/client.ts:92`
 
 **Interfaces — Produces:** screen `floor-plans` (`navLabelKey: "nav.floor_plans"`, group
-`operations`, order 11, `requiresPermission: "venue.configure"`, `readPermission: "venue.view"`);
+`operations`, order 13, `requiresPermission: "venue.configure"`, `readPermission: "venue.view"`);
 `VenueServiceApi.floorPlanSets(): Promise<FloorPlanSetsModel>` subscribed as
 `getFloorPlanSets` on `floor_plan_sets`, `floor_plans`, `floor_plan_placements`,
 `floor_plan_tables`, `floor_plan_table_parts`, `department_floor_plan_sets`, `menu_periods`,
@@ -1677,7 +1685,8 @@ place. Move it first" / "Otra mesa ocupa su nuevo sitio. Muévela primero";
   clearing" even when it also needs moving; tapping it opens the Mark moved question (title,
   body, Cancel, Mark moved) and Mark moved sends `mark-moved` with the room's revision; on the list
   it is the plain card with "Needs moving" and a Mark moved button; Join with… and the seat
-  pickers leave it out; `table.new_place_taken` names both tables.
+  pickers leave it out (2026-10-18, finish review: pickers now list such a table disabled, reading
+  "Needs moving", as they list one that needs clearing); `table.new_place_taken` names both tables.
 - [ ] **Step 2:** Run — FAIL.
 - [ ] **Step 3:** Implement beside the needs-clearing code paths.
 - [ ] **Step 4:** Run the file, `till-floor-screen.signals.test.ts`, `till-floor-screen.sheet.test.ts`, `codes.test.ts`.

@@ -38,7 +38,8 @@ import {
 } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { listTables, listZones, updateZone } from "./tables.js";
-import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { advanceTicketItem, fireLines, listTablesWithState } from "./working-order.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
@@ -106,7 +107,7 @@ describe("table CRUD", () => {
     const cfg = await setupVenue();
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terraza" }));
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "12", zoneId }));
-    const tables = await asApp(cfg, (tx) => listTables(tx, cfg));
+    const tables = await asApp(cfg, (tx) => listTables(tx, cfg, new Date()));
     expect(tables).toEqual([
       expect.objectContaining({
         id,
@@ -138,8 +139,8 @@ describe("a joined table's parts", () => {
           : { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
       partKeys,
     });
-    await asApp(cfg, (tx) =>
-      saveZonePlan(tx, cfg, enabledTableRemovals(ALL_MODULES), zoneId, {
+    await asApp(cfg, async (tx) =>
+      saveLayout(tx, cfg, enabledTableRemovals(ALL_MODULES), await defaultLayout(tx, cfg, zoneId), {
         revision: 0,
         tables: [
           entry("c3", "Counter 3", 2),
@@ -150,7 +151,9 @@ describe("a joined table's parts", () => {
       }),
     );
     const labels = async (options?: { includeDisabled: boolean }) =>
-      (await asApp(cfg, (tx) => listTables(tx, cfg, options))).map((table) => table.label);
+      (await asApp(cfg, (tx) => listTables(tx, cfg, new Date(), options))).map(
+        (table) => table.label,
+      );
     expect(await labels()).toEqual(["Long table"]);
     expect(await labels({ includeDisabled: true })).toEqual([
       "Counter 3",

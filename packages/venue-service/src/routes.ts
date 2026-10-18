@@ -90,6 +90,8 @@ import {
   type SpecialDayInput,
 } from "./special-days.js";
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
+import { mountFloorPlanSetRoutes } from "./floor-plan-set-routes.js";
+import { onlyKeys } from "./request-keys.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -142,6 +144,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "special_day.invalid": 400,
   "special_day.not_found": 404,
   "special_day.date_taken": 409,
+  "floor_plan_set.is_default": 409,
+  "floor_plan_set.name_taken": 409,
+  "floor_plan_set.invalid": 400,
+  "floor_plan_set.not_found": 404,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
@@ -167,12 +173,6 @@ function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
     return value as "auto" | "on_request";
   if (!zone && field === "printTradingName" && typeof value === "boolean") return value;
   throw new AppError("management.request_invalid", { field });
-}
-
-/** Refuses any body key outside `allowed`, so a client cannot choose what the server derives. */
-function onlyKeys(body: object, allowed: readonly string[]): void {
-  const extra = Object.keys(body).find((key) => !allowed.includes(key));
-  if (extra !== undefined) throw new AppError("management.request_invalid", { field: extra });
 }
 
 function zoneSettingsBody(body: Record<string, unknown>): ZoneServiceSettingsInput {
@@ -308,6 +308,12 @@ function requireCellTarget(body: Record<string, unknown>): RouteTarget | null {
   if (!Object.hasOwn(body, "target"))
     throw new AppError("management.request_invalid", { field: "target" });
   return body.target === null ? null : requireRouteTarget(body.target, "target");
+}
+
+/** Absent keeps the period's set; null empties it. */
+function floorPlanSetField(body: Record<string, unknown>): { floorPlanSetId?: string | null } {
+  if (!Object.hasOwn(body, "floorPlanSetId")) return {};
+  return { floorPlanSetId: requireNullableBodyUuid(body.floorPlanSetId, "floorPlanSetId") };
 }
 
 /** A cell being cleared takes no period lines, not even an empty list. */
@@ -454,6 +460,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
         return fn(tx);
       });
+
+    mountFloorPlanSetRoutes(app, ctx, log, run);
 
     app.get("/management-api/venue-service/stations/:stationId/service-times", (c) =>
       run(c, log, async () => {
@@ -1175,6 +1183,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "menuId",
           "staffMenuIds",
           "endOffsetMinutes",
+          "floorPlanSetId",
           "expectedClockRevision",
         ]);
         const name = requireString(body.name, "name");
@@ -1187,6 +1196,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...(body.endOffsetMinutes === undefined
             ? {}
             : { endOffsetMinutes: parseEndOffsetMinutes(body.endOffsetMinutes) }),
+          ...floorPlanSetField(body),
         };
         const period = await gated(sessionId, (tx) =>
           saveMenuPeriod(tx, ctx.cfg, departmentId, input, body.expectedClockRevision as number),
@@ -1252,6 +1262,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "menuId",
           "staffMenuIds",
           "endOffsetMinutes",
+          "floorPlanSetId",
           "expectedClockRevision",
         ]);
         if (Object.keys(body).every((key) => key === "expectedClockRevision"))
@@ -1266,6 +1277,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...(body.endOffsetMinutes === undefined
             ? {}
             : { endOffsetMinutes: parseEndOffsetMinutes(body.endOffsetMinutes) }),
+          ...floorPlanSetField(body),
         };
         await gated(sessionId, (tx) =>
           updateMenuPeriod(tx, ctx.cfg, periodId, period, body.expectedClockRevision as number),

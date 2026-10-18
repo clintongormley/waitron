@@ -181,6 +181,10 @@ function trimLabels(draft: FloorPlanDraft, sent: FloorPlanDraft = draft): FloorP
   };
 }
 
+/** A set deleted, or no longer holding the zone, reads as the zone gone: the editor has nothing to
+ *  open either way. */
+const SET_GONE = new Set(["zone.not_found", "floor_plan_set.not_found", "floor_plan_set.invalid"]);
+
 /** `back` when it is a dashboard path on this origin, else the dashboard's home. */
 function closeHref(back: string | null): string {
   const url = back === null ? null : URL.parse(back, location.origin);
@@ -208,6 +212,11 @@ export class FloorPlanEditor extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
+      }
+      p.shared {
+        margin: var(--wt-space-1) 0 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
       }
       wt-form-actions {
         flex: 1 1 auto;
@@ -322,6 +331,7 @@ export class FloorPlanEditor extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
 
   @state() private zoneName: string | null = null;
+  @state() private setName: string | null = null;
   @state() private draft: FloorPlanDraft | null = null;
   @state() private selected: string | null = null;
   @state() private loadError: string | null = null;
@@ -352,6 +362,7 @@ export class FloorPlanEditor extends LitElement {
   protected venueTables: DashboardTable[] = [];
 
   #zoneId: string | null = null;
+  #setId: string | null = null;
   #newKeys = 0;
   /** Monotonic, so a key never returns: not after a save turns `new:<n>` into an id, nor on undo. */
   readonly #nextKey = (): string => `new:${++this.#newKeys}`;
@@ -548,14 +559,17 @@ export class FloorPlanEditor extends LitElement {
 
   #route(): void {
     this.back = new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("back");
+    const setId = this.#url.read("set");
     const zoneId = this.#url.read("zone");
-    if (zoneId === this.#zoneId) return;
+    if (setId === this.#setId && zoneId === this.#zoneId) return;
+    this.#setId = setId;
     this.#zoneId = zoneId;
     const request = ++this.#request;
     this.#cancelPending();
     this.#disposeScope();
 
     this.zoneName = null;
+    this.setName = null;
     this.draft = null;
     this.#opened = null;
     this.#history = null;
@@ -565,13 +579,13 @@ export class FloorPlanEditor extends LitElement {
     this.#places = new Map();
     this.loadError = null;
     this.#clearFeedback();
-    if (zoneId !== null) void this.#load(zoneId, request);
+    if (setId !== null && zoneId !== null) void this.#load(setId, zoneId, request);
   }
 
-  async #load(zoneId: string, request: number): Promise<void> {
+  async #load(setId: string, zoneId: string, request: number): Promise<void> {
     try {
       const [plan, zones, tables] = await Promise.all([
-        this.api.getFloorPlan(zoneId),
+        this.api.getFloorPlan(setId, zoneId),
         this.api.listZones(),
         this.api.listTables({ includeDisabled: true }),
       ]);
@@ -580,13 +594,15 @@ export class FloorPlanEditor extends LitElement {
 
       this.revision = plan.revision;
       this.zoneName = zones.find((zone) => zone.id === zoneId)?.name ?? null;
+      this.setName = plan.setName;
       this.venueTables = tables;
       this.#opened = draft;
       this.#history = new UndoHistory(draft);
       this.draft = draft;
     } catch (error) {
       if (request !== this.#request) return;
-      this.loadError = codeOf(error);
+      const code = codeOf(error);
+      this.loadError = SET_GONE.has(code) ? "zone.not_found" : code;
     }
   }
 
@@ -801,7 +817,8 @@ export class FloorPlanEditor extends LitElement {
       this.#selectFlagged(this.mark!.key);
       return;
     }
-    // A scope exists only once a zone's plan is loaded, so both are set here.
+    // A scope exists only once a layout is loaded, so all three are set here.
+    const setId = this.#setId!;
     const zoneId = this.#zoneId!;
     const draft = this.draft!;
     const sentDraft = trimLabels(draft);
@@ -814,12 +831,16 @@ export class FloorPlanEditor extends LitElement {
     this.refused = null;
     let answer: { revision: number; ids: Record<string, string> };
     try {
-      answer = await this.api.saveFloorPlan(zoneId, body);
+      answer = await this.api.saveFloorPlan(setId, zoneId, body);
     } catch (error) {
       if (saveRequest !== this.#saveRequest) return;
       this.saving = false;
       if (request !== this.#request) return;
       const code = codeOf(error);
+      if (SET_GONE.has(code)) {
+        this.#retireZone();
+        return;
+      }
       if (code === "floor_plan.out_of_date") this.outOfDate = true;
       const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
       this.#placeRefusal(code, params, body);
@@ -843,7 +864,7 @@ export class FloorPlanEditor extends LitElement {
     if (this.selected !== null) this.selected = rekey(this.selected);
     if (this.deleteAsk !== null) this.deleteAsk = rekey(this.deleteAsk);
     this.#scope?.changed();
-    void this.#reread(zoneId, ++this.#request, false);
+    void this.#reread(setId, zoneId, ++this.#request, false);
   };
 
   #rekeyMarks(rekey: (key: string) => string): void {
@@ -857,18 +878,20 @@ export class FloorPlanEditor extends LitElement {
 
   readonly #loadNewer = (): void => {
     this.loadingNewer = true;
-    void this.#reread(this.#zoneId!, ++this.#request, true);
+    void this.#reread(this.#setId!, this.#zoneId!, ++this.#request, true);
   };
 
   /** A refresh replaces only an unchanged draft; Reload replaces it whatever it holds. */
-  async #reread(zoneId: string, request: number, replace: boolean): Promise<void> {
+  async #reread(setId: string, zoneId: string, request: number, replace: boolean): Promise<void> {
     let plan: FloorPlan;
     try {
-      plan = await this.api.getFloorPlan(zoneId);
+      plan = await this.api.getFloorPlan(setId, zoneId);
     } catch (error) {
       if (this.isConnected && request === this.#request) {
         this.loadingNewer = false;
-        if (replace) {
+        if (SET_GONE.has(codeOf(error))) {
+          this.#retireZone();
+        } else if (replace) {
           const code = codeOf(error);
           this.message = actionMessage(() => codeMessage(code));
         } else {
@@ -1177,19 +1200,25 @@ export class FloorPlanEditor extends LitElement {
     const history = this.#history;
     // On a phone an empty cancel slot would still take a gap the row lacks room for.
     const historySlot = this.narrow ? "cancel" : "secondary";
+    const title =
+      this.zoneName === null || this.setName === null
+        ? t("floor_plan_editor.title")
+        : fill("floor_plan_editor.layout_title", { zone: this.zoneName, set: this.setName });
     return html`
-      <wt-modal
-        size="full"
-        .open=${true}
-        .beforeClose=${this.#leave}
-        aria-label=${this.zoneName ?? t("floor_plan_editor.title")}
-      >
+      <wt-modal size="full" .open=${true} .beforeClose=${this.#leave} aria-label=${title}>
         <div class="frame">
           <div class="notices"><slot name="notices"></slot></div>
           <div class="width-probe"></div>
           <header class=${this.narrow ? "narrow" : ""}>
             <div>
-              <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
+              <h1>${title}</h1>
+              ${
+                this.draft === null
+                  ? nothing
+                  : html`<p class="shared" data-shared-tables>
+                      ${t("floor_plan_editor.shared_tables")}
+                    </p>`
+              }
             </div>
             <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
               ${

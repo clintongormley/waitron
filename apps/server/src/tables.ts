@@ -16,6 +16,7 @@ import {
   tableServiceStatuses,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { todayBusinessDay } from "./floor-today-store.js";
 import type { TillConfig } from "./till-config.js";
 
 /** `createdAt` is an ISO string. */
@@ -30,8 +31,10 @@ export interface DiningTable {
 export async function listTables(
   tx: Transaction,
   cfg: TillConfig,
+  now: Date,
   options: { includeDisabled?: boolean } = {},
 ): Promise<DiningTable[]> {
+  const businessDay = options.includeDisabled ? null : await todayBusinessDay(tx, cfg, now);
   return tx
     .select({
       id: diningTables.id,
@@ -48,7 +51,7 @@ export async function listTables(
         eq(floorZones.active, true),
         options.includeDisabled
           ? undefined
-          : and(tableInService(diningTables.id), not(savedPart(diningTables.id))),
+          : and(tableInService(diningTables.id), not(savedPart(diningTables.id, businessDay))),
       ),
     )
     .orderBy(diningTables.label);

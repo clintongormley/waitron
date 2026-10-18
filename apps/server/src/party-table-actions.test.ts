@@ -53,6 +53,7 @@ import {
   type PartyVenue,
   floorRow,
 } from "./testing/party-venue.js";
+import { needingMoving } from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 // Move guests, join tables and split a table (table actions plan, Task 8; spec §6, §8, §15).
@@ -461,6 +462,18 @@ describe("move guests", () => {
       );
 
       expect(error).toMatchObject({ code: "table.needs_clearing", params: { tableId: dirty } });
+    });
+
+    it("refuses a table that needs moving", async () => {
+      const { tableId, spare } = await needingMoving(v);
+      const ana = await seat(v, spare);
+      const moving = await opts(ana.partyId);
+
+      const error = await refused([ana.partyId], [ana.tabId], [spare, tableId], () =>
+        act((tx) => moveGuests(tx, v.cfg, ana.partyId, tableId, moving)),
+      );
+
+      expect(error).toMatchObject({ code: "table.needs_moving", params: { tableId } });
     });
 
     it("refuses the party's own only table", async () => {
@@ -1080,6 +1093,18 @@ describe("join tables", () => {
       );
 
       expect(error).toMatchObject({ code: "table.needs_clearing", params: { tableId: dirty } });
+    });
+
+    it("refuses a table that needs moving", async () => {
+      const { tableId, spare } = await needingMoving(v);
+      const ana = await seat(v, spare);
+      const joining = await opts(ana.partyId);
+
+      const error = await refused([ana.partyId], [ana.tabId], [spare, tableId], () =>
+        act((tx) => joinTables(tx, v.cfg, ana.partyId, tableId, joining)),
+      );
+
+      expect(error).toMatchObject({ code: "table.needs_moving", params: { tableId } });
     });
   });
 });

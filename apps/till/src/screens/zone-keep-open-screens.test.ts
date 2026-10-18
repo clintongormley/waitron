@@ -81,6 +81,8 @@ it.each([true, false])(
           closed,
           closesAt: "22:00",
           hasPlan: false,
+          layoutSetName: null,
+          layoutDue: null,
           serviceMode: "table_tab",
         },
         {
@@ -91,6 +93,8 @@ it.each([true, false])(
           closed: false,
           closesAt: null,
           hasPlan: false,
+          layoutSetName: null,
+          layoutDue: null,
           serviceMode: "table_tab",
         },
       ],

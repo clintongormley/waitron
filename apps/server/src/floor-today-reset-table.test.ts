@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodaySplitParts,
@@ -19,7 +20,8 @@ import {
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { compareLabels } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
-import { readZonePlan, saveZonePlan } from "./floor-plan.js";
+import { readLayout, saveLayout } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { moveBill } from "./move-bill.js";
@@ -900,6 +902,42 @@ describe("Reset table's place check, more cases", () => {
   });
 });
 
+const SIX = {
+  key: "six",
+  label: "Table 6",
+  seats: 2,
+  place: { x: 14, y: 20, width: 2, height: 2 },
+};
+
+describe("Reset table's place check, against a layout that overlaps its own tables", () => {
+  it("Long table saved over Table 6, which stands at its own saved place: Reset table puts Long table back overlapping it", async () => {
+    const { table, zoneId } = await longTableWith(LONG_SAVED, [SIX]);
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+    expect(await placeOf(table.six!)).toEqual(SIX.place);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+
+    await settles(() => reset(table.long!, [table.c5!]), zoneId);
+
+    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
+    expect(await seatsOf(table.long!)).toBe(10);
+    expect(await placeOf(table.six!)).toEqual(SIX.place);
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+
+  it("Table 6 moved one square off its own saved place: refused naming Table 6, and nothing changes", async () => {
+    const { table } = await longTableWith(LONG_SAVED, [SIX]);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+    await moveTo(table.six!, 15, 20);
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c5!]), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.six!,
+    });
+    expect(await everything()).toEqual(before);
+  });
+});
+
 describe("Reset table on a joined table saved with no place", () => {
   /** Long table saved with no place, put out today at 10, 20 (8 × 8, the size a new table gets). */
   async function longPutOut(others: PlannedEntry[]) {
@@ -984,6 +1022,19 @@ describe("Reset table on a joined table saved with no place", () => {
 
     expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
   });
+
+  it("Table 6 standing at its own saved place inside where Long table stood: the place comes from today's map, not the saved row, so Table 6 still counts and is named", async () => {
+    const { table } = await longPutOut([SIX]);
+    expect(await placeOf(table.six!)).toEqual(SIX.place);
+    await ok(splitOff(table.long!, [table.c5!], 6));
+    const before = await everything();
+
+    await refused(reset(table.long!, [table.c5!]), 409, "table.place_taken", {
+      tableId: table.long!,
+      standingId: table.six!,
+    });
+    expect(await everything()).toEqual(before);
+  });
 });
 
 async function apart(tableId: string): Promise<number | null> {
@@ -1020,7 +1071,7 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
   await giveKeptSize(v, master.c4!, { width: 2, height: 2 });
   await seat(v, zone.table.c3!);
   await inTx(v, async (tx) => {
-    const plan = await readZonePlan(tx, v.cfg, zoneId);
+    const plan = await readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId));
     const tables = plan.tables.map((t) => ({
       id: t.id,
       key: t.id,
@@ -1030,16 +1081,16 @@ async function longAroundHeldCounter3(long: PlannedEntry["place"]) {
       placement: t.placement,
       partKeys: t.id === master.long ? [master.c3!, master.c4!, master.c5!] : t.partIds,
     }));
-    await saveZonePlan(
+    await saveLayout(
       tx,
       v.cfg,
       REMOVALS,
-      zoneId,
+      await defaultLayout(tx, v.cfg, zoneId),
       { revision: plan.revision, tables },
       v.clock.now().instant,
     );
   });
-  await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant));
+  await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant, "due"));
   return zone;
 }
 
@@ -1057,21 +1108,63 @@ describe("Reset table on a joined table come apart around a part the guests held
     expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
     expect(await seatsOf(table.long!)).toBe(10);
   });
+});
 
+describe("Reset table on a joined table come apart around a table with guests a new layout joins to it", () => {
   it("saved with no place and put out today: Long table comes back off the map, not built out from where its row stood", async () => {
-    const { table, zoneId } = await longAroundHeldCounter3(null);
-    await ok(post(`/api/tables/${table.long!}/today/place`, table.long!, { x: 30, y: 30 }));
-    await ok(splitOff(table.long!, [table.c5!]));
+    const { table, master, zoneId } = await longTableWith(null, [
+      BAR,
+      { key: "c6", label: "Counter 6", seats: 2, place: { x: 60, y: 40 } },
+    ]);
+    await ok(post(`/api/tables/${table.long!}/today/place`, table.long!, { x: 10, y: 20 }));
+    await ok(splitOff(table.long!, [table.c4!, table.c5!]));
+    await seat(v, table.c6!);
+    await inTx(v, async (tx) => {
+      const layout = await defaultLayout(tx, v.cfg, zoneId);
+      const plan = await readLayout(tx, v.cfg, layout);
+      const tables = plan.tables.map((t) => ({
+        id: t.id,
+        key: t.id,
+        label: t.label,
+        seats: t.seats,
+        fixed: t.fixed,
+        placement: t.id === master.c6 ? null : t.placement,
+        partKeys:
+          t.id === master.long ? [master.c3!, master.c4!, master.c5!, master.c6!] : t.partIds,
+      }));
+      await saveLayout(tx, v.cfg, REMOVALS, layout, { revision: plan.revision, tables }, NOW);
+    });
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
     expect(await apart(table.long!)).toBe(1);
-    expect(await splitRowsOf(table.long!)).toEqual([table.c4!, table.c5!].sort());
-    expect((await todayRow(v, table.long!))!.x).not.toBeNull();
-    expect((await todayRow(v, table.long!))!.takenOff).toBe(false);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 8, height: 8 });
 
-    await settles(() => reset(table.long!, [table.c4!, table.c5!]), zoneId);
+    await ok(reset(table.long!, [table.c3!, table.c4!, table.c5!]));
 
     expect(await placeOf(table.long!)).toEqual(NO_PLACE);
     expect(await seatsOf(table.long!)).toBe(10);
     expect(await splitRowsOf(table.long!)).toEqual([]);
+  });
+});
+
+describe("a room's reset while guests sit at a part saved into Long table", () => {
+  it("leaves Long table's whole group waiting: Long table cannot be put on the map", async () => {
+    const { table } = await longAroundHeldCounter3(null);
+
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ tableId: floorResetTables.tableId, pending: floorResetTables.pending })
+        .from(floorResetTables)
+        .where(inArray(floorResetTables.tableId, [table.long!, table.c3!, table.c4!, table.c5!])),
+    );
+    expect(rows.map((row) => row.pending)).toEqual([true, true, true, true]);
+    await refused(
+      post(`/api/tables/${table.long!}/today/place`, table.long!, { x: 30, y: 30 }),
+      409,
+      "table.in_joined_table",
+      { tableId: table.long! },
+    );
+    expect(await placeOf(table.long!)).toEqual(NO_PLACE);
   });
 });
 
@@ -1175,12 +1268,12 @@ describe("Reset table refused when the tables sent are not the ones free, nothin
 });
 
 describe("Reset table and the room's reset", () => {
-  it("after a reset to the saved plan, the tables taken back are joined and Long table in service", async () => {
+  it("after a Reset to {set} plan, the tables taken back are joined and Long table in service", async () => {
     const { table, zoneId } = await LONG_TABLE();
     await seat(v, table.long!);
     await ok(splitOff(table.long!, [table.c4!, table.c5!]));
     const before = (await zoneRevisionOf(v, zoneId))!;
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, v.clock.now().instant, "due"));
     expect(await zoneRevisionOf(v, zoneId)).toBe(before + 1);
 
     await settles(() => reset(table.long!, [table.c4!, table.c5!], 8), zoneId);
@@ -1195,13 +1288,13 @@ describe("Reset table and the room's reset", () => {
     expect(await splitRowsOf(table.long!)).toEqual([table.c3!]);
   });
 
-  it("a room's reset after a partial Reset table waits for the guests left apart, then puts Long table back whole", async () => {
+  it("a room's reset after a partial Reset table waits for the guests left apart, then marks Long table needing moving", async () => {
     const { table, zoneId } = await LONG_TABLE();
     const { partyId } = await seat(v, table.long!);
     await ok(splitOff(table.long!, [table.c4!, table.c5!]));
     await ok(reset(table.long!, [table.c4!, table.c5!], 8));
 
-    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW, "due"));
 
     expect(await placeOf(table.long!)).toEqual({ x: 12, y: 20, width: 4, height: 2 });
     expect(await seatsOf(table.long!)).toBe(8);
@@ -1211,10 +1304,16 @@ describe("Reset table and the room's reset", () => {
     await inTx(v, (tx) => finishTable(tx, { partyId, ...command }));
     await inTx(v, (tx) => catchUpZone(tx, v.cfg, REMOVALS, zoneId, NOW));
 
-    expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
-    expect(await seatsOf(table.long!)).toBe(10);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await out(table.c3!)).toBe(1);
+    expect(await placeOf(table.long!)).toEqual({ x: 12, y: 20, width: 4, height: 2 });
+    expect(await seatsOf(table.long!)).toBe(8);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!]);
+    const [marked] = await inTx(v, (tx) =>
+      tx
+        .select({ readyToMove: floorResetTables.readyToMove })
+        .from(floorResetTables)
+        .where(eq(floorResetTables.tableId, table.long!)),
+    );
+    expect(marked).toEqual({ readyToMove: true });
   });
 
   it("Back to its saved place works on Long table after Reset table", async () => {

@@ -24,7 +24,8 @@ import {
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
-import { readZonePlan, saveZonePlan } from "./floor-plan.js";
+import { readLayout, saveLayout } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { finishTable, leaveTables } from "./parties.js";
@@ -88,14 +89,15 @@ async function plannedZone(...labels: string[]): Promise<{ zoneId: string; ids: 
   const ids: string[] = [];
   for (const label of labels) ids.push(await v.table(label, zoneId));
   await inTx(v, async (tx) => {
-    const [plan] = await tx
-      .insert(floorPlans)
-      .values({ zoneId, savedAt: NOW.toISOString() })
-      .returning({ id: floorPlans.id });
+    await tx.insert(floorPlans).values({
+      zoneId,
+      setId: (await defaultLayout(tx, v.cfg, zoneId)).setId,
+      savedAt: NOW.toISOString(),
+    });
     for (const [i, label] of labels.entries()) {
       const [row] = await tx
         .insert(floorPlanTables)
-        .values({ planId: plan!.id, label, fixed: false })
+        .values({ zoneId, label, fixed: false })
         .returning({ id: floorPlanTables.id });
       await tx
         .update(diningTables)
@@ -204,7 +206,7 @@ async function strayPartyRow(partyId: string, tableId: string): Promise<void> {
 }
 
 const reset = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
-  inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, NOW));
+  inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, NOW, "due"));
 const catchUp = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
   inTx(v, (tx) => catchUpZone(tx, v.cfg, removals, zoneId, NOW));
 
@@ -391,7 +393,9 @@ describe("removing a table of a joined table split today", () => {
 
   /** Saves the zone's plan again without master table `masterId`, and without it as a part. */
   async function saveWithout(zoneId: string, masterId: string): Promise<void> {
-    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const plan = await inTx(v, async (tx) =>
+      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+    );
     const tables = plan.tables
       .filter((table) => table.id !== masterId)
       .map((table) => ({
@@ -403,8 +407,15 @@ describe("removing a table of a joined table split today", () => {
         placement: table.placement,
         partKeys: table.partIds.filter((id) => id !== masterId),
       }));
-    await inTx(v, (tx) =>
-      saveZonePlan(tx, v.cfg, NONE, zoneId, { revision: plan.revision, tables }, NOW),
+    await inTx(v, async (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        NONE,
+        await defaultLayout(tx, v.cfg, zoneId),
+        { revision: plan.revision, tables },
+        NOW,
+      ),
     );
   }
 

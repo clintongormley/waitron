@@ -6,7 +6,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   tableInService,
   diningTables,
+  floorPlanPlacements,
   floorPlans,
+  floorPlanSets,
   floorPlanTables,
   floorResetTables,
   floorTodayJoins,
@@ -20,11 +22,19 @@ import {
   joinedTableApart,
   stillJoinedPart,
   workingOrders,
+  type Transaction,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
-import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import {
+  createDepartment,
+  createServiceZone,
+  linkFloorPlanSet,
+  zoneSalePolicies,
+  zoneServicePolicies,
+} from "@waitron/venue-service";
+import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import {
   catchUpZone,
   ensureToday,
@@ -33,6 +43,7 @@ import {
   todayBusinessDay,
 } from "./floor-today-store.js";
 import { writeMerge } from "./floor-today-merges.js";
+import { markMoved } from "./floor-today-mark-moved.js";
 import { splitJoinedTable } from "./floor-today-split.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { finishTable } from "./parties.js";
@@ -48,7 +59,7 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { giveKeptSize, mergeOf, plannedZone } from "./testing/floor-today-venue.js";
+import { giveKeptSize, mergeOf, plannedZone, setsDepartment } from "./testing/floor-today-venue.js";
 import { handOverOrder, listTablesWithState } from "./working-order.js";
 import "./errors.js";
 
@@ -96,14 +107,28 @@ async function zone(): Promise<string> {
   return id;
 }
 
-function masterRow(planId: string, table: MasterTable) {
-  return {
-    planId,
-    label: table.label,
-    seats: table.seats ?? null,
-    fixed: table.fixed ?? false,
-    ...(table.place === undefined ? {} : { ...table.place, shape: "rect" as const, rotation: 0 }),
-  };
+/** Writes one master table of the zone's plan, with its place on the plan if it has one. */
+async function insertMaster(
+  tx: Transaction,
+  zoneId: string,
+  planId: string,
+  table: MasterTable,
+): Promise<string> {
+  const [row] = await tx
+    .insert(floorPlanTables)
+    .values({
+      zoneId,
+      label: table.label,
+      seats: table.seats ?? null,
+      fixed: table.fixed ?? false,
+    })
+    .returning({ id: floorPlanTables.id });
+  if (table.place !== undefined) {
+    await tx
+      .insert(floorPlanPlacements)
+      .values({ planId, planTableId: row!.id, ...table.place, shape: "rect", rotation: 0 });
+  }
+  return row!.id;
 }
 
 /** Writes the zone's master plan; a table naming `live` is followed by that live table. */
@@ -111,19 +136,20 @@ async function masterOf(zoneId: string, tables: MasterTable[]): Promise<Map<stri
   return inTx(v, async (tx) => {
     const [plan] = await tx
       .insert(floorPlans)
-      .values({ zoneId, savedAt: NOW.toISOString() })
+      .values({
+        zoneId,
+        setId: (await defaultLayout(tx, v.cfg, zoneId)).setId,
+        savedAt: NOW.toISOString(),
+      })
       .returning({ id: floorPlans.id });
     const ids = new Map<string, string>();
     for (const table of tables) {
-      const [row] = await tx
-        .insert(floorPlanTables)
-        .values(masterRow(plan!.id, table))
-        .returning({ id: floorPlanTables.id });
-      ids.set(table.label, row!.id);
+      const id = await insertMaster(tx, zoneId, plan!.id, table);
+      ids.set(table.label, id);
       if (table.live !== undefined) {
         await tx
           .update(diningTables)
-          .set({ planTableId: row!.id })
+          .set({ planTableId: id })
           .where(eq(diningTables.id, table.live));
       }
     }
@@ -138,15 +164,28 @@ async function planIdOf(zoneId: string): Promise<string> {
   return plan!.id;
 }
 
-async function editMaster(masterId: string, values: Partial<typeof floorPlanTables.$inferInsert>) {
-  await inTx(v, (tx) =>
-    tx.update(floorPlanTables).set(values).where(eq(floorPlanTables.id, masterId)),
-  );
+/** Changes a master table; `x` and `y` move its place on the plan. */
+async function editMaster(
+  masterId: string,
+  values: { label?: string; seats?: number; fixed?: boolean; x?: number; y?: number },
+) {
+  const { x, y, ...table } = values;
+  await inTx(v, async (tx) => {
+    if (Object.keys(table).length > 0) {
+      await tx.update(floorPlanTables).set(table).where(eq(floorPlanTables.id, masterId));
+    }
+    if (x !== undefined || y !== undefined) {
+      await tx
+        .update(floorPlanPlacements)
+        .set({ x, y })
+        .where(eq(floorPlanPlacements.planTableId, masterId));
+    }
+  });
 }
 
 async function addToMaster(zoneId: string, table: MasterTable): Promise<void> {
   const planId = await planIdOf(zoneId);
-  await inTx(v, (tx) => tx.insert(floorPlanTables).values(masterRow(planId, table)));
+  await inTx(v, (tx) => insertMaster(tx, zoneId, planId, table));
 }
 
 async function deleteFromMaster(masterId: string): Promise<void> {
@@ -159,6 +198,7 @@ async function deleteFromMaster(masterId: string): Promise<void> {
       .update(floorResetTables)
       .set({ planTableId: null })
       .where(eq(floorResetTables.planTableId, masterId));
+    await tx.delete(floorPlanPlacements).where(eq(floorPlanPlacements.planTableId, masterId));
     await tx.delete(floorPlanTables).where(eq(floorPlanTables.id, masterId));
   });
 }
@@ -206,10 +246,25 @@ async function finish(partyId: string): Promise<void> {
   await inTx(v, (tx) => finishTable(tx, { partyId, ...sent }));
 }
 
-const reset = (zoneId: string, removals: readonly TableRemoval[] = NONE, now = NOW) =>
-  inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, now));
+const reset = (
+  zoneId: string,
+  removals: readonly TableRemoval[] = NONE,
+  now = NOW,
+  onto: Parameters<typeof resetZone>[5] = "due",
+) => inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, now, onto));
 const catchUp = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
   inTx(v, (tx) => catchUpZone(tx, v.cfg, removals, zoneId, NOW));
+
+/** The tables of the zone whose reset rows are marked ready to move, sorted. */
+async function readyToMoveIn(zoneId: string): Promise<(string | null)[]> {
+  const rows = await inTx(v, (tx) =>
+    tx
+      .select({ tableId: floorResetTables.tableId })
+      .from(floorResetTables)
+      .where(and(eq(floorResetTables.zoneId, zoneId), eq(floorResetTables.readyToMove, true))),
+  );
+  return rows.map((row) => row.tableId).sort();
+}
 
 const place = (x: number, y: number) => ({ x, y, width: 8, height: 8 });
 
@@ -228,7 +283,9 @@ async function resave(
   zoneId: string,
   change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
 ): Promise<Record<string, string>> {
-  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const plan = await inTx(v, async (tx) =>
+    readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+  );
   const tables = plan.tables.map((table) => ({
     id: table.id,
     key: table.id,
@@ -238,12 +295,12 @@ async function resave(
     placement: table.placement,
     partKeys: table.partIds,
   }));
-  const { ids } = await inTx(v, (tx) =>
-    saveZonePlan(
+  const { ids } = await inTx(v, async (tx) =>
+    saveLayout(
       tx,
       v.cfg,
       REMOVALS,
-      zoneId,
+      await defaultLayout(tx, v.cfg, zoneId),
       { revision: plan.revision, tables: change(tables) },
       NOW,
     ),
@@ -251,7 +308,7 @@ async function resave(
   return ids;
 }
 
-describe("building today's plan from a zone's master plan", () => {
+describe("building today's plan from a zone's layout", () => {
   it("builds today's plan from the master on the first reset", async () => {
     const z = await zone();
     const t1 = await v.table("First 1", z);
@@ -288,7 +345,7 @@ describe("building today's plan from a zone's master plan", () => {
     expect(await pendingRows(z)).toEqual([]);
   });
 
-  it("leaves a seated table and its merge alone, and catches them up once free", async () => {
+  it("leaves a seated table and its merge alone, and marks them needing moving once free", async () => {
     const z = await zone();
     const t1 = await v.table("Merge 1", z);
     const t2 = await v.table("Merge 2", z);
@@ -329,13 +386,11 @@ describe("building today's plan from a zone's master plan", () => {
     await finish(partyId);
     await catchUp(z);
 
-    expect(await todayRow(t1)).toMatchObject({ x: 20, y: 0 });
-    expect(await todayRow(t2)).toMatchObject({ x: 10, y: 30 });
-    expect((await tableRow(v, t1)).label).toBe("Patio 1");
-    expect(
-      await inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, z))),
-    ).toEqual([]);
-    expect(await pendingRows(z)).toEqual([]);
+    expect(await todayRow(t1)).toMatchObject({ x: 0, y: 0 });
+    expect(await todayRow(t2)).toMatchObject({ x: 10, y: 0 });
+    expect((await tableRow(v, t1)).label).toBe("Merge 1");
+    expect(await mergeMembersIn(z)).toEqual([t1, t2].sort());
+    expect(await readyToMoveIn(z)).toEqual([t1, t2].sort());
   });
 
   it("does not bring a mid-service master edit to the till before the next reset", async () => {
@@ -469,7 +524,7 @@ describe("building today's plan from a zone's master plan", () => {
     expect(await pendingRows(z)).toEqual([]);
   });
 
-  it("does not reset a zone with no master plan", async () => {
+  it("does not reset a zone with no layout", async () => {
     const z = await zone();
     await v.table("Bare 1", z);
 
@@ -694,7 +749,7 @@ describe("building today's plan from a zone's master plan", () => {
         .set({ pending: true, placed: false, remove: false })
         .where(eq(floorResetTables.tableId, t1)),
     );
-    await catchUp(z);
+    await inTx(v, (tx) => catchUpZone(tx, v.cfg, NONE, z, NOW, { inReset: true }));
 
     expect(await todayRow(u1)).toMatchObject({ x: 30, y: 40, rotation: 90 });
     expect(await mergeMembersIn(z)).toEqual([]);
@@ -1132,7 +1187,7 @@ describe("the parts of joined tables in the till's copy", () => {
     );
   });
 
-  it("takes out a part the saved plan dropped, at the next reset", async () => {
+  it("takes out a part the layout dropped, at the next reset", async () => {
     const { zoneId, master } = await plannedZone(v, LONG_AND_COUNTERS, NOW);
     await resave(zoneId, (tables) =>
       tables.map((table) =>
@@ -1205,7 +1260,9 @@ describe("the parts of joined tables in the till's copy", () => {
   it("a joined table whose name an occupied table still holds leaves its parts in service", async () => {
     const { zoneId, master, table } = await plannedZone(v, [{ key: "t9", label: "T9" }], NOW);
     await seat(v, table.t9!);
-    const [t9] = (await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId))).tables;
+    const [t9] = (
+      await inTx(v, async (tx) => readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)))
+    ).tables;
     await resave(zoneId, (tables) => [
       ...tables.filter((entry) => entry.id !== master.t9),
       ...["Counter 3", "Counter 4", "Counter 5"].map((label, i) => ({
@@ -1306,7 +1363,7 @@ describe("a reset over a joined table split today", () => {
     expect(await flags(table.c5!)).toMatchObject({ joined: true });
   });
 
-  it("a reset while guests sit at a part split off moves nothing in the group, until they leave", async () => {
+  it("a reset while guests sit at a part split off moves nothing in the group, and marks it needing moving once they leave", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     const c5Before = await todayRow(table.c5!);
@@ -1324,11 +1381,14 @@ describe("a reset over a joined table split today", () => {
     await finish(partyId);
     await catchUp(zoneId);
 
-    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await todayRow(table.long!)).toMatchObject({ x: 10, width: 4, seats: 6 });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
-  it("a reset while guests sit at the part a split passed them to moves nothing in the group", async () => {
+  it("a reset while guests sit at the part a split passed them to moves nothing in the group, even once they leave", async () => {
     const { zoneId, table } = await longTable();
     const { partyId } = await seat(v, table.long!);
     await split(table.long!, [table.c4!, table.c5!], null);
@@ -1349,11 +1409,14 @@ describe("a reset over a joined table split today", () => {
     await finish(partyId);
     await catchUp(zoneId);
 
-    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await todayRow(table.long!)).toEqual(before.long);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
-  it("a reset while guests sit at Long table leaves its split parts standing", async () => {
+  it("a reset while guests sit at Long table leaves its split parts standing, and marks them needing moving once they leave", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     const c5Before = await todayRow(table.c5!);
@@ -1370,11 +1433,15 @@ describe("a reset over a joined table split today", () => {
     await finish(partyId);
     await catchUp(zoneId);
 
-    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await todayRow(table.long!)).toMatchObject({ x: 10, width: 4, seats: 6 });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await todayRow(table.c5!)).toEqual(c5Before);
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
-  it("a reset while food is on its way to a part split off moves nothing in the group, until it is collected", async () => {
+  it("a reset while food is on its way to a part split off moves nothing in the group, and marks it needing moving once collected", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     const c5Before = await todayRow(table.c5!);
@@ -1397,9 +1464,13 @@ describe("a reset over a joined table split today", () => {
     await inTx(v, (tx) => handOverOrder(tx, v.cfg, order));
     await catchUp(zoneId);
 
-    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await flags(table.c5!)).toMatchObject({ joined: true });
+    expect(await todayRow(table.long!)).toMatchObject({ x: 10, width: 4, seats: 6 });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await todayRow(table.c5!)).toEqual(c5Before);
+    expect(await flags(table.c5!)).toMatchObject({ joined: false });
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
   it("a reset while food is on its way to Long table leaves its split parts standing", async () => {
@@ -1451,7 +1522,7 @@ describe("a reset over a joined table split today", () => {
     expect(await pendingRows(zoneId)).toEqual([]);
   });
 
-  it("a reset while a part split off is merged with a table guests sit at moves nothing in the group", async () => {
+  it("a reset while a part split off is merged with a table guests sit at moves nothing in the group, even once they leave", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await mergeC5WithBar(table);
@@ -1474,10 +1545,13 @@ describe("a reset over a joined table split today", () => {
     await finish(partyId);
     await catchUp(zoneId);
 
-    expect(await mergeOf(v, table.c5!)).toBeNull();
-    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
-    expect(await todayRow(table.bar!)).toMatchObject({ x: 40, y: 0 });
-    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await mergeOf(v, table.c5!)).toEqual(before.merge);
+    expect(await todayRow(table.long!)).toEqual(before.long);
+    expect(await todayRow(table.bar!)).toEqual(before.bar);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!, table.bar!].sort(),
+    );
   });
 
   it("a reset holds back a second split joined table whose part is merged with a waiting group's part", async () => {
@@ -1530,10 +1604,22 @@ describe("a reset over a joined table split today", () => {
     await finish(partyId);
     await catchUp(zoneId);
 
-    expect(await mergeOf(v, table.w3!)).toBeNull();
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await splitRowsOf(table.window!)).toEqual([]);
-    expect(await todayRow(table.window!)).toMatchObject({ x: 60, width: 6, seats: 6 });
+    expect(await mergeOf(v, table.w3!)).not.toBeNull();
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await splitRowsOf(table.window!)).toEqual([table.w3!]);
+    expect(await todayRow(table.window!)).toEqual(windowBefore);
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [
+        table.long!,
+        table.c3!,
+        table.c4!,
+        table.c5!,
+        table.window!,
+        table.w1!,
+        table.w2!,
+        table.w3!,
+      ].sort(),
+    );
   });
 
   const MARKED = "2026-10-10T11:00:00.000Z";
@@ -1546,31 +1632,63 @@ describe("a reset over a joined table split today", () => {
         .where(eq(diningTables.id, tableId)),
     );
 
-  it("a reset takes back Counter 5 split off and needing clearing, and clears its mark", async () => {
+  const markCleared = (tableId: string) =>
+    inTx(v, (tx) =>
+      tx.update(diningTables).set({ needsClearingSince: null }).where(eq(diningTables.id, tableId)),
+    );
+
+  it("a reset leaves Counter 5 split off and needing clearing, with its mark, and marks the group needing moving once cleared", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);
+    const longBefore = await todayRow(table.long!);
 
     await reset(zoneId);
 
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await flags(table.c5!)).toMatchObject({ joined: true });
-    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await flags(table.c5!)).toMatchObject({ joined: false });
+    expect(await todayRow(table.long!)).toEqual(longBefore);
+
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await flags(table.c5!)).toMatchObject({ joined: false });
+    expect(await todayRow(table.long!)).toEqual(longBefore);
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
-  it("a reset takes back Counter 4 and Counter 5 split off and needing clearing, and clears both marks", async () => {
+  it("a reset leaves Counter 4 and Counter 5 split off and needing clearing, with both marks, and marks the group needing moving once both are cleared", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c4!, table.c5!], 2);
     await markNeedsClearing(table.c4!);
     await markNeedsClearing(table.c5!);
+    const splitBefore = await splitRowsOf(table.long!);
+    const longBefore = await todayRow(table.long!);
 
     await reset(zoneId);
 
-    expect((await tableRow(v, table.c4!)).needsClearingSince).toBeNull();
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
+    expect((await tableRow(v, table.c4!)).needsClearingSince).toBe(MARKED);
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
+    expect(await todayRow(table.long!)).toEqual(longBefore);
+
+    await markCleared(table.c4!);
+    await catchUp(zoneId);
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
+
+    expect(await readyToMoveIn(zoneId)).toEqual([]);
+
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
+    expect(await todayRow(table.long!)).toEqual(longBefore);
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
   it("a reset leaves the mark on Bar, a table it puts back that was never split off", async () => {
@@ -1584,7 +1702,7 @@ describe("a reset over a joined table split today", () => {
     expect((await tableRow(v, table.bar!)).needsClearingSince).toBe(MARKED);
   });
 
-  it("a reset while guests sit at a part split off leaves the mark on the other part, and the catch-up after they leave clears it", async () => {
+  it("a reset while guests sit at a part split off leaves the mark on the other part, and the catch-up after they leave still waits for it", async () => {
     const { zoneId, table } = await longTable();
     await split(table.long!, [table.c4!, table.c5!], 2);
     await markNeedsClearing(table.c5!);
@@ -1599,8 +1717,8 @@ describe("a reset over a joined table split today", () => {
     await finish(partyId);
     await catchUp(zoneId);
 
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
-    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
   });
 
   it("a reset leaves a split part's clearing mark when two live tables follow its saved joined table", async () => {
@@ -1613,16 +1731,17 @@ describe("a reset over a joined table split today", () => {
         .set({ planTableId: master.long! })
         .where(eq(diningTables.id, table.bar!)),
     );
+    const longBefore = await todayRow(table.long!);
 
     await reset(zoneId);
 
-    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await todayRow(table.long!)).toEqual(longBefore);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
     expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
     expect(await flags(table.c5!)).toEqual({ joined: false, apart: false });
   });
 
-  it("a delayed reset clears a split part's mark from its copied plan after a new saved plan stands it apart", async () => {
+  it("a delayed reset marks a split part's group from its copied plan after a new layout stands it apart, once its mark is cleared", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c4!, table.c5!], 2);
     await markNeedsClearing(table.c5!);
@@ -1646,7 +1765,9 @@ describe("a reset over a joined table split today", () => {
             : entry,
       ),
     );
-    const saved = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const saved = await inTx(v, async (tx) =>
+      readLayout(tx, v.cfg, await defaultLayout(tx, v.cfg, zoneId)),
+    );
     expect(saved.tables.find((entry) => entry.id === master.long)!.partIds.sort()).toEqual(
       [master.c3!, master.c4!].sort(),
     );
@@ -1658,15 +1779,23 @@ describe("a reset over a joined table split today", () => {
     await finish(partyId);
     await catchUp(zoneId);
 
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBeNull();
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
-    expect(await todayRow(table.c5!)).toMatchObject({ x: null, takenOff: false });
-    expect(await flags(table.c5!)).toEqual({ joined: true, apart: false });
-    expect(await pendingRows(zoneId)).toEqual([]);
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
+
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+
+    expect(await splitRowsOf(table.long!)).toEqual(splitBefore);
+    expect(await flags(table.c5!)).toEqual({ joined: false, apart: false });
+    expect((await pendingRows(zoneId)).map((row) => row.tableId).sort()).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
-  it("a reset leaves the mark on Counter 5 split off when the saved plan stands it apart from Long table", async () => {
+  it("a reset leaves Counter 5 split off and its mark when the layout stands it apart from Long table, and marks it needing moving once cleared", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);
@@ -1682,13 +1811,22 @@ describe("a reset over a joined table split today", () => {
 
     await reset(zoneId);
 
-    expect(await splitRowsOf(table.long!)).toEqual([]);
-    expect(await todayRow(table.c5!)).toMatchObject({ x: 60, takenOff: false });
-    expect(await flags(table.c5!)).toMatchObject({ joined: false });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
     expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+
+    const c5Before = await todayRow(table.c5!);
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await todayRow(table.c5!)).toEqual(c5Before);
+    expect(await flags(table.c5!)).toMatchObject({ joined: false });
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
   });
 
-  it("a reset leaves the mark on Counter 5 split off when the saved plan drops it and an unpaid order to it keeps it", async () => {
+  it("a reset leaves Counter 5 split off and its mark when the layout drops it, and once cleared an unpaid order to it keeps it while Long table needs moving", async () => {
     const { zoneId, master, table } = await longTable();
     await split(table.long!, [table.c5!], 6);
     await markNeedsClearing(table.c5!);
@@ -1709,9 +1847,522 @@ describe("a reset over a joined table split today", () => {
 
     await reset(zoneId);
 
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect((await liveTablesOf(zoneId)).map((t) => t.id)).toContain(table.c5);
+    expect(await todayRow(table.c5!)).toBeUndefined();
+    expect(await readyToMoveIn(zoneId)).toEqual([table.long!, table.c3!, table.c4!].sort());
+  });
+
+  const markMovedOn = (tableId: string) =>
+    inTx(v, (tx) => markMoved(tx, v.cfg, NONE, tableId, NOW));
+
+  it("a split part's group marked once its guests leave is taken back into Long table by Mark moved", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    const { partyId } = await seat(v, table.c5!);
+    await reset(zoneId);
+    await finish(partyId);
+    await catchUp(zoneId);
+    expect(await readyToMoveIn(zoneId)).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
+
+    await markMovedOn(table.c5!);
+
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
+    expect(await todayRow(table.c5!)).toMatchObject({ x: null, takenOff: false });
+    expect(await flags(table.c5!)).toMatchObject({ joined: true });
+    expect(await readyToMoveIn(zoneId)).toEqual([]);
+    expect(await pendingRows(zoneId)).toEqual([]);
+  });
+
+  it("a marked group holding a part merged with Bar ends the merge at Mark moved", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    await mergeC5WithBar(table);
+    const { partyId } = await seat(v, table.bar!);
+    await reset(zoneId);
+    await finish(partyId);
+    await catchUp(zoneId);
+    expect(await mergeOf(v, table.c5!)).not.toBeNull();
+
+    await markMovedOn(table.long!);
+
+    expect(await mergeOf(v, table.c5!)).toBeNull();
+    expect(await mergeOf(v, table.bar!)).toBeNull();
+    expect(await splitRowsOf(table.long!)).toEqual([]);
+    expect(await todayRow(table.long!)).toMatchObject(WHOLE);
+    expect(await todayRow(table.bar!)).toMatchObject({ x: 40, y: 0 });
+    expect(await readyToMoveIn(zoneId)).toEqual([]);
+    expect(await pendingRows(zoneId)).toEqual([]);
+  });
+
+  it("Mark moved is refused, writing nothing, while food is on its way to a part of the marked group", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    const { partyId } = await seat(v, table.c5!);
+    await reset(zoneId);
+    await finish(partyId);
+    await catchUp(zoneId);
+    const marked = [table.long!, table.c3!, table.c4!, table.c5!].sort();
+    expect(await readyToMoveIn(zoneId)).toEqual(marked);
+    const order = await counterOrder(v, "Paella");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table.c5! })
+        .where(eq(workingOrders.id, order)),
+    );
+    await pay(v, order, "20.00");
+    const c5Before = await todayRow(table.c5!);
+
+    const refused = await markMovedOn(table.c5!).then(
+      () => null,
+      (error: unknown) => error as AppError,
+    );
+
+    expect({ code: refused?.code, params: refused?.params }).toEqual({
+      code: "table.delivery_pending",
+      params: { tableId: table.c5! },
+    });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+    expect(await todayRow(table.c5!)).toEqual(c5Before);
+    expect(await readyToMoveIn(zoneId)).toEqual(marked);
+  });
+
+  it("Mark moved is refused while a table of the marked group needs clearing", async () => {
+    const { zoneId, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    const { partyId } = await seat(v, table.c5!);
+    await reset(zoneId);
+    await finish(partyId);
+    await catchUp(zoneId);
+    await markNeedsClearing(table.c5!);
+
+    const refused = await markMovedOn(table.long!).then(
+      () => null,
+      (error: unknown) => error as AppError,
+    );
+
+    expect({ code: refused?.code, params: refused?.params }).toEqual({
+      code: "table.needs_clearing",
+      params: { tableId: table.c5! },
+    });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+  });
+
+  it("Mark moved is refused with a module's refusal to let go of Counter 5, which the layout drops", async () => {
+    const { zoneId, master, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    await markNeedsClearing(table.c5!);
+    const order = await counterOrder(v, "Paella");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table.c5! })
+        .where(eq(workingOrders.id, order)),
+    );
+    await resave(zoneId, (tables) =>
+      tables
+        .filter((entry) => entry.id !== master.c5)
+        .map((entry) =>
+          entry.id === master.long ? { ...entry, partKeys: [master.c3!, master.c4!] } : entry,
+        ),
+    );
+    await reset(zoneId);
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+    const marked = [table.long!, table.c3!, table.c4!].sort();
+    expect(await readyToMoveIn(zoneId)).toEqual(marked);
+    const bookings: TableRemoval = {
+      refuse: (_tx, _cfg, tableIds) =>
+        Promise.resolve(
+          new Map(
+            tableIds
+              .filter((id) => id === table.c5)
+              .map((tableId) => [tableId, new AppError("table.booked", { tableId })]),
+          ),
+        ),
+      release: () => Promise.resolve(),
+    };
+
+    const refused = await inTx(v, (tx) => markMoved(tx, v.cfg, [bookings], table.long!, NOW)).then(
+      () => null,
+      (error: unknown) => error as AppError,
+    );
+
+    expect({ code: refused?.code, params: refused?.params }).toEqual({
+      code: "table.booked",
+      params: { tableId: table.c5! },
+    });
+    expect(await readyToMoveIn(zoneId)).toEqual(marked);
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+  });
+
+  it("Mark moved on Long table, marked while the layout drops Counter 5, puts Long table back and keeps Counter 5 off the map for its unpaid order", async () => {
+    const { zoneId, master, table } = await longTable();
+    await split(table.long!, [table.c5!], 6);
+    await markNeedsClearing(table.c5!);
+    const order = await counterOrder(v, "Paella");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table.c5! })
+        .where(eq(workingOrders.id, order)),
+    );
+    await resave(zoneId, (tables) =>
+      tables
+        .filter((entry) => entry.id !== master.c5)
+        .map((entry) =>
+          entry.id === master.long ? { ...entry, partKeys: [master.c3!, master.c4!] } : entry,
+        ),
+    );
+    await reset(zoneId);
+    await markCleared(table.c5!);
+    await catchUp(zoneId);
+    expect(await readyToMoveIn(zoneId)).toEqual([table.long!, table.c3!, table.c4!].sort());
+    expect(await splitRowsOf(table.long!)).toEqual([table.c5!]);
+
+    await markMovedOn(table.long!);
+
+    expect(await readyToMoveIn(zoneId)).toEqual([]);
+    expect(await todayRow(table.long!)).toMatchObject({ x: 10, y: 20, seats: 10 });
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect((await liveTablesOf(zoneId)).map((t) => t.id)).toContain(table.c5);
     expect(await todayRow(table.c5!)).toBeUndefined();
-    expect((await tableRow(v, table.c5!)).needsClearingSince).toBe(MARKED);
+  });
+});
+
+describe("resets onto a set's layout", () => {
+  const PAINTED = new Date("2026-10-09T06:00:00Z");
+  // 21:00 in Madrid on Friday, while Dinner runs.
+  const FRIDAY_NIGHT = new Date("2026-10-09T19:00:00Z");
+  const at = (x: number) => ({ x, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 });
+
+  async function saveSet(
+    setId: string,
+    zoneId: string,
+    change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
+    now = NOW,
+  ): Promise<Record<string, string>> {
+    const plan = await inTx(v, (tx) => readLayout(tx, v.cfg, { setId, zoneId }));
+    const tables = plan.tables.map((table) => ({
+      id: table.id,
+      key: table.id,
+      label: table.label,
+      seats: table.seats,
+      fixed: table.fixed,
+      placement: table.placement,
+      partKeys: table.partIds,
+    }));
+    const { ids } = await inTx(v, (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        { setId, zoneId },
+        { revision: plan.revision, tables: change(tables) },
+        now,
+      ),
+    );
+    return ids;
+  }
+
+  /** Standard stands A at 0 and B at 20; Dinner stands A at 40 and leaves B off. */
+  async function twoLayouts(now = NOW) {
+    const d = await setsDepartment(v, PAINTED);
+    const a = `A ${randomUUID().slice(0, 6)}`;
+    const b = `B ${randomUUID().slice(0, 6)}`;
+    const ids = await saveSet(
+      d.standard,
+      d.zoneId,
+      () => [
+        { key: "a", label: a, seats: 4, fixed: false, placement: at(0), partKeys: [] },
+        { key: "b", label: b, seats: 4, fixed: false, placement: at(20), partKeys: [] },
+      ],
+      now,
+    );
+    await saveSet(
+      d.dinner,
+      d.zoneId,
+      (tables) =>
+        tables.map((t) => ({
+          ...t,
+          placement: t.id === ids.a ? at(40) : t.id === ids.b ? null : t.placement,
+        })),
+      now,
+    );
+    return { ...d, a: ids.a!, b: ids.b! };
+  }
+
+  async function liveOf(masterId: string): Promise<string> {
+    const [row] = await inTx(v, (tx) =>
+      tx
+        .select({ id: diningTables.id })
+        .from(diningTables)
+        .where(eq(diningTables.planTableId, masterId)),
+    );
+    return row!.id;
+  }
+
+  async function layoutRevision(setId: string, zoneId: string): Promise<number> {
+    const [row] = await inTx(v, (tx) =>
+      tx
+        .select({ revision: floorPlans.revision })
+        .from(floorPlans)
+        .where(and(eq(floorPlans.setId, setId), eq(floorPlans.zoneId, zoneId))),
+    );
+    return row!.revision;
+  }
+
+  it("the day's first read resets onto the due set and records it", async () => {
+    const d = await twoLayouts(FRIDAY_NIGHT);
+    expect(await todayZone(d.zoneId)).toMatchObject({ businessDay: "2026-10-09", setId: d.dinner });
+
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+
+    expect(await todayZone(d.zoneId)).toMatchObject({
+      businessDay: "2026-10-10",
+      setId: d.standard,
+      layoutRevision: await layoutRevision(d.standard, d.zoneId),
+      occurrence: JSON.stringify([d.departmentId, "2026-10-10", d.lunchPeriod, "12:00"]),
+    });
+    expect(await todayRow(await liveOf(d.a))).toMatchObject({ x: 0 });
+    expect(await todayRow(await liveOf(d.b))).toMatchObject({ x: 20 });
+  });
+
+  it("a reset reads only the chosen set's places", async () => {
+    const d = await twoLayouts();
+
+    await reset(d.zoneId, NONE, NOW, { setId: d.dinner, occurrence: null });
+
+    expect(await todayRow(await liveOf(d.a))).toMatchObject({ x: 40 });
+    expect(await todayRow(await liveOf(d.b))).toMatchObject({ x: null });
+    expect(await todayZone(d.zoneId)).toMatchObject({
+      setId: d.dinner,
+      layoutRevision: await layoutRevision(d.dinner, d.zoneId),
+      occurrence: null,
+    });
+    expect((await liveTablesOf(d.zoneId)).length).toBe(2);
+  });
+
+  it("the dashboard's first save resets onto the due layout, not the set saved", async () => {
+    const d = await setsDepartment(v, PAINTED);
+
+    const ids = await saveSet(d.dinner, d.zoneId, () => [
+      {
+        key: "a",
+        label: `A ${randomUUID().slice(0, 6)}`,
+        seats: 4,
+        fixed: false,
+        placement: at(0),
+        partKeys: [],
+      },
+    ]);
+
+    expect(await todayZone(d.zoneId)).toMatchObject({
+      businessDay: "2026-10-10",
+      setId: d.standard,
+      layoutRevision: await layoutRevision(d.standard, d.zoneId),
+      occurrence: JSON.stringify([d.departmentId, "2026-10-10", d.lunchPeriod, "12:00"]),
+    });
+    expect(await todayRow(await liveOf(ids.a!))).toMatchObject({ x: null });
+  });
+  it("a due reset of a zone whose department has no set resets nothing and answers null", async () => {
+    const zoneId = await inTx(v, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      const zone = await createServiceZone(tx, v.cfg, {
+        name: `Setless ${randomUUID().slice(0, 8)}`,
+        departmentId: department.id,
+      });
+      const [unlinked] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await tx.insert(floorPlans).values({
+        zoneId: zone.id,
+        setId: unlinked!.id,
+        revision: 1,
+        savedAt: FRIDAY_NIGHT.toISOString(),
+      });
+      return zone.id;
+    });
+
+    await expect(reset(zoneId)).resolves.toBeNull();
+    expect(await todayZone(zoneId)).toBeUndefined();
+  });
+
+  it("leaves a zone with tables but no saved due layout as it is at the day's first read", async () => {
+    const { zoneId, gaining, tableId, label } = await inTx(v, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      const zone = await createServiceZone(tx, v.cfg, {
+        name: `Moved ${randomUUID().slice(0, 8)}`,
+        departmentId: department.id,
+      });
+      const name = `A ${randomUUID().slice(0, 6)}`;
+      const { ids } = await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        await defaultLayout(tx, v.cfg, zone.id),
+        {
+          revision: 0,
+          tables: [
+            { key: "a", label: name, seats: 4, fixed: false, placement: at(30), partKeys: [] },
+          ],
+        },
+        FRIDAY_NIGHT,
+      );
+      const moved = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      await tx
+        .update(zoneServicePolicies)
+        .set({ departmentId: moved.id })
+        .where(eq(zoneServicePolicies.zoneId, zone.id));
+      const [unlinked] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await tx.insert(floorPlans).values({
+        zoneId: zone.id,
+        setId: unlinked!.id,
+        revision: 1,
+        savedAt: FRIDAY_NIGHT.toISOString(),
+      });
+      return { zoneId: zone.id, gaining: moved.id, tableId: ids.a!, label: name };
+    });
+    const recordBefore = await todayZone(zoneId);
+    const [live] = await liveTablesOf(zoneId);
+    const rowBefore = await todayRow(live!.id);
+    expect(rowBefore).toMatchObject({ x: 30 });
+
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    expect(await todayZone(zoneId)).toEqual(recordBefore);
+    expect(await todayRow(live!.id)).toEqual(rowBefore);
+
+    const setId = await inTx(v, async (tx) => {
+      const [set] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await linkFloorPlanSet(tx, v.cfg, {
+        setId: set!.id,
+        departmentId: gaining,
+        name: "Standard",
+      });
+      return set!.id;
+    });
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    expect(await todayZone(zoneId)).toEqual(recordBefore);
+    expect(await todayRow(live!.id)).toEqual(rowBefore);
+
+    await inTx(v, (tx) =>
+      saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        { setId, zoneId },
+        {
+          revision: 0,
+          tables: [
+            {
+              id: tableId,
+              key: "a",
+              label,
+              seats: 4,
+              fixed: false,
+              placement: at(50),
+              partKeys: [],
+            },
+          ],
+        },
+        NOW,
+      ),
+    );
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    expect(await todayZone(zoneId)).toMatchObject({
+      businessDay: "2026-10-10",
+      setId,
+      layoutRevision: await layoutRevision(setId, zoneId),
+    });
+    expect(await todayRow(live!.id)).toMatchObject({ x: 50 });
+  });
+
+  it("leaves a zone as it is when its department gains a set with no saved layout", async () => {
+    const { zoneId, fromSet } = await inTx(v, async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      const zone = await createServiceZone(tx, v.cfg, {
+        name: `Inside ${randomUUID().slice(0, 8)}`,
+        departmentId: department.id,
+      });
+      const from = await defaultLayout(tx, v.cfg, zone.id);
+      await saveLayout(
+        tx,
+        v.cfg,
+        REMOVALS,
+        from,
+        {
+          revision: 0,
+          tables: [
+            {
+              key: "a",
+              label: `A ${randomUUID().slice(0, 6)}`,
+              seats: 4,
+              fixed: false,
+              placement: at(30),
+              partKeys: [],
+            },
+          ],
+        },
+        FRIDAY_NIGHT,
+      );
+      const gaining = await createDepartment(tx, v.cfg, {
+        name: `Dept ${randomUUID().slice(0, 8)}`,
+        orderStart: "table",
+      });
+      await tx
+        .update(zoneServicePolicies)
+        .set({ departmentId: gaining.id })
+        .where(eq(zoneServicePolicies.zoneId, zone.id));
+      const [set] = await tx
+        .insert(floorPlanSets)
+        .values({ locationId: v.cfg.locationId })
+        .returning({ id: floorPlanSets.id });
+      await linkFloorPlanSet(tx, v.cfg, {
+        setId: set!.id,
+        departmentId: gaining.id,
+        name: "Standard",
+      });
+      return { zoneId: zone.id, fromSet: from.setId };
+    });
+    const recordBefore = await todayZone(zoneId);
+    const [live] = await liveTablesOf(zoneId);
+    const rowBefore = await todayRow(live!.id);
+    expect(recordBefore).toMatchObject({ businessDay: "2026-10-09", setId: fromSet });
+    expect(rowBefore).toMatchObject({ x: 30 });
+
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+
+    expect(await todayZone(zoneId)).toEqual(recordBefore);
+    expect(await todayRow(live!.id)).toEqual(rowBefore);
+    expect(await liveTablesOf(zoneId)).toHaveLength(1);
   });
 });

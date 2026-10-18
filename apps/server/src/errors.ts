@@ -379,11 +379,18 @@ declare module "@waitron/shared" {
     "table.delivery_pending": { tableId: string };
     /** Reset table found `standingId` standing in the place joined table `tableId` would take. */
     "table.place_taken": { tableId: string; standingId: string };
+    /** Mark moved found `standingId`, a table that does not need moving, standing in a new place of `tableId`'s change. */
+    "table.new_place_taken": { tableId: string; standingId: string };
     /**
      * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
      */
     "table.needs_clearing": { tableId: string };
+    /**
+     * The table's reset row waits for Mark moved, so no party may be seated at it, moved to it or
+     * joined to it, and it may not be merged, until it is marked moved.
+     */
+    "table.needs_moving": { tableId: string };
     /**
      * A bill was moved to a table its own party already holds, a party joined a table it holds, or
      * guests were moved to the only table their party holds.
@@ -437,7 +444,7 @@ declare module "@waitron/shared" {
     "unpaid_departure.bill_holds_payment": { workingOrderId: string };
     /**
      * The party's main bill was to leave while the party holds another bill that is open or
-     * presented: it moves only as the party's last unpaid bill (spec §13 item 5). Split a table
+     * presented: it moves only as the party's last unpaid bill. Split a table
      * refuses the party's main bill as the bill the new party takes.
      */
     "party.main_bill_stays": { partyId: string };
@@ -708,18 +715,24 @@ declare module "@waitron/shared" {
     /** No floor-plan zone with this id. */
     "zone.not_found": { zoneId: string };
     /**
-     * The zone's master plan was saved since the editor's copy was read. `revision` is the plan's
-     * current one; the caller reloads the plan and saves again.
+     * This set's layout of the zone was saved since the editor's copy was read. `revision` is the
+     * layout's current one; the caller reloads the layout and saves again.
      */
     "floor_plan.out_of_date": { zoneId: string; revision: number };
-    /** A master-plan save's entry is out of range; `field` is its path, such as `tables.0.seats`. */
+    /** A layout save's entry is out of range; `field` is its path, such as `tables.0.seats`. */
     "floor_plan.invalid": { field: string };
+    /** No floor plan set with this id among the venue's active departments' sets. */
+    "floor_plan_set.not_found": { setId: string };
+    /** A floor plan set request names something the set cannot take; `field` names it. */
+    "floor_plan_set.invalid": { field: string };
     /**
      * The till's read of today's room is older than the room: `revision` is the room's revision
      * after this request's catch-up, which the refusal rolls back with everything else; a caller
      * should re-read the floor before trying again.
      */
     "floor_today.out_of_date": { zoneId: string; revision: number };
+    /** The layout the till offered or reset onto is no longer the zone's; the till reads again. */
+    "floor_today.layout_changed": { zoneId: string };
     "merge.seats_required": Record<string, never>;
     /** A table named to split off a group is not one of its members. */
     "merge.member_invalid": { tableId: string; field: "partIds" };

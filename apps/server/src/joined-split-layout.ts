@@ -1,3 +1,4 @@
+import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { NEW_TABLE_SIZE } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
 
@@ -148,6 +149,8 @@ function cornersOf(place: Placement): { corners: Point[]; axes: Point[] } {
   };
 }
 
+const STANDS_IN_SLACK = 1e-9;
+
 /** Whether the two turned boxes overlap by at least one square along each of their four sides' directions. */
 export function standsIn(place: Placement, other: Placement): boolean {
   const a = cornersOf(place);
@@ -159,6 +162,63 @@ export function standsIn(place: Placement, other: Placement): boolean {
     const overlap =
       Math.min(Math.max(...onA), Math.max(...onB)) - Math.max(Math.min(...onA), Math.min(...onB));
     // Slack for rounding: the 195° pair in standsIn's tests overlaps by exactly one square and computes as 0.9999999999999982.
-    return overlap >= 1 - 1e-9;
+    return overlap >= 1 - STANDS_IN_SLACK;
   });
+}
+
+const PLACE_KEYS = ["x", "y", "width", "height", "rotation", "shape"] as const;
+
+/**
+ * Whether a table drawn at `standing` keeps another table out of `place`: it stands in it, unless
+ * it stands exactly where the layout being applied puts it (`own`, null for no place there). A
+ * layout that overlaps its own tables was saved that way, so the overlap blocks nothing.
+ */
+export function blocksPlace(place: Placement, standing: Placement, own: Placement | null): boolean {
+  if (own !== null && PLACE_KEYS.every((key) => own[key] === standing[key])) return false;
+  return standsIn(place, standing);
+}
+
+export type SqlPlace = Record<"x" | "y" | "width" | "height" | "rotation", SQLWrapper>;
+export type SqlShapedPlace = SqlPlace & { shape: SQLWrapper };
+
+/** `blocksPlace` in SQL; `own`'s columns are all null for no place. reset-row-moves.test.ts pins the two agreeing. */
+export function blocksPlaceSql(
+  place: SqlPlace,
+  standing: SqlShapedPlace,
+  own: SqlShapedPlace,
+): SQL {
+  const same = sql.join(
+    PLACE_KEYS.map((key) => sql`${own[key]} is ${standing[key]}`),
+    sql` and `,
+  );
+  return sql`(not (${same}) and ${standsInSql(place, standing)})`;
+}
+
+/**
+ * `standsIn` in SQL, on the same four directions. Each overlap is worked out from the boxes'
+ * centres and half sizes rather than their corners, so the two can differ in the last digits;
+ * reset-row-moves.test.ts pins them agreeing.
+ */
+export function standsInSql(place: SqlPlace, other: SqlPlace): SQL {
+  const half = (value: SQLWrapper) => sql`(${value} / 2.0)`;
+  const turn = (p: SqlPlace) => sql`radians(${p.rotation})`;
+  const [hwA, hhA, hwB, hhB] = [
+    half(place.width),
+    half(place.height),
+    half(other.width),
+    half(other.height),
+  ];
+  const dx = sql`((${other.x} + ${hwB}) - (${place.x} + ${hwA}))`;
+  const dy = sql`((${other.y} + ${hhB}) - (${place.y} + ${hhA}))`;
+  const between = sql`radians(${other.rotation} - ${place.rotation})`;
+  const c = sql`abs(cos(${between}))`;
+  const s = sql`abs(sin(${between}))`;
+  const along = (p: SqlPlace) => sql`(${dx} * cos(${turn(p)}) + ${dy} * sin(${turn(p)}))`;
+  const across = (p: SqlPlace) => sql`(${dy} * cos(${turn(p)}) - ${dx} * sin(${turn(p)}))`;
+  const overlaps = (distance: SQL, reach: SQL, otherReach: SQL) =>
+    sql`(min(${reach}, ${distance} + ${otherReach}) + min(${reach}, ${otherReach} - ${distance}) >= ${1 - STANDS_IN_SLACK})`;
+  return sql`(${overlaps(along(place), hwA, sql`(${hwB} * ${c} + ${hhB} * ${s})`)}
+    and ${overlaps(across(place), hhA, sql`(${hwB} * ${s} + ${hhB} * ${c})`)}
+    and ${overlaps(along(other), sql`(${hwA} * ${c} + ${hhA} * ${s})`, hwB)}
+    and ${overlaps(across(other), sql`(${hwA} * ${s} + ${hhA} * ${c})`, hhB)})`;
 }

@@ -18,7 +18,8 @@ import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { partyTablesName } from "@waitron/shared";
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import { foodOnItsWay } from "./delivery-release.js";
-import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
+import { defaultLayout } from "./testing/floor-sets.js";
 import { resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -759,7 +760,7 @@ describe("Split tables… on a group with nobody seated", () => {
     expect(await groupOf(table.c3!)).toBeNull();
   });
 
-  it("a reset waiting on food on its way to Long table itself is applied once Bar is ticked and Long table is whole", async () => {
+  it("a reset waiting on food on its way to Long table itself marks it needing moving once Bar is ticked and Long table is whole", async () => {
     const { table, zoneId, master, revision } = await barOnLong();
     await foodOnItsWayTo(table.long!);
     const removals = enabledTableRemovals(ALL_MODULES);
@@ -782,8 +783,15 @@ describe("Split tables… on a group with nobody seated", () => {
       });
     }
     await inTx(v, async (tx) => {
-      await saveZonePlan(tx, v.cfg, removals, zoneId, { revision, tables: saved }, NOW);
-      await resetZone(tx, v.cfg, removals, zoneId, NOW);
+      await saveLayout(
+        tx,
+        v.cfg,
+        removals,
+        await defaultLayout(tx, v.cfg, zoneId),
+        { revision, tables: saved },
+        NOW,
+      );
+      await resetZone(tx, v.cfg, removals, zoneId, NOW, "due");
     });
     const waiting = () =>
       inTx(v, (tx) =>
@@ -799,8 +807,19 @@ describe("Split tables… on a group with nobody seated", () => {
 
     await settles(() => splitOff(table.bar!, [table.bar!]), zoneId);
 
-    expect(await waiting()).toEqual([]);
-    expect(await placeOf(table.long!)).toEqual({ x: 30, y: 30, width: 6, height: 2 });
+    expect((await waiting()).map((row) => row.tableId).sort()).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
+    const marked = await inTx(v, (tx) =>
+      tx
+        .select({ tableId: floorResetTables.tableId })
+        .from(floorResetTables)
+        .where(and(eq(floorResetTables.zoneId, zoneId), eq(floorResetTables.readyToMove, true))),
+    );
+    expect(marked.map((row) => row.tableId).sort()).toEqual(
+      [table.long!, table.c3!, table.c4!, table.c5!].sort(),
+    );
+    expect(await placeOf(table.long!)).toEqual({ x: 10, y: 20, width: 6, height: 2 });
     expect(await seatsOf(table.long!)).toBe(10);
     expect(await splitRowsOf(table.long!)).toEqual([]);
     expect(await placeOf(table.bar!)).toEqual({ x: 40, y: 0, width: 2, height: 2 });

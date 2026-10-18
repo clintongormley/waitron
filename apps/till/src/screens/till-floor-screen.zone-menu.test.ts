@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
@@ -15,6 +16,8 @@ function zone(id: string, name: string, hasPlan = true): FloorZone {
     closesAt: null,
     closed: false,
     hasPlan,
+    layoutSetName: null,
+    layoutDue: null,
     serviceMode: "table_tab",
   };
 }
@@ -132,6 +135,17 @@ function refusal(el: TillFloorScreen): string | null {
 
 afterEach(cleanupWidgets);
 
+// The toolbar's List/Map button and a menu only for today's plan are the wider screen's; a phone's
+// menu is in "the zone menu on a phone and wider".
+const startWidth = innerWidth,
+  startHeight = innerHeight;
+beforeEach(async () => {
+  await page.viewport(1280, 844);
+});
+afterEach(async () => {
+  await page.viewport(startWidth, startHeight);
+});
+
 describe("till-floor-screen: the zone menu", () => {
   it("shows the zone menu for a planned zone only, in both views", async () => {
     const el = await mount();
@@ -159,7 +173,7 @@ describe("till-floor-screen: the zone menu", () => {
     expect(menuOf(el)).toBeNull();
   });
 
-  it("offers a zone with no tables a reset, which brings in the tables its saved plan has gained", async () => {
+  it("offers a zone with no tables a reset, which brings in the tables its layout has gained", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
       zones: [...zones, zone("z4", "Garden")],
@@ -175,7 +189,7 @@ describe("till-floor-screen: the zone menu", () => {
     expect(refreshes.count).toBe(1);
   });
 
-  it("is not offered to a zone with no tables and no saved plan", async () => {
+  it("is not offered to a zone with no tables and no layout", async () => {
     const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
       zones: [...zones, zone("z4", "Counter", false)],
       tables: [...terraceTables, ...barTables, ...patioTables],
@@ -298,5 +312,139 @@ describe("till-floor-screen: the zone menu and the room's revision", () => {
     expect(api.putBackToday).not.toHaveBeenCalled();
     expect(refusal(el)).toBe("The floor has changed. Check and try again");
     expect(refreshes.count).toBe(1);
+  });
+});
+
+describe("till-floor-screen: the zone menu on a phone and wider", () => {
+  const inside = { ...zone("z1", "Inside"), layoutSetName: "Dinner" };
+
+  async function mountAt(
+    width: number,
+    over: { zones?: FloorZone[]; canChangeToday?: boolean; api?: ReturnType<typeof stubApi> } = {},
+  ) {
+    await page.viewport(width, 844);
+    expect(innerWidth).toBe(width);
+    const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+      zones: over.zones ?? [inside, zones[1]!],
+      tables: [...terraceTables, ...barTables],
+      api: (over.api ?? stubApi()) as unknown as TillApi,
+      canChangeToday: over.canChangeToday ?? true,
+    });
+    return el;
+  }
+
+  /** Each entry the menu's popup holds, in order: an action's text, or a heading's marked `heading:`. */
+  async function entries(el: TillFloorScreen): Promise<string[]> {
+    const menu = menuOf(el)!;
+    await menu.updateComplete;
+    const actions = menu.shadowRoot!.querySelector("wt-row-actions")!;
+    return [...actions.children].map((child) => {
+      const words = child.textContent!.replace(/\s+/g, " ").trim();
+      return child.matches("wt-button, button, a") ? words : `heading: ${words}`;
+    });
+  }
+
+  /** The ⋮ button's accessible name. */
+  async function menuName(el: TillFloorScreen): Promise<string | null> {
+    const actions = menuOf(el)!.shadowRoot!.querySelector("wt-row-actions")!;
+    await actions.updateComplete;
+    return actions.shadowRoot!.querySelector("button")!.getAttribute("aria-label");
+  }
+
+  async function chooseItem(el: TillFloorScreen, item: string): Promise<void> {
+    const menu = menuOf(el)!;
+    menu.shadowRoot!.querySelector<HTMLElement>(`[data-menu-item="${item}"]`)!.click();
+    await menu.updateComplete;
+    await el.updateComplete;
+  }
+
+  it("at 1280 keeps List and the menu in the toolbar, with no heading, and names the recorded set", async () => {
+    const el = await mountAt(1280);
+    const toggle = el.shadowRoot!.querySelector<HTMLElement>(".actions [data-view-toggle]");
+    expect(toggle?.textContent?.trim()).toBe("List");
+    expect(await entries(el)).toEqual([
+      "Add a spare table",
+      "Taken off today",
+      "Reset to Dinner plan",
+    ]);
+  });
+
+  it("offers no reset while the zone records no set", async () => {
+    const el = await mountAt(1280, { zones: [{ ...inside, layoutSetName: null }] });
+    expect(await entries(el)).toEqual(["Add a spare table", "Taken off today"]);
+  });
+
+  it("asks before the reset with the new second line", async () => {
+    const el = await mountAt(1280);
+    await chooseItem(el, "reset");
+    const dialog = menuOf(el)!.shadowRoot!.querySelector('wt-dialog[data-dialog="reset"]')!;
+    expect(dialog.querySelector("[data-reset-body]")!.textContent!.trim()).toBe(
+      "Free tables go back now; occupied ones show Needs moving once free.",
+    );
+  });
+
+  it("at 390 moves List into the menu, above the muted heading and the three items, and Map on the list", async () => {
+    const el = await mountAt(390);
+    expect(el.shadowRoot!.querySelector("[data-view-toggle]")).toBeNull();
+    expect(await entries(el)).toEqual([
+      "List",
+      "heading: Today's plan · Inside",
+      "Add a spare table",
+      "Taken off today",
+      "Reset to Dinner plan",
+    ]);
+    await chooseItem(el, "view");
+    expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
+    expect((await entries(el))[0]).toBe("Map");
+    await chooseItem(el, "view");
+    expect(el.shadowRoot!.querySelector("wt-floor-map")).not.toBeNull();
+  });
+
+  it("at 390 gives someone who cannot change today's plan a menu holding only List or Map", async () => {
+    const el = await mountAt(390, { canChangeToday: false });
+    expect(await entries(el)).toEqual(["List"]);
+    await chooseItem(el, "view");
+    expect(await entries(el)).toEqual(["Map"]);
+  });
+
+  it("at 390 names the menu for today's plan while it holds the plan's items", async () => {
+    const el = await mountAt(390);
+    expect(await menuName(el)).toBe("Today's plan");
+  });
+
+  it("at 390 names the menu for the floor's view when it holds only List or Map", async () => {
+    const el = await mountAt(390, { canChangeToday: false });
+    expect(await menuName(el)).toBe("Floor view");
+  });
+
+  it("at 390 gives a zone with no plan a menu holding only List or Map", async () => {
+    const el = await mountAt(390);
+    await showZone(el, "z2");
+    expect(await entries(el)).toEqual(["Map"]);
+  });
+
+  it("at 390 gives a floor with no zones a menu holding only List or Map", async () => {
+    const el = await mountAt(390, { zones: [] });
+    expect(await entries(el)).toEqual(["Map"]);
+  });
+
+  it("at 390 keeps the toggle's event inside the screen", async () => {
+    const el = await mountAt(390);
+    const escaped: string[] = [];
+    el.addEventListener("zone-toggle-view", () => escaped.push("zone-toggle-view"));
+    await chooseItem(el, "view");
+    expect(escaped).toEqual([]);
+  });
+
+  it("asks for the zones as well as the tables after a reset, sent or refused", async () => {
+    const api = stubApi();
+    api.resetZoneToday.mockRejectedValueOnce({ code: "table.fixed", status: 409 });
+    const el = await mountAt(1280, { api });
+    const details: unknown[] = [];
+    el.addEventListener("floor-refresh", (event) => details.push((event as CustomEvent).detail));
+    await send(el, "zone-reset", { zoneId: "z1" });
+    await send(el, "zone-reset", { zoneId: "z1" });
+    expect(api.resetZoneToday).toHaveBeenCalledTimes(2);
+    expect(details).toEqual([{ zones: true }, { zones: true }]);
   });
 });
