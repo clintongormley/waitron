@@ -1307,7 +1307,7 @@ describe("the Rota's empty weeks", () => {
       "No staffing is painted for Kitchen this week",
     );
     expect(normal(message(el).querySelector("p")!.textContent!)).toBe(
-      "Slots come from the staffing you paint: who Kitchen needs, and when. Paint Winter's standard week once and every week of the season gets its slots. You can still add shifts by person.",
+      "Slots come from the staffing you paint: who Kitchen needs, and when. Paint Winter's standard week once and every week of the season gets its slots. You can still add shifts in Everyone.",
     );
     expect(q(el, "rota-by-area")).toBeNull();
     const button = paint(el)!;
@@ -1329,6 +1329,15 @@ describe("the Rota's empty weeks", () => {
     const publish = q<Button>(el, "[data-test=publish-week]")!;
     expect(publish.variant).toBe("secondary");
     expect(publish.disabled).toBe(true);
+  });
+  it("an area with no paint this week points to Everyone in Spanish too", async () => {
+    const el = await mountUnpainted(unpainted());
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(normal(message(el).querySelector("p")!.textContent!)).toMatch(
+      /\. Puedes seguir añadiendo \S+ en Todo el equipo\.$/,
+    );
   });
   it("an area with no paint this week: shifts it already has show beneath, marked not needed", async () => {
     const client = unpainted((r) => {
@@ -1367,7 +1376,7 @@ describe("the Rota's empty weeks", () => {
     );
     const el = await mountUnpainted(client);
     expect(normal(message(el).querySelector("p")!.textContent!)).toBe(
-      "Slots come from the staffing you paint: who Kitchen needs, and when. You can still add shifts by person.",
+      "Slots come from the staffing you paint: who Kitchen needs, and when. You can still add shifts in Everyone.",
     );
     const button = paint(el)!;
     expect(normal(button.textContent!)).toBe("Edit Nadal staffing");
@@ -1436,7 +1445,7 @@ describe("the Rota's empty weeks", () => {
     );
     expect(paint(seasonless)).toBeNull();
     expect(normal(message(seasonless).querySelector("p")!.textContent!)).toBe(
-      "Slots come from the staffing you paint: who Kitchen needs, and when. You can still add shifts by person.",
+      "Slots come from the staffing you paint: who Kitchen needs, and when. You can still add shifts in Everyone.",
     );
   });
   it("an area with no paint this week: a person who may only read Staffing gets Show {season}'s standard week", async () => {
