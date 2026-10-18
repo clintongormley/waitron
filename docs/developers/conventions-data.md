@@ -1833,12 +1833,14 @@ table its name, as for any row waiting only for its name, and never marks it aga
 table holds the name it keeps waiting. A row with no table yet (a joined table still to be made) is
 ended, because the catch-up makes the table of a waiting row with no table without reading `placed`.
 The catch-up reads only waiting rows and skips placed ones, so none of these is marked again until a
-reset rewrites the zone's rows; that reset marks a table again, as any reset does, when its new
-place is still taken. Once none of a marked group's tables would move (taken off, say), the catch-up
-applies it as any other row. Back to its saved place on a table that needs moving is Mark moved
-(`backToSaved`). A table that needs moving is refused `table.needs_moving` when a tab is opened at
-it (`openTab`, `apps/server/src/working-order.ts`), a bill is moved to it (`readTargetTable`,
-`apps/server/src/move-bill.ts`) or it is merged (`apps/server/src/floor-today-merges.ts`).
+reset rewrites the zone's rows; that reset treats them as any reset does: a free table goes to its
+new place, or is marked again when that place is still taken; a table with guests waits and, once
+free, is marked whatever stands in its new place. Once none of a marked group's tables would move
+(taken off, say), the catch-up applies it as any other row. Back to its saved place on a table that
+needs moving is Mark moved (`backToSaved`). A table that needs moving is refused
+`table.needs_moving` when a tab is opened at it (`openTab`, `apps/server/src/working-order.ts`), a
+bill is moved to it (`readTargetTable`, `apps/server/src/move-bill.ts`) or it is merged
+(`apps/server/src/floor-today-merges.ts`).
 
 No reset puts a table down on another. At every reset and catch-up, a table whose new place a table
 staying on the map stands in keeps its place (`standsIn`, `apps/server/src/joined-split-layout.ts`:
@@ -1849,12 +1851,12 @@ blocks in turn (`blockedMoves`, `apps/server/src/floor-reset-plan.ts`; in SQL, `
 out of service in a joined table blocks nothing. Mark moved refuses `table.new_place_taken` while a
 drawn table outside the group, neither needing moving nor out of service in a joined table, stands
 in one of the group's new places. Back to its saved place refuses `table.place_taken` while a table
-drawn on today's map stands in the saved place (below). On all of these paths, and on Reset table
-and Back when the place comes from the reset row, a table standing exactly at its own place in the
-zone's recorded layout (its `floor_reset_tables` row, all six placement fields equal) blocks no
-other table's new place (`blocksPlace` and `blocksPlaceSql`,
-`apps/server/src/joined-split-layout.ts`; the places are read by `layoutPlacesIn`): a layout whose
-tables overlap was saved that way.
+drawn on today's map, other than one out of service in a joined table, stands in the saved place
+(below). On all of these paths, and on Reset table and Back when the place comes from the reset row,
+a table standing exactly at its own place in the zone's recorded layout (its `floor_reset_tables`
+row, all six placement fields equal) blocks no other table's new place (`blocksPlace` and
+`blocksPlaceSql`, `apps/server/src/joined-split-layout.ts`; the places are read by
+`layoutPlacesIn`): a layout whose tables overlap was saved that way.
 
 A closing party keeps its table names as text and releases its `party_tables` rows
 (`closePartyTables`, `apps/server/src/parties.ts`). Permanent removal releases order delivery
@@ -1948,13 +1950,13 @@ names.
 Back to its saved place puts a table at its reset row's place; on a table that needs moving it is
 Mark moved (`backToSaved`, `apps/server/src/floor-today-store.ts`). Otherwise it, and Take off for
 today, refuse a table split off (`table.split_off`, `refuseSplitOff`). Back takes the table out of
-its merge first, and then refuses `table.place_taken` while a table drawn on today's map, other
-than the table itself, stands in the saved place (Reset table's `refusePlaceTaken`, with the place
-from the reset row), so it also refuses landing on a partner of the merge it left: in a merge of
-three the partners stay where they stand, and in a merge of two the partner goes back to where it
-stood before the merge, which may be the saved place. A table standing exactly at its own place in
-the recorded layout blocks nothing (`blocksPlace`). The refusal rolls back leaving the merge. The
-till shows the code's own words for it, not Reset table's sentence.
+its merge first, and then refuses `table.place_taken` while a table drawn on today's map, other than
+the table itself or one out of service in a joined table, stands in the saved place (Reset table's
+`refusePlaceTaken`, with the place from the reset row), so it also refuses landing on a partner of
+the merge it left: in a merge of three the partners stay where they stand, and in a merge of two the
+partner goes back to where it stood before the merge, which may be the saved place. A table standing
+exactly at its own place in the recorded layout blocks nothing (`blocksPlace`). The refusal rolls
+back leaving the merge. The till shows the code's own words for it, not Reset table's sentence.
 
 Reset table (`POST /api/tables/:id/today/reset`, `resetTable`,
 `apps/server/src/floor-today-reset-table.ts`) takes back every table split off the joined table that

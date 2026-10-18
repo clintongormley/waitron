@@ -2607,7 +2607,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A879. After Leave it here, bookings and the dashboard's table list still follow the last
   reset's copy, not today's map (2026-10-18).** Where the new layout joins 4 and 5, the dashboard
   list leaves out 4 and 5 and lists the off-map 4+5, and a booking today at 4 is refused
-  `table.in_joined_table`, for the rest of the day. It was already so while they needed moving.
+  `table.in_joined_table`, until the next reset. It was already so while they needed moving.
   Left open by A878.
   [Detail](backlog/till.md#a879-after-leave-it-here-bookings-and-the-dashboards-table-list-still-follow-the-last-resets-copy)
 

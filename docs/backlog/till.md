@@ -1500,7 +1500,7 @@ staff leave 4 and 5 standing apart, the dashboard's table list (`GET /api/tables
 at 4 is refused `table.in_joined_table` (`requireActiveTable`, `packages/bookings/src/bookings.ts`)
 until the next reset. A878's plan review ran both (experiments P3 and P4, 2026-10-18; the plan's
 reader table, [plan](../superpowers/plans/2026-10-18-a878-leave-it-here.md)). It was already so
-while 4 and 5 needed moving, so Leave it here only makes it last the rest of the day. Next: decide
+while 4 and 5 needed moving, so Leave it here only makes it last until the next reset. Next: decide
 whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
