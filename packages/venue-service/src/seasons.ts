@@ -1,9 +1,19 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
-import { AppError, CALENDAR_COLOURS, type CalendarColour, type ErrorParams } from "@waitron/shared";
-import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
+import {
+  AppError,
+  CALENDAR_COLOURS,
+  type BusinessDayClock,
+  type CalendarColour,
+  type ErrorParams,
+} from "@waitron/shared";
+import {
+  assertBusinessDayScheduleWrite,
+  assertWaitingChangeFits,
+} from "./business-day-schedule.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
+import { settledClock } from "./service-day-context.js";
 import type { VenueScope } from "./operations.js";
 import {
   byStart,
@@ -68,8 +78,12 @@ export function temporaryStart(index: number): string {
 }
 
 /** Every department, since a season change moves days under all of them. */
-async function checkScheduleAfterSeasonWrite(tx: Transaction, cfg: VenueScope): Promise<void> {
-  const clash = await scheduleEndOffsetClash(tx, cfg);
+async function checkScheduleAfterSeasonWrite(
+  tx: Transaction,
+  cfg: VenueScope,
+  clock: BusinessDayClock,
+): Promise<void> {
+  const clash = await scheduleEndOffsetClash(tx, cfg, clock);
   if (clash !== null) invalid({ field: "seasons", reason: "end_offset", ...clash });
 }
 
@@ -144,7 +158,8 @@ export async function saveSeasons(
     expectedClockRevision,
   );
 
-  const { dayCutover } = await readLocationClock(tx, cfg.locationId);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const { dayCutover } = clock;
   const only = {
     seasonIds: [...new Set(added.map((entry) => entry.split))],
     weekdays: [0, 1, 2, 3, 4, 5, 6],
@@ -185,7 +200,10 @@ export async function saveSeasons(
       if (week !== undefined) await writeZoneSeasonWeeks(tx, zoneId, [row!.id], week);
     }
   }
-  if (timed) await checkScheduleAfterSeasonWrite(tx, cfg);
+  if (timed) {
+    await checkScheduleAfterSeasonWrite(tx, cfg, settledClock(clock, at));
+    await assertWaitingChangeFits(tx, cfg, at, clock);
+  }
   return readSeasons(tx, cfg);
 }
 

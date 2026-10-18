@@ -2,7 +2,8 @@ import { readZoneKeepOpenState } from "./operations.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { saveSeasonWeeks } from "./season-weeks.js";
 import { deletePeriod } from "./period-delete.js";
-import { saveSpecialDay } from "./special-days.js";
+import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";
+import { readSeasons, saveSeasons } from "./seasons.js";
 import {
   replaceMenuWeek,
   saveMenuPeriod,
@@ -1130,6 +1131,273 @@ describe("a waiting change checks the hours written while it waits", () => {
       },
     });
     expect(await storedZone(v)).toEqual([]);
+  });
+  const specialDayNames = (v: Awaited<ReturnType<typeof fixture>>) =>
+    withTransaction(suite.db, async (tx) =>
+      (
+        await tx
+          .select({ name: specialDays.name })
+          .from(specialDays)
+          .where(eq(specialDays.locationId, v.cfg.locationId))
+      )
+        .map((row) => row.name)
+        .sort(),
+    );
+  const seasonNames = (v: Awaited<ReturnType<typeof fixture>>) =>
+    withTransaction(suite.db, async (tx) => (await readSeasons(tx, v.cfg)).map((s) => s.name));
+  const addSeason = (v: Awaited<ReturnType<typeof fixture>>) =>
+    withTransaction(suite.db, (tx) =>
+      saveSeasons(
+        tx,
+        v.cfg,
+        { save: [{ name: "Summer", startsOn: "06-01", colour: "blue" }], delete: [] },
+        at,
+        1,
+      ),
+    );
+  const removeSpecialDay = (v: Awaited<ReturnType<typeof fixture>>, id: string) =>
+    withTransaction(suite.db, (tx) => deleteSpecialDay(tx, v.cfg, id, at, 1));
+
+  it("refuses a one-off special day crossing the waiting start on its date, naming it, and stores one that fits", async () => {
+    const v = await fixture([]);
+    await waiting(v);
+    await expect(
+      paintDate(v, "menu", "2026-11-04", [range("22:00", "04:30")], at, 1),
+    ).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            departmentId: v.departmentId,
+            specialDayName: "Special day",
+            date: "2026-11-04",
+            startsAt: "22:00",
+            endsAt: "04:30",
+            reason: "range",
+          }),
+        ],
+      },
+    });
+    expect(await specialDayNames(v)).toEqual([]);
+    await expect(
+      paintDate(v, "menu", "2026-11-04", [range("09:00", "17:00")], at, 1),
+    ).resolves.toBeUndefined();
+    expect(await specialDayNames(v)).toEqual(["Special day"]);
+  });
+  it("refuses a repeating special day crossing the waiting start, parsing it under the start in force", async () => {
+    const v = await fixture([]);
+    await waiting(v);
+    await expect(
+      paintDate(v, "menu", "2026-12-25", [range("22:00", "04:30")], at, 1, true),
+    ).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        conflicts: [
+          expect.objectContaining({
+            specialDayName: "Special day",
+            startsAt: "22:00",
+            endsAt: "04:30",
+            reason: "range",
+          }),
+        ],
+      },
+    });
+    expect(await specialDayNames(v)).toEqual([]);
+  });
+  it("refuses a special day's zone paint crossing the waiting start, and stores one that fits", async () => {
+    const v = await fixture([], { zone: true });
+    await waiting(v);
+    await expect(
+      paintDate(v, "zone", "2026-11-04", [range("22:00", "04:30")], at, 1),
+    ).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            zoneId: v.zoneId,
+            specialDayName: "Special day",
+            date: "2026-11-04",
+            startsAt: "22:00",
+            endsAt: "04:30",
+            reason: "range",
+          }),
+        ],
+      },
+    });
+    expect(await specialDayNames(v)).toEqual([]);
+    await expect(
+      paintDate(v, "zone", "2026-11-04", [range("09:00", "17:00")], at, 1),
+    ).resolves.toBeUndefined();
+    expect(await specialDayNames(v)).toEqual(["Special day"]);
+  });
+  // The two dates' conflicts came back in either order across repeat runs.
+  it("answers a special day whose last orders clash only under the waiting start as a waiting-change conflict", async () => {
+    const v = await fixture([], { offset: 30 });
+    await waiting(v);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        saveSpecialDay(
+          tx,
+          v.cfg,
+          null,
+          {
+            name: "Late weekend",
+            repeatsYearly: false,
+            dates: [
+              { date: "2026-11-06", closedAllDay: false },
+              { date: "2026-11-07", closedAllDay: false },
+            ],
+            paint: [
+              {
+                departmentId: v.departmentId,
+                date: "2026-11-06",
+                ranges: [{ periodId: v.periodId, ...range("01:00", "03:00") }],
+              },
+              {
+                departmentId: v.departmentId,
+                date: "2026-11-07",
+                ranges: [{ periodId: v.periodId, ...range("03:00", "04:00") }],
+              },
+            ],
+          },
+          at,
+          1,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 2,
+        conflicts: expect.arrayContaining([
+          expect.objectContaining({
+            specialDayName: "Late weekend",
+            date: "2026-11-06",
+            startsAt: "01:00",
+            endsAt: "03:00",
+            reason: "sending_cutoff",
+          }),
+          expect.objectContaining({
+            specialDayName: "Late weekend",
+            date: "2026-11-07",
+            startsAt: "03:00",
+            endsAt: "04:00",
+            reason: "endpoint_day",
+          }),
+        ]),
+      },
+    });
+    expect(await specialDayNames(v)).toEqual([]);
+  });
+  it("refuses deleting a special day while another holds a clash, and deletes the clashing one", async () => {
+    const v = await fixture([]);
+    const [clashing, clean] = await withTransaction(suite.db, async (tx) => [
+      await paintedDay(tx, v, {
+        name: "Fiesta",
+        date: "2026-11-20",
+        ranges: [{ periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" }],
+      }),
+      await paintedDay(tx, v, {
+        name: "Market",
+        date: "2026-12-10",
+        ranges: [{ periodId: v.periodId, startsAt: "09:00", endsAt: "17:00" }],
+      }),
+    ]);
+    await waiting(v);
+    await expect(removeSpecialDay(v, clean!)).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({
+            specialDayId: clashing,
+            specialDayName: "Fiesta",
+            date: "2026-11-20",
+            startsAt: "22:00",
+            endsAt: "04:30",
+            reason: "range",
+          }),
+        ],
+      },
+    });
+    expect(await specialDayNames(v)).toEqual(["Fiesta", "Market"]);
+    await expect(removeSpecialDay(v, clashing!)).resolves.toBeUndefined();
+    expect(await specialDayNames(v)).toEqual(["Market"]);
+  });
+  it("answers a special-day delete whose last orders clash only under the waiting start as a waiting-change conflict", async () => {
+    const v = await fixture([], { offset: 30 });
+    const clean = await withTransaction(suite.db, async (tx) => {
+      await seasonDay(tx, { ...v, weekday: 5, ranges: [range("01:00", "03:00")] });
+      await seasonDay(tx, { ...v, weekday: 6, ranges: [range("03:00", "04:00")] });
+      return paintedDay(tx, v, { name: "Market", date: "2026-12-10", ranges: [] });
+    });
+    await waiting(v);
+    await expect(removeSpecialDay(v, clean)).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: offsetClash,
+    });
+    expect(await specialDayNames(v)).toEqual(["Market"]);
+  });
+  it("refuses adding a season while a stored range clashes, since the new season copies it, and adds one when none does", async () => {
+    const clash = { weekday: 6, startsAt: "21:00", endsAt: "04:30", reason: "range" };
+    const v = await fixture([]);
+    await withTransaction(suite.db, (tx) =>
+      seasonDay(tx, { ...v, weekday: 6, ranges: [range("21:00", "04:30")] }),
+    );
+    await waiting(v);
+    await expect(addSeason(v)).rejects.toMatchObject({
+      code: "hours.clock_change_conflict",
+      params: {
+        dayCutover: "03:00",
+        startsAt: "2026-11-04T02:00:00.000Z",
+        conflictCount: 1,
+        conflicts: [
+          expect.objectContaining({ seasonName: "Summer", ...clash }),
+          expect.objectContaining({ seasonName: "Winter", ...clash }),
+        ],
+      },
+    });
+    expect(await seasonNames(v)).toEqual(["Winter"]);
+
+    const fits = await fixture([range("09:00", "17:00")]);
+    await waiting(fits);
+    await expect(addSeason(fits)).resolves.toHaveLength(2);
+    expect(await seasonNames(fits)).toEqual(["Summer", "Winter"]);
+  });
+  it("answers a season save whose last orders clash only under the waiting start as a waiting-change conflict", async () => {
+    const v = await fixture([], { offset: 30 });
+    await withTransaction(suite.db, async (tx) => {
+      await seasonDay(tx, { ...v, weekday: 5, ranges: [range("01:00", "03:00")] });
+      await seasonDay(tx, { ...v, weekday: 6, ranges: [range("03:00", "04:00")] });
+    });
+    await waiting(v);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        saveSeasons(
+          tx,
+          v.cfg,
+          {
+            save: [{ id: v.seasonId, name: "Winter", startsOn: "01-01", colour: "blue" }],
+            delete: [],
+          },
+          at,
+          1,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "hours.clock_change_conflict", params: offsetClash });
+    expect(
+      await withTransaction(suite.db, async (tx) => (await readSeasons(tx, v.cfg))[0]!.startsOn),
+    ).toBe("12-01");
   });
 });
 

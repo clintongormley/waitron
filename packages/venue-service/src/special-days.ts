@@ -2,7 +2,10 @@ import { and, asc, eq, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm"
 import { floorZones, newId, type Transaction } from "@waitron/db";
 import { readLocationClock, type LocationPlace } from "@waitron/reporting";
 import { AppError, isUuid, type BusinessDayClock, type ErrorParams } from "@waitron/shared";
-import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
+import {
+  assertBusinessDayScheduleWrite,
+  assertWaitingChangeFits,
+} from "./business-day-schedule.js";
 import type { PaintRange, ZonePaint } from "./day-paint.js";
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { isLocalDate } from "./hours-rules.js";
@@ -23,7 +26,7 @@ import { departments, zoneServicePolicies } from "./schema/service.js";
 import { readHolidayDates } from "./holidays.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
 import { joinTouching, type ServingRead } from "./season-weeks.js";
-import { scheduleCutovers } from "./service-day-context.js";
+import { scheduleCutovers, settledClock } from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
 import "./errors.js";
 
@@ -886,7 +889,7 @@ async function requireSpecialDay(tx: Transaction, cfg: VenueScope, id: string) {
 async function checkScheduleAfterWrite(
   tx: Transaction,
   cfg: VenueScope,
-  clock?: BusinessDayClock,
+  clock: BusinessDayClock,
 ): Promise<void> {
   const clash = await scheduleEndOffsetClash(tx, cfg, clock);
   if (clash !== null)
@@ -1044,7 +1047,8 @@ export async function saveSpecialDay(
   await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
   const stored = id === null ? null : await readSpecialDay(tx, cfg, id);
   const clock = await readLocationClock(tx, cfg.locationId);
-  const parsed = parseInput(input, clock);
+  const settled = settledClock(clock, at);
+  const parsed = parseInput(input, settled);
   const zoneDepartments = await assertPaintOwners(
     tx,
     cfg,
@@ -1187,8 +1191,9 @@ export async function saveSpecialDay(
       })),
     );
   }
-  await checkScheduleAfterWrite(tx, cfg, clock);
+  await checkScheduleAfterWrite(tx, cfg, settled);
   await afterWrite?.({ clock, departmentOf: zoneDepartments });
+  await assertWaitingChangeFits(tx, cfg, at, clock);
   return readSpecialDay(tx, cfg, specialDayId);
 }
 
@@ -1203,5 +1208,7 @@ export async function deleteSpecialDay(
   await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
   await requireSpecialDay(tx, cfg, id);
   await tx.delete(specialDays).where(eq(specialDays.id, id));
-  await checkScheduleAfterWrite(tx, cfg);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  await checkScheduleAfterWrite(tx, cfg, settledClock(clock, at));
+  await assertWaitingChangeFits(tx, cfg, at, clock);
 }
