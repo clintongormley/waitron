@@ -1070,9 +1070,12 @@ help about anything you want very quickly."
 - **Open points for the plan:** where the help texts live and how they are translated (EN/ES, like
   the screens' strings); how a screen declares which of its parts have help, so a shared `wt-*`
   primitive can carry it rather than every screen drawing its own marker; whether the mode stays on across pages and sessions; keyboard and screen-reader use.
-- **Documentation does not exist yet.** The repository has developer docs only (`docs/developers/`);
-  there is no user documentation for a "?" to link to. Writing it, and deciding where it is
-  published, is part of this work or its own entry.
+- **Documentation.** Three user guides exist (`docs/products.md`, `docs/modifiers.md`,
+  `docs/content-and-images.md`, English only); nothing in the apps links to them and the box does
+  not serve them. The design (below) proposes serving them from the box in English and Spanish.
+- **Design (2026-10-18):** [2026-10-18-a582-help-mode-design.md](../superpowers/specs/2026-10-18-a582-help-mode-design.md),
+  pictures in [mockups/a582-help-mode/](mockups/a582-help-mode/). It settles the open points above
+  as recommendations and waits for the owner's answer to its one question (§9).
 - **Relation to A237.** The standing rule (owner 2026-10-03) makes a short explanation the field's
   hint, never a "?" button. Help mode fits beside it: hints stay where they are, and help mode is the
   place for the longer explanation. A237's remaining "?" buttons may move into help mode instead of

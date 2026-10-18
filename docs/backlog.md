@@ -3640,7 +3640,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   outside the repository (lane C, `a585-1-shots/11a-…`, `11b-…`, `11c-…`).
 
 - **A582. Help mode: a "?" in the top bar marks everything that has help (owner 2026-10-13)** —
-  OPEN, not started. On the dashboard and on every device — tills, handhelds, and probably the
+  DESIGNED 2026-10-18, waiting for the owner's answer to one question
+  ([design](superpowers/specs/2026-10-18-a582-help-mode-design.md), pictures in
+  [mockups/a582-help-mode/](backlog/mockups/a582-help-mode/)); not built. On the dashboard and on every device — tills, handhelds, and probably the
   kitchen screens and monitors — a circled "?" in the top bar switches help mode on and off; while
   on, a small circled "?" appears beside each thing on the page that has help, and clicking one shows
   the help or opens its page in the documentation. Nothing changes on the page while it is off.
