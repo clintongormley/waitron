@@ -213,7 +213,13 @@ import { mountSetup } from "./setup-api.js";
 import { readSetupOpeningHours } from "./setup-opening-hours.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { seedInstalledDemo } from "./demo-seed.js";
-import { fiscalDrainEnabled, runFiscalDrain } from "./onboarding-policy.js";
+import {
+  certificateDutiesEnabled,
+  fiscalDrainEnabled,
+  runFiscalDrain,
+} from "./onboarding-policy.js";
+import { runCertificateReminderLoop } from "./certificate-reminder-worker.js";
+import { createCertificateReminderSender } from "./certificate-reminder-email.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
 import { releaseStalePaymentAttempts } from "./till-sale.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
@@ -1656,6 +1662,32 @@ async function bootServer(
       await attendanceEmailLoop;
     });
   }
+  let certificateReminderController: AbortController | undefined;
+  let certificateReminderLoop: Promise<void> | undefined;
+  if (certificateDutiesEnabled(enabledFiscal, config)) {
+    const reminderController = new AbortController();
+    certificateReminderController = reminderController;
+    const reminderLoop = runCertificateReminderLoop({
+      db,
+      seat: enabledFiscal.certificate,
+      nodeId: till.nodeId,
+      locationId: till.locationId,
+      venueLanguage: venueLocale === "es-ES" ? "es" : "en",
+      now,
+      isPrimary: () => holders.singletonRole.current === "primary",
+      signal: reminderController.signal,
+      resolveDelivery: () =>
+        resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true),
+      send: createCertificateReminderSender(),
+      onError: (error) =>
+        log("error", "fiscal.certificate_reminder_failed", { errorCode: codeOf(error) }),
+    });
+    certificateReminderLoop = reminderLoop;
+    undoOnFailure.push(async () => {
+      reminderController.abort();
+      await reminderLoop;
+    });
+  }
   // The operational surface (print agents, devices, pairing, card readers) is not mounted on a
   // read-only node at all, so even its safe-verb reads are absent, not merely its writes refused.
   // Un-mounting at boot rather than gating per request is deliberate; see read-only-gate.ts's header.
@@ -2039,7 +2071,7 @@ async function bootServer(
       cache: batteryCache,
     }),
   ];
-  if (enabledFiscal.certificate !== undefined && fiscalDrainEnabled(config)) {
+  if (certificateDutiesEnabled(enabledFiscal, config)) {
     serverAlertSources.push(
       certificateAlertSource(enabledFiscal.certificate, {
         nodeId: till.nodeId,
@@ -2569,12 +2601,14 @@ async function bootServer(
         cloudController.abort();
         invoiceEmailController.abort();
         attendanceController.abort();
+        certificateReminderController?.abort();
         tenderRefundController.abort();
         await closeAll([
           () => pendingCardLoop,
           () => tenderRefundLoop,
           () => attendanceLoop,
           () => attendanceEmailLoop,
+          () => certificateReminderLoop,
           () => invoiceEmailLoop,
           () => cloudWorker,
           () => cloudSnapshots,

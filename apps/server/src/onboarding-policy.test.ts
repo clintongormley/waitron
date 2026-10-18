@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { fiscalDrainEnabled, runFiscalDrain } from "./onboarding-policy.js";
+import type { FiscalCertificateSeat } from "@waitron/fiscal";
+import {
+  certificateDutiesEnabled,
+  fiscalDrainEnabled,
+  runFiscalDrain,
+} from "./onboarding-policy.js";
 
 describe("fiscalDrainEnabled", () => {
   it.each(["demo", "prepare"] as const)(
@@ -85,5 +90,31 @@ describe("fiscalDrainEnabled", () => {
       ),
     ).resolves.toBe(expected);
     expect(drain).toHaveBeenCalledWith(now);
+  });
+});
+
+describe("certificateDutiesEnabled", () => {
+  const seat = {} as FiscalCertificateSeat;
+  const filing = {
+    environment: "preproduction" as const,
+    onboardingIntent: undefined,
+    fiscalTestSubmissions: true,
+  };
+
+  it("is off when the fiscal module has no certificate seat, even where records are filed", () => {
+    expect(certificateDutiesEnabled({}, filing)).toBe(false);
+  });
+
+  it("is off when the seat exists but records are not filed", () => {
+    expect(
+      certificateDutiesEnabled({ certificate: seat }, { ...filing, fiscalTestSubmissions: false }),
+    ).toBe(false);
+    expect(
+      certificateDutiesEnabled({ certificate: seat }, { ...filing, onboardingIntent: "demo" }),
+    ).toBe(false);
+  });
+
+  it("is on when the seat exists and records are filed", () => {
+    expect(certificateDutiesEnabled({ certificate: seat }, filing)).toBe(true);
   });
 });

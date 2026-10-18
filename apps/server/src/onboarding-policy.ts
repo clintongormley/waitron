@@ -1,4 +1,4 @@
-import { emptyDrainResult, type DrainResult } from "@waitron/fiscal";
+import { emptyDrainResult, type DrainResult, type FiscalCertificateSeat } from "@waitron/fiscal";
 import type { DeploymentEnvironment } from "./config.js";
 import type { OnboardingIntent } from "./trading-config.js";
 
@@ -13,6 +13,16 @@ export function fiscalDrainEnabled(policy: FiscalDrainPolicy): boolean {
   if (policy.onboardingIntent === "demo" || policy.onboardingIntent === "prepare") return false;
   if (policy.environment === "production") return true;
   return policy.fiscalTestSubmissions;
+}
+
+/** The certificate's expiry alert and emails run only where its records are filed. */
+export function certificateDutiesEnabled<
+  F extends { readonly certificate?: FiscalCertificateSeat },
+>(
+  fiscal: F,
+  policy: FiscalDrainPolicy,
+): fiscal is F & { readonly certificate: FiscalCertificateSeat } {
+  return fiscal.certificate !== undefined && fiscalDrainEnabled(policy);
 }
 
 /** Apply the submission policy before the regime can construct a client or contact its endpoint. */
