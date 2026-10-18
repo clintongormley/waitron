@@ -213,6 +213,21 @@ describe("till-floor-screen on the new map", () => {
     expect(el.shadowRoot!.querySelector("[data-table=t4]")).not.toBeNull();
   });
 
+  it("names a forgotten unplaced table's marker Forgotten in the tray", async () => {
+    const el = await mount({
+      tables: [
+        planned("t1"),
+        planned("t4", { ...seated, timingBand: "forgotten", today: today({ placement: null }) }),
+      ],
+    });
+    const token = el.shadowRoot!.querySelector<HTMLElement>("[data-tray-table=t4] wt-table-token")!;
+    await (token as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    const marker = token.shadowRoot!.querySelector("[data-forgotten]")!;
+    expect(marker.getAttribute("role")).toBe("img");
+    expect(marker.getAttribute("aria-label")).toBe("Forgotten");
+    expect(marker.hasAttribute("aria-hidden")).toBe(false);
+  });
+
   it("keeps a held taken-off table reachable under the map and in the list", async () => {
     const el = await mount({
       tables: [planned("t1"), planned("t5", { ...seated, today: today({ takenOff: true }) })],

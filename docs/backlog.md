@@ -2477,12 +2477,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (`packages/ui/src/components/wt-floor-map.ts`) divides by the view's scale; `git blame` puts that
   code before A766. A766 guarded only a drag's move at scale 0.
 
-- **A839. A forgotten table in the floor's tray of unplaced tables is not spoken as forgotten
-  (owner, 2026-10-17).** The tray draws `wt-table-token` without a `forgotten` label (`#trayItem`,
-  `apps/till/src/screens/till-floor-screen.ts`), so the token's forgotten marker is
-  `aria-hidden`. Pass it the floor's "Forgotten" wording. Done when a test finds the marker of a
-  forgotten unplaced table named "Forgotten".
-
 - **A561. A 2 × 2 table's name is cut short on the till map (2026-10-13).** It shows "Cou…".
   [Detail](backlog/till.md#a561-a-2--2-tables-name-is-cut-short-on-the-till-map)
 
