@@ -2227,11 +2227,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Fresh split lines have a header that folds the original family back only while its contents,
   prices and group still match. Folding clears a partial selection; a fully selected family stays
   selected. Recalled source identities remain separate. After a station check, New order retains
-  the station warning beside its unsent dish. You can choose an offered station or
-  remove that dish there. A saved revision now starts a station check after 400 ms on both till
+  the station warning and a symbol beside its unsent dish. You open the dish's ⓘ window to
+  choose an offered station or remove it. A saved revision now starts a station check after 400 ms on both till
   and handheld layouts, before you press Send. A new edit, bill, editor version or API invalidates
-  the old answer; an unanswered check retains the last warning. Moving these details into the
-  line window remains open. On the feature branch, Send all now sends the saved arrangement
+  the old answer; an unanswered check retains the last warning. On the feature branch, the unsent
+  line window now holds the station and Keep/Remove choices alongside the existing modifier and
+  note editor. Course changes wait for Save; Close preserves the old course. Recalled dishes keep
+  their recorded prices and retired answers. The warning controls reject stale clicks during a
+  command or after leaving the bill. On the feature branch, Send all now sends the saved arrangement
   directly, and Fire sends only ticked eligible dishes. Known unsellable or unrouted dishes stay
   in New order. A refused send refreshes station warnings without opening a preview or sending
   again. Recalled dishes use their saved source references, including when their old offer is

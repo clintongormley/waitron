@@ -172,9 +172,15 @@ function storeWith(modifiers: LiveModifier[], wire = source()): WorkingOrderStor
   return store;
 }
 
-async function openPicker(store: WorkingOrderStore) {
-  const { el } = await mountWidget<TillBasket>("till-basket", { store });
-  const edit = el.shadowRoot!.querySelector<HTMLElement>(".edit-modifiers");
+async function openPicker(store: WorkingOrderStore, lineDetails = false) {
+  const { el } = await mountWidget<TillBasket>("till-basket", {
+    store,
+    lineDetails,
+    courses: [{ id: "mains", name: "Mains", displayOrder: 1, heldUntilFired: true }],
+  });
+  const edit = el.shadowRoot!.querySelector<HTMLElement>(
+    lineDetails ? "[data-line-detail]" : ".edit-modifiers",
+  );
   expect(edit).not.toBeNull();
   await userEvent.click(edit!);
   await el.updateComplete;
@@ -577,4 +583,36 @@ describe("recalled source modifier editor", () => {
       }
     },
   );
+});
+
+it("the recalled line window changes note and course without replacing its recorded money or retired answers", async () => {
+  const wire = source();
+  wire.note = "Old note";
+  wire.source.line.note = "Old note";
+  const store = storeWith([], wire);
+  const original = store.lines[0]!;
+  const { el, picker } = await openPicker(store, true);
+  expect(picker.shadowRoot!.querySelector("wt-textarea")!.value).toBe("Old note");
+  picker
+    .shadowRoot!.querySelector("wt-textarea")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "No salt" } }));
+  picker
+    .shadowRoot!.querySelector('[name="course"]')!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "mains" } }));
+  await picker.updateComplete;
+  await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+  await el.updateComplete;
+  expect(store.lines[0]).toBe(original);
+  expect(toDraftLineInput(original)).toMatchObject({
+    sourceLineId: "sent-burger",
+    quantity: "2",
+    note: "No salt",
+    courseId: "mains",
+  });
+  expect(toDraftLineInput(original)).not.toHaveProperty("options");
+  expect(toDraftLineInput(original)).not.toHaveProperty("extras");
+  expect(store.total).toBe("17.25");
+  expect(original.product.unitPrice).toBe("7.50");
+  expect(original.source!.extras[0]!.unitPriceGross).toBe("0.75");
+  expect(original.source!.line.optionSnapshots![0]!.labelName).toEqual({ en: "Rare" });
 });

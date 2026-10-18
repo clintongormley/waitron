@@ -2,7 +2,13 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { Station, TabLine } from "../api/client.js";
-import { beer, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  mount,
+  openDraftLine,
+  resized,
+  store,
+} from "./till-table-order-screen.test-helpers.js";
 import { current, row } from "./till-table-order-screen.current-orders.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
@@ -37,6 +43,7 @@ async function draft(stations: Station[], makeAt?: string) {
     { product: beer, quantity: "1", ...(makeAt === undefined ? {} : { makeAt }) },
   ]);
   await el.updateComplete;
+  if (stations.length > 1) await openDraftLine(el, 0);
   return el;
 }
 

@@ -17,7 +17,7 @@ import {
   mountWidget,
   servedMenus,
 } from "../widgets/test-helpers.js";
-import { resized } from "./till-table-order-screen.test-helpers.js";
+import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.js";
 import {
   TillTableOrderScreen,
   type AdjustDetail,
@@ -190,10 +190,26 @@ async function openReview(el: TillTableOrderScreen): Promise<void> {
   await el.updateComplete;
 }
 
+async function saveDraftLine(el: TillTableOrderScreen): Promise<void> {
+  for (const basket of el.shadowRoot!.querySelectorAll("till-basket")) {
+    await basket.updateComplete;
+    const form = basket.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker");
+    if (form === null) continue;
+    const save = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".confirm")!;
+    await save.updateComplete;
+    await userEvent.click(
+      save.disabled ? form.shadowRoot!.querySelector<HTMLElement>(".cancel")! : save,
+    );
+    await basket.updateComplete;
+  }
+  await el.updateComplete;
+}
+
 async function submitDraft(
   el: TillTableOrderScreen,
   kind: string,
 ): Promise<CustomEvent | undefined> {
+  await saveDraftLine(el);
   if (kind === "fire-all") {
     for (const row of el.shadowRoot!.querySelectorAll<HTMLElement>(
       '[data-draft-select][aria-pressed="false"]',
@@ -610,10 +626,15 @@ describe("till-table-order-screen", () => {
     );
   });
 
+  async function coursePicker(el: TillTableOrderScreen, index: number): Promise<WtCombobox | null> {
+    const form = await openDraftLine(el, index);
+    return form.shadowRoot!.querySelector<WtCombobox>('[name="course"]');
+  }
   async function ringAndPickers(el: TillTableOrderScreen): Promise<WtCombobox[]> {
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
-    return [...el.shadowRoot!.querySelectorAll<WtCombobox>("[data-round-course]")];
+    const picker = await coursePicker(el, 0);
+    return picker === null ? [] : [picker];
   }
 
   it.each([[courses], [[]]])(
@@ -628,7 +649,7 @@ describe("till-table-order-screen", () => {
       const draftStore = new WorkingOrderStore();
       draftStore.loadFrom("draft", [{ product: cafe, quantity: "1", courseId: course.id, course }]);
       const { el } = await mount({ courses: activeCourses, draftStore });
-      const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-round-course="0"]')!;
+      const picker = (await coursePicker(el, 0))!;
       await picker.updateComplete;
       expect(
         el
@@ -678,14 +699,14 @@ describe("till-table-order-screen", () => {
     expect(optionValues).toEqual(["", "entrantes", "postres"]);
   });
 
-  it("picks a draft line's course from a compact shared dropdown, named for the line", async () => {
+  it("picks a draft line's course from the line window, named for the line", async () => {
     const { el } = await mount({ courses });
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
-    const picker = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-round-course="0"]');
+    const picker = await coursePicker(el, 0);
     expect(picker).not.toBeNull();
     expect(picker!.name).toBe("course");
-    expect(picker!.hideLabel).toBe(true);
+    expect(picker!.hideLabel).toBe(false);
     expect(picker!.label).toBe(`${t("table.course_label")} · Café`);
     expect(picker!.getAttribute("search")).toBe("auto");
     expect(picker!.searchPlaceholder).toBe(t("form.combobox_search"));
@@ -714,18 +735,19 @@ describe("till-table-order-screen", () => {
       host.style.setProperty("--wt-tap-min", "60px");
       grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
       await el.updateComplete;
-      const picker = el.shadowRoot!.querySelector<WtCombobox>(
-        'wt-combobox[data-round-course="0"]',
-      )!;
+      const picker = (await coursePicker(el, 0))!;
       await picker.updateComplete;
       const box = picker.shadowRoot!.querySelector<HTMLElement>("[part=field]")!;
       expect(box.getBoundingClientRect().height).toBeGreaterThanOrEqual(60);
+      expect(
+        picker.shadowRoot!.querySelector("button")!.getBoundingClientRect().height,
+      ).toBeGreaterThanOrEqual(60);
     } finally {
       await page.viewport(414, 896);
     }
   });
 
-  it("keeps a draft line's course box within its line when the chosen course has a long name", async () => {
+  it("keeps a draft line's course box within its line window when the chosen course has a long name", async () => {
     await page.viewport(1024, 768);
     try {
       const long = {
@@ -738,22 +760,17 @@ describe("till-table-order-screen", () => {
       await resized(el);
       grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
       await el.updateComplete;
-      await chooseOption(
-        el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-round-course="0"]')!,
-        "long",
-      );
+      const picker = (await coursePicker(el, 0))!;
+      await chooseOption(picker, "long");
       await el.updateComplete;
-      const picker = el.shadowRoot!.querySelector<WtCombobox>(
-        'wt-combobox[data-round-course="0"]',
-      )!;
       await picker.updateComplete;
       expect(picker.value).toBe("long");
       const box = picker
         .shadowRoot!.querySelector<HTMLElement>("[part=field]")!
         .getBoundingClientRect();
-      const line = picker
-        .closest(".draft-line-tools")!
-        .assignedSlot!.closest(".line-after")!
+      const line = (picker.getRootNode() as ShadowRoot)
+        .querySelector("wt-modal")!
+        .shadowRoot!.querySelector("dialog")!
         .getBoundingClientRect();
       expect(box.left).toBeGreaterThanOrEqual(line.left - 0.5);
       expect(box.right).toBeLessThanOrEqual(line.right + 0.5);
@@ -764,8 +781,8 @@ describe("till-table-order-screen", () => {
 
   it("hides the course picker when the venue has no courses to pick", async () => {
     const { el } = await mount({ courses: [] });
-    await ringAndPickers(el);
-    expect(el.shadowRoot!.querySelector("[data-round-course]")).toBeNull();
+    const pickers = await ringAndPickers(el);
+    expect(pickers).toEqual([]);
   });
 
   it("OMITS courseId for an unoverridden line (the server applies the product default)", async () => {
@@ -851,22 +868,15 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
-  it("forwards a per-line note set through the round basket's Note affordance on submission (parity)", async () => {
+  it("forwards a per-line note saved in the line window on submission (parity)", async () => {
     const { el } = await mount();
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
 
-    // Open THAT round line's editor via the basket's Note button and type a note.
-    const basket = el.shadowRoot!.querySelector("till-basket")!;
-    await (basket as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-    basket.shadowRoot!.querySelector<HTMLElement>('[data-test="line-note-button-0"]')!.click();
-    await (basket as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-    const note = basket
-      .shadowRoot!.querySelector('[data-test="line-note"]')!
-      .shadowRoot!.querySelector("textarea")!;
-    note.value = "table 4 — no ice";
-    note.dispatchEvent(new Event("input"));
-    await el.updateComplete;
+    const form = await openDraftLine(el, 0);
+    const note = form.shadowRoot!.querySelector('[data-test="line-note"]')!;
+    note.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "table 4 — no ice" } }));
+    await form.updateComplete;
 
     const captured = await submitDraft(el, "fire-all");
     expect(captured!.detail.lines).toEqual([
@@ -943,7 +953,7 @@ describe("till-table-order-screen", () => {
     it("groups a line by the course the waiter picked over its product's", async () => {
       const { el } = await mount({ courses, products: [cafe, pan] });
       await ringTwoCourses(el);
-      const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-round-course="0"]')!;
+      const picker = (await coursePicker(el, 0))!;
       await chooseOption(picker, "entrantes");
       await el.updateComplete;
       const sent = await submitDraft(el, "send-all");
@@ -1022,9 +1032,9 @@ describe("till-table-order-screen", () => {
     it("moves a line to the section of the course the waiter picks", async () => {
       const { el } = await mount({ courses: serviceCourses, products: menu });
       await ring(el, [steak, "1"], [beer, "1"]);
-      const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-round-course="0"]')!;
+      const picker = (await coursePicker(el, 0))!;
       await chooseOption(picker, "drinks");
-      await el.updateComplete;
+      await saveDraftLine(el);
       expect(sectionNames(el)).toEqual([{ heading: null, lines: ["Beer ×1", "Steak ×1"] }]);
     });
 

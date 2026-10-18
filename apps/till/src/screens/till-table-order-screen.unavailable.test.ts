@@ -3,7 +3,15 @@ import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { OrderLine } from "../state/working-order.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
-import { beer, flan, mount, resized, rows, store } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  flan,
+  mount,
+  openDraftLine,
+  resized,
+  rows,
+  store,
+} from "./till-table-order-screen.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -30,6 +38,10 @@ async function holding(lines: OrderLine[], over: Partial<TillTableOrderScreen> =
   await resized(mounted.el);
   store(mounted.el).loadFrom(store(mounted.el).id, lines);
   await settled(mounted.el);
+  submissions.set(mounted.el, []);
+  mounted.el.addEventListener("submit-draft", (event) =>
+    submissions.get(mounted.el)!.push((event as CustomEvent<SubmitDraftDetail>).detail),
+  );
   return mounted;
 }
 
@@ -55,27 +67,19 @@ const removeButton = (el: TillTableOrderScreen, index: number) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-flag-remove="${index}"]`);
 const keepButton = (el: TillTableOrderScreen, index: number) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-flag-keep="${index}"]`);
-const previewDialog = (el: TillTableOrderScreen) =>
-  el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")!;
-const previewText = (el: TillTableOrderScreen) =>
-  previewDialog(el).querySelector("[data-preview-body]")!.textContent!.replace(/\s+/g, " ").trim();
-
+const submissions = new WeakMap<TillTableOrderScreen, SubmitDraftDetail[]>();
+const rowWarningText = (el: TillTableOrderScreen) => rowTexts(el).join(" ");
 async function press(el: TillTableOrderScreen, action: string): Promise<void> {
-  el.shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${action}"]`)!.click();
+  if (action === "fire-all") {
+    for (const button of el.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]"))
+      button.click();
+  }
+  const next = action === "fire-all" || action === "send-selected" ? "fire-selected" : action;
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-draft-action="${next}"]`)!.click();
   await settled(el);
 }
-
-/** Confirms the open preview and answers with what it sent. */
 async function confirmed(el: TillTableOrderScreen): Promise<SubmitDraftDetail> {
-  let detail: SubmitDraftDetail | undefined;
-  el.addEventListener(
-    "submit-draft",
-    (event) => (detail = (event as CustomEvent<SubmitDraftDetail>).detail),
-    { once: true },
-  );
-  el.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
-  await settled(el);
-  return detail!;
+  return submissions.get(el)!.at(-1)!;
 }
 
 describe("till-table-order-screen: a draft line that cannot be sold now", () => {
@@ -85,6 +89,7 @@ describe("till-table-order-screen: a draft line that cannot be sold now", () => 
       { product: flan, quantity: "1" },
     ]);
 
+    await openDraftLine(el, 0);
     expect(rowTexts(el)).toEqual([`Beer ×2 | ${t("basket.blocked.server")}`, "Flan ×1"]);
     expect(removeButton(el, 0)!.textContent!.trim()).toBe(t("action.remove"));
     expect(removeButton(el, 0)!.getAttribute("aria-label")).toBe(`${t("action.remove")} · Beer`);
@@ -99,6 +104,7 @@ describe("till-table-order-screen: a draft line that cannot be sold now", () => 
       { product: flan, quantity: "1", blocked: "unavailable" },
     ]);
 
+    await openDraftLine(el, 1);
     expect(rowTexts(el)).toEqual(["Beer ×1", `Flan ×1 | ${t("basket.blocked.unavailable")}`]);
     expect(removeButton(el, 1)).not.toBeNull();
     expect(keepButton(el, 1)).not.toBeNull();
@@ -106,6 +112,7 @@ describe("till-table-order-screen: a draft line that cannot be sold now", () => 
 
   it("gives Remove and Keep a tap target of 44 px each way", async () => {
     const { el } = await holding([{ product: beer, quantity: "1", unavailableOnServer: true }]);
+    await openDraftLine(el, 0);
     for (const button of [removeButton(el, 0)!, keepButton(el, 0)!]) {
       const box = button.getBoundingClientRect();
       expect(box.width).toBeGreaterThanOrEqual(44);
@@ -119,6 +126,7 @@ describe("till-table-order-screen: a draft line that cannot be sold now", () => 
       { product: flan, quantity: "1", blocked: "unavailable" },
     ]);
 
+    await openDraftLine(el, 1);
     removeButton(el, 1)!.click();
     await settled(el);
 
@@ -130,6 +138,7 @@ describe("till-table-order-screen: a draft line that cannot be sold now", () => 
   it("keeps the line in the draft, still flagged, on Keep, and says it stays", async () => {
     const { el } = await holding([{ product: beer, quantity: "1", unavailableOnServer: true }]);
 
+    await openDraftLine(el, 0);
     keepButton(el, 0)!.click();
     await settled(el);
 
@@ -140,13 +149,12 @@ describe("till-table-order-screen: a draft line that cannot be sold now", () => 
     expect(el.shadowRoot!.querySelector("[data-flag-kept]")!.textContent!.trim()).toBe(
       t("table.flag_kept"),
     );
-    expect(el.shadowRoot!.activeElement).toBe(
-      el.shadowRoot!.querySelector('[data-draft-select="0"]'),
-    );
+    expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("[data-flag-kept]"));
   });
 
   it("keeps Remove and Keep off while a send is out", async () => {
     const { el } = await holding([{ product: beer, quantity: "1", unavailableOnServer: true }]);
+    await openDraftLine(el, 0);
     const off = () =>
       [removeButton(el, 0)!, keepButton(el, 0)!].map(
         (button) => (button as HTMLElement & { disabled: boolean }).disabled,
@@ -192,7 +200,7 @@ describe("till-table-order-screen: a draft line that cannot be sold now", () => 
 });
 
 describe("till-table-order-screen: sending a draft with a flagged line", () => {
-  it("leaves the flagged line out of Send all, and its preview names it before anything is sent", async () => {
+  it("leaves the flagged line out of direct Send all, retaining its named row warning", async () => {
     const { el } = await holding([
       { product: beer, quantity: "2", unavailableOnServer: true },
       { product: flan, quantity: "1" },
@@ -200,8 +208,11 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
 
     await press(el, "send-all");
 
-    expect(previewDialog(el).open).toBe(true);
-    expect(previewText(el)).toContain(t("table.left_out_one").replace("{names}", "Beer ×2"));
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>("[data-draft-preview]")!
+        .open,
+    ).toBe(false);
+    expect(rowWarningText(el)).toContain(`Beer ×2 | ${t("basket.blocked.server")}`);
     const sent = await confirmed(el);
     expect(sent.sent.map((line) => line.product.name)).toEqual(["Flan"]);
     expect(sent.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
@@ -215,7 +226,7 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
 
     await press(el, "fire-all");
 
-    expect(previewText(el)).toContain(t("table.left_out_one").replace("{names}", "Flan ×1"));
+    expect(rowWarningText(el)).toContain(`Flan ×1 | ${t("basket.blocked.unavailable")}`);
     expect((await confirmed(el)).sent.map((line) => line.product.name)).toEqual(["Beer"]);
   });
 
@@ -230,11 +241,11 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
 
     await press(el, "send-selected");
 
-    expect(previewText(el)).toContain(t("table.left_out_one").replace("{names}", "Beer ×1"));
+    expect(rowWarningText(el)).toContain(`Beer ×1 | ${t("basket.blocked.server")}`);
     expect((await confirmed(el)).sent.map((line) => line.product.name)).toEqual(["Flan"]);
   });
 
-  it("keeps each named line's name and count together, so a narrow screen never breaks between them", async () => {
+  it("keeps the excluded dish's name, count and warning in its own row", async () => {
     const { el } = await holding([
       { product: beer, quantity: "2", unavailableOnServer: true },
       { product: flan, quantity: "1" },
@@ -242,12 +253,13 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
 
     await press(el, "send-all");
 
-    expect(el.shadowRoot!.querySelector("[data-preview-left-out]")!.textContent).toContain(
-      "Beer\u00a0×2",
-    );
+    expect(
+      el.shadowRoot!.querySelector('[data-draft-select="0"] .draft-line-name')!.textContent,
+    ).toContain("Beer ×2");
+    expect(el.shadowRoot!.querySelector("[data-flag-warning]")).not.toBeNull();
   });
 
-  it("names how many, and not which, when more than three are left out", async () => {
+  it("retains each warning rather than hiding four excluded dishes behind a summary", async () => {
     const { el } = await holding([
       ...["1", "2", "3", "4"].map((quantity) => ({
         product: beer,
@@ -260,8 +272,8 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
 
     await press(el, "fire-all");
 
-    expect(previewText(el)).toContain(t("table.left_out_unnamed").replace("{n}", "4"));
-    expect(previewText(el)).not.toContain("Beer");
+    expect(el.shadowRoot!.querySelectorAll("[data-flag-warning]")).toHaveLength(4);
+    expect((await confirmed(el)).sent.map((line) => line.product.name)).toEqual(["Flan"]);
   });
 
   it("sends nothing when every line is flagged, and says why, with no Confirm", async () => {
@@ -272,10 +284,16 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
 
     await press(el, "send-all");
 
-    expect(previewText(el)).toBe(
-      `${t("table.nothing_sent")} ${t("table.left_out").replace("{n}", "2").replace("{names}", "Beer ×1, Flan ×1")}`,
-    );
-    expect(el.shadowRoot!.querySelector("[data-draft-confirm]")).toBeNull();
+    expect(rowTexts(el)).toEqual([
+      `Beer ×1 | ${t("basket.blocked.server")}`,
+      `Flan ×1 | ${t("basket.blocked.unavailable")}`,
+    ]);
+    expect(submissions.get(el)).toEqual([]);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        '[data-draft-action="send-all"]',
+      )!.disabled,
+    ).toBe(true);
   });
 });
 

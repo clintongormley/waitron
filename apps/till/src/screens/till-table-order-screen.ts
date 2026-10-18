@@ -1058,19 +1058,16 @@ export class TillTableOrderScreen extends LitElement {
       }
       .draft-line-tools {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: flex-end;
+        flex-direction: column;
+        align-items: stretch;
         gap: var(--wt-space-2);
         padding-bottom: var(--wt-space-2);
         min-width: 0;
         max-width: 100%;
       }
 
-      /* Cut to the line, so a long chosen course ends in the dropdown's own ellipsis. */
-      .draft-line-tools > wt-combobox {
-        min-width: 0;
-        max-width: 100%;
+      [data-flag-warning] {
+        color: var(--wt-color-warning);
       }
 
       .flag-choice {
@@ -2314,9 +2311,6 @@ export class TillTableOrderScreen extends LitElement {
     return line.courseId ?? line.product.courseId ?? "";
   }
 
-  /** The empty row's meaning is the CALLER's: "use the product default" for a draft line (never sent
-   * as a course), "no course" for a tab line (the explicit `null`). A dropdown shows no row's text for
-   * the empty value, so that row's text is also the placeholder. */
   #coursePicker(
     attrs: { lineCourse?: number; roundCourse?: number },
     lineName: string,
@@ -2349,15 +2343,6 @@ export class TillTableOrderScreen extends LitElement {
     ></wt-combobox>`;
   }
 
-  /** The course goes on the line, so the draft saves it. */
-  #pickCourse(store: WorkingOrderStore, line: OrderLine, courseId: string): void {
-    store.setLineCourse(
-      store.lines.indexOf(line),
-      courseId === "" ? undefined : courseId,
-      this.courses.find((course) => course.id === courseId),
-    );
-  }
-
   #makeAtPicker(
     store: WorkingOrderStore,
     line: OrderLine,
@@ -2378,12 +2363,13 @@ export class TillTableOrderScreen extends LitElement {
       data-make-at=${index}
       name="make-at"
       label=${`${t("move_station.make_at")} · ${name}`}
-      hide-label
+      ?disabled=${!this.#canEditDraftLine(store, line)}
       search="never"
       .options=${options}
       .value=${this.stations.some((station) => station.id === line.makeAt) ? line.makeAt! : rules}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
+        if (!this.#canEditDraftLine(store, line)) return;
         store.setLineMakeAt(
           store.lines.indexOf(line),
           event.detail.value === rules ? undefined : event.detail.value,
@@ -3430,6 +3416,9 @@ export class TillTableOrderScreen extends LitElement {
                   }
                   <till-basket
                     .hideKitchenNote=${true}
+                    .lineDetails=${true}
+                    .courses=${this.courses}
+                    .orderInFlight=${this.groupCommandBusy}
                     stacked
                     .store=${store}
                     .lineIndexes=${section.indexes}
@@ -3444,7 +3433,6 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  /** A draft line's slotted controls in its basket row. */
   #draftLine(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
     const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
@@ -3456,21 +3444,9 @@ export class TillTableOrderScreen extends LitElement {
     const isFlagged = flagged(line);
     if (!isFlagged) this.#kept.delete(line);
     const tools = [
-      ...(this.courses.length === 0 &&
-      (line.course === undefined || line.course.id !== line.courseId)
-        ? []
-        : [
-            this.#coursePicker(
-              { roundCourse: index },
-              name,
-              this.#selectedCourseId(line),
-              t("table.course_default"),
-              (courseId) => this.#pickCourse(store, line, courseId),
-              line.course,
-            ),
-          ]),
       ...(this.stations.length > 1 ? [this.#makeAtPicker(store, line, index, name)] : []),
-      ...(isFlagged ? [this.#flagChoice(store, line, index)] : []),
+      ...(isFlagged && line.source === undefined ? [this.#flagChoice(store, line, index)] : []),
+      this.#draftRoutingWarning(store, line, index, true),
     ];
     if (store.editsLocked)
       return html`<span slot=${`lead-${index}`} class="draft-line-name"
@@ -3529,8 +3505,11 @@ export class TillTableOrderScreen extends LitElement {
       ${
         tools.length === 0
           ? nothing
-          : html`<span slot=${`after-${index}`} class="draft-line-tools">${tools}</span>`
+          : html`<div slot=${`detail-${index}`} class="draft-line-tools" data-draft-line-details>
+              ${tools}
+            </div>`
       }
+      ${isFlagged && line.source === undefined ? html`<span slot=${`after-${index}`} data-flag-warning aria-hidden="true">⚠</span>` : nothing}
       ${this.#draftRoutingWarning(store, line, index)}`;
   }
 
@@ -3538,10 +3517,20 @@ export class TillTableOrderScreen extends LitElement {
     store: WorkingOrderStore,
     line: OrderLine,
     index: number,
+    detail = false,
   ): TemplateResult | typeof nothing {
     const routing = this.#routingRows.get(line);
     if (routing === undefined || line.makeAt !== undefined || this.pendingDraft !== null)
       return nothing;
+    if (!detail)
+      return html`<div
+        slot=${`after-${index}`}
+        class="draft-routing-warning"
+        data-draft-routing-warning
+      >
+        <span aria-hidden="true">⚠</span>
+        ${t(routing.row.why === "closed" ? "dead_end.closed" : "dead_end.disabled").replace("{station}", () => routing.row.stationName)}
+      </div>`;
     const current = () =>
       this.isConnected &&
       store === this.#draftStore &&
@@ -3551,11 +3540,7 @@ export class TillTableOrderScreen extends LitElement {
       !store.sending &&
       !this.groupCommandBusy &&
       this.pendingDraft === null;
-    return html`<div
-      slot=${`after-${index}`}
-      class="draft-routing-warning"
-      data-draft-routing-warning
-    >
+    return html`<div class="draft-routing-detail" data-draft-routing-detail>
       <span aria-hidden="true">⚠</span>
       <till-dead-ends-section
         .answer=${{ sends: true, deadEnds: [{ ...routing.row, key: String(index), quantity: line.quantity }], stations: routing.stations }}
@@ -3623,13 +3608,13 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  /** A line that cannot be sold now asks whether it goes or stays; kept, it says it stays. Its
-   * reason shows beside its name, in the basket's words. */
   #flagChoice(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
     if (this.#kept.has(line))
-      return html`<span class="flag-kept" data-flag-kept>${t("table.flag_kept")}</span>`;
+      return html`<span class="flag-kept" data-flag-kept tabindex="-1"
+        >${t("table.flag_kept")}</span
+      >`;
     const name = shownName(line.product);
-    const busy = store.sending || this.takeOverSent !== null;
+    const busy = !this.#canEditDraftLine(store, line);
     return html`<span class="flag-choice" role="group" aria-label=${name}>
       <wt-button
         variant="secondary"
@@ -3652,20 +3637,35 @@ export class TillTableOrderScreen extends LitElement {
     </span>`;
   }
 
+  #canEditDraftLine(store: WorkingOrderStore, line: OrderLine): boolean {
+    return (
+      this.isConnected &&
+      store === this.#draftStore &&
+      store.lines.includes(line) &&
+      !store.sending &&
+      !store.editsLocked &&
+      !this.groupCommandBusy &&
+      this.takeOverSent === null &&
+      this.orderingAllowed
+    );
+  }
+
   /** The line's row goes with it, so focus goes to the order's heading. */
   async #removeFlagged(store: WorkingOrderStore, line: OrderLine): Promise<void> {
+    if (!this.#canEditDraftLine(store, line)) return;
     store.removeLine(store.lines.indexOf(line));
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
   }
 
-  /** The buttons go, so focus goes to the line itself. */
+  /** The replaced choice keeps focus inside the line window. */
   async #keepFlagged(store: WorkingOrderStore, line: OrderLine): Promise<void> {
+    if (!this.#canEditDraftLine(store, line)) return;
     this.#kept.add(line);
     this.requestUpdate();
     await this.updateComplete;
     this.renderRoot
-      .querySelector<HTMLElement>(`[data-draft-select="${store.lines.indexOf(line)}"]`)
+      .querySelector<HTMLElement>(`[slot="detail-${store.lines.indexOf(line)}"] [data-flag-kept]`)
       ?.focus();
   }
 

@@ -1,3 +1,4 @@
+import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
@@ -6567,8 +6568,13 @@ describe("till-app: submitting the draft", () => {
       vi
         .mocked(api.getTablesState)
         .mockResolvedValue([seated({}, { revision: 4, mainBillId: "wo-next" }), mesa7, mesa9]);
-    const courseOf = (order: TillTableOrderScreen, index: number) =>
-      order.shadowRoot!.querySelector<WtCombobox>(`[data-round-course="${index}"]`)!.value;
+    const courseOf = async (order: TillTableOrderScreen, index: number) => {
+      const form = await openDraftLine(order, index);
+      const value = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!.value;
+      form.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+      await order.updateComplete;
+      return value;
+    };
 
     const firedGroup = (id: string, summary: string): OrderGroup => ({
       courseIds: [],
@@ -6598,8 +6604,11 @@ describe("till-app: submitting the draft", () => {
       );
       const order = await openMesa(el);
       await ring(el, order, beer, steak);
-      const steakCourse = order.shadowRoot!.querySelector<WtCombobox>('[data-round-course="1"]')!;
+      const form = await openDraftLine(order, 1);
+      const steakCourse = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!;
       await chooseOption(steakCourse, "desserts");
+      await form.updateComplete;
+      form.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
       await flush(el);
       partyOnNextBill();
 
@@ -6609,7 +6618,7 @@ describe("till-app: submitting the draft", () => {
       const next = tableOrder(el)!;
       expect(next.orderId).toBe("wo-4");
       expect(draftOf(next).lines.map((line) => line.product.id)).toEqual(["steak"]);
-      expect(courseOf(next, 0)).toBe("desserts");
+      expect(await courseOf(next, 0)).toBe("desserts");
       expect(next.shadowRoot!.querySelector('[data-draft-action="send-all"]')).not.toBeNull();
       expect(next.shadowRoot!.querySelector("[data-destination-choice]")).toBeNull();
 

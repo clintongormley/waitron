@@ -5,7 +5,14 @@ import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import type { OrderLine } from "../state/working-order.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { beer, flan, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  flan,
+  mount,
+  openDraftLine,
+  resized,
+  store,
+} from "./till-table-order-screen.test-helpers.js";
 
 const answer: DeadEndAnswer = {
   sends: true,
@@ -53,17 +60,18 @@ async function checked() {
   const check = await checkSaved(el);
   el.answerDeadEnds(check.sent, answer, check.checkId);
   await el.updateComplete;
+  await openDraftLine(el, 0);
   return { el, draft };
 }
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
-it("shows a saved dish's routing refusal with a symbol, reason and replacement stations before Send", async () => {
+it("shows a saved dish's routing refusal with a symbol, reason and replacement stations before Send, with choices in its line window", async () => {
   const { el, draft } = await checked();
   expect(warning(el)).not.toBeNull();
   expect(warning(el)!.getAttribute("slot")).toBe("after-0");
   expect(warning(el)!.querySelector('[aria-hidden="true"]')).not.toBeNull();
-  const detail = warning(el)!.querySelector("till-dead-ends-section")!;
+  const detail = root(el).querySelector("[data-draft-routing-detail] till-dead-ends-section")!;
   await (detail as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(detail.shadowRoot!.textContent).toContain("Bar");
   expect(detail.shadowRoot!.textContent).toContain("closed");
@@ -80,8 +88,8 @@ it("shows a saved dish's routing refusal with a symbol, reason and replacement s
 it("a replacement station updates only its live dish and clears the routing marker", async () => {
   const { el, draft } = await checked();
   expect(warning(el)).not.toBeNull();
-  warning(el)!
-    .querySelector("till-dead-ends-section")!
+  root(el)
+    .querySelector("[data-draft-routing-detail] till-dead-ends-section")!
     .dispatchEvent(
       new CustomEvent("make-at", {
         detail: { key: "0", stationId: "kitchen" },
@@ -99,7 +107,7 @@ it("a replacement station updates only its live dish and clears the routing mark
 it("a routing warning cannot follow the screen onto another bill", async () => {
   const { el } = await checked();
   expect(warning(el)).not.toBeNull();
-  const old = warning(el)!.querySelector("till-dead-ends-section")!;
+  const old = root(el).querySelector("[data-draft-routing-detail] till-dead-ends-section")!;
   const replacement = new DraftStore();
   replacement.addProduct(beer, "1");
   el.draftStore = replacement;
@@ -115,7 +123,7 @@ it.each(["sending", "locked", "group-command"])(
   async (state) => {
     const { el, draft } = await checked();
     expect(warning(el)).not.toBeNull();
-    const detail = warning(el)!.querySelector("till-dead-ends-section")!;
+    const detail = root(el).querySelector("[data-draft-routing-detail] till-dead-ends-section")!;
     if (state === "sending") draft.sending = true;
     else if (state === "locked") draft.lockEdits();
     else el.groupCommandBusy = true;
@@ -132,8 +140,8 @@ it.each(["sending", "locked", "group-command"])(
 it("retained Remove removes only its dish and leaves another row's quantity intact", async () => {
   const { el, draft } = await checked();
   expect(warning(el)).not.toBeNull();
-  warning(el)!
-    .querySelector("till-dead-ends-section")!
+  root(el)
+    .querySelector("[data-draft-routing-detail] till-dead-ends-section")!
     .dispatchEvent(
       new CustomEvent("remove", { detail: { key: "0" }, bubbles: true, composed: true }),
     );
@@ -145,8 +153,8 @@ it("retained Remove removes only its dish and leaves another row's quantity inta
 it("does not accept an unoffered station from a retained control", async () => {
   const { el, draft } = await checked();
   expect(warning(el)).not.toBeNull();
-  warning(el)!
-    .querySelector("till-dead-ends-section")!
+  root(el)
+    .querySelector("[data-draft-routing-detail] till-dead-ends-section")!
     .dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "other" } }));
   expect(draft.lines[0]!.makeAt).toBeUndefined();
   expect(warning(el)).not.toBeNull();
@@ -171,7 +179,7 @@ it("a response for an old bill cannot clear its retained station or mark the new
 it("a replaced routing answer invalidates an old row's station and Remove controls", async () => {
   const { el, draft } = await checked();
   expect(warning(el)).not.toBeNull();
-  const old = warning(el)!.querySelector("till-dead-ends-section")!;
+  const old = root(el).querySelector("[data-draft-routing-detail] till-dead-ends-section")!;
   const check = await checkSaved(el);
   el.answerDeadEnds(check.sent, { ...answer, deadEnds: [] }, check.checkId);
   old.dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
@@ -185,7 +193,7 @@ it("a replaced routing answer invalidates an old row's station and Remove contro
 it("a removed dish's detached routing controls cannot edit its successor", async () => {
   const { el, draft } = await checked();
   expect(warning(el)).not.toBeNull();
-  const old = warning(el)!.querySelector("till-dead-ends-section")!;
+  const old = root(el).querySelector("[data-draft-routing-detail] till-dead-ends-section")!;
   draft.removeLine(0);
   old.dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
   old.dispatchEvent(new CustomEvent("remove", { detail: { key: "0" } }));
@@ -199,7 +207,7 @@ it("a removed dish's detached routing controls cannot edit its successor", async
 it("a disconnected row cannot change or remove the retained outbox", async () => {
   const { el, draft } = await checked();
   expect(warning(el)).not.toBeNull();
-  const old = warning(el)!.querySelector("till-dead-ends-section")!;
+  const old = root(el).querySelector("[data-draft-routing-detail] till-dead-ends-section")!;
   el.remove();
   old.dispatchEvent(new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }));
   old.dispatchEvent(new CustomEvent("remove", { detail: { key: "0" } }));

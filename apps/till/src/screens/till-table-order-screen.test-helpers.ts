@@ -1,4 +1,7 @@
 /** Fixtures and steps shared by the table screen's drafting and Review suites. */
+import { userEvent } from "vitest/browser";
+import type { TillBasket } from "../widgets/basket.js";
+import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import { mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -157,3 +160,27 @@ export async function resized(el: TillTableOrderScreen): Promise<void> {
 }
 
 export const shown = (element: Element | null) => element !== null && element.checkVisibility();
+
+export async function openDraftLine(
+  el: TillTableOrderScreen,
+  index: number,
+): Promise<TillModifierPicker> {
+  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  if (review?.checkVisibility()) {
+    await userEvent.click(review);
+    await el.updateComplete;
+  }
+  const basket = [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")].find((each) =>
+    each.lineIndexes?.includes(index),
+  );
+  if (basket === undefined) throw new Error(`No draft basket for line ${index}`);
+  await basket.updateComplete;
+  const info = basket.shadowRoot!.querySelector<HTMLElement>(`[data-line-detail="${index}"]`);
+  if (info === null) throw new Error(`No detail control for line ${index}`);
+  await userEvent.click(info);
+  await basket.updateComplete;
+  const picker = basket.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker");
+  if (picker === null) throw new Error(`No line window for ${index}`);
+  await picker.updateComplete;
+  return picker;
+}

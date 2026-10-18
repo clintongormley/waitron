@@ -5,7 +5,13 @@ import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import type { OrderLine } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { beer, flan, menuOf, resized } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  flan,
+  menuOf,
+  openDraftLine,
+  resized,
+} from "./till-table-order-screen.test-helpers.js";
 import type { TillDeadEndsSection } from "../widgets/dead-ends-section.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
@@ -31,6 +37,14 @@ describe.each(["en", "es"] as const)("retained routing warning %s", (locale) => 
           products: [beer, flan],
           menus: menuOf([beer, flan]),
           orderId: "bill",
+          courses: [
+            {
+              id: "mains",
+              name: locale === "es" ? "Principales" : "Mains",
+              displayOrder: 1,
+              heldUntilFired: true,
+            },
+          ],
         },
         theme,
       );
@@ -76,9 +90,16 @@ describe.each(["en", "es"] as const)("retained routing warning %s", (locale) => 
       const warning = pane.querySelector<HTMLElement>("[data-draft-routing-warning]")!;
       expect(window.innerWidth).toBe(width);
       expect(warning.checkVisibility()).toBe(true);
-      const detail = warning.querySelector<TillDeadEndsSection>("till-dead-ends-section")!;
+      const picker = await openDraftLine(el, 0);
+      const detail = pane.querySelector<TillDeadEndsSection>(
+        "[data-draft-routing-detail] till-dead-ends-section",
+      )!;
       await detail.updateComplete;
       expect(detail.shadowRoot!.querySelector(".reason")!.textContent).toContain("Bar");
+      const note = picker.shadowRoot!.querySelector("wt-textarea")!;
+      expect(detail.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+        note.getBoundingClientRect().width - 1,
+      );
       const field = detail.shadowRoot!.querySelector<WtCombobox>("wt-combobox")!;
       const remove = detail.shadowRoot!.querySelector<WtButton>(".remove")!;
       await field.updateComplete;
@@ -95,16 +116,16 @@ describe.each(["en", "es"] as const)("retained routing warning %s", (locale) => 
       expect(warning.getBoundingClientRect().right).toBeLessThanOrEqual(
         pane.getBoundingClientRect().right,
       );
+      const windowBounds = detail.getBoundingClientRect();
       for (const paragraph of detail.shadowRoot!.querySelectorAll("p")) {
         const range = document.createRange();
         range.selectNodeContents(paragraph);
         for (const box of range.getClientRects())
-          expect(box.right).toBeLessThanOrEqual(rowBounds.right + 0.5);
+          expect(box.right).toBeLessThanOrEqual(windowBounds.right + 0.5);
       }
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.screenshot({
-        element: pane,
         path: `__screenshots__/a773-routing-${locale}-${theme}-${width}.png`,
       });
       expect(draft.lines.map((line) => [line.product.name, line.quantity])).toEqual([

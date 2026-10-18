@@ -25,7 +25,7 @@ import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
-import { resized } from "./screens/till-table-order-screen.test-helpers.js";
+import { openDraftLine, resized } from "./screens/till-table-order-screen.test-helpers.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { TillProfileDialog } from "./widgets/profile-dialog.js";
@@ -1342,8 +1342,12 @@ describe("till-app: a table's draft is kept on the server", () => {
     const { el } = await mountApp();
     await openMesa(el);
     await tap(el, "Flan");
-    const picker = tableOrder(el)!.shadowRoot!.querySelector<WtCombobox>("[data-round-course]")!;
+    const form = await openDraftLine(tableOrder(el)!, 0);
+    const picker = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!;
     await chooseOption(picker, "mains");
+    await form.updateComplete;
+    form.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    await flush(el);
     await back(el);
 
     expect(server.drafts[0]!.lines.map((line) => line.courseId)).toEqual(["mains"]);

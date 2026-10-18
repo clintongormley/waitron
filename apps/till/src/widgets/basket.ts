@@ -44,7 +44,7 @@ import {
 } from "../state/adjust-target.js";
 import type { AdjustKind, AdjustTarget } from "./adjustment-dialog.js";
 import type { AdjustDetail } from "../screens/till-table-order-screen.js";
-import type { Station, TabLine, TillProduct } from "../api/client.js";
+import type { Station, TabLine, TillCourse, TillProduct } from "../api/client.js";
 
 const QTY_BADGE = "×";
 
@@ -291,6 +291,8 @@ export class TillBasket extends LitElement {
   @property({ attribute: false }) lineIndexes?: readonly number[];
 
   @property({ type: Boolean, reflect: true }) stacked = false;
+  @property({ type: Boolean }) lineDetails = false;
+  @property({ attribute: false }) courses: readonly TillCourse[] = [];
 
   /** The stored order the basket holds, as the server last listed it; null when not known. While it
    * is known, a dish the kitchen has shows no × and no `−`, and the adjustments are offered only
@@ -321,16 +323,27 @@ export class TillBasket extends LitElement {
    */
   #modifierSelection: LineSelection | null = null;
   #modifierProduct?: TillProduct;
+  #modifierCourse?: string;
 
   /** Detects a whole-basket swap: `clear` mints a fresh id and `loadFrom` adopts the retrieved order's,
    * while an in-basket add / remove / edit keeps it. */
   #lastStoreId?: string;
 
   #openModifierPicker(line: OrderLine): void {
+    if (this.store.sending || this.store.editsLocked || this.orderInFlight) return;
+    this.#modifierCourse =
+      this.lineDetails &&
+      (this.courses.length > 0 || (line.course !== undefined && line.course.id === line.courseId))
+        ? (line.courseId ?? line.product.courseId ?? "")
+        : undefined;
     this.modifierLine = line;
     this.#modifierProduct = line.product;
     if (line.source === undefined) {
-      this.#modifierSelection = { extras: line.extras ?? [], options: line.options ?? [] };
+      this.#modifierSelection = {
+        extras: line.extras ?? [],
+        options: line.options ?? [],
+        ...(this.lineDetails ? { note: line.note ?? "" } : {}),
+      };
       return;
     }
     const offered = offeredListsOf(line.product);
@@ -373,6 +386,7 @@ export class TillBasket extends LitElement {
           : [];
     });
     this.#modifierSelection = {
+      ...(this.lineDetails ? { note: line.note ?? "" } : {}),
       extras: line.sourceSelection?.extras ?? derived,
       options:
         line.sourceSelection?.options ??
@@ -384,6 +398,7 @@ export class TillBasket extends LitElement {
     this.modifierLine = null;
     this.#modifierSelection = null;
     this.#modifierProduct = undefined;
+    this.#modifierCourse = undefined;
   }
 
   #recordedExtra(line: OrderLine, listId: string, productId: string): TabLine | undefined {
@@ -396,11 +411,38 @@ export class TillBasket extends LitElement {
 
   #confirmModifiers(detail: ModifierConfirmDetail): void {
     const line = this.modifierLine;
-    if (line === null) return;
+    if (
+      line === null ||
+      !this.isConnected ||
+      this.store.sending ||
+      this.store.editsLocked ||
+      this.orderInFlight
+    )
+      return;
     const index = this.store.lines.indexOf(line);
+    if (index < 0) return;
+    const courseChanged =
+      this.lineDetails && detail.courseId !== undefined && detail.courseId !== this.#modifierCourse;
+    if (
+      courseChanged &&
+      detail.courseId !== "" &&
+      !this.courses.some((course) => course.id === detail.courseId)
+    )
+      return;
+    const finishPlacement = () => {
+      if (!this.lineDetails) return;
+      this.store.setLineExtras(index, { note: detail.note ?? "" });
+      if (courseChanged)
+        this.store.setLineCourse(
+          index,
+          detail.courseId || undefined,
+          this.courses.find((course) => course.id === detail.courseId),
+        );
+    };
     if (line.source === undefined) {
       this.#closeModifierPicker();
       this.store.setLineModifiers(index, detail);
+      finishPlacement();
       return;
     }
     const offered = offeredListsOf(line.product);
@@ -430,6 +472,7 @@ export class TillBasket extends LitElement {
       });
     this.#closeModifierPicker();
     this.store.patchRecalledLineModifiers(index, selection);
+    finishPlacement();
   }
 
   constructor() {
@@ -562,17 +605,29 @@ export class TillBasket extends LitElement {
                   }</span
                 >
                 ${this.#quantityCell(line, index, sent)} ${this.#dishTotal(line, listed)}
-                <wt-button
-                  class="note-toggle"
-                  variant="ghost"
-                  size="md"
-                  data-test=${`line-note-button-${index}`}
-                  aria-expanded=${this.editingLine === line}
-                  aria-label=${`${t("line.note.button")} ${this.#lineName(line)}`}
-                  @click=${() => this.#toggleEditor(line)}
-                >
-                  ${t("line.note.button")}
-                </wt-button>
+                ${
+                  this.lineDetails
+                    ? html`<wt-button
+                        variant="ghost"
+                        size="md"
+                        data-line-detail=${index}
+                        aria-label=${`${t("modifier.edit")} · ${this.#lineName(line)}`}
+                        ?disabled=${this.store.sending || this.store.editsLocked || this.orderInFlight}
+                        @click=${() => this.#openModifierPicker(line)}
+                        ><span aria-hidden="true">ⓘ</span></wt-button
+                      >`
+                    : html`<wt-button
+                        class="note-toggle"
+                        variant="ghost"
+                        size="md"
+                        data-test=${`line-note-button-${index}`}
+                        aria-expanded=${this.editingLine === line}
+                        aria-label=${`${t("line.note.button")} ${this.#lineName(line)}`}
+                        @click=${() => this.#toggleEditor(line)}
+                      >
+                        ${t("line.note.button")}
+                      </wt-button>`
+                }
                 ${
                   sent
                     ? html`<wt-button class="remove-gap" variant="ghost" size="md" inert
@@ -614,7 +669,7 @@ export class TillBasket extends LitElement {
                 // Edit button rather than a dialog whose save would carry nothing. The MIXED case —
                 // variants AND an offered list — still re-asks the variant and discards it; open in
                 // `docs/backlog.md`.
-                offeredListsOf(line.product).length > 0
+                !this.lineDetails && offeredListsOf(line.product).length > 0
                   ? html`<wt-button
                       class="edit-modifiers"
                       size="sm"
@@ -676,6 +731,21 @@ export class TillBasket extends LitElement {
         this.modifierLine && this.#modifierSelection
           ? html`<till-modifier-picker
               .product=${this.#modifierProduct}
+              .lineDetails=${this.lineDetails}
+              .withNote=${this.lineDetails}
+              .initialCourse=${this.#modifierCourse}
+              .coursePlaceholder=${
+                this.modifierLine.course !== undefined &&
+                this.modifierLine.course.id === this.#modifierCourse &&
+                !this.courses.some((course) => course.id === this.#modifierCourse)
+                  ? this.modifierLine.course!.name
+                  : t("table.course_default")
+              }
+              .courseChoices=${[
+                { value: "", label: t("table.course_default") },
+                ...this.courses.map((course) => ({ value: course.id, label: course.name })),
+              ]}
+              .disabled=${this.store.sending || this.store.editsLocked || this.orderInFlight}
               .quantity=${this.modifierLine.quantity}
               .showTotal=${this.modifierLine.source === undefined}
               .initialSelections=${this.#modifierSelection}
@@ -687,6 +757,10 @@ export class TillBasket extends LitElement {
                 event.stopPropagation();
                 this.#closeModifierPicker();
               }}
+              ><slot
+                slot="line-details"
+                name=${`detail-${this.store.lines.indexOf(this.modifierLine)}`}
+              ></slot
             ></till-modifier-picker>`
           : nothing
       }
