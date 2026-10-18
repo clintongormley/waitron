@@ -3574,6 +3574,14 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   the same column. Left open by the table actions plan.
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
+- **A875. Check two writes the bill payments design says a pending card refund refuses.** The
+  design's §8 test 17 lists "a move" among the writes refused `bill.refund_in_progress`, and §5.2
+  lists "transfer". Read, not run (A847's review, #1860): neither moving guests nor moving a bill
+  appears to check for a pending refund, and the test covering test 17 makes no move; a transfer
+  between bills appears to be refused earlier, `bill.payments_received`, because the refunded
+  payment is still on the bill. Next: one route case each during a pending refund, then fix the
+  design's wording, or the code if a move can change what a bill charges (ask the owner first).
+
 - **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Still
   open: whether we may supply the idempotency key, whether reader webhooks are signed, and whether
   `void` maps onto the refund endpoint. [Detail](backlog/payments.md#the-sumup-solo-experiments)
