@@ -1,7 +1,13 @@
 import { readLineNutrition, type LineNutrition } from "./line-nutrition.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import { joinedOutOfService, joinedTableApart, stillJoinedPart, tableInService } from "@waitron/db";
+import {
+  joinedOutOfService,
+  joinedTableApart,
+  needsMoving,
+  stillJoinedPart,
+  tableInService,
+} from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import {
@@ -1393,6 +1399,7 @@ export async function openTab(
       joined: joinedOutOfService(diningTables.id).mapWith(Boolean),
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
+      needsMoving: needsMoving(diningTables.id).mapWith(Boolean),
     })
     .from(diningTables)
     .where(eq(diningTables.id, req.tableId));
@@ -1407,6 +1414,9 @@ export async function openTab(
   }
   if (table.needsClearingSince !== null) {
     throw new AppError("table.needs_clearing", { tableId: req.tableId });
+  }
+  if (table.needsMoving) {
+    throw new AppError("table.needs_moving", { tableId: req.tableId });
   }
 
   const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);

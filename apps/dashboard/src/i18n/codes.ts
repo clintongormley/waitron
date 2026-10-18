@@ -639,6 +639,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table needs clearing first. Mark it cleared on the till, then try again",
     es: "Esa mesa está por recoger. Márcala como recogida en la caja e inténtalo de nuevo",
   },
+  "table.needs_moving": {
+    en: "That table needs moving first. Mark it moved on the till, then try again",
+    es: "Esa mesa está por mover. Márcala como movida en la caja e inténtalo de nuevo",
+  },
   "station.name_taken": {
     en: "A station with that name already exists",
     es: "Ya existe una estación con ese nombre",

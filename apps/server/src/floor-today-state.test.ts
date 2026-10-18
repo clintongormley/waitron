@@ -641,4 +641,32 @@ describe("the till's table-state answer says what needs moving", () => {
     expect(states.get(t4)!.today).toMatchObject({ needsMoving: false, seats: 2 });
     expect(states.get(t45)!.today.needsMoving).toBe(false);
   });
+
+  it("refuses seating the member of a marked group that moves, and seats the one the till shows free", async () => {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    const s = await standardAndDinner(
+      v,
+      NOW,
+      [
+        { key: "t4", label: fresh("4") },
+        { key: "t5", label: fresh("5") },
+        { key: "t45", label: fresh("4+5"), partKeys: ["t4", "t5"] },
+      ],
+      { standard: { t4: 0, t5: 20, t45: null }, dinner: { t4: 0, t5: 40, t45: null } },
+    );
+    await s.onto(s.d.standard);
+    const [t4, t5] = [s.live("t4"), s.live("t5")];
+    await inTx(v, (tx) =>
+      tx.update(floorTodayTables).set({ seats: 2 }).where(eq(floorTodayTables.tableId, t4)),
+    );
+    await seatAndFinishAcross(t4, () => s.onto(s.d.dinner));
+    await catchUp();
+    expect(await readyToMoveOf(t4)).toBe(true);
+
+    await expect(seat(v, t5)).rejects.toMatchObject({
+      code: "table.needs_moving",
+      params: { tableId: t5 },
+    });
+    await seat(v, t4);
+  });
 });

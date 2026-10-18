@@ -1,4 +1,4 @@
-import { joinedOutOfService, tableInService } from "@waitron/db";
+import { joinedOutOfService, needsMoving, tableInService } from "@waitron/db";
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import {
   diningTables,
@@ -218,7 +218,7 @@ export interface TargetTable {
  * that a party other than `source` holds now is `party.out_of_date` for the party holding it. Then
  * the revision of a party holding it, other than `source`, is checked and moved on (P27); then the
  * table is refused when it does not exist, is out of use, is out of service because of a joined
- * table (`joinedOutOfService`) or needs clearing.
+ * table (`joinedOutOfService`), needs clearing or needs moving.
  */
 export async function readTargetTable(
   tx: Transaction,
@@ -250,6 +250,7 @@ export async function readTargetTable(
       joined: joinedOutOfService(diningTables.id).mapWith(Boolean),
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
+      needsMoving: needsMoving(diningTables.id).mapWith(Boolean),
     })
     .from(diningTables)
     .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)));
@@ -257,6 +258,7 @@ export async function readTargetTable(
   if (!table.inService) throw new AppError("table.inactive", { tableId });
   if (table.joined) throw new AppError("table.in_joined_table", { tableId });
   if (table.needsClearingSince !== null) throw new AppError("table.needs_clearing", { tableId });
+  if (table.needsMoving) throw new AppError("table.needs_moving", { tableId });
   return { holding, zoneId: table.zoneId };
 }
 

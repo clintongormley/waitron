@@ -545,6 +545,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.not_open": 409,
   "tab.line_not_found": 404,
   "table.needs_clearing": 409,
+  "table.needs_moving": 409,
   "table.already_in_party": 409,
   "tab.merge_self": 400,
   "tab.transfer_self": 400,

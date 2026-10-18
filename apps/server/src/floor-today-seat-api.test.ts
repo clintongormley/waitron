@@ -6,6 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  floorResetTables,
   floorZones,
   floorTodayTables,
   kitchenTimingDefaults,
@@ -20,6 +21,7 @@ import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js
 import {
   expectRevision,
   mergeOf,
+  needingMoving,
   plannedZone,
   withFloorRevision,
 } from "./testing/floor-today-venue.js";
@@ -365,5 +367,43 @@ describe("seating one party at several tables", () => {
       body: { error: { code: "table.not_found", params: { tableId: "nope" } } },
     });
     expect(await heldRows(f1)).toBe(0);
+  });
+});
+
+/** Stands in for a reset row a later read marked: pending, and ready to move. */
+async function markReadyToMove(tableId: string): Promise<void> {
+  await inTx(v, (tx) =>
+    tx
+      .update(floorResetTables)
+      .set({ pending: true, readyToMove: true })
+      .where(eq(floorResetTables.tableId, tableId)),
+  );
+}
+
+describe("seating a table that needs moving", () => {
+  it("refuses it with table.needs_moving, as the till shows it, and seats nobody", async () => {
+    const { tableId } = await needingMoving(v);
+    const state = await app.request("/api/tables/state", { headers: { cookie } });
+    const tables = (await state.json()) as { id: string; today: { needsMoving: boolean } }[];
+    expect(tables.find((t) => t.id === tableId)!.today.needsMoving).toBe(true);
+
+    expect(await refusal(post(`/api/tables/${tableId}/seat`, { guestCount: 2 }))).toEqual({
+      status: 409,
+      body: { error: { code: "table.needs_moving", params: { tableId } } },
+    });
+    expect(await heldRows(tableId)).toBe(0);
+  });
+
+  it("refuses to seat a merge one of whose tables needs moving, and seats nobody", async () => {
+    const { a, b } = await threeTables();
+    await merge(a, b, "right");
+    await markReadyToMove(b);
+
+    expect(await refusal(post(`/api/tables/${a}/seat`, { guestCount: 2 }))).toEqual({
+      status: 409,
+      body: { error: { code: "table.needs_moving", params: { tableId: b } } },
+    });
+    expect(await heldRows(a)).toBe(0);
+    expect(await heldRows(b)).toBe(0);
   });
 });

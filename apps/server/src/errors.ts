@@ -385,6 +385,11 @@ declare module "@waitron/shared" {
      */
     "table.needs_clearing": { tableId: string };
     /**
+     * The table's reset row waits for Mark moved, so no party may be seated at it, moved to it or
+     * joined to it, and it may not be merged, until it is marked moved.
+     */
+    "table.needs_moving": { tableId: string };
+    /**
      * A bill was moved to a table its own party already holds, a party joined a table it holds, or
      * guests were moved to the only table their party holds.
      */

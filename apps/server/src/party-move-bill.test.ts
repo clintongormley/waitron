@@ -59,6 +59,7 @@ import {
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
+import { needingMoving } from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 // Move a bill to another party, a table or the counter (table actions plan, Task 7; spec §7, §8,
@@ -500,6 +501,15 @@ describe("what a move refuses, changing nothing", () => {
     const error = await refused(p, [p.second], () => move(p.second, { tableId: dirty }), [dirty]);
 
     expect(error).toMatchObject({ code: "table.needs_clearing", params: { tableId: dirty } });
+  });
+
+  it("refuses a table that needs moving", async () => {
+    const p = await twoParties("Mesa por mover");
+    const { tableId } = await needingMoving(v);
+
+    const error = await refused(p, [p.second], () => move(p.second, { tableId }), [tableId]);
+
+    expect(error).toMatchObject({ code: "table.needs_moving", params: { tableId } });
   });
 
   it.each(["missing today", "disabled zone"])(

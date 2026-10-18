@@ -72,6 +72,28 @@ export function joinedOutOfService(tableId: SQLWrapper): SQL {
   return sql`(${stillJoinedPart(tableId)} or ${joinedTableApart(tableId)})`;
 }
 
+/**
+ * The table's reset row waits for Mark moved: the row is marked ready to move and the table, drawn
+ * on today's map, is in a merge, split off, or not exactly at the row's placement — the tables
+ * read's "Needs moving" (`movesTable`, apps/server/src/floor-reset-plan.ts).
+ */
+export function needsMoving(tableId: SQLWrapper): SQL {
+  return sql`${tableId} in (
+    select reset_row.table_id
+    from floor_reset_tables reset_row
+    inner join floor_today_tables today_row on today_row.table_id = reset_row.table_id
+    where reset_row.ready_to_move = 1
+      and today_row.taken_off = 0 and today_row.x is not null
+      and (
+        today_row.x is not reset_row.x or today_row.y is not reset_row.y
+        or today_row.width is not reset_row.width or today_row.height is not reset_row.height
+        or today_row.shape is not reset_row.shape or today_row.rotation is not reset_row.rotation
+        or exists (select 1 from floor_today_join_tables merged where merged.table_id = reset_row.table_id)
+        or exists (select 1 from floor_today_split_parts split_off where split_off.part_table_id = reset_row.table_id)
+      )
+  )`;
+}
+
 /** A table follows a part of a joined table on its zone's saved plan, whatever the layout. */
 function anySavedPart(tableId: SQLWrapper): SQL {
   return sql`${tableId} in (

@@ -27,9 +27,10 @@ import {
 } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "../floor-plan.js";
 import { defaultLayout } from "./floor-sets.js";
-import { resetZone, type ResetOnto } from "../floor-today-store.js";
+import { ensureToday, resetZone, type ResetOnto } from "../floor-today-store.js";
+import { finishTable, markTableCleared } from "../parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
-import { inTx, type PartyVenue } from "./party-venue.js";
+import { inTx, OPERATOR, seat, type PartyVenue } from "./party-venue.js";
 
 export interface PlannedEntry {
   key: string;
@@ -288,6 +289,56 @@ export async function standardAndDinner(
       ),
     );
   return { d, live, onto };
+}
+
+/**
+ * A table that needs moving: guests sit at it, its zone's layout moves it from x 0 to 40 and is
+ * reset onto, the guests leave, and a read marks its reset row. `spare` stands free at x 80.
+ */
+export async function needingMoving(v: PartyVenue, now: Date = new Date()) {
+  const z = await plannedZone(
+    v,
+    [
+      { key: "moving", place: { x: 0, y: 0 } },
+      { key: "spare", place: { x: 80, y: 0 } },
+    ],
+    now,
+  );
+  const [tableId, spare] = [z.table.moving!, z.table.spare!];
+  const { partyId, revision } = await seat(v, tableId);
+  await inTx(v, async (tx) => {
+    const layout = await defaultLayout(tx, v.cfg, z.zoneId);
+    const plan = await readLayout(tx, v.cfg, layout);
+    await saveLayout(
+      tx,
+      v.cfg,
+      REMOVALS,
+      layout,
+      {
+        revision: plan.revision,
+        tables: plan.tables.map((t) => ({
+          id: t.id,
+          key: t.id,
+          label: t.label,
+          seats: t.seats,
+          fixed: t.fixed,
+          placement:
+            t.id === z.master.moving && t.placement !== null
+              ? { ...t.placement, x: 40 }
+              : t.placement,
+          partKeys: t.partIds,
+        })),
+      },
+      now,
+    );
+    await resetZone(tx, v.cfg, REMOVALS, z.zoneId, now, "due");
+  });
+  await inTx(v, async (tx) => {
+    await finishTable(tx, { partyId, expectedPartyRevision: revision, operatorId: OPERATOR });
+    await markTableCleared(tx, tableId);
+    await ensureToday(tx, v.cfg, REMOVALS, now);
+  });
+  return { ...z, tableId, spare };
 }
 
 /** Records `partTableId` as split off joined table `joinedTableId` today, as the split route will. */

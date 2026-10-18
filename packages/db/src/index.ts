@@ -33,6 +33,7 @@ export { tableInService } from "./table-in-service.js";
 export {
   joinedOutOfService,
   joinedTableApart,
+  needsMoving,
   savedPart,
   stillJoinedPart,
 } from "./joined-parts.js";
