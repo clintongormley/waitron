@@ -259,6 +259,7 @@ export interface SplitTableDetail {
   tableId: string;
   billId: string | null;
   guests: SplitGuestsDetail;
+  prompt?: object;
 }
 
 /** The app's answer to a split whose count for one side the server refused: what was sent, and
@@ -270,6 +271,7 @@ export interface SplitRefusal {
   leaving: string;
   field: "staying" | "leaving";
   message: string;
+  prompt?: object;
 }
 
 /** An action's preview, and the submission its Confirm sends. `leftOut`: the flagged lines it
@@ -1348,6 +1350,7 @@ export class TillTableOrderScreen extends LitElement {
     staying: string;
     leaving: string;
     refusal: { field: "staying" | "leaving"; message: string } | null;
+    prompt?: object;
   } | null = null;
   @state() private transferToBillId: string | null = null;
   /** A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
@@ -1716,8 +1719,8 @@ export class TillTableOrderScreen extends LitElement {
       this.counting = { value: this.guestsRefusal.value, refusal: this.guestsRefusal.message };
     }
     if (changed.has("splitRefusal") && this.splitRefusal !== null) {
-      const { tableId, billId, staying, leaving, field, message } = this.splitRefusal;
-      this.splitGuests = { tableId, billId, staying, leaving, refusal: { field, message } };
+      const { tableId, billId, staying, leaving, field, message, prompt } = this.splitRefusal;
+      this.splitGuests = { tableId, billId, staying, leaving, refusal: { field, message }, prompt };
     }
     // The app re-points this screen at whichever party holds the table, so a window opened for the
     // old party would otherwise save to the new one. A screen drawn afresh counts its first party as
@@ -4837,12 +4840,15 @@ export class TillTableOrderScreen extends LitElement {
 
   #splitTable(tableId: string, billId: string | null): void {
     this.#closeActions();
+    const prompt = {};
+    this.#dispatch("split-table-open", { tableId, billId, prompt });
     this.splitGuests = {
       tableId,
       billId,
       staying: this.#savedGuests(),
       leaving: "",
       refusal: null,
+      prompt,
     };
   }
 
@@ -4869,6 +4875,7 @@ export class TillTableOrderScreen extends LitElement {
           tableId: splitting.tableId,
           billId: splitting.billId,
           guests: (event as CustomEvent<SplitGuestsDetail>).detail,
+          ...(splitting.prompt === undefined ? {} : { prompt: splitting.prompt }),
         } satisfies SplitTableDetail);
       }}
       @split-guests-cancel=${(event: Event) => {

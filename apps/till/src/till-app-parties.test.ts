@@ -8534,3 +8534,218 @@ describe("till-app: split-table editing observations", () => {
     );
   }
 });
+
+describe("till-app: Split a table retains the guests prompt observation", () => {
+  const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+  const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+
+  async function prompt(el: TillApp, billId = "wo-check") {
+    const order = tableOrder(el)!;
+    if (order.shadowRoot!.querySelector("[data-move-split]") === null) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+      await flush(el);
+    }
+    for (const selector of [
+      "[data-move-split]",
+      '[data-action="split-table"]',
+      '[data-target="t5"]',
+      `[data-target="${billId}"]`,
+    ]) {
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>(selector)!);
+      await flush(el);
+    }
+    const dialog = order.shadowRoot!.querySelector("till-split-guests-dialog")!;
+    expect(dialog).not.toBeNull();
+    await dialog.updateComplete;
+    return dialog;
+  }
+
+  async function confirm(el: TillApp, dialog: HTMLElementTagNameMap["till-split-guests-dialog"]) {
+    await userEvent.click(
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!,
+    );
+    await flush(el);
+  }
+
+  for (const change of ["owner", "draft", "revision"] as const) {
+    it("refuses a refreshed " + change + " while the guests prompt stays open", async () => {
+      let changed = false;
+      const listDrafts = vi.fn(async (partyId: string) => {
+        const snapshot = await drafts.listDrafts(partyId);
+        const edit = snapshot.billEdits.find((value) => value.billId === "wo-check")!;
+        if (change === "revision") {
+          edit.draftId = "saved-draft";
+          edit.draftRevision = changed ? 2 : 1;
+        } else if (changed) {
+          if (change === "owner") edit.editorVersion = 2;
+          else {
+            edit.draftId = "new-draft";
+            edit.draftRevision = 1;
+          }
+        }
+        return snapshot;
+      });
+      const { el } = await mountApp({
+        getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+        listDrafts,
+      });
+      await openMesa(el);
+      const dialog = await prompt(el);
+      const reads = listDrafts.mock.calls.length;
+      changed = true;
+      window.dispatchEvent(new Event("focus"));
+      await flush(el);
+      expect(listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      expect(tableOrder(el)!.shadowRoot!.querySelector("till-split-guests-dialog")).toBe(dialog);
+      await confirm(el, dialog);
+      expect(api.splitTable).not.toHaveBeenCalled();
+      expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    });
+  }
+
+  it("keeps missing metadata at prompt opening from becoming permission after refresh", async () => {
+    let missing = true;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      if (missing)
+        snapshot.billEdits = snapshot.billEdits.filter((edit) => edit.billId !== "wo-check");
+      return snapshot;
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      listDrafts,
+    });
+    await openMesa(el);
+    const dialog = await prompt(el);
+    missing = false;
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    await confirm(el, dialog);
+    expect(api.splitTable).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(["wo-check", "none"])("allows %s when only an unrelated bill changed", async (billId) => {
+    let changed = false;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-4")!.editorVersion = 2;
+      return snapshot;
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      listDrafts,
+    });
+    await openMesa(el);
+    const dialog = await prompt(el, billId);
+    changed = true;
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    await confirm(el, dialog);
+    expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      "t5",
+      billId === "none" ? null : billId,
+      3,
+      billId === "none"
+        ? []
+        : [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
+      { staying: 3, leaving: null },
+    );
+  });
+
+  it("refuses a guests prompt carried across a bill switch", async () => {
+    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]) });
+    const order = await openMesa(el);
+    const dialog = await prompt(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    await confirm(el, dialog);
+    expect(api.splitTable).not.toHaveBeenCalled();
+  });
+
+  it("allows a new prompt after cancelling and refreshing its bill", async () => {
+    let changed = false;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-check")!.editorVersion = 2;
+      return snapshot;
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      listDrafts,
+    });
+    await openMesa(el);
+    const first = await prompt(el);
+    const closed = new Promise<void>((resolve) =>
+      first.addEventListener("split-guests-cancel", () => resolve(), { once: true }),
+    );
+    await userEvent.click(
+      first.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-cancel]")!,
+    );
+    await closed;
+    await flush(el);
+    changed = true;
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    const second = await prompt(el);
+    await confirm(el, second);
+    expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      "t5",
+      "wo-check",
+      3,
+      [{ billId: "wo-check", editorVersion: 2, draftId: null, draftRevision: null }],
+      { staying: 3, leaving: null },
+    );
+  });
+
+  it("retains the original observation when a refused guest count is corrected", async () => {
+    let changed = false;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      if (changed) snapshot.billEdits.find((edit) => edit.billId === "wo-check")!.editorVersion = 2;
+      return snapshot;
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]),
+      listDrafts,
+      splitTable: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", field: "guests.leaving" }),
+    });
+    await openMesa(el);
+    await confirm(el, await prompt(el));
+    expect(api.splitTable).toHaveBeenCalledOnce();
+    const retry = tableOrder(el)!.shadowRoot!.querySelector("till-split-guests-dialog")!;
+    expect(retry).not.toBeNull();
+    await retry.updateComplete;
+    expect(retry.leavingRefusal).toBe(t("seat.guest_count_invalid"));
+    const input = retry
+      .shadowRoot!.querySelector<HTMLElement>('wt-input[name="leavingGuests"]')!
+      .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    await userEvent.fill(input, "1");
+    changed = true;
+    window.dispatchEvent(new Event("focus"));
+    await flush(el);
+    await confirm(el, retry);
+    expect(api.splitTable).toHaveBeenCalledTimes(1);
+    expect(banner(el)?.textContent).toContain(codeMessage("draft.out_of_date"));
+  });
+
+  it("does not send an old guests prompt to a replacement API", async () => {
+    const { el } = await mountApp({ getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]) });
+    await openMesa(el);
+    const dialog = await prompt(el);
+    const original = api;
+    const replacement = stubApi({ getTablesState: vi.fn().mockResolvedValue([atTwo, mesa5]) });
+    el.api = replacement;
+    await flush(el);
+    await confirm(el, dialog);
+    expect(original.splitTable).not.toHaveBeenCalled();
+    expect(replacement.splitTable).not.toHaveBeenCalled();
+  });
+});

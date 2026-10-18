@@ -12335,12 +12335,29 @@ export class TillApp extends LitElement {
       this.errorKey = "table.bills_kept_separate";
   }
 
+  // Refreshing the view cannot replace the bill observation a guests dialog opened with.
+  readonly #splitTablePrompts = new WeakMap<object, BillComposition | null>();
+
+  #onSplitTableOpen(event: Event): void {
+    const { billId, prompt } = (
+      event as CustomEvent<Pick<SplitTableDetail, "billId"> & { prompt: object }>
+    ).detail;
+    this.#splitTablePrompts.set(prompt, this.#billComposition(billId === null ? [] : [billId]));
+  }
+
   async #onSplitTable(event: Event): Promise<void> {
-    const { tableId, billId, guests } = (event as CustomEvent<SplitTableDetail>).detail;
+    const { tableId, billId, guests, prompt } = (event as CustomEvent<SplitTableDetail>).detail;
     const party = this.orderParty;
     if (party === null) return;
-    const asked = this.#billComposition(billId === null ? [] : [billId]);
-    if (asked === null) return;
+    const asked =
+      prompt === undefined
+        ? this.#billComposition(billId === null ? [] : [billId])
+        : this.#splitTablePrompts.get(prompt);
+    if (asked == null) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    if (!this.#billCompositionUnchanged(asked)) return;
     const live = () => this.#billCompositionCurrent(asked);
     const sent = asked.sent;
     const visit = this.#orderVisit;
@@ -12351,7 +12368,7 @@ export class TillApp extends LitElement {
         party.id,
         tableId,
         billId,
-        party.revision,
+        asked.revisions.expectedPartyRevision!,
         asked.expectedEdits,
         guests,
       );
@@ -12368,6 +12385,7 @@ export class TillApp extends LitElement {
             leaving: guestField(guests.leaving),
             field: side,
             message: t("seat.guest_count_invalid"),
+            ...(prompt === undefined ? {} : { prompt }),
           };
         return;
       }
@@ -14826,6 +14844,7 @@ export class TillApp extends LitElement {
           } else void this.#onMoveHeldOrder(event);
         }}
         @join-tables=${(event: Event) => void this.#onJoinTables(event)}
+        @split-table-open=${(event: Event) => this.#onSplitTableOpen(event)}
         @split-table=${(event: Event) => void this.#onSplitTable(event)}
         @name-party=${(event: Event) => void this.#onNameParty(event)}
         @guests-party=${(event: Event) => void this.#onGuestsParty(event)}

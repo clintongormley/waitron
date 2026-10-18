@@ -4507,8 +4507,18 @@ describe("till-table-order-screen", () => {
       await confirmSplitGuests(el);
 
       expect(split).toEqual([
-        { tableId: "t5", billId: "wo-check", guests: { staying: 3, leaving: null } },
-        { tableId: "t5", billId: null, guests: { staying: 3, leaving: null } },
+        {
+          tableId: "t5",
+          billId: "wo-check",
+          guests: { staying: 3, leaving: null },
+          prompt: expect.any(Object),
+        },
+        {
+          tableId: "t5",
+          billId: null,
+          guests: { staying: 3, leaving: null },
+          prompt: expect.any(Object),
+        },
       ]);
     });
 
@@ -4739,7 +4749,14 @@ describe("till-table-order-screen", () => {
       dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
       await el.updateComplete;
 
-      expect(split).toEqual([{ tableId: "t5", billId: null, guests: { staying: 3, leaving: 2 } }]);
+      expect(split).toEqual([
+        {
+          tableId: "t5",
+          billId: null,
+          guests: { staying: 3, leaving: 2 },
+          prompt: expect.any(Object),
+        },
+      ]);
       expect(el.shadowRoot!.querySelector("till-split-guests-dialog")).toBeNull();
     });
 
@@ -4784,7 +4801,14 @@ describe("till-table-order-screen", () => {
       await dialog.updateComplete;
       dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
       await el.updateComplete;
-      expect(split).toEqual([{ tableId: "t5", billId: null, guests: { staying: 4, leaving: 2 } }]);
+      expect(split).toEqual([
+        {
+          tableId: "t5",
+          billId: null,
+          guests: { staying: 4, leaving: 2 },
+          prompt: expect.any(Object),
+        },
+      ]);
     });
 
     it("moves an untouched staying side of Split a table's guests window to a count stored elsewhere, and splits with it", async () => {
@@ -4801,7 +4825,12 @@ describe("till-table-order-screen", () => {
       dialog.shadowRoot!.querySelector<HTMLElement>("[data-split-guests-confirm]")!.click();
       await el.updateComplete;
       expect(split).toEqual([
-        { tableId: "t5", billId: null, guests: { staying: 6, leaving: null } },
+        {
+          tableId: "t5",
+          billId: null,
+          guests: { staying: 6, leaving: null },
+          prompt: expect.any(Object),
+        },
       ]);
     });
 
