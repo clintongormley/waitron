@@ -72,6 +72,21 @@ describe("sealAeatSecret's install record", () => {
     ]);
   });
 
+  it("a seal with no clock stamps the row with the current time", async () => {
+    await seedTenantTillSif(suite.db);
+    const before = new Date();
+
+    await sealAeatSecret(
+      { db: suite.db, ring: testRing(), nodeId: TENANT_A.nodeId },
+      certOf(candidate),
+    );
+
+    const after = new Date();
+    const [row] = await installRows();
+    expect(row!.installedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(row!.installedAt.getTime()).toBeLessThanOrEqual(after.getTime());
+  });
+
   it("a resumed setup sealing the same file writes no second row", async () => {
     await seedTenantTillSif(suite.db);
     const ring = testRing();
