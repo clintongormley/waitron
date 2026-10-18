@@ -4990,8 +4990,10 @@ change between the open department's offered tabs through. The address keeps the
 is `service`, `receipt` or `transfers`; Details has none); the list's “Set up the tax-agency
 description” and the image library's receipt-logo link open Receipts, and an address naming an unknown view,
 or a tab not offered, opens Details and replaces the address without adding a history entry. A
-refusal naming a field, or an invalid Save, shows the first tab holding a marked field, and marks
-every tab that holds one. A strip too wide for the dialog scrolls sideways inside it. Edit zone
+refusal naming a field, or an invalid Save, of the shared draft shows the first of Details, Service
+and Transfers holding a marked field; a receipt refusal naming a field that lands while another tab
+shows brings back Receipts (`department-receipt-invalid`). A tab shown this way replaces the
+address, the field takes focus, and every tab holding a marked field is marked. A strip too wide for the dialog scrolls sideways inside it. Edit zone
 holds its name and four raw service overrides. Each override offers “Same as department (…)”, and saving that choice writes null. How
 orders start chooses Table service or Counter service. Counter service has a paid-when choice and
 a collection-ticket choice. The zone's name and policy save in one request. Edit department preserves the department's receipt policy.

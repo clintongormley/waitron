@@ -296,6 +296,24 @@ it("Enter in a receipt field, receipt unchanged and Details dirty, writes nothin
   expect(modal.open).toBe(true);
   expect(form.hasUnsavedChanges).toBe(true);
 });
+it("Enter reaching a receipt field after the dialog has moved to Details, before the browser moves focus off it, writes nothing", async () => {
+  const { el, form, writes } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  await editDepartmentField(form, "name", "Restaurant draft");
+  await selectDepartmentTab(form, "receipt");
+  await userEvent.click(page.elementLocator(editor.shadowRoot!.querySelector("wt-input")!));
+  form.tab = "details";
+  await form.updateComplete;
+  await form.shadowRoot!.querySelector("wt-tabs")!.updateComplete;
+  expect(departmentSave(form)).not.toBeNull();
+  expect(editor.shadowRoot!.activeElement?.shadowRoot?.activeElement).toBe(receiptInput(editor));
+  receiptInput(editor).dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+  );
+  await form.updateComplete;
+  expect(writes).toEqual([]);
+  expect(form.hasUnsavedChanges).toBe(true);
+});
 it("a department Save keeps the dialog open while the receipt draft is dirty", async () => {
   const { el, form, modal, writes } = await mount();
   const editor = await supplyReceiptEditor(el, form);
@@ -355,4 +373,63 @@ it("receipt events naming another department leave the dialog alone", async () =
   await modal.updateComplete;
   expect(heard).not.toHaveBeenCalled();
   expect(modal.open).toBe(true);
+});
+function tabChanges(el: HTMLElement) {
+  const changes: unknown[] = [];
+  el.addEventListener("department-tab-change", (event) =>
+    changes.push((event as CustomEvent).detail),
+  );
+  return changes;
+}
+function tabMarks(form: HTMLElementTagNameMap["department-settings"]) {
+  return form.shadowRoot!.querySelector("wt-tabs")!.items.map(({ key, marked }) => [key, marked]);
+}
+it("a receipt refusal naming a field while Details shows selects Receipts, replacing the address, marks it and focuses the field", async () => {
+  const { el, form } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  await selectDepartmentTab(form, "receipt");
+  await selectDepartmentTab(form, "details");
+  const changes = tabChanges(el);
+  await editor.refuse();
+  await expect.poll(() => form.tab).toBe("receipt");
+  expect(changes).toEqual([{ tab: "receipt", replace: true }]);
+  await form.shadowRoot!.querySelector("wt-tabs")!.updateComplete;
+  expect(tabMarks(form)).toEqual([
+    ["details", undefined],
+    ["service", undefined],
+    ["receipt", "needs fixing"],
+    ["transfers", undefined],
+  ]);
+  const field = editor.shadowRoot!.querySelector("wt-input")!;
+  await expect.poll(() => editor.shadowRoot!.activeElement).toBe(field);
+  expect(field.shadowRoot!.activeElement).toBe(receiptInput(editor));
+  await editReceipt(editor, "Fixed");
+  await expect.poll(() => tabMarks(form)[2]).toEqual(["receipt", undefined]);
+  expect(changes).toHaveLength(1);
+});
+it("a receipt refusal while Receipts shows marks the tab and changes no tab", async () => {
+  const { el, form } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  await selectDepartmentTab(form, "receipt");
+  const changes = tabChanges(el);
+  await editor.refuse();
+  await form.updateComplete;
+  await form.shadowRoot!.querySelector("wt-tabs")!.updateComplete;
+  expect(tabMarks(form)[2]).toEqual(["receipt", "needs fixing"]);
+  expect(form.tab).toBe("receipt");
+  expect(changes).toEqual([]);
+});
+it("a receipt refusal from another department's editor leaves the tab alone", async () => {
+  const { el, form } = await mount();
+  const editor = await supplyReceiptEditor(el, form);
+  const changes = tabChanges(el);
+  const heard = vi.fn();
+  el.addEventListener("department-receipt-invalid", heard);
+  editor.departmentId = "d2";
+  await editor.refuse();
+  await form.updateComplete;
+  expect(form.tab).toBe("details");
+  expect(changes).toEqual([]);
+  expect(heard).not.toHaveBeenCalled();
+  expect(editor.shadowRoot!.activeElement).toBeNull();
 });

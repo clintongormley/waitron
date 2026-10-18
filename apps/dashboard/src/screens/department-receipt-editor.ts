@@ -131,6 +131,8 @@ export class DepartmentReceiptEditor extends LitElement {
   #previewDue = false;
   #previewSource?: unknown;
   #paper = new PrintPaper();
+  #marked = false;
+  #announcedMarked = false;
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -151,6 +153,15 @@ export class DepartmentReceiptEditor extends LitElement {
   }
   get saving(): boolean {
     return this.busy;
+  }
+  /** Whether a field shows a mark, as of the last render. */
+  get invalid(): boolean {
+    return this.#marked;
+  }
+  protected override updated(): void {
+    if (this.#marked === this.#announcedMarked) return;
+    this.#announcedMarked = this.#marked;
+    this.#notify("department-receipt-invalid", this.department?.id, { invalid: this.#marked });
   }
   #open(department: { id: string; name: string }): void {
     this.#opening++;
@@ -194,12 +205,17 @@ export class DepartmentReceiptEditor extends LitElement {
       this.#notify("department-receipt-closed", departmentId);
   }
   #notify(
-    type: "department-receipt-saved" | "department-receipt-cancel" | "department-receipt-closed",
+    type:
+      | "department-receipt-saved"
+      | "department-receipt-cancel"
+      | "department-receipt-closed"
+      | "department-receipt-invalid",
     departmentId = this.department?.id,
+    detail: { invalid?: boolean } = {},
   ): void {
     if (!departmentId) return;
     this.dispatchEvent(
-      new CustomEvent(type, { detail: { departmentId }, bubbles: true, composed: true }),
+      new CustomEvent(type, { detail: { departmentId, ...detail }, bubbles: true, composed: true }),
     );
   }
   #release(): void {
@@ -572,11 +588,13 @@ export class DepartmentReceiptEditor extends LitElement {
         ></wt-textarea>`;
   }
   override render() {
+    this.#marked = false;
     if (!this.department) return nothing;
     const action = saveActionState(this.#scope);
     const problems = this.attempted ? this.#problems() : {};
     const errors = { ...problems, ...this.errors };
     const hasErrors = Object.keys(errors).length > 0;
+    this.#marked = hasErrors;
     const warnings = this.model
       ? untranslatedLanguages(
           [this.draft.receipt.headerSubtitle, this.draft.receipt.footerMessage],

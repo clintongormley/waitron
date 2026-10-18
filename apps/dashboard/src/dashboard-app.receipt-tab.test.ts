@@ -143,6 +143,91 @@ it("a dirty receipt draft asks before another department's Receipts address; Kee
   await expect.poll(() => next.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
   expect(receiptField(next, "email").value).toBe("");
 });
+async function showDepartmentTab(app: Parameters<typeof departmentForm>[0], key: string) {
+  const form = departmentForm(app)!;
+  const strip = form.shadowRoot!.querySelector("wt-tabs")!;
+  await strip.updateComplete;
+  await userEvent.click(
+    page.elementLocator(strip.shadowRoot!.querySelector(`[role=tab][data-key=${key}]`)!),
+  );
+  await expect.poll(() => form.tab).toBe(key);
+}
+const emailRefusal = () =>
+  new Response(
+    JSON.stringify({
+      error: { code: "receipt.invalid", params: { field: "email", reason: "invalid_email" } },
+    }),
+    { status: 422, headers: { "content-type": "application/json" } },
+  );
+it("a receipt refusal naming a field that lands while Details shows returns to Receipts, replacing the address, marks the tab and focuses the field", async () => {
+  const held = deferred<Response>();
+  const { app, editor, modal } = await mountReceiptTab({
+    respond: (path, init) =>
+      path.endsWith("/bar/receipt") && init.method === "PUT" ? held.promise : undefined,
+  });
+  await editReceipt(editor, "email", "new@example.com");
+  await userEvent.click(page.elementLocator(receiptSave(editor)));
+  await expect.poll(() => editor.saving).toBe(true);
+  await showDepartmentTab(app, "details");
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/bar");
+  const form = departmentForm(app)!;
+  const strip = form.shadowRoot!.querySelector("wt-tabs")!;
+  const push = vi.spyOn(history, "pushState");
+  const replace = vi.spyOn(history, "replaceState");
+  try {
+    held.resolve(emailRefusal());
+    await expect.poll(() => form.tab).toBe("receipt");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/venue-operations/department/bar/view/receipt");
+    expect(push).not.toHaveBeenCalled();
+    expect(
+      replace.mock.calls.some(([, , url]) => String(url).includes("/department/bar/view/receipt")),
+    ).toBe(true);
+    await strip.updateComplete;
+    expect(strip.items.map(({ key, marked }) => [key, marked])).toEqual([
+      ["details", undefined],
+      ["service", undefined],
+      ["receipt", "needs fixing"],
+    ]);
+    const email = receiptField(editor, "email");
+    expect(email.error).toBe("Enter an email address such as name@example.com.");
+    await expect.poll(() => receiptRoot(editor).activeElement).toBe(email);
+    expect(email.shadowRoot!.activeElement).toBe(email.shadowRoot!.querySelector("input"));
+    expect(modal.open).toBe(true);
+    expect(editor.hasUnsavedChanges).toBe(true);
+    await editReceipt(editor, "email", "fixed@example.com");
+    await strip.updateComplete;
+    await expect
+      .poll(() => strip.items.find(({ key }) => key === "receipt")!.marked)
+      .toBeUndefined();
+  } finally {
+    push.mockRestore();
+    replace.mockRestore();
+  }
+});
+it("a receipt refusal naming a field that lands while Receipts shows changes no tab or address", async () => {
+  const held = deferred<Response>();
+  const { app, editor } = await mountReceiptTab({
+    respond: (path, init) =>
+      path.endsWith("/bar/receipt") && init.method === "PUT" ? held.promise : undefined,
+  });
+  const form = departmentForm(app)!;
+  const changes = vi.fn();
+  form.addEventListener("department-tab-change", changes);
+  await editReceipt(editor, "email", "new@example.com");
+  await userEvent.click(page.elementLocator(receiptSave(editor)));
+  await expect.poll(() => editor.saving).toBe(true);
+  held.resolve(emailRefusal());
+  await expect.poll(() => receiptField(editor, "email").error).not.toBe("");
+  await expect.poll(() => receiptRoot(editor).activeElement).toBe(receiptField(editor, "email"));
+  const strip = form.shadowRoot!.querySelector("wt-tabs")!;
+  await strip.updateComplete;
+  expect(strip.items.find(({ key }) => key === "receipt")!.marked).toBe("needs fixing");
+  expect(form.tab).toBe("receipt");
+  expect(changes).not.toHaveBeenCalled();
+  expect(location.pathname).toBe("/manage/venue-operations/department/bar/view/receipt");
+});
 it("Venue settings no longer hosts a global receipt tab or global receipt reads", async () => {
   const { app, fetchImpl } = await mount({ path: "/manage/venue-settings/view/receipts" });
   await expect.poll(() => location.pathname).toBe("/manage/venue-settings/view/venue-details");

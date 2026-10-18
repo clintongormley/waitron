@@ -94,6 +94,7 @@ export class ReceiptEditorStub extends LitElement {
   value = "";
   hold = false;
   busy = false;
+  error = "";
   finish?: () => void;
   #scope?: DraftScope<string>;
   override connectedCallback() {
@@ -123,6 +124,15 @@ export class ReceiptEditorStub extends LitElement {
   get saving(): boolean {
     return this.busy;
   }
+  get invalid(): boolean {
+    return !!this.error;
+  }
+  async refuse(error = "Refused") {
+    this.error = error;
+    this.requestUpdate();
+    await this.updateComplete;
+    this.notify("department-receipt-invalid", { invalid: true });
+  }
   async save() {
     this.busy = true;
     if (this.hold)
@@ -133,10 +143,10 @@ export class ReceiptEditorStub extends LitElement {
     this.busy = false;
     this.notify("department-receipt-saved");
   }
-  notify(type: string) {
+  notify(type: string, detail: object = {}) {
     this.dispatchEvent(
       new CustomEvent(type, {
-        detail: { departmentId: this.departmentId },
+        detail: { departmentId: this.departmentId, ...detail },
         bubbles: true,
         composed: true,
       }),
@@ -147,10 +157,18 @@ export class ReceiptEditorStub extends LitElement {
         name="receiptSubtitle"
         label="Subtitle"
         .value=${this.value}
+        error=${this.error}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
           this.value = event.detail.value;
           this.#scope?.changed();
+          if (this.error) {
+            this.error = "";
+            this.requestUpdate();
+            void this.updateComplete.then(() =>
+              this.notify("department-receipt-invalid", { invalid: false }),
+            );
+          }
         }}
       ></wt-input
       ><button data-test="save-receipt" @click=${() => void this.save()}>Save</button
