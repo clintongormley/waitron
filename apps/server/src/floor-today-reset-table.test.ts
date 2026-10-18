@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodaySplitParts,
@@ -1058,21 +1059,26 @@ describe("Reset table on a joined table come apart around a part the guests held
     expect(await placeOf(table.long!)).toEqual(LONG_SAVED);
     expect(await seatsOf(table.long!)).toBe(10);
   });
+});
 
-  it("saved with no place and put out today: Long table comes back off the map, not built out from where its row stood", async () => {
-    const { table, zoneId } = await longAroundHeldCounter3(null);
-    await ok(post(`/api/tables/${table.long!}/today/place`, table.long!, { x: 30, y: 30 }));
-    await ok(splitOff(table.long!, [table.c5!]));
-    expect(await apart(table.long!)).toBe(1);
-    expect(await splitRowsOf(table.long!)).toEqual([table.c4!, table.c5!].sort());
-    expect((await todayRow(v, table.long!))!.x).not.toBeNull();
-    expect((await todayRow(v, table.long!))!.takenOff).toBe(false);
+describe("a room's reset while guests sit at a part saved into Long table", () => {
+  it("leaves Long table's whole group waiting: Long table cannot be put on the map", async () => {
+    const { table } = await longAroundHeldCounter3(null);
 
-    await settles(() => reset(table.long!, [table.c4!, table.c5!]), zoneId);
-
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ tableId: floorResetTables.tableId, pending: floorResetTables.pending })
+        .from(floorResetTables)
+        .where(inArray(floorResetTables.tableId, [table.long!, table.c3!, table.c4!, table.c5!])),
+    );
+    expect(rows.map((row) => row.pending)).toEqual([true, true, true, true]);
+    await refused(
+      post(`/api/tables/${table.long!}/today/place`, table.long!, { x: 30, y: 30 }),
+      409,
+      "table.in_joined_table",
+      { tableId: table.long! },
+    );
     expect(await placeOf(table.long!)).toEqual(NO_PLACE);
-    expect(await seatsOf(table.long!)).toBe(10);
-    expect(await splitRowsOf(table.long!)).toEqual([]);
   });
 });
 
