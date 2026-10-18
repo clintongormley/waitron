@@ -276,13 +276,20 @@ export async function removeSets(
     .select({ id: floorPlans.id })
     .from(floorPlans)
     .where(inArray(floorPlans.setId, setIds));
-  const planIds = plans.map((plan) => plan.id);
-  await tx.delete(floorPlanPlacements).where(inArray(floorPlanPlacements.planId, planIds));
-  await tx.delete(floorPlanTableSizes).where(inArray(floorPlanTableSizes.planId, planIds));
-  await tx.delete(floorPlans).where(inArray(floorPlans.id, planIds));
+  await deletePlans(
+    tx,
+    plans.map((plan) => plan.id),
+  );
   await tx
     .update(floorTodayZones)
     .set({ setId: null })
     .where(inArray(floorTodayZones.setId, setIds));
   await tx.delete(floorPlanSets).where(inArray(floorPlanSets.id, setIds));
+}
+
+/** Deletes layouts `planIds` with the placements and kept sizes that name them. */
+export async function deletePlans(tx: Transaction, planIds: readonly string[]): Promise<void> {
+  await tx.delete(floorPlanPlacements).where(inArray(floorPlanPlacements.planId, [...planIds]));
+  await tx.delete(floorPlanTableSizes).where(inArray(floorPlanTableSizes.planId, [...planIds]));
+  await tx.delete(floorPlans).where(inArray(floorPlans.id, [...planIds]));
 }

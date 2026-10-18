@@ -2,7 +2,6 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import {
   diningTables,
   floorZones,
-  floorPlanPlacements,
   floorPlans,
   floorPlanTableParts,
   floorPlanTableSizes,
@@ -27,7 +26,7 @@ import {
   type ErrorParams,
 } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
-import { removeSets } from "./floor-plan-sets.js";
+import { deletePlans, removeSets } from "./floor-plan-sets.js";
 import { removeLiveTables, tableDeleteRefusals } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -223,18 +222,14 @@ export function floorDeletionFor(
       await tx
         .delete(floorPlanTableParts)
         .where(inArray(floorPlanTableParts.joinedTableId, masterIds));
-      const planIds = floor.plans.map((plan) => plan.id);
-      await tx.delete(floorPlanPlacements).where(inArray(floorPlanPlacements.planId, planIds));
       await tx
         .delete(floorPlanTableSizes)
-        .where(
-          or(
-            inArray(floorPlanTableSizes.planId, planIds),
-            inArray(floorPlanTableSizes.planTableId, masterIds),
-          ),
-        );
+        .where(inArray(floorPlanTableSizes.planTableId, masterIds));
+      await deletePlans(
+        tx,
+        floor.plans.map((plan) => plan.id),
+      );
       await tx.delete(floorPlanTables).where(inArray(floorPlanTables.id, masterIds));
-      await tx.delete(floorPlans).where(inArray(floorPlans.id, planIds));
     },
   };
 }
