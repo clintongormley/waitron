@@ -12,7 +12,14 @@ import type { SaveKitchenNoteDetail } from "../widgets/order-kitchen-note.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
-import { ContentLanguageController, inNumberOrder, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  ContentLanguageController,
+  Gestures,
+  inNumberOrder,
+  leaveCoordinatorFor,
+} from "@waitron/ui";
+import { pointerElementsAt, scrollAncestors } from "@waitron/ui/src/reorder-table.js";
+import type { TillBasket } from "../widgets/basket.js";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import {
   LitElement,
@@ -764,12 +771,35 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       .draft-group-name {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
         margin: 0;
         font-size: var(--wt-font-size-md);
       }
 
+      .draft-select,
+      [data-draft-drag-heading] {
+        touch-action: none;
+        user-select: none;
+      }
+
+      [data-draft-dragging] {
+        outline: 2px solid var(--wt-color-primary);
+        outline-offset: 2px;
+      }
+
+      .draft-drop-gap {
+        min-height: var(--wt-space-3);
+      }
+
+      [data-draft-drag-active] .draft-drop-gap {
+        border-block-end: 2px dashed var(--wt-color-primary);
+      }
+
       .draft-group-select {
-        width: 100%;
+        flex: 1;
+        min-width: 0;
         text-align: start;
         min-height: var(--wt-tap-min);
         overflow-wrap: anywhere;
@@ -1503,6 +1533,8 @@ export class TillTableOrderScreen extends LitElement {
     const store = this.#draftStore;
     if (this.#watchedDraft !== undefined && this.#watchedDraft.store === store) return;
     this.#watchedDraft?.stop();
+    this.#draftEpoch++;
+    this.#endDraftDrag();
     this.#cancelAutomaticRouting();
     this.#routingChecked = undefined;
     this.#selected = new WeakSet();
@@ -1516,6 +1548,8 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchedDraft = {
       store,
       stop: store.subscribe(() => {
+        this.#draftEpoch++;
+        this.#endDraftDrag();
         this.#cancelAutomaticRouting();
         if (store.sending) this.draftMoveStore = null;
         if (store.editsLocked) {
@@ -1550,6 +1584,21 @@ export class TillTableOrderScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.addEventListener("pointerdown", this.#pressDraft, true);
+    this.addEventListener("click", this.#draftClick, true);
+    this.addEventListener("keydown", this.#draftKey, true);
+    this.#draftGestures = new Gestures(this, {
+      holdStart: () => {
+        if (this.#draftPressCurrent()) {
+          this.#suppressDraftClick = true;
+          this.draftDragging = true;
+        }
+      },
+      holdDrop: ({ x, y }) => this.#dropDraft(x, y),
+      longPress: () => this.#openHeldDraftLine(),
+      pan: ({ dy }) => this.#panDraft(dy),
+      cancel: () => this.#endDraftDrag(),
+    });
     this.requestUpdate();
     this.#watchDraft();
     this.#measure(this.getBoundingClientRect().width);
@@ -1575,6 +1624,12 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.removeEventListener("pointerdown", this.#pressDraft, true);
+    this.removeEventListener("click", this.#draftClick, true);
+    this.removeEventListener("keydown", this.#draftKey, true);
+    this.#draftGestures?.disconnect();
+    this.#draftGestures = undefined;
+    this.#endDraftDrag();
     super.disconnectedCallback();
     this.#serveScope?.dispose();
     this.#serveScope = undefined;
@@ -1601,6 +1656,239 @@ export class TillTableOrderScreen extends LitElement {
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
   #selected = new WeakSet<OrderLine>();
+  #draftGestures?: Gestures;
+  #draftEpoch = 0;
+  @state() private draftDragging = false;
+  #suppressDraftClick = false;
+  #draftPress?: {
+    store: WorkingOrderStore;
+    lines: readonly OrderLine[];
+    chosen: readonly OrderLine[];
+    generation: number;
+    control: HTMLElement;
+    group: LayoutGroup | undefined;
+    api: TillApi | undefined;
+    scope: string;
+    groups: string;
+  };
+
+  #draftDragScope(): string {
+    return JSON.stringify([this.orderId, this.party?.id, this.serviceVisit]);
+  }
+
+  #draftDragGroups(): string {
+    return JSON.stringify([
+      this.currentOrders?.revision,
+      this.groups.map(({ id, state, position }) => [id, state, position]),
+    ]);
+  }
+
+  readonly #pressDraft = (event: PointerEvent): void => {
+    this.#endDraftDrag();
+    this.#suppressDraftClick = false;
+    if (event.button !== 0) return;
+    const store = this.#draftStore;
+    if (store === null) return;
+    const path = event.composedPath();
+    if (path.some((node) => node instanceof HTMLElement && node.localName === "wt-row-actions"))
+      return;
+    const control = path.find(
+      (node): node is HTMLElement =>
+        node instanceof HTMLElement &&
+        (node.hasAttribute("data-draft-select") || node.hasAttribute("data-draft-drag-heading")),
+    );
+    if (control === undefined) return;
+    const group = this.#draftLayout(store).find(
+      (group) => group.key === control.dataset.draftDragHeading,
+    );
+    const line = store.lines[Number(control.dataset.draftSelect)];
+    const chosen =
+      group === undefined
+        ? line === undefined
+          ? []
+          : this.#selected.has(line)
+            ? store.lines.filter((candidate) => this.#selected.has(candidate))
+            : [line]
+        : group.sections.flatMap(({ indexes }) => indexes.map((index) => store.lines[index]!));
+    if (chosen.length === 0) return;
+    this.#draftPress = {
+      store,
+      lines: [...store.lines],
+      chosen,
+      generation: store.loadGeneration,
+      control,
+      group,
+      api: this.api,
+      scope: this.#draftDragScope(),
+      groups: this.#draftDragGroups(),
+    };
+  };
+
+  #canDragDraft(store: WorkingOrderStore): boolean {
+    return (
+      this.isConnected &&
+      store === this.#draftStore &&
+      !store.editsLocked &&
+      !store.sending &&
+      !this.busy &&
+      !this.groupCommandBusy &&
+      !this.currentOrdersUnread &&
+      this.orderingAllowed
+    );
+  }
+
+  #draftPressCurrent(): boolean {
+    const press = this.#draftPress;
+    return (
+      press !== undefined &&
+      this.#canDragDraft(press.store) &&
+      press.api === this.api &&
+      press.scope === this.#draftDragScope() &&
+      press.groups === this.#draftDragGroups() &&
+      press.generation === press.store.loadGeneration &&
+      press.lines.length === press.store.lines.length &&
+      press.lines.every((line, index) => line === press.store.lines[index])
+    );
+  }
+
+  readonly #draftClick = (event: MouseEvent): void => {
+    if (!this.#suppressDraftClick) return;
+    if (
+      event
+        .composedPath()
+        .some(
+          (node) =>
+            node instanceof HTMLElement &&
+            (node.hasAttribute("data-draft-select") ||
+              node.hasAttribute("data-draft-group-select")),
+        )
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  };
+
+  readonly #draftKey = (event: KeyboardEvent): void => {
+    this.#suppressDraftClick = false;
+    if (event.key === "Escape") this.#endDraftDrag();
+  };
+
+  #endDraftDrag(): void {
+    this.#draftPress = undefined;
+    this.draftDragging = false;
+  }
+
+  #panDraft(dy: number): void {
+    const press = this.#draftPress;
+    if (press === undefined) return;
+    this.#suppressDraftClick = true;
+    for (const target of [...scrollAncestors(press.control).slice(1), document.scrollingElement]) {
+      if (!(target instanceof HTMLElement)) continue;
+      if (
+        target !== document.scrollingElement &&
+        !/auto|scroll/.test(getComputedStyle(target).overflowY)
+      )
+        continue;
+      const before = target.scrollTop;
+      target.scrollTop -= dy;
+      if (target.scrollTop !== before) break;
+    }
+  }
+
+  #openHeldDraftLine(): void {
+    const press = this.#draftPress;
+    if (press !== undefined && press.group === undefined && this.#draftPressCurrent()) {
+      const index = Number(press.control.dataset.draftSelect);
+      const basket = [...this.renderRoot.querySelectorAll<TillBasket>("till-basket")].find(
+        (basket) => basket.lineIndexes?.includes(index),
+      );
+      basket?.shadowRoot?.querySelector<HTMLElement>(`[data-line-detail="${index}"]`)?.click();
+    }
+    this.#endDraftDrag();
+  }
+
+  #dropDraft(x: number, y: number): void {
+    const press = this.#draftPress;
+    if (press === undefined || !this.draftDragging || !this.#draftPressCurrent()) {
+      this.#endDraftDrag();
+      return;
+    }
+    const path = pointerElementsAt(x, y);
+    if (!path.includes(this)) {
+      this.#endDraftDrag();
+      return;
+    }
+    const gap = path.find((node) => node.hasAttribute("data-draft-gap")) as HTMLElement | undefined;
+    const target = path.find((node) => node.hasAttribute("data-draft-group")) as
+      HTMLElement | undefined;
+    const held = path.find((node) => node.hasAttribute("data-held-group")) as
+      HTMLElement | undefined;
+    const layout = this.#draftLayout(press.store);
+    const group = layout.find((group) => group.key === target?.dataset.draftGroup);
+    const indexes = press.chosen.map((line) => press.store.lines.indexOf(line));
+    if (press.group !== undefined) {
+      const slots = layout.filter((group) => group.kind === "new");
+      const from = slots.findIndex((group) => group.key === press.group!.key);
+      let to = slots.findIndex((entry) => entry.key === group?.key);
+      if (to >= 0 && target !== undefined) {
+        const rect = target.querySelector("h3")!.getBoundingClientRect();
+        if (y >= rect.y + rect.height / 2) to++;
+      } else if (gap !== undefined) {
+        to =
+          gap.dataset.draftGap === "end"
+            ? slots.length
+            : slots.findIndex((entry) => entry.key === gap.dataset.draftGap);
+      }
+      if (to >= 0 && from >= 0) {
+        to -= from < to ? 1 : 0;
+        if (slots[to] !== undefined) press.store.moveSlot(press.group.slot!, slots[to]!.slot!);
+      }
+    } else if (gap !== undefined) {
+      const next =
+        gap.dataset.draftGap === "end"
+          ? layout.length
+          : layout.findIndex((group) => group.key === gap.dataset.draftGap);
+      const previous = layout[next - 1];
+      const first = layout[next];
+      const sourcePlace =
+        previous === undefined
+          ? undefined
+          : press.store.lines[previous.sections[0]!.indexes[0]!]!.place;
+      const afterGroupId =
+        previous?.kind === "join"
+          ? previous.groupId!
+          : sourcePlace?.kind === "new"
+            ? sourcePlace.afterGroupId
+            : undefined;
+      const slot =
+        previous?.kind === "new"
+          ? previous.slot! + 1
+          : previous?.kind === "join"
+            ? Math.max(0, ...layout.map((group) => group.slot ?? 0)) + 1
+            : first?.kind === "new"
+              ? first.slot!
+              : 1;
+      if (next >= 0)
+        press.store.setLinePlaces(
+          indexes,
+          {
+            kind: "new",
+            slot,
+            ...(afterGroupId === undefined ? {} : { afterGroupId }),
+          },
+          { from: slot },
+        );
+    } else if (group !== undefined && !group.invalidTarget) {
+      const place = press.store.lines[group.sections[0]!.indexes[0]!]!.place ?? { kind: "fire" };
+      press.store.setLinePlaces(indexes, place);
+    } else if (
+      held !== undefined &&
+      this.groups.some((group) => group.id === held.dataset.heldGroup && group.state === "held")
+    ) {
+      press.store.setLinePlaces(indexes, { kind: "join", groupId: held.dataset.heldGroup! });
+    }
+    this.#endDraftDrag();
+  }
   #routingRows = new WeakMap<
     OrderLine,
     { row: DeadEndAnswer["deadEnds"][number]; stations: DeadEndAnswer["stations"] }
@@ -3273,8 +3561,65 @@ export class TillTableOrderScreen extends LitElement {
     return [name, ...group.courseNames].join(" · ");
   }
 
+  #draftGroupMenu(store: WorkingOrderStore, group: LayoutGroup) {
+    const slots = this.#draftLayout(store).filter((group) => group.kind === "new");
+    const index = slots.findIndex((slot) => slot.key === group.key);
+    if (index < 0 || slots.length < 2 || store.editsLocked) return nothing;
+    const epoch = this.#draftEpoch;
+    const scope = this.#draftDragScope();
+    const groups = this.#draftDragGroups();
+    const api = this.api;
+    const move = (by: number) => {
+      if (
+        !this.#canDragDraft(store) ||
+        epoch !== this.#draftEpoch ||
+        scope !== this.#draftDragScope() ||
+        groups !== this.#draftDragGroups() ||
+        api !== this.api
+      )
+        return;
+      const target = slots[index + by];
+      if (target !== undefined) store.moveSlot(group.slot!, target.slot!);
+    };
+    return keyed(
+      JSON.stringify([epoch, scope, groups]),
+      html`<wt-row-actions
+        data-draft-group-more=${group.key}
+        label=${`${t("shell.more")} · ${this.#draftGroupName(group)}`}
+        align="end"
+      >
+        ${
+          index === 0
+            ? nothing
+            : html`<wt-button
+                data-draft-earlier
+                variant="secondary"
+                ?disabled=${!this.#canDragDraft(store)}
+                @click=${() => move(-1)}
+                >${t("table.group_earlier")}</wt-button
+              >`
+        }
+        ${
+          index === slots.length - 1
+            ? nothing
+            : html`<wt-button
+                data-draft-later
+                variant="secondary"
+                ?disabled=${!this.#canDragDraft(store)}
+                @click=${() => move(1)}
+                >${t("table.group_later")}</wt-button
+              >`
+        }
+      </wt-row-actions>`,
+    );
+  }
+
   #draftSections(store: WorkingOrderStore): TemplateResult {
-    return html`<div class="draft-sections" data-draft-sections>
+    return html`<div
+      class="draft-sections"
+      data-draft-sections
+      ?data-draft-drag-active=${this.draftDragging}
+    >
       ${repeat(
         this.#draftLayout(store),
         (group) => group.key,
@@ -3285,62 +3630,73 @@ export class TillTableOrderScreen extends LitElement {
           ).length;
           const checked = selected === 0 ? "false" : selected === indexes.length ? "true" : "mixed";
           const name = this.#draftGroupName(group);
-          return html`<section class="draft-group" data-draft-group=${group.key} aria-label=${name}>
-            <h3 class="draft-group-name" data-draft-group-name>
-              ${
-                store.editsLocked
-                  ? name
-                  : html`<button
-                      type="button"
-                      class="option draft-group-select"
-                      role="checkbox"
-                      data-draft-group-select=${group.key}
-                      aria-checked=${checked}
-                      ?disabled=${store.sending || this.groupCommandBusy}
-                      @click=${() => {
-                        if (store.editsLocked || store.sending || this.groupCommandBusy) return;
-                        for (const index of indexes) {
-                          const line = store.lines[index]!;
-                          if (checked === "true") this.#selected.delete(line);
-                          else this.#selected.add(line);
-                        }
-                        this.requestUpdate();
-                      }}
-                    >
-                      <span aria-hidden="true"
-                        >${checked === "true" ? "☑" : checked === "mixed" ? "▣" : "☐"}</span
+          return html`${group.kind === "fire" ? nothing : html`<div class="draft-drop-gap" data-draft-gap=${group.key} aria-hidden="true"></div>`}
+            <section class="draft-group" data-draft-group=${group.key} aria-label=${name}>
+              <h3
+                class="draft-group-name"
+                data-draft-group-name
+                data-draft-drag-heading=${group.kind === "new" ? group.key : nothing}
+                ?data-draft-dragging=${this.draftDragging && this.#draftPress?.group?.key === group.key}
+              >
+                ${
+                  store.editsLocked
+                    ? name
+                    : html`<button
+                        type="button"
+                        class="option draft-group-select"
+                        role="checkbox"
+                        data-draft-group-select=${group.key}
+                        aria-checked=${checked}
+                        ?disabled=${store.sending || this.groupCommandBusy}
+                        @click=${() => {
+                          if (store.editsLocked || store.sending || this.groupCommandBusy) return;
+                          for (const index of indexes) {
+                            const line = store.lines[index]!;
+                            if (checked === "true") this.#selected.delete(line);
+                            else this.#selected.add(line);
+                          }
+                          this.requestUpdate();
+                        }}
                       >
-                      ${name}
-                    </button>`
-              }
-            </h3>
-            ${repeat(
-              group.sections,
-              (section) => section.course?.id ?? "",
-              (section) =>
-                html`<section class="draft-section" data-draft-section=${section.course?.id ?? ""}>
-                  ${
-                    section.heading && section.course !== null
-                      ? html`<h4 class="draft-section-name">${section.course.name}</h4>`
-                      : nothing
-                  }
-                  <till-basket
-                    .hideKitchenNote=${true}
-                    .lineDetails=${true}
-                    .draftParent=${this}
-                    .courses=${this.courses}
-                    .orderInFlight=${this.groupCommandBusy}
-                    stacked
-                    .store=${store}
-                    .lineIndexes=${section.indexes}
+                        <span aria-hidden="true"
+                          >${checked === "true" ? "☑" : checked === "mixed" ? "▣" : "☐"}</span
+                        >
+                        ${name}
+                      </button>`
+                }
+                ${this.#draftGroupMenu(store, group)}
+              </h3>
+              ${repeat(
+                group.sections,
+                (section) => section.course?.id ?? "",
+                (section) =>
+                  html`<section
+                    class="draft-section"
+                    data-draft-section=${section.course?.id ?? ""}
                   >
-                    ${section.indexes.map((index) => this.#draftLine(store, store.lines[index]!, index))}
-                  </till-basket>
-                </section>`,
-            )}
-          </section>`;
+                    ${
+                      section.heading && section.course !== null
+                        ? html`<h4 class="draft-section-name">${section.course.name}</h4>`
+                        : nothing
+                    }
+                    <till-basket
+                      .hideKitchenNote=${true}
+                      .lineDetails=${true}
+                      .draftParent=${this}
+                      .courses=${this.courses}
+                      .orderInFlight=${this.groupCommandBusy}
+                      stacked
+                      .store=${store}
+                      .lineIndexes=${section.indexes}
+                    >
+                      ${section.indexes.map((index) => this.#draftLine(store, store.lines[index]!, index))}
+                    </till-basket>
+                  </section>`,
+              )}
+            </section>`;
         },
       )}
+      <div class="draft-drop-gap" data-draft-gap="end" aria-hidden="true"></div>
     </div>`;
   }
 
@@ -3387,6 +3743,7 @@ export class TillTableOrderScreen extends LitElement {
         type="button"
         class="option draft-select"
         data-draft-select=${index}
+        ?data-draft-dragging=${this.draftDragging && this.#draftPress?.group === undefined && this.#draftPress?.chosen.includes(line)}
         aria-pressed=${selected}
         ?disabled=${store.editsLocked || store.sending}
         @click=${() => {
