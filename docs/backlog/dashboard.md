@@ -1124,8 +1124,8 @@ help about anything you want very quickly."
   Theme, and the banner's controls add no height to it. Slice 2 is complete: 2a #1848, 2b #1851.
 - **Slice 3 landed (#NNNN, NNNN-NN-NN).** The guides moved from `docs/` to
   `apps/server/src/guide/en/`, with a `{#id}` on every section, and gained Spanish twins of all
-  three in `apps/server/src/guide/es/`. `apps/server/src/guide-markdown.ts` renders them and refuses
-  anything outside the small subset they use; `apps/server/src/guide-catalogue.ts` lists the
+  three in `apps/server/src/guide/es/`. `apps/server/src/guide-markdown.ts` renders the small subset
+  they use, refuses a listed set of other shapes, and shows everything else as plain text; `apps/server/src/guide-catalogue.ts` lists the
   languages and pages; the route `apps/server/src/guide-pages.ts` is mounted in every `bootServer`
   branch. The image carries `dist/guide` as `/app/guide`, and image smoke fetches a Spanish page.
   Root guards: `scripts/guide-page-tokens.test.ts` (the page's token copies) and

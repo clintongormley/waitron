@@ -868,8 +868,8 @@ with temporary cases in `apps/server/src/working-order.test.ts` and `order-group
 reverted:
 
 - With an options list deleted and the menus not republished, the till cannot add a dish that
-  carries it (`options.label_required`), and saving any change to a parked order holding such a
-  dish is refused the same way. On a table's order, a new round and a quantity change still
+  carries it (`options.label_required`), and saving a change to a parked order that keeps such a
+  dish on it is refused the same way. On a table's order, a new round and a quantity change still
   succeed; only another such dish with the old answer is refused.
 - With an options list and an extras list both deleted and the menus republished, raising the
   quantity of a table's dish that still carries an extra from the deleted list is refused

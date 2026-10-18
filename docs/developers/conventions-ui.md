@@ -99,9 +99,9 @@ machinery treat any path under `docs/` as documentation that nothing builds:
 - `isInertPath` in `scripts/changed-scope.mjs:126` treats every `docs/` path as inert, so a
   guide-only change would run no CI code job and no test. Measured 2026-10-18 on this branch with
   `scopeForPaths` from `scripts/changed-packages.mjs` and a workspace of `@waitron/server` and
-  `@waitron/dashboard`: the path docs/guide/en/products.md gave
-  `{"kind":"documentation","packages":[]}` and `apps/server/src/guide/en/products.md` gave
-  `{"kind":"packages","packages":["@waitron/server"]}`.
+  `@waitron/dashboard`: the path docs/guide/en/products.md gave `kind: "documentation"` with no
+  packages, and `apps/server/src/guide/en/products.md` gave `kind: "packages"` with
+  `@waitron/server`.
 - The root `CLAUDE.md` (§6, Workflow) exempts a `docs/`-only change from the pull-request
   ceremony, so a guide shipped in the image could be pushed straight to `main` with nothing run.
 
@@ -129,18 +129,20 @@ accepts exactly this:
 
 Everything else in a line is escaped and shown as written, so a placeholder such as
 `**<department> receipt logo**` reads as text. A shape outside the subset makes `renderGuide` throw
-an error naming the line: a table, a fence, a quote, a `*` or `+` list, a numbered list, a nested
+an error naming the line: a table row starting with `|`, a fence, a quote, a `*` or `+` list, a numbered list, a nested
 list, an indented line, a rule, a level-3 heading, a second title, formatting inside a heading, an
 image, a link to anything but another guide, a lone `*`, a backslash, an HTML comment, an HTML
 entity and an address in angle brackets (every refusal is a `fail(…)` call in that file). Measured
-2026-10-18 by calling `renderGuide` from `node`: a table row, a fence, `1. one`, `### Sub` and a link
+2026-10-18 by calling `renderGuide` from `node`: a table row starting with `|`, a fence, `1. one`, `### Sub` and a link
 to `https://example.com` were each refused with their line number; `<b>hi</b>` rendered as
 `&lt;b&gt;hi&lt;/b&gt;`; and `[m](modifiers.md#lists)` rendered as `<a href="modifiers#lists">`. A
 link is written relative, so it stays in the reader's language.
 
-The refusal is what keeps a guide from rendering wrongly on a box: `apps/server/src/guide-content.test.ts`
-renders every page, so a guide edit outside the subset fails `apps/server`'s tests in CI. If one
-reached a box anyway, the route answers its own 500 page and logs `guide.render_failed`, without
+The refusals keep the shapes listed above from reaching a box: `apps/server/src/guide-content.test.ts`
+renders every page, so a guide edit that uses one fails `apps/server`'s tests in CI. Anything else,
+such as a table written without a leading `|`, `~~strike~~` or `<img src=x>`, is shown as plain
+text (measured 2026-10-19 with the same `node` call), so only reading the rendered page catches it.
+If a refused shape reached a box anyway, the route answers its own 500 page and logs `guide.render_failed`, without
 the guide's words.
 
 ### Section ids and twins
@@ -169,7 +171,9 @@ the route a decoded parameter: measured 2026-10-18 on Hono 4.13.13 with a throwa
 only `app.get("/help/:lang/:page", …)`, `/help/en/..%2F..%2Fetc%2Fpasswd` reached the handler as
 `page: "../../etc/passwd"`. Anything else under `/help`, including `/help`, `/help/en` and a
 trailing slash, answers the guide's own 404 page (`app.get("/help/*", …)`, `guide-pages.ts:222`);
-an address of the form `/help/es/<anything>` gets it in Spanish, every other one in English.
+an address `/help/es/<page>` with one part after `es` and no trailing slash gets it in Spanish,
+and every other one, `/help/es` and `/help/es/products/` among them, gets it in English
+(`guide-pages.ts:192` and `:222`).
 Without that catch-all those addresses would fall through to whatever is mounted later: a setup box
 with no built setup app answers every other GET with its 200 placeholder
 (`apps/server/src/setup-api.ts:1412`).

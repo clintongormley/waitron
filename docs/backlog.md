@@ -724,7 +724,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A884. Deleting an options or extras list leaves it on the published menus until they are
   republished.** Until then the till cannot add a dish carrying a deleted options list, nor save a
-  parked order holding one (`options.label_required`); after a republish, a table's dish carrying an
+  change to a parked order that keeps one (`options.label_required`); after a republish, a table's dish carrying an
   extra from a deleted list cannot have its quantity raised (`extras.invalid`).
   [Detail](backlog/catalogue.md#a884-deleting-an-options-or-extras-list-leaves-it-on-the-published-menus-until-they-are-republished)
 
@@ -4444,8 +4444,8 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 - **A886. Dashboard wording: "Disabled product", "Menús", and two strings nothing reads.** The
   image library says "Disabled product" where the product screens say "Archived", the Spanish
-  `product.refusal_menus` and `folders.delete_off_menus` say "menús" where the dashboard says
-  "cartas", and
+  `product.refusal_menus`, `folders.delete_off_menus` and `routing.period_not_on_menus` say
+  "menús" where the neighbouring strings say "cartas", and
   `product.disable_warning` and `product.disabled_badge` are unused.
   [Detail](backlog/languages.md#a886-dashboard-wording-disabled-product-menús-and-two-strings-nothing-reads)
 

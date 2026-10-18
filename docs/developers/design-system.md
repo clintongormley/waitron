@@ -2187,7 +2187,7 @@ the link ("Read more in the guide", "Más información en la guía", `help.guide
 primitive shows no fixed words. The link sits after the text in the open box. Tab goes from the
 badge to the link and the box stays open; Tab past the link closes the box, Escape on it closes the
 box and puts focus back on the badge, and a click on it opens the guide in a new tab and closes the
-box, leaving the form underneath as it was (`packages/ui/src/components/wt-help-tooltip.guide.test.ts`).
+box (`packages/ui/src/components/wt-help-tooltip.guide.test.ts`).
 A link is only worth adding where the guide says more than the badge: in Products, the price field,
 the default course and the Variants section link to their sections, and VAT and Availability do not.
 A `wt-data-table` column badge and a `wt-menu-row` cannot carry a link yet. Where the guides live and

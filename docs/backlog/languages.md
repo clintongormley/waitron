@@ -73,9 +73,13 @@ Found while checking the guides for A582 slice 3. One clean-up of the dashboard'
   deshabilitado"; `image.disabled_product`, `packages/media/src/dashboard/strings.ts`, drawn in
   `packages/media/src/dashboard/image-library.ts`), where the product screens say "Archived"
   (`product.archived_badge`).
-- The Spanish `product.refusal_menus` (`apps/dashboard/src/i18n/strings.ts`) is "Menús", and
-  `folders.delete_off_menus` says "menús", where the dashboard's other Spanish strings call a menu a
-  "carta" (the neighbouring `product.off_menus` and `folders.off_menus_unknown` among them).
+- The Spanish `product.refusal_menus` is "Menús" and `folders.delete_off_menus` says "menús"
+  (`apps/dashboard/src/i18n/strings.ts`), where the neighbouring strings in that file, such as
+  `product.off_menus` and `folders.off_menus_unknown`, say "carta". Two strings in
+  `packages/venue-service/src/dashboard/strings.ts` say "menús" too: `routing.period_not_on_menus`
+  ("No está en los menús de {periods}", drawn by `routing-cell-editor.ts` and
+  `routing-grid-model.ts`) and `venue.delete_item_staff_menus` ("Quita {count} ajustes de menús del
+  personal").
 - `product.disable_warning` and `product.disabled_badge` are declared in English and Spanish, and no
   other file under `apps/` or `packages/` names them (grep, 2026-10-18); the last change to their
   use was A435's first step (#1464, products and variants archived for good). Delete them.

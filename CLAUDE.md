@@ -266,7 +266,8 @@ called weaker than its name, the topic file lists what it does not see.
   link goes through `apps/dashboard/src/help-guide.ts`. Guards: `apps/server/src/guide-content.test.ts`
   and `scripts/guide-links.test.ts`, both weaker than their names — the first checks that the guides
   render and that their ids, links and twins' ids match, never that a guide or its twin says what
-  the screen does or was updated with it; the second reads the dashboard's source as text. See
+  the screen does or was updated with it; the second's check that only `help-guide.ts` writes a
+  guide path reads the dashboard's source as text. See
   [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Before treating a numeric field as whole numbers, follow its checks and wire conversion and
   try a fraction.** Cost: A284 almost skipped a logout timer because its comment said whole minutes;
