@@ -229,6 +229,28 @@ it("a zone's day with its department closed shows 'Restaurant closed all day' be
   expect(column("1").querySelector(".all-closed.behind")).toBeNull();
 });
 
+it("widening a department's day leaves its zones unedited", async () => {
+  const { painter } = await mount({
+    model: withDays(painterModel(), "d1", { 2: [slot("p1", "13:00", "18:00")] }),
+  });
+  await drag(painter, "2", 12 * 60, 14 * 60);
+  expect(grid(painter).days.get("2")).toEqual([
+    { periodId: "p1", startsAt: "13:00", endsAt: "20:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+});
+
+it("a department change on a day its zone has no closure leaves the zone unedited", async () => {
+  const { painter } = await mount();
+  chip(painter, "paint-closed")!.click();
+  await settle(painter);
+  await drag(painter, "1", 8 * 60, 10 * 60);
+  expect(grid(painter).days.get("1")).toEqual([
+    { periodId: "p1", startsAt: "13:00", endsAt: "14:00" },
+  ]);
+  expect(painter.edited()).toEqual({ departments: ["d1"], zones: [] });
+});
+
 it("keeps the draft across the picker: Restaurant's paint is still there after Terrace", async () => {
   const { painter } = await mount({ model: openOn(4) });
   chip(painter, "paint-p2")!.click();

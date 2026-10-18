@@ -21,6 +21,7 @@ import {
   type Paint,
 } from "../paint-model.js";
 import { seasonLastDay } from "../season-rules.js";
+import { closuresInHours } from "../zone-own-hours.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { PaintChange, PaintColumn } from "./paint-grid.js";
 import { format, formatMonthDay } from "./hours-view.js";
@@ -452,7 +453,19 @@ export class SeasonPainter extends LitElement {
     this.notice = "";
     if (this.refused?.owner === key && this.refused.column === event.detail.key)
       this.refused = undefined;
-    this.draft = new Map(this.draft).set(key, week);
+    const draft = new Map(this.draft).set(key, week);
+    const department = this.model.departments.find(({ id }) => departmentKey(id) === key);
+    for (const zone of department?.zones ?? []) {
+      const zoneWeek = draft.get(zoneKey(zone.id));
+      const day = zoneWeek?.get(event.detail.key) ?? [];
+      const cut = closuresInHours(event.detail.day.filter(isPeriodPaint), day, {
+        dayCutover: this.model.dayCutover,
+        endMinute: 1440,
+      }).map(({ startsAt, endsAt }) => ({ periodId: null, startsAt, endsAt }));
+      if (zoneWeek && !samePaint(cut, day))
+        draft.set(zoneKey(zone.id), copyWeek(zoneWeek).set(event.detail.key, cut));
+    }
+    this.draft = draft;
     this.scope?.changed();
   }
   private async save() {

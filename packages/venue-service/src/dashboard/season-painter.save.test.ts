@@ -124,6 +124,49 @@ it("saves exactly the edited department and zone in one request, then is clean a
   ]);
 });
 
+it("shrinking Restaurant's Tuesday cuts Terrace's Tuesday in the same Save", async () => {
+  const { painter, writes } = await mount(
+    withDays(withBar(), "d1", { 2: [slot("p1", "13:00", "18:00")] }),
+  );
+  button(painter, "paint-closed").click();
+  await settle(painter);
+  await drag(painter, "2", 10 * 60, 12 * 60);
+  await save(painter, writes);
+  expect(writes.map(({ body }) => body)).toEqual([
+    {
+      departments: [
+        {
+          departmentId: "d1",
+          days: [
+            { weekday: 1, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }] },
+            { weekday: 2, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "16:00" }] },
+            empty(3),
+            empty(4),
+            empty(5),
+            empty(6),
+            empty(0),
+          ],
+        },
+      ],
+      zones: [
+        {
+          zoneId: "z2",
+          days: [
+            open(1),
+            { weekday: 2, ranges: [{ startsAt: "15:00", endsAt: "16:00" }] },
+            open(3),
+            open(4),
+            open(5),
+            open(6),
+            open(0),
+          ],
+        },
+      ],
+      expectedClockRevision: 4,
+    },
+  ]);
+});
+
 it("sends the clock revision the draft was seeded with, followed only while nothing is edited", async () => {
   const { painter, writes } = await mount();
   painter.model = { ...withBar(), clockRevision: 9 };
