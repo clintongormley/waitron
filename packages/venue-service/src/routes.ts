@@ -90,6 +90,7 @@ import {
   type SpecialDayInput,
 } from "./special-days.js";
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
+import { mountFloorPlanSetRoutes } from "./floor-plan-set-routes.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -142,6 +143,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "special_day.invalid": 400,
   "special_day.not_found": 404,
   "special_day.date_taken": 409,
+  "floor_plan_set.is_default": 409,
+  "floor_plan_set.name_taken": 409,
+  "floor_plan_set.invalid": 400,
+  "floor_plan_set.not_found": 404,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
@@ -454,6 +459,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
         return fn(tx);
       });
+
+    mountFloorPlanSetRoutes(app, ctx, log, run);
 
     app.get("/management-api/venue-service/stations/:stationId/service-times", (c) =>
       run(c, log, async () => {

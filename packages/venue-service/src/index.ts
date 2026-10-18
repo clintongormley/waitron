@@ -103,5 +103,10 @@ export * from "./order-kitchen-notes.js";
 export * from "./party-allergy.js";
 export * from "./device-zone-selection.js";
 export type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/module";
-export { linkFloorPlanSet, readFloorPlanSets } from "./floor-plan-set-store.js";
+export {
+  createFloorPlanSet,
+  linkFloorPlanSet,
+  readFloorPlanSets,
+  type FloorPlanSetsModel,
+} from "./floor-plan-set-store.js";
 export type { DueFloorLayout, FloorPlanSetSummary } from "@waitron/module";

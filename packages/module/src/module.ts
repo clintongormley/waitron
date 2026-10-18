@@ -126,7 +126,8 @@ export interface FloorDeletion {
   clear(tx: Transaction, zoneIds: readonly string[], now: Date): Promise<void>;
   /**
    * Deletes the sets' placements, sizes, layouts and rows; a today's record naming one keeps its
-   * today's rows and loses its set.
+   * today's rows and loses its set. The caller first removes the department links and the
+   * periods' references to the sets, which name them by plain foreign keys.
    */
   removeSets(tx: Transaction, setIds: readonly string[]): Promise<void>;
 }
