@@ -125,7 +125,8 @@ come after the list above:
   [ui-review.md](ui-review.md), and the first physical print since #327.
 - **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
   enrolled; Logging Slice 2, the one-touch bug report; the first real Bluetooth pairing at the box
-  through the dashboard; paying at the table from a handheld (Slice 2).
+  through the dashboard; paying at the table from a handheld (Slice 2, designed as A796, waiting
+  for the owner's answers).
 - Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud
   primary, under _Replication, failover and the cloud_.
 
@@ -3682,7 +3683,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   auth. Gated on the deli having a Stripe account, which it does not.
 
 
-- **Slice 2 — the handheld NFC/QR link.** Restoring `stripe_on_device` (Tap-to-Pay) remains open.
+- **Slice 2 — the handheld NFC/QR link: paying at the table from a handheld (A796).** Designed
+  2026-10-19, waiting for the owner's answers to four questions (confirm the reader before every
+  card; what the ready-made Móvil profile allows; whether a paid table closes by itself; when
+  Tap-to-Pay comes): [design](superpowers/specs/2026-10-19-a796-handheld-payments-design.md),
+  [mockups](backlog/mockups/a796-handheld-payments/). Restoring `stripe_on_device` (Tap-to-Pay)
+  remains open; the design proposes it as a later slice that needs an installable Android app.
   [Detail](backlog/payments.md#slice-2--the-handheld-nfcqr-link)
 
 - **Loose ends left by W102 (NFC and equipment labels).**

@@ -132,6 +132,9 @@ Picture: `mockups/a846-held-card-payments/01-record-what-was-done.png` (also `-d
 _2026-10-14: the NFC implementation is in place. The box-address checks below remain open,
 along with Tap-to-Pay._
 
+_2026-10-19: the handheld payment flow is designed as A796, waiting for the owner's answers:
+[2026-10-19-a796-handheld-payments-design.md](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md)._
+
 ## Check NFC pick-up on the box's address
 
 On the OnePlus 13, open the installed till at `https://waitron.local`. In Equipment, press
