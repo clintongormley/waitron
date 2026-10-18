@@ -182,7 +182,8 @@ declare module "@waitron/shared" {
     "special_day.invalid": {
       field: string;
       date?: string;
-      reason?: "empty" | "order" | "step" | "overlap" | "clock_skips" | "end_offset";
+      reason?:
+        "empty" | "order" | "step" | "overlap" | "clock_skips" | "end_offset" | "outside_hours";
       departmentId?: string;
       zoneId?: string;
       periodId?: string;

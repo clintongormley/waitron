@@ -80,13 +80,14 @@ import {
 } from "./department-transfers.js";
 import "./errors.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
-import { assertSeasonClosuresInHours } from "./zone-closure-hours.js";
+import { assertDatedClosuresInHours, assertSeasonClosuresInHours } from "./zone-closure-hours.js";
 import { parseEndOffsetMinutes } from "./period-end-offset.js";
 import {
   deleteSpecialDay,
   listSpecialDays,
   readSpecialDay,
   saveSpecialDay,
+  type SpecialDayInput,
 } from "./special-days.js";
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
 
@@ -564,6 +565,16 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       "zonePaint",
       "expectedClockRevision",
     ] as const;
+    // Called after saveSpecialDay, which has validated `input` against SpecialDayInput.
+    const assertSpecialDayClosuresInHours = (tx: Transaction, input: unknown) => {
+      const { dates, zonePaint } = input as SpecialDayInput;
+      return assertDatedClosuresInHours(
+        tx,
+        ctx.cfg,
+        zonePaint ?? [],
+        new Set(dates.filter((entry) => entry.closedAllDay).map((entry) => entry.date)),
+      );
+    };
 
     app.get("/management-api/venue-service/special-days", (c) =>
       run(c, log, async () => {
@@ -584,10 +595,10 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
-        const saved = await gated(sessionId, (tx) => {
+        const saved = await gated(sessionId, async (tx) => {
           onlyKeys(body, SPECIAL_DAY_KEYS);
           const { expectedClockRevision, ...input } = body;
-          return saveSpecialDay(
+          const day = await saveSpecialDay(
             tx,
             ctx.cfg,
             null,
@@ -595,6 +606,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             new Date(),
             expectedClockRevision as number,
           );
+          await assertSpecialDayClosuresInHours(tx, input);
+          return day;
         });
         return c.json(saved, 201);
       }),
@@ -606,10 +619,10 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const id = requireUuidParam(c.req.param("id"), "SpecialDayId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         return c.json(
-          await gated(sessionId, (tx) => {
+          await gated(sessionId, async (tx) => {
             onlyKeys(body, SPECIAL_DAY_KEYS);
             const { expectedClockRevision, ...input } = body;
-            return saveSpecialDay(
+            const day = await saveSpecialDay(
               tx,
               ctx.cfg,
               id,
@@ -617,6 +630,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               new Date(),
               expectedClockRevision as number,
             );
+            await assertSpecialDayClosuresInHours(tx, input);
+            return day;
           }),
         );
       }),
