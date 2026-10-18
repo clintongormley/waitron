@@ -36,6 +36,18 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("TillApi", () => {
+  it("carries the captured editing observation when abandoning a table bill", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    const expectedEdit = { billId: "wo-4", editorVersion: 8, draftId: null, draftRevision: null };
+    await new TillApi("", fetchStub).abandonWorkingOrder("wo-4", expectedEdit);
+    expect(fetchStub).toHaveBeenCalledWith("/api/working-orders/wo-4", {
+      method: "DELETE",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedEdit }),
+    });
+  });
+
   it.each(["open", "presented"] as const)(
     "carries the bill edit observation when paying a %s table bill in full",
     async (state) => {
@@ -246,6 +258,12 @@ describe("TillApi", () => {
       [{ menuItemId: "mi-p", quantity: "2" }],
       { method: "cash", amount: "5.00" },
       "wo1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -260,6 +278,7 @@ describe("TillApi", () => {
           lines: [{ menuItemId: "mi-p", quantity: "2" }],
           tender: { method: "cash", amount: "5.00" },
           workingOrderId: "wo1",
+          expectedEdit: null,
         }),
       }),
     );
@@ -283,6 +302,10 @@ describe("TillApi", () => {
       "wo1",
       undefined,
       { invoiceType: "F1", recipient },
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -294,6 +317,7 @@ describe("TillApi", () => {
           workingOrderId: "wo1",
           invoiceType: "F1",
           recipient,
+          expectedEdit: null,
         }),
       }),
     );
@@ -315,6 +339,7 @@ describe("TillApi", () => {
     const api = new TillApi("", fetchStub);
 
     const out = await api.pay({
+      expectedEdit: null,
       id: "wo1",
       lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
       tip: "0.50",
@@ -328,6 +353,7 @@ describe("TillApi", () => {
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          expectedEdit: null,
           id: "wo1",
           lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
           tip: "0.50",
@@ -348,6 +374,7 @@ describe("TillApi", () => {
     };
 
     await new TillApi("", fetchStub).pay({
+      expectedEdit: null,
       id: "wo-card",
       lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
       invoiceType: "F1",
@@ -358,6 +385,7 @@ describe("TillApi", () => {
       "/api/pay",
       expect.objectContaining({
         body: JSON.stringify({
+          expectedEdit: null,
           id: "wo-card",
           lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
           invoiceType: "F1",
@@ -373,17 +401,27 @@ describe("TillApi", () => {
     const tender = { method: "cash", amount: "5.00" } as const;
     const lines = [{ menuItemId: "mi-cafe", quantity: "1" }];
 
-    await api.recordSale(lines, tender, "wo1", undefined, undefined, "es-ES");
-    await api.pay({ id: "wo2", lines, receiptLanguage: "es-ES" });
-    await api.collectOrder("wo3", tender, "es-ES");
+    await api.recordSale(
+      lines,
+      tender,
+      "wo1",
+      undefined,
+      undefined,
+      "es-ES",
+      undefined,
+      undefined,
+      null,
+    );
+    await api.pay({ expectedEdit: null, id: "wo2", lines, receiptLanguage: "es-ES" });
+    await api.collectOrder("wo3", tender, "es-ES", undefined, null);
 
     const bodies = fetchStub.mock.calls.map(
       ([, init]) => JSON.parse((init as RequestInit).body as string) as unknown,
     );
     expect(bodies).toEqual([
-      { lines, tender, workingOrderId: "wo1", receiptLanguage: "es-ES" },
-      { id: "wo2", lines, receiptLanguage: "es-ES" },
-      { tender, receiptLanguage: "es-ES" },
+      { lines, tender, workingOrderId: "wo1", receiptLanguage: "es-ES", expectedEdit: null },
+      { expectedEdit: null, id: "wo2", lines, receiptLanguage: "es-ES" },
+      { tender, receiptLanguage: "es-ES", expectedEdit: null },
     ]);
   });
 
@@ -409,20 +447,27 @@ describe("TillApi", () => {
         undefined,
         undefined,
         guests,
+        null,
       );
-      expect(sentBody(fetchStub)).toStrictEqual({ lines, tender, workingOrderId: "wo1", ...sent });
+      expect(sentBody(fetchStub)).toStrictEqual({
+        lines,
+        tender,
+        workingOrderId: "wo1",
+        ...sent,
+        expectedEdit: null,
+      });
     });
 
     it("with a card payment", async () => {
       const fetchStub = stub();
-      await new TillApi("", fetchStub).pay({ id: "wo2", lines, guests });
-      expect(sentBody(fetchStub)).toStrictEqual({ id: "wo2", lines, ...sent });
+      await new TillApi("", fetchStub).pay({ expectedEdit: null, id: "wo2", lines, guests });
+      expect(sentBody(fetchStub)).toStrictEqual({ expectedEdit: null, id: "wo2", lines, ...sent });
     });
 
     it("with a collect", async () => {
       const fetchStub = stub();
-      await new TillApi("", fetchStub).collectOrder("wo3", tender, undefined, guests);
-      expect(sentBody(fetchStub)).toStrictEqual({ tender, ...sent });
+      await new TillApi("", fetchStub).collectOrder("wo3", tender, undefined, guests, null);
+      expect(sentBody(fetchStub)).toStrictEqual({ tender, ...sent, expectedEdit: null });
     });
 
     it("with a bill payment", async () => {
@@ -459,14 +504,12 @@ describe("TillApi", () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ outcome: "declined" }));
     const api = new TillApi("", fetchStub);
 
-    const out = await api.pay({ id: "wo1", lines: [] });
+    const out = await api.pay({ expectedEdit: null, id: "wo1", lines: [] });
 
-    // A no-tip/no-allowOffline call sends only id+lines — JSON.stringify drops the undefined-valued
-    // optional fields rather than sending them as explicit nulls.
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/pay",
       expect.objectContaining({
-        body: JSON.stringify({ id: "wo1", lines: [] }),
+        body: JSON.stringify({ expectedEdit: null, id: "wo1", lines: [] }),
       }),
     );
     expect(out).toEqual({ outcome: "declined" });
@@ -955,17 +998,19 @@ describe("TillApi", () => {
     expect(r).toEqual(order);
   });
 
-  it("setWorkingOrderLabel sends only label and revision", async () => {
+  it("setWorkingOrderLabel sends the label, revision and editing observation", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 4 }));
     const api = new TillApi("", fetchStub);
-    await expect(api.setWorkingOrderLabel("wo1", { label: "Ana", revision: 3 })).resolves.toEqual({
+    await expect(
+      api.setWorkingOrderLabel("wo1", { expectedEdit: null, label: "Ana", revision: 3 }),
+    ).resolves.toEqual({
       revision: 4,
     });
     expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/working-orders/wo1/label", {
       method: "PUT",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ label: "Ana", revision: 3 }),
+      body: JSON.stringify({ expectedEdit: null, label: "Ana", revision: 3 }),
     });
   });
 
@@ -977,6 +1022,7 @@ describe("TillApi", () => {
 
     await expect(
       api.updateWorkingOrder("wo1", {
+        expectedEdit: null,
         lines: [{ menuItemId: "mi-cafe", quantity: "3" }],
         label: "Mesa 5",
         revision: 4,
@@ -990,6 +1036,7 @@ describe("TillApi", () => {
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          expectedEdit: null,
           lines: [{ menuItemId: "mi-cafe", quantity: "3" }],
           label: "Mesa 5",
           revision: 4,
@@ -998,20 +1045,19 @@ describe("TillApi", () => {
     );
   });
 
-  it("abandonWorkingOrder DELETEs the addressed order (empty 200 body, no request body)", async () => {
+  it("abandonWorkingOrder DELETEs the addressed counter order with no table editor", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const api = new TillApi("", fetchStub);
 
-    await expect(api.abandonWorkingOrder("wo1")).resolves.toBeUndefined();
+    await expect(api.abandonWorkingOrder("wo1", null)).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/wo1",
       expect.objectContaining({ method: "DELETE", credentials: "include" }),
     );
-    // A discard carries neither a body nor a content-type header.
     const init = fetchStub.mock.calls[0][1] as RequestInit;
-    expect(init.body).toBeUndefined();
-    expect(init.headers).toBeUndefined();
+    expect(init.body).toBe(JSON.stringify({ expectedEdit: null }));
+    expect(init.headers).toEqual({ "content-type": "application/json" });
   });
 
   it("surfaces the server's { code } when a working-order request 4xxs (retrieve of a closed order)", async () => {
@@ -1065,10 +1111,16 @@ describe("TillApi", () => {
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(ticket));
 
-    const r = await new TillApi("", fetchStub).collectOrder("wo1", {
-      method: "cash",
-      amount: "1.50",
-    });
+    const r = await new TillApi("", fetchStub).collectOrder(
+      "wo1",
+      {
+        method: "cash",
+        amount: "1.50",
+      },
+      undefined,
+      undefined,
+      null,
+    );
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/wo1/collect",
@@ -1076,7 +1128,7 @@ describe("TillApi", () => {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tender: { method: "cash", amount: "1.50" } }),
+        body: JSON.stringify({ tender: { method: "cash", amount: "1.50" }, expectedEdit: null }),
       }),
     );
     expect(r).toEqual(ticket);
@@ -2412,6 +2464,7 @@ describe("TillApi", () => {
 
   describe("adjustments (service plan Task 11)", () => {
     const ask = {
+      expectedEdit: null,
       expectedRevision: 7,
       lineId: "line-1",
       reasonId: "reason-1",

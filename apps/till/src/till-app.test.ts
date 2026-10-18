@@ -809,6 +809,12 @@ describe("till-app", () => {
       [{ menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: "kitchen" }],
       { method: "cash", amount: "2" },
       expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     expect(order).toEqual(["ask", "pay"]);
   });
@@ -1654,6 +1660,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "20.00" },
       expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3175,6 +3187,12 @@ describe("till-app", () => {
       // replays and a retrieved order settles under its own id (see the retrieve→pay and retry tests
       // below).
       workingOrderId,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     // A FRESH walk-up (never persisted) is filed straight from its lines — no pre-pay re-lock. Only a
     // RETRIEVED/parked basket is synced first (see the retrieve→edit→pay test); syncing a walk-up here
@@ -3242,6 +3260,10 @@ describe("till-app", () => {
           countryCode: "ES",
         },
       },
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3708,6 +3730,10 @@ describe("till-app", () => {
           countryCode: "ES",
         },
       },
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3748,12 +3774,14 @@ describe("till-app", () => {
 
     expect(pay).toHaveBeenCalledTimes(2);
     expect(pay).toHaveBeenNthCalledWith(1, {
+      expectedEdit: null,
       id,
       lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       invoiceType: "F1",
       recipient,
     });
     expect(pay).toHaveBeenNthCalledWith(2, {
+      expectedEdit: null,
       id,
       lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       invoiceType: "F1",
@@ -3794,6 +3822,12 @@ describe("till-app", () => {
       [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       nextId,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3831,6 +3865,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "5" },
       c.store.id,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3878,6 +3918,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "5" },
       c.store.id,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -3926,6 +3972,12 @@ describe("till-app", () => {
       expect.anything(),
       expect.anything(),
       workingOrderId,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     expect(ticket(el)).not.toBeNull();
 
@@ -4165,6 +4217,9 @@ describe("till-app", () => {
         undefined,
         undefined,
         "es-ES",
+        undefined,
+        undefined,
+        null,
       );
     });
 
@@ -4223,6 +4278,8 @@ describe("till-app", () => {
         id,
         { method: "cash", amount: "5" },
         "es-ES",
+        undefined,
+        null,
       );
     });
 
@@ -4353,6 +4410,9 @@ describe("till-app", () => {
         undefined,
         undefined,
         "ca-ES",
+        undefined,
+        undefined,
+        null,
       );
     });
 
@@ -4386,6 +4446,12 @@ describe("till-app", () => {
         expect.anything(),
         { method: "cash", amount: "5" },
         "wo-1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
       );
     });
 
@@ -5992,6 +6058,12 @@ describe("till-app", () => {
       [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" }],
       { method: "card", amount: "1.50", externalRef: "OP-42" },
       workingOrderId,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     const view = ticket(el)!;
     expect(view).not.toBeNull();
@@ -6074,6 +6146,12 @@ describe("till-app", () => {
       [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       "wo-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     // The order was retrieved but NOT edited, so it must NOT be re-synced: an unedited retrieve→pay
     // files from the stored lines (recordSale straight through).
@@ -6110,6 +6188,7 @@ describe("till-app", () => {
       ],
       label: "Mesa 4",
       revision: 3,
+      expectedEdit: null,
     });
     // recordSale files the SAME edited composition under the same id, and the sync ran FIRST — the
     // server needs the lock updated before it files from it.
@@ -6120,6 +6199,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "5" },
       "wo-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
       recordSale.mock.invocationCallOrder[0]!,
@@ -6325,6 +6410,7 @@ describe("till-app", () => {
       ],
       label: undefined,
       revision: 0,
+      expectedEdit: null,
     });
   });
 
@@ -6445,6 +6531,7 @@ describe("till-app", () => {
           extras: [{ listId: "list-milk", picks: [{ productId: "p-milk", quantity: 2 }] }],
         },
       ],
+      expectedEdit: null,
     });
   });
 
@@ -6607,6 +6694,12 @@ describe("till-app", () => {
       [plainLine("2")],
       { method: "cash", amount: "10" },
       "wo-customised",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
 
     emit(counter, "new-sale");
@@ -6619,6 +6712,7 @@ describe("till-app", () => {
       label: "Takeaway",
       revision: 0,
       lines: [plainLine("3")],
+      expectedEdit: null,
     });
     expect(currentApi.parkOrder).not.toHaveBeenCalled();
   });
@@ -6859,6 +6953,7 @@ describe("till-app", () => {
           options: [{ listId: "list-punto", labelId: "label-medium" }],
         },
       ],
+      expectedEdit: null,
     });
   });
 
@@ -6885,6 +6980,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "5" },
       c.store.id,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -6939,6 +7040,12 @@ describe("till-app", () => {
       ],
       { method: "cash", amount: "5" },
       "wo-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
     expect(ticket(el)).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
@@ -7194,6 +7301,7 @@ describe("till-app", () => {
       ],
       label: "Mesa 4",
       revision: 3,
+      expectedEdit: null,
     });
     expect(parkOrder).not.toHaveBeenCalled();
     // Success path: the basket empties and stays on the counter (a hold is not a completed sale).
@@ -7219,6 +7327,7 @@ describe("till-app", () => {
       ],
       label: "Ana",
       revision: 3,
+      expectedEdit: null,
     });
     expect(setWorkingOrderLabel).not.toHaveBeenCalled();
     expect(c.store.lines).toHaveLength(0);
@@ -7322,6 +7431,7 @@ describe("till-app", () => {
     expect(setWorkingOrderLabel).toHaveBeenCalledExactlyOnceWith("wo-1", {
       label: "Ana",
       revision: 3,
+      expectedEdit: null,
     });
     expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
     expect(currentApi.parkOrder).not.toHaveBeenCalled();
@@ -7382,6 +7492,7 @@ describe("till-app", () => {
       ],
       label: "Mesa 4",
       revision: 3,
+      expectedEdit: null,
     });
     expect(parkOrder).not.toHaveBeenCalled();
   });
@@ -7695,7 +7806,7 @@ describe("till-app", () => {
     emit(c, "discard-order", { id: "wo-1" });
     await flush(el);
 
-    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1");
+    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1", null);
     // once on entering the counter, once after the discard.
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
   });
@@ -7745,7 +7856,7 @@ describe("till-app", () => {
     emit(c, "discard-order", { id: "wo-1" });
     await flush(el);
 
-    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1");
+    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1", null);
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("held.stale"));
     expect(el.shadowRoot!.textContent).not.toContain("working_order.not_open");
@@ -7766,7 +7877,7 @@ describe("till-app", () => {
     emit(c, "discard-order", { id: "wo-1" });
     await flush(el);
 
-    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1");
+    expect(currentApi.abandonWorkingOrder).toHaveBeenCalledWith("wo-1", null);
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("held.discard_holds_money"));
     expect(banner.textContent).not.toContain(t("held.stale"));
@@ -10196,6 +10307,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(pay).toHaveBeenCalledWith({
+        expectedEdit: null,
         id: workingOrderId,
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
         tip: "0.50",
@@ -10217,6 +10329,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(pay).toHaveBeenCalledWith({
+        expectedEdit: null,
         id: c.store.id,
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" }],
       });
@@ -10891,8 +11004,10 @@ describe("till-app", () => {
         ],
         label: "Mesa 4",
         revision: 3,
+        expectedEdit: null,
       });
       expect(pay).toHaveBeenCalledWith({
+        expectedEdit: null,
         id: "wo-1",
         lines: [
           { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
@@ -10920,6 +11035,7 @@ describe("till-app", () => {
 
       expect(updateWorkingOrder).not.toHaveBeenCalled();
       expect(pay).toHaveBeenCalledWith({
+        expectedEdit: null,
         id: "wo-1",
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       });
@@ -11169,6 +11285,7 @@ describe("till-app", () => {
         ],
         label: "Mesa 4",
         revision: 3,
+        expectedEdit: null,
       });
       expect(placeOrder).toHaveBeenCalledWith("wo-1", null);
       expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
@@ -11385,7 +11502,13 @@ describe("till-app", () => {
       emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
       await flush(el);
 
-      expect(currentApi.collectOrder).toHaveBeenCalledWith(id, { method: "cash", amount: "5" });
+      expect(currentApi.collectOrder).toHaveBeenCalledWith(
+        id,
+        { method: "cash", amount: "5" },
+        undefined,
+        undefined,
+        null,
+      );
       const view = ticket(el)!;
       expect(view).not.toBeNull();
       // The ticket renders the SERVER collect result (its `lines` are the filed placed composition),
@@ -11863,10 +11986,16 @@ describe("till-app", () => {
         }),
       );
       await flush(el);
-      expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
-        method: "cash",
-        amount: "30.00",
-      });
+      expect(currentApi.collectOrder).toHaveBeenCalledWith(
+        "wo-debt",
+        {
+          method: "cash",
+          amount: "30.00",
+        },
+        undefined,
+        undefined,
+        null,
+      );
       expect(ticket(el)!.originalReceiptAvailable).toBe(false);
       expect(waiting.mock.calls.length).toBeGreaterThan(reads);
     });
@@ -11891,7 +12020,7 @@ describe("till-app", () => {
       );
       await flush(el);
       expect(vi.mocked(currentApi.collectOrder).mock.calls).toStrictEqual([
-        ["wo-debt", { method: "cash", amount: "30.00" }],
+        ["wo-debt", { method: "cash", amount: "30.00" }, undefined, undefined, null],
       ]);
     });
 
@@ -11925,10 +12054,16 @@ describe("till-app", () => {
         expect(lookup).toHaveBeenCalledWith("wo-debt", { signal: expect.any(AbortSignal) });
         dialog.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
         await flush(el);
-        expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
-          method: "cash",
-          amount: "30.00",
-        });
+        expect(currentApi.collectOrder).toHaveBeenCalledWith(
+          "wo-debt",
+          {
+            method: "cash",
+            amount: "30.00",
+          },
+          undefined,
+          undefined,
+          null,
+        );
         expect(ticket(el)!.originalReceiptAvailable).toBe(!invoiced);
       },
     );
@@ -11979,10 +12114,16 @@ describe("till-app", () => {
       expect(unload()).toBe(true);
       form.shadowRoot!.querySelector<HTMLElement>("[data-collect]")!.click();
       await el.updateComplete;
-      expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-debt", {
-        method: "cash",
-        amount: "40.00",
-      });
+      expect(currentApi.collectOrder).toHaveBeenCalledWith(
+        "wo-debt",
+        {
+          method: "cash",
+          amount: "40.00",
+        },
+        undefined,
+        undefined,
+        null,
+      );
       const protectionAtRefresh: boolean[] = [];
       vi.mocked(currentApi.listStations).mockImplementationOnce(async () => {
         protectionAtRefresh.push(unload());
@@ -17065,6 +17206,12 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       "wo-1",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -17246,10 +17393,16 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     expect(tenderPay(el).stage).toBe("collect");
     emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
     await flush(el);
-    expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-sent", {
-      method: "cash",
-      amount: "5",
-    });
+    expect(currentApi.collectOrder).toHaveBeenCalledWith(
+      "wo-sent",
+      {
+        method: "cash",
+        amount: "5",
+      },
+      undefined,
+      undefined,
+      null,
+    );
 
     emit(ticket(el)!, "new-sale");
     await flush(el);
@@ -17294,6 +17447,8 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
       "wo-sent",
       { method: "cash", amount: "5" },
       "es-ES",
+      undefined,
+      null,
     );
   });
 
@@ -17829,10 +17984,16 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
     await flush(el);
 
-    expect(currentApi.collectOrder).toHaveBeenCalledWith("wo-sent", {
-      method: "cash",
-      amount: "5",
-    });
+    expect(currentApi.collectOrder).toHaveBeenCalledWith(
+      "wo-sent",
+      {
+        method: "cash",
+        amount: "5",
+      },
+      undefined,
+      undefined,
+      null,
+    );
     expect(ticket(el)).not.toBeNull();
     expect(listCounterWaiting.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
@@ -21005,6 +21166,7 @@ describe("basket protection lifetimes", () => {
       lines: [{ menuItemId: "menu-item-cafe-0", quantity: "2", makeAt: null, note: "No sugar" }],
       label: "Mesa 4",
       revision: 3,
+      expectedEdit: null,
     });
     expect(unloadCancelled()).toBe(false);
     expect(c.store.lines[0]!.note).toBe("No sugar");
@@ -22350,7 +22512,13 @@ describe("A737 Find a bill page", () => {
     emit(collector, "find-bill-pay", detail);
     emit(collector, "find-bill-pay", detail);
     expect(collectOrder).toHaveBeenCalledTimes(1);
-    expect(collectOrder).toHaveBeenCalledWith("wo-debt", { method: "cash", amount: "30.00" });
+    expect(collectOrder).toHaveBeenCalledWith(
+      "wo-debt",
+      { method: "cash", amount: "30.00" },
+      undefined,
+      undefined,
+      null,
+    );
     finish(saleResult);
     await flush(el);
     expect(ticket(el)?.originalReceiptAvailable).toBe(false);

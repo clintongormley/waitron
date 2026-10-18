@@ -450,20 +450,25 @@ describe("A773 bill document choices retain their editing observation", () => {
     countryCode: "ES",
   };
 
-  async function opening(kind: "invoice" | "language") {
+  async function opening(kind: "invoice" | "language", targetId = "wo-4") {
     const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
     const setOrderReceiptLanguage = vi.fn().mockResolvedValue({ revision: 8 });
     const { el } = await mountApp({
       getTill: vi
         .fn()
         .mockResolvedValue({ ...till, fullInvoices: true, receiptLanguages: ["es-ES", "en-GB"] }),
-      getPartyBills: vi.fn().mockResolvedValue([billOf({ revision: 7 })]),
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([
+          billOf({ revision: 7 }),
+          ...(targetId === "wo-4" ? [] : [billOf({ workingOrderId: targetId, revision: 7 })]),
+        ]),
       setOrderInvoiceChoice,
       setOrderReceiptLanguage,
     });
     const order = await openTable(el);
     emit(order, kind === "invoice" ? "choose-bill-invoice" : "choose-bill-receipt-language", {
-      workingOrderId: "wo-4",
+      workingOrderId: targetId,
       revision: 7,
     });
     await flush(el);
@@ -566,6 +571,103 @@ describe("A773 bill document choices retain their editing observation", () => {
         expect(text(order.shadowRoot!.querySelector("[data-choose-bill-language]"))).toBe(
           shownLanguage,
         );
+    },
+  );
+
+  for (const change of ["newer", "missing"] as const)
+    for (const outcome of ["success", "refusal"] as const)
+      it.each(["invoice", "language"] as const)(
+        `ignores a late %s ${outcome} after a ${change} bill editing observation`,
+        async (kind) => {
+          const targetId = change === "missing" ? "wo-5" : "wo-4";
+          const { el, order, form, write } = await opening(kind, targetId);
+          let resolve!: (value: { revision: number }) => void;
+          let reject!: (error: unknown) => void;
+          write.mockImplementationOnce(
+            () =>
+              new Promise<{ revision: number }>((yes, no) => {
+                resolve = yes;
+                reject = no;
+              }),
+          );
+          confirm(kind, form!);
+          await flush(el);
+          expect(write).toHaveBeenCalledOnce();
+          const edit = drafts.edit;
+          if (change === "missing") drafts.bills.delete(targetId);
+          else
+            drafts.edit = (id) => ({
+              ...edit(id),
+              editorVersion: id === targetId ? 2 : edit(id).editorVersion,
+            });
+          const reads = drafts.listDrafts.mock.calls.length;
+          window.dispatchEvent(new Event("focus"));
+          await vi.waitFor(() =>
+            expect(drafts.listDrafts.mock.calls.length).toBeGreaterThan(reads),
+          );
+          await flush(el);
+          const shownLanguage = order.bills.find(
+            (row) => row.workingOrderId === targetId,
+          )!.receiptLanguage;
+          const shownRevision = order.bills.find(
+            (row) => row.workingOrderId === targetId,
+          )!.revision;
+          const readsBeforeAnswer = vi.mocked(el.api.getPartyBills).mock.calls.length;
+          const errorBeforeAnswer = text(el.shadowRoot!.querySelector('[role="alert"]'));
+          if (outcome === "success") resolve({ revision: 8 });
+          else reject({ code: "working_order.out_of_date" });
+          await flush(el);
+          expect(order.bills.find((row) => row.workingOrderId === targetId)!.revision).toBe(
+            shownRevision,
+          );
+          expect(vi.mocked(el.api.getPartyBills).mock.calls.length).toBe(readsBeforeAnswer);
+          expect(text(el.shadowRoot!.querySelector('[role="alert"]'))).toBe(errorBeforeAnswer);
+          if (kind === "invoice") {
+            expect(form!.isConnected).toBe(true);
+            expect((form as HTMLElement & { refusal: string }).refusal).toBe("");
+          } else
+            expect(
+              order.bills.find((row) => row.workingOrderId === targetId)!.receiptLanguage,
+            ).toBe(shownLanguage);
+        },
+      );
+
+  it.each(["invoice", "language"] as const)(
+    "accepts its pending %s answer when another bill's editing state changes",
+    async (kind) => {
+      const { el, order, form, write } = await opening(kind);
+      let answer!: (value: { revision: number }) => void;
+      write.mockImplementationOnce(
+        () =>
+          new Promise<{ revision: number }>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      confirm(kind, form!);
+      await flush(el);
+      expect(write).toHaveBeenCalledOnce();
+      const edit = drafts.edit;
+      drafts.edit = (id) => ({
+        ...edit(id),
+        editorVersion: id === "wo-5" ? 2 : edit(id).editorVersion,
+      });
+      const reads = drafts.listDrafts.mock.calls.length;
+      window.dispatchEvent(new Event("focus"));
+      await vi.waitFor(() => expect(drafts.listDrafts.mock.calls.length).toBeGreaterThan(reads));
+      await flush(el);
+      const readsBeforeAnswer = vi.mocked(el.api.getPartyBills).mock.calls.length;
+      answer({ revision: 8 });
+      await flush(el);
+      if (kind === "invoice") {
+        expect(form!.isConnected).toBe(false);
+        expect(vi.mocked(el.api.getPartyBills).mock.calls.length).toBe(readsBeforeAnswer + 1);
+      } else {
+        expect(order.bills.find((row) => row.workingOrderId === "wo-4")!.revision).toBe(8);
+        expect(text(order.shadowRoot!.querySelector("[data-choose-bill-language]"))).toContain(
+          "English",
+        );
+      }
+      expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
     },
   );
 

@@ -915,7 +915,7 @@ export interface AdjustmentReason {
  * extra; null is a discount on the whole bill. `quantity` absent covers the whole line; an extra is
  * taken only whole. */
 export interface AdjustmentAsk {
-  expectedEdit?: BillEditExpected;
+  expectedEdit: BillEditExpected | null;
   sourceDraftId?: string;
   /** The bill's revision as the till last read it. */
   expectedRevision: number;
@@ -2762,15 +2762,22 @@ export class TillApi {
     lines: SaleLine[],
     tender: Tender,
     workingOrderId: string,
-    zoneId?: string,
-    invoice?: {
-      invoiceType: "F1" | "F2";
-      recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
-    },
-    receiptLanguage?: string,
-    kitchenNote?: string | null,
-    guests?: number | null,
-    expectedEdit?: BillEditExpected,
+    zoneId: string | undefined,
+    invoice:
+      | {
+          invoiceType: "F1" | "F2";
+          recipient: {
+            taxId: string;
+            legalName: string;
+            address: string;
+            countryCode: string;
+          } | null;
+        }
+      | undefined,
+    receiptLanguage: string | undefined,
+    kitchenNote: string | null | undefined,
+    guests: number | null | undefined,
+    expectedEdit: BillEditExpected | null,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
@@ -2781,7 +2788,7 @@ export class TillApi {
       receiptLanguage,
       kitchenNote,
       ...(guests === undefined ? {} : { guests }),
-      ...(expectedEdit === undefined ? {} : { expectedEdit }),
+      expectedEdit,
     });
   }
 
@@ -2793,6 +2800,7 @@ export class TillApi {
    * decline is data, not a throw — see {@link PayOutcome}.
    */
   pay(req: {
+    expectedEdit: BillEditExpected | null;
     id: string;
     lines: SaleLine[];
     invoiceType?: "F1" | "F2";
@@ -3081,14 +3089,19 @@ export class TillApi {
    */
   updateWorkingOrder(
     id: string,
-    req: { lines: SaleLine[]; label?: string; revision: number },
+    req: {
+      lines: SaleLine[];
+      label?: string;
+      revision: number;
+      expectedEdit: BillEditExpected | null;
+    },
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(`/api/working-orders/${id}`, "PUT", req);
   }
 
   setWorkingOrderLabel(
     id: string,
-    req: { label: string; revision: number },
+    req: { label: string; revision: number; expectedEdit: BillEditExpected | null },
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(`/api/working-orders/${id}/label`, "PUT", req);
   }
@@ -3120,8 +3133,8 @@ export class TillApi {
    * otherwise `working_order.not_open` for a non-open or unknown id. So a non-open order that
    * still holds money answers `bill.payments_received`.
    */
-  async abandonWorkingOrder(id: string): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${id}`, "DELETE");
+  async abandonWorkingOrder(id: string, expectedEdit: BillEditExpected | null): Promise<void> {
+    await this.#request<void>(`/api/working-orders/${id}`, "DELETE", { expectedEdit });
   }
 
   /**
@@ -3144,15 +3157,15 @@ export class TillApi {
   collectOrder(
     id: string,
     tender: Tender,
-    receiptLanguage?: string,
-    guests?: number | null,
-    expectedEdit?: BillEditExpected,
+    receiptLanguage: string | undefined,
+    guests: number | null | undefined,
+    expectedEdit: BillEditExpected | null,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", {
       tender,
       receiptLanguage,
       ...(guests === undefined ? {} : { guests }),
-      ...(expectedEdit === undefined ? {} : { expectedEdit }),
+      expectedEdit,
     });
   }
 
