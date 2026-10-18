@@ -3074,19 +3074,9 @@ describe("floor plans", () => {
     });
   });
 
-  it("the zones list says which zones' plans have a placed table, and still leaves out an inactive zone", async () => {
-    const noPlan = await createZone(unique("HasPlacedNone"));
-    const unplaced = await createZone(unique("HasPlacedOff"));
+  it("the zones list leaves out an inactive zone and says nothing about placed tables", async () => {
     const placed = await createZone(unique("HasPlacedOn"));
     const inactive = await createZone(unique("HasPlacedGone"));
-    expect(
-      (
-        await put(unplaced, {
-          revision: 0,
-          tables: [{ ...entry("a", unique("U")), placement: null }],
-        })
-      ).status,
-    ).toBe(200);
     expect(
       (
         await put(placed, {
@@ -3102,9 +3092,8 @@ describe("floor plans", () => {
 
     const response = await req("/zones", { method: "GET" }, managerCookie);
     expect(response.status).toBe(200);
-    const zones = (await response.json()) as { id: string; hasPlacedTables: boolean }[];
-    const flag = (id: string) => zones.find((zone) => zone.id === id)?.hasPlacedTables;
-    expect([flag(noPlan), flag(unplaced), flag(placed)]).toEqual([false, false, true]);
+    const zones = (await response.json()) as Record<string, unknown>[];
+    expect(zones.find((zone) => zone.id === placed)).not.toHaveProperty("hasPlacedTables");
     expect(zones.find((zone) => zone.id === inactive)).toBeUndefined();
   });
 

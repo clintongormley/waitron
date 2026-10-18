@@ -460,6 +460,7 @@ it("registers Opening hours without a separate Station hours page", () => {
   expect(screens.map((screen) => screen.id)).toEqual([
     "venue-operations",
     "prep-stations",
+    "floor-plans",
     "opening-hours",
   ]);
   expect(customElements.get("dashboard-hours-screen")).toBeUndefined();
@@ -544,7 +545,7 @@ it("declares the Calendar's Week as a search destination", async () => {
   );
 });
 
-it("A725 puts Prep stations immediately after Departments and zones, before Calendar", () => {
+it("A725 puts Prep stations after Departments and zones and Floor plans (A504), before Calendar", () => {
   const screens = [
     VENUE_SERVICE_DASHBOARD.screen!,
     ...VENUE_SERVICE_DASHBOARD.moreScreens!.map(({ screen }) => screen),
@@ -553,6 +554,7 @@ it("A725 puts Prep stations immediately after Departments and zones, before Cale
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   expect(screens.map(({ id }) => id)).toEqual([
     "venue-operations",
+    "floor-plans",
     "prep-stations",
     "opening-hours",
   ]);

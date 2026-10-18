@@ -202,39 +202,14 @@ it("offers a department's Receipt in its Also edit cell, opening the receipt wit
   expect(alsoCell(table, "department:d1").textContent!.trim()).toBe("Receipt");
 });
 
-it("labels a zone's floor-plan link by whether a table is placed, and its click does not open the zone", async () => {
-  const { el, table } = await withFloorZones([
-    { id: "z1", name: "Terrace", hasPlacedTables: false },
-    { id: "z2", name: "Bar", hasPlacedTables: true },
-    { id: "z3", name: "Same" },
+it("draws no floor-plan link on a zone row; the Floor plans page holds them", async () => {
+  const { table } = await withFloorZones([
+    { id: "z1", name: "Terrace" },
+    { id: "z2", name: "Bar" },
   ]);
-  const link = (id: string) =>
-    alsoCell(table, `zone:${id}`).querySelector<HTMLAnchorElement>(
-      `a[data-test="floor-plan-zone-${id}"]`,
-    );
-  expect(link("z1")!.textContent!.trim()).toBe("Add floor plan");
-  expect(link("z2")!.textContent!.trim()).toBe("Floor plan");
-  expect(link("z3")!.textContent!.trim()).toBe("Floor plan");
-  expect(link("z1")!.getAttribute("href")).toBe(
-    "/manage/floor-plan/zone/z1?back=%2Fmanage%2Fvenue-operations",
-  );
-  expect(link("z1")!.hasAttribute("data-own-click")).toBe(false);
-  const zone = vi.fn();
-  el.addEventListener("edit-zone", zone);
-  const followed: string[] = [];
-  const stay = (event: Event) => {
-    if (event.defaultPrevented) return;
-    followed.push((event.composedPath()[0] as HTMLAnchorElement).getAttribute("href") ?? "");
-    event.preventDefault();
-  };
-  document.addEventListener("click", stay);
-  try {
-    await userEvent.click(link("z2")!);
-  } finally {
-    document.removeEventListener("click", stay);
-  }
-  expect(followed).toEqual(["/manage/floor-plan/zone/z2?back=%2Fmanage%2Fvenue-operations"]);
-  expect(zone).not.toHaveBeenCalled();
+  expect(alsoCell(table, "zone:z1").textContent!.trim()).toBe("");
+  expect(table.shadowRoot!.querySelectorAll('[data-test^="floor-plan-zone-"]')).toHaveLength(0);
+  expect(table.shadowRoot!.querySelectorAll('a[href*="/manage/floor-plan"]')).toHaveLength(0);
 });
 
 it("makes no floor-plan read, on mount or when a zone's menu opens", async () => {
@@ -285,25 +260,17 @@ it("orders the columns as drawn, ignoring an order stored before the Also edit c
 
 it("names each Also edit link's row, in English and Spanish", async () => {
   const floorZones = [
-    { id: "z1", name: "Terrace", hasPlacedTables: false },
-    { id: "z2", name: "Bar", hasPlacedTables: true },
+    { id: "z1", name: "Terrace" },
+    { id: "z2", name: "Bar" },
   ];
   const { table } = await withFloorZones(floorZones);
   const label = (selector: string) =>
     table.shadowRoot!.querySelector(selector)!.getAttribute("aria-label");
   expect(label('[data-test="receipt-department-d1"]')).toBe("Restaurant: Receipt");
-  expect(label('[data-test="floor-plan-zone-z1"]')).toBe("Terrace: Add floor plan");
-  expect(label('[data-test="floor-plan-zone-z2"]')).toBe("Bar: Floor plan");
   cleanup();
   setLocale("es");
   const es = await withFloorZones(floorZones);
   expect(es.table.columns.find(({ key }) => key === "also")!.label).toBe("Editar también");
   const esLink = (selector: string) => es.table.shadowRoot!.querySelector(selector)!;
   expect(esLink('[data-test="receipt-department-d1"]').textContent!.trim()).toBe("Recibo");
-  expect(esLink('[data-test="floor-plan-zone-z1"]').textContent!.trim()).toBe(
-    "Añadir plano de sala",
-  );
-  expect(esLink('[data-test="floor-plan-zone-z2"]').getAttribute("aria-label")).toBe(
-    "Bar: Plano de sala",
-  );
 });
