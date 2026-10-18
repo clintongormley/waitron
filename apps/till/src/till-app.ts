@@ -6148,6 +6148,11 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
+    const api = this.api;
+    const current = () =>
+      session === this.#operatorSession &&
+      api === this.api &&
+      basketVisit === this.#store.loadGeneration;
     if (!refusalRetry) this.errorKey = undefined;
     // A network failure after the fiscal call started is `sale.unconfirmed`; before it, nothing was filed.
     let reachedFiscal = false;
@@ -6157,47 +6162,43 @@ export class TillApp extends LitElement {
     let placed = false;
     try {
       if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
-      if (session !== this.#operatorSession) return;
+      if (!current()) return;
       const lines = this.#currentSaleLines();
       const label = this.#store.label;
       const payload = this.#basketPayload();
       if (this.#store.persisted) {
-        if (
-          !(await this.#syncIfDirty(id, lines, label)) ||
-          basketVisit !== this.#store.loadGeneration
-        )
-          return;
+        if (!(await this.#syncIfDirty(id, lines, label)) || !current()) return;
       } else {
-        await this.api.parkOrder({
+        await api.parkOrder({
           id,
           lines,
           label,
           ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
         });
-        if (session !== this.#operatorSession) return;
+        if (!current()) return;
         if (!(await this.#adoptCreatedCounterNote(id, basketVisit, session))) return;
         this.#commitBasket(payload);
       }
       if (this.invoiceChoice?.orderId === id) {
-        const saved = await this.api.setOrderInvoiceChoice(id, {
+        const saved = await api.setOrderInvoiceChoice(id, {
           revision: this.#store.revision,
           ...this.invoiceChoice.invoice,
           expectedEdit: null,
         });
-        if (session !== this.#operatorSession) return;
+        if (!current()) return;
         this.#store.markSaved(saved.revision);
       }
       await this.#saveUnsavedReceiptLanguage(id);
-      if (session !== this.#operatorSession) return;
+      if (!current()) return;
       reachedFiscal = true;
-      await this.api.placeOrder(id);
-      if (session !== this.#operatorSession) return;
+      await api.placeOrder(id, null);
+      if (!current()) return;
       this.stage = "collect";
       placed = true;
     } catch (error) {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
-      if (session !== this.#operatorSession) return;
+      if (!current()) return;
       if (
         !refusalRetry &&
         ["station.no_replacement", "route.station_inactive"].includes(
@@ -6216,7 +6217,7 @@ export class TillApp extends LitElement {
     } finally {
       this.placing = false;
     }
-    if (session !== this.#operatorSession) return;
+    if (!current()) return;
     if (placed)
       void this.#refreshListsAfterWrite(session, [
         ["station", "refresh.station_after_place"],

@@ -864,7 +864,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
     emit(counter(el), "place-order");
     await flush(el);
 
-    expect(api.placeOrder).toHaveBeenCalledWith("wo-9");
+    expect(api.placeOrder).toHaveBeenCalledWith("wo-9", null);
     expect(offered(el)).toBe(0);
   });
 

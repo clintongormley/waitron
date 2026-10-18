@@ -3123,8 +3123,10 @@ export class TillApi {
    * composition and opens its amendment log. A non-open or absent id rejects with
    * `working_order.not_open`.
    */
-  placeOrder(id: string): Promise<PlaceOrderResult> {
-    return this.#request<PlaceOrderResult>(`/api/working-orders/${id}/place`, "POST");
+  placeOrder(id: string, expectedEdit: BillEditExpected | null): Promise<PlaceOrderResult> {
+    return this.#request<PlaceOrderResult>(`/api/working-orders/${id}/place`, "POST", {
+      expectedEdit,
+    });
   }
 
   /**

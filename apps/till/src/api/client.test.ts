@@ -1026,20 +1026,19 @@ describe("TillApi", () => {
     });
   });
 
-  it("placeOrder POSTs to the addressed order's /place route with no body, returning the result", async () => {
+  it("placeOrder POSTs an explicit counter observation, returning the result", async () => {
     const result = { id: "wo1", status: "placed" };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(result));
 
-    const r = await new TillApi("", fetchStub).placeOrder("wo1");
+    const r = await new TillApi("", fetchStub).placeOrder("wo1", null);
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/wo1/place",
       expect.objectContaining({ method: "POST", credentials: "include" }),
     );
-    // A no-body POST carries neither a request body nor a content-type header.
     const init = fetchStub.mock.calls[0]![1] as RequestInit;
-    expect(init.body).toBeUndefined();
-    expect(init.headers).toBeUndefined();
+    expect(init.body).toBe(JSON.stringify({ expectedEdit: null }));
+    expect(init.headers).toEqual({ "content-type": "application/json" });
     expect(r).toEqual(result);
   });
 
@@ -1050,7 +1049,7 @@ describe("TillApi", () => {
       }),
     );
 
-    await expect(new TillApi("", fetchStub).placeOrder("wo1")).rejects.toMatchObject({
+    await expect(new TillApi("", fetchStub).placeOrder("wo1", null)).rejects.toMatchObject({
       code: "working_order.not_open",
     });
   });

@@ -522,7 +522,7 @@ describe("note save inverse controls", () => {
       if (action === "pay") expect(api.recordSale).toHaveBeenCalledOnce();
       if (action === "card") expect(api.pay).toHaveBeenCalledOnce();
       if (action === "hold") expect(basket(el).store.id).not.toBe("wo-9");
-      if (action === "place") expect(api.placeOrder).toHaveBeenCalledWith("wo-9");
+      if (action === "place") expect(api.placeOrder).toHaveBeenCalledWith("wo-9", null);
       expect(api.updateWorkingOrder).not.toHaveBeenCalled();
     },
   );
@@ -920,6 +920,9 @@ async function mountedTable(
   formFactor: FormFactor = "till",
 ) {
   const server = draftServer();
+  server.bills.add("bill-table");
+  if (initialParty?.mainBillId !== null && initialParty?.mainBillId !== undefined)
+    server.bills.add(initialParty.mainBillId);
   const el = await mounted(
     {
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
@@ -1083,6 +1086,12 @@ it.each(["send-lines", "pay-tab", "bill-pay"])(
         [],
         { method: "cash", amount: "10.00" },
         "bill-table",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { billId: "bill-table", editorVersion: 0, draftId: null, draftRevision: null },
       );
     if (action === "bill-pay") expect(api.getBillBalance).toHaveBeenCalled();
   },

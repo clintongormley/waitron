@@ -3251,6 +3251,113 @@ describe("till-app", () => {
     expect(currentApi.pay).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["basket", "success"],
+    ["basket", "refusal"],
+    ["api", "success"],
+    ["api", "refusal"],
+  ] as const)("ignores a Place %s replacement's late %s", async (replacement, outcome) => {
+    let accept!: () => void;
+    let refuse!: (error: unknown) => void;
+    const placeOrder = vi.fn(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          accept = resolve;
+          refuse = reject;
+        }),
+    );
+    const { el } = await mountApp({
+      zonePolicy: { serviceMode: "ticket_then_pay" },
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      placeOrder,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "2");
+    await flush(el);
+    const originalId = c.store.id;
+    emit(c, "place-order");
+    await flush(el);
+    expect(placeOrder).toHaveBeenCalledExactlyOnceWith(originalId, null);
+
+    if (replacement === "basket")
+      c.store.loadFrom("replacement", [{ product: cafe, quantity: "1" }], "Next order", 8);
+    else el.api = stubApi();
+    await flush(el);
+    const lines = structuredClone(c.store.lines);
+    const id = c.store.id;
+    const api = el.api;
+    const waitingReads = vi.mocked(api.listCounterWaiting).mock.calls.length;
+    const stationReads = vi.mocked(api.getStationQueue).mock.calls.length;
+    if (outcome === "success") accept();
+    else refuse({ code: "sale.refused" });
+    await flush(el);
+
+    expect(tenderPay(el).stage).toBe("order");
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent?.trim() ?? "").toBe("");
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines).toEqual(lines);
+    expect(api.listCounterWaiting).toHaveBeenCalledTimes(waitingReads);
+    expect(api.getStationQueue).toHaveBeenCalledTimes(stationReads);
+    expect(api.placeOrder).toHaveBeenCalledTimes(replacement === "api" ? 0 : 1);
+  });
+
+  it.each(["basket", "api"] as const)(
+    "does not place after a %s replacement while the invoice choice waits",
+    async (replacement) => {
+      let accept!: (value: { revision: number }) => void;
+      const setOrderInvoiceChoice = vi.fn(
+        () =>
+          new Promise<{ revision: number }>((resolve) => {
+            accept = resolve;
+          }),
+      );
+      const { el } = await mountApp({
+        ...fullInvoicesOn(),
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        setOrderInvoiceChoice,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await flush(el);
+      emit(c, "choose-invoice");
+      await flush(el);
+      emit(
+        el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+        "invoice-recipient-confirm",
+        {
+          invoiceType: "F1",
+          recipient: {
+            taxId: "12345678Z",
+            legalName: "Ana García",
+            address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+            countryCode: "ES",
+          },
+        },
+      );
+      await flush(el);
+      const originalApi = el.api;
+      emit(c, "place-order");
+      await flush(el);
+      expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
+      expect(originalApi.placeOrder).not.toHaveBeenCalled();
+      if (replacement === "basket")
+        c.store.loadFrom("next-basket", [{ product: cafe, quantity: "1" }], "Next order", 8);
+      else el.api = stubApi();
+      await flush(el);
+      const id = c.store.id;
+      const revision = c.store.revision;
+      const lines = structuredClone(c.store.lines);
+      accept({ revision: 9 });
+      await flush(el);
+      expect(originalApi.placeOrder).not.toHaveBeenCalled();
+      expect(el.api.placeOrder).not.toHaveBeenCalled();
+      expect(c.store.id).toBe(id);
+      expect(c.store.revision).toBe(revision);
+      expect(c.store.lines).toEqual(lines);
+      expect(tenderPay(el).stage).toBe("order");
+    },
+  );
+
   it("places a loaded bill over €3,000 without a recipient prompt despite retired timing metadata", async () => {
     const { el } = await mountApp({
       zonePolicy: { serviceMode: "invoice_first" },
@@ -3264,7 +3371,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
-    expect(currentApi.placeOrder).toHaveBeenCalledWith("large-bill");
+    expect(currentApi.placeOrder).toHaveBeenCalledWith("large-bill", null);
     expect(tenderPay(el).stage).toBe("collect");
     expect(ticket(el)).toBeNull();
     expect(currentApi.recordSale).not.toHaveBeenCalled();
@@ -3309,7 +3416,7 @@ describe("till-app", () => {
       invoiceType: "F1",
       recipient,
     });
-    expect(placeOrder).toHaveBeenCalledWith(id);
+    expect(placeOrder).toHaveBeenCalledWith(id, null);
     expect(vi.mocked(currentApi.setOrderInvoiceChoice).mock.invocationCallOrder[0]).toBeLessThan(
       placeOrder.mock.invocationCallOrder[0]!,
     );
@@ -10943,7 +11050,7 @@ describe("till-app", () => {
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
         label: undefined,
       });
-      expect(currentApi.placeOrder).toHaveBeenCalledWith(id);
+      expect(currentApi.placeOrder).toHaveBeenCalledWith(id, null);
       expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
       expect(c.store.persisted).toBe(true); // marked persisted after the successful park
       expect(tenderPay(el).stage).toBe("collect"); // Place → Collect
@@ -10975,7 +11082,7 @@ describe("till-app", () => {
 
       expect(currentApi.parkOrder).not.toHaveBeenCalled();
       expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
-      expect(currentApi.placeOrder).toHaveBeenCalledWith("wo-1");
+      expect(currentApi.placeOrder).toHaveBeenCalledWith("wo-1", null);
       expect(tenderPay(el).stage).toBe("collect");
     });
 
@@ -11011,7 +11118,7 @@ describe("till-app", () => {
         label: "Mesa 4",
         revision: 3,
       });
-      expect(placeOrder).toHaveBeenCalledWith("wo-1");
+      expect(placeOrder).toHaveBeenCalledWith("wo-1", null);
       expect(updateWorkingOrder.mock.invocationCallOrder[0]!).toBeLessThan(
         placeOrder.mock.invocationCallOrder[0]!,
       );

@@ -19,6 +19,21 @@ const owned = {
 };
 
 describe("bill editing over the till client", () => {
+  it.each([null, { billId: "bill-2", editorVersion: 7, draftId: "draft-2", draftRevision: 3 }])(
+    "places an order with its explicit editing observation %j",
+    async (expectedEdit) => {
+      const result = { id: "bill-2", status: "placed" };
+      const fetch = vi.fn(async () => Response.json(result));
+      expect(await new TillApi("", fetch).placeOrder("bill-2", expectedEdit)).toEqual(result);
+      expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/working-orders/bill-2/place", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ expectedEdit }),
+      });
+    },
+  );
+
   it("retains empty and owned bill observations from the same draft read", async () => {
     const answer = { drafts: [], billEdits: [empty, owned] };
     const fetch = vi.fn(async () => Response.json(answer));
