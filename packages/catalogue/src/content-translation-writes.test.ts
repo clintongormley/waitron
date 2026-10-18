@@ -17,39 +17,27 @@ import { sections, sectionMembers } from "./schema/sections.js";
 import { addMember } from "./sections.js";
 import { units } from "./schema/units.js";
 import { writeContentLanguages } from "./content-languages.js";
+import { resolveTranslationCells } from "./content-translation-cells.js";
+import { writeTranslationMaps } from "./content-translation-writes.js";
+import type { TranslationItem } from "./content-translation-types.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";
-import {
-  writeMenuTranslation,
-  writeSectionTranslation,
-  writeIncludedMenuTranslation,
-  writeProductTranslation,
-  writeVariantTranslation,
-  writeOptionListTranslation,
-  writeOptionLabelTranslation,
-  writeExtraListTranslation,
-  writeUnitTranslation,
-} from "./content-translation-writes.js";
-
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const context = { fallbackLanguage: "en", required: ["es", "ca"] };
-const writers = {
-  product: writeProductTranslation,
-  variant: writeVariantTranslation,
-  option_list: writeOptionListTranslation,
-  option_label: writeOptionLabelTranslation,
-  extra_list: writeExtraListTranslation,
-  unit: writeUnitTranslation,
-};
-type Kind = keyof typeof writers;
-const kinds = Object.keys(writers) as Kind[];
-const codes = {
-  product: "content.translation_required",
-  variant: "content.translation_required",
-  option_list: "options.translation_required",
-  option_label: "options.translation_required",
-  extra_list: "extras.translation_required",
-  unit: "unit.translation_required",
-};
+const kinds = ["product", "variant", "option_list", "option_label", "extra_list", "unit"] as const;
+type Kind = (typeof kinds)[number];
+
+async function resolveItem(
+  tx: Transaction,
+  kind: TranslationItem["kind"],
+  id: string,
+): Promise<TranslationItem> {
+  const { cells } = await resolveTranslationCells(
+    tx,
+    [{ kind, id, language: "en", field: "name" }],
+    context,
+  );
+  return { kind, id, name: cells[0]!.staffText ?? "", owners: cells[0]!.owners, cells };
+}
 
 async function fixture(tx: Transaction) {
   await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
@@ -258,18 +246,15 @@ describe("shared translation writes", () => {
 
   it.each(kinds)("%s refuses a disappeared target instead of recreating it", async (kind) => {
     await seedTenant(suite.db);
+    const before = await withTransaction(suite.db, (tx) => snapshot(tx));
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await fixture(tx);
-        const { targets } = await resolveTranslationTargets(
-          tx,
-          "en",
-          [{ kind, id: "removed-id" }],
-          context,
-        );
-        await writers[kind](tx, targets[0]!, { en: "English", es: "Castellano" });
+        await writeTranslationMaps(tx, await resolveItem(tx, kind, "removed-id"), {
+          name: { en: "English", es: "Castellano" },
+        });
       }),
     ).rejects.toMatchObject({ code: "content.translation_invalid" });
+    expect(await withTransaction(suite.db, (tx) => snapshot(tx))).toEqual(before);
   });
 
   it("refuses a resolved variant passed to the top-level product writer", async () => {
@@ -277,13 +262,8 @@ describe("shared translation writes", () => {
     await expect(
       withTransaction(suite.db, async (tx) => {
         const ids = await fixture(tx);
-        const { targets } = await resolveTranslationTargets(
-          tx,
-          "en",
-          [{ kind: "variant", id: ids.variant }],
-          context,
-        );
-        await writeProductTranslation(tx, targets[0]!, { en: "English" });
+        const item = await resolveItem(tx, "variant", ids.variant);
+        await writeTranslationMaps(tx, { ...item, kind: "product" }, { name: { en: "English" } });
       }),
     ).rejects.toMatchObject({ code: "content.translation_invalid" });
   });
@@ -297,13 +277,9 @@ describe("shared translation writes", () => {
           .update(optionLists)
           .set({ active: false })
           .where(eq(optionLists.id, ids.option_list));
-        const { targets } = await resolveTranslationTargets(
-          tx,
-          "en",
-          [{ kind: "option_label", id: ids.option_label }],
-          context,
-        );
-        await writeOptionLabelTranslation(tx, targets[0]!, { en: "English" });
+        await writeTranslationMaps(tx, await resolveItem(tx, "option_label", ids.option_label), {
+          name: { en: "English" },
+        });
       }),
     ).rejects.toMatchObject({ code: "content.translation_invalid" });
   });
@@ -319,26 +295,17 @@ describe("shared translation writes", () => {
         await tx.update(products).set({ active: false }).where(eq(products.id, archivedId));
         const before = await snapshot(tx);
         expect(before.products.find((row) => row.id === archivedId)!.active).toBe(false);
-        const { targets } = await resolveTranslationTargets(
-          tx,
-          "en",
-          [{ kind, id: ids[kind] }],
-          context,
-        );
+        const item = await resolveItem(tx, kind, ids[kind]);
         expect(await snapshot(tx)).toEqual(before);
-        await writers[kind](tx, targets[0]!, { en: "CLIENT English" });
+        const customerName =
+          kind === "product"
+            ? { es: "CLIENT Pan", ca: "CLIENT Pa", en: "CLIENT English" }
+            : { es: "CLIENT Pequeño", ca: "CLIENT Petit", en: "CLIENT English" };
+        await writeTranslationMaps(tx, item, { name: customerName });
         expect(await snapshot(tx)).toEqual({
           ...before,
           products: before.products.map((row) =>
-            row.id === ids[kind]
-              ? {
-                  ...row,
-                  customerName:
-                    kind === "product"
-                      ? { es: "CLIENT Pan", ca: "CLIENT Pa", en: "CLIENT English" }
-                      : { es: "CLIENT Pequeño", ca: "CLIENT Petit", en: "CLIENT English" },
-                }
-              : row,
+            row.id === ids[kind] ? { ...row, customerName } : row,
           ),
         });
       });
@@ -350,19 +317,28 @@ describe("shared translation writes", () => {
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
       const before = await snapshot(tx);
-      const resolution = await resolveTranslationTargets(
-        tx,
-        "en",
-        kinds.map((kind) => ({ kind, id: ids[kind] })),
-        context,
-      );
+      const items: TranslationItem[] = [];
+      for (const kind of kinds) items.push(await resolveItem(tx, kind, ids[kind]));
       const readSpy = vi.spyOn(tx, "select");
       const executeSpy = vi.spyOn(tx, "execute");
       try {
-        for (const entry of resolution.targets)
-          await writers[entry.target.kind as Kind](tx, entry, {
-            en: `CLIENT English ${entry.target.kind}`,
+        for (const item of items) {
+          const names =
+            item.kind === "product"
+              ? { es: "CLIENT Pan", ca: "CLIENT Pa" }
+              : item.kind === "variant"
+                ? { es: "CLIENT Pequeño", ca: "CLIENT Petit" }
+                : item.kind === "option_list"
+                  ? { es: "CLIENT Punto", ca: "CLIENT Punt" }
+                  : item.kind === "option_label"
+                    ? { es: "CLIENT Poco", ca: "CLIENT Poc" }
+                    : item.kind === "extra_list"
+                      ? { es: "CLIENT Guarnición", ca: "CLIENT Guarnició" }
+                      : { es: "CLIENT Kilogramo", ca: "CLIENT Quilogram" };
+          await writeTranslationMaps(tx, item, {
+            name: { ...names, en: `CLIENT English ${item.kind}` },
           });
+        }
         expect(readSpy).not.toHaveBeenCalled();
         expect(executeSpy).not.toHaveBeenCalled();
       } finally {
@@ -382,10 +358,10 @@ describe("shared translation writes", () => {
                   ? after.extras
                   : after.units;
         const row = rows.find((row) => row.id === ids[kind])!;
-        const names = "customerName" in row ? row.customerName : row.name;
-        expect(names).toMatchObject({ en: `CLIENT English ${kind}` });
+        expect("customerName" in row ? row.customerName : row.name).toMatchObject({
+          en: `CLIENT English ${kind}`,
+        });
       }
-      // Remove only the new cells before comparing every remaining stored column and sibling row.
       for (const rows of [after.products, after.options, after.labels, after.extras])
         for (const row of rows) if (row.customerName) delete row.customerName.en;
       for (const row of after.units) delete row.name.en;
@@ -393,104 +369,75 @@ describe("shared translation writes", () => {
     });
   });
 
-  it.each(kinds)("%s refuses a missing default companion without writing", async (kind) => {
-    await seedTenant(suite.db);
-    const ids = await withTransaction(suite.db, (tx) => fixture(tx));
-    await withTransaction(suite.db, async (tx) => {
-      if (kind === "product" || kind === "variant")
-        await tx.update(products).set({ customerName: null }).where(eq(products.id, ids[kind]));
-      else if (kind === "option_list")
-        await tx
-          .update(optionLists)
-          .set({ customerName: null })
-          .where(eq(optionLists.id, ids[kind]));
-      else if (kind === "option_label")
-        await tx
-          .update(optionLabels)
-          .set({ customerName: null })
-          .where(eq(optionLabels.id, ids[kind]));
-      else if (kind === "extra_list")
-        await tx.update(extraLists).set({ customerName: null }).where(eq(extraLists.id, ids[kind]));
-      else
-        await tx
-          .update(units)
-          .set({ name: { ca: "Quilogram" } })
-          .where(eq(units.id, ids[kind]));
-    });
-    const before = await withTransaction(suite.db, (tx) => snapshot(tx));
-    await expect(
-      withTransaction(suite.db, async (tx) => {
-        const { targets } = await resolveTranslationTargets(
-          tx,
-          "en",
-          [{ kind, id: ids[kind] }],
-          context,
-        );
-        await writers[kind](tx, targets[0]!, { en: "New customer text" });
-      }),
-    ).rejects.toMatchObject({
-      code: codes[kind],
-      params:
-        kind === "product" || kind === "variant"
-          ? { language: "es" }
-          : { language: "es", field: kind === "unit" ? "name" : "customerName" },
-    });
-    expect(await withTransaction(suite.db, (tx) => snapshot(tx))).toEqual(before);
-    await withTransaction(suite.db, async (tx) => {
-      const { targets } = await resolveTranslationTargets(
-        tx,
-        "en",
-        [{ kind, id: ids[kind] }],
-        context,
-      );
-      await writers[kind](tx, targets[0]!, { en: "New customer text", es: "Castellano explícito" });
-      const { targets: after } = await resolveTranslationTargets(
-        tx,
-        "en",
-        [{ kind, id: ids[kind] }],
-        context,
-      );
-      expect(after[0]).toMatchObject({
-        names: { en: "New customer text", es: "Castellano explícito" },
-      });
-    });
-  });
-
   it.each(kinds)(
-    "%s accepts an explicit default companion using the saved default, not the fallback or all required languages",
+    "%s saves without a default companion and changes only the final name map",
     async (kind) => {
       await seedTenant(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const ids = await fixture(tx);
+        const before = await snapshot(tx);
+        await writeTranslationMaps(tx, await resolveItem(tx, kind, ids[kind]), {
+          name: { en: "New customer text" },
+        });
+        const after = await snapshot(tx);
+        const expected = structuredClone(before);
+        const rows =
+          kind === "product" || kind === "variant"
+            ? expected.products
+            : kind === "option_list"
+              ? expected.options
+              : kind === "option_label"
+                ? expected.labels
+                : kind === "extra_list"
+                  ? expected.extras
+                  : expected.units;
+        const row = rows.find((row) => row.id === ids[kind])!;
+        if ("customerName" in row) row.customerName = { en: "New customer text" };
+        else row.name = { en: "New customer text" };
+        expect(after).toEqual(expected);
         const { targets } = await resolveTranslationTargets(
           tx,
           "en",
           [{ kind, id: ids[kind] }],
           context,
         );
-        await writers[kind](tx, targets[0]!, { en: "New English", es: "Nuevo castellano", ca: "" });
-        const { targets: after } = await resolveTranslationTargets(
+        expect(targets[0]).toMatchObject({ names: { en: "New customer text" } });
+      });
+    },
+  );
+
+  it.each(kinds)(
+    "%s replaces all submitted language keys and permits clearing the final translation",
+    async (kind) => {
+      await seedTenant(suite.db);
+      await withTransaction(suite.db, async (tx) => {
+        const ids = await fixture(tx);
+        await writeTranslationMaps(tx, await resolveItem(tx, kind, ids[kind]), {
+          name: { en: "New English", es: "Nuevo castellano" },
+        });
+        const { targets } = await resolveTranslationTargets(
           tx,
           "en",
           [{ kind, id: ids[kind] }],
           context,
         );
-        expect(after[0]).toMatchObject({
-          names: { en: "New English", es: "Nuevo castellano", ca: "" },
-        });
+        expect(targets[0]).toMatchObject({ names: { en: "New English", es: "Nuevo castellano" } });
+        await writeTranslationMaps(tx, await resolveItem(tx, kind, ids[kind]), { name: {} });
+        const { targets: cleared } = await resolveTranslationTargets(
+          tx,
+          "en",
+          [{ kind, id: ids[kind] }],
+          context,
+        );
+        expect(cleared[0]).toMatchObject({ names: {} });
       });
     },
   );
 });
 
 describe("menu translation writes", () => {
-  const menuWriters = {
-    menu: writeMenuTranslation,
-    section: writeSectionTranslation,
-    included_menu: writeIncludedMenuTranslation,
-  };
   it.each(["menu", "section", "included_menu"] as const)(
-    "%s requires the effective default and preserves non-name columns",
+    "%s saves optional final names and preserves non-name columns",
     async (kind) => {
       await seedTenant(suite.db);
       const ids = await withTransaction(suite.db, async (tx) => {
@@ -513,32 +460,18 @@ describe("menu translation writes", () => {
           .where(eq(sectionMembers.id, member.id));
         return { menu: root, section: section!.id, included_menu: member.id };
       });
-      await expect(
-        withTransaction(suite.db, async (tx) => {
-          const resolved = await resolveTranslationTargets(
-            tx,
-            "en",
-            [{ kind, id: ids[kind] }],
-            context,
-          );
-          await menuWriters[kind](tx, resolved.targets[0]!, { en: "English" });
-        }),
-      ).rejects.toMatchObject({
-        code: "menu_section.translation_required",
-        params: { field: "names", language: "es" },
-      });
       await withTransaction(suite.db, async (tx) => {
         const beforeSections = await tx.select().from(sections).orderBy(sections.id);
         const beforeMembers = await tx.select().from(sectionMembers).orderBy(sectionMembers.id);
-        const resolved = await resolveTranslationTargets(
-          tx,
-          "en",
-          [{ kind, id: ids[kind] }],
-          context,
-        );
+        const item = await resolveItem(tx, kind, ids[kind]);
         const readSpy = vi.spyOn(tx, "execute");
         try {
-          await menuWriters[kind](tx, resolved.targets[0]!, { en: "English", es: "Castellano" });
+          await writeTranslationMaps(tx, item, {
+            name:
+              kind === "included_menu"
+                ? { ca: "CLIENT Begudes", en: "English" }
+                : { en: "English" },
+          });
           expect(readSpy).not.toHaveBeenCalled();
         } finally {
           readSpy.mockRestore();
@@ -550,22 +483,53 @@ describe("menu translation writes", () => {
           expect(row).toMatchObject({
             showAsFolder: false,
             folderOverrides: {
-              names: { ca: "CLIENT Begudes", en: "English", es: "Castellano" },
+              names: { ca: "CLIENT Begudes", en: "English" },
               color: "#123456",
               image: null,
             },
           });
           delete row.folderOverrides.names!.en;
-          delete row.folderOverrides.names!.es;
         } else {
           const row = afterSections.find((row) => row.id === ids[kind])!;
-          expect(row.names).toEqual({ en: "English", es: "Castellano" });
+          expect(row.names).toEqual({ en: "English" });
           delete row.names.en;
-          delete row.names.es;
         }
         expect(afterSections).toEqual(beforeSections);
         expect(afterMembers).toEqual(beforeMembers);
       });
+    },
+  );
+});
+
+describe("final translation map identity", () => {
+  it.each(["kind", "id", "field"] as const)(
+    "refuses a group whose resolved cell has a different %s without writing",
+    async (changed) => {
+      await seedTenant(suite.db);
+      const ids = await withTransaction(suite.db, (tx) => fixture(tx));
+      const before = await withTransaction(suite.db, (tx) => snapshot(tx));
+      await expect(
+        withTransaction(suite.db, async (tx) => {
+          const { cells } = await resolveTranslationCells(
+            tx,
+            [{ kind: "product", id: ids.product, language: "en", field: "name" }],
+            context,
+          );
+          const cell = { ...cells[0]! };
+          if (changed === "kind") cell.kind = "variant";
+          if (changed === "id") cell.id = ids.variant;
+          if (changed === "field") cell.field = "abbreviation";
+          const item: TranslationItem = {
+            kind: "product",
+            id: ids.product,
+            name: "STAFF Bread",
+            owners: cells[0]!.owners,
+            cells: [cell],
+          };
+          await writeTranslationMaps(tx, item, { name: { en: "Wrong target" } });
+        }),
+      ).rejects.toMatchObject({ code: "content.translation_invalid" });
+      expect(await withTransaction(suite.db, (tx) => snapshot(tx))).toEqual(before);
     },
   );
 });

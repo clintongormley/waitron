@@ -29,10 +29,16 @@ import {
 } from "./content-translation-targets.js";
 import {
   TRANSLATION_NAME_BYTES,
-  type TranslationEdit,
   type TranslationCellRef,
   type TranslationRef,
+  type TranslationTarget,
+  type TranslationCellEdit,
 } from "./content-translation-types.js";
+import {
+  parseTranslationBaseline,
+  sameTranslationBaseline,
+  type TranslationBaseline,
+} from "./content-translation-baseline.js";
 import "./errors.js";
 import { contentSuggestionJobs, contentSuggestions } from "./schema/suggestions.js";
 
@@ -81,6 +87,13 @@ function validFix(fix: Fix, missing: readonly string[], languages: readonly stri
 }
 
 export type PageStored = "stored" | "complete" | "ended" | "stale";
+
+function nameEvidence(target: TranslationTarget): string {
+  return JSON.stringify({
+    ...(JSON.parse(target.expected) as Record<string, unknown>),
+    field: "name",
+  });
+}
 
 /**
  * Stores one page of a job's results, only at the job's saved position. The last page also finishes
@@ -150,7 +163,7 @@ export async function storeSuggestionPage(
         dropped += 1;
         continue;
       }
-      rows.set(language, { ...emptyRow(language), text: trimmed, expected: target.expected });
+      rows.set(language, { ...emptyRow(language), text: trimmed, expected: nameEvidence(target) });
     }
     const effective: Record<string, string> = entry ? effectiveNames(entry) : {};
     for (const fix of result.corrections) {
@@ -165,7 +178,13 @@ export async function storeSuggestionPage(
         dropped += 1;
         continue;
       }
-      rows.set(language, { ...emptyRow(language), fix });
+      const target =
+        language === null ? null : resolveTranslationRow(live!.row, language, settings).target;
+      rows.set(language, {
+        ...emptyRow(language),
+        fix,
+        expected: target?.effectiveSelectedText === fix.wrong ? nameEvidence(target) : null,
+      });
     }
     if (result.placeholder) {
       if (entry) rows.set(null, { ...(rows.get(null) ?? emptyRow(null)), placeholder: true });
@@ -251,21 +270,16 @@ export async function storeSuggestionPage(
 }
 
 const SUGGESTION_PAGE = 100;
-const COMPARED = [
-  "ref",
-  "language",
-  "owners",
-  "selectedText",
-  "effectiveSelectedText",
-  "inheritedSelectedText",
-] as const;
-
-function readToken(token: string): Record<string, unknown> | null {
+function readToken(token: string): TranslationBaseline | null {
   try {
-    const value: unknown = JSON.parse(token);
-    return value !== null && typeof value === "object" && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
+    const value = JSON.parse(token) as TranslationBaseline;
+    return parseTranslationBaseline({
+      ...value.ref,
+      language: value.language,
+      field: value.field,
+      expected: token,
+      text: null,
+    } as TranslationCellEdit);
   } catch {
     return null;
   }
@@ -274,8 +288,25 @@ function readToken(token: string): Record<string, unknown> | null {
 export function suggestionStale(stored: string, current: string): boolean {
   const before = readToken(stored);
   const after = readToken(current);
-  if (!before || !after) return true;
-  return COMPARED.some((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+  if (
+    !before ||
+    !after ||
+    before.field !== "name" ||
+    after.field !== "name" ||
+    !after.config.languages.includes(after.language)
+  )
+    return true;
+  return !sameTranslationBaseline(
+    {
+      ...before,
+      config: after.config,
+      required: after.required,
+      defaultText: after.defaultText,
+      inheritedDefaultText: after.inheritedDefaultText,
+      effectiveDefaultText: after.effectiveDefaultText,
+    },
+    after,
+  );
 }
 
 export async function listContentSuggestions(
@@ -306,6 +337,9 @@ export async function listContentSuggestions(
   for (const row of rows) {
     const item = live.get(keyOf(row));
     if (!item) continue;
+    const target =
+      row.language === null ? null : resolveTranslationRow(item.row, row.language, settings).target;
+    const languageFix = row.fixField !== null && row.fixField !== "internal";
     suggestions.push({
       id: row.id,
       kind: row.kind,
@@ -321,11 +355,11 @@ export async function listContentSuggestions(
       // A row with text has a language and `expected` (content_suggestions_text_language_ck,
       // content_suggestions_name_ck).
       stale:
-        row.text !== null &&
-        suggestionStale(
-          row.expected!,
-          resolveTranslationRow(item.row, row.language!, settings).target.expected,
-        ),
+        (row.text !== null || languageFix) &&
+        (row.expected === null ||
+          target === null ||
+          (languageFix && target.effectiveSelectedText !== row.fixWrong) ||
+          suggestionStale(row.expected, nameEvidence(target))),
     });
   }
   return {
@@ -343,25 +377,6 @@ export async function discardContentSuggestion(tx: Transaction, id: string): Pro
     .returning({ id: contentSuggestions.id });
   if (deleted.length === 0)
     throw new AppError("content.suggestion_not_found", { suggestionId: id });
-}
-
-export async function deleteSavedSuggestions(
-  tx: Transaction,
-  language: string,
-  defaultLanguage: string,
-  edits: readonly Pick<TranslationEdit, "kind" | "id" | "defaultText">[],
-): Promise<void> {
-  await tx
-    .delete(contentSuggestions)
-    .where(
-      storedIn(
-        edits.flatMap((edit) =>
-          (edit.defaultText === undefined ? [language] : [language, defaultLanguage]).map(
-            (saved) => [edit.kind, edit.id, saved] as const,
-          ),
-        ),
-      ),
-    );
 }
 
 export async function deleteSavedCellSuggestions(

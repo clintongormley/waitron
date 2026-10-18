@@ -40,7 +40,9 @@ declare module "@waitron/shared" {
     "unit.translation_required": { field: "name" | "abbreviation"; language: string };
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
-    "content.translation_stale": { kind: string; id: string } | { scope: "configuration" };
+    "content.translation_stale":
+      | { kind: string; id: string; language: string; field: "name" | "abbreviation" }
+      | { scope: "configuration" };
     /** A Translate all job is already submitting or running for the venue. */
     "content.suggestion_job_running": Record<string, never>;
     /** The Cloud account has not agreed to menu text going to the named language-model providers. */
@@ -53,15 +55,20 @@ declare module "@waitron/shared" {
     "content.suggestion_expired": Record<string, never>;
     /** The suggestion being discarded is gone. */
     "content.suggestion_not_found": { suggestionId: string };
-    "content.translation_unavailable": { kind: string; id: string };
-    "content.translation_batch_invalid": Record<string, never>;
-    "content.translation_refused": {
-      causeCode: string;
-      causeParams: Readonly<Record<string, unknown>>;
+    "content.translation_unavailable": {
       kind: string;
       id: string;
-      field: "text" | "defaultText" | "name" | "abbreviation";
       language: string;
+      field: "name" | "abbreviation";
+    };
+    "content.translation_batch_invalid": Record<string, never>;
+    "content.translation_refused": {
+      kind: string;
+      id: string;
+      language: string;
+      field: "name" | "abbreviation";
+      causeCode: string;
+      causeParams: Readonly<Record<string, unknown>>;
     };
     "content.translation_invalid": Record<string, never>;
     /** Required content has no text in the configured default language. */

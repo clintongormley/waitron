@@ -4,7 +4,6 @@ import { eq, inArray } from "drizzle-orm";
 import { products, withTransaction } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
-import { resolveTranslationTargets } from "./content-translation-targets.js";
 import { resolveTranslationCells } from "./content-translation-cells.js";
 import { saveContentTranslations } from "./content-translations.js";
 import { setProductVariants } from "./variants.js";
@@ -77,15 +76,14 @@ it("stores each name with the token of the item it was made from", async () => {
   );
   await app(async (tx) => {
     for (const row of await tx.select().from(contentSuggestions)) {
-      const { targets } = await resolveTranslationTargets(
+      const { cells } = await resolveTranslationCells(
         tx,
-        row.language!,
-        [{ kind: row.kind, id: row.itemId }],
+        [{ kind: row.kind, id: row.itemId, language: row.language!, field: "name" }],
         context,
       );
       expect(row).toMatchObject({
         jobId: job.id,
-        expected: targets[0]!.target.expected,
+        expected: cells[0]!.expected,
         createdAt: at.toISOString(),
       });
     }

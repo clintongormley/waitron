@@ -1143,9 +1143,12 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   projection are checked against real rereads. The multilingual HTTP read/save routes use grouped
   map replacements, explicit clears, whole-batch retries and exact saved-name suggestion cleanup.
   The language screen consumes count-only summaries; retained-cell reads and live dependencies
-  are wired. The dashboard page/save contract, editor and remaining legacy helper retirement are
-  unfinished. Boot's configured-origin forwarding and obsolete callback cleanup wait for lane E.
-  Automatic-translation review, future presentation and the remaining validation are unfinished.
+  are wired. The legacy single-language map writers and default-companion cleanup are retired.
+  Spelling fixes now retain evidence only for an exact saved name match; listing rechecks that
+  evidence, and pruning keeps fixes and notes on complete live items. All-language suggestion
+  paging, the dashboard page/save contract and the editor are unfinished. Boot's configured-origin
+  forwarding and obsolete callback cleanup wait for lane E. Automatic-translation review, future
+  presentation and the remaining validation are unfinished.
   [Detail](backlog/catalogue.md#a682-translations-nothing-required-every-missing-name-reported-all-languages-side-by-side-owner-2026-10-14)
 
 - **Content languages and the image library (#339, #344) — what is left open.**

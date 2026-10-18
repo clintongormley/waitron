@@ -120,7 +120,7 @@ it("lists the page language, the default language and the item rows", async () =
         text: null,
         placeholder: false,
         fix: { field: "ca", wrong: "Formatge", right: "Formatges" },
-        stale: false,
+        stale: true,
       },
     ]),
   );
@@ -261,6 +261,13 @@ it("starting a run prunes suggestions for names that were filled elsewhere", asy
       { itemId: venue.wine, language: "ca", text: "CLIENT-CA Vi", placeholder: false, fix: null },
       { itemId: venue.wine, language: "es", text: "CLIENT-ES Vino", placeholder: false, fix: null },
       { itemId: venue.wine, language: "en", text: "CLIENT-EN Wine", placeholder: false, fix: null },
+      {
+        itemId: venue.cheese,
+        language: "ca",
+        text: null,
+        placeholder: false,
+        fix: { field: "ca", wrong: "Formatge", right: "Formatges" },
+      },
     ]),
   );
 });
@@ -424,6 +431,15 @@ describe("suggestionStale", () => {
     JSON.stringify({
       ref: { kind: "product", id: "p1" },
       language: "es",
+      field: "name",
+      structure: {
+        role: "product",
+        active: true,
+        ownerActive: true,
+        rootMatched: true,
+        parentRole: null,
+        childActive: true,
+      },
       inheritedSelectedText: null,
       inheritedDefaultText: null,
       owners: { kind: "product", parentId: null },
