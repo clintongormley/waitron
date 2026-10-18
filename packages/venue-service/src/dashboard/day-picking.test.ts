@@ -551,6 +551,8 @@ describe("DayPicker", () => {
     await expectRun(host, run(20, 20));
     await userEvent.keyboard("{ArrowRight}");
     await expectRun(host, run(21, 21));
+    await userEvent.click(button(host, 21));
+    await expectRun(host, run(21, 21));
 
     host.onPicked = (picked) => {
       if (picked?.to === day(13)) host.allowPicking = false;

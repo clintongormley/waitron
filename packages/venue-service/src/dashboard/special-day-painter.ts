@@ -793,8 +793,8 @@ export class SpecialDayPainter extends LitElement {
     this.scope?.commit(copyDraft(this.baseline));
   }
   /** An edited owner's paint goes back to its saved state when the owner is gone from `this.model`
-   *  or no longer active, and the notice beside Save names it. */
-  private dropUnpaintable(previous: Model) {
+   *  or no longer active, and the notice beside Save names it. True when it dropped any. */
+  private dropUnpaintable(previous: Model): boolean {
     const paintable = new Set(
       this.model.departments
         .filter(({ active }) => active)
@@ -813,10 +813,11 @@ export class SpecialDayPainter extends LitElement {
       if (saved) paint.set(owner, copyDays(saved));
       else paint.delete(owner);
     }
-    if (!paint) return;
+    if (!paint) return false;
     this.draft = { ...this.draft, paint };
     this.notice = droppedNotice(gone, inactive);
     this.scope?.changed();
+    return true;
   }
   /** One entry per (owner, date) whose paint differs from the saved state, for owners the model
    *  still has; a removed date sends none, as the server drops its paint with it. */
@@ -930,10 +931,11 @@ export class SpecialDayPainter extends LitElement {
     this.seeded = this.seedKey();
     this.attempted = false;
     this.adopt(detail, [], "", this.paintedSince(sent));
-    this.dropUnpaintable(model);
+    // A drop leaves the draft clean, but its notice must stay on screen.
+    const dropped = this.dropUnpaintable(model);
     this.dispatchEvent(
       new CustomEvent<{ detail: SpecialDayDetail; clean: boolean }>("special-day-saved", {
-        detail: { detail, clean: !this.scope?.isDirty() },
+        detail: { detail, clean: !dropped && !this.scope?.isDirty() },
         bubbles: true,
         composed: true,
       }),

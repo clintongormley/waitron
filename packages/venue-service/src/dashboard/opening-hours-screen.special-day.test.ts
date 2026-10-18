@@ -768,6 +768,7 @@ describe("Save closes the special-day editor", () => {
     const painter = await shownPainter(el);
     await rename(painter, "Staff dinners");
     const back = vi.spyOn(history, "back");
+    const pushed = pushedPaths();
     saveButton(painter).click();
     await expect.poll(() => painterOf(el)).toBeNull();
     expect(writes.map(([path, method]) => [path, method])).toEqual([
@@ -776,6 +777,7 @@ describe("Save closes the special-day editor", () => {
     expect(back).not.toHaveBeenCalled();
     expect(location.pathname).toBe("/manage/opening-hours/view/year");
     expect(drawnView(el)).toBe("year");
+    expect(pushed()).toEqual([]);
   });
 
   it("a refused save keeps it open", async () => {

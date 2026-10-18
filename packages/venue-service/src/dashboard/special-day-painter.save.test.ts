@@ -574,6 +574,32 @@ describe("a live refresh that takes away a department or zone with edits", () =>
       { departmentId: "d1", date: DEC_15, ranges: [dinner("19:00", "22:00")] },
     ]);
   });
+  it("a save whose only later edit was dropped for a department made inactive meanwhile is not clean, and says so", async () => {
+    let succeed!: () => void;
+    const late = new Promise<void>((resolve) => {
+      succeed = resolve;
+    });
+    const { painter, writes } = await mount({ refusals: [late] });
+    const clean: boolean[] = [];
+    painter.addEventListener("special-day-saved", (event) =>
+      clean.push((event as CustomEvent<{ clean: boolean }>).detail.clean),
+    );
+    painter.model = oldBarActive();
+    await settle(painter);
+    await paintDinner(painter, DEC_15);
+    saveButton(painter).click();
+    await expect.poll(() => writes.length).toBe(1);
+    await settle(painter);
+    await pick(painter, "d2");
+    await drag(painter, DEC_14, at("21:00"), at("22:00"));
+    painter.model = painterModel();
+    await settle(painter);
+    succeed();
+    await expect.poll(() => clean).toEqual([false]);
+    await expect.poll(() => frame(painter).busy).toBe(false);
+    await settle(painter);
+    expect(frame(painter).refusal).toBe("Old bar is no longer active; its changes were dropped.");
+  });
 });
 
 describe("after a save", () => {
