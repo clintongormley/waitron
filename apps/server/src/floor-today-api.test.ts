@@ -1802,6 +1802,20 @@ describe("Update layout", () => {
     expect(await todayRow(v, live("five"))).toMatchObject({ x: 160, takenOff: true });
   });
 
+  it("leaves a taken-off table put back on after Update layout on when its group frees", async () => {
+    const { d, live, partyId } = await waitingGroup();
+    await expectRevision(v, today(live("five"), "put-back"), d.zoneId);
+
+    await finish(partyId);
+
+    expect(await todayRow(v, live("five"))).toMatchObject({ x: 60, takenOff: false });
+    expect(await floorToday(live("five"))).toMatchObject({ needsMoving: true });
+
+    await expectRevision(v, today(live("five"), "mark-moved"), d.zoneId);
+
+    expect(await todayRow(v, live("five"))).toMatchObject({ x: 160, takenOff: false });
+  });
+
   it("applies a waiting taken-off table later though a table stands at its new place", async () => {
     const { live, partyId } = await waitingGroup();
     await expectRevision(v, today(live("spare"), "move", { x: 160, y: 0 }));

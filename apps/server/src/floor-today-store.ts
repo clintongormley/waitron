@@ -125,36 +125,47 @@ export async function resetZone(
   zoneId: string,
   now: Date,
   onto: ResetOnto | "due",
-  { keepTakenOff = false }: { keepTakenOff?: boolean } = {},
 ): Promise<number | null> {
-  const options: ResetOptions = { keepTakenOff };
   await requireZone(tx, cfg, zoneId);
   const day = await todayBusinessDay(tx, cfg, now);
   if (day === null) return null;
-  if (onto !== "due") {
-    const layout = await layoutRowOf(tx, onto.setId, zoneId);
-    return resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout, options);
-  }
+  if (onto !== "due") return resetZoneOn(tx, cfg, removals, zoneId, day, now, onto);
   const { states, rows } = await zoneLayoutsOn(tx, cfg, [zoneId], now, day);
   const due = dueOnto(states.get(zoneId)!);
   if (due === null) return null;
-  return resetZoneFor(tx, cfg, removals, zoneId, day, now, due, rows.get(zoneId), options);
+  return resetZoneFor(tx, cfg, removals, zoneId, day, now, due, rows.get(zoneId), {
+    keepTakenOff: false,
+  });
+}
+
+/** `resetZone` onto `onto` on business day `day`, for a caller that has read the day. */
+export async function resetZoneOn(
+  tx: Transaction,
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+  zoneId: string,
+  day: string,
+  now: Date,
+  onto: ResetOnto,
+): Promise<number> {
+  const layout = await layoutRowOf(tx, onto.setId, zoneId);
+  return resetZoneFor(tx, cfg, removals, zoneId, day, now, onto, layout, { keepTakenOff: false });
 }
 
 /**
- * Update layout: resets the zone onto the layout due at `now`, keeping taken-off tables off, when
- * it is the one `sent` names; refuses `floor_today.layout_changed` otherwise. Answers the room's
- * new revision.
+ * Update layout: resets the zone onto the layout due at `now` on business day `day`, keeping
+ * taken-off tables off, when it is the one `sent` names; refuses `floor_today.layout_changed`
+ * otherwise. Answers the room's new revision.
  */
 export async function updateLayout(
   tx: Transaction,
   cfg: TillConfig,
   removals: readonly TableRemoval[],
   zoneId: string,
+  day: string | null,
   now: Date,
   sent: { setId: string; layoutRevision: number },
 ): Promise<number> {
-  const day = await todayBusinessDay(tx, cfg, now);
   const { states, rows } = await zoneLayoutsOn(tx, cfg, [zoneId], now, day);
   const due = states.get(zoneId)!.due;
   if (
@@ -924,16 +935,17 @@ function mergedWith(
  * For each zone with a table or a layout: resets it onto its due layout when its today's plan is
  * for an earlier business day (or it has none), else catchUpZone when it has pending rows; one
  * query finds those zones. A zone whose due layout has no saved row is left as it is (plan
- * decision 24). A caught-up zone whose plan changed moves its revision by one.
+ * decision 24). A caught-up zone whose plan changed moves its revision by one. Answers the
+ * business day, null when the venue's clock names none.
  */
 export async function ensureToday(
   tx: Transaction,
   cfg: TillConfig,
   removals: readonly TableRemoval[],
   now: Date,
-): Promise<void> {
+): Promise<string | null> {
   const day = await todayBusinessDay(tx, cfg, now);
-  if (day === null) return;
+  if (day === null) return null;
   const zones = await tx
     .select({ zoneId: floorZones.id, businessDay: floorTodayZones.businessDay })
     .from(floorZones)
@@ -979,11 +991,13 @@ export async function ensureToday(
       }
     } else await catchUpZone(tx, cfg, removals, zoneId, now);
   }
-  if (before === null) return;
+  if (before === null) return day;
   const after = await roomPrints(tx, cfg, catchingUp);
   const changed = catchingUp.filter((zoneId) => after.get(zoneId) !== before.get(zoneId));
-  if (changed.length === 0) return;
-  await moveChangedRooms(tx, await roomRevisions(tx, changed), before, after);
+  if (changed.length > 0) {
+    await moveChangedRooms(tx, await roomRevisions(tx, changed), before, after);
+  }
+  return day;
 }
 
 const dueRow = alias(floorResetTables, "due_row");

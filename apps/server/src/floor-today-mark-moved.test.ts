@@ -292,9 +292,9 @@ describe("Mark moved", () => {
     await s.onto(s.d.standard);
     const [t4, t5, t45, t8] = [s.live("t4"), s.live("t5"), s.live("t45"), s.live("t8")];
     await setToday(t4, { takenOff: true });
-    await s.onto(s.d.dinner, { keepTakenOff: true });
+    await s.update(s.d.dinner);
     const partyId = await seatAt(t45);
-    await s.onto(s.d.standard, { keepTakenOff: true });
+    await s.update(s.d.standard);
     await finish(partyId);
     expect(await needsMoving(t45)).toBe(true);
     expect(await todayRow(t4)).toMatchObject({ takenOff: true });

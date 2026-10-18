@@ -18,12 +18,11 @@ import {
   moveToday,
   placeSpareToday,
   putBackToday,
-  resetZone,
+  resetZoneOn,
   type ResetOnto,
   rotateToday,
   seatsToday,
   takeOffToday,
-  todayBusinessDay,
   updateLayout,
 } from "./floor-today-store.js";
 import { plannedZones } from "./floor-layout-due.js";
@@ -246,19 +245,16 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const active = await zoneActive(tx, deps.cfg, zoneId);
         const now = deps.clock.now().instant;
-        await ensureToday(tx, deps.cfg, removals, now);
+        const day = await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
         if (sent !== null) refuseStale(zoneId, sent, from);
         else if (await hasTodayRow(tx, deps.cfg.locationId, zoneId)) {
           throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
         }
-        if (!active) return from;
-        const onto = await recordedOnto(tx, deps.cfg, zoneId, now);
+        if (!active || day === null) return from;
+        const onto = await recordedOnto(tx, deps.cfg, zoneId, day);
         if (onto === null) return from;
-        return (
-          (await resetZone(tx, deps.cfg, removals, zoneId, now, onto, { keepTakenOff: false })) ??
-          from
-        );
+        return resetZoneOn(tx, deps.cfg, removals, zoneId, day, now, onto);
       });
       return c.json({ zoneId, revision });
     }),
@@ -281,11 +277,11 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const active = await zoneActive(tx, deps.cfg, zoneId);
         const now = deps.clock.now().instant;
-        await ensureToday(tx, deps.cfg, removals, now);
+        const day = await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
         refuseStale(zoneId, sent, from);
         if (!active) return from;
-        return updateLayout(tx, deps.cfg, removals, zoneId, now, layout);
+        return updateLayout(tx, deps.cfg, removals, zoneId, day, now, layout);
       });
       return c.json({ zoneId, revision });
     }),
@@ -312,12 +308,10 @@ async function recordedOnto(
   tx: Transaction,
   cfg: TillConfig,
   zoneId: string,
-  now: Date,
+  day: string,
 ): Promise<ResetOnto | null> {
   const sets = await VENUE_SERVICE.readFloorPlanSets(tx, cfg);
   if (!plannedZones(sets).has(zoneId)) return null;
-  const day = await todayBusinessDay(tx, cfg, now);
-  if (day === null) return null;
   const [record] = await tx
     .select({ setId: floorTodayZones.setId, occurrence: floorTodayZones.occurrence })
     .from(floorTodayZones)

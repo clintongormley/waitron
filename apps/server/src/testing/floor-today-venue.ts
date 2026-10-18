@@ -27,7 +27,13 @@ import {
 } from "@waitron/venue-service";
 import { readLayout, saveLayout, type ZonePlanSave } from "../floor-plan.js";
 import { defaultLayout } from "./floor-sets.js";
-import { ensureToday, resetZone, type ResetOnto } from "../floor-today-store.js";
+import {
+  ensureToday,
+  resetZone,
+  todayBusinessDay,
+  updateLayout,
+  type ResetOnto,
+} from "../floor-today-store.js";
 import { finishTable, markTableCleared } from "../parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
 import { inTx, OPERATOR, seat, type PartyVenue } from "./party-venue.js";
@@ -276,19 +282,28 @@ export async function standardAndDinner(
     })),
   );
   const live = (key: string) => standard.tables.find((t) => t.id === ids[key])!.liveTableId!;
-  const onto = (setId: string, options?: { keepTakenOff: boolean }) =>
+  const onto = (setId: string) =>
     inTx(v, (tx) =>
-      resetZone(
-        tx,
-        v.cfg,
-        REMOVALS,
-        d.zoneId,
-        now,
-        { setId, occurrence: null } satisfies ResetOnto,
-        options,
-      ),
+      resetZone(tx, v.cfg, REMOVALS, d.zoneId, now, {
+        setId,
+        occurrence: null,
+      } satisfies ResetOnto),
     );
-  return { d, live, onto };
+  /** Update layout onto `setId`, which Lunch, the period running at `now`, is made to pick. */
+  const update = (setId: string) =>
+    inTx(v, async (tx) => {
+      await tx
+        .update(menuPeriods)
+        .set({ floorPlanSetId: setId })
+        .where(eq(menuPeriods.id, d.lunchPeriod));
+      const { revision } = await readLayout(tx, v.cfg, { setId, zoneId: d.zoneId });
+      const day = await todayBusinessDay(tx, v.cfg, now);
+      return updateLayout(tx, v.cfg, REMOVALS, d.zoneId, day, now, {
+        setId,
+        layoutRevision: revision,
+      });
+    });
+  return { d, live, onto, update };
 }
 
 /**

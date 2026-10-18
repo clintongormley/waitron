@@ -1068,15 +1068,15 @@ describe("the reset waiting rules", () => {
     return { ...s, t9 };
   }
 
-  it("a reset with keepTakenOff keeps table 9 off at its new place", async () => {
+  it("Update layout keeps table 9 off at its new place", async () => {
     const z = await nineTakenOff();
 
-    await z.onto(z.d.dinner, { keepTakenOff: true });
+    await z.update(z.d.dinner);
 
     expect(await todayRow(z.t9)).toMatchObject({ x: 40, takenOff: true });
   });
 
-  it("a reset without keepTakenOff puts table 9 back at its new place", async () => {
+  it("a reset onto a set puts table 9 back at its new place", async () => {
     const z = await nineTakenOff();
 
     await z.onto(z.d.dinner);
@@ -1469,7 +1469,7 @@ describe("no reset puts a table down on another", () => {
     const [t3, t2, t1] = [s.live("t3"), s.live("t2"), s.live("t1")];
     await seatAt(t3);
 
-    await s.onto(s.d.dinner, { keepTakenOff: true });
+    await s.update(s.d.dinner);
 
     expect(await todayRows([t3, t2, t1])).toMatchObject([{ x: 0 }, { x: 20 }, { x: 40 }]);
     expect(await readyOf(t3)).toEqual({ pending: true, readyToMove: false });
@@ -1512,7 +1512,7 @@ describe("no reset puts a table down on another", () => {
     const [t6, t7] = [s.live("t6"), s.live("t7")];
     await setToday(t7, { takenOff: true });
 
-    await s.onto(s.d.dinner, { keepTakenOff: true });
+    await s.update(s.d.dinner);
 
     expect(await todayRow(t6)).toMatchObject({ x: 40, takenOff: false });
     expect(await readyOf(t6)).toEqual({ pending: false, readyToMove: false });
@@ -1532,7 +1532,7 @@ describe("no reset puts a table down on another", () => {
     await setToday(t9, { takenOff: true });
     await seatAt(t7);
 
-    await s.onto(s.d.dinner, { keepTakenOff: true });
+    await s.update(s.d.dinner);
 
     expect(await todayRow(t9)).toMatchObject({ x: 40, takenOff: true });
     expect(await readyOf(t9)).toEqual({ pending: false, readyToMove: false });
