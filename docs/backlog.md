@@ -4392,12 +4392,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   list has its shadow cut off where the table ends.
   [Detail](backlog/dashboard.md#dragging-a-row-a180-994-and-1003--two-things-seen-left-as-they-were)
 
-- **A829. Cut a long one-word name in the overview's top-sellers table with "…"** (owner,
-  2026-10-17: no mid-word break; the full name shows on hover, as A784 does for a holiday's name).
-  Today such a name, with five-digit figures, reaches 12px into the card's 17px padding (measured
-  2026-09-24 at 1280px).
-  [Detail](backlog/dashboard.md#a829-cut-a-long-one-word-name-in-the-overviews-top-sellers-table-with-)
-
 - **Two texts still use the old words.** A hint says "Create" (the Products screen's empty prompt,
   "Create a menu on the Menus screen…"), and the purchase dialog's edit heading reads "Edit
   purchase invoice" while its create heading is now "Add invoice". Left open by A450 (#1484).

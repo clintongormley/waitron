@@ -884,19 +884,6 @@ wrapper each list puts round its table (`.table-wrap`, or `.wrap` in the variant
 `overflow-x: auto`). The canvas editor's tile drag stays as it is (owner choice, 2026-10-01); A182
 plans to retire the editor.
 
-## A829. Cut a long one-word name in the overview's top-sellers table with "…"
-
-From **Variants as products (#511–#556) — what is left open.** How the model works is in
-[products.md](../developers/products.md), under _Variants_.
-
-- **A829. Cut a long one-word name in the overview's top-sellers table with "…".** Today the table
-  can reach into its card's padding at desktop width when a variant has a long one-word name and
-  the figures run to five digits (12px into the 17px padding, measured 2026-09-24 at 1280px). Owner,
-  2026-10-17: no mid-word break; cut the name with "…" and show the whole name on hover, as A784
-  (#1840) does for a day's name in the Calendar (the whole name in its `title`). Done when a test at
-  1280px holds the table inside the card's padding with such a name and checks the "…" and the
-  `title`.
-
 ## A541. A `wt-disclosure` reopened after an animated close snaps open with no animation
 
 - **A541. A `wt-disclosure` reopened after an animated close snaps open with no animation** — OPEN,
@@ -917,6 +904,8 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   (`packages/ui/src/components/wt-dialog.ts`.)
 
 ## Decisions and deliberate limits
+
+- **Long top-seller names on the overview (A829, owner, 2026-10-17).** Keep each name on one line, truncate it with an ellipsis, and show its full text on hover through `title`.
 
 **Page search (owner, 2026-10-15, A727).** Search finds named tabs, windows and views inside
 readable pages, showing their name and containing page. Page matches precede inner results.

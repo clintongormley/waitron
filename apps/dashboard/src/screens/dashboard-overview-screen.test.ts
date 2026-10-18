@@ -504,3 +504,78 @@ describe.each(["light", "dark"] as const)("overview card layout (%s)", (theme) =
     }
   });
 });
+
+describe.each(["light", "dark"] as const)("top-seller name overflow (%s)", (theme) => {
+  it.each([
+    ["en-GB", 1280],
+    ["es-ES", 1280],
+    ["en-GB", 390],
+    ["es-ES", 390],
+  ] as const)("truncates names and retains hover text in %s at %i px", async (locale, width) => {
+    const previous = [innerWidth, innerHeight] as const;
+    await page.viewport(width, 1000);
+    try {
+      setLocale(locale);
+      const productName = "SupercalifragilisticexpialidociousChocolate";
+      const variantName = "SupercalifragilisticexpialidociousChocolateGrande";
+      const { el } = await mountWidget<OverviewScreen>(
+        "dashboard-overview-screen",
+        {
+          api: stubApi({
+            getSalesOverview: vi.fn().mockResolvedValue({
+              ...overview,
+              topSellers: [
+                {
+                  name: productName,
+                  quantity: "99999",
+                  total: "99999.99",
+                  variants: [{ name: variantName, quantity: "88888", total: "88888.88" }],
+                },
+              ],
+            }),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      const card = el.shadowRoot!.querySelector<HTMLElement>("[data-test=top-sellers]")!;
+      await (card as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      await document.fonts.ready;
+      expect(innerWidth).toBe(width);
+      const surface = card.shadowRoot!.querySelector<HTMLElement>(".card")!;
+      const cardBox = surface.getBoundingClientRect();
+      const padding = getComputedStyle(surface);
+      const table = card.querySelector("table")!;
+      const tableBox = table.getBoundingClientRect();
+      expect(tableBox.left).toBeGreaterThanOrEqual(cardBox.left + parseFloat(padding.paddingLeft));
+      expect(tableBox.right).toBeLessThanOrEqual(cardBox.right - parseFloat(padding.paddingRight));
+      expect(cardBox.right).toBeLessThanOrEqual(innerWidth);
+      const names = [
+        card.querySelector<HTMLElement>("[data-test=seller-name]")!,
+        card.querySelector<HTMLElement>("[data-test=variant-name]")!,
+      ];
+      for (const [index, name] of names.entries()) {
+        expect(name.textContent).toBe([productName, variantName][index]);
+        expect(name.title).toBe([productName, variantName][index]);
+        const cell = name.closest("th")!;
+        const style = getComputedStyle(cell);
+        expect(style.textOverflow).toBe("ellipsis");
+        expect(style.whiteSpace).toBe("nowrap");
+        expect(style.overflowX).toBe("hidden");
+        expect(cell.clientWidth).toBeGreaterThan(0);
+        expect(cell.scrollWidth).toBeGreaterThan(cell.clientWidth);
+      }
+      const numbers = [...table.querySelectorAll<HTMLElement>("td")];
+      expect(numbers.map((cell) => cell.textContent)).toEqual(
+        locale === "en-GB"
+          ? ["99999", "€99,999.99", "88888", "€88,888.88"]
+          : ["99999", "99.999,99\u00a0€", "88888", "88.888,88\u00a0€"],
+      );
+      for (const number of numbers) {
+        expect(number.scrollWidth).toBeLessThanOrEqual(number.clientWidth);
+      }
+    } finally {
+      await page.viewport(...previous);
+    }
+  });
+});

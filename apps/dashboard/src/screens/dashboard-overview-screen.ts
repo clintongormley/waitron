@@ -76,6 +76,15 @@ export class OverviewScreen extends LitElement {
         text-align: left;
         border-bottom: 1px solid var(--wt-color-border);
       }
+      .cards th[scope="row"] {
+        max-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .cards .num {
+        white-space: nowrap;
+      }
       th.num,
       td.num {
         text-align: right;

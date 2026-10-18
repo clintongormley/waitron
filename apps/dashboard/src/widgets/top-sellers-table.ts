@@ -39,7 +39,7 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
       ${rows.map(
         (row, i) =>
           html`<tr data-test=${`seller-row-${i}`}>
-              <th scope="row" data-test="seller-name">${row.name}</th>
+              <th scope="row" data-test="seller-name" title=${row.name}>${row.name}</th>
               <td class="num">${row.quantity}</td>
               <td class="num">${formatMoney(row.total, currentLocale())}</td>
             </tr>
@@ -48,7 +48,7 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
                 html`<tr data-test=${`seller-row-${i}-variant-${j}`}>
                   <th scope="row" class="seller-variant">
                     <span class="visually-hidden">${row.name}, </span
-                    ><span data-test="variant-name">${variant.name}</span>
+                    ><span data-test="variant-name" title=${variant.name}>${variant.name}</span>
                   </th>
                   <td class="num">${variant.quantity}</td>
                   <td class="num">${formatMoney(variant.total, currentLocale())}</td>
