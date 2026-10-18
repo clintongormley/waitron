@@ -114,6 +114,7 @@ import { createAlertRegistry } from "./alerts.js";
 import {
   appendOnlyRestoredAlertSource,
   awaitingCertAlertSource,
+  certificateAlertSource,
   backupAlertSource,
   sealedStateAlertSource,
   firstStartAlertSource,
@@ -2038,6 +2039,14 @@ async function bootServer(
       cache: batteryCache,
     }),
   ];
+  if (enabledFiscal.certificate !== undefined && fiscalDrainEnabled(config)) {
+    serverAlertSources.push(
+      certificateAlertSource(enabledFiscal.certificate, {
+        nodeId: till.nodeId,
+        locationId: till.locationId,
+      }),
+    );
+  }
   mountAlertsApi(
     app,
     {

@@ -316,6 +316,18 @@ declare module "@waitron/shared" {
     "fiscal.filing_cases_open": { count: number };
 
     /**
+     * An ongoing-alert code from ./certificate-alerts.ts, never thrown: the node's AEAT certificate
+     * ends on the venue-local day `date`, `days` calendar days away.
+     */
+    "fiscal.certificate_expiring": { days: number; date: string };
+
+    /**
+     * The same ongoing check: the node's AEAT certificate ended on the venue-local day `date`.
+     * Never thrown.
+     */
+    "fiscal.certificate_expired": { date: string };
+
+    /**
      * The same ongoing check, one per chain: AEAT refused `count` records of the chain in a row
      * with the code `codigo`, and the chain's next records are held (./drain.ts,
      * `SAME_CODE_REFUSAL_LIMIT`). Never thrown.

@@ -67,6 +67,21 @@ export interface FiscalCertificateSeat {
     body: unknown,
     now: Date,
   ): Promise<FiscalCertificateAnswer>;
+  /** The ongoing expiry alerts for the certificate `nodeId` installed last, read in `tx`. */
+  alerts(
+    tx: Transaction,
+    deps: { nodeId: string; locationId: string },
+    now: Date,
+  ): Promise<
+    readonly {
+      key: string;
+      code: string;
+      params: Readonly<Record<string, unknown>>;
+      severity: "warning" | "error";
+      since: string | null;
+      screen?: string;
+    }[]
+  >;
 }
 
 /**

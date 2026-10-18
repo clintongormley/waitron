@@ -12,6 +12,7 @@ const root = join(import.meta.dirname, "..");
 const ONGOING_CODE_SOURCES = [
   "apps/server/src/alert-sources.ts",
   "packages/fiscal-verifactu/src/submission-alerts.ts",
+  "packages/fiscal-verifactu/src/certificate-alerts.ts",
 ];
 
 const CODE_RE = /code: "([a-z0-9_]+\.[a-z0-9_]+)"/g;
