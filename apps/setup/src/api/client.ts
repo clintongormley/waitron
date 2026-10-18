@@ -158,6 +158,22 @@ export interface RecoveryRestoreCredentials {
   };
 }
 
+export interface RecoveryPreparationRequest {
+  binding: RecoveryRestoreCredentials["recoveryOperation"]["binding"];
+  context: NonNullable<RecoveryRestoreCredentials["recoveryContext"]>;
+  nodeRecoverySecret: string;
+  proposal: unknown;
+}
+export type RecoveryPreparationSource =
+  | {
+      kind: "archive";
+      artifact: Blob;
+      recoveryKey: string;
+      environment: "production" | "preproduction";
+    }
+  | { kind: "bucket"; kit: string; environment: "production" | "preproduction" }
+  | { kind: "cloud"; pointId: string };
+
 export interface BucketRestoreBody {
   /** The recovery kit as pasted or read from its file; as sensitive as the recovery key. */
   kit: string;
@@ -365,6 +381,26 @@ export class SetupApi {
       oldBoxGone,
     });
   }
+  async prepareRecovery(
+    source: RecoveryPreparationSource,
+    preparation: RecoveryPreparationRequest,
+  ): Promise<unknown> {
+    if (source.kind !== "archive")
+      return this.#request("/setup-api/recovery/preparation", "POST", { source, preparation });
+    const { artifact, ...metadata } = source;
+    const form = new FormData();
+    form.set("request", JSON.stringify({ source: metadata, preparation }));
+    form.set("artifact", artifact);
+    const fetchImpl = this.#fetchImpl;
+    const response = await fetchImpl(this.#baseUrl + "/setup-api/recovery/preparation", {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    });
+    if (!response.ok) throw await apiError(response);
+    return response.json() as Promise<unknown>;
+  }
+
   previewCloudRestore(pointId: string): Promise<RecoveryBackupPreview> {
     return this.#request("/setup-api/cloud-recovery/preview", "POST", { pointId });
   }

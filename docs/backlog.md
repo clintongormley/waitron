@@ -331,8 +331,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   recovery-field entry checks remain the driver’s work. Preserve existing branch work.
   The selected module now supplies PDF/manual key fields. Local Chromium checks enter rendered
   grouped/lowercase/look-alike values, forward the decoded secret and clear native fields;
-  mismatched PDFs and stale reads refuse. Interactive recovery-hour selection and key reissue
-  still need wiring, followed by installed end-to-end qualification.
+  mismatched PDFs and stale reads refuse. The setup host now accepts module-owned recovery
+  proposals for validated archive, bucket and Cloud copies over HTTPS; focused tests carry clock
+  comparisons across requests and exercise the real setup listener. The browser transport is
+  present; the hour-selection screen and key reissue still need wiring, followed by installed
+  end-to-end qualification.
   Hour codec, module admission and clock units pass locally, with source timestamps embedded
   by the Node bundler. History enumeration, durable selection and the shared host store have focused
   local checks. Certificate-free owned preproduction readiness and publication have focused checks;

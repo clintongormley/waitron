@@ -1,3 +1,7 @@
+import {
+  mountRecoveryPreparationApi,
+  type PrepareRecovery,
+} from "./setup-recovery-preparation-api.js";
 import { mountSetupFirstFiscalApi, type FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupCoordinator, FirstSetupHold } from "@waitron/provisioning";
 import type { Context, Hono } from "hono";
@@ -146,6 +150,7 @@ export interface SetupDeps {
     request: ArchiveRestoreRequest,
     options: { oldBoxGone: boolean },
   ) => Promise<void>;
+  prepareRecovery?: PrepareRecovery;
   previewRestore?: (request: ArchiveRestoreRequest) => Promise<RecoveryBackupPreview>;
   previewBucketRestore?: (
     input: Omit<BucketRestoreInput, "venueConfirmed">,
@@ -726,6 +731,16 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     deps.sendEmailTest,
     () => provisioning || fiscalTesting || configurationStaging,
   );
+
+  mountRecoveryPreparationApi(app, deps, log, {
+    uploadLimit: MAX_RESTORE_UPLOAD_BYTES,
+    hold: (request) => holds.get(request),
+    busy: () => provisioning || fiscalTesting || configurationStaging || emailTesting(),
+    run: createErrorBoundary(
+      { ...BUCKET_RESTORE_STATUS, "setup.not_ready": 503 },
+      "setup.restore_failed",
+    ),
+  });
 
   app.post("/setup-api/fiscal-test", async (c) => {
     if (provisioning || fiscalTesting || configurationStaging || emailTesting()) {

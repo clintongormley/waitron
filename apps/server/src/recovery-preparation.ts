@@ -21,10 +21,26 @@ import { AppError, isAppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { lstat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
+import {
+  readArtifactIdentity,
+  validateArtifact,
+  validateDatabaseEntries,
+  type ValidatedArtifact,
+  type ValidationDeps,
+  type RestoreOperationRunner,
+} from "./restore.js";
+import type {
+  RecoveryPreparationRequest,
+  PrepareRecovery,
+} from "./setup-recovery-preparation-api.js";
+import { prepareStreamRestore, type PrepareStreamDeps } from "./restore-stream.js";
+import { parseRecoveryKit } from "@waitron/stream";
+import type { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { VENUE_FILE } from "@waitron/store";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
-import type { RestoreOperationRunner } from "./restore.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 import "./errors.js";
@@ -223,5 +239,155 @@ export function createSelectedRecoveryPreparation(options: Options): {
       };
       return scoped;
     },
+  };
+}
+
+export function createInteractiveRecoveryPreparation(options: {
+  stateDir: string;
+  venueDir: string;
+  migrationsRoot: string | null;
+  modules: readonly WaitronModule[];
+  coordinator: FirstSetupCoordinator;
+}) {
+  const requests = new AsyncLocalStorage<{ db: Database; hold: FirstSetupHold }>();
+  const sessions = new Map<
+    string,
+    {
+      fingerprint: string;
+      service: ReturnType<typeof createSelectedRecoveryPreparation>;
+    }
+  >();
+  return {
+    async prepare(
+      copy: ValidatedArtifact,
+      sourceId: string,
+      supplied: RecoveryPreparationRequest,
+      hold?: FirstSetupHold,
+    ): Promise<unknown> {
+      const input = structuredClone(supplied);
+      const refuse = (): never => {
+        throw new AppError("module.operation_invalid", { module: input.binding.module });
+      };
+      if (input.context.selectedSourceId !== sourceId || input.binding.sourceId !== copy.sourceId)
+        return refuse();
+      const run = async (currentHold: FirstSetupHold) => {
+        const preview = await readRecoveryCopyPreview(copy, sourceId, options);
+        const selected = { ...preview, activationSourceId: copy.sourceId };
+        const { node } = readArtifactIdentity(copy.secretEntries);
+        if (
+          input.binding.targetNodeId !== node.nodeId ||
+          selected.fiscalSelection?.module !== input.binding.module
+        )
+          return refuse();
+        const store = await openVenueDatabase(dirname(copy.databasePath));
+        try {
+          await withRecoveryKeyAuthority(
+            { db: store.venue, nodeId: node.nodeId },
+            input.binding,
+            input.nodeRecoverySecret,
+            async () => {},
+          );
+          const key = JSON.stringify([input.binding.module, input.binding.eventId]);
+          const fingerprint = createHash("sha256")
+            .update(
+              JSON.stringify([input.binding, input.context, selected, input.nodeRecoverySecret]),
+            )
+            .digest("hex");
+          let cached = sessions.get(key);
+          if (cached?.fingerprint !== fingerprint) {
+            sessions.delete(key);
+            cached = undefined;
+          }
+          if (!input.context.oldBoxGone || !input.context.soleRecovery) {
+            sessions.delete(key);
+            return refuse();
+          }
+          if (cached === undefined) {
+            const active = () => {
+              const scope = requests.getStore();
+              if (scope === undefined) return refuse();
+              return scope;
+            };
+            cached = {
+              fingerprint,
+              service: createSelectedRecoveryPreparation({
+                ...options,
+                selected,
+                node,
+                binding: input.binding,
+                secret: input.nodeRecoverySecret,
+                database: () => active().db,
+                currentHold: () => active().hold,
+                readIsolation: async () => ({
+                  oldMachineAbsent: false,
+                  oldMachineOffline: true,
+                  noParallelRecovery: true,
+                }),
+              }),
+            };
+          }
+          const result = await requests.run({ db: store.venue, hold: currentHold }, () =>
+            cached!.service.prepare(input.proposal),
+          );
+          if (!sessions.has(key) && sessions.size === 16)
+            sessions.delete(sessions.keys().next().value!);
+          sessions.set(key, cached);
+          return result;
+        } finally {
+          await store.close();
+        }
+      };
+      return hold === undefined
+        ? options.coordinator.run(run)
+        : options.coordinator.held(hold, () => run(hold));
+    },
+  };
+}
+
+export function createSetupRecoveryPreparation(
+  options: Parameters<typeof createInteractiveRecoveryPreparation>[0] & {
+    stagingDir: string;
+    cloudRecovery?: Pick<ReturnType<typeof createCloudRecoveryClient>, "preview">;
+    bucket: Omit<PrepareStreamDeps, "kit" | "stateDir" | "migrationsRoot" | "oldBoxGone">;
+  },
+): PrepareRecovery {
+  const interactive = createInteractiveRecoveryPreparation(options);
+  return async (source, request, hold) => {
+    const archive = async (
+      input: Pick<ValidationDeps, "artifact" | "recoveryKey" | "environment">,
+    ) => {
+      const copy = await validateArtifact({ ...options, ...input });
+      try {
+        return await interactive.prepare(copy, copy.sourceId!, request, hold);
+      } finally {
+        await copy.discard();
+      }
+    };
+    if (source.kind === "archive") return archive(source);
+    if (source.kind === "cloud") {
+      if (options.cloudRecovery === undefined) throw new AppError("setup.not_ready", {});
+      return options.cloudRecovery.preview(archive, source.pointId);
+    }
+    const kit = parseRecoveryKit(source.kit);
+    const prepared = await prepareStreamRestore({
+      ...options,
+      ...options.bucket,
+      kit,
+      oldBoxGone: request.context.oldBoxGone,
+    });
+    try {
+      const copy = await validateDatabaseEntries(prepared.entries, prepared.databasePath, {
+        ...options,
+        environment: source.environment,
+      });
+      return await interactive.prepare(
+        copy,
+        `stream:${kit.venueId}:${prepared.generation}`,
+        request,
+        hold,
+      );
+    } finally {
+      await prepared.discard();
+    }
   };
 }

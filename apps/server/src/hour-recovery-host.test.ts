@@ -1,5 +1,11 @@
+import { Agent } from "undici";
+import { startServer, type StartedServer } from "./boot.js";
+import { freePorts } from "./testing/free-ports.js";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import {
   copyFile,
+  cp,
   mkdtemp,
   mkdir,
   readFile,
@@ -35,8 +41,17 @@ import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocati
 import { AppError, locationId, seriesId } from "@waitron/shared";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
-import { runRestoreHooks, restoreFromArtifact, restoreFromArtifactFile } from "./restore.js";
-import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
+import {
+  runRestoreHooks,
+  restoreFromArtifact,
+  restoreFromArtifactFile,
+  validateArtifact,
+} from "./restore.js";
+import {
+  createSelectedRecoveryPreparation,
+  createInteractiveRecoveryPreparation,
+  createSetupRecoveryPreparation,
+} from "./recovery-preparation.js";
 import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 import { buildManifest } from "./backup-manifest.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
@@ -3253,4 +3268,454 @@ describe("selected-hour admission before archive placement", () => {
     },
     120_000,
   );
+  async function interactiveHost() {
+    const f = await archiveHost();
+    vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
+    const coordinator = createFirstSetupCoordinator();
+    const options = { ...f.roots, coordinator, modules: ALL_MODULES, migrationsRoot: null };
+    const session = createInteractiveRecoveryPreparation(options);
+    const request = {
+      binding: { ...f.options.binding, eventId: "interactive-browser" },
+      context: {
+        selectedSourceId: f.options.selected.sourceId,
+        oldBoxGone: true,
+        soleRecovery: true,
+      },
+      nodeRecoverySecret: key.secret,
+      proposal: { action: "clock-challenge" },
+    };
+    const invoke = async (
+      proposal: unknown,
+      override: Partial<typeof request> = {},
+      current = session,
+    ) => {
+      const copy = await validateArtifact(f.restore);
+      try {
+        return await coordinator.run((hold) =>
+          current.prepare(
+            copy,
+            f.options.selected.sourceId,
+            { ...request, ...override, proposal },
+            hold,
+          ),
+        );
+      } finally {
+        await copy.discard();
+      }
+    };
+    const compare = async (override: Partial<typeof request> = {}) => {
+      const challenge = (await invoke({ action: "clock-challenge" }, override)) as { id: string };
+      return invoke(
+        { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: Date.now() } },
+        override,
+      );
+    };
+    return { ...f, session, options, request, invoke, compare };
+  }
+
+  it("interactive preparation keeps browser comparisons across freshly validated private copies and stages the selected hour", async () => {
+    const f = await interactiveHost();
+    const rows = await suite.db.select().from(invoiceSeries);
+    await f.compare();
+    expect(await f.invoke({ action: "preview" })).toMatchObject({
+      status: "preview",
+      identity: "06RD",
+    });
+    const selected = (await f.invoke({ action: "select", answer: "no" })) as { input: unknown };
+    expect(selected).toMatchObject({
+      status: "selected",
+      identity: "06RD",
+      input: {
+        allocation: {
+          installationIdentity: "06RD",
+          series: [
+            { code: "A-06RD", purpose: "standard" },
+            { code: "FF-06RD", purpose: "full" },
+            { code: "R-06RD", purpose: "rectificative" },
+          ],
+        },
+      },
+    });
+    expect(await suite.db.select().from(invoiceSeries)).toEqual(rows);
+    expect(
+      JSON.stringify(await readModulePreparationHistory(f.roots, binding.module)),
+    ).not.toContain(key.secret);
+    await stageRestoreRequest(
+      f.roots.stateDir,
+      {
+        ...f.restore,
+        recoveryOperation: { binding: f.request.binding, input: selected.input },
+        nodeRecoverySecret: key.secret,
+        recoveryContext: f.request.context,
+      },
+      async () => {},
+    );
+    agreeInternet();
+    expect(await runStagedRestore(f.restore)).toBe(true);
+    const restored = await openVenueDatabase(f.roots.venueDir);
+    try {
+      const result = await restored.venue.select().from(invoiceSeries);
+      expect(result.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
+        "A-06RD",
+        "FF-06RD",
+        "R-06RD",
+      ]);
+      expect(result.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
+        123, 123, 123,
+      ]);
+    } finally {
+      await restored.close();
+    }
+  });
+
+  it("interactive preparation authenticates every fresh copy and does not erase a good comparison after a wrong key", async () => {
+    const f = await interactiveHost();
+    await f.compare();
+    const history = await readModulePreparationHistory(f.roots, binding.module);
+    await expect(
+      f.invoke({ action: "select", answer: "no" }, { nodeRecoverySecret: "wrong" }),
+    ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
+    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(history);
+    expect(await f.invoke({ action: "select", answer: "no" })).toMatchObject({
+      status: "selected",
+      identity: "06RD",
+    });
+  });
+
+  it.each(["source", "node", "module", "isolation", "parallel"])(
+    "interactive preparation refuses changed %s before spending an hour",
+    async (fault) => {
+      const f = await interactiveHost();
+      await f.compare();
+      const changed = structuredClone(f.request);
+      if (fault === "source") changed.context.selectedSourceId = "different-selected-copy";
+      if (fault === "node") changed.binding.targetNodeId = "00000000-0000-4000-8000-000000000002";
+      if (fault === "module") changed.binding.module = "fiscal-none";
+      if (fault === "isolation") changed.context.oldBoxGone = false;
+      if (fault === "parallel") changed.context.soleRecovery = false;
+      const history = await readModulePreparationHistory(f.roots, binding.module);
+      await expect(f.invoke({ action: "select", answer: "no" }, changed)).rejects.toMatchObject({
+        code: "module.operation_invalid",
+      });
+      expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(history);
+    },
+  );
+
+  it("interactive preparation loses transient clock grants across restart while retaining the spent hour", async () => {
+    const f = await interactiveHost();
+    await f.compare();
+    const selected = await f.invoke({ action: "select", answer: "no" });
+    const restarted = createInteractiveRecoveryPreparation(f.options);
+    await expect(f.invoke({ action: "select", answer: "no" }, {}, restarted)).rejects.toMatchObject(
+      {
+        code: "sif.allocation_invalid",
+        params: { reason: "clock_stale" },
+      },
+    );
+    const challenge = (await f.invoke({ action: "clock-challenge" }, {}, restarted)) as {
+      id: string;
+    };
+    await f.invoke(
+      { action: "compare-clocks", browser: { challengeId: challenge.id, instantMs: Date.now() } },
+      {},
+      restarted,
+    );
+    expect(await f.invoke({ action: "select", answer: "no" }, {}, restarted)).toEqual(selected);
+  });
+
+  it.each(["archive", "bucket", "cloud"])(
+    "interactive HTTP %s preparation authenticates the actual selected copy and preserves comparisons",
+    async (kind) => {
+      const bucket = kind === "bucket" ? await bucketCommand() : undefined;
+      const f = bucket?.f ?? (await archiveHost());
+      vi.setSystemTime(
+        new Date(kind === "bucket" ? "2026-10-16T14:40:00Z" : "2026-10-16T13:40:00Z"),
+      );
+      let cloud: ReturnType<typeof createCloudRecoveryClient> | undefined;
+      const pointId = "047bacd4-df70-4881-a835-c6dd75ae7ecf";
+      if (kind === "cloud") {
+        const point = {
+          id: pointId,
+          venueId: node.locationId,
+          capturedAt: new Date().toISOString(),
+          modules: (
+            await buildManifest({
+              db: suite.db,
+              modules: ALL_MODULES,
+              environment: "preproduction",
+              now: new Date(),
+            })
+          ).modules,
+          digest: createHash("sha256").update(f.restore.artifact).digest("hex"),
+          size: f.restore.artifact.length,
+          objectKey: `snapshots/${pointId}`,
+          verification: "verified",
+          kind: "snapshot",
+          deleting: false,
+          deletedAt: null,
+        };
+        const expiresAt = new Date(Date.now() + 900000).toISOString();
+        cloud = createCloudRecoveryClient({
+          stateDir: f.roots.stateDir,
+          origin: "https://cloud.example.test",
+          environment: "preproduction",
+          download: async () => f.restore.artifact,
+          fetch: async (url, init) => {
+            const action = new URL(String(url)).pathname.split("/").at(-1);
+            const body = JSON.parse(String(init?.body)) as { payload: string };
+            const requestId = JSON.parse(Buffer.from(body.payload, "base64url").toString())[2];
+            if (action === "start" || action === "status")
+              return Response.json({
+                requestId,
+                state: action === "start" ? "awaiting_owner" : "approved",
+                expiresAt,
+                operationId: action === "start" ? null : requestId,
+              });
+            if (action === "info") return Response.json({ point, operationExpiresAt: expiresAt });
+            if (action === "read")
+              return Response.json({
+                point,
+                location: {
+                  endpoint: "https://store.example.test",
+                  bucket: "copy",
+                  region: "local",
+                },
+                credentials: {
+                  accessKeyId: "unused",
+                  secretAccessKey: "unused",
+                  sessionToken: "unused",
+                },
+                recoveryKey: "archive password",
+                expiresAt,
+                operationExpiresAt: expiresAt,
+              });
+            throw new Error(`Unexpected Cloud action ${action}`);
+          },
+        });
+        await cloud.start();
+        await cloud.status();
+      }
+      const coordinator = createFirstSetupCoordinator();
+      const prepareRecovery = createSetupRecoveryPreparation({
+        ...f.roots,
+        stagingDir: join(root, "interactive-validation"),
+        modules: ALL_MODULES,
+        migrationsRoot: null,
+        coordinator,
+        cloudRecovery: cloud,
+        bucket: {
+          litestreamBin: "/unused",
+          now: () => new Date(),
+          log: () => {},
+          openStore: bucket?.deps.openStore,
+          restoreGeneration: async ({ outPath }) => {
+            await copyFile(f.database, outPath);
+          },
+        },
+      });
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          firstSetup: { coordinator, assertOtherAllowed: async () => {} },
+          prepareRecovery,
+        },
+        () => {},
+      );
+      const source = bucket
+        ? { kind: "bucket", kit: encodeRecoveryKit(bucket.kit), environment: "preproduction" }
+        : kind === "cloud"
+          ? { kind: "cloud", pointId }
+          : { kind: "archive", recoveryKey: "archive password", environment: "preproduction" };
+      const prior = bucket
+        ? JSON.parse(await readFile(bucket.command.operationPath, "utf8")).binding
+        : f.options.binding;
+      const request = {
+        binding: { ...prior, eventId: "browser-http" },
+        context: {
+          selectedSourceId: bucket
+            ? `stream:${node.locationId}:gen-0-${node.nodeId}-20261016T124000Z`
+            : f.options.selected.sourceId,
+          oldBoxGone: true,
+          soleRecovery: true,
+        },
+        nodeRecoverySecret: key.secret,
+      };
+      const send = async (proposal: unknown) => {
+        const socket = new TLSSocket(new Socket());
+        try {
+          let init: RequestInit;
+          if (kind === "archive") {
+            const form = new FormData();
+            form.set("request", JSON.stringify({ source, preparation: { ...request, proposal } }));
+            form.set("artifact", new Blob([Uint8Array.from(f.restore.artifact)]), "selected.wbk");
+            init = { method: "POST", body: form };
+          } else
+            init = {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ source, preparation: { ...request, proposal } }),
+            };
+          const response = await app.request(
+            "https://box.test/setup-api/recovery/preparation",
+            init,
+            { incoming: { socket } },
+          );
+          const body = await response.json();
+          expect(body).not.toHaveProperty("nodeRecoverySecret");
+          expect(response.status, JSON.stringify(body)).toBe(200);
+          expect(response.headers.get("cache-control")).toBe("no-store");
+          return body;
+        } finally {
+          socket.destroy();
+        }
+      };
+      const rows = await suite.db.select().from(invoiceSeries);
+      const challenge = await send({ action: "clock-challenge" });
+      await send({
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      });
+      const selected = await send({ action: "select", answer: "no" });
+      expect(selected).toMatchObject({
+        status: "selected",
+        identity: kind === "bucket" ? "06RE" : "06RD",
+        binding: request.binding,
+      });
+      expect(await suite.db.select().from(invoiceSeries)).toEqual(rows);
+      expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+      const journal = JSON.stringify(await readModulePreparationHistory(f.roots, binding.module));
+      expect(journal).not.toContain(key.secret);
+      expect(journal).not.toContain("archive password");
+      expect(journal).not.toContain("synthetic-secret");
+      expect(
+        await readdir(join(root, "interactive-validation")).catch(
+          (error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return [];
+            throw error;
+          },
+        ),
+      ).toEqual([]);
+      expect(
+        (await readdir(f.roots.stateDir)).filter((name) => name.startsWith("stream-restore-")),
+      ).toEqual([]);
+    },
+  );
+  it("interactive recovery is wired through the real setup boot and a certificate-verified HTTPS connection", async () => {
+    const f = await archiveHost();
+    vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
+    const migrations = join(root, "boot-migrations");
+    const sets = manifestSets();
+    const migrationOptions = migrationOptionsFor(sets, null);
+    for (const [index, set] of sets.entries()) {
+      await cp(migrationOptions[index]!.migrationsFolder, join(migrations, set.name), {
+        recursive: true,
+      });
+    }
+    const [port] = await freePorts(1);
+    let server: StartedServer | undefined;
+    let agent: Agent | undefined;
+    const preparation = {
+      binding: { ...f.options.binding, eventId: "real-https-browser" },
+      context: {
+        selectedSourceId: f.options.selected.sourceId,
+        oldBoxGone: true,
+        soleRecovery: true,
+      },
+      nodeRecoverySecret: key.secret,
+    };
+    try {
+      server = await startServer({
+        WAITRON_ENV: "dev",
+        WAITRON_STATE_DIR: f.roots.stateDir,
+        WAITRON_VENUE_DIR: f.roots.venueDir,
+        WAITRON_MIGRATIONS_DIR: migrations,
+        WAITRON_HTTP_HOST: "127.0.0.1",
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_LANDING_PORT: "0",
+        WAITRON_MANAGEMENT_RP_ID: "localhost",
+        WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
+      });
+      agent = new Agent({ connect: { ca: await readFile(join(f.roots.stateDir, "tls/ca.crt")) } });
+      const post = async (proposal: unknown) => {
+        const form = new FormData();
+        form.set(
+          "request",
+          JSON.stringify({
+            source: {
+              kind: "archive",
+              recoveryKey: "archive password",
+              environment: "preproduction",
+            },
+            preparation: { ...preparation, proposal },
+          }),
+        );
+        form.set("artifact", new Blob([Uint8Array.from(f.restore.artifact)]), "selected.wbk");
+        const response = await fetch(`https://127.0.0.1:${port}/setup-api/recovery/preparation`, {
+          method: "POST",
+          body: form,
+          dispatcher: agent,
+          headers: { Origin: `https://127.0.0.1:${port}`, "Sec-Fetch-Site": "same-origin" },
+        } as RequestInit);
+        const body = await response.json();
+        expect(response.status, JSON.stringify(body)).toBe(200);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        return body;
+      };
+      const challenge = await post({ action: "clock-challenge" });
+      await post({
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      });
+      expect(await post({ action: "select", answer: "no" })).toMatchObject({
+        status: "selected",
+        identity: "06RD",
+        binding: preparation.binding,
+      });
+      expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
+    } finally {
+      await agent?.close();
+      await server?.close();
+    }
+  });
+  it("interactive preparation invalidates a comparison after an authenticated source changes and returns", async () => {
+    const f = await interactiveHost();
+    await f.compare();
+    const entries = unpackArchive(decryptArtifact(f.restore.artifact, "archive password"));
+    const manifest = entries.find((entry) => entry.name === "manifest.json")!;
+    const metadata = JSON.parse(Buffer.from(manifest.bytes).toString("utf8"));
+    metadata.createdAt = "2026-10-16T12:41:00.000Z";
+    manifest.bytes = Buffer.from(JSON.stringify(metadata));
+    const copy = await validateArtifact({
+      ...f.restore,
+      artifact: encryptArtifact(packArchive(entries), "archive password"),
+    });
+    try {
+      await expect(
+        f.options.coordinator.run((hold) =>
+          f.session.prepare(
+            copy,
+            copy.sourceId!,
+            {
+              ...f.request,
+              binding: { ...f.request.binding, sourceId: copy.sourceId! },
+              context: { ...f.request.context, selectedSourceId: copy.sourceId! },
+              proposal: { action: "preview" },
+            },
+            hold,
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: "sif.allocation_invalid",
+        params: { reason: "clock_stale" },
+      });
+    } finally {
+      await copy.discard();
+    }
+    await expect(f.invoke({ action: "select", answer: "no" })).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "clock_stale" },
+    });
+  });
 });

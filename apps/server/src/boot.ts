@@ -1,3 +1,4 @@
+import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import type { WaitronModule } from "@waitron/module";
 import { createHash } from "node:crypto";
 import { reconcileFirstSetupBeforeMode } from "./first-fiscal-mode.js";
@@ -1052,6 +1053,17 @@ async function bootServer(
           guard: firstSetup.assertOtherAllowed,
         }),
         cloudRecovery,
+        prepareRecovery: createSetupRecoveryPreparation({
+          stateDir: config.stateDir,
+          venueDir: config.venueDir,
+          stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
+          migrationsRoot: config.migrationsRoot,
+          // Recovery configures its own host; first setup's instances are already bound.
+          modules: ALL_MODULES,
+          coordinator: firstSetupCoordinator,
+          cloudRecovery,
+          bucket: { litestreamBin: config.litestreamBin, now, log, openStore: openBoundedBucket },
+        }),
         previewRestore: (request) =>
           previewRecoveryArchive({
             ...request,

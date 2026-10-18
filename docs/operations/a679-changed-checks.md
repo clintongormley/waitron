@@ -1335,3 +1335,24 @@ Task 9 remains incomplete: replace the pasted-operation workflow with authentica
 hour preparation, finish the real first-setup/reissue flow and interruption ordering. Task 8's
 exact protected-wrapper permission and Tasks 10–12 remain separate gates. The provisioning coverage
 gate and owner acceptance of actual generated PDFs remain open; no readiness or landing is claimed.
+
+
+## Interactive selected-source preparation (2026-10-18)
+
+The hour plan's Task 9 adds an HTTPS-only setup endpoint and browser transport for module-owned
+recovery proposals. The host authenticates the named key against a newly validated selected copy
+on each request. It keeps comparison state between those requests and reuses the current setup
+hold. Archive, bucket and managed-Cloud tests use their real adapters with synthetic external
+responses; a separate case reaches the real setup boot over a connection that validates its CA.
+
+`apps/server/src/hour-recovery-host.test.ts` gains cases and imports. No earlier test body,
+fixture value or expectation is changed. The route and browser-client cases are new files.
+The real-boot case initially refused `outside_confirmation_missing`: first setup's already-bound
+module instance could not be configured for recovery. Recovery now receives the original module
+contributions and configures its own host. The route also has observed failures and fixes for
+malformed multipart input and an oversized stream without `Content-Length`.
+
+This step does not replace the pasted-operation screen. The module-owned hour question,
+clock/declaration controls, first-setup screen, reissue and installed complete browser journeys
+remain open. Task 8's proposed protected standby wrapper remains unapplied pending its exact
+approval. No protected writer, SQL, schema, guard or earlier fiscal assertion is changed.
