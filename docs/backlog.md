@@ -2249,8 +2249,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   rather than sending them to another open bill. The table's Preview and Send to window, its leave
   scope and cached pre-send save are now removed on the feature branch. Direct Send still flushes
   the current draft before submitting. Accessibility checks scan direct actions and Move to, and
-  the note checks follow the dish window while other rows change. The unused pure grouping and
-  preview helpers still need to be retired after their useful checks move to the current layout.
+  the note checks follow the dish window while other rows change. The unused Preview grouping,
+  submission and count-summary helpers are removed on the feature branch. Retained-course
+  recovery checks now read the current New order layout; live-label precedence, reused course
+  names, blocked selections and empty sends have focused checks there.
   The Sent panel and held-dish Finish resolution remain open. Its
   [plan](superpowers/plans/2026-10-16-a773-1-unsent-list.md) preserves checkpoints through
   `d17d4571`, including Recall/cancellation/refund, models, payment guards, closed-bill gating and

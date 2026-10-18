@@ -1838,11 +1838,8 @@ export class TillTableOrderScreen extends LitElement {
 
   #draftEntries(lines: readonly OrderLine[]): DraftEntry[] {
     return lines.map((line) => ({
-      courseId: this.#selectedCourseId(line) || null,
-      ...(line.course === undefined ? {} : { course: line.course }),
       quantity: line.quantity,
       wholeUnits: countsWholeUnits(line),
-      flagged: flagged(line),
     }));
   }
 
@@ -1894,10 +1891,6 @@ export class TillTableOrderScreen extends LitElement {
       this.requestUpdate();
       return;
     }
-  }
-
-  #selectedCourseId(line: OrderLine): string {
-    return line.courseId ?? line.product.courseId ?? "";
   }
 
   #coursePicker(

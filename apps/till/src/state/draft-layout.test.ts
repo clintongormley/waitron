@@ -150,6 +150,40 @@ describe("New order layout (A773)", () => {
     });
   });
 
+  it("keeps live labels when saved metadata is stale and separates a retired course with a reused name", () => {
+    const main = courses[1]!;
+    const retired = { ...main, id: "retired", displayOrder: 4 };
+    const lines = [
+      line("Retired", { kind: "fire" }, retired.id, { course: retired }),
+      line("Live", { kind: "fire" }, main.id, { course: { ...main, name: "Stale label" } }),
+      line("Mismatched", { kind: "fire" }, "starter", { course: retired }),
+    ];
+    expect(draftLayout(context(lines))[0]!.sections).toEqual([
+      { course: courses[0], heading: true, indexes: [2] },
+      { course: main, heading: true, indexes: [1] },
+      { course: retired, heading: true, indexes: [0] },
+    ]);
+  });
+
+  it("keeps unknown and absent courses in the no-course section before known courses", () => {
+    const lines = [
+      line("Steak", { kind: "fire" }, "main"),
+      line("Beer", { kind: "fire" }),
+      line("Croquetas", { kind: "fire" }, "starter"),
+      line("Apple", { kind: "fire" }, "missing"),
+    ];
+    expect(
+      draftLayout({ ...context(lines), courses: [...courses].reverse() })[0]!.sections,
+    ).toEqual([
+      { course: null, heading: true, indexes: [3, 1] },
+      { course: courses[0], heading: true, indexes: [2] },
+      { course: courses[1], heading: true, indexes: [0] },
+    ]);
+    expect(draftLayout({ ...context(lines), courses: [] })[0]!.sections).toEqual([
+      { course: null, heading: false, indexes: [3, 1, 2, 0] },
+    ]);
+  });
+
   it("keeps fired and vanished join targets explicit and invalid until send recovery", () => {
     const lines = [
       line("fired", { kind: "join", groupId: "fired" }),
@@ -211,6 +245,14 @@ describe("New order submissions (A773)", () => {
     expect(fireGroups(lines, new Set(), sendable)).toEqual([]);
     expect(lines).toEqual(before);
   });
+  it("sends nothing for an empty outbox or a selection containing only blocked or nonexistent rows", () => {
+    expect(sendAllGroups([], groups, () => true)).toEqual([]);
+    expect(fireGroups([], new Set([0]), () => true)).toEqual([]);
+    expect(fireGroups(lines, new Set([4, 99]), sendable)).toEqual([]);
+    expect(fireGroups(lines, new Set([1]), sendable)).toEqual([{ release: "fire", indexes: [1] }]);
+    expect(sendAllGroups(lines, groups, () => false)).toEqual([]);
+  });
+
   it("keeps stale join and anchor IDs for server refusal rather than silently sending somewhere else", () => {
     const data = [
       line("stale join", { kind: "join", groupId: "gone" }),

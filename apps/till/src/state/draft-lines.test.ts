@@ -6,7 +6,7 @@ import {
   toDraftLineInput as draftInput,
 } from "./draft-lines.js";
 import { lineBlock } from "./menu-refresh.js";
-import { draftSections } from "./draft-groups.js";
+import { draftLayout } from "./draft-layout.js";
 import { productAsVariant } from "./order-line.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 import type { Place } from "./draft-place.js";
@@ -641,8 +641,14 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
     expect(rebuilt.notOffered).toBeUndefined();
     expect(rebuilt.unavailableOnServer).toBe(true);
     expect(
-      draftSections([{ courseId: rebuilt.courseId ?? null, course: rebuilt.course }], []),
-    ).toEqual([{ course, lineIndexes: [0] }]);
+      draftLayout({
+        lines: [rebuilt],
+        courses: [],
+        groups: [],
+        locale: "en",
+        nextDisplayNumber: 1,
+      })[0]!.sections,
+    ).toEqual([{ course, heading: false, indexes: [0] }]);
     expect(toDraftLineInput(rebuilt)).toEqual({ ...input, id: "dl-1" });
     expect(missing.course).toEqual(course);
     expect(missing.notOffered).toBe(true);
@@ -679,8 +685,14 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
     expect(rebuilt.courseId).toBe("selected");
     expect(rebuilt.course).toBeUndefined();
     expect(
-      draftSections([{ courseId: rebuilt.courseId ?? null, course: rebuilt.course }], []),
-    ).toEqual([{ course: null, lineIndexes: [0] }]);
+      draftLayout({
+        lines: [rebuilt],
+        courses: [],
+        groups: [],
+        locale: "en",
+        nextDisplayNumber: 1,
+      })[0]!.sections,
+    ).toEqual([{ course: null, heading: false, indexes: [0] }]);
   });
 
   it("marks the line as holding no earlier price when the offer is back under another version", () => {
