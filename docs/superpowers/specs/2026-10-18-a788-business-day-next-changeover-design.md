@@ -11,11 +11,13 @@ with the workspace's `tsx` (`node_modules/.pnpm/node_modules/.bin/tsx <script>`,
 worktree); plain `node` cannot run them, because the source they import names `./errors.js` for a
 file that exists only as `.ts`. The `.test.ts.txt` files are tests that ran beside
 `packages/venue-service/src/business-day-schedule.test.ts`, using its `fixture`, with `AI_AGENT`
-and `CLAUDECODE` unset. `a788-fix-probe.test.ts.txt` (and `dst.ts`, `backup.ts`, `extremes.ts`)
-ran in a throwaway copy of the worktree, `/tmp/a788-fix/clone`, whose `.git` link was removed; in
+and `CLAUDECODE` unset. `a788-fix-probe.test.ts.txt` (and `dst.ts`, `backup.ts`, `extremes.ts`, whose kept copies still
+import from that path) ran in a throwaway copy of the worktree, `/tmp/a788-fix/clone`, whose `.git` link was removed; in
 that copy only, `assertBusinessDayScheduleWrite` was given a switch, `A788_FREEZE_OFF=1`, that skips
 its "a change is waiting" refusal, so the real editors could be run as they would behave without
-the freeze. Each such test was run with the switch on and off.
+the freeze. Each such test was run with the switch on and off. `a788-fix2-probe.test.ts.txt` ran the
+same way in a second copy, `/tmp/a788-fix2/clone`; `dst-rule2.ts` and `hours-back.mts` import
+straight from the worktree.
 
 ## The owner's request
 
@@ -92,8 +94,8 @@ Each example below is a probe result from `a788-probe.test.ts.txt` or `a788-fix-
 | `range` | A day's ranges no longer fit inside one business day under the new start | Dinner 22:00–04:30 with a new 03:00 start → `range` |
 | `all_day` | An "all day" range is written start-to-start, so under any other start it means something else | 05:00–05:00 with a new 03:00 start → `all_day` |
 | `endpoint_day` | A range's start or end moves to the other calendar date | Lunch 13:00–16:00 with a new 21:00 start → `endpoint_day` ("Wednesday's lunch" would become Thursday's) |
-| `sending_cutoff` | Last orders (the period's end offset) would reach the next range | Wednesday 22:00–02:45 with last orders +60, Thursday 03:30–04:30, new 03:00 start → `sending_cutoff` for the Wednesday range (last orders at 03:45 run into Thursday's 03:30, which now starts Thursday's day) and `endpoint_day` for the Thursday range |
-| `transition_strip` | A range or its last orders falls between the old and new start on the changeover night | 21:00–02:45 with last orders +30, new 03:00 start → `transition_strip` (last orders at 03:15) |
+| `sending_cutoff` | Last orders (the period's end offset) would reach the next range, move to another calendar day, or fall at or before the range's own start (`business-day-schedule.ts:426-432`) | Wednesday 22:00–02:45 with last orders +60, Thursday 03:30–04:30, new 03:00 start → `sending_cutoff` for the Wednesday range (last orders at 03:45 run into Thursday's 03:30, which now starts Thursday's day) and `endpoint_day` for the Thursday range |
+| `transition_strip` | A range's last orders (or an end) fall between the old and the new start, on any day of the week, so under the new start they sit on the other side of a changeover (`business-day-schedule.ts:433-439`, which tests the wall time only, not a date) | 21:00–02:45 with last orders +30, new 03:00 start → `transition_strip` (last orders at 03:15) |
 
 No conflict was found for 13:00–16:00 → 03:00, 20:00–01:00 → 03:00 or 09:00–17:00 → 07:00.
 
@@ -165,9 +167,12 @@ Section 5 says what each needs.
    tomorrow" — and the 21:00 example says the same: at 22:00 the next 21:00 is on the next calendar
    date. Today's business day ends at the new start on the following calendar date; in the code's
    terms, the change's effective business date is today's business date plus 1. (Owner: if this
-   misreads you and you meant the changeover after that, say so; nothing below would change except
-   that every example moves a day later.)
-2. **If that moment has already passed, one changeover later.** That can happen only when Save is
+   misreads you and you meant the changeover after that, say so. Then the effective date is always
+   today plus 2, whose moment is on the day after tomorrow and so can never have passed; every
+   example moves a day later, and rule 2, example 3, question 3, rule 6's "keep open" clash, the
+   backup edge case in section 5 and every problem of moving today's end listed in section 2 all go
+   away, because today's end never moves.)
+2. **If that moment has already passed (it is now or earlier), one changeover later.** That can happen only when Save is
    pressed after midnight and before the old changeover, with a new start earlier than the time now
    (at 01:00 with a 05:00 start, choosing 00:30). Then today's business day ends as planned, at the
    old start, and the **following** day ends at the new start: effective date plus 2. (Question 3.)
@@ -190,8 +195,9 @@ Section 5 says what each needs.
    - a range that does not fit under the waiting start (`range`, `all_day`) is caught by the
      editors' own check before the write (section 2). That check is split: the starts in force and
      in the past keep today's refusal, and a failure under the waiting start alone becomes
-     `hours.clock_change_conflict`, instead of today's vague "Check this day's time ranges and
-     periods." (`painter-labels.ts:71`, `dashboard/strings.ts:156`);
+     `hours.clock_change_conflict`, instead of today's generic refusals, "Check this day's time ranges and
+     periods." for a department and "These closed times overlap or are not in 15-minute steps." for
+     a zone (`painter-labels.ts:70-71`, `dashboard/strings.ts:154`, `:156`);
    - a range that fits but would move date, run its last orders into the next range or sit in the
      strip (`endpoint_day`, `sending_cutoff`, `transition_strip`) is caught after the write: the
      writer re-runs the venue-wide check, `businessDayClockConflicts` (the clock without the waiting
@@ -299,17 +305,20 @@ can have been recorded after 03:00 yet.)
   in place until the later changeover; a short day ends them early. Question 2.
 - **Daylight saving.** `candidateFor` refuses a change when the old or new start does not happen
   exactly once on the day before, the day of or the day after the changeover
-  (`business-day-start.ts:128-142`). Under rule 1 that refuses Saves during **three** business days.
-  Probe (`dst.ts`): 05:00 → 02:30 is refused for Saves during the business days of 23, 24 and
-  25 Oct 2026 and allowed from 26 Oct; 02:30 → 05:00 and 05:00 → 02:00 give the same window;
-  05:00 → 02:30 in spring is refused during 26, 27 and 28 Mar 2027 and allowed from 29 Mar;
+  (`business-day-start.ts:128-142`). With rules 1 and 2 together that refuses Saves for about three
+  days. Probe (`dst-rule2.ts`, every minute, rules 1 and 2 and that check): 05:00 → 02:30 is refused
+  from Fri 23 Oct 2026, 02:30 to Mon 26 Oct, 02:29 and allowed from Mon 26 Oct, 02:30; 02:30 →
+  05:00 gives the same window; in spring 05:00 → 02:30 is refused from Fri 26 Mar 2027, 02:30 to
+  Mon 29 Mar, 02:29. With a 05:00 start the window opens and closes at 02:30, not at a changeover,
+  because from 02:30 rule 2 moves the effective date a day later. Probe (`dst.ts`, rule 1 only):
   05:00 → 03:00 is never refused. So "save again after the change" would send the owner into a
   second refusal on the day the clocks change. The refusal instead names the first moment a Save
-  will work, worked out by trying the following business days with the same rule and the same
-  three-day check, and gives it as the start of that business day: "The clocks change on Sun
-  25 Oct. Save again from Mon 26 Oct, 05:00." (`dst.ts`: business day 26 Oct starts Mon 26 Oct,
-  05:00 under a 05:00 start, and Mon 26 Oct, 02:30 under a 02:30 start.) Only starts inside the
-  hour the clocks skip or repeat are affected; in Madrid that is 02:00–02:59.
+  will work. The effective date can change only at a changeover or when the new start passes on a
+  date (rules 1 and 2), so the server tries those moments in turn from now, with the same rules and
+  the same check, and names the first that passes: "The clocks change on Sun 25 Oct. Save again
+  from Mon 26 Oct, 02:30." (`dst-rule2.ts`: a Save at Fri 23 Oct 03:00 and at Mon 26 Oct 02:15 is
+  refused; at Mon 26 Oct 02:30 and 03:00 it is allowed.) Only starts inside the hour the clocks
+  skip or repeat are affected; in Madrid that is 02:00–02:59.
 - **A daily close for today.** Save is refused if a daily close (the end-of-day "Z" record, which is
   append-only and hash-chained) exists for the day before the effective date or later
   (`business-day-start.ts:152`, `:157`, `:167`); under rule 1 that day is today. Kept unchanged.
@@ -350,7 +359,9 @@ can have been recorded after 03:00 yet.)
   against every start ever saved (`service-day-context.ts:40-44`), once 03:00 has been a start, no
   normal-week range may cross 03:00 again, and no "all day" range can be saved on the normal week.
   Probe (`hours.mts`, which calls the parse function the editors use): 20:00–00:30 is refused after
-  05:00 → 21:00 → back to 05:00; 05:00–05:00 is refused once 03:00 is in the history. Easier changes
+  05:00 → 21:00 → back to 05:00; 05:00–05:00 is refused once 03:00 is in the history. Probe
+  (`hours-back.mts`, 05:00 → 03:00 → back to 05:00): 22:00–04:30 is refused (`order`), 05:00–05:00
+  is refused (`empty`), 22:00–02:30 is accepted. Easier changes
   make this bite sooner. Question 4.
 - **The staffing painters read the venue's first start, not today's.** `currentCutover`
   (`packages/staffing/src/paint.ts:139-140`), `paint.ts:341-342`, `routes.ts:165-166`, `rota.ts:56`
@@ -398,15 +409,30 @@ can have been recorded after 03:00 yet.)
 
 ### Venue service (`packages/venue-service`)
 
-- `businessDayClockConflicts` names only the ranges that fail. When a day's ranges do not parse
-  together, each range is parsed on its own under the old and new start; a range that fails alone
-  gets `range` ("Crosses the new start"), and the others on that day are not listed. Only when no
-  range fails alone — overlapping rows no writer accepts, which the existing case "rejects
-  overlapping raw ranges" (`business-day-schedule.test.ts:396-409`) stores directly — is every range
-  of the day marked, with a new reason `overlap` and today's label "Invalid or overlapping range".
-  Probe (`a788-fix-probe.test.ts.txt`, "per-range parse"): under 03:00, 13:00–16:00 alone parses
-  and 22:00–04:30 alone is refused with reason `order`. Chosen over relabelling the whole day
-  because the owner has to know which range to change.
+- `businessDayClockConflicts` marks `range` only on the ranges that fail. When a day's ranges do
+  not parse together, each range is parsed on its own under the old and new start; a range that
+  fails alone gets `range` ("Crosses the new start"). The other ranges of that day are not marked
+  `range`; each still goes through every other check (`all_day`, `endpoint_day`, `sending_cutoff`,
+  `transition_strip`) exactly as if the day had parsed, so each is listed with its own reason, or
+  not at all if it has none. For `sending_cutoff`'s "a later range on the same day" comparison
+  (`business-day-schedule.ts:406-417`) the failing ranges are left out, because they must change
+  anyway and have no place under the new start. Only when no range fails alone — overlapping rows
+  no writer accepts, which the existing case "rejects overlapping raw ranges"
+  (`business-day-schedule.test.ts:396-409`) stores directly — is every range of the day marked,
+  with a new reason `overlap` and today's label "Invalid or overlapping range". Probes:
+  - `a788-fix-probe.test.ts.txt`, "per-range parse": under 03:00, 13:00–16:00 alone parses and
+    22:00–04:30 alone is refused with reason `order`;
+  - `a788-fix2-probe.test.ts.txt`: a Wednesday with lunch 13:00–16:00 and dinner 20:00–23:30,
+    05:00 → 21:00, returns both as `range` today; lunch alone returns `endpoint_day` and dinner
+    alone `range`. Under this rule the list therefore shows the dinner as "Crosses the new start"
+    and the lunch as "Moves to another day". With 05:00 → 03:00 a lunch 13:00–16:00 has no clash of
+    its own (`a788-probe.test.ts.txt`), so a lunch-and-dinner day lists only the dinner.
+  Mockup 04 is unaffected: each of its days has one range. Chosen over relabelling the whole day
+  because the owner has to know which range to change, and must see every clash before pressing
+  Save again. The new reason is a cross-package contract: it is added to the reason union in the
+  module seat (`packages/module/src/module.ts:607`), the dashboard client
+  (`apps/dashboard/src/api/client.ts:146`) and the dialog's label map
+  (`business-day-start-editor.ts:336-345`).
 - `assertBusinessDayScheduleWrite` keeps its revision check but no longer refuses because a change
   waits (`business-day-schedule.ts:501-508`). The editors' parse check runs the waiting start
   separately, and each of the eight callers (section 2) runs the clash check after its write while
@@ -441,7 +467,7 @@ A755's form for a later date stays valid and shows as a waiting change until a S
 ### What stays
 
 The resolver in `@waitron/shared`, every report reader, the history check, the opening-hours
-conflict check and its five reasons (with `range` narrowed to the ranges that fail), the revision
+conflict check and its five reasons plus the new `overlap` (with `range` narrowed to the ranges that fail), the revision
 guard, the time-zone lock once a change exists (`apps/server/src/venue-details.ts:101-103`,
 `:243-245`), the venue-details PATCH refusing a changed start (`venue-details.ts:206-212`), the
 backup timing, and the export refusal.
@@ -457,9 +483,9 @@ empieza a las" (`:3794`), changes to match.
 | `venue_details.dayCutover` (Spanish only changes) | Business day starts at | El día de trabajo empieza a las |
 | `business_day.new_start` (row label) | New start | Nuevo inicio |
 | `business_day.new_start_value` | {time}, from {when} | {time}, desde {when} |
-| `business_day.day_length` | Business day {day} lasts {hours} h. | El día de trabajo {day} dura {hours} h. |
+| `business_day.day_length` | Business day {day} lasts {duration}. | El día de trabajo {day} dura {duration}. |
 | `business_day.takes_effect` | Changes at the next changeover: {when}. | Cambia en el próximo cambio de día: {when}. |
-| `business_day.today_runs` | Today's business day ({day}) runs {start} → {end}: {hours} h. | El día de trabajo de hoy ({day}) va de {start} a {end}: {hours} h. |
+| `business_day.today_runs` | Today's business day ({day}) runs {start} → {end}: {duration}. | El día de trabajo de hoy ({day}) va de {start} a {end}: {duration}. |
 | `business_day.history` (replaces today's) | Earlier reports keep their days. | Los informes anteriores conservan sus días. |
 | `business_day.conflicts` (replaces today's) | Opening hours that clash with the new start: | Horarios que chocan con el nuevo inicio: |
 | `business_day.conflict_range` (replaces today's) | Crosses the new start | Cruza el nuevo inicio |
@@ -476,7 +502,9 @@ empieza a las" (`:3794`), changes to match.
 `business_day.date`, `business_day.date_invalid`, `business_day.replace`,
 `business_day.cancel_pending`, `business_day.acknowledge`, `business_day.transition`, and
 `hours.clock_change_pending` (`apps/dashboard/src/i18n/strings.ts:829-854` and `:3760-3786`;
-`packages/venue-service/src/dashboard/strings.ts:377`, `:1228`). `{when}` is a weekday, date and
+`packages/venue-service/src/dashboard/strings.ts:377`, `:1228`). `{duration}` is whole hours and
+minutes, leaving out a zero part: "22 h", "19 h 30 min", "47 h 59 min", "1 min" (the same in
+Spanish). `{when}` is a weekday, date and
 time in the venue's time zone, "Wed 21 Oct, 03:00" / "mié 21 oct, 03:00"; today's dialog formats a
 year and a zone name instead (`business-day-start-editor.ts:305-317`).
 
@@ -490,11 +518,14 @@ runs its full wave with two Codex run-it reviews.
 1. **Server: the next-changeover rule.** Failing tests first, written from section 4: both owner
    examples, the after-midnight case, two Saves, undo by saving the start in force, the
    `changeover_passed` race (Save at the changeover instant), the "keep open" clash, the history
-   refusal still biting, the `DELETE` route gone, a Save during the business day the clocks change
-   refused with the first working moment named, and the automatic backup moment before and after a
+   refusal still biting, the `DELETE` route gone, with 05:00 → 02:30, Saves at Fri 23 Oct 2026
+   03:00 and Mon 26 Oct 02:15 refused, the second naming "Mon 26 Oct, 02:30", and a Save at Mon
+   26 Oct 03:00 accepted (section 5), and the automatic backup moment before and after a
    Save (section 5). Then `business-day-start.ts`, the route, the model, the error copy.
 2. **Venue service: hours stay editable, and clashes name their range.** Failing tests first: a day
-   with lunch 13:00–16:00 and dinner 22:00–04:30, 05:00 → 03:00, lists only the dinner; the
+   with lunch 13:00–16:00 and dinner 22:00–04:30, 05:00 → 03:00, lists only the dinner; a day with
+   lunch 13:00–16:00 and dinner 20:00–23:30, 05:00 → 21:00, lists the dinner as `range` and the
+   lunch as `endpoint_day`; the
    overlapping-rows case still marks both; each of the eight writers accepts a time edit while a
    change waits, and refuses one that clashes with `hours.clock_change_conflict` naming the range,
    with nothing written — one case before the write (a range that crosses the waiting start) and one
@@ -553,9 +584,10 @@ to 00:30. Wednesday 00:30 has already passed.
 
 ### Question 4 of 4 — old starts keep limiting the opening hours
 
-Your day started at 05:00. You try 21:00 for a week, then go back to 05:00. Today, from then on no
-normal-week range may ever cross 21:00 again, so a 20:00–00:30 dinner is refused for good; and once
-any change has been made, no "all day" range can be saved on the normal week. This is because the
+Your day started at 05:00. You try 03:00 for a week, then go back to 05:00. Today, from then on no
+normal-week range may ever cross 03:00 again, so a 22:00–04:30 dinner is refused for good, while
+22:00–02:30 is still accepted; and no "all day" range such as 05:00–05:00 can be saved on the
+normal week again. This is because the
 hours editors check every start the venue has ever had, so that past days still draw correctly in
 Opening hours. This is true today, with or without A788.
 
