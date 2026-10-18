@@ -333,6 +333,13 @@ shipped list has one: a probe on 2026-10-13 over every province and area of
 `packages/country-es/src/data/es-2026.ts` read 729 holidays in 61 lists and found no name twice.
 Re-check when a new year's list is added.
 
+## A855. The till's zones read builds date formatters on every call
+
+**A855 (2026-10-18).** About 0.75 ms of each `GET /api/zones` goes on `new Intl.DateTimeFormat`
+inside `serviceMomentAt` and `serviceDayContext` (`packages/venue-service`), through the
+business-day helpers in `@waitron/reporting` and `@waitron/shared`. A504 took the read's median from
+1.436 to 3.004 ms on one bench. Next: keep one formatter per time zone. Left open by A504.
+
 ## Decisions and deliberate limits
 
 - **`seasons.colour` has no CHECK and no trigger (A721 plan, Decision 1; plan default).** A CHECK

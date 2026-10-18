@@ -1419,10 +1419,9 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   authenticated route case first. The combined department editor preserves the off fallback.
 
 - **A855. The till's zones read builds date formatters on every call (2026-10-18).** About 0.75 ms
-  of each `GET /api/zones` goes on `new Intl.DateTimeFormat` inside `serviceMomentAt` and
-  `serviceDayContext` (`packages/venue-service`), through the business-day helpers in
-  `@waitron/reporting` and `@waitron/shared`. A504 took the read's median from 1.436 to 3.004 ms on
-  one bench. Next: keep one formatter per time zone. Left open by A504.
+  of each `GET /api/zones` goes on `new Intl.DateTimeFormat`. Next: keep one formatter per time
+  zone. Left open by A504.
+  [Detail](backlog/service-periods.md#a855-the-tills-zones-read-builds-date-formatters-on-every-call)
 
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
@@ -2393,9 +2392,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   - `wt-floor-plan-preview` has no product user. It remains in `packages/ui/demo/main.ts`, with
     its token and its row in `docs/developers/design-system.md`. Retire it, or record why it is
     kept.
-  - The zones list's placed-table query has two untested properties: `zonesWithPlacedTables`
-    (`apps/server/src/floor-plan.ts`) reads only the listed zones and makes one query for all of
-    them. Pin both.
   - Check "closing the editor returns focus to its originating row menu" in
     `docs/developers/design-system.md` (Departments and zones) now that Edit receipt opens from the
     Receipt link: a review saw focus return to the link.
@@ -2449,7 +2445,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a590-splitting-a-table-from-the-order-screen-drops-the-rooms-new-revision)
 
 - **A591. A split down to one loses a table that had guests when its joined table went live
-  (2026-10-13).** It is off the map once they leave. Found by A579 part 3a's review.
+  (2026-10-13).** It is off the map once they leave. Reset table still reaches it; a room's reset
+  no longer does. Found by A579 part 3a's review.
   [Detail](backlog/till.md#a591-a-split-down-to-one-loses-a-table-that-had-guests-when-its-joined-table-went-live)
 
 - **A592. A party that joins a group's table names the group's other tables in random order
@@ -2468,7 +2465,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A598. A table held by guests when its joined table went live is neither joined nor split off
   (2026-10-13).** So the till cannot see that the rest will not rejoin; it asks Seats only after the
-  server refuses. Found by A579 part 3c's review.
+  server refuses. Reset table still reaches it. Found by A579 part 3c's review.
   [Detail](backlog/till.md#a598-a-table-held-by-guests-when-its-joined-table-went-live-is-neither-joined-nor-split-off)
 
 - **A603. Reset table does not wait for food on its way to a group's other tables, nor for a table a
@@ -2480,17 +2477,17 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (2026-10-13).** Not known to be reachable. Found reading, not run, in A579 part 4b's review.
   [Detail](backlog/till.md#a604-a-split-off-table-the-tills-read-leaves-out-could-make-reset-table-refuse-as-out-of-date)
 
-- **A565. "Reset to saved plan" does not wait for food on its way to an ordinary table
-  (2026-10-13).** Dates from floor plans slice 1; #1604 made only split groups wait.
-  [Detail](backlog/till.md#a565-reset-to-saved-plan-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
+- **A565. A reset does not wait for food on its way to an ordinary table (2026-10-13).** Dates
+  from floor plans slice 1; #1604 made only split groups wait.
+  [Detail](backlog/till.md#a565-a-reset-does-not-wait-for-food-on-its-way-to-an-ordinary-table)
 
 - **A566. An open order with nothing sent yet does not hold a split group back at a reset
   (2026-10-13).** Left open by #1604.
   [Detail](backlog/till.md#a566-an-open-order-with-nothing-sent-yet-does-not-hold-a-split-group-back-at-a-reset)
 
-- **A567. A saved-plan edit to a waiting joined table can shift where its tables land
-  (2026-10-13).** Accepted for now in #1604; Reset table (A579) lays out from the same slots.
-  [Detail](backlog/till.md#a567-a-saved-plan-edit-to-a-waiting-joined-table-can-shift-where-its-tables-land)
+- **A567. An edit to the recorded layout of a waiting joined table can shift where its tables
+  land (2026-10-13).** Accepted for now in #1604; Reset table (A579) lays out from the same slots.
+  [Detail](backlog/till.md#a567-an-edit-to-the-recorded-layout-of-a-waiting-joined-table-can-shift-where-its-tables-land)
 
 - **A568. A part placed on today's map while its joined table waited keeps its place
   (2026-10-13).** Until the next reset; the till hides it. Left open by A503 part 2 (#1601).
@@ -2513,9 +2510,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   map (2026-10-13).** The reset still puts it back. Left open by #1608.
   [Detail](backlog/till.md#a571-a-joined-table-that-came-apart-cannot-reach-reset-table-when-its-free-tables-are-off-the-map)
 
-- **A572. Reset table counts a joined table whole while a table added to it still has guests
-  (2026-10-13).** Full saved seats, none asked. Left open by #1608, kept by A579.
-  [Detail](backlog/till.md#a572-reset-table-counts-a-joined-table-whole-while-a-table-added-to-it-still-has-guests)
+- **A572. Reset table puts back a joined table with its full seats while a table its layout adds
+  still has guests (2026-10-13).** None asked. Left open by #1608, kept by A579.
+  [Detail](backlog/till.md#a572-reset-table-puts-back-a-joined-table-with-its-full-seats-while-a-table-its-layout-adds-still-has-guests)
 
 - **A575. Reset table's window: two things seen in #1608's look (2026-10-13).** A Spanish wrap,
   and where the stays-apart lines sit.
@@ -2553,12 +2550,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   it as a gap. Left open by A504.
 
 - **A859. Floor plans and the till's layout banner: looks left to the owner (2026-10-18).** A504's
-  LOOK passes kept these as built, as judgement calls: the solid "Default" badge (the mock-up's is
-  a pale pill); no explanation line in the Add set dialog; the Delete dialog's "Used by Dinner."
-  reads oddly when a set and a period share a name; the till's banner is a plain line where the
-  mock-up draws a tinted box (`wt-banner` would be close); the 390 px floor menu's heading is in
-  sentence case, not small capitals. Mock-ups: [a504-floor-plans](backlog/mockups/a504-floor-plans/).
+  look passes kept five things as built, as judgement calls, each differing from the mock-ups.
   Left open by A504.
+  [Detail](backlog/till.md#a859-floor-plans-and-the-tills-layout-banner-looks-left-to-the-owner)
+
+- **A860. A floor-check rule copied four times (2026-10-18).** Whether a table's new place is
+  taken is decided in four places, in TypeScript and in SQL, each excluding a slightly different set
+  of tables. Next: share one verdict, or pin the copies as matching. Left open by A504.
+  [Detail](backlog/till.md#a860-a-floor-check-rule-copied-four-times)
 
 - **A508. A table's QR code: order, call a waiter, ask for the bill or pay (owner, 2026-10-11).**
   When a tab is opened for seated guests, a QR code is printed for them; on their own phone it
