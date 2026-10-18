@@ -17,18 +17,17 @@ function api(courses: Course[]): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-async function mount(courses: Course[], theme: "light" | "dark") {
+async function mount(courses: Course[], theme: "light" | "dark", readOnly = false) {
   const mounted = await mountWidget<CoursesScreen>(
     "dashboard-courses-screen",
-    { api: api(courses) },
+    { api: api(courses), readOnly },
     theme,
   );
   const list = mounted.el.shadowRoot!.querySelector("dashboard-course-list")!;
+  const row = readOnly ? "li[data-course]" : "tbody tr[data-course]";
   await vi.waitFor(() =>
     expect(
-      list.shadowRoot!.querySelector(
-        courses.length ? "tbody tr[data-course]" : "[data-test=empty]",
-      ),
+      list.shadowRoot!.querySelector(courses.length ? row : "[data-test=empty]"),
     ).not.toBeNull(),
   );
   return mounted;
@@ -42,6 +41,11 @@ describe.each(["light", "dark"] as const)("courses-screen a11y (%s theme)", (the
 
   it("renders an empty list accessibly", async () => {
     const { host } = await mount([], theme);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a read-only list accessibly", async () => {
+    const { host } = await mount(COURSES, theme, true);
     await expectNoA11yViolations(host);
   });
 });

@@ -19,7 +19,7 @@ describe.each(["light", "dark"] as const)("venue settings a11y (%s theme)", (the
               html`<h2>Receipt text</h2>
                 <p>Body</p>`,
           },
-          { key: "k", tab: "kitchen", render: () => html`<h2>Courses</h2>` },
+          { key: "k", tab: "kitchen", render: () => html`<h2>Late flags</h2>` },
         ],
       },
       theme,
