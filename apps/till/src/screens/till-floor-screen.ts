@@ -10,6 +10,7 @@ import {
   unsafeCSS,
 } from "lit";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import { MediaQueryController } from "../state/media-query-controller.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import type { TimingBand } from "@waitron/shared";
@@ -677,17 +678,10 @@ export class TillFloorScreen extends LitElement {
   #reminderTimer?: ReturnType<typeof setTimeout>;
   #rereadTimer?: ReturnType<typeof setInterval>;
 
-  @state() private phone = false;
-  #phoneWidth?: MediaQueryList;
-  readonly #onPhoneWidth = (event: MediaQueryListEvent) => {
-    this.phone = event.matches;
-  };
+  readonly #phone = new MediaQueryController(this, PHONE_WIDTH);
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.#phoneWidth = window.matchMedia(PHONE_WIDTH);
-    this.phone = this.#phoneWidth.matches;
-    this.#phoneWidth.addEventListener("change", this.#onPhoneWidth);
     // The timers stopped while the screen was off the page. A reminder that fell due meanwhile
     // redraws at once; the floor's re-read waits a full 15 s.
     if (this.hasUpdated) {
@@ -698,8 +692,6 @@ export class TillFloorScreen extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.#phoneWidth?.removeEventListener("change", this.#onPhoneWidth);
-    this.#phoneWidth = undefined;
     clearTimeout(this.#reminderTimer);
     clearInterval(this.#rereadTimer);
     this.#rereadTimer = undefined;
@@ -1721,11 +1713,11 @@ export class TillFloorScreen extends LitElement {
     const zone = this.zones.find((each) => each.id === activeKey) ?? null;
     const zoneId = zone?.id ?? null;
     const canChange = zone !== null && (planned || zone.hasPlan) && this.canChangeToday;
-    if (!canChange && !this.phone) return nothing;
+    if (!canChange && !this.#phone.matches) return nothing;
     return html`<till-floor-zone-menu
       .zone=${zone}
       .tables=${this.#zone.visible}
-      .phone=${this.phone}
+      .phone=${this.#phone.matches}
       .view=${view}
       .canChangeToday=${canChange}
       @zone-toggle-view=${(event: Event) => {
@@ -1923,7 +1915,7 @@ export class TillFloorScreen extends LitElement {
           }
           <div class="actions">
             ${
-              this.phone
+              this.#phone.matches
                 ? nothing
                 : html`<wt-button
                     class="view-toggle"
