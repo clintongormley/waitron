@@ -1168,10 +1168,7 @@ describe("till-table-order-screen", () => {
           grid(el).store.lines[2],
           grid(el).store.lines[0],
         ]);
-        expect(
-          el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")
-            ?.open ?? false,
-        ).toBe(false);
+        expect(el.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
         await toggle(el, "Beer");
         await toggle(el, "Steak");
         const selected = (await submitDraft(el, "fire-selected"))!;

@@ -70,9 +70,7 @@ describe.each(["en", "es"] as const)("direct actions %s", (locale) => {
       expect(submitted).toHaveLength(1);
       expect(submitted[0]!.sent).toEqual([draft.lines[1]]);
       expect(submitted[0]!.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
-      expect(
-        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")!.open,
-      ).toBe(false);
+      expect(el.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
     });
   });
 });

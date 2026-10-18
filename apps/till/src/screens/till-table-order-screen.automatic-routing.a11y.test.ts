@@ -7,6 +7,8 @@ import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { beer, flan, menuOf, resized } from "./till-table-order-screen.test-helpers.js";
+import type { TillBasket } from "../widgets/basket.js";
+import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillDeadEndsSection } from "../widgets/dead-ends-section.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
@@ -62,12 +64,10 @@ describe.each(["en", "es"] as const)("automatic routing %s", (locale) => {
         .poll(() => el.shadowRoot!.querySelector("[data-draft-routing-warning]"))
         .not.toBeNull();
       const warning = el.shadowRoot!.querySelector<HTMLElement>("[data-draft-routing-warning]")!;
-      const detail = warning.querySelector<TillDeadEndsSection>("till-dead-ends-section")!;
-      await detail.updateComplete;
       expect(window.innerWidth).toBe(width);
       expect(warning.checkVisibility()).toBe(true);
       expect(warning.querySelector('[aria-hidden="true"]')!.textContent).toContain("⚠");
-      expect(detail.shadowRoot!.querySelector(".reason")!.textContent).toContain("Bar");
+      expect(warning.textContent).toContain("Bar");
       const pane = el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]")!;
       const bounds = warning.getBoundingClientRect();
       expect(bounds.left).toBeGreaterThanOrEqual(0);
@@ -77,14 +77,26 @@ describe.each(["en", "es"] as const)("automatic routing %s", (locale) => {
         ["Beer", "2"],
         ["Flan", "1"],
       ]);
-      expect(
-        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")!.open,
-      ).toBe(false);
+      expect(el.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
       await expectNoA11yViolations(host);
       await page.screenshot({
         element: pane,
         path: `__screenshots__/a773-automatic-routing-${locale}-${theme}-${width}.png`,
       });
+      const basket = [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")].find((row) =>
+        row.lineIndexes?.includes(0),
+      )!;
+      await basket.updateComplete;
+      await userEvent.click(basket.shadowRoot!.querySelector<WtButton>('[data-line-detail="0"]')!);
+      const picker = basket.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+      await picker.updateComplete;
+      const detail = el.shadowRoot!.querySelector<TillDeadEndsSection>(
+        "[data-draft-routing-detail] till-dead-ends-section",
+      )!;
+      await detail.updateComplete;
+      expect(detail.shadowRoot!.querySelector(".reason")!.textContent).toContain("Bar");
+      expect(detail.checkVisibility()).toBe(true);
+      await expectNoA11yViolations(host);
     });
   });
 });

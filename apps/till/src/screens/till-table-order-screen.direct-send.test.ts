@@ -71,9 +71,7 @@ it("Send all immediately submits this bill's displayed arrangement, including a 
   ]);
   expect(submissions[0]!.billId).toBeUndefined();
   expect(submissions[0]!.joinGroupId).toBeUndefined();
-  expect(
-    root(el).querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")?.open ?? false,
-  ).toBe(false);
+  expect(root(el).querySelector("[data-draft-preview]")).toBeNull();
   expect(root(el).querySelector("[data-destination-choice]")).toBeNull();
 });
 

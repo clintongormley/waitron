@@ -208,10 +208,7 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
 
     await press(el, "send-all");
 
-    expect(
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>("[data-draft-preview]")!
-        .open,
-    ).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
     expect(rowWarningText(el)).toContain(`Beer ×2 | ${t("basket.blocked.server")}`);
     const sent = await confirmed(el);
     expect(sent.sent.map((line) => line.product.name)).toEqual(["Flan"]);

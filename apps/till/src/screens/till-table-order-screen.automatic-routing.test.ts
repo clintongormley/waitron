@@ -60,9 +60,7 @@ it("checks the saved revision after 400 ms without opening a preview or sending 
   expect(checks).toHaveLength(1);
   expect(checks[0]!.automatic).toBe(true);
   expect(checks[0]!.sent).toEqual([...draft.lines]);
-  expect(
-    el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")!.open,
-  ).toBe(false);
+  expect(el.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
   expect(submitted).not.toHaveBeenCalled();
   el.answerDeadEnds(checks[0]!.sent, answer, checks[0]!.checkId);
   await el.updateComplete;

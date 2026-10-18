@@ -129,16 +129,7 @@ import type {
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 import { heldGroupIds, inHeldGroup, sendsAlone } from "../state/held-groups.js";
-import {
-  draftPreview,
-  draftSubmission,
-  itemCount,
-  type DraftAction,
-  type DraftEntry,
-  type DraftGroup,
-  type DraftPreview,
-  type DraftSubmission,
-} from "../state/draft-groups.js";
+import { itemCount, type DraftEntry, type DraftGroup } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import type { Place } from "../state/draft-place.js";
 import {
@@ -227,24 +218,6 @@ function countsWholeUnits(line: OrderLine): boolean {
   return soldByTheUnit(line.product) || (line.notOffered === true && /^\d+$/.test(line.quantity));
 }
 
-/** How many lines an action leaves in the draft, naming them when there are only a few. */
-function leftOutText(lines: readonly OrderLine[]): string {
-  if (lines.length > LEFT_OUT_NAMED)
-    return t("table.left_out_unnamed").replace("{n}", String(lines.length));
-  const names = lines
-    .map((line) => `${shownName(line.product)}\u00a0×${trimQuantity(line.quantity)}`)
-    .join(", ");
-  return countText(lines.length, "table.left_out", "table.left_out_one").replace(
-    "{names}",
-    () => names,
-  );
-}
-
-/** Beyond this many, the left-out message counts the lines without naming them. */
-const LEFT_OUT_NAMED = 3;
-
-/** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
-
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
 type TableVerb = "move" | "join" | "move-bill";
 type ActionVerb = TableVerb | "merge" | "transfer" | "split";
@@ -287,21 +260,6 @@ export interface SplitRefusal {
   field: "staying" | "leaving";
   message: string;
   prompt?: object;
-}
-
-/** An action's preview, and the submission its Confirm sends. `leftOut`: the flagged lines it
- * leaves in the draft. */
-interface PendingDraft {
-  preview: DraftPreview;
-  join?: { group: OrderGroup; index: number };
-  detail: SubmitDraftDetail;
-  leftOut: readonly OrderLine[];
-  action: DraftAction;
-  checking: boolean;
-  deadEnds?: {
-    rows: ReadonlyMap<OrderLine, DeadEndAnswer["deadEnds"][number]>;
-    stations: DeadEndAnswer["stations"];
-  };
 }
 
 /** A held row whose Move to… is open, on whichever bill of the party it sits. */
@@ -605,11 +563,6 @@ export class TillTableOrderScreen extends LitElement {
         justify-content: flex-end;
         gap: var(--wt-space-2);
       }
-      .draft-preview .cancel-actions {
-        inline-size: 100%;
-        justify-content: space-between;
-      }
-
       .served-line {
         color: var(--wt-color-text-muted);
       }
@@ -706,32 +659,6 @@ export class TillTableOrderScreen extends LitElement {
         display: block;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-
-      .send-to {
-        margin: var(--wt-space-3) 0 0;
-        padding: 0;
-        border: none;
-      }
-
-      .send-to legend {
-        padding: 0;
-        margin-bottom: var(--wt-space-2);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .send-to-option {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        cursor: pointer;
-        overflow-wrap: anywhere;
-      }
-
-      .send-to-option input {
-        flex: none;
-        accent-color: var(--wt-color-primary);
       }
 
       .bill-state {
@@ -1570,7 +1497,6 @@ export class TillTableOrderScreen extends LitElement {
         if (store.editsLocked) {
           this.draftMoveStore = null;
           this.#selected = new WeakSet();
-          this.pendingDraft = null;
           this.#closeChange();
         }
         this.#noteDraftStart(store);
@@ -1629,9 +1555,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#serveScope?.dispose();
     this.#serveScope = undefined;
     this.#serveLeave = undefined;
-    this.#previewScope?.dispose();
-    this.#previewScope = undefined;
-    this.#previewLeave = undefined;
     this.#actionOpening++;
     this.#actionScope?.dispose();
     this.#actionScope = undefined;
@@ -1661,56 +1584,6 @@ export class TillTableOrderScreen extends LitElement {
   @state() private draftMoveStore: WorkingOrderStore | null = null;
   /** Flagged lines the person chose to keep, which no longer ask Remove or Keep. */
   #kept = new WeakSet<OrderLine>();
-  @state() private pendingDraft: PendingDraft | null = null;
-  readonly #previewId = {};
-  #previewScope?: DraftScope<{ value: string; label: string } | null>;
-  #previewLeave?: LeaveCoordinator;
-  #previewOpening = 0;
-  readonly #beforePreviewClose = async (reason: LeaveReason): Promise<boolean> => {
-    const opening = this.#previewOpening;
-    const outcome = await this.#previewLeave!.request({
-      scopes: [this.#previewId],
-      reason,
-      proceed() {},
-    });
-    return outcome === "proceeded" && opening === this.#previewOpening;
-  };
-
-  #watchPreview(): void {
-    if (this.pendingDraft === null) {
-      this.#previewScope?.dispose();
-      this.#previewScope = undefined;
-      return;
-    }
-    if (this.#previewScope) return;
-    this.#previewLeave = leaveCoordinatorFor(this);
-    if (!this.#previewLeave) return;
-    this.#previewScope = this.#previewLeave.register({
-      id: this.#previewId,
-      parent: this,
-      current: () => this.sendTo,
-      snapshot: (value) => (value === null ? null : { ...value }),
-      equal: (a, b) => a?.value === b?.value,
-      restore: (value) => (this.sendTo = value),
-    });
-    this.#previewScope.commit(null);
-  }
-
-  #previewClosed(event: Event): void {
-    event.stopPropagation();
-    if (event.target !== event.currentTarget || !this.isConnected || !this.pendingDraft) return;
-    this.#dismissPreview();
-  }
-
-  #requestPreviewClose(): void {
-    if (!this.isConnected || !this.pendingDraft) return;
-    if (this.#previewScope) {
-      void this.renderRoot.querySelector<WtDialog>("[data-draft-preview]")!.requestClose("cancel");
-    } else {
-      this.#dismissPreview();
-    }
-  }
-
   #routingTimer?: ReturnType<typeof setTimeout>;
   #routingChecked?: string;
   #automaticRouting?: {
@@ -1751,7 +1624,6 @@ export class TillTableOrderScreen extends LitElement {
       !check.store.sending &&
       !check.store.editsLocked &&
       !this.groupCommandBusy &&
-      this.pendingDraft === null &&
       check.sent.length === check.store.lines.length &&
       check.sent.every((line, index) => line === check.store.lines[index])
     );
@@ -1767,8 +1639,7 @@ export class TillTableOrderScreen extends LitElement {
       key === undefined ||
       store.sending ||
       store.editsLocked ||
-      this.groupCommandBusy ||
-      this.pendingDraft !== null
+      this.groupCommandBusy
     ) {
       this.#cancelAutomaticRouting();
       return;
@@ -1793,11 +1664,6 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #checkId = 0;
-  #lastPreview?: { store: WorkingOrderStore; action: DraftAction };
-  /** The bill the waiter chose in the open preview, under the name it had then; null sends no
-   * bill, so the lines go on the party's main bill as the server finds it when it takes the
-   * request. */
-  @state() private sendTo: { value: string; label: string } | null = null;
   #payStore?: TabPayStore;
   /** Memoised so a render triggered by a draft change does not recompute every line's gross. */
   #lineGrossByLineNo = new Map<number, Decimal>();
@@ -1851,12 +1717,10 @@ export class TillTableOrderScreen extends LitElement {
       this.fireGroupPending = null;
       this.movePending = null;
       this.servePending = null;
-      this.pendingDraft = null;
       this.reviewing = false;
       this.#browsingScroll = undefined;
     }
     this.#watchServe();
-    this.#watchPreview();
     this.#watchActions();
     if (changed.has("busy") && this.busy) this.#actionScope?.changed();
     this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
@@ -1993,96 +1857,6 @@ export class TillTableOrderScreen extends LitElement {
     this.requestUpdate();
   }
 
-  /**
-   * The preview is counted from the submission, and Confirm sends the submission kept here, so it is
-   * exactly what the preview named. An unoverridden line OMITS
-   * `courseId`, so the server applies the product's default course. The answers name lists, products
-   * and labels by id alone: the server takes every price, VAT class and name from the published offer.
-   */
-  #openPreview(
-    store: WorkingOrderStore,
-    action: DraftAction,
-    check = true,
-    deadEnds?: PendingDraft["deadEnds"],
-  ): void {
-    this.#cancelAutomaticRouting();
-    this.#previewOpening++;
-    this.#previewScope?.dispose();
-    this.#previewScope = undefined;
-    const checkId = ++this.#checkId;
-    this.#lastPreview = { store, action };
-    const lines = store.lines;
-    const entries = this.#draftEntries(lines);
-    const selected = this.#selectedIndexes(lines);
-    const submission: Omit<DraftSubmission, "groups"> & { groups: SubmitDraftDetail["groups"] } =
-      action.kind === "send-all"
-        ? {
-            groups: sendAllGroups(lines, this.groups, (index) => !flagged(lines[index]!)).map(
-              ({ indexes, ...group }) => ({ ...group, lineIndexes: indexes }),
-            ),
-            remaining: lines.flatMap((line, index) => (flagged(line) ? [index] : [])),
-            leftOut: lines.flatMap((line, index) => (flagged(line) ? [index] : [])),
-          }
-        : draftSubmission(action, entries, this.courses, selected);
-    const preview = draftPreview(submission, entries);
-    const order = submission.groups.flatMap((group) => group.lineIndexes);
-    const place = new Map(order.map((index, position) => [index, position]));
-    const sent = order.map((index) => lines[index]!);
-    const detail: SubmitDraftDetail = {
-      lines: sent.map((line) => {
-        const wire: GroupLine = {
-          ...toWireProductIdentity(line.product),
-          quantity: line.quantity,
-          ...toWireLineExtras(line),
-          ...toWireModifiers(line),
-        };
-        if (line.courseId !== undefined) wire.courseId = line.courseId;
-        return wire;
-      }),
-      groups: submission.groups.map((group) => ({
-        release: group.release,
-        lineIndexes: group.lineIndexes.map((index) => place.get(index)!),
-        ...(group.joinGroupId === undefined ? {} : { joinGroupId: group.joinGroupId }),
-        ...(group.afterGroupId === undefined ? {} : { afterGroupId: group.afterGroupId }),
-      })),
-      ...(submission.joinGroupId === undefined ? {} : { joinGroupId: submission.joinGroupId }),
-      store,
-      sent,
-      draft: this.#draftOf(store),
-    };
-    const held = this.#heldInOrder;
-    const index = held.findIndex((group) => group.id === submission.joinGroupId);
-    this.sendTo = null;
-    this.pendingDraft = {
-      preview,
-      ...(index < 0 ? {} : { join: { group: held[index]!, index } }),
-      detail,
-      leftOut: (submission.leftOut ?? []).map((at) => lines[at]!),
-      action,
-      checking: check && sent.length > 0,
-      ...(deadEnds === undefined ? {} : { deadEnds }),
-    };
-    this.#watchPreview();
-    const dialog = this.renderRoot.querySelector<WtDialog>("[data-draft-preview]");
-    if (dialog) dialog.open = true;
-    if (check && sent.length > 0) {
-      const request = new CustomEvent("check-dead-ends", {
-        detail: { sent, checkId },
-        bubbles: true,
-        composed: true,
-        cancelable: true,
-      });
-      this.dispatchEvent(request);
-      if (!request.defaultPrevented) this.answerDeadEnds(sent, undefined, checkId);
-    }
-  }
-
-  reopenDraftPreview(sent: readonly OrderLine[]): void {
-    const last = this.#lastPreview;
-    if (last === undefined || sent.some((line) => !last.store.lines.includes(line))) return;
-    this.#openPreview(last.store, last.action);
-  }
-
   refreshDraftRouting(store: WorkingOrderStore, sent: readonly OrderLine[]): void {
     if (
       !this.isConnected ||
@@ -2096,8 +1870,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   currentDeadEndsCheck(checkId: number): boolean {
-    if (this.#automaticRouting?.checkId === checkId) return this.#automaticRoutingCurrent();
-    return this.pendingDraft !== null && this.#checkId === checkId;
+    return this.#automaticRouting?.checkId === checkId && this.#automaticRoutingCurrent();
   }
 
   answerDeadEnds(sent: readonly OrderLine[], answer?: DeadEndAnswer, checkId?: number): void {
@@ -2106,10 +1879,10 @@ export class TillTableOrderScreen extends LitElement {
     if (automatic !== undefined && automatic.checkId === checkId) {
       if (answer === undefined) return;
       const rows = answer.deadEnds.flatMap((row) => {
-        const line = automatic.sent[Number(row.key)];
+        const line = sent[Number(row.key)];
         return line === undefined ? [] : [[line, row] as const];
       });
-      for (const line of automatic.sent) this.#routingRows.delete(line);
+      for (const line of sent) this.#routingRows.delete(line);
       for (const [line, row] of rows) {
         if (
           line.makeAt !== undefined &&
@@ -2121,190 +1894,6 @@ export class TillTableOrderScreen extends LitElement {
       this.requestUpdate();
       return;
     }
-    const pending = this.pendingDraft;
-    if (
-      pending === null ||
-      pending.detail.store !== this.#draftStore ||
-      pending.detail.sent.length !== sent.length ||
-      pending.detail.sent.some((line, index) => line !== sent[index])
-    )
-      return;
-    const deadEnds =
-      answer === undefined
-        ? undefined
-        : {
-            rows: new Map(
-              answer.deadEnds.flatMap((row) => {
-                const line = sent[Number(row.key)];
-                if (
-                  line?.makeAt !== undefined &&
-                  !answer.stations.some((station) => station.id === line.makeAt)
-                )
-                  pending.detail.store.setLineMakeAt(
-                    pending.detail.store.lines.indexOf(line),
-                    undefined,
-                  );
-                return line === undefined ? [] : [[line, row] as const];
-              }),
-            ),
-            stations: answer.stations,
-          };
-    if (deadEnds !== undefined) {
-      for (const line of sent) this.#routingRows.delete(line);
-      for (const [line, row] of deadEnds.rows) {
-        this.#routingRows.set(line, { row, stations: deadEnds.stations });
-      }
-    }
-    this.pendingDraft = {
-      ...pending,
-      checking: false,
-      ...(deadEnds === undefined ? {} : { deadEnds }),
-    };
-  }
-
-  beginDeadEndsQuestion(sent: readonly OrderLine[], checkId?: number): void {
-    if (checkId !== undefined && !this.currentDeadEndsCheck(checkId)) return;
-    const pending = this.pendingDraft;
-    if (
-      pending === null ||
-      pending.detail.store !== this.#draftStore ||
-      pending.detail.sent.length !== sent.length ||
-      pending.detail.sent.some((line, index) => line !== sent[index])
-    )
-      return;
-    this.pendingDraft = { ...pending, checking: true };
-  }
-
-  #previewMakeAt(event: Event): void {
-    const pending = this.pendingDraft;
-    if (pending === null) return;
-    const { key, stationId } = (event as CustomEvent<{ key: string; stationId: string }>).detail;
-    const line = pending.detail.sent[Number(key)];
-    if (line === undefined) return;
-    pending.detail.store.setLineMakeAt(
-      pending.detail.store.lines.indexOf(line),
-      stationId || undefined,
-    );
-    this.requestUpdate();
-  }
-
-  #previewRemove(event: Event): void {
-    const pending = this.pendingDraft;
-    if (pending === null) return;
-    const { key } = (event as CustomEvent<{ key: string }>).detail;
-    const line = pending.detail.sent[Number(key)];
-    if (line === undefined) return;
-    const store = pending.detail.store;
-    const sendTo = this.sendTo;
-    store.removeLine(store.lines.indexOf(line));
-    const answer = pending.deadEnds;
-    const deadEnds =
-      answer === undefined
-        ? undefined
-        : {
-            stations: answer.stations,
-            rows: new Map([...answer.rows].filter(([item]) => item !== line)),
-          };
-    this.#openPreview(store, pending.action, false, deadEnds);
-    this.sendTo = sendTo;
-    this.#previewScope?.changed();
-  }
-
-  #confirmPreview(): void {
-    const pending = this.pendingDraft;
-    if (!this.isConnected || pending === null) return;
-    if (pending.checking || [...(pending.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt))
-      return;
-    this.pendingDraft = null;
-    this.#watchPreview();
-    this.renderRoot.querySelector<WtDialog>("[data-draft-preview]")!.closeAfter("saved");
-    // Sent by id even when it is the main bill: the server refuses a chosen bill that is no longer
-    // open, where sending none would put the order on the party's main bill as it stands then, or
-    // on a new one.
-    const chosen = this.sendTo;
-    this.#dispatch(
-      "submit-draft",
-      chosen === null ? pending.detail : { ...pending.detail, billId: chosen.value },
-    );
-  }
-
-  /**
-   * Where the open preview can send: the party's open bills, and first a new bill when the party has
-   * no open main bill. A chosen bill stays listed and checked after it stops being an open bill of
-   * the party, marked as such, because Confirm still sends it. `checked` is the value shown chosen;
-   * null when there is only one place to send to.
-   */
-  #sendToChoices(): {
-    choices: { value: string; label: string; closed: boolean }[];
-    checked: string;
-  } | null {
-    const party = this.party;
-    if (party === null) return null;
-    const chosen = this.sendTo;
-    const choices = this.#shownBills().flatMap((bill, index) =>
-      bill.partyId === party.id && (bill.status === "open" || bill.workingOrderId === chosen?.value)
-        ? [
-            {
-              value: bill.workingOrderId,
-              label: this.#billName(index),
-              closed: bill.status !== "open",
-            },
-          ]
-        : [],
-    );
-    if (chosen !== null && !choices.some((choice) => choice.value === chosen.value)) {
-      choices.push({ ...chosen, closed: true });
-    }
-    const openMain = this.#shownBills().find(
-      (bill) =>
-        bill.workingOrderId === party.mainBillId &&
-        bill.partyId === party.id &&
-        bill.status === "open",
-    );
-    if (openMain === undefined) {
-      choices.unshift({ value: "", label: t("table.send_to_new"), closed: false });
-    }
-    if (choices.length < 2) return null;
-    return { choices, checked: chosen?.value ?? openMain?.workingOrderId ?? "" };
-  }
-
-  #sendToChoice(): TemplateResult | typeof nothing {
-    const offered = this.#sendToChoices();
-    if (offered === null) return nothing;
-    return html`<fieldset class="send-to" data-send-to>
-      <legend>${t("table.send_to")}</legend>
-      ${offered.choices.map(
-        (choice) =>
-          html`<label class="send-to-option">
-            <input
-              type="radio"
-              name="billId"
-              .value=${choice.value}
-              .checked=${offered.checked === choice.value}
-              @change=${(event: Event) => {
-                event.stopPropagation();
-                if (
-                  !this.isConnected ||
-                  !this.pendingDraft ||
-                  !(event.currentTarget as HTMLElement).isConnected
-                )
-                  return;
-                this.sendTo =
-                  choice.value === "" ? null : { value: choice.value, label: choice.label };
-                this.#previewScope?.changed();
-              }}
-            />
-            <span
-              >${choice.label}${choice.closed ? ` ${t("table.send_to_not_open")}` : nothing}</span
-            >
-          </label>`,
-      )}
-    </fieldset>`;
-  }
-
-  #dismissPreview(): void {
-    this.pendingDraft = null;
-    this.#watchPreview();
   }
 
   #selectedCourseId(line: OrderLine): string {
@@ -2909,10 +2498,9 @@ export class TillTableOrderScreen extends LitElement {
           ${draft === null ? nothing : this.#ordering(draft)}
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
-        ${this.#previewDialog()} ${this.#fireGroupDialog()} ${this.#moveDialog()}
-        ${this.#serveDialog()} ${this.#changeEditor()} ${this.#takeOverDialog()}
-        ${this.#billChoiceDialog()} ${this.#nameDialog()} ${this.#guestsDialog()}
-        ${this.#splitGuestsDialog()}
+        ${this.#fireGroupDialog()} ${this.#moveDialog()} ${this.#serveDialog()}
+        ${this.#changeEditor()} ${this.#takeOverDialog()} ${this.#billChoiceDialog()}
+        ${this.#nameDialog()} ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
       </section>
     `;
   }
@@ -3521,8 +3109,7 @@ export class TillTableOrderScreen extends LitElement {
     detail = false,
   ): TemplateResult | typeof nothing {
     const routing = this.#routingRows.get(line);
-    if (routing === undefined || line.makeAt !== undefined || this.pendingDraft !== null)
-      return nothing;
+    if (routing === undefined || line.makeAt !== undefined) return nothing;
     if (!detail)
       return html`<div
         slot=${`after-${index}`}
@@ -3539,8 +3126,7 @@ export class TillTableOrderScreen extends LitElement {
       store.lines.includes(line) &&
       !store.editsLocked &&
       !store.sending &&
-      !this.groupCommandBusy &&
-      this.pendingDraft === null;
+      !this.groupCommandBusy;
     return html`<div class="draft-routing-detail" data-draft-routing-detail>
       <span aria-hidden="true">⚠</span>
       <till-dead-ends-section
@@ -3879,115 +3465,6 @@ export class TillTableOrderScreen extends LitElement {
         }}
         >${t("action.back")}</wt-button
       >
-    </wt-dialog>`;
-  }
-
-  #previewDialog(): TemplateResult {
-    const pending = this.pendingDraft;
-    const preview = pending?.preview;
-    const deadEnds =
-      pending?.deadEnds === undefined
-        ? undefined
-        : {
-            sends: true,
-            stations: pending.deadEnds.stations,
-            deadEnds: pending.detail.sent.flatMap((line, index) => {
-              const row = pending.deadEnds!.rows.get(line);
-              return row === undefined ? [] : [{ ...row, key: String(index) }];
-            }),
-          };
-    const waiting =
-      pending?.checking === true ||
-      [...(pending?.deadEnds?.rows.keys() ?? [])].some((line) => !line.makeAt);
-    return html`<wt-dialog
-      ${trackDialog()}
-      class="draft-preview"
-      data-draft-preview
-      .open=${pending !== null}
-      .heading=${t("table.preview_title")}
-      .beforeClose=${this.#previewScope ? this.#beforePreviewClose : undefined}
-      @wt-close=${(event: Event) => this.#previewClosed(event)}
-    >
-      <div class="preview-body" data-preview-body>
-        ${
-          pending !== null && pending.detail.sent.length === 0
-            ? html`<p data-preview-nothing>${t("table.nothing_sent")}</p>`
-            : nothing
-        }
-        ${
-          preview === undefined
-            ? nothing
-            : html`${
-                preview.fireItems > 0
-                  ? html`<p data-preview-fire>
-                      ${countText(preview.fireItems, "table.preview_fire", "table.preview_fire_one")}
-                    </p>`
-                  : nothing
-              }
-              ${
-                pending!.join !== undefined
-                  ? html`<p data-preview-join>
-                      ${countText(
-                        preview.holdItems,
-                        "table.preview_join",
-                        "table.preview_join_one",
-                      ).replace("{group}", () =>
-                        heldGroupLabel(pending!.join!.group, pending!.join!.index),
-                      )}
-                    </p>`
-                  : preview.holdGroups > 0
-                    ? html`<p data-preview-hold>
-                        ${countText(preview.holdGroups, "table.preview_hold", "table.preview_hold_one")}
-                      </p>`
-                    : nothing
-              }`
-        }
-        ${
-          pending === null || pending.leftOut.length === 0
-            ? nothing
-            : html`<p data-preview-left-out>${leftOutText(pending.leftOut)}</p>`
-        }
-        ${pending === null || pending.detail.sent.length === 0 ? nothing : this.#sendToChoice()}
-        ${
-          deadEnds?.deadEnds.length
-            ? html`<till-dead-ends-section
-                .answer=${deadEnds}
-                .choices=${new Map(
-                  deadEnds.deadEnds.flatMap((row) => {
-                    const stationId = pending?.detail.sent[Number(row.key)]?.makeAt;
-                    return stationId === undefined ? [] : [[row.key, stationId] as const];
-                  }),
-                )}
-                .allowRemove=${true}
-                @make-at=${(event: Event) => this.#previewMakeAt(event)}
-                @remove=${(event: Event) => this.#previewRemove(event)}
-              ></till-dead-ends-section>`
-            : nothing
-        }
-      </div>
-      <div slot="footer" class="cancel-actions">
-        <wt-button
-          class="preview-back"
-          variant="secondary"
-          data-draft-dismiss
-          @click=${() => this.#requestPreviewClose()}
-        >
-          ${t("action.back")}
-        </wt-button>
-        ${
-          pending !== null && pending.detail.sent.length === 0
-            ? nothing
-            : html`<wt-button
-                class="preview-confirm"
-                variant=${waiting ? "secondary" : "primary"}
-                data-draft-confirm
-                ?disabled=${waiting}
-                @click=${() => this.#confirmPreview()}
-              >
-                ${t("table.preview_confirm")}
-              </wt-button>`
-        }
-      </div>
     </wt-dialog>`;
   }
 

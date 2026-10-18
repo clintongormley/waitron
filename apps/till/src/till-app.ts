@@ -82,7 +82,6 @@ import {
   pause,
   resendUnanswered,
   type DraftRefused,
-  type DraftSaveOutcome,
   type RetainedDraftCandidate,
 } from "./state/draft-sync.js";
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
@@ -2620,7 +2619,6 @@ export class TillApp extends LitElement {
   #editDeadEndsClose?: (reason: LeaveReason) => Promise<boolean>;
   @state() private deadEndsQuestion: { answer: DeadEndAnswer; allowRemove: boolean } | null = null;
   #resolveDeadEnds?: (decision: DeadEndsDecision | null) => void;
-  #previewSaveOutcome?: { sent: readonly OrderLine[]; outcome: DraftSaveOutcome };
   /** Defaults to prepay, so an unresolved boot never shows the Place/Collect controls. */
   @state() private orderFlow: OrderFlow = "prepay";
   @state() private onboardingIntent?: TillInfo["onboardingIntent"];
@@ -10151,18 +10149,14 @@ export class TillApp extends LitElement {
 
   async #onCheckDeadEnds(event: Event): Promise<void> {
     event.preventDefault();
-    const {
-      sent,
-      checkId,
-      automatic = false,
-    } = (event as CustomEvent<{ sent: readonly OrderLine[]; checkId: number; automatic?: boolean }>)
-      .detail;
+    const { sent, checkId } = (
+      event as CustomEvent<{ sent: readonly OrderLine[]; checkId: number }>
+    ).detail;
     const screen = event
       .composedPath()
       .find((node) => node instanceof HTMLElement && node.tagName === "TILL-TABLE-ORDER-SCREEN") as
       TillTableOrderScreen | undefined;
     if (screen === undefined) return;
-    if (!automatic) this.#previewSaveOutcome = undefined;
     const sync = this.#draftSync;
     const party = this.orderParty;
     if (sync === undefined || party === null) {
@@ -10183,26 +10177,12 @@ export class TillApp extends LitElement {
       sync.revision === revision &&
       this.#draftRoutingRevision(sync.store) === revision &&
       !sync.store.editsLocked;
-    if (automatic && !current()) return;
+    if (!current()) return;
     const request = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const saved = automatic ? "saved" : await sync.flush(request.signal);
-      if (saved !== "saved") {
-        if (
-          (saved === "failed" || saved.refused !== "session.required") &&
-          session === this.#operatorSession &&
-          sync === this.#draftSync
-        )
-          this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved);
-        if (screen.currentDeadEndsCheck(checkId))
-          this.#previewSaveOutcome = { sent, outcome: saved };
-        return;
-      }
-      if (automatic && !current()) return;
       const positions = sent.map((line) => sync.store.lines.indexOf(line));
       const ids = positions.includes(-1) ? null : sync.lineIds(positions);
       if (ids === null || sync.draftId === null) return;
-      screen.beginDeadEndsQuestion(sent, checkId);
       const question = limited(3_000, request.signal);
       let answer: DeadEndAnswer | undefined;
       try {
@@ -10214,7 +10194,7 @@ export class TillApp extends LitElement {
         question.done();
       }
       if (answer === undefined) return;
-      if (session !== this.#operatorSession || (automatic && !current())) return;
+      if (!current()) return;
       const byId = new Map(ids.map((id, index) => [id, index]));
       screen.answerDeadEnds(
         sent,
@@ -10263,14 +10243,7 @@ export class TillApp extends LitElement {
     const send = limited(TABLE_REQUEST_LIMIT_MS);
     let submitted: SubmittedDraft;
     try {
-      const checked = this.#previewSaveOutcome;
-      this.#previewSaveOutcome = undefined;
-      const saved =
-        checked !== undefined &&
-        checked.sent.length === sent.length &&
-        checked.sent.every((line, index) => line === sent[index])
-          ? checked.outcome
-          : await sync.flush(send.signal);
+      const saved = await sync.flush(send.signal);
       if (!live()) return;
       if (saved !== "saved") {
         if (

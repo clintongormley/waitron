@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { t } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -10,6 +11,7 @@ import "./till-table-order-screen.js";
 import "../widgets/adjustment-dialog.js";
 import type {
   AdjustDetail,
+  SubmitDraftDetail,
   TableServiceStatus,
   TillTableOrderScreen,
 } from "./till-table-order-screen.js";
@@ -430,16 +432,25 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(selected.host);
     });
 
-    it("has no violations in the preview dialog", async () => {
+    it("has no violations after selected Fire, without another confirmation", async () => {
       const { el, host } = await withDraft({}, true);
-      el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-selected"]')!.click();
+      const submitted: SubmitDraftDetail[] = [];
+      el.addEventListener("submit-draft", (event) =>
+        submitted.push((event as CustomEvent<SubmitDraftDetail>).detail),
+      );
+      await openReview(el);
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-selected"]')!,
+      );
       await el.updateComplete;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await el.updateComplete;
+      expect(submitted).toHaveLength(1);
+      expect(submitted[0]!.lines).toEqual([{ menuItemId: "offer-cafe", quantity: "1" }]);
+      expect(submitted[0]!.groups).toEqual([{ release: "fire", lineIndexes: [0] }]);
+      expect(el.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the preview's Send to choice", async () => {
+    it("has no violations after direct Send with several bills, without a destination choice", async () => {
       const { el, host } = await withDraft(
         {
           party,
@@ -450,16 +461,30 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         },
         false,
       );
-      el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!.click();
+      const own = el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!.store;
+      const submitted: SubmitDraftDetail[] = [];
+      el.addEventListener("submit-draft", (event) =>
+        submitted.push((event as CustomEvent<SubmitDraftDetail>).detail),
+      );
+      await openReview(el);
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
+      );
       await el.updateComplete;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await el.updateComplete;
-      if (el.shadowRoot!.querySelector("[data-send-to]") === null)
-        throw new Error("the scan must include the Send to choice");
+      expect(submitted).toHaveLength(1);
+      expect(submitted[0]!.store).toBe(own);
+      expect(submitted[0]!.sent).toEqual([...own.lines]);
+      expect(submitted[0]!.lines).toEqual([
+        { menuItemId: "offer-cafe", quantity: "1" },
+        { menuItemId: "offer-cafe", quantity: "2" },
+      ]);
+      expect(submitted[0]!).not.toHaveProperty("billId");
+      expect(el.shadowRoot!.querySelector("[data-send-to]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in a later addition's destination and held-group picker", async () => {
+    it("has no violations in Move to with the later addition's held-group choices", async () => {
       const group = (id: string, position: number, state: OrderGroup["state"]): OrderGroup => ({
         courseIds: [],
         id,
@@ -474,11 +499,20 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       });
       const { el, host } = await withDraft(
         { groups: [group("g1", 1, "fired"), group("g2", 2, "held"), group("g3", 3, "held")] },
-        false,
+        true,
       );
-      el.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
-      await el.updateComplete;
       await openReview(el);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-draft-move]")!);
+      await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-draft-move-dialog]")!
+          .open,
+      ).toBe(true);
+      expect(
+        [...el.shadowRoot!.querySelectorAll('[data-draft-move-to^="join:"]')].map((choice) =>
+          choice.getAttribute("data-draft-move-to"),
+        ),
+      ).toEqual(["join:g2", "join:g3"]);
       await expectNoA11yViolations(host);
     });
   });

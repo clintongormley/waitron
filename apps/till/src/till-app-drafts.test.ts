@@ -5851,10 +5851,7 @@ describe("till-app: a draft line that cannot be sold now", () => {
     ).toBe(true);
     await act(el, "send-all");
     expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
-    expect(
-      screen(el).querySelector<HTMLElement & { open: boolean }>("[data-draft-preview]")?.open ??
-        false,
-    ).toBe(false);
+    expect(screen(el).querySelector("[data-draft-preview]")).toBeNull();
     expect(api.submitDraft).not.toHaveBeenCalled();
   });
 
@@ -9105,11 +9102,7 @@ describe("automatic saved-draft routing", () => {
       expect(api.saveDraft).toHaveBeenCalledOnce();
       expect(api.submitDraft).not.toHaveBeenCalled();
       expect(rows(el)).toEqual(["Beer ×1"]);
-      expect(
-        tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-          "[data-draft-preview]",
-        )!.open,
-      ).toBe(false);
+      expect(tableOrder(el)!.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
     },
   );
 });
@@ -9223,11 +9216,7 @@ describe("direct New order actions", () => {
     expect(askDraftDeadEnds).toHaveBeenCalledTimes(2);
     expect(rows(el)).toEqual(["Beer ×1"]);
     expect(savedLines()).toEqual(["offer-beer ×1"]);
-    expect(
-      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-        "[data-draft-preview]",
-      )!.open,
-    ).toBe(false);
+    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-draft-preview]")).toBeNull();
   });
   it("retains the whole outbox and sends nothing when its save is refused", async () => {
     const { el } = await mountApp({
