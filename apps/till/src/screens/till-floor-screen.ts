@@ -929,23 +929,22 @@ export class TillFloorScreen extends LitElement {
   }
 
   #markMoved(table: TableState): void {
-    this.moving = null;
-    const api = this.api;
-    if (api === undefined || !this.tables.some((current) => current.id === table.id)) return;
-    this.refusal = null;
-    void this.#settle(
-      this.#send(this.#revision(table.zoneId), (sent) => api.markMovedToday(table.id, sent)),
-    );
+    this.#sendTodayAction(table, (api, sent) => api.markMovedToday(table.id, sent));
   }
 
   #leaveHere(table: TableState): void {
+    this.#sendTodayAction(table, (api, sent) => api.leaveHereToday(table.id, sent));
+  }
+
+  #sendTodayAction(
+    table: TableState,
+    call: (api: TillApi, revision: number) => Promise<FloorAnswer>,
+  ): void {
     this.moving = null;
     const api = this.api;
     if (api === undefined || !this.tables.some((current) => current.id === table.id)) return;
     this.refusal = null;
-    void this.#settle(
-      this.#send(this.#revision(table.zoneId), (sent) => api.leaveHereToday(table.id, sent)),
-    );
+    void this.#settle(this.#send(this.#revision(table.zoneId), (sent) => call(api, sent)));
   }
 
   #emit(type: string, detail: unknown): void {
@@ -2124,8 +2123,7 @@ export class TillFloorScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  /** A card is one button, so a table needing clearing or moving, whose card holds its own Mark
-   * cleared or Mark moved, is a plain box instead. */
+  /** A card is one button, so a table needing clearing or moving is a plain box instead. */
   #waitingCard(table: TableState, kind: Waiting): TemplateResult {
     const words = WAITING[kind];
     const clear = kind === "clear";
@@ -2162,7 +2160,6 @@ export class TillFloorScreen extends LitElement {
     </div>`;
   }
 
-  /** Mark moved changes today's plan, so it needs a device that may; Mark cleared does not. */
   #actsOn(kind: Waiting): boolean {
     return kind === "clear" || this.canChangeToday;
   }

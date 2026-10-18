@@ -445,6 +445,7 @@ describe("till-floor-screen: a table that needs moving", () => {
     await settle(el);
 
     expect(api.leaveHereToday).toHaveBeenCalledWith("t3", 6);
+    expect(api.markMovedToday).not.toHaveBeenCalled();
   });
 
   it("asks the floor to read again once Leave it here is answered", async () => {
