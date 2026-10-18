@@ -870,6 +870,18 @@ const en = {
   "floor_plans.start_from_required": "Choose a set to start from.",
   "floor_plans.name_taken": "Another set of this department already has this name.",
   "floor_plans.set_gone": "This set no longer exists.",
+  "floor_plans.make_default": "Make default",
+  "floor_plans.delete": "Delete…",
+  "floor_plans.delete_heading": "Delete {set}?",
+  "floor_plans.delete_named": "Delete {set}",
+  "floor_plans.delete_used_by": "Used by {periods}.",
+  "floor_plans.delete_unused": "No period uses it.",
+  "floor_plans.delete_tables_stay": "The tables stay: every set shares them.",
+  "floor_plans.delete_on_floor":
+    "On the floor, {zones} keep today's layout until someone presses Update layout.",
+  "floor_plans.replace_default": "{set} (default)",
+  "floor_plans.replace_invalid": "Choose another set.",
+  "floor_plans.is_default": "The default set cannot be deleted.",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -1766,6 +1778,18 @@ const es: Record<keyof typeof en, string> = {
   "floor_plans.start_from_required": "Elige un conjunto del que partir.",
   "floor_plans.name_taken": "Otro conjunto de este departamento ya tiene este nombre.",
   "floor_plans.set_gone": "Este conjunto ya no existe.",
+  "floor_plans.make_default": "Hacer predeterminado",
+  "floor_plans.delete": "Eliminar…",
+  "floor_plans.delete_heading": "¿Eliminar {set}?",
+  "floor_plans.delete_named": "Eliminar {set}",
+  "floor_plans.delete_used_by": "Usado por {periods}.",
+  "floor_plans.delete_unused": "Ningún periodo lo usa.",
+  "floor_plans.delete_tables_stay": "Las mesas se quedan: son comunes a todos los conjuntos.",
+  "floor_plans.delete_on_floor":
+    "En sala, {zones} mantienen el plano de hoy hasta que alguien pulse Actualizar plano.",
+  "floor_plans.replace_default": "{set} (predeterminado)",
+  "floor_plans.replace_invalid": "Elige otro conjunto.",
+  "floor_plans.is_default": "El conjunto predeterminado no se puede eliminar.",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };

@@ -129,6 +129,34 @@ describe("VenueServiceApi", () => {
     ]);
   });
 
+  it("makes a set the default, reads what deleting one changes, and deletes it", async () => {
+    const impact = { periods: [{ id: "p1", name: "Dinner" }], zonesShowing: [] };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(undefined, 204))
+      .mockResolvedValueOnce(jsonResponse(impact))
+      .mockResolvedValueOnce(jsonResponse(undefined, 204))
+      .mockResolvedValueOnce(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await api.makeDefaultFloorPlanSet("s2");
+    expect(await api.readFloorPlanSetDeleteImpact("s2")).toEqual(impact);
+    await api.deleteFloorPlanSet("s2", null);
+    await api.deleteFloorPlanSet("s2", "s3");
+    const base = "/management-api/venue-service/floor-plan-sets";
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        init.body === undefined ? undefined : JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      [`${base}/s2/make-default`, "POST", undefined],
+      [`${base}/s2/delete-impact`, "GET", undefined],
+      [`${base}/s2/delete`, "POST", { replaceWith: null }],
+      [`${base}/s2/delete`, "POST", { replaceWith: "s3" }],
+    ]);
+  });
+
   it("writes one department field and clears one zone override", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));

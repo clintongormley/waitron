@@ -1,5 +1,5 @@
 import type { DeleteImpact } from "@waitron/shared";
-import type { FloorPlanSetsModel } from "../floor-plan-set-types.js";
+import type { FloorPlanSetDeleteImpact, FloorPlanSetsModel } from "../floor-plan-set-types.js";
 import type { LocalDate } from "../hours-types.js";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -244,6 +244,29 @@ export class VenueServiceApi {
 
   copyFloorPlanSet(setId: string, name: string): Promise<{ setId: string }> {
     return this.request(`${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}/copy`, "POST", { name });
+  }
+
+  makeDefaultFloorPlanSet(setId: string): Promise<void> {
+    return this.request(`${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}/make-default`, "POST");
+  }
+
+  readFloorPlanSetDeleteImpact(
+    setId: string,
+    options?: { passive?: boolean },
+  ): Promise<FloorPlanSetDeleteImpact> {
+    return this.request(
+      `${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}/delete-impact`,
+      "GET",
+      undefined,
+      options,
+    );
+  }
+
+  /** A null `replaceWith` hands the set's periods to the department's default. */
+  deleteFloorPlanSet(setId: string, replaceWith: string | null): Promise<void> {
+    return this.request(`${FLOOR_PLAN_SETS}/${encodeURIComponent(setId)}/delete`, "POST", {
+      replaceWith,
+    });
   }
 
   /** After a set write, so the page shows it even when the change feed delivers nothing. */

@@ -14,6 +14,7 @@ afterEach(() => {
   setLocale("en");
 });
 
+const FLOOR_PLAN_SETS = "/management-api/venue-service/floor-plan-sets";
 type Write = { path: string; method: string; body: unknown };
 async function mountScreen(
   options: {
@@ -21,6 +22,10 @@ async function mountScreen(
     model?: FloorPlanSetsModel;
     /** Answers a write; a throw is the request's refusal. */
     write?: (write: Write) => unknown;
+    /** Answers a read other than the page's own; a throw is the read's failure. */
+    read?: (path: string) => unknown;
+    /** Answers each of the page's own reads, in place of `model`. */
+    page?: () => FloorPlanSetsModel;
   } = {},
 ): Promise<{
   screen: FloorPlansScreen;
@@ -36,7 +41,8 @@ async function mountScreen(
       return options.write?.({ path, method, body });
     }
     paths.push(`${path} ${JSON.stringify(init ?? {})}`);
-    return options.model ?? casaMarina();
+    if (options.read && path !== FLOOR_PLAN_SETS) return options.read(path);
+    return options.page?.() ?? options.model ?? casaMarina();
   }) as DashboardRequest;
   const screen = document.createElement("dashboard-floor-plans-screen") as FloorPlansScreen;
   screen.api = new VenueServiceApi(request);
@@ -344,4 +350,154 @@ it("keeps the dialog open and marks Name when the name is taken", async () => {
     )
     .toBe("Another set of this department already has this name.");
   expect(dialog.busy).toBe(false);
+});
+
+it("offers Make default and Delete… on a set that is not the default, and neither on the default", async () => {
+  const { table } = await mountScreen();
+  expect(menuItems(table, "set:standard").map((item) => text(item))).toEqual(["Rename…", "Copy…"]);
+  expect(menuItems(table, "set:dinner").map((item) => text(item))).toEqual([
+    "Rename…",
+    "Copy…",
+    "Make default",
+    "Delete…",
+  ]);
+  expect(menuItems(table, "set:bar-standard").map((item) => text(item))).toEqual([
+    "Rename…",
+    "Copy…",
+  ]);
+});
+
+it("Make default sends one request and the list follows its live read", async () => {
+  let model = casaMarina();
+  const { table, writes, paths } = await mountScreen({
+    write: () => {
+      model = casaMarina();
+      const sets = model.departments[0]!.sets;
+      sets[0]!.isDefault = false;
+      sets[1]!.isDefault = true;
+      return undefined;
+    },
+    page: () => model,
+  });
+  menuItems(table, "set:dinner")
+    .find((item) => text(item) === "Make default")!
+    .click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes).toEqual([
+    { path: `${FLOOR_PLAN_SETS}/dinner/make-default`, method: "POST", body: undefined },
+  ]);
+  await expect.poll(() => paths.length).toBe(2);
+  await expect.poll(() => text(cell(table, "set:dinner", "name"))).toBe("Dinner Default");
+  expect(text(cell(table, "set:standard", "name"))).toBe("Standard");
+});
+
+it("says so when Make default is refused", async () => {
+  const { screen, table } = await mountScreen({
+    write: () => {
+      throw Object.assign(new Error("gone"), { code: "floor_plan_set.not_found", params: {} });
+    },
+  });
+  menuItems(table, "set:dinner")
+    .find((item) => text(item) === "Make default")!
+    .click();
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=action-error]")?.textContent)
+    .toBe("This set no longer exists.");
+});
+
+const deleteDialogOf = (screen: FloorPlansScreen) =>
+  screen.shadowRoot!.querySelector("dashboard-floor-plan-set-delete-dialog");
+const dinnerImpact = {
+  periods: [{ id: "dinner-period", name: "Dinner" }],
+  zonesShowing: [{ id: "inside", name: "Inside" }],
+};
+
+it("Delete… reads the impact, offers the default, and deletes with the choice", async () => {
+  const { screen, table, writes, paths } = await mountScreen({
+    read: () => dinnerImpact,
+    write: () => undefined,
+  });
+  menuItems(table, "set:dinner")
+    .find((item) => text(item) === "Delete…")!
+    .click();
+  await screen.updateComplete;
+  const dialog = deleteDialogOf(screen)!;
+  expect(dialog.set).toEqual({ id: "dinner", name: "Dinner" });
+  await expect.poll(() => dialog.impact).toEqual(dinnerImpact);
+  expect(paths).toContain(`${FLOOR_PLAN_SETS}/dinner/delete-impact {}`);
+  await dialog.updateComplete;
+  const body = [...dialog.shadowRoot!.querySelectorAll("[data-test=body] p")].map((p) => text(p));
+  expect(body).toEqual([
+    "Used by Dinner.",
+    "The tables stay: every set shares them.",
+    "On the floor, Inside keep today's layout until someone presses Update layout.",
+  ]);
+  const field =
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=replaceWith]")!;
+  expect(field.options).toEqual([
+    { value: "", label: "Standard (default)", muted: true },
+    { value: "private", label: "Private party" },
+  ]);
+  const button = dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
+  expect(text(button)).toBe("Delete Dinner");
+  button.click();
+  await expect.poll(() => deleteDialogOf(screen)).toBeNull();
+  expect(writes).toEqual([
+    { path: `${FLOOR_PLAN_SETS}/dinner/delete`, method: "POST", body: { replaceWith: null } },
+  ]);
+  await expect
+    .poll(() => paths.filter((path) => path.startsWith(`${FLOOR_PLAN_SETS} `)))
+    .toHaveLength(2);
+});
+
+it("Delete… says when the impact cannot be read, and reads it again on Try again", async () => {
+  let fail = true;
+  const { screen, table } = await mountScreen({
+    read: () => {
+      if (fail) throw new Error("offline");
+      return dinnerImpact;
+    },
+  });
+  menuItems(table, "set:dinner")
+    .find((item) => text(item) === "Delete…")!
+    .click();
+  await screen.updateComplete;
+  const dialog = deleteDialogOf(screen)!;
+  await expect.poll(() => dialog.readError).toBe("What deleting it changes could not be read.");
+  fail = false;
+  await dialog.updateComplete;
+  dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=retry-delete]")!.click();
+  await expect.poll(() => dialog.impact).toEqual(dinnerImpact);
+  expect(dialog.readError).toBe("");
+});
+
+it("keeps the delete dialog open with the refusal when the delete is refused", async () => {
+  const { screen, table } = await mountScreen({
+    read: () => dinnerImpact,
+    write: () => {
+      throw Object.assign(new Error("default"), { code: "floor_plan_set.is_default", params: {} });
+    },
+  });
+  menuItems(table, "set:dinner")
+    .find((item) => text(item) === "Delete…")!
+    .click();
+  await screen.updateComplete;
+  const dialog = deleteDialogOf(screen)!;
+  await expect.poll(() => dialog.impact).toEqual(dinnerImpact);
+  await dialog.updateComplete;
+  dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+  await expect.poll(() => dialog.refusal?.code).toBe("floor_plan_set.is_default");
+  expect(deleteDialogOf(screen)).toBe(dialog);
+  expect(dialog.busy).toBe(false);
+});
+
+it("speaks Spanish in the set menu", async () => {
+  setLocale("es");
+  const { table } = await mountScreen();
+  expect(menuItems(table, "set:dinner").map((item) => text(item))).toEqual([
+    "Renombrar…",
+    "Copiar…",
+    "Hacer predeterminado",
+    "Eliminar…",
+  ]);
 });

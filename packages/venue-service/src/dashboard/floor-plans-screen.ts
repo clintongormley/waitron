@@ -13,6 +13,12 @@ import type {
   FloorPlanSetSave,
 } from "./floor-plan-set-dialog.js";
 import "./floor-plan-set-dialog.js";
+import type {
+  FloorPlanSetDeleteConfirm,
+  FloorPlanSetDeleteDialog,
+  FloorPlanSetDeleteImpact,
+} from "./floor-plan-set-delete-dialog.js";
+import "./floor-plan-set-delete-dialog.js";
 import { format } from "./hours-view.js";
 import { PERIOD_COLOUR_TOKENS } from "./period-colour-styles.js";
 import { refusalOf } from "./refusal.js";
@@ -31,6 +37,16 @@ type Row =
       zone: Zone;
       layout: FloorPlanSet["layouts"][number];
     };
+
+type Deletion = {
+  department: Department;
+  set: { id: string; name: string };
+  /** The latest impact read; an answer to an earlier one is ignored. */
+  generation: number;
+  impact?: FloorPlanSetDeleteImpact;
+  readError: string;
+  busy: boolean;
+};
 
 const PAGE = "/manage/floor-plans";
 
@@ -143,6 +159,8 @@ export class FloorPlansScreen extends LitElement {
   @state() private readError = "";
   @state() private editing?: { mode: FloorPlanSetMode; set?: { id: string; name: string } };
   @state() private busy = false;
+  @state() private deleting?: Deletion;
+  @state() private actionError = "";
   private detach?: () => void;
 
   override connectedCallback() {
@@ -254,11 +272,123 @@ export class FloorPlansScreen extends LitElement {
       <wt-button variant="secondary" data-test="copy-set" @click=${() => this.edit("copy", set)}
         >${t("floor_plans.copy")}</wt-button
       >
+      ${
+        row.set.isDefault
+          ? nothing
+          : html`<wt-button
+                variant="secondary"
+                data-test="make-default-set"
+                @click=${() => void this.makeDefault(set.id)}
+                >${t("floor_plans.make_default")}</wt-button
+              ><wt-button
+                variant="secondary"
+                data-test="delete-set"
+                @click=${() => this.askDelete(row.department, set)}
+                >${t("floor_plans.delete")}</wt-button
+              >`
+      }
     </wt-row-actions>`;
   }
 
+  private async makeDefault(setId: string) {
+    if (this.readOnly || this.busy) return;
+    this.busy = true;
+    this.actionError = "";
+    try {
+      await this.api.makeDefaultFloorPlanSet(setId);
+    } catch (error) {
+      this.actionError =
+        refusalOf(error).code === "floor_plan_set.not_found"
+          ? t("floor_plans.set_gone")
+          : t("menu.save_error");
+      return;
+    } finally {
+      this.busy = false;
+    }
+    this.api.rereadFloorPlanSets();
+  }
+
+  private askDelete(department: Department, set: { id: string; name: string }) {
+    if (this.readOnly || !this.isConnected || this.editing || this.deleting) return;
+    const deletion: Deletion = { department, set, generation: 0, readError: "", busy: false };
+    this.deleting = deletion;
+    void this.readImpact(deletion);
+  }
+
+  private async readImpact(deletion: Deletion) {
+    const generation = ++deletion.generation;
+    const current = () => this.deleting === deletion && deletion.generation === generation;
+    let impact: FloorPlanSetDeleteImpact;
+    try {
+      impact = await this.api.readFloorPlanSetDeleteImpact(deletion.set.id);
+    } catch {
+      if (current()) {
+        deletion.readError = t("period.delete_read_error");
+        this.requestUpdate();
+      }
+      return;
+    }
+    if (!current()) return;
+    deletion.impact = impact;
+    deletion.readError = "";
+    this.requestUpdate();
+  }
+
+  private async confirmDelete(event: CustomEvent<FloorPlanSetDeleteConfirm>) {
+    event.stopPropagation();
+    const deletion = this.deleting;
+    const dialog = event.currentTarget as FloorPlanSetDeleteDialog;
+    if (!deletion?.impact || deletion.busy || this.readOnly || !this.isConnected) return;
+    if (event.detail.setId !== deletion.set.id) return;
+    deletion.busy = true;
+    dialog.refusal = undefined;
+    this.requestUpdate();
+    try {
+      await this.api.deleteFloorPlanSet(deletion.set.id, event.detail.replaceWith);
+    } catch (error) {
+      if (this.deleting === deletion) dialog.refusal = refusalOf(error);
+      return;
+    } finally {
+      deletion.busy = false;
+      this.requestUpdate();
+    }
+    if (this.deleting === deletion) this.deleting = undefined;
+    this.api.rereadFloorPlanSets();
+  }
+
+  private renderDeletion() {
+    const deletion = this.deleting;
+    if (!deletion) return nothing;
+    const sets = deletion.department.sets;
+    const defaultSet = sets.find(({ isDefault }) => isDefault);
+    return keyed(
+      deletion,
+      html`<dashboard-floor-plan-set-delete-dialog
+        .open=${true}
+        .set=${deletion.set}
+        .defaultSet=${defaultSet && { id: defaultSet.id, name: defaultSet.name }}
+        .replacements=${sets
+          .filter(({ id, isDefault }) => !isDefault && id !== deletion.set.id)
+          .map(({ id, name }) => ({ id, name }))}
+        .impact=${deletion.impact}
+        .readError=${deletion.readError}
+        .busy=${deletion.busy}
+        @floor-plan-set-delete-confirm=${(event: CustomEvent<FloorPlanSetDeleteConfirm>) =>
+          void this.confirmDelete(event)}
+        @floor-plan-set-delete-retry=${(event: Event) => {
+          event.stopPropagation();
+          if (this.deleting === deletion && !deletion.busy) void this.readImpact(deletion);
+        }}
+        @floor-plan-set-delete-close=${(event: Event) => {
+          event.stopPropagation();
+          if (this.deleting === deletion && !deletion.busy) this.deleting = undefined;
+        }}
+      ></dashboard-floor-plan-set-delete-dialog>`,
+    );
+  }
+
   private edit(mode: FloorPlanSetMode, set?: { id: string; name: string }) {
-    if (this.readOnly || !this.model || this.editing) return;
+    if (this.readOnly || !this.model || this.editing || this.deleting) return;
     this.editing = { mode, set };
   }
 
@@ -347,6 +477,11 @@ export class FloorPlansScreen extends LitElement {
       </div>
       ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}
       ${
+        this.actionError
+          ? html`<p role="alert" data-test="action-error">${this.actionError}</p>`
+          : nothing
+      }
+      ${
         !model
           ? nothing
           : model.departments.length === 0
@@ -367,7 +502,8 @@ export class FloorPlansScreen extends LitElement {
                 .rowCellParts=${(row: Row) => (row.kind === "department" ? "department-cell" : "")}
               ></wt-data-table>`
       }
-      ${this.readOnly ? nothing : this.renderDialog()}`;
+      ${this.readOnly ? nothing : this.renderDialog()}
+      ${this.readOnly ? nothing : this.renderDeletion()}`;
   }
 }
 

@@ -15,3 +15,9 @@ export interface FloorPlanSetsModel {
     }[];
   }[];
 }
+
+/** What deleting a set changes: the periods that name it, and the zones showing it today. */
+export interface FloorPlanSetDeleteImpact {
+  periods: { id: string; name: string }[];
+  zonesShowing: { id: string; name: string }[];
+}
