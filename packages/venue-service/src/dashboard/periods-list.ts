@@ -128,8 +128,6 @@ export class PeriodsList extends LitElement {
   @state() private painted?: Map<string, PaintedIn>;
   @state() private readError = "";
   @state() private paintedInError = "";
-  @state() private floorPlans?: FloorPlanSetsModel;
-  @state() private floorPlansError = "";
   private periods = new PeriodEditing(this, {
     api: () => this.api,
     model: () => this.model!,
@@ -140,12 +138,11 @@ export class PeriodsList extends LitElement {
     readOnly: () => this.readOnly,
     draftParent: () => this.draftParent,
     onDelete: (_department, period) => this.askDelete(period),
-    floorPlans: () => this.floorPlans,
+    keepFloorPlans: true,
   });
   @state() private deleting?: Deletion;
   private detach?: () => void;
   private paintedDetach?: () => void;
-  private floorPlansDetach?: () => void;
 
   override connectedCallback() {
     super.connectedCallback();
@@ -175,26 +172,13 @@ export class PeriodsList extends LitElement {
         this.paintedInError = "";
       },
     );
-    this.floorPlansDetach = this.api.watchFloorPlanSets(
-      (model) => {
-        this.floorPlans = model;
-        this.floorPlansError = "";
-      },
-      () => {
-        this.floorPlansError = t("floor_plans.load_error");
-      },
-      () => {
-        this.floorPlansError = "";
-      },
-    );
+    this.periods.watchFloorPlans();
   }
   override disconnectedCallback() {
     this.detach?.();
     this.paintedDetach?.();
-    this.floorPlansDetach?.();
     this.detach = undefined;
     this.paintedDetach = undefined;
-    this.floorPlansDetach = undefined;
     super.disconnectedCallback();
   }
 
@@ -245,7 +229,7 @@ export class PeriodsList extends LitElement {
     departments: Map<string, FloorPlanSetsModel["departments"][number]>;
   };
   private plannedDepartments() {
-    const floorPlans = this.floorPlans;
+    const floorPlans = this.periods.floorPlans;
     if (!floorPlans) return undefined;
     if (this.planned?.floorPlans !== floorPlans)
       this.planned = {
@@ -261,7 +245,7 @@ export class PeriodsList extends LitElement {
   private floorPlanCell(row: PeriodRow) {
     if (row.kind !== "period") return nothing;
     const sets = this.plannedDepartments()?.get(row.departmentId)?.sets ?? [];
-    const chosen = sets.find(({ id }) => id === row.floorPlanSetId);
+    const chosen = sets.find(({ id, isDefault }) => !isDefault && id === row.floorPlanSetId);
     if (chosen) return chosen.name;
     const fallback = sets.find(({ isDefault }) => isDefault);
     if (!fallback) return nothing;
@@ -367,7 +351,7 @@ export class PeriodsList extends LitElement {
       </div>
       ${this.readError ? html`<p role="alert" data-test="read-error">${this.readError}</p>` : nothing}
       ${this.paintedInError ? html`<p role="alert" data-test="painted-in-error">${this.paintedInError}</p>` : nothing}
-      ${this.floorPlansError ? html`<p role="alert" data-test="floor-plans-error">${this.floorPlansError}</p>` : nothing}
+      ${this.periods.floorPlansFailed ? html`<p role="alert" data-test="floor-plans-error">${t("floor_plans.load_error")}</p>` : nothing}
       ${
         !model
           ? nothing

@@ -732,3 +732,24 @@ it("says when the floor plan sets cannot be read", async () => {
     .poll(() => el.shadowRoot!.querySelector("[data-test=floor-plans-error]")?.textContent)
     .toBe("Floor plans could not be loaded. It will be tried again.");
 });
+
+it("a period naming the department's default set reads as the default, (default) muted", async () => {
+  const read = () => {
+    const base = plannedModel();
+    return {
+      ...base,
+      departments: base.departments.map((department) => ({
+        ...department,
+        periods: department.periods.map((entry) =>
+          entry.id === "p1" ? { ...entry, floorPlanSetId: "house" } : entry,
+        ),
+      })),
+    };
+  };
+  const grid = await loaded(await mount(answering(read, paintedIn, withTables)));
+  await expect.poll(() => grid.columns.map((c) => c.key)).toContain("floorPlan");
+  await grid.updateComplete;
+  const shown = cell(grid, "period:p1", "floorPlan")!;
+  expect(shown.textContent!.replace(/\s+/g, " ").trim()).toBe("House (default)");
+  expect(shown.querySelector("[part~=default-mark]")!.textContent!.trim()).toBe("(default)");
+});

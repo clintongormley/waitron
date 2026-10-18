@@ -207,7 +207,7 @@ export class PeriodDialog extends LitElement {
           a.colour === b.colour &&
           a.menuId === b.menuId &&
           a.endOffsetMinutes === b.endOffsetMinutes &&
-          a.floorPlanSetId === b.floorPlanSetId &&
+          this.shownPlan(a.floorPlanSetId) === this.shownPlan(b.floorPlanSetId) &&
           a.departmentId === b.departmentId &&
           a.staffMenuIds.length === b.staffMenuIds.length &&
           a.staffMenuIds.every((id) => b.staffMenuIds.includes(id)),
@@ -246,6 +246,10 @@ export class PeriodDialog extends LitElement {
     const fallback = department.sets.find(({ isDefault }) => isDefault);
     if (!fallback) return undefined;
     return { fallback, others: department.sets.filter((set) => set !== fallback) };
+  }
+  /** The field's value: a set that is the department's default now reads as the empty choice. */
+  private shownPlan(setId: string): string {
+    return setId === this.floorPlanSets?.fallback.id ? "" : setId;
   }
   private get choosesDepartment() {
     return !this.period && this.departments !== undefined;
@@ -336,7 +340,13 @@ export class PeriodDialog extends LitElement {
           input: {
             ...input,
             endOffsetMinutes: offsetNumber(this.draft.endOffsetMinutes)!,
-            ...(this.floorPlanSets ? { floorPlanSetId: floorPlanSetId || null } : {}),
+            ...(this.floorPlanSets &&
+            !(
+              this.shownPlan(floorPlanSetId) === "" &&
+              this.period?.floorPlanSetId === this.floorPlanSets.fallback.id
+            )
+              ? { floorPlanSetId: this.shownPlan(floorPlanSetId) || null }
+              : {}),
           },
           ...(this.choosesDepartment ? { departmentId } : {}),
         },
@@ -442,7 +452,7 @@ export class PeriodDialog extends LitElement {
       label=${t("period.floor_plan")}
       show-empty-option
       search="never"
-      .value=${this.draft.floorPlanSetId}
+      .value=${this.shownPlan(this.draft.floorPlanSetId)}
       .options=${[
         {
           value: "",

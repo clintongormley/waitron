@@ -1392,3 +1392,20 @@ it("adding, the field follows the chosen department and empties on a change of d
   await el.updateComplete;
   expect(writes[0]!.input.floorPlanSetId).toBeNull();
 });
+
+it("a stored set that is now the default shows the empty choice, and an unchanged field sends nothing", async () => {
+  const el = await mountPlanned("house");
+  const control = field(el, "floorPlanSetId");
+  expect(control.value).toBe("");
+  await (control as unknown as HTMLElementTagNameMap["wt-combobox"]).updateComplete;
+  expect(shownText(control).textContent!.trim()).toBe("House (default)");
+  expect(shownText(control).classList.contains("muted")).toBe(true);
+  expect(save(el).disabled).toBe(true);
+  const writes: { input: Record<string, unknown> }[] = [];
+  el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
+  await change(el, "name", { value: "Evening" });
+  save(el).click();
+  await el.updateComplete;
+  expect(writes).toHaveLength(1);
+  expect(writes[0]!.input).not.toHaveProperty("floorPlanSetId");
+});

@@ -9,6 +9,7 @@ import {
   frame,
   grid,
   painterApi,
+  painterFloorPlans,
   painterModel,
   pick,
   settle,
@@ -1306,4 +1307,25 @@ describe("the band in what the painter edits", () => {
     expect(frame(painter).band).toBe("blue");
     expect(drawn(painter).getBoundingClientRect().height).toBeGreaterThan(0);
   });
+});
+
+it("✎ opens the period dialog with the department's Floor plan field", async () => {
+  painter = document.createElement("season-painter");
+  painter.api = painterApi([], () => ({}), painterFloorPlans);
+  painter.model = painterModel();
+  painter.seasonId = "winter";
+  painter.departmentId = "d1";
+  painter.open = true;
+  applyTokens(painter);
+  document.body.append(painter);
+  await settle(painter);
+  chip(painter, "edit-p1")!.click();
+  await settle(painter);
+  const dialog = painter.shadowRoot!.querySelector("period-dialog")!;
+  await expect.poll(() => dialog.shadowRoot!.querySelector("[name=floorPlanSetId]")).not.toBeNull();
+  const plan =
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[name=floorPlanSetId]",
+    )!;
+  expect(plan.options.map((option) => option.label)).toEqual(["House (default)", "Late"]);
 });

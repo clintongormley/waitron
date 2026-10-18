@@ -23,6 +23,7 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
     "not-painted",
     "add-from-page",
     "deletable",
+    "floor-plan",
   ])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed("<period-dialog></period-dialog>", theme)) as PeriodDialog;
@@ -68,6 +69,20 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
             };
     }
     if (state === "deletable") el.deletable = true;
+    if (state === "floor-plan") {
+      el.departmentId = "restaurant";
+      el.floorPlans = [
+        {
+          id: "restaurant",
+          name: "Restaurant",
+          zones: [{ id: "inside", name: "Inside", tableCount: 6 }],
+          sets: [
+            { id: "house", name: "House", isDefault: true, usedBy: [], layouts: [] },
+            { id: "late", name: "Late", isDefault: false, usedBy: [], layouts: [] },
+          ],
+        },
+      ];
+    }
     if (state === "add-from-page")
       el.departments = [
         { id: "restaurant", name: "Restaurant", colourUsers: [{ name: "Lunch", colour: "red" }] },
@@ -85,6 +100,8 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
       ).not.toBeNull();
     if (state === "add-from-page")
       expect(el.shadowRoot!.querySelector("[name=departmentId]")).not.toBeNull();
+    if (state === "floor-plan")
+      expect(el.shadowRoot!.querySelector("[name=floorPlanSetId]")).not.toBeNull();
     const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
     if (state === "invalid") {
       name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Dinner" } }));
