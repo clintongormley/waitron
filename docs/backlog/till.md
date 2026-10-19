@@ -1015,8 +1015,8 @@ the bill-specific draft handles that race.
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
   Start from the screens in `apps/till/src/screens/` and [the fixed-screen contract](../developers/design-system.md#fixed-device-screens).
   Decide how each workflow fits narrow and wide screens and what a venue may choose per device.
-  Counter's remaining owner-approved redesign is A738–A739. The handheld, kitchen screen and pass
-  were designed on 2026-10-18 as A797, waiting for the owner's answer to Q42 (lane C's questions
+  Counter's custom-item residual (A738) and payment window (A739) remain. The handheld, kitchen
+  screen and pass were designed on 2026-10-18 as A797, waiting for the owner's answer to Q42 (lane C's questions
   file); nothing is built until then:
   [design](../superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](mockups/a797-device-screens/). Menu Device Home Page, receipt configuration and the floor-plan editor stay
@@ -1498,6 +1498,17 @@ while 4 and 5 needed moving, so Leave it here only makes it last until the next 
 whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
+
+### Counter cleanup choices (A738, owner amendments 2026-10-16 to 2026-10-19)
+
+Park keeps the existing optional name and order number. A blank submission sends no label; it does
+not mint a timestamp name. Park, Parked orders and Send are Counter display copy. Course/group
+Held, Fire and the table's Send controls retain their own meanings.
+
+Use the existing modifiers window for line details. Sent extras and notes remain read-only; moving
+a sent unpaid Counter dish uses its separate current movement facts. A739 owns the payment-window
+redesign. The custom item's permission and catalogue/report/invoice identity remain undecided.
+
 
 ### Installed modules release removed tables (A894, owner decision 2026-10-19)
 
@@ -2062,6 +2073,10 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
 
 ## A737–A740: the counter till redesigned (owner, 2026-10-15)
 
+2026-10-20: the Counter cleanup has a current [UI contract](../developers/design-system.md#counter-basket-and-payment-space).
+Custom items remain an undecided A738 residual; A739 remains separate. The dated source record below
+describes the earlier starting point.
+
 2026-10-17: A740 implements device zones and period-scoped menu memory. The remaining Counter
 redesign is A738–A739. The dated design and campaign-order notes below retain their original scope.
 
@@ -2094,7 +2109,21 @@ the modifier picker (`apps/till/src/widgets/modifier-picker.ts`), not a heading.
 the till shows the receipt on screen (`#showTicket`, `apps/till/src/till-app.ts`), which pushes New
 order off a short screen.
 
+### Custom item on the Counter (A738 residual)
+
+The dashed + Custom item tile and its window remain unbuilt. Keep the requested fields together:
+name, price, required VAT rate and destination (nowhere or a station). Decide who may use it and
+whether it needs an underlying product for the catalogue, reports and invoice lines. A weighed
+product does not supply an arbitrary-price path. The cleanup below does not settle those choices.
+
 ### A738. The counter screen: fewer distractions
+
+2026-10-20: the executable cleanup is described in the current
+[Counter contract](../developers/design-system.md#counter-basket-and-payment-space) and
+[implementation plan](../superpowers/plans/2026-10-19-a738-counter-cleanup.md). The original boards
+and dated requirements below remain as a design record. Later owner amendments preserve the
+optional name and order number on Park, replacing the generated timestamp name described below.
+The custom-item residual above and A739 remain open.
 
 Board 1 is the target; board 2 the windows.
 

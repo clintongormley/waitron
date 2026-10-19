@@ -110,8 +110,8 @@ come after the list above:
   area. **Send the asesor's [shortened list](compliance/asesor-questions.md#the-shortened-list-2026-10-09)
   (S3, S6, S10 cover Q27–Q29).**
 - **Design the fixed screens for each kind of device** (A182 part 1, under _The till, devices and
-  table service_). The remaining counter redesign is A738–A739. The handheld, kitchen screen and pass
-  were designed on 2026-10-18 as **A797**, waiting for the owner's answer to Q42 (lane C's questions
+  table service_). The Counter cleanup is built; A738 custom items and A739 paying remain.
+  The handheld, kitchen screen and pass were designed on 2026-10-18 as **A797**, waiting for the owner's answer to Q42 (lane C's questions
   file): [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
@@ -2280,27 +2280,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   part "Goes with kitchen food". Try it once a venue has run with that.
   [Spec §5](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#5-firing-and-the-pass)
 
-- **A738 — the counter screen: fewer distractions (owner, 2026-10-15; open; A182 part 1 for the
-  counter till).** Top bar Counter, Floor | Held, Waiting, Transfers, Pass | ☰, with the rest in ☰
-  and Kitchen only under Testing. After A668's data shape. How a later addition to a table is
-  grouped and sent is A773's, not A738's.
-  [Detail](backlog/till.md#a738-the-counter-screen-fewer-distractions), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
-  [Implementation plan](superpowers/plans/2026-10-19-a738-counter-cleanup.md). Implementation is in
-  progress: shared filtering, the fixed top bar, selected Parked/Waiting views and stored-item
-  previews are implemented. Line-window work now includes shared entry points, read-only collection
-  inspection, staged quantity/extras/note edits, explicit empty-note entry and aligned amount
-  columns. Sent-unpaid line movement now uses that read-only window and refreshes its placed-order
-  facts separately from amount adjustments. Counter and table Order now share the last-added strip,
-  with space after the menu, line-window access and scrolling tied to additions. Their service text
-  opens keep-open and shows the zone and receipt-equipment availability. Park now opens an
-  optional-name dialog and keeps the existing blank-name payload. Final whole-feature acceptance
-  remains open; custom-item permission and reporting identity remain undecided.
+- **Custom item on the Counter (A738 residual; undecided).** The dashed + Custom item tile and its
+  window remain unbuilt. The window needs a name, price, required VAT rate and destination
+  (nowhere or a station). Decide the permission and whether an underlying product supplies the
+  catalogue, reports and invoice-line identity before building an arbitrary-price path.
+  [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
 - **A739 — paying: Hold · Pay and one payment window (owner, 2026-10-15; open).** Pay opens one
   window: how much (An amount, Split equally, Items, Whole bill), the reader and printer (Change,
   Scan a QR sticker, or tap NFC), the receipt (print, email or none, language, full invoice),
   then Cash or Card. The simulator asks Declined/Approved at Card; Decline not declining is
-  reproduced and fixed; the Demo card reader goes; no receipt screen after paying. After A738.
+  reproduced and fixed; the Demo card reader goes; no receipt screen after paying. It follows the Counter cleanup; the custom-item residual is separate.
   [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
@@ -2983,8 +2973,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#screen-faults-seen-during-menus-task-9s-look-on-2026-09-27)
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
-  Counter design and implementation remain A738–A739. The handheld, kitchen screen and pass were
-  designed on 2026-10-18 as **A797**, waiting for the owner's answer to Q42 (lane C's questions
+  Counter custom items (A738 residual) and the payment window (A739) remain. The handheld,
+  kitchen screen and pass were designed on 2026-10-18 as **A797**, waiting for the owner's answer to Q42 (lane C's questions
   file); nothing is built until then:
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate

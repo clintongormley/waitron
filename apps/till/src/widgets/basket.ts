@@ -97,6 +97,10 @@ export class TillBasket extends LitElement {
         container-type: inline-size;
       }
 
+      :host([line-details]) wt-button::part(button) {
+        min-height: var(--wt-tap-min);
+      }
+
       .entry {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;

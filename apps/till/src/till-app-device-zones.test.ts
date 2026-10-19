@@ -258,7 +258,7 @@ describe("live device zones", () => {
     expect(store.id).toBe(id);
     expect(
       el.shadowRoot!.querySelector("[data-device-zones-pending]")?.textContent ?? "",
-    ).toContain("Hold, send or cancel this order");
+    ).toContain("Park, send or cancel this order");
     store.addProduct(product, "1");
     expect(
       store.lines.map((line) => [line.product.productId, line.quantity, line.product.unitPrice]),
@@ -943,7 +943,7 @@ it("refuses hiding a zone with basket lines, while allowing only the future star
   await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-zones-save]")!);
   expect(api.setDeviceZones).not.toHaveBeenCalled();
   expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toContain(
-    "Hold, send or cancel",
+    "Park, send or cancel",
   );
   expect(store.lines).toHaveLength(1);
   await userEvent.click(

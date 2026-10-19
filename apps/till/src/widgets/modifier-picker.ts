@@ -532,6 +532,10 @@ export class TillModifierPicker extends LitElement {
     if (note !== "") {
       detail.note = note;
     }
+    // Consumers can leave during the event; a refused apply must restore this draft's baseline.
+    const baseline = this.#baseline;
+    this.#baseline = submitted;
+    this.#scope?.commit(submitted);
     const accepted = this.dispatchEvent(
       new CustomEvent<ModifierConfirmDetail>("wt-modifier-confirm", {
         detail,
@@ -540,9 +544,9 @@ export class TillModifierPicker extends LitElement {
         cancelable: true,
       }),
     );
-    if (accepted) {
-      this.#baseline = submitted;
-      this.#scope?.commit(submitted);
+    if (!accepted) {
+      this.#baseline = baseline;
+      if (baseline !== undefined) this.#scope?.commit(baseline);
     }
   }
 
@@ -852,7 +856,7 @@ export class TillModifierPicker extends LitElement {
         <span class="stepper">
           <wt-button
             class="step"
-            size="sm"
+            size=${this.lineDetails ? "md" : "sm"}
             data-test="${test}-dec"
             aria-label=${`${t("modifier.decrease")} ${item.name}`}
             ?disabled=${count <= 0}
@@ -863,7 +867,7 @@ export class TillModifierPicker extends LitElement {
           <span class="stepper-count" data-test="${test}-count">${count}</span>
           <wt-button
             class="step"
-            size="sm"
+            size=${this.lineDetails ? "md" : "sm"}
             data-test="${test}-inc"
             aria-label=${`${t("modifier.increase")} ${item.name}`}
             ?disabled=${(item.maxQuantity !== null && count >= item.maxQuantity) || atListMax}

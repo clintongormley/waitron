@@ -8,6 +8,24 @@ Slice 1 (**7a — walk-up cash sale**) of the Counter POS, built in #60.
 The matching HTTP surface lives in `@waitron/server` (`apps/server/src/till-api.ts`); this app never
 talks to the database directly.
 
+## Counter ordering
+
+The fixed till bar keeps Counter, Floor, Parked, Waiting, Transfers and Pass together, with
+counts for the order lists and transfers. More holds the secondary actions at every width. Parked
+orders and Waiting replace the menu-side view while your current basket stays in place. Expand an
+order to read its recorded dishes, extras and note before choosing an action.
+
+Filter beside search combines dietary choices and declared-allergen exclusions. The line's
+information action, a held press or a mouse double click opens the existing line window. Unsent
+quantity, extras and note are staged together; sent facts stay read-only. Both order screens give
+the last-added strip its own space and reveal a dish when an addition creates or grows its line.
+Park opens an optional-name dialog and preserves the order's existing name/number rules.
+
+2026-10-20, A738: these controls replace the earlier lists-under-products layout described in the
+historical slice notes below. The [current UI contract](../../docs/developers/design-system.md#counter-basket-and-payment-space)
+gives the status, line-window and draft rules. Custom items remain undecided; the separate A739
+payment redesign remains open.
+
 ## Table ordering
 
 **2026-10-19, A773-1:** the counter flow and slice boundaries below describe the early counter

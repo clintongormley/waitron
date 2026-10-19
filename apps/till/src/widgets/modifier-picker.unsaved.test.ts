@@ -203,6 +203,33 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
+it("A738 a refused confirmation restores dirty protection after releasing it for its consumer", async () => {
+  const { form } = await mount({
+    product: { ...product, variants: undefined, offeredModifiers: [] },
+    lineDetails: true,
+    withNote: true,
+    quantity: "2",
+    initialSelections: { note: "Initial note" },
+  });
+  await note(form, "Edited note");
+  const protection: boolean[] = [];
+  const refuse = (event: Event) => {
+    protection.push(unload());
+    event.preventDefault();
+  };
+  form.addEventListener("wt-modifier-confirm", refuse);
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+  expect(protection).toEqual([false]);
+  expect(unload()).toBe(true);
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-textarea")!.value).toBe("Edited note");
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".confirm")!.disabled,
+  ).toBe(false);
+  form.removeEventListener("wt-modifier-confirm", refuse);
+  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+  expect(unload()).toBe(false);
+});
 const edits = {
   variant: async (form: TillModifierPicker) => {
     await input(form, 'input[value="large"]');
