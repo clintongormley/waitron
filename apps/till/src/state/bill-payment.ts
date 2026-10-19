@@ -205,7 +205,6 @@ export interface PendingSend {
   refusal: { code: string } | null;
 }
 
-/** The phone's pending sends, keyed by bill. */
 export type PendingPayments = ReadonlyMap<string, PendingSend>;
 
 function codeOf(error: unknown): string | null {
@@ -271,8 +270,8 @@ export function sendUnanswered(
 
 /**
  * The send `turn` on `billId` ended at `tick`, with a result or with `error`. A result ends the
- * entry. Once a send is uncertain no refusal makes it certain: the server raises the session,
- * device and reader refusals before it looks the submission id up, so they say nothing of an
+ * entry. Once a send is uncertain no refusal makes it certain: the server can raise the session,
+ * device and reader refusals before it looks the submission id up, when they say nothing of an
  * earlier attempt. A {@link FRESH_ID_AFTER} refusal of a certain send drops it.
  */
 export function sendEnded(
@@ -285,13 +284,13 @@ export function sendEnded(
   const entry = pending.get(billId);
   if (entry?.turn !== turn) return pending;
   if (error === undefined) return without(pending, billId);
-  const code = codeOf(error);
+  const code = codeOf(error) ?? "server.internal";
   const ended = { ...entry, inFlight: false, endedTick: tick };
-  if (code === null || isUncertainFailure(error))
+  if (isUncertainFailure(error))
     return withEntry(pending, {
       ...ended,
       uncertain: true,
-      refusal: code !== null && code !== "server.internal" ? { code } : entry.refusal,
+      refusal: code !== "server.internal" ? { code } : entry.refusal,
     });
   if (!entry.uncertain && FRESH_ID_AFTER.has(code)) return without(pending, billId);
   return withEntry(pending, { ...ended, refusal: { code } });

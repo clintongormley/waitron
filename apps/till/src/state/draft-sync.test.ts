@@ -1677,6 +1677,33 @@ describe("resendUnanswered: onUnanswered", () => {
     expect(onUnanswered).toHaveBeenCalledOnce();
   });
 
+  it("is called once when the caller's signal ends an attempt, which is not sent again", async () => {
+    const limit = new AbortController();
+    const send = vi.fn<(signal: AbortSignal) => Promise<string>>(
+      (signal) =>
+        new Promise((_resolve, reject) =>
+          signal.addEventListener(
+            "abort",
+            () => reject(new DOMException("aborted", "AbortError")),
+            {
+              once: true,
+            },
+          ),
+        ),
+    );
+    const onUnanswered = vi.fn();
+    const settled = resendUnanswered(send, limit.signal, () => true, onUnanswered).catch(
+      (error: unknown) => error,
+    );
+
+    limit.abort();
+    await vi.advanceTimersByTimeAsync(SUBMIT_RETRIES * SUBMIT_RETRY_PAUSE_MS);
+
+    expect(await settled).toBeInstanceOf(DOMException);
+    expect(send).toHaveBeenCalledOnce();
+    expect(onUnanswered).toHaveBeenCalledOnce();
+  });
+
   it("is never called when the only answer is a coded refusal", async () => {
     const refusal = { code: "bill.nothing_outstanding", status: 409 };
     const send = vi.fn<(signal: AbortSignal) => Promise<string>>(() => Promise.reject(refusal));

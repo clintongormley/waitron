@@ -655,6 +655,7 @@ describe("a bill's payment that got no answer", () => {
         "a status of 500 or more with a code",
         { code: "reader.provider_disconnected", status: 503 },
       ],
+      ["a coded error at exactly 500", { code: "reader.provider_disconnected", status: 500 }],
       ["a code-less error", { status: 400 }],
       ["server.internal", { code: "server.internal", status: 400 }],
     ])("is true for %s", (_name, error) => {
@@ -809,6 +810,19 @@ describe("a bill's payment that got no answer", () => {
       });
     });
 
+    it.each([
+      ["a network failure", noAnswer],
+      ["a code-less server.internal at 502", internal],
+    ])("keeps the earlier refusal of a resend of the same id that ends with %s", (_name, error) => {
+      const refused = ended({ code: "reader.not_held", status: 409 }, endedAfterNoAnswer(noAnswer));
+      const again = sendStarted(refused, "wo-4", sent("wo-4", "sub-1"), 2, 7);
+
+      expect(sendEnded(again, "wo-4", 2, 9, error).get("wo-4")).toMatchObject({
+        uncertain: true,
+        refusal: { code: "reader.not_held" },
+      });
+    });
+
     it.each(FRESH_ID_AFTER)("removes a certain send after %s", (code) => {
       expect(ended({ code, status: 409 }).has("wo-4")).toBe(false);
     });
@@ -864,6 +878,16 @@ describe("a bill's payment that got no answer", () => {
       expect(
         submissionFor("wo-4", tenEuros, kept.submission, () => "sub-2").request.submissionId,
       ).toBe("sub-1");
+    });
+
+    it("removes a certain kept entry whose submission id the balance lists, and returns it as found", () => {
+      const pending = ended({ code: "bill.nothing_outstanding", status: 409 });
+      const paid = payment("sub-1", "received");
+      const settled = settledByBalance(pending, balance("wo-4", [paid]), 6);
+
+      expect(settled.pending.has("wo-4")).toBe(false);
+      expect(settled.found).toEqual({ payment: paid, entry: pending.get("wo-4") });
+      expect(settled.freed).toBeNull();
     });
 
     it("leaves a certain entry absent from the balance as it is", () => {
