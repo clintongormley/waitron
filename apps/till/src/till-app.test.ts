@@ -19876,6 +19876,109 @@ describe("switching the device's profile from the header", () => {
           }
         });
 
+  it("Profile recovery reports a failed setup read and releases the dialog for retry", async () => {
+    const { el } = await openProfile();
+    vi.mocked(currentApi.getTill).mockRejectedValueOnce(new TypeError("offline"));
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("boot.error")));
+    expect(profileDialog(el)).toBeNull();
+    expect(lock(el)).toBeNull();
+    expect(counter(el)).not.toBeNull();
+    profileButton(el)!.click();
+    await flush(el);
+    expect(profileDialog(el)!.busy).toBe(false);
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await vi.waitFor(() => expect(profileDialog(el)).toBeNull());
+    expect(currentApi.switchDeviceProfile).toHaveBeenCalledTimes(2);
+  });
+  it.each(["reply", "refusal"] as const)(
+    "Profile recovery ignores a switch %s after logout",
+    async (answer) => {
+      let finish!: (value: { activeProfileId: string }) => void;
+      let refuse!: (error: Error) => void;
+      const switchDeviceProfile = vi.fn(
+        () =>
+          new Promise<{ activeProfileId: string }>((resolve, reject) => {
+            finish = resolve;
+            refuse = reject;
+          }),
+      );
+      const { el } = await openProfile({ switchDeviceProfile });
+      const reads = vi.mocked(currentApi.getTill).mock.calls.length;
+      emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+      await vi.waitFor(() => expect(switchDeviceProfile).toHaveBeenCalledOnce());
+      emit(shell(el)!, "logout");
+      await flush(el);
+      if (answer === "reply") finish({ activeProfileId: BAR.id });
+      else refuse(new TypeError("offline"));
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+      expect(profileDialog(el)).toBeNull();
+      expect(currentApi.getTill).toHaveBeenCalledTimes(reads);
+      expect(el.shadowRoot!.textContent).not.toContain(t("boot.error"));
+    },
+  );
+  it.each(["reply", "refusal"] as const)(
+    "Profile recovery ignores a setup %s after logout",
+    async (answer) => {
+      let finish!: (value: Awaited<ReturnType<TillApi["getTill"]>>) => void;
+      let refuse!: (error: Error) => void;
+      const { el } = await openProfile();
+      vi.mocked(currentApi.getTill).mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            finish = resolve;
+            refuse = reject;
+          }),
+      );
+      emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+      await vi.waitFor(() => expect(currentApi.getTill).toHaveBeenCalledTimes(2));
+      emit(shell(el)!, "logout");
+      await flush(el);
+      if (answer === "reply")
+        finish({
+          ...till,
+          formFactor: "till",
+          courses: till.courses.map((course) => ({ ...course, heldUntilFired: false })),
+          clockingAvailable: false,
+          receiptLanguages: [],
+          activeReaders: [],
+          fullInvoices: false,
+          setupRevision: "switched",
+          startingScreen: "show-schedule",
+        });
+      else refuse(new TypeError("offline"));
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(counter(el)).toBeNull();
+      expect(schedule(el)).toBeNull();
+      expect(profileDialog(el)).toBeNull();
+      expect(el.shadowRoot!.textContent).not.toContain(t("boot.error"));
+    },
+  );
+  it("Profile recovery ignores equipment answered after logout instead of signing the operator back in", async () => {
+    const { NFC_EQUIPMENT } = await import("../test/equipment-nfc.js");
+    let finish!: (value: DeviceEquipment) => void;
+    const getDeviceEquipment = vi.fn().mockResolvedValue(NFC_EQUIPMENT);
+    const { el } = await openProfile({ getDeviceEquipment });
+    const reads = getDeviceEquipment.mock.calls.length;
+    getDeviceEquipment.mockImplementationOnce(
+      () =>
+        new Promise<DeviceEquipment>((done) => {
+          finish = done;
+        }),
+    );
+    emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+    await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalledTimes(reads + 1));
+    emit(shell(el)!, "logout");
+    await flush(el);
+    finish(NFC_EQUIPMENT);
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(counter(el)).toBeNull();
+    expect(profileDialog(el)).toBeNull();
+  });
   it("offers no Profile button on a device approved for one profile", async () => {
     const { el } = await mountApp({
       getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity, approvedProfiles: [COUNTER] }),
