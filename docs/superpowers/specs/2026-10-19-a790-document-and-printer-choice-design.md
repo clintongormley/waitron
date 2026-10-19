@@ -1,3 +1,93 @@
+# A790: H approved; I proposed, 2026-10-19, after the 14:20 answer
+
+**A–H are approved only in their precise answered scope. I alone is proposed next;
+the full design, plan and build remain unapproved.** This addendum takes precedence
+over conflicting text and boards below. Every existing byte remains an exact historical
+suffix, including former questions and evidence statements.
+
+H authority: the owner's **“SHARED BY THE BROWSER”** answer at the end of
+`/Users/clintongormley/waitron-campaign-f/questions.md`, 2026-10-19 about 14:20.
+On the dashboard without a device profile, remembered printers belong to the browser
+and are shared by everyone who signs in on it, **per sale venue, Receipt and Invoice
+separate**. Memory grants no permission to an unavailable or inaccessible printer and
+must reveal no inaccessible equipment. Recheck current-person authorization, Orders
+visibility, current offers, sale venue and any accompanying device restrictions before
+showing or selecting a destination. H settles sharing between logins, not browser-close
+retention or the ordering of late writes during account changes.
+
+A–G remain unchanged: A delivers the same recorded full invoice through Receipt or Invoice,
+with recorded customer details in the compact Receipt. B offers **every active sale-venue
+printer, including A4 and portable printers for both dashboard documents**, bypassing
+profile printer lists; exclude disabled, deleted and other-venue equipment. No profile
+step, borrowed till identity or dashboard Equipment update. C keeps Invoice's printer row
+inline and foldable in the same form as its named final button, matching Receipt/payment. D opens
+Receipt directly for simplified `S/318` (€14.50, Spanish, one guest), retaining recorded
+facts and offered language. E separates browser memory by sale venue and document.
+F updates it only after server acceptance; cancellation before submission or refusal
+leaves the earlier choice alone, and later paper failure does not undo acceptance.
+Acceptance establishes no physical output. G preselects the sole eligible printer only
+on a **newly opened** device-free dashboard form with no usable memory, explaining an
+unavailable previous choice without inventing a warning on first use. G approves no
+multiple/zero fallback, open-form selection replacement, rerouting or automatic print.
+An invalid selection still needs explicit reselection and confirmation.
+
+Device paths retain their role lists. The phone keeps its **one Equipment receipt setting**,
+without separate receipt memory or new receipt-preference storage. [A796 Revision 4](2026-10-19-a796-handheld-payments-design.md)
+continues to own its save/concurrency design and overridable defaults unchanged. Do not
+re-ask A–H or A796. Q1–Q6 otherwise remain settled, subject to explicit A–H overrides;
+Q4 adds no exclusive invoice-role holder check. Portable receipt holding remains open.
+
+## I: the sole next owner question, proposal only
+
+**Should this dashboard browser remember its accepted printer choices after ALL browser
+windows close and you reopen it (recommended), or forget them when the browser closes?**
+
+Recommend retaining them so returning to the workstation restores its accepted
+destination, subject to current eligibility and authorization. The session-only
+alternative gives you a fresh choice after browser close. I asks about lifecycle
+behavior only; it chooses no technical storage, expiry or manual-reset agreement.
+
+Worked proposal in the **same normal browser with retained site data**: Ana explicitly
+prints Harbour's `F/1042` **Receipt** on **Patio receipt**, and the server accepts
+**before she closes all browser windows**. Later she reopens that same browser and
+Luis signs in. **Bar receipt and Patio receipt both remain active and eligible to Luis.**
+
+| I alternative           | Luis opens Harbour's Receipt form after browser reopen                                                                 | Named final action when server-designated as a copy |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Retain, recommended     | Patio receipt is preselected from the accepted request.                                                                | Print a copy on Patio receipt                       |
+| Forget at browser close | No remembered destination; the still-proposed multiple-printer fallback asks Luis to choose. He selects Patio receipt. | Print a copy on Patio receipt                       |
+
+Two eligible choices keep G's sole-printer rule from masking the difference. H shares
+within this browser under either alternative; logout alone is not browser close.
+Harbour's Invoice choice, **Office · A4**, and Hillside's choices stay separate under E;
+this example compares only Harbour Receipt. Reopening, signing in, selecting or folding
+does not itself print or update memory. The explicit named final action remains required.
+
+No existing persistence support or reliable detection of normal browser closure is
+claimed. The builder must later propose the technical mechanism, unusual/private browser
+lifecycle behavior and recovery. Neither option guarantees retention after clearing site
+data, expiry or private browsing. Technical storage, expiry, manual reset and error
+handling stay open, as do concurrent/late accepted-intent ordering, account-transition
+ordering and late-request writes. H and I settle none of those. Device Invoice memory,
+portable receipt holding, multiple/zero fallback, wider document steps, A790 integration
+and full design/plan/build agreement remain open.
+
+Retain these design requirements: fix sale/document/printer/language/context per request;
+recheck authorization and sale location in the reservation transaction. Reconcile unknown
+or late outcomes against the **same request** before any fresh request; closing the browser
+or changing login does not resolve an unanswered submission. Separate accepted write from
+failed refresh. Keep server-derived original/copy, the shared full-invoice (F1) delivery
+guard and closed public F1 gate. No implicit print, rerouting, payment, fiscal or drawer
+effects are authorized.
+
+[Eight static H/I boards](../../backlog/mockups/a790-document-and-printer-choice/revision-h-and-browser-reopen/README.md)
+cover EN/ES, light/dark, at 390/1280 px. Each final PNG was rendered in headless Chromium
+and visually inspected; native SVG text boxes were checked within each drawing. Earlier conflicting boards remain history; the source map
+stays historical and runtime-unverified. This docs-only proposal supplies no runtime,
+test, accessibility, legal or physical-output evidence.
+
+---
+
 # A790: G approved; H proposed, 2026-10-19, after the 14:01 answer
 
 **A–G are approved only in their precise answered scope. H alone is proposed next;
