@@ -5365,6 +5365,12 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **A late move or second finger can overtake the gesture hold timer.** A delayed move is
+  treated as a pan, and a delayed second finger misses hold cancellation. Disposable probes
+  reproduce both on unchanged main `d5230d32d` and A891's candidate. Extend hold recognition
+  to those paths with their own tests; native-device reproduction remains unverified.
+  [Detail](developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
+
 - **The basket's custom fractional-unit test fails under shuffled test order.** On unchanged
   main `d5230d32d`, `basket.test.ts` passes all 67 cases normally, but seed 891 loses the
   expected `0.25 tray` label (1 failed, 66 passed). Check its language state and isolate the

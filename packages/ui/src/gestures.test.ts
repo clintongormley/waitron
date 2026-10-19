@@ -54,6 +54,20 @@ const tapAt = (x: number, y: number, id = 1) => {
   up(id, x, y);
 };
 
+function pointerAt(type: string, timeStamp: number, clientX = 10): void {
+  const event = new PointerEvent(type, {
+    bubbles: true,
+    composed: true,
+    pointerId: 1,
+    pointerType: "mouse",
+    button: 0,
+    clientX,
+    clientY: 10,
+  });
+  Object.defineProperty(event, "timeStamp", { value: timeStamp });
+  b.dispatchEvent(event);
+}
+
 function called(except: (keyof Handlers)[]): (keyof Handlers)[] {
   return (Object.keys(handlers) as (keyof Handlers)[]).filter(
     (k) => !except.includes(k) && handlers[k].mock.calls.length > 0,
@@ -178,19 +192,6 @@ describe("Gestures", () => {
     { duration: 500, held: true },
     { duration: 650, held: true },
   ])("classifies a $duration ms press before a queued hold timer runs", ({ duration, held }) => {
-    const pointerAt = (type: string, timeStamp: number) => {
-      const event = new PointerEvent(type, {
-        bubbles: true,
-        composed: true,
-        pointerId: 1,
-        pointerType: "mouse",
-        button: 0,
-        clientX: 10,
-        clientY: 10,
-      });
-      Object.defineProperty(event, "timeStamp", { value: timeStamp });
-      b.dispatchEvent(event);
-    };
     pointerAt("pointerdown", 1000);
     expect(handlers.holdStart).not.toHaveBeenCalled();
     pointerAt("pointerup", 1000 + duration);
@@ -203,6 +204,21 @@ describe("Gestures", () => {
     expect(handlers.longPress).toHaveBeenCalledTimes(held ? 1 : 0);
     expect(called(["holdStart", "longPress", "tap"])).toEqual([]);
   });
+
+  it.each([false, true])(
+    "does not restart a recognized hold at release (dragged: %s)",
+    (dragged) => {
+      pointerAt("pointerdown", 1000);
+      vi.advanceTimersByTime(500);
+      if (dragged) pointerAt("pointermove", 1600, 30);
+      pointerAt("pointerup", 1700, dragged ? 30 : 10);
+      expect(handlers.holdStart).toHaveBeenCalledTimes(1);
+      expect(handlers.longPress).toHaveBeenCalledTimes(dragged ? 0 : 1);
+      expect(handlers.holdDrop).toHaveBeenCalledTimes(dragged ? 1 : 0);
+      expect(called(["holdStart", "longPress", "holdDrag", "holdDrop"])).toEqual([]);
+      expect(gestures.active).toBe(false);
+    },
+  );
 
   it("the hold is placed where the pointer is when it fires", () => {
     down(1, 10, 10);

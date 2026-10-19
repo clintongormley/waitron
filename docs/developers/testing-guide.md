@@ -1404,6 +1404,14 @@ installed disposable checkout at unchanged base `d5230d32d3a111206e29238f0cc029c
 --sequence.seed=891` failed the same check (1 failed, 66 passed); without the shuffle options,
 all 67 passed. That finding remains separate in the backlog; A891 changes no basket assertion.
 
+The A891 review also found a separate move/pinch gap. Four disposable gesture probes ran
+unchanged at base `d5230d32d3a111206e29238f0cc029cdfbddb872` and the A891 candidate:
+with the hold timer withheld, a move 20 px at +700 ms pans instead of holding and dragging;
+a second pointer at +700 ms enters pinch without reporting hold cancellation. Controls that
+ran the timer first reported the hold/drag/drop and hold/cancel respectively. Both trees
+returned all four expected observations. Native-device reproduction remains unverified;
+this is recorded separately rather than widening A891's stationary-release fix.
+
 ## A browser test waits for a dialog's close event, not a timer
 
 `wt-dialog` (`packages/ui/src/components/wt-dialog.ts`) sends `wt-close` only from the browser's own
