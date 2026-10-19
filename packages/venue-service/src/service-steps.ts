@@ -113,7 +113,6 @@ const STARTER_STEPS = [
   { start: "all_served", minutes: 10, en: "Anything else?", es: "¿Algo más?" },
 ] as const;
 
-/** Named in the venue's first receipt language: English for `en`, Spanish for any other. */
 export async function addStarterServiceSteps(
   tx: Transaction,
   cfg: VenueScope,
