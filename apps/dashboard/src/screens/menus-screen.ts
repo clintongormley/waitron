@@ -794,8 +794,8 @@ export class MenusScreen extends LitElement {
   /** The products the add-products window's own list already holds, which it does not offer. */
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
-  /** The tree row's ⋮, or the Home page tab's shortcut ⋮ or add tile, that gets focus back once
-   * nothing is out and the window it opened, if any, has closed. */
+  /** The tree row's ⋮, or the Home page tab's shortcut Remove button or add tile, that gets focus
+   * back once nothing is out and the window it opened, if any, has closed. */
   #focusReturn:
     | { menuId: string; key: string }
     | { menuId: string; shortcuts: string[]; add: "product" | "section" }
@@ -1836,8 +1836,8 @@ export class MenusScreen extends LitElement {
     });
   }
 
-  /** Focus then goes to the removed shortcut's ⋮ while it is still drawn, as after a refusal, else
-   * the next shortcut's, else the previous one's, else the tile that adds products. */
+  /** Focus then goes to the removed shortcut's Remove button while it is still drawn, as after a
+   * refusal, else the next shortcut's, else the previous one's, else the tile that adds products. */
   #removeHomeShortcut(memberId: string): void {
     const order = this.#shortcutOrder();
     const at = order.indexOf(memberId);

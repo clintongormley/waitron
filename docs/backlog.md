@@ -886,13 +886,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   layout. Left open by W93 (#1287).
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
 
-- **A Home page tab product shortcut that is not on sale on the menu does not say whether the
-  product is archived or reached only through a disabled included menu.** Its tile reads "Not shown:
-  not on sale on this menu" for every product the menu document leaves out
-  (`#hiddenReason`, `apps/dashboard/src/widgets/device-home-preview.ts`). By reading only:
-  `offerRowsOn` (`packages/catalogue/src/operations.ts`) drops an archived product, and `offersOn`
-  one reached only through a disabled included menu; whether an archived product can still be a
-  reachable shortcut was not checked. Left open by A816.
+- **A Home page tab product shortcut reached only through a disabled included menu reads "Not
+  shown: not on sale on this menu"**, where a section shortcut in that place reads "Not shown: in a
+  disabled included menu" (`#hiddenReason`, `apps/dashboard/src/widgets/device-home-preview.ts`).
+  Left open by A816 (#1880).
 
 - **Configuration export/import still leaves publications behind.** Reset the venue instead of
   republishing old menus. Left open by A291 (2026-10-06, removed format-2 preview/republication).

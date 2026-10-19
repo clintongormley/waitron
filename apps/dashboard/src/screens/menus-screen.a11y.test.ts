@@ -513,23 +513,37 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     },
   );
 
-  it.each([390, 1280])(
-    "accessible Home page tab editing its shortcuts with a shortcut's ⋮ open, %ipx wide",
-    async (width) => {
+  it.each([
+    ["ready", 390],
+    ["ready", 1280],
+    ["disabled while a remove is sent", 390],
+    ["disabled while a remove is sent", 1280],
+  ] as const)(
+    "accessible Home page tab editing its shortcuts with each one's remove button %s, %ipx wide",
+    async (state, width) => {
       const { el, host } = await mountHome(width);
       const preview = q(
         el,
         "dashboard-device-home-preview",
       ) as HTMLElementTagNameMap["dashboard-device-home-preview"];
-      await vi.waitFor(() => {
-        if (!preview.shadowRoot!.querySelector('[data-test="grip-t-soup"]'))
-          throw new Error("edit");
-      });
-      preview
-        .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-          '[data-test="actions-t-lager"]',
-        )!
-        .show();
+      const remove = () =>
+        preview.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          '[data-test="remove-t-lager"]',
+        );
+      await vi.waitFor(() => expect(remove()).not.toBeNull());
+      expect(remove()!.disabled).toBe(false);
+      if (state !== "ready") {
+        el.api.removeHomeShortcut = vi.fn(() => new Promise<never>(() => undefined));
+        remove()!.click();
+        await vi.waitFor(() => {
+          expect(remove()!.disabled).toBe(true);
+          expect(
+            preview.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+              '[data-test="remove-t-drinks"]',
+            )!.disabled,
+          ).toBe(true);
+        });
+      }
       await expectNoA11yViolations(host);
     },
   );

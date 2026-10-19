@@ -425,8 +425,9 @@ the 2026-09-30 folders design; what remains:
 - **Home page shortcuts (Task 8, #722; rewritten 2026-10-06 for W93, which replaced named layouts
   and the profile's choice with one Device Home Page per menu).** The add-shortcut picker offers
   active products only, so a shortcut to a product switched off since, once removed, cannot be
-  added again until the product is switched back on. How the Home page tab's preview draws such a
-  shortcut was not checked.
+  added again until the product is switched back on. Archiving a product turns its shortcut into
+  a Missing one (`takeOffMenus`, `packages/catalogue/src/menu-removal.ts`); how the Home page tab's
+  preview draws a shortcut to a product switched off any other way was not checked.
 
 ## Content languages and the image library (#339, #344) — what is left open
 
