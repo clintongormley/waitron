@@ -8,6 +8,8 @@ import {
   CORE_MIGRATIONS,
   installChangeFeed,
   locations,
+  newId,
+  nowIso,
   tenantReceipts,
   withTransaction,
 } from "@waitron/db";
@@ -61,15 +63,11 @@ it("upgrades a populated predecessor with its installed change-feed and append-o
       operationDescription: "Hospitality",
     })
     .returning();
-  const [dept] = await suite.db
-    .insert(departments)
-    .values({
-      locationId: locationId(place!.id),
-      name: "Existing department",
-      tradingName: "Existing sign",
-      isDefault: true,
-    })
-    .returning();
+  // Raw SQL: the drizzle schema names columns later migrations add, which this database lacks.
+  const dept = { id: newId() };
+  suite.db.run(
+    sql`insert into departments (id, location_id, name, trading_name, is_default, created_at) values (${dept.id}, ${locationId(place!.id)}, 'Existing department', 'Existing sign', 1, ${nowIso()})`,
+  );
   const receipt = {
     logo: `${"a".repeat(64)}.png`,
     headerSubtitle: "Existing subtitle",
@@ -106,9 +104,13 @@ it("upgrades a populated predecessor with its installed change-feed and append-o
   expect(
     suite.db.all(sql`select name from sqlite_master where type = 'trigger' order by name`),
   ).toEqual(before);
-  expect(await suite.db.select().from(departments)).toContainEqual(
+  expect(
+    await suite.db
+      .select({ id: departments.id, name: departments.name, tradingName: departments.tradingName })
+      .from(departments),
+  ).toContainEqual(
     expect.objectContaining({
-      id: dept!.id,
+      id: dept.id,
       name: "Existing department",
       tradingName: "Existing sign",
     }),
@@ -127,11 +129,11 @@ it("upgrades a populated predecessor with its installed change-feed and append-o
   await withTransaction(suite.db, async (tx) => {
     await tx
       .insert(departmentReceipts)
-      .values({ departmentId: dept!.id, receipt: { email: "existing@example.com" } });
+      .values({ departmentId: dept.id, receipt: { email: "existing@example.com" } });
   });
   await expect(
     withTransaction(suite.db, async (tx) => {
-      await tx.insert(departmentReceipts).values({ departmentId: dept!.id, receipt: {} });
+      await tx.insert(departmentReceipts).values({ departmentId: dept.id, receipt: {} });
     }),
   ).rejects.toThrow("UNIQUE constraint failed: department_receipts.department_id");
   expect(await suite.db.select().from(departmentReceipts)).toHaveLength(1);
