@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { TillApi } from "./client.js";
+import type { CancelItemRequest } from "./line-cancel-types.js";
 
 const context = {
   billStatus: "open" as const,
@@ -39,6 +40,30 @@ const command = {
 };
 
 describe("the cancellation HTTP client", () => {
+  it("declares the preparation answer on the cancellation request", () => {
+    expectTypeOf<CancelItemRequest>()
+      .toHaveProperty("preparationStarted")
+      .toEqualTypeOf<boolean | undefined>();
+  });
+
+  it.each([true, false])(
+    "submits the explicit preparation answer %j with the original consent",
+    async (preparationStarted) => {
+      const fetcher = vi.fn().mockResolvedValue(json({ revision: 9 }));
+      const api = new TillApi("", fetcher);
+      const ask: CancelItemRequest = {
+        ...command,
+        expectedContext: { ...context, stage: "not_started" },
+        preparationStarted,
+      };
+      expect(await api.cancelItem("party-1", "dish-3", ask)).toEqual({ revision: 9 });
+      const request = JSON.parse(fetcher.mock.calls[0]![1].body as string);
+      expect(request.preparationStarted).toBe(preparationStarted);
+      expect(request.expectedContext.stage).toBe("not_started");
+      expect(request.submissionId).toBe("cancel-1");
+    },
+  );
+
   it("reads the full line context with its bill, revisions and abort signal", async () => {
     const answer = { billId: "bill-4", revision: 8, billRevision: 4, context };
     const fetcher = vi.fn().mockResolvedValue(json(answer));

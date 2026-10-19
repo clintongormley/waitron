@@ -2853,14 +2853,8 @@ export interface VoidTarget {
 }
 
 /**
- * A cancel's change once the caller has checked the bill and the paid lines: take `removed`
- * thousandths off the line, reducing its extras children (which follow their dish) and its ticket
- * item's fired quantity, or the whole line with its extras children when null; and move the bill's
- * and the party's revisions on. A line that had already fired records a VOID kitchen notice for what
- * was removed — marked started when the cook had started it — and gets a VOID correction slip where
- * its station has a printer. A held line of a group whose HOLD ticket was queued records a `void`
- * notice for what was removed and gets a HOLD CANCELLED slip instead. Cancelling an extra also
- * tells the kitchen about its dish ({@link tellKitchenOfCancelledExtra}).
+ * The caller checks that the bill and paid quantities allow removal. Corrections must precede
+ * deletion because notices and slips read the removed rows.
  */
 export async function removeFromLine(
   tx: Transaction,
@@ -2870,8 +2864,9 @@ export async function removeFromLine(
   removed: number | null,
   operatorId: string | undefined,
   attendance?: { recorder: AttendanceRecorder; at: string },
+  preparationStarted = false,
 ): Promise<void> {
-  const wasStarted = isStarted(target.state);
+  const wasStarted = preparationStarted || isStarted(target.state);
   const extra =
     target.parentLineId === null ? null : await readCancelledExtra(tx, target.id, cfg.locale);
   const childItems =
@@ -2912,7 +2907,7 @@ export async function removeFromLine(
         workingOrderLineId: item.workingOrderLineId,
         stationId: item.stationId,
         quantity: removedQuantity(item),
-        wasStarted: isStarted(item.state),
+        wasStarted: preparationStarted || isStarted(item.state),
       })),
   );
   // Before the delete or the reduction: the notice and the slip re-read the line.

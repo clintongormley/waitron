@@ -37,6 +37,7 @@ export interface CancelItemAsk {
   expectedEdit: BillEditExpected;
   quantity: string;
   outcome: "remove_charge" | "keep_charge";
+  preparationStarted?: boolean;
   expectedPartyRevision: number;
   expectedBillRevision: number;
   expectedContext: CancellationContext;
@@ -61,6 +62,8 @@ export async function cancelItem(
   } = { venueLocale: cfg.locale },
 ): Promise<{ revision: number }> {
   if (ask.outcome !== "remove_charge" && ask.outcome !== "keep_charge") throw invalid("outcome");
+  if (ask.preparationStarted !== undefined && typeof ask.preparationStarted !== "boolean")
+    throw invalid("preparationStarted");
   const expectedEdit = parseBillEditExpected(ask.expectedEdit);
   const expectedContext = {
     ...ask.expectedContext,
@@ -80,6 +83,7 @@ export async function cancelItem(
       lineId,
       quantity: ask.quantity,
       outcome: ask.outcome,
+      preparationStarted: ask.preparationStarted,
       expectedContext,
       expectedEdit,
       operatorId,
@@ -89,6 +93,12 @@ export async function cancelItem(
     },
     async () => {
       const context = await requireCancellationContext(tx, partyId, lineId, ask.expectedContext);
+      if (
+        ask.preparationStarted === true &&
+        !context.components.some((component) => component.firedAt !== null)
+      )
+        throw invalid("preparationStarted");
+      const started = context.stage === "started" || ask.preparationStarted === true;
       const revision = await partyRevision(tx, partyId);
       if (revision !== ask.expectedPartyRevision)
         throw new AppError("party.out_of_date", { partyId, revision });
@@ -124,14 +134,10 @@ export async function cancelItem(
         refused,
       );
       if ((line!.unitPrecision ?? 0) > 0 && removed !== active) throw refused();
-      if (
-        ask.outcome === "keep_charge" &&
-        context.billStatus !== "settled" &&
-        context.stage === "not_started"
-      )
+      if (ask.outcome === "keep_charge" && context.billStatus !== "settled" && !started)
         throw invalid("outcome");
       if (ask.outcome === "remove_charge") {
-        if (context.stage === "not_started") {
+        if (!started) {
           await assertTabOpen(tx, bill!.id);
           await refusePaymentInFlight(tx, [bill!.id]);
           await refusePaidLines(tx, bill!.id, [
@@ -211,6 +217,7 @@ export async function cancelItem(
             operatorId,
             submissionId: ask.submissionId,
             approver: ask.approver,
+            preparationStarted: ask.preparationStarted,
           },
           policy.venueLocale,
           policy.attempts,
@@ -253,7 +260,7 @@ export async function cancelItem(
                 workingOrderLineId: row.id,
                 stationId: item.stationId,
                 quantity: corrected,
-                wasStarted: isStarted(item.state),
+                wasStarted: ask.preparationStarted === true || isStarted(item.state),
                 fired: item.firedAt !== null,
               });
           }
@@ -298,7 +305,7 @@ export async function cancelItem(
             lineId,
             quantity,
             cancelledAt: nowIso(),
-            wasStarted: prior?.wasStarted === true || context.stage === "started",
+            wasStarted: prior?.wasStarted === true || started,
             actorId: operatorId,
           })
           .onConflictDoUpdate({
@@ -306,7 +313,7 @@ export async function cancelItem(
             set: {
               quantity,
               cancelledAt: nowIso(),
-              wasStarted: prior?.wasStarted === true || context.stage === "started",
+              wasStarted: prior?.wasStarted === true || started,
               actorId: operatorId,
             },
           });

@@ -133,6 +133,111 @@ async function startExtra(order: Fixture) {
 }
 
 describe("Cancel item service command", () => {
+  it("keeps fired food charged when the waiter confirms preparation has started", async () => {
+    const order = await fixture();
+    const ask = { ...(await askFor(order)), preparationStarted: true };
+    const before = await snapshot(order);
+    await cancel(order, ask);
+    const after = await snapshot(order);
+    expect(after.lines).toEqual(before.lines);
+    expect(after.cancellations).toMatchObject([{ quantity: 2000, wasStarted: true }]);
+    expect(after.tickets.map((row) => row.quantity).sort()).toEqual([1000, 2000]);
+    const notices = [];
+    for (const station of new Set(order.tickets.map((row) => row.stationId)))
+      notices.push(...(await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, station))));
+    expect(notices.filter((row) => row.workingOrderId === order.billId)).toMatchObject([
+      { quantity: "2.000", wasStarted: true },
+      { quantity: "4.000", wasStarted: true },
+    ]);
+    await cancel(order, ask);
+    expect(await snapshot(order)).toEqual(after);
+    await expect(cancel(order, { ...ask, preparationStarted: false })).rejects.toMatchObject({
+      code: "submission.id_reused",
+    });
+    expect(await snapshot(order)).toEqual(after);
+  });
+
+  it("requires the started cancellation reason after a fired preparation Yes", async () => {
+    const order = await fixture();
+    const ask = { ...(await askFor(order, "remove_charge")), preparationStarted: true };
+    const before = await snapshot(order);
+    await expect(cancel(order, ask)).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "reasonId" },
+    });
+    expect(await snapshot(order)).toEqual(before);
+    await cancel(order, { ...ask, reasonId: venue.reasonId.house });
+    const after = await snapshot(order);
+    expect(after.lines.map((row) => ({ quantity: row.quantity, total: row.lineTotal }))).toEqual([
+      { quantity: 1000, total: 900 },
+      { quantity: 2000, total: 300 },
+    ]);
+    expect(after.adjustments).toMatchObject([{ action: "cancel", reasonId: venue.reasonId.house }]);
+    const notices = [];
+    for (const station of new Set(order.tickets.map((row) => row.stationId)))
+      notices.push(...(await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, station))));
+    expect(notices.filter((row) => row.workingOrderId === order.billId)).toMatchObject([
+      { quantity: "2.000", wasStarted: true },
+      { quantity: "4.000", wasStarted: true },
+    ]);
+  });
+
+  it("does not turn held food into started food from a supplied answer", async () => {
+    const order = await fixture("hold");
+    const before = await snapshot(order);
+    await expect(
+      cancel(order, { ...(await askFor(order)), preparationStarted: true }),
+    ).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "preparationStarted" },
+    });
+    expect(await snapshot(order)).toEqual(before);
+  });
+
+  it("does not use preparation No to bypass an extra that is already started", async () => {
+    const order = await fixture();
+    await startExtra(order);
+    const ask = { ...(await askFor(order, "remove_charge")), preparationStarted: false };
+    const before = await snapshot(order);
+    await expect(cancel(order, ask)).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "reasonId" },
+    });
+    expect(await snapshot(order)).toEqual(before);
+  });
+
+  it.each([[null], ["yes"], [1], [[]], [{}]])(
+    "refuses a malformed direct preparation answer %j without writes",
+    async (preparationStarted) => {
+      const order = await fixture();
+      const ask = {
+        ...(await askFor(order, "remove_charge")),
+        preparationStarted: preparationStarted as unknown as boolean,
+      };
+      const before = await snapshot(order);
+      await expect(cancel(order, ask)).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "preparationStarted" },
+      });
+      expect(await snapshot(order)).toEqual(before);
+    },
+  );
+
+  it("rechecks the stored context even after the waiter answered preparation Yes", async () => {
+    const order = await fixture();
+    const ask = { ...(await askFor(order)), preparationStarted: true };
+    await startExtra(order);
+    const before = await snapshot(order);
+    const context = await inTx(venue, (tx) =>
+      readCancellationContext(tx, order.partyId, order.parent.id),
+    );
+    await expect(cancel(order, ask)).rejects.toMatchObject({
+      code: "tab.cancel_context_changed",
+      params: { context },
+    });
+    expect(await snapshot(order)).toEqual(before);
+  });
+
   it.each(["hold", "fire"] as const)(
     "removes an unpaid unstarted %s dish without a reason or an adjustment, once",
     async (release) => {

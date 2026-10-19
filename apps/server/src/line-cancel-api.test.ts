@@ -152,6 +152,93 @@ async function managerReason() {
 }
 
 describe("the public cancellation read and command", () => {
+  it("carries preparation Yes through HTTP and records started service cancellation", async () => {
+    const p = await fixture("fire");
+    const body = await bodyFor(p, { outcome: "keep_charge", preparationStarted: true });
+    const before = await frozen();
+    const answer = await post(p, body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const after = await frozen();
+    expect(await rowsOf(venue, p.billId)).toEqual([p.parent, p.extra, p.water]);
+    expect(after.cancellations.find((row) => row.lineId === p.parent.id)).toMatchObject({
+      quantity: 2000,
+      wasStarted: true,
+    });
+    for (const key of ["sales", "saleLines", "payments", "tenders"] as const)
+      expect(after[key]).toEqual(before[key]);
+    expect((await post(p, body)).json).toEqual(answer.json);
+    expect(await frozen()).toEqual(after);
+    const conflict = await post(p, { ...body, preparationStarted: false });
+    expect(conflict.status).toBe(409);
+    expect(conflict.json).toMatchObject({ code: "submission.id_reused" });
+    expect(await frozen()).toEqual(after);
+  });
+
+  it("checks the reason's PIN before the write lock after preparation Yes", async () => {
+    const p = await fixture("fire");
+    const reason = await managerReason();
+    const body = await bodyFor(p, {
+      preparationStarted: true,
+      reasonId: reason.id,
+      note: "guest changed their mind",
+      approver: { personId: venue.managerId, pin: PINS.manager },
+    });
+    watchDerivationsAndLock(venue.db, PINS.manager, () =>
+      withTransaction(venue.db, (tx) => tx.execute(sql`select 1`)),
+    );
+    const answer = await post(p, body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(watchedDerivationCount()).toBe(1);
+    expect(
+      (await frozen()).adjustments.filter((row) => row.workingOrderId === p.billId),
+    ).toMatchObject([{ approvedBy: venue.managerId, note: "guest changed their mind" }]);
+    expect(await rowsOf(venue, p.billId)).toEqual([p.water]);
+    expect(JSON.stringify((await frozen()).commands)).not.toContain(`"${PINS.manager}"`);
+  });
+
+  it("removes fired food without a reason after preparation No", async () => {
+    const p = await fixture("fire");
+    const answer = await post(
+      p,
+      await bodyFor(p, { preparationStarted: false, reasonId: undefined }),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await rowsOf(venue, p.billId)).toEqual([p.water]);
+    expect((await frozen()).adjustments.filter((row) => row.workingOrderId === p.billId)).toEqual(
+      [],
+    );
+  });
+
+  it.each([[null], ["yes"], [1], [[]], [{}]])(
+    "refuses malformed preparation answer %j without writes",
+    async (preparationStarted) => {
+      const p = await fixture("fire");
+      const body = await bodyFor(p, { preparationStarted });
+      const before = await frozen();
+      const refused = await post(p, body);
+      expect(refused.status).toBe(400);
+      expect(refused.json).toEqual({
+        code: "management.request_invalid",
+        params: { field: "preparationStarted" },
+      });
+      expect(await frozen()).toEqual(before);
+    },
+  );
+
+  it("refuses preparation Yes on held food through HTTP without writes", async () => {
+    const p = await fixture("hold");
+    const body = await bodyFor(p, { preparationStarted: true });
+    const before = await frozen();
+    const refused = await post(p, body);
+    expect(refused.status).toBe(400);
+    expect(refused.json).toEqual({
+      code: "management.request_invalid",
+      params: { field: "preparationStarted" },
+    });
+    expect(await frozen()).toEqual(before);
+  });
+
   it.each(["hold", "fire"] as const)(
     "removes unpaid unstarted %s food through HTTP with no reason and no adjustment",
     async (release) => {

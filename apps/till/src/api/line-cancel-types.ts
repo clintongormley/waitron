@@ -27,6 +27,7 @@ export interface CancelItemRequest {
   expectedEdit: BillEditExpected;
   quantity: string;
   outcome: "remove_charge" | "keep_charge";
+  preparationStarted?: boolean;
   expectedPartyRevision: number;
   expectedBillRevision: number;
   expectedContext: CancellationContext;

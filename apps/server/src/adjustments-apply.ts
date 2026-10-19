@@ -115,6 +115,7 @@ export interface AdjustmentAsk {
 
 export interface AdjustmentArgs extends AdjustmentAsk {
   submissionId: string;
+  preparationStarted?: boolean;
   /** Someone at or above the plan's approver role: the higher of the reason's approver role (when
    * the operator is below its apply role) and a manager (when the bill's discount limit asks for
    * one). */
@@ -914,6 +915,7 @@ export async function applyAdjustment(
           plan.removed,
           args.operatorId,
           activity,
+          args.preparationStarted,
         );
       } else {
         splits = await reprice(tx, cfg, args.orderId, plan.carve, plan.changes);

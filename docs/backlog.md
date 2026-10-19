@@ -2219,6 +2219,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   and complete the remaining prose audit, whole-path, ownership, native-screen, physical-till and
   delivery checks. The command and HTTP removal path now removes unpaid, unstarted dishes without
   a reason or adjustment, retaining the open-bill, payment-in-flight and paid-quantity refusals.
+  The command and HTTP route now carry a fired dish's preparation answer: Yes uses the started
+  path and marks its correction as started; No cannot override stored preparation state. The dialog
+  still needs the question and revised reason/button choices.
   Preserve the completed behavioral checks and their receipts; the detail's
   Decisions section records their scope and limits. The product guide separates stored-line
   availability from the saved New order payment refusal; the till README distinguishes fresh-dish

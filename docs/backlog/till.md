@@ -2258,8 +2258,11 @@ The remaining work includes:
   (main `8e15b02a25828cdd47c2400cb7292b1793ca93cc`) into plan T20/T22. Unpaid, unstarted
   removal now takes no reason, approval or adjustment record through the command and HTTP route;
   it retains the open-bill, payment-in-flight and paid-quantity checks. A held dish tells the kitchen
-  only when its HOLD ticket was queued; fired work retains its correction. The preparation
-  question, charged-cancel reasons, buttons and paid-table unserved-dish resolution remain open.
+  only when its HOLD ticket was queued; fired work retains its correction. The command and HTTP
+  route now carry the explicit preparation answer. Yes on fired food uses the started path and
+  marks the correction started; No cannot override stored preparation state. Held food cannot
+  claim preparation Yes, and the answer is part of replay consent. The question in the dialog,
+  charged-cancel reasons, buttons and paid-table unserved-dish resolution remain open.
   The earlier picture-03 implementation is not the completed revised design. A758's later slices
   own the changed reason rules, starter list, reports and filled refund screen.
 - Reconcile the full branch with current main, including migration collisions and prose describing
