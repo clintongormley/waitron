@@ -1863,6 +1863,7 @@ describe("the menus list's Changes column", () => {
         for (const position of points) {
           const label = JSON.stringify(position);
           const hit = table(el).shadowRoot.elementFromPoint(box.x + position.x, box.y + position.y);
+          expect(cell.contains(hit), label).toBe(true);
           expect(anchor.contains(hit), label).toBe(false);
           expect(hit?.closest("wt-button"), label).toBeNull();
           // Forced, so a row activator lying over the point takes the click rather than stalling it.

@@ -3167,7 +3167,7 @@ export class MenusScreen extends LitElement {
   }
 
   /** A menu never published has none of it live, so it is marked as well. */
-  #hasUnpublishedChanges(): boolean {
+  #marksPreview(): boolean {
     return (
       !this.statusError &&
       (this.status?.state === "changed" || this.status?.state === "unpublished")
@@ -3540,7 +3540,7 @@ export class MenusScreen extends LitElement {
           {
             key: "preview",
             label: t("menus.tab_preview"),
-            marked: this.#hasUnpublishedChanges() ? t("menus.tab_preview_unpublished") : undefined,
+            marked: this.#marksPreview() ? t("menus.tab_preview_unpublished") : undefined,
           },
         ]}
         @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {

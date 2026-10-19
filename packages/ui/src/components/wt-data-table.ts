@@ -59,7 +59,8 @@ export interface DataTableColumn<Row> {
   /** On the table's last column, keeps it at the box's trailing edge while the other columns scroll
    * sideways under it. */
   pinned?: "end";
-  /** Keep the whole cell outside row activation, including blank space beside its action. */
+  /** Keep the whole cell outside row activation, including blank space beside its action. Tree mode
+   * still draws the row's activator in its first column whatever that column sets. */
   activatesRow?: false;
   /** A help-mode badge over the heading's label; `label` is the badge's whole accessible name. */
   help?: { text: string; label: string };
@@ -331,8 +332,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
         position: relative;
       }
 
-      /* The stretched activator covers the whole row so a mouse user can click anywhere; it is a
-         real focusable button so keyboard/AT users tab to it and Enter/Space activate the row. It
+      /* The stretched activator covers the whole row (drawn in a pinned cell, that cell only) so a
+         mouse user can click anywhere; it is a real focusable button so keyboard/AT users tab to it
+         and Enter/Space activate the row. It
          sits at the base layer… */
       .row-activate {
         position: absolute;
@@ -864,7 +866,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * sort. */
   @property({ attribute: false }) rowKeepsChildOrder: (row: Row) => boolean = () => false;
   /** When set, each row becomes activatable, except on a flat table a row `rowClickable` refuses: a
-   * stretched, focusable button covers the row and calls this on click. Per-row controls (the
+   * stretched, focusable button covers the row and calls this on click; on a flat table it is drawn
+   * in the first shown column that does not set `activatesRow: false`, and drawn in the pinned
+   * column it covers that cell only. Per-row controls (the
    * selection checkbox, the Edit/Delete menu) sit above the activator, so they are never swallowed.
    * In a tree, `rowActivation` can give a row a toggle instead. */
   @property({ attribute: false }) rowClick?: (row: Row) => void;

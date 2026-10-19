@@ -4426,6 +4426,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   mutation tests, not fixed. Outside a search it answers true for the same row
   (`packages/ui/src/components/wt-data-table.ts`).
 
+- **A890. A tree `wt-data-table` draws a row's activator in its first column even when that column
+  sets `activatesRow: false`** — OPEN, left by A813. A flat table now draws it in the first shown
+  column that does not opt out; tree mode still draws it at `ci === 0`
+  (`packages/ui/src/components/wt-data-table.ts`). No tree table sets the option on its first
+  column today; what a click on that cell's blank space then does was not tested.
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).

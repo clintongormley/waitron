@@ -4267,7 +4267,7 @@ test("a real pointer click on an in-cell control does not fall through to the ro
   expect(clicked).toEqual([]); // the click reached Edit, not the activator beneath it
 });
 
-test("a clickable row gets exactly one activator, and it sits in the row's first cell", async () => {
+test("a clickable row gets exactly one activator, and it sits in the row's first cell when that column does not opt out", async () => {
   const el = await table({ rowClick: (row: Row) => row.id });
   const firstRow = el.shadowRoot!.querySelector("tbody tr")!;
   expect(firstRow.querySelectorAll(".row-activate").length).toBe(1);
