@@ -130,8 +130,8 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
           const stored = await withTransaction(deps.db, (tx) =>
             storeSuggestionPage(tx, job.id, page, deps.context, at),
           );
-          if (stored !== "stored") return "again";
-          cursor = collected.nextCursor!;
+          if (stored !== "stored" || collected.nextCursor === null) return "again";
+          cursor = collected.nextCursor;
         }
       }
       if (status.state === "failed") {

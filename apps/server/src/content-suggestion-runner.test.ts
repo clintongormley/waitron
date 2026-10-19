@@ -357,6 +357,30 @@ it("a refused page (429) resumes at the saved position after back-off", async ()
 
     await runner.step();
     expect(cursors(f).slice(before)[0]).toBe(1);
+    await runToIdle(runner);
+    expect(actions(f).filter((a) => a === RELEASE)).toHaveLength(1);
+    expect(actions(f).indexOf(RELEASE)).toBeGreaterThan(actions(f).lastIndexOf(COLLECT));
+  } finally {
+    await f.close();
+  }
+});
+
+it("the status reply's limit reason reaches the last page of a multi-page walk", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    f.pageItems(1);
+    f.capStop(true);
+    await inTx((tx) => startSuggestionRun(tx, context));
+
+    await runToIdle(createContentSuggestionRunner(deps(f)));
+    expect(cursors(f)).toEqual([0, 1, 2]);
+    expect(await job()).toMatchObject({ state: "partly_done", failure: "limit" });
+    expect(await runView()).toMatchObject({
+      state: "partly_done",
+      code: "content.suggestion_limit_reached",
+      fits: 0,
+    });
   } finally {
     await f.close();
   }
