@@ -3,6 +3,44 @@
 Use this inventory to review changes to checks that existed before the replacement setup flow.
 It records changes on the candidate branch, not acceptance of the finished product.
 
+## Staged restore admission and historical placement scopes, 2026-10-19
+
+Two new cases in `retired-fiscal-operation-entry.test.ts` submit retired emergency input through
+the real staged archive and bucket entry points. They supply the selected copy's actual node key,
+matching source and outside files, then try twice. Both require `sif.allocation_invalid` with
+`outside_confirmation_missing`, exact retained destination bytes, trading identity, staged marker
+and key, unchanged fiscal rows and untouched outside evidence. Existing source assertions remain.
+
+In an independently installed copy, removing `writeValidated`'s pre-placement admission makes
+both cases replace the destination with the selected database, failing their retained-byte checks.
+Restoring that gate and substituting the historical fiscal dispatcher instead makes both consume
+the retired evidence and fail with `allocation_consumed`. Both production files are restored
+byte-for-byte between experiments. The new checks do not change the gate or fiscal writers.
+
+The source selection of `restore-emergency.test.ts`, `restore-emergency-attempts.test.ts` and
+`restore-paper-export.test.ts` reproduces 18 failures. Merely substituting the historical dispatcher
+passes six cases and fails 12: its new pre-placement call consumes one-use emergency evidence,
+and the paper wrong-key case then expects a destination that admission has never placed.
+An installed proposal passes all 18 by explicitly testing the historical dispatcher and its
+original placement-phase runner. The 82 existing assertion expressions are identical.
+
+These three proposals are **unapplied**. Their runner intentionally has no `checkBeforePlacement`
+property, so they qualify the old placement, rollback and publication contracts, not today's
+pre-placement admission. This is an additional scope decision beyond changing the dispatcher;
+the queue requires exact approval. The new production cases and existing current-hour recovery
+journeys qualify the production entry separately. No production source, guard, writer, SQL,
+threshold, exclusion or dependency changes in this checkpoint. Exact proposals, assertion
+inventories and logs are under Lane E's `receipts/a679-restore-integration-20261019`.
+
+The complete current recovery host/preview selection passes 150 cases, and the protected fiscal
+pair passes 20 unchanged. The source current-entry/promotion selection passes 64 cases and fails
+one: the dormant-admission key case freezes `Date` but leaves `performance` moving. Adding a
+1,200 ms pause after its comparison reproduces `clock_corrected`; freezing both clocks passes
+the same delayed case. A separate one-line fixture proposal preserves all 104 assertion
+expressions across its 56 cases and remains unapplied pending exact approval. This timing
+failure is not counted as a source pass. The new staged and first-setup route selection passes
+all nine cases independently.
+
 ## Current-hour registration command, 2026-10-19
 
 This qualification supersedes the earlier command-success limits recorded below. The matching

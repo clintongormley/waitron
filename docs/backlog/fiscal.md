@@ -296,6 +296,22 @@ path forms and command argument refusals. Synthetic clock responses and a pinned
 are used for the built-command test; no real external clock or hardware acceptance is claimed.
 The seven exact historical/protocol test-scope proposals remain unapplied.
 
+Staged archive and bucket entry checks now also refuse retired emergency input with the selected
+copy's actual node key and matching outside files. Two attempts retain the destination database,
+trading identity, staged marker and key, original fiscal rows and outside evidence. In an installed
+copy, removing pre-placement admission replaces the destination and fails both checks; restoring
+the historical dispatcher consumes the old evidence and fails their refusal reasons.
+
+Three further proposals retain the 18 emergency-attempt and paper-export cases with their named
+historical dispatcher and original placement-phase runner. All 82 assertion expressions remain.
+They intentionally omit the later pre-placement admission in those historical suites, so their
+exact scope needs separate approval; none is applied. The production gate stays in place and is
+qualified separately. The source 18-case selection still fails until that scope is settled.
+The complete current recovery host/preview selection passes 150 cases. A separate promotion
+fixture freezes wall time while its elapsed clock advances; an inserted 1,200 ms delay reproduces
+its `clock_corrected` refusal. A one-line proposal freezing both clocks passes that delayed case
+without changing assertions, and remains unapplied pending its own exact approval.
+
 Provisioning's new layout of six shards still needs CI timing qualification. `test-light-a`
 reaches its ten-minute job limit while still reporting advancing provisioning files:70 completed
 files total520.5seconds, with the largest taking160.9seconds. The dedicated shards retain the
