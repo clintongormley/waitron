@@ -3733,19 +3733,19 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   an HTML page throws `SyntaxError`. Its one caller is `reverseViaSumUp`; fold it into the neutral
   reversal primitive. Left open by A632.
 
-- **A846. An orphaned card payment whose settled amount differs from ours is held, and never
-  forgotten** (owner decision, 2026-10-17). Never refund it automatically while the amounts
-  disagree, but keep its alert up and remind daily until a person resolves it, and have the sweep
-  re-check closed periods for orphans still unresolved. Today every reconcile pass that still finds
-  such an orphan asks for the same period to be swept again a day later, so its period is re-swept
-  daily for as long as the amounts disagree (`resweepAfter`, `apps/server/src/reconcile-duty.ts`;
-  the chain is pinned in `packages/scheduler/src/resweep.test.ts`). First check whether that already
-  covers the "closed periods" half; if it does, the job is the daily reminder alone. Done when tests show the alert still raised and reminded on a later day, and a
-  closed period's unresolved orphan found again by the sweep. **Checked 2026-10-18: the single
-  case works, but a second held payment can stay out of every alert, a failed check ends the daily
-  re-check for good, and nothing lets a person close a held payment.** Build waits for owner
-  question Q44 (how a person closes one).
-  [Detail](backlog/payments.md#a846-held-card-payments-what-the-check-found-and-what-to-build)
+- **Turn off Stripe's on-reader tip screen, or read the tip back.** If tipping is switched on in
+  Stripe's Dashboard, every tipped reader payment would be charged more than Waitron records. **Next
+  action:** pass `process_config[skip_tipping]=true` from `processPaymentIntent`, tested against
+  Stripe's sandbox. Left open by A846.
+  [Detail](backlog/payments.md#turn-off-stripes-on-reader-tip-screen-or-read-the-tip-back)
+
+- **The payments check ignores the currency Stripe reports.** `stripeReportClient` never reads
+  `bt.currency`. Left open by A846.
+  [Detail](backlog/payments.md#the-payments-check-ignores-the-currency-stripe-reports)
+
+- **A846's points for the owner at land: held card payments.** A kept payment has no invoice, the
+  held alert comes back at midnight UTC, and four smaller choices. Each stays open until the owner
+  answers it. [Detail](backlog/payments.md#a846s-points-for-the-owner-at-land-held-card-payments)
 
 - **The reconciler's card reversal records only after the provider call, with a fresh key each time.** **Next
   action:** give the reconciler's reversal the same durable-attempt rule.

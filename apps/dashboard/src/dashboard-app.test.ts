@@ -6511,6 +6511,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       listStuckBillPayments: pending(),
       listStuckTenderRefunds: async () => [],
       listStuckBillRefunds: pending(),
+      listHeldPayments: pending(),
       liveData: new LiveData(),
     });
 

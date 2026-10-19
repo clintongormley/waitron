@@ -2,23 +2,25 @@
 // params, and a `{name:money}` slot writes a decimal-string amount as euros. Kept free of imports so
 // the root guard (`scripts/alert-codes.test.ts`) can load it.
 //
-// No sentence promises a later check by the server: the daily payments check looks at each day once,
-// and the fiscal reconciliation sweep has no production caller. Only `alert.source_unavailable`,
+// No sentence promises a later check by the server: the daily payments check looks at a day again
+// only in some cases (`reconcilerAsDuty`, `apps/server/src/reconcile-duty.ts`), and the fiscal
+// reconciliation sweep has no production caller. Only `alert.source_unavailable`,
 // `fiscal.estado_desconocido` and `fiscal.respuesta_descuadrada` promise an automatic retry, the
 // two fiscal ones only while no earlier record of the record's chain is on hold: an open dashboard
 // asks for its alerts again every minute, and the drain puts such a record back to waiting
 // (`awaitReadableAnswer`, `@waitron/fiscal-verifactu`); a sentence that asks for a retry or a
-// restart asks the owner to do it.
+// restart asks the owner to do it. `payment.reconcile_held` comes back on its own, without saying
+// so: once it is marked handled, a payments check on a later UTC day that gets past the Stripe
+// account raises it again while a held payment has no recorded outcome (`refreshHeldAlert`,
+// `@waitron/payments`; `resolveAccount` in `@waitron/payments-stripe`'s reconciler).
 
 // An open payment incident swallows later detections for the same till and code, so its figures
 // are from when it was raised, and a bill payment's alert may stand for more than one payment.
 const MORE_EN = " Later checks do not add to this alert while it is open, so there may be more.";
 const MORE_ES =
   " Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.";
-const NOT_RECHECKED_EN =
-  " Marking it handled does not fix it, and Waitron may not check these payments again.";
-const NOT_RECHECKED_ES =
-  " Marcarla como resuelta no lo soluciona, y es posible que Waitron no vuelva a comprobar estos pagos.";
+const NOT_FIXED_EN = " Marking it handled does not fix it.";
+const NOT_FIXED_ES = " Marcarla como resuelta no lo soluciona.";
 
 export const ALERT_MESSAGES: Readonly<
   Record<string, { readonly en: string; readonly es: string }>
@@ -244,24 +246,28 @@ export const ALERT_MESSAGES: Readonly<
     es: `Una devolución con tarjeta de {amount:money} lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Hasta entonces, su cuenta no se puede modificar ni facturar. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme.${MORE_ES}`,
   },
   "payment.reconcile_unsettled": {
-    en: `A check found {count} card payments that the card provider had not paid out.${MORE_EN}${NOT_RECHECKED_EN}`,
-    es: `Una comprobación encontró {count} pagos con tarjeta que el proveedor de pagos no había liquidado.${MORE_ES}${NOT_RECHECKED_ES}`,
+    en: `A check found {count} card payments that the card provider had not paid out.${MORE_EN}${NOT_FIXED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta que el proveedor de pagos no había liquidado.${MORE_ES}${NOT_FIXED_ES}`,
   },
   "payment.reconcile_lost_settlement": {
-    en: `A check found {count} payments the card provider says were paid, but that never finished here. Check those orders.${MORE_EN}${NOT_RECHECKED_EN}`,
-    es: `Una comprobación encontró {count} pagos que el proveedor de pagos indica como cobrados, pero que aquí no se completaron. Revisa esos pedidos.${MORE_ES}${NOT_RECHECKED_ES}`,
+    en: `A check found {count} payments the card provider says were paid, but that never finished here. Check those orders.${MORE_EN}${NOT_FIXED_EN}`,
+    es: `Una comprobación encontró {count} pagos que el proveedor de pagos indica como cobrados, pero que aquí no se completaron. Revisa esos pedidos.${MORE_ES}${NOT_FIXED_ES}`,
   },
   "payment.reconcile_orphan": {
-    en: `A check found {count} card payments taken for orders that were already closed or abandoned. Waitron tries to refund some of these itself; check the rest.${MORE_EN}${NOT_RECHECKED_EN}`,
-    es: `Una comprobación encontró {count} pagos con tarjeta de pedidos ya cerrados o abandonados. Waitron intenta devolver algunos por sí mismo; revisa el resto.${MORE_ES}${NOT_RECHECKED_ES}`,
+    en: `A check found {count} card payments taken for orders that were already closed or abandoned. Waitron tries to refund some of these itself; check the rest.${MORE_EN}${NOT_FIXED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta de pedidos ya cerrados o abandonados. Waitron intenta devolver algunos por sí mismo; revisa el resto.${MORE_ES}${NOT_FIXED_ES}`,
   },
   "payment.reconcile_missing_local": {
-    en: `A check found {count} payments reported by the card provider that are not recorded here.${MORE_EN}${NOT_RECHECKED_EN}`,
-    es: `Una comprobación encontró {count} pagos indicados por el proveedor de pagos que no están registrados aquí.${MORE_ES}${NOT_RECHECKED_ES}`,
+    en: `A check found {count} payments reported by the card provider that are not recorded here.${MORE_EN}${NOT_FIXED_EN}`,
+    es: `Una comprobación encontró {count} pagos indicados por el proveedor de pagos que no están registrados aquí.${MORE_ES}${NOT_FIXED_ES}`,
   },
   "payment.reconcile_drift": {
-    en: `A check found {count} card payments paid out for a different amount than was charged.${MORE_EN}${NOT_RECHECKED_EN}`,
-    es: `Una comprobación encontró {count} pagos con tarjeta liquidados por un importe distinto del cobrado.${MORE_ES}${NOT_RECHECKED_ES}`,
+    en: `A check found {count} card payments paid out for a different amount than was charged.${MORE_EN}${NOT_FIXED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta liquidados por un importe distinto del cobrado.${MORE_ES}${NOT_FIXED_ES}`,
+  },
+  "payment.reconcile_held": {
+    en: "{count} card payments for closed orders were paid out at a different amount than was charged. Waitron will not refund them. Record what was done with each on Card payments.",
+    es: "{count} pagos con tarjeta de pedidos cerrados se liquidaron por un importe distinto del cobrado. Waitron no los devolverá. Registra qué se hizo con cada uno en Pagos con tarjeta.",
   },
   "payment.reconcile_remediation_failed": {
     en: `Automatic refunds failed for {count} card payments. Waitron will not try them again; refund them in the card provider's own dashboard.${MORE_EN}`,

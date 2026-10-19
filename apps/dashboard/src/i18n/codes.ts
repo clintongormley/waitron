@@ -1160,6 +1160,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This payment is no longer stuck — the list has been refreshed.",
     es: "Este cobro ya no está pendiente; se ha actualizado la lista.",
   },
+  "payment.hold_not_found": {
+    en: "That payment is no longer held.",
+    es: "Ese pago ya no está retenido.",
+  },
+  "payment.hold_already_recorded": {
+    en: "Someone has already recorded what was done with that payment.",
+    es: "Alguien ya ha registrado qué se hizo con ese pago.",
+  },
   "payment.resolve_unsupported": {
     en: "Waitron cannot ask this card provider about a stuck payment, so the order stays locked. Check the payment in the provider's dashboard.",
     es: "Waitron no puede consultar un cobro pendiente con este proveedor de pagos, así que el pedido sigue bloqueado. Revisa el pago en el panel del proveedor.",

@@ -8,6 +8,7 @@ import { CORE_MIGRATIONS, devices, incidents, nowIso, sales, withTransaction } f
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  currentIncidentsOf,
   findIncident,
   listHandledIncidents,
   listOpenIncidents,
@@ -789,5 +790,146 @@ describe("tenant incident reads", () => {
     );
     const rows = await asApp((tx) => listHandledIncidents(tx, cutOff));
     expect(rows.map((r) => r.deviceId)).toEqual([deviceId]);
+  });
+
+  async function insertIncident(row: {
+    id?: string;
+    deviceId?: DeviceId;
+    code?: string;
+    detectedAt: string;
+    acknowledgedAt: string | null;
+  }): Promise<string> {
+    const id = row.id ?? crypto.randomUUID();
+    await suite.db.insert(incidents).values({
+      id,
+      source: "device",
+      deviceId: row.deviceId ?? deviceId,
+      code: row.code ?? "test.current",
+      params: { id },
+      severity: "error",
+      detectedAt: row.detectedAt,
+      acknowledgedAt: row.acknowledgedAt,
+      acknowledgedBy: row.acknowledgedAt === null ? null : "00000000-0000-4000-8000-000000000001",
+    });
+    return id;
+  }
+
+  it("answers the open incident of a code and the last one handled", async () => {
+    const second = await seedTenant(suite.db);
+    await insertIncident({
+      code: "test.other",
+      detectedAt: "2026-03-05T10:00:00.000Z",
+      acknowledgedAt: null,
+    });
+    await insertIncident({
+      code: "test.other",
+      detectedAt: "2026-03-01T10:00:00.000Z",
+      acknowledgedAt: "2026-03-09T10:00:00.000Z",
+    });
+    await insertIncident({
+      deviceId: second.deviceId,
+      detectedAt: "2026-03-05T10:00:00.000Z",
+      acknowledgedAt: null,
+    });
+    await insertIncident({
+      deviceId: second.deviceId,
+      detectedAt: "2026-03-01T10:00:00.000Z",
+      acknowledgedAt: "2026-03-09T10:00:00.000Z",
+    });
+    const prefix = crypto.randomUUID().slice(0, -2);
+    await insertIncident({
+      id: `${prefix}0b`,
+      detectedAt: "2026-03-01T10:00:00.000Z",
+      acknowledgedAt: "2026-03-02T10:00:00.000Z",
+    });
+    const later = await insertIncident({
+      id: `${prefix}0a`,
+      detectedAt: "2026-03-01T09:00:00.000Z",
+      acknowledgedAt: "2026-03-03T10:00:00.000Z",
+    });
+    const open = await insertIncident({
+      detectedAt: "2026-03-04T10:00:00.000Z",
+      acknowledgedAt: null,
+    });
+
+    const current = await asApp((tx) =>
+      currentIncidentsOf(tx, { origin: deviceOrigin(deviceId), code: "test.current" }),
+    );
+    expect(current.open?.id).toBe(open);
+    expect(current.open?.params).toEqual({ id: open });
+    expect(current.open?.acknowledgedAt).toBeNull();
+    expect(current.lastHandled?.id).toBe(later);
+    expect(current.lastHandled?.params).toEqual({ id: later });
+    expect(current.lastHandled?.acknowledgedAt?.toISOString()).toBe("2026-03-03T10:00:00.000Z");
+    expect(
+      await asApp((tx) =>
+        currentIncidentsOf(tx, { origin: deviceOrigin(deviceId), code: "test.unused" }),
+      ),
+    ).toEqual({ open: null, lastHandled: null });
+  });
+
+  it("answers no handled incident when a code's only incident is open", async () => {
+    const open = await insertIncident({ detectedAt: BASE.toISOString(), acknowledgedAt: null });
+    const current = await asApp((tx) =>
+      currentIncidentsOf(tx, { origin: deviceOrigin(deviceId), code: "test.current" }),
+    );
+    expect(current.open?.id).toBe(open);
+    expect(current.lastHandled).toBeNull();
+  });
+
+  it("picks the open incident, not a handled one detected at the same instant", async () => {
+    const prefix = crypto.randomUUID().slice(0, -2);
+    const open = await insertIncident({
+      id: `${prefix}0a`,
+      detectedAt: BASE.toISOString(),
+      acknowledgedAt: null,
+    });
+    const handled = await insertIncident({
+      id: `${prefix}0b`,
+      detectedAt: BASE.toISOString(),
+      acknowledgedAt: BASE.toISOString(),
+    });
+    const current = await asApp((tx) =>
+      currentIncidentsOf(tx, { origin: deviceOrigin(deviceId), code: "test.current" }),
+    );
+    expect(current.open?.id).toBe(open);
+    expect(current.lastHandled?.id).toBe(handled);
+  });
+
+  it("picks the later-detected of two incidents handled at the same instant, whatever their ids", async () => {
+    const prefix = crypto.randomUUID().slice(0, -2);
+    const handledAt = new Date(BASE.getTime() + 60_000).toISOString();
+    await insertIncident({
+      id: `${prefix}0b`,
+      detectedAt: BASE.toISOString(),
+      acknowledgedAt: handledAt,
+    });
+    const successor = await insertIncident({
+      id: `${prefix}0a`,
+      detectedAt: new Date(BASE.getTime() + 30_000).toISOString(),
+      acknowledgedAt: handledAt,
+    });
+    const current = await asApp((tx) =>
+      currentIncidentsOf(tx, { origin: deviceOrigin(deviceId), code: "test.current" }),
+    );
+    expect(current.lastHandled?.id).toBe(successor);
+  });
+
+  it("marks an incident handled by no one", async () => {
+    const origin = deviceOrigin(deviceId);
+    const raised = {
+      origin,
+      error: chainFailed(deviceId),
+      severity: "error" as const,
+      detectedAt: BASE,
+    };
+    await asApp((tx) => recordIncidentOnce(tx, raised));
+    const [open] = await asApp((tx) => listOpenIncidents(tx));
+    const handledAt = new Date(BASE.getTime() + 1_000);
+    await asApp((tx) => markIncidentHandled(tx, { id: open!.id, personId: null, handledAt }));
+    const handled = await asApp((tx) => findIncident(tx, open!.id));
+    expect(handled?.acknowledgedAt?.toISOString()).toBe(handledAt.toISOString());
+    expect(handled?.acknowledgedBy).toBeNull();
+    expect(await asApp((tx) => recordIncidentOnce(tx, raised))).toBe(true);
   });
 });

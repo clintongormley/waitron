@@ -181,6 +181,22 @@ describe("readOpenAlerts", () => {
     });
   });
 
+  it("links the held-payments alert to Payments, and no other payment check alert", async () => {
+    const v = await seedVenue();
+    await raise(v, "payment.reconcile_held", "error", NOW);
+    await raise(v, "payment.reconcile_orphan", "error", NOW);
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, new Set(["payments.manage"])),
+    );
+    const byCode = new Map(alerts.map((a) => [a.code, a]));
+    expect(byCode.get("payment.reconcile_held")).toMatchObject({
+      area: "payments",
+      screen: "payments",
+    });
+    expect(byCode.get("payment.reconcile_orphan")!.area).toBe("payments");
+    expect("screen" in byCode.get("payment.reconcile_orphan")!).toBe(false);
+  });
+
   it("puts errors first, then the newest", async () => {
     const v = await seedVenue();
     await raise(v, "payment.offline_forward_declined", "warning", new Date(NOW.getTime() - 1_000));

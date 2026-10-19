@@ -777,6 +777,42 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("lists held card payments and sends an outcome, leaving out a note that was not given", async () => {
+    const held = [{ holdId: "h-1", orderNumber: 57 }];
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(held))
+      .mockResolvedValueOnce(jsonResponse({ outcome: "kept" }))
+      .mockResolvedValueOnce(jsonResponse({ outcome: "refunded_at_provider" }));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.listHeldPayments()).resolves.toEqual(held);
+    await expect(api.recordHeldOutcome("h-1", { outcome: "kept", pin: "1234" })).resolves.toEqual({
+      outcome: "kept",
+    });
+    await expect(
+      api.recordHeldOutcome("h/2", {
+        outcome: "refunded_at_provider",
+        note: "Refunded in Stripe",
+        pin: "1234",
+      }),
+    ).resolves.toEqual({ outcome: "refunded_at_provider" });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/payments/held", "GET", undefined],
+      ["/management-api/payments/held/h-1/outcome", "POST", { outcome: "kept", pin: "1234" }],
+      [
+        "/management-api/payments/held/h%2F2/outcome",
+        "POST",
+        { outcome: "refunded_at_provider", note: "Refunded in Stripe", pin: "1234" },
+      ],
+    ]);
+    expect(Object.keys(JSON.parse(fetchImpl.mock.calls[1]![1].body as string))).toEqual([
+      "outcome",
+      "pin",
+    ]);
+  });
+
   it("lists unresolved bill payments and refunds and sends confirmed outcomes with the manager PIN", async () => {
     const payment = [{ billPaymentId: "bp-1", orderNumber: 12 }];
     const refund = [{ refundId: "br-1", orderNumber: 12 }];

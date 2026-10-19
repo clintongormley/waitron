@@ -24,6 +24,9 @@ function row(over: Partial<ReconcilableRow> = {}): ReconcilableRow {
     workingOrderId: "wo-1",
     workingOrderStatus: "settled",
     reconcileRemediatedAt: null,
+    paymentId: "pay-1",
+    held: false,
+    holdResolved: false,
     ...over,
   };
 }
@@ -98,6 +101,29 @@ describe("classify", () => {
     const out = classify([row({ saleId: null })], [settled], NOW, LAG);
     expect(out.rows.map((r) => r.klass).sort()).toEqual(["drift", "orphan"]);
     expect(out.rows.every((r) => r.settled === settled)).toBe(true);
+  });
+
+  it("files a held payment with a recorded outcome in no class, and its settlement is not missing", () => {
+    const settled = record({ amount: decimal("12.50") });
+    const out = classify(
+      [row({ saleId: null, workingOrderStatus: "abandoned", holdResolved: true })],
+      [settled],
+      NOW,
+      LAG,
+    );
+    expect(out.rows).toEqual([]);
+    expect(out.unmatched).toEqual([]);
+    expect(out.checked).toBe(1);
+  });
+
+  it("still files a held payment with no outcome yet as orphan and drift", () => {
+    const out = classify(
+      [row({ saleId: null, workingOrderStatus: "abandoned", holdResolved: false })],
+      [record({ amount: decimal("12.50") })],
+      NOW,
+      LAG,
+    );
+    expect(out.rows.map((r) => r.klass).sort()).toEqual(["drift", "orphan"]);
   });
 
   it("classifies an initiated row the report says settled as lostSettlement", () => {

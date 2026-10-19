@@ -47,7 +47,7 @@ export interface LedgerRow {
  *
  * `rows` deliberately spans TWO ranges: every row at or above the horizon start (gap derivation
  * needs to know which recent days are already recorded) plus every NON-TERMINAL row at any age (a
- * re-sweep chain older than the horizon must stay claimable). Counting missing days BELOW the
+ * re-sweep, or a parked period's retry, older than the horizon must stay claimable). Counting missing days BELOW the
  * horizon would be an unbounded read, so it arrives pre-aggregated as `recordedBelowHorizon`.
  */
 export interface LedgerSnapshot {

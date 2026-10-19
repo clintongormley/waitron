@@ -29,12 +29,19 @@ import {
   deviceProfileCardReaders,
   findPaymentByBillPayment,
   IN_PROGRESS_PAYMENT_STATES,
+  paymentHoldOutcome,
+  paymentHoldOutcomes,
+  paymentHolds,
   payments,
+  recordHoldOutcome,
+  refreshHeldAlert,
   readProfileReaderList,
   setProfileReaderList,
   type AbandonedAttemptOutcome,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
+  type HeldAlertSink,
+  type HoldOutcome,
   type PaymentProvider,
 } from "@waitron/payments";
 import {
@@ -52,6 +59,7 @@ import {
   type PinThrottle,
   type SecretCheck,
 } from "@waitron/identity";
+import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -148,6 +156,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.not_found": 404,
   "device_profile.invalid": 400,
   "payment.not_stuck": 409,
+  "payment.hold_not_found": 404,
+  "payment.hold_already_recorded": 409,
   "payment.resolve_unsupported": 422,
   "payment.outcome_unknown": 409,
   "bill.payment_not_found": 404,
@@ -229,6 +239,30 @@ function parseAttestation<O extends string>(
   const note = typeof body.note === "string" ? body.note.trim() : "";
   if (note === "") throw new AppError("management.request_invalid", { field: "note" });
   return { outcome: outcome as O, note, pin: body.pin };
+}
+
+const heldAlerts: HeldAlertSink = {
+  raise: recordIncidentOnce,
+  current: currentIncidentsOf,
+  handle: markIncidentHandled,
+};
+
+/** The request fields of a held payment's outcome, before the PIN is checked. Unlike an
+ * attestation, the note is optional: an absent or blank one is stored as null. */
+function parseHoldOutcome(body: Record<string, unknown>): {
+  outcome: HoldOutcome;
+  note: string | null;
+  pin: unknown;
+} {
+  const outcome = body.outcome;
+  if (!paymentHoldOutcome.enumValues.includes(outcome as HoldOutcome)) {
+    throw new AppError("management.request_invalid", { field: "outcome" });
+  }
+  if (body.note !== undefined && typeof body.note !== "string") {
+    throw new AppError("management.request_invalid", { field: "note" });
+  }
+  const note = body.note?.trim() ?? "";
+  return { outcome: outcome as HoldOutcome, note: note === "" ? null : note, pin: body.pin };
 }
 
 /** `reason` and, when the provider named one, `providerStatus` of an unknown outcome. */
@@ -1233,6 +1267,57 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         };
       });
       return c.json(answer);
+    }),
+  );
+
+  // A card payment the provider settled for a different amount, held until a manager says what
+  // was done with it.
+  app.get("/management-api/payments/held", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const rows = await gated(sessionId, (tx) =>
+        tx
+          .select({
+            holdId: paymentHolds.id,
+            paymentRef: payments.paymentRef,
+            provider: payments.provider,
+            orderNumber: workingOrders.orderNumber,
+            label: workingOrders.label,
+            settledAt: payments.settledAt,
+            amount: payments.amount,
+            providerAmount: paymentHolds.providerAmount,
+          })
+          .from(paymentHolds)
+          .innerJoin(payments, eq(payments.id, paymentHolds.paymentId))
+          .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
+          .leftJoin(paymentHoldOutcomes, eq(paymentHoldOutcomes.holdId, paymentHolds.id))
+          .where(isNull(paymentHoldOutcomes.id))
+          .orderBy(paymentHolds.foundAt, sql`${paymentHolds}.rowid`),
+      );
+      return c.json(
+        rows.map(({ label, ...row }) => ({
+          ...row,
+          ...(label === null ? {} : { label }),
+          amount: centsToDecimal(row.amount),
+          providerAmount: centsToDecimal(row.providerAmount),
+        })),
+      );
+    }),
+  );
+
+  app.post("/management-api/payments/held/:id/outcome", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PaymentHoldId");
+      const { outcome, note, pin } = parseHoldOutcome(
+        await readJsonBody<Record<string, unknown>>(c),
+      );
+      await pinGated(sessionId, pin, async (tx, personId) => {
+        const at = deps.clock.now().instant;
+        await recordHoldOutcome(tx, { holdId: id, outcome, note, personId, at });
+        await refreshHeldAlert(tx, heldAlerts, { now: at, by: personId });
+      });
+      return c.json({ outcome });
     }),
   );
 

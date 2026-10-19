@@ -10,3 +10,4 @@ export { deviceCardReaders } from "./device-card-readers.js";
 export { deviceProfileCardReaders } from "./device-profile-card-readers.js";
 export { cardReaderHolders } from "./card-reader-holders.js";
 export { paymentResolutionOutcome, paymentResolutions } from "./payment-resolutions.js";
+export { paymentHoldOutcome, paymentHoldOutcomes, paymentHolds } from "./payment-holds.js";

@@ -69,6 +69,10 @@ export {
   recordResolution,
 } from "./resolutions.js";
 export type { NewPaymentResolution } from "./resolutions.js";
+export { listOpenHolds, recordHold, recordHoldOutcome } from "./holds.js";
+export type { HoldOutcome, OpenHold } from "./holds.js";
+export { refreshHeldAlert } from "./held-alert.js";
+export type { HeldAlertSink } from "./held-alert.js";
 export {
   clearUnlistedReaderChoice,
   readProfileReaderList,
@@ -138,3 +142,4 @@ export { cardReaderHolders } from "./schema/card-reader-holders.js";
 
 export { payments } from "./schema/payments.js";
 export { paymentResolutions } from "./schema/payment-resolutions.js";
+export { paymentHoldOutcome, paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";

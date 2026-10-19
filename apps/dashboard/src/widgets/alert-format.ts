@@ -11,15 +11,12 @@ export function incidentIdOf(alert: Pick<AlertView, "key" | "kind">): string | n
     : null;
 }
 
-/** The screen a "Go to" action opens. Only an ongoing alert names the screen that fixes it; an event
- * is marked handled instead. */
+/** The screen a "Go to" action opens. */
 export function screenTargetOf(
-  alert: Pick<AlertView, "kind" | "screen">,
+  alert: Pick<AlertView, "screen">,
   canOpen: (screen: string) => boolean,
 ): string | null {
-  return alert.kind === "ongoing" && alert.screen !== undefined && canOpen(alert.screen)
-    ? alert.screen
-    : null;
+  return alert.screen !== undefined && canOpen(alert.screen) ? alert.screen : null;
 }
 
 /** Invalidates rather than re-watching: while another observer (the bell or the Alerts screen) holds

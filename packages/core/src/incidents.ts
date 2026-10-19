@@ -1,6 +1,6 @@
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
 import { devices, incidents, newId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { readOrigin } from "@waitron/shared";
@@ -208,14 +208,47 @@ export async function findIncident(tx: Transaction, id: string): Promise<TenantI
   return row === undefined ? null : toTenantIncident(row);
 }
 
+export async function currentIncidentsOf(
+  tx: Transaction,
+  input: { origin: Origin; code: string },
+): Promise<{ open: TenantIncident | null; lastHandled: TenantIncident | null }> {
+  const ofCode = and(
+    eq(incidents.source, input.origin.source),
+    input.origin.deviceId === null
+      ? isNull(incidents.deviceId)
+      : eq(incidents.deviceId, input.origin.deviceId),
+    eq(incidents.code, input.code),
+  );
+  const [open] = await tx
+    .select(tenantIncidentColumns)
+    .from(incidents)
+    .leftJoin(devices, eq(devices.id, incidents.deviceId))
+    .where(and(ofCode, isNull(incidents.acknowledgedAt)))
+    .orderBy(desc(incidents.detectedAt), desc(incidents.id))
+    .limit(1);
+  const [lastHandled] = await tx
+    .select(tenantIncidentColumns)
+    .from(incidents)
+    .leftJoin(devices, eq(devices.id, incidents.deviceId))
+    .where(and(ofCode, isNotNull(incidents.acknowledgedAt)))
+    // One sweep's two transactions share a `now`, so a replaced incident and its successor can be
+    // handled at one instant; the later-detected of the two is the successor.
+    .orderBy(desc(incidents.acknowledgedAt), desc(incidents.detectedAt), desc(incidents.id))
+    .limit(1);
+  return {
+    open: open === undefined ? null : toTenantIncident(open),
+    lastHandled: lastHandled === undefined ? null : toTenantIncident(lastHandled),
+  };
+}
+
 /**
  * Marks an open incident handled. Marking an already-handled incident changes nothing, so it keeps
  * its first handler and time. Handling frees the `incidents_open_dedup` key: a producer that detects
- * the same condition again records a new incident.
+ * the same condition again records a new incident. A null `personId` is the system handling it.
  */
 export async function markIncidentHandled(
   tx: Transaction,
-  input: { id: string; personId: string; handledAt: Date },
+  input: { id: string; personId: string | null; handledAt: Date },
 ): Promise<void> {
   await tx
     .update(incidents)

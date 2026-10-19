@@ -28,49 +28,61 @@ their full text.
   Post-invoice returns use the durable `tender_refunds` path (A737 Part 2): the server records
   the request before sending, keeps `tr_<refundId>` on retry and recovers pending outcomes.
 
-## A846. Held card payments: what the check found, and what to build
+## Turn off Stripe's on-reader tip screen, or read the tip back
 
-A held payment is an orphan (a card payment whose order was closed or abandoned with no sale) whose
-amount the card provider paid out differs from ours, so the sweep will not refund it
-(`amountDrifted`, `packages/payments/src/reconcile.ts`).
+- **Turn off Stripe's on-reader tip screen, or read the tip back.** Waitron takes the tip at the
+  till and adds it to the amount it charges (`tipOf`, `apps/server/src/till-sale.ts`). It creates
+  no Stripe Terminal configuration and does not turn the reader's tip screen off:
+  `processPaymentIntent` (`packages/payments-stripe/src/stripe-client.ts`) sends only the payment's
+  id. Stripe's docs: "When you process the payment, the reader adds the selected tip. If the
+  payment is successful, the amount in the `PaymentIntent` and `Charge` updates to include the tip
+  amount" (https://docs.stripe.com/terminal/features/collecting-tips/on-reader), set up through "a
+  Configuration object or the Dashboard". So if tipping were switched on in Stripe's Dashboard,
+  every tipped reader payment would be charged more than Waitron records, the payments check would
+  report each as a difference, and an orphaned one would be held. Read from the code and Stripe's
+  docs while planning A846 (the fee question's table in
+  [the A846 plan](../superpowers/plans/2026-10-19-a846-held-card-payments.md)); not tried against
+  Stripe. **Next action:** pass `process_config[skip_tipping]=true` from `processPaymentIntent`,
+  tested against Stripe's sandbox.
 
-Measured 2026-10-18 with a throwaway test in `apps/server` (kept outside the repository) that ran
-the real scheduler (`runDue`), `reconcilerAsDuty` and `reconcilePayments` with `recordIncidentOnce`
-over a fake settlement report, one payment captured at €10.00 and paid out at €12.50:
+## The payments check ignores the currency Stripe reports
 
-- **One held payment works today.** Day 1 raised `payment.reconcile_orphan` (remediation
-  `amountDrifted`) and `payment.reconcile_drift`. Both were marked handled; the next day's
-  re-sweep of the same, already-checked day raised both again. Left open, each stayed one alert,
-  and the re-sweep chain went on daily. Nothing was refunded.
-- **A second held payment stayed out of every alert.** Held payments on 1 and 2 July, every open
-  alert marked handled each morning: on four days running the open orphan alert named only the
-  first. Every orphan alert shares one key (the payment check, no device, no sale), the older
-  day's re-sweep runs first, and while the first stays held it takes the key every day.
-- **A failed check ended the re-check for good.** The provider failed three checks in a row (about
-  45 minutes at the default back-off): the re-sweep was marked `parked`, and no later day checked
-  that day again. The held payment was then in no open alert. A first check that parks is never
-  retried either.
-- **Nothing lets a person close a held payment.** The payment stays `captured` on an abandoned
-  order. Stripe is the only provider with a reconciler, and its sweep compares each charge's own
-  gross amount, read from `type: "charge"` balance transactions alone (`listSettlements`,
-  `packages/payments-stripe/src/stripe-report-client.ts`). A refund made in Stripe's own dashboard
-  is, I believe, a balance transaction of its own that this read never lists, so the figures would
-  still differ and the daily reminder would never stop. Not tested against Stripe.
+- **The payments check ignores the currency Stripe reports.** `stripeReportClient`
+  (`packages/payments-stripe/src/stripe-report-client.ts`) reads each balance transaction's
+  `amount` and never its `currency`. Stripe's docs: "if you charge a customer 10.00 EUR, the
+  PaymentIntent's `amount` is `1000` and `currency` is `eur`. If this converts to 12.34 USD in your
+  Stripe account, the BalanceTransaction's `amount` is `1234`, its `currency` is `usd`"
+  (https://docs.stripe.com/api/balance_transactions/object), and "If the charge currency differs
+  from your settlement currency … Stripe converts the charge to your settlement currency"
+  (https://docs.stripe.com/currencies/conversions). Waitron charges in euros, so an account whose
+  settlement currency is not the euro would make every payment differ. Left open by A846.
 
-Proposed build (owner question Q44 decides the first two points):
+## A846's points for the owner at land: held card payments
 
-1. A "Held: paid out at a different amount" list in the Payments screen's section for stuck bill
-   payments and refunds, every held payment whatever day it was taken, each with Record outcome:
-   "Refunded in the card provider's dashboard" or "Kept: the money was owed", an optional note
-   and the manager PIN, as the section's existing Record outcome takes. Recording ends the checks
-   and the alert for that payment; Waitron refunds nothing. Needs a place to keep the provider's
-   figure and the outcome (a migration).
-2. One alert for held payments, apart from the ordinary orphan alert, that names every held
-   payment, links to that list, and stays up until each has an outcome.
-3. A check that fails three times in a row is tried again the next day, instead of never.
-4. The alert wording stops saying Waitron may not check these payments again.
+Each stays open until the owner answers it. "The picture" is
+[01-record-what-was-done.png](mockups/a846-held-card-payments/01-record-what-was-done.png)
+([dark](mockups/a846-held-card-payments/01-record-what-was-done-dark.png)).
 
-Picture: `mockups/a846-held-card-payments/01-record-what-was-done.png` (also `-dark`).
+1. **"Kept: the money was owed" leaves money with no invoice.** The payment stays captured on an
+   abandoned order with no sale, and Waitron files nothing for it. Whether the money needs an
+   invoice is a fiscal question A846 does not answer.
+2. **"Next morning" is midnight UTC** (01:00 or 02:00 in Spain), not the venue's business-day
+   changeover, so a venue still open then sees the held-payments alert come back during service.
+3. **A replaced alert reads "handled by someone"** in the Handled tab when the check replaced it
+   because a new held payment appeared. Alternative: a distinct "replaced by a newer alert" line.
+4. **The alert's button reads "Go to Card payments"** (the screen's name in the navigation), as
+   other alerts' links do, not the picture's "Open Payments".
+5. **The outcome is a dropdown, not the picture's two radio buttons**: no radio-group field exists
+   among the shared components. Building one is a new shared field with its own tests.
+6. **The morning return needs the payments check to get past its Stripe account.** While the
+   Stripe credential cannot be used, the check starts and throws in `resolveAccount()`
+   (`packages/payments-stripe/src/reconciler.ts`) before reading anything, so a handled
+   held-payments alert does not come back; what shows instead is the check's own failure
+   (`reconcile.run_failed` and `reconcile.run_parked` log lines, and `/health`'s `parked` count
+   and a `duty.degraded` log line for the pass that parks it). The alternative is refreshing the
+   held alert before the check resolves its Stripe account.
+
+The Stripe tip screen, the plan's sixth point, is its own entry above.
 
 ## The SumUp Solo experiments
 
@@ -265,7 +277,11 @@ for reconciliation rather than show a receipt).
 - **An orphaned card payment whose settled amount differs from ours is held, never forgotten**
   (owner, 2026-10-17). It is never refunded automatically while the amounts disagree; its alert
   stays up and reminds daily until a person resolves it, and the sweep re-checks closed periods for
-  orphans still unresolved. The build is A846.
+  orphans still unresolved. Built by A846, as the owner refined it in answering Q44 on 2026-10-18
+  (recorded in [the A846 plan](../superpowers/plans/2026-10-19-a846-held-card-payments.md)):
+  the reminder is an ordinary alert that can be marked handled and comes back the next morning
+  while any held payment has no outcome, not one that cannot be dismissed; and a manager closes a
+  held payment by recording an outcome in the Payments screen's held list.
 
 - **Uncertain Stripe reader payments stay unknown** (owner, 2026-10-16, A764).
   Check them automatically after collection ends; keep the order locked until the outcome is known.

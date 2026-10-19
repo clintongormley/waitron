@@ -54,6 +54,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStuckBillPayments: vi.fn().mockResolvedValue([PAYMENT]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([REFUND]),
+    listHeldPayments: vi.fn().mockResolvedValue([]),
     resolveStuckBillPayment: vi.fn().mockResolvedValue({ outcome: "not_charged" }),
     resolveStuckBillRefund: vi.fn().mockResolvedValue({ outcome: "completed" }),
     attestStuckBillPayment: vi.fn().mockResolvedValue({ outcome: "received" }),
@@ -141,6 +142,7 @@ describe("bill payment recovery on the Payments screen", () => {
         listStuckBillPayments: vi.fn().mockResolvedValue([]),
         listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
         listStuckBillRefunds: vi.fn().mockResolvedValue([]),
+        listHeldPayments: vi.fn().mockResolvedValue([]),
       } as unknown as DashboardApi,
     });
     const el = await mount(api);

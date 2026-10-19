@@ -84,6 +84,7 @@ function client(overrides: Partial<DashboardApi> = {}) {
     listStuckBillPayments: vi.fn().mockResolvedValue([]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
+    listHeldPayments: vi.fn().mockResolvedValue([]),
     enableReader: vi.fn().mockResolvedValue(undefined),
     renameReader: vi.fn().mockResolvedValue(undefined),
     availableReaders: vi.fn().mockResolvedValue([]),

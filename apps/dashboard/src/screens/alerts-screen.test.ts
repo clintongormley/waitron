@@ -286,6 +286,50 @@ describe("dashboard-alerts-screen", () => {
     expect(goTo.mock.calls[0]![0].detail).toEqual({ screen: "backup" });
   });
 
+  it("offers both Mark handled and Go to Card payments for the held-payments alert", async () => {
+    const held: AlertView = {
+      ...open,
+      key: "incident:i9",
+      code: "payment.reconcile_held",
+      params: { count: 1, payments: [] },
+      screen: "payments",
+    };
+    for (const [locale, label] of [
+      ["en-GB", "Go to Card payments"],
+      ["es-ES", "Ir a Pagos con tarjeta"],
+    ] as const) {
+      setLocale(locale);
+      const api = stubApi({
+        listAlerts: vi
+          .fn()
+          .mockResolvedValue({ visible: true, alerts: [held, open] } satisfies AlertsResponse),
+      });
+      const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
+        api,
+        canOpen: (screen: string) => screen === "payments",
+      });
+      await flush(el);
+      const [heldRow, plainRow] = [...rows(el, "open-alerts-table")];
+      expect(heldRow!.querySelector("[data-test=alert-handle]")).not.toBeNull();
+      const goTo = heldRow!.querySelector<HTMLElement>("[data-test=alert-go-to]")!;
+      expect(goTo.textContent!.trim()).toBe(label);
+      const handleBox = heldRow!
+        .querySelector("[data-test=alert-handle]")!
+        .shadowRoot!.querySelector("button")!
+        .getBoundingClientRect();
+      const goToBox = goTo.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+      expect(goToBox.left - handleBox.right, "the two buttons do not touch").toBeGreaterThan(0);
+      // An event that names no screen still offers only Mark handled.
+      expect(plainRow!.querySelector("[data-test=alert-handle]")).not.toBeNull();
+      expect(plainRow!.querySelector("[data-test=alert-go-to]")).toBeNull();
+      const emitted = vi.fn();
+      el.addEventListener("wt-alert-go-to", emitted);
+      await userEvent.click(goTo);
+      expect(emitted.mock.calls[0]![0].detail).toEqual({ screen: "payments" });
+      cleanupWidgets();
+    }
+  });
+
   it("offers no Go to for a screen the session may not open", async () => {
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
       api: stubApi(),
@@ -467,6 +511,13 @@ describe("the open alerts at phone width", () => {
     },
     area: "fiscal",
   };
+  const held: AlertView = {
+    ...open,
+    key: "incident:i4",
+    code: "payment.reconcile_held",
+    params: { count: 1, payments: [] },
+    screen: "payments",
+  };
   // This table's actions column holds a plain button rather than a row menu, so each row's
   // button is checked the way expectRowMenusOnScreen checks a menu's.
   it.each(["en-GB", "es-ES"])(
@@ -512,6 +563,52 @@ describe("the open alerts at phone width", () => {
           // hit test inside the button's own shadow root reports as its host.
           const hit = table.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
           expect(hit, `row ${index} is covered`).toBe(action);
+        }
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "keeps both of the held-payments alert's buttons on screen and uncovered beside a long alert (390 px, %s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        expect(window.innerWidth).toBe(390);
+        const api = stubApi({
+          listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [long, held] }),
+        });
+        const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
+          api,
+          canOpen: () => true,
+        });
+        await flush(el);
+        const table = el.shadowRoot!.querySelector("[data-test=open-alerts-table]")!;
+        const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+        expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(
+          scroll.clientWidth,
+        );
+        const box = scroll.getBoundingClientRect();
+        const heldRow = rows(el, "open-alerts-table")[1]!;
+        const actions = [
+          ...heldRow.querySelectorAll("[data-test=alert-handle], [data-test=alert-go-to]"),
+        ];
+        expect(actions).toHaveLength(2);
+        for (const action of actions) {
+          const name = action.getAttribute("data-test")!;
+          const button = action.shadowRoot!.querySelector("button")!;
+          const at = button.getBoundingClientRect();
+          expect(at.right, name).toBeLessThanOrEqual(box.right);
+          expect(at.left, name).toBeGreaterThanOrEqual(box.left);
+          expect(at.right, `${name} against the screen`).toBeLessThanOrEqual(window.innerWidth);
+          const hit = table.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+          expect(hit, `${name} is covered`).toBe(action);
         }
       } finally {
         setLocale(before);

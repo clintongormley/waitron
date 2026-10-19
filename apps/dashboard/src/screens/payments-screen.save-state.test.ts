@@ -68,6 +68,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStuckBillPayments: vi.fn().mockResolvedValue([PAYMENT]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
+    listHeldPayments: vi.fn().mockResolvedValue([]),
     attestStuckBillPayment: vi.fn().mockResolvedValue({ outcome: "received" }),
     ...overrides,
   } as unknown as DashboardApi;
@@ -431,6 +432,103 @@ describe("the bill attestation's Record", () => {
     await openAttest(undefined, el);
     expect(await state(el, "confirm-bill-attest")).toEqual(quiet);
     await noComplaint(el, "bill-attest-dialog");
+  });
+});
+
+const HELD = {
+  holdId: "h-1",
+  paymentRef: "pi_57",
+  provider: "acme",
+  orderNumber: 57,
+  settledAt: "2026-07-01T19:40:00.000Z",
+  amount: "10.00",
+  providerAmount: "12.50",
+};
+
+async function openHeld(
+  api: DashboardApi = stubApi({
+    listHeldPayments: vi.fn().mockResolvedValue([HELD]),
+    recordHeldOutcome: vi.fn().mockResolvedValue({ outcome: "kept" }),
+  }),
+) {
+  const { el } = await mount(api);
+  await vi.waitFor(() => expect(q(el, "[data-test=record-held-h-1]")).not.toBeNull());
+  q(el, "[data-test=record-held-h-1]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=confirm-held-outcome]")).not.toBeNull());
+  await settle(el);
+  return { el, api };
+}
+
+describe("the held payment's Record", () => {
+  it("opens with every field empty and Record quiet, and a press sends nothing and marks nothing", async () => {
+    const { el, api } = await openHeld();
+    expect(value(el, "held-outcome-outcome")).toBe("");
+    expect(value(el, "held-outcome-note")).toBe("");
+    expect(value(el, "held-outcome-pin")).toBe("");
+    expect(await state(el, "confirm-held-outcome")).toEqual(quiet);
+    await press(el, "confirm-held-outcome");
+    await settle(el);
+    action(el, "confirm-held-outcome").click();
+    await settle(el);
+    expect(api.recordHeldOutcome).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=held-outcome-dialog]")).not.toBeNull();
+    await noComplaint(el, "held-outcome-dialog");
+  });
+
+  it("an outcome wakes Record", async () => {
+    const { el } = await openHeld();
+    await chooseOption(q(el, "[data-test=held-outcome-outcome]")!, "kept");
+    expect(await state(el, "confirm-held-outcome")).toEqual(ready);
+  });
+
+  it.each([
+    ["the note", "held-outcome-note"],
+    ["the PIN", "held-outcome-pin"],
+  ])("%s wakes Record, and emptying it quiets it", async (_, test) => {
+    const { el } = await openHeld();
+    await type(el, test, "1234");
+    expect(await state(el, "confirm-held-outcome")).toEqual(ready);
+    await type(el, test, "");
+    expect(await state(el, "confirm-held-outcome")).toEqual(quiet);
+  });
+
+  it("a note of spaces alone is no change", async () => {
+    const { el } = await openHeld();
+    await type(el, "held-outcome-note", "   ");
+    expect(await state(el, "confirm-held-outcome")).toEqual(quiet);
+  });
+
+  it("a note alone keeps Record drawn as a change but unpressable once tried", async () => {
+    const { el, api } = await openHeld();
+    await type(el, "held-outcome-note", "Checked Stripe");
+    await press(el, "confirm-held-outcome");
+    expect(await state(el, "confirm-held-outcome")).toEqual(blocked);
+    expect(api.recordHeldOutcome).not.toHaveBeenCalled();
+  });
+
+  it("a press with an outcome and a PIN records it and closes the dialog", async () => {
+    const { el, api } = await openHeld();
+    await chooseOption(q(el, "[data-test=held-outcome-outcome]")!, "kept");
+    await type(el, "held-outcome-pin", "1234");
+    await press(el, "confirm-held-outcome");
+    await vi.waitFor(() => expect(q(el, "[data-test=held-outcome-dialog]")).toBeNull());
+    expect(api.recordHeldOutcome).toHaveBeenCalledExactlyOnceWith("h-1", {
+      outcome: "kept",
+      pin: "1234",
+    });
+  });
+
+  it("reopens quiet after an attempt", async () => {
+    const { el } = await openHeld();
+    await type(el, "held-outcome-note", "Checked Stripe");
+    await press(el, "confirm-held-outcome");
+    q(el, "[data-test=held-outcome-dialog]")!.dispatchEvent(new CustomEvent("wt-close"));
+    await vi.waitFor(() => expect(q(el, "[data-test=held-outcome-dialog]")).toBeNull());
+    q(el, "[data-test=record-held-h-1]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=confirm-held-outcome]")).not.toBeNull());
+    await settle(el);
+    expect(await state(el, "confirm-held-outcome")).toEqual(quiet);
+    await noComplaint(el, "held-outcome-dialog");
   });
 });
 

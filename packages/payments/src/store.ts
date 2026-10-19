@@ -14,6 +14,7 @@ import { devices, nowIso, workingOrders } from "@waitron/db";
 import "./errors.js";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
+import { paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
 import { readerHeldBy, readerPaymentInProgress } from "./device-readers.js";
 import type { CardDetails, PaymentState } from "./provider.js";
 
@@ -684,6 +685,7 @@ export async function assertReversible(
  * row. `createdAt` is the key `listReconcilable` merges its two queries on.
  */
 export interface ReconcilableRow {
+  paymentId: string;
   paymentRef: string;
   state: PaymentState;
   amount: string;
@@ -698,6 +700,10 @@ export interface ReconcilableRow {
   // placed order is not settled.
   workingOrderStatus: "open" | "placed" | "settled" | "abandoned";
   reconcileRemediatedAt: string | null;
+  /** The payment has a hold, with or without an outcome. */
+  held: boolean;
+  /** The payment has a hold with a recorded outcome. */
+  holdResolved: boolean;
 }
 
 /**
@@ -716,6 +722,7 @@ export async function listReconcilable(
   const auditable = () =>
     tx
       .select({
+        paymentId: payments.id,
         paymentRef: payments.paymentRef,
         state: payments.state,
         amount: payments.amount,
@@ -727,11 +734,15 @@ export async function listReconcilable(
         workingOrderId: payments.workingOrderId,
         workingOrderStatus: workingOrders.status,
         reconcileRemediatedAt: payments.reconcileRemediatedAt,
+        held: sql<boolean>`${paymentHolds.id} is not null`.mapWith(Boolean),
+        holdResolved: sql<boolean>`${paymentHoldOutcomes.id} is not null`.mapWith(Boolean),
       })
       .from(payments)
-      .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId));
+      .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
+      .leftJoin(paymentHolds, eq(paymentHolds.paymentId, payments.id))
+      .leftJoin(paymentHoldOutcomes, eq(paymentHoldOutcomes.holdId, paymentHolds.id));
 
-  const held = (
+  const capturedOrSettled = (
     await auditable().where(
       and(
         eq(payments.provider, provider),
@@ -755,7 +766,7 @@ export async function listReconcilable(
   // Code-unit comparison of `${created_at}|${payment_ref}` — no locale collation, no branch on the
   // three-way result. `payment_ref` is unique per provider, so the key is total.
   const orderKey = (row: ReconcilableRow): string => `${row.createdAt}|${row.paymentRef}`;
-  return [...held, ...pending].sort((a, b) => {
+  return [...capturedOrSettled, ...pending].sort((a, b) => {
     const left = orderKey(a);
     const right = orderKey(b);
     return Number(left > right) - Number(left < right);
@@ -763,7 +774,7 @@ export async function listReconcilable(
 }
 
 /** Keeps an `IN` list under the engine's bind-parameter ceiling however large the input. */
-const CHUNK_SIZE = 1000;
+export const CHUNK_SIZE = 1000;
 
 /**
  * Which of these references belongs to ANY payment of this provider? Deliberately unbounded by
@@ -790,9 +801,10 @@ export async function existingReferences(
 }
 
 /**
- * Stamp the orphan-remediation marker, matching only a row whose marker is still null and returning
- * whether it stamped. That row-or-nothing return is the concurrency guard: two sweeps racing over
- * one orphan produce exactly one reversal, because only one of them sees `true`.
+ * Stamp the orphan-remediation marker, matching only a row whose marker is still null and that has
+ * no hold, and returning whether it stamped. That row-or-nothing return is the concurrency guard:
+ * two sweeps racing over one orphan produce exactly one reversal, because only one of them sees
+ * `true`, and a payment a racing sweep has held is never claimed.
  */
 export async function markReconcileRemediated(
   tx: Transaction,
@@ -801,7 +813,13 @@ export async function markReconcileRemediated(
   const [row] = await tx
     .update(payments)
     .set({ reconcileRemediatedAt: params.at.toISOString(), updatedAt: nowIso() })
-    .where(and(keyWhere(params), isNull(payments.reconcileRemediatedAt)))
+    .where(
+      and(
+        keyWhere(params),
+        isNull(payments.reconcileRemediatedAt),
+        sql`not exists (select 1 from ${paymentHolds} where ${paymentHolds.paymentId} = ${payments.id})`,
+      ),
+    )
     .returning({ id: payments.id });
   return row !== undefined;
 }

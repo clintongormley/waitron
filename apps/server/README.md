@@ -14,9 +14,11 @@ This document is written for whoever deploys this process, not whoever reads its
 
 **The one thing worth remembering before anything else:** `drain` carries a legal, hourly submission
 duty under Spain's Veri\*Factu regulation (art. 16.4). A `/health` that reports `200` is a claim that
-the pass was not wholesale abandoned and no Stripe settlement-audit period has been
-permanently parked — it is **not** a claim that every individual fiscal record has actually been
-accepted by AEAT. A database whose records reach AEAT but are individually rejected reads `200` with
+the pass was not wholesale abandoned and each duty had a clean pass within its budget; a parked
+Stripe settlement-audit period is not in the status code, and the body's `parked` count shows it
+only until the next recorded pass replaces it. The error-level `reconcile.run_parked` log line,
+written by the pass that parks, is the signal to look for afterwards. It is **not** a claim that
+every individual fiscal record has actually been accepted by AEAT. A database whose records reach AEAT but are individually rejected reads `200` with
 `lastOkAt` refreshing every pass; that is visible only via `recordsHalted`/`incidentsRaised` in the
 `drain.complete` log line, the `incidents` and `filing_cases` tables, and the dashboard's alerts
 bell and Alerts screen (as `fiscal.` alerts, among them `fiscal.filing_cases_open`, to anyone
@@ -506,8 +508,8 @@ status code: the container's healthcheck reads it (`deploy/compose.yml`), and an
 waits for a healthy container (`deploy/waitron.sh`), so a bucket outage must not hold either. The
 dashboard's alerts report the bucket copy instead.
 
-**A `503` is the single most important signal this process can produce.** It means one of four
-things — three visible in the body above without needing the logs, one that needs them:
+**A `503` is the single most important signal this process can produce.** It means one of three
+things — two visible in the body above without needing the logs, one that needs them:
 
 - **`stale: true`, `consecutiveFailures` counting up** — a duty inside the pass is failing every
   time it runs (a database blip, an unreachable AEAT endpoint). Check the logs (below) for the
@@ -525,21 +527,26 @@ things — three visible in the body above without needing the logs, one that ne
   `recordPass` for why that is correct rather than an over-broad alarm. Find why
   via the `drain.tenant_skipped` / `reconcile.pair_skipped` log lines (next section); the most
   common cause is a missing, unreadable, or stale-shaped credential.
-- **`parked` > 0, `payments.reconcile.stripe` only** — a Stripe reconcile run exhausted
-  `WAITRON_SCHEDULER_MAX_ATTEMPTS` (default 3) and is now permanently abandoned for that (duty,
-  period): nothing claims it again automatically, unlike a `skipped` pair (which retries within one
-  `WAITRON_SKIP_RETRY_MS` interval, folded as a minimum against an earlier gate — see the env-var
-  table above) or a `failed` one (which retries on its own backoff and does NOT flip this field —
-  see `src/pass.ts`'s own comment on why). `fiscal.drain` has no equivalent terminal outcome at
-  all — a rejected or held fiscal record is a different, already-persisted signal, deliberately not
-  fed into `/health`: a record AEAT rejected, or a cancellation set aside because AEAT rejected its original, gets a row in the
-  `incidents` table and a filing case in `filing_cases` (open ones raise the `fiscal.filing_cases_open`
-  alert), except that the hourly retry of a chain held by a run of rejections, rejected again with
-  the run's code, gets the filing case and no incident; a record held behind it gets neither, and shows in the `fiscal.submission_stopped` alert
-  (and, when a run of rejections with one error code holds its chain, in the
-  `fiscal.refusals_repeated` alert) and in `recordsHalted` in `drain.complete`; see
-  the opening section above. Find a park via the error-level `reconcile.run_parked` log line, which
-  carries the duty, period and `errorCode`.
+
+**`parked` > 0, `payments.reconcile.stripe` only, is not a `503` by itself.** The pass that parks
+counts as a failure (`consecutiveFailures` goes up and `lastOkAt` does not advance), but the next
+clean pass clears it, so the status code turns `503` only when no clean pass comes within the
+duty's 26-hour budget. A park means a Stripe reconcile run exhausted
+`WAITRON_SCHEDULER_MAX_ATTEMPTS` (default 3) for that (duty, period), and a fresh run of the same
+period is queued for a day later (`retryParkedAfterMs`, `src/reconcile-duty.ts`), unlike a
+`skipped` pair (which retries within one
+`WAITRON_SKIP_RETRY_MS` interval, folded as a minimum against an earlier gate — see the env-var
+table above) or a `failed` one (which retries on its own backoff and does NOT flip this field —
+see `src/pass.ts`'s own comment on why). `fiscal.drain` has no equivalent terminal outcome at
+all — a rejected or held fiscal record is a different, already-persisted signal, deliberately not
+fed into `/health`: a record AEAT rejected, or a cancellation set aside because AEAT rejected its original, gets a row in the
+`incidents` table and a filing case in `filing_cases` (open ones raise the `fiscal.filing_cases_open`
+alert), except that the hourly retry of a chain held by a run of rejections, rejected again with
+the run's code, gets the filing case and no incident; a record held behind it gets neither, and shows in the `fiscal.submission_stopped` alert
+(and, when a run of rejections with one error code holds its chain, in the
+`fiscal.refusals_repeated` alert) and in `recordsHalted` in `drain.complete`; see
+the opening section above. Find a park via the error-level `reconcile.run_parked` log line, which
+carries the duty, period and `errorCode`.
 
 `payments.reconcile.stripe` uses the identical `skipped`/`parked` mechanism with a 26-hour staleness
 budget (a daily period plus slack) rather than drain's ~75 minutes, so the same reading applies to
@@ -562,10 +569,10 @@ as a minimum against whatever a healthy duty computed the same pass, so it can o
 sooner, never later. That means the fix lands within one skip-retry interval, not necessarily the
 very next pass as it would for a whole-duty failure below — still comfortably inside `drain`'s
 hourly legal cadence, and no longer the 5-second-forever loop a missing certificate used to produce
-(see `WAITRON_SKIP_RETRY_MS` in the table above). A **parked** reconcile run is different: nothing
-re-attempts it on its own, ever — there is no
-remediation UI or re-sweep of an abandoned period, so a parked settlement audit needs a
-human to investigate directly, via the `reconcile.run_parked` line's duty/period. If the
+(see `WAITRON_SKIP_RETRY_MS` in the table above). A **parked** reconcile run is different: it is tried
+again a day after it parked, as a new run with fresh attempts, and again a day after each later
+park, so a cause that does not clear on its own needs a human to investigate, via the
+`reconcile.run_parked` line's duty/period. If the
 WHOLE pass is failing rather than one duty, restart is unlikely to help either — the process
 already retries every pass on its own at `WAITRON_MIN_TICK_MS`'s fast cadence (unlike a skip, a
 whole-duty throw still reports `now`), so a repeating `503` past a few cycles means the underlying
@@ -599,10 +606,11 @@ The ones worth grepping for:
   `sk_live_`/`sk_test_` prefix disagrees with this host's `WAITRON_ENV`).
 - **`reconcile.run_failed`** (`warn`) — `{ duty, period, errorCode }`. One claimed
   reconcile run failed this attempt but is still retrying on its own backoff — a `next_attempt_at`
-  exists. Never flips `/health`; see the `skipped`/`parked` bullets above.
+  exists. Never flips `/health`; see `skipped` and `parked` under
+  ["What `/health` means"](#what-health-means).
 - **`reconcile.run_parked`** (`error`) — `{ duty, period, errorCode }`. One claimed
-  reconcile run exhausted `WAITRON_SCHEDULER_MAX_ATTEMPTS` and is now abandoned for that
-  (duty, period) permanently — nothing will claim it again. This is what `/health`'s
+  reconcile run exhausted `WAITRON_SCHEDULER_MAX_ATTEMPTS`; a fresh run of that (duty, period) is
+  due a day later. This is what `/health`'s
   `parked` count (above) is counting.
 - **`duty.failed`** (`error`) — `{ duty, errorCode }`. The WHOLE duty threw for this pass (not a
   contained skip) — `fiscal.drain` or `payments.reconcile.stripe` itself.

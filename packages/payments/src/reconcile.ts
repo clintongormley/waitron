@@ -1,4 +1,11 @@
-import { AppError, compareDecimal, decimal, isAppError, jobOrigin } from "@waitron/shared";
+import {
+  AppError,
+  compareDecimal,
+  decimal,
+  decimalToCents,
+  isAppError,
+  jobOrigin,
+} from "@waitron/shared";
 import type { Decimal, Origin, SaleId } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -6,6 +13,9 @@ import type { PaymentState } from "./provider.js";
 import type { OrphanRemediation } from "./errors.js";
 import type { ReconcilableRow } from "./store.js";
 import { existingReferences, listReconcilable, markReconcileRemediated } from "./store.js";
+import { holdExists, recordHold, resolvedHoldsAmong } from "./holds.js";
+import { refreshHeldAlert } from "./held-alert.js";
+import type { HeldAlertSink } from "./held-alert.js";
 
 /** Half-open `[from, to)`. */
 export interface ReconcilePeriod {
@@ -144,6 +154,8 @@ export function classify(
   for (const row of rows) {
     const settled = row.externalRef === null ? undefined : index.get(row.externalRef);
     if (settled !== undefined) matched.add(settled);
+    // A person has recorded what became of this held payment: nothing is left to check or raise.
+    if (row.holdResolved) continue;
 
     if (row.state === "initiated") {
       // A minted-but-unpaid hosted payment is ordinary at any age — the abandonment path
@@ -181,6 +193,7 @@ export interface ReconcileDeps {
   report: SettlementReportSource;
   reverse: ReversalFn;
   incidents: IncidentSink;
+  heldAlerts: HeldAlertSink;
   settlementLagMs: number;
 }
 
@@ -204,21 +217,27 @@ const SEVERITY = {
 
 /**
  * Audit one period's payments against the processor's settlement report, raise one incident per
- * class, and reverse the orphans that pass every gate.
+ * class (a held payment only in the held alert), and reverse the orphans that pass every gate.
  *
- * T1 reads, the report fetch runs outside every transaction, T2 writes incidents and markers, and
- * the reversals run outside every transaction (each is a network call). The report is fetched even
- * when T1 read nothing: zero local rows against a non-empty report is the silent-data-loss case.
- * The remediation marker is stamped BEFORE the reversal, so a crash between the processor refunding
- * and us recording it leaves an under-remediated orphan, never a double refund.
+ * T1 refreshes the held alert and reads, the report fetch runs outside every transaction, T2
+ * writes incidents and markers, and the reversals run outside every transaction (each is a network
+ * call). The report is fetched even when T1 read nothing: zero local rows against a non-empty
+ * report is the silent-data-loss case. The remediation marker is stamped BEFORE the reversal, so a
+ * crash between the processor refunding and us recording it leaves an under-remediated orphan,
+ * never a double refund.
  */
 export async function reconcilePayments(
   deps: ReconcileDeps,
   period: ReconcilePeriod,
   now: Date,
 ): Promise<PaymentReconcileResult> {
-  // T1 — our rows for the period.
-  const rows = await withTransaction(deps.db, (tx) => listReconcilable(tx, deps.provider, period));
+  // T1 — our rows for the period. The held alert is refreshed here too, so its morning return does
+  // not wait on the settlement report.
+  let heldRaised = 0;
+  const rows = await withTransaction(deps.db, async (tx) => {
+    if (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null })) heldRaised += 1;
+    return listReconcilable(tx, deps.provider, period);
+  });
 
   // Widened by the settlement lag: a payment captured at the end of the period settles days after.
   const records = await deps.report.fetch({
@@ -235,21 +254,27 @@ export async function reconcilePayments(
     orphan: [],
     missingLocal: [],
     drift: [],
-    incidentsRaised: 0,
+    incidentsRaised: heldRaised,
     remediated: 0,
     remediationFailures: [],
   };
-  for (const entry of classified.rows) result[entry.klass].push(mismatchOf(entry));
-
-  // A drifting orphan is two independent entries over one row; this set joins them.
-  const driftedRefs = new Set(
-    classified.rows.filter((e) => e.klass === "drift").map((e) => e.row.paymentRef),
-  );
 
   // T2 — resolve the missingLocal candidates, raise every incident, and claim the orphans this
   // sweep will reverse.
   const remediable: ReconcilableRow[] = [];
   await withTransaction(deps.db, async (tx) => {
+    // An outcome recorded since T1 read these rows ends their checks just as one T1 saw would.
+    const resolved = await resolvedHoldsAmong(tx, [
+      ...new Set(classified.rows.map((entry) => entry.row.paymentId)),
+    ]);
+    const findings = classified.rows.filter((entry) => !resolved.has(entry.row.paymentId));
+    for (const entry of findings) result[entry.klass].push(mismatchOf(entry));
+
+    // A drifting orphan is two independent entries over one row; this set joins them.
+    const driftedRefs = new Set(
+      findings.filter((e) => e.klass === "drift").map((e) => e.row.paymentRef),
+    );
+
     const allReferences = new Set<string>();
     for (const record of classified.unmatched) {
       for (const reference of record.references) allReferences.add(reference);
@@ -271,11 +296,15 @@ export async function reconcilePayments(
     //   - `alreadyClaimed`: an earlier sweep, or a concurrent one that won the race, owns the
     //     reversal. It precedes the drift gate because that reversal has already happened or already
     //     failed for good, so settling the drift cannot unblock it.
+    //   - held: a payment with a hold waits for a person to record its outcome, whatever this
+    //     sweep's report says.
     //   - `amountDrifted`: the reversal sends no amount, so the processor would refund its figure
     //     while we record ours. Sending our amount is no fix: where the processor's charge is the
     //     smaller, the refund is refused after the permanent marker is stamped.
     const remediation = new Map<string, OrphanRemediation>();
-    for (const entry of classified.rows) {
+    const held = new Set<string>();
+    let wroteHold = false;
+    for (const entry of findings) {
       if (entry.klass !== "orphan") continue;
       const ref = entry.row.paymentRef;
       if (entry.row.workingOrderStatus !== "abandoned") {
@@ -290,8 +319,27 @@ export async function reconcilePayments(
         remediation.set(ref, "alreadyClaimed");
         continue;
       }
+      if (entry.row.held) {
+        held.add(ref);
+        continue;
+      }
       if (driftedRefs.has(ref)) {
         remediation.set(ref, "amountDrifted");
+        // Non-null: a drifted row matched a settlement, and its orphan entry carries the same one.
+        const providerAmount = entry.settled!.amount;
+        // `payment_holds` refuses a stored count of whole cents that is not positive, and that
+        // refusal would undo all of T2, so no hold is written unless the figure rounds to a cent.
+        if (decimalToCents(providerAmount) > 0) {
+          const hold = await recordHold(tx, {
+            paymentId: entry.row.paymentId,
+            providerAmount,
+            foundAt: now,
+          });
+          // Refused: a sweep that overtook this one claimed the payment after this one's T1 read.
+          if (hold === "refused") remediation.set(ref, "alreadyClaimed");
+          else held.add(ref);
+          if (hold === "written") wroteHold = true;
+        }
         continue;
       }
       const claimed = await markReconcileRemediated(tx, {
@@ -299,14 +347,24 @@ export async function reconcilePayments(
         paymentRef: ref,
         at: now,
       });
+      if (!claimed && (await holdExists(tx, entry.row.paymentId))) {
+        // A sweep that overtook this one held the payment after this one's T1 read.
+        held.add(ref);
+        continue;
+      }
       // A lost race is the same fact as an earlier sweep's marker — another sweep owns the reversal
       // — so it reports the same reason.
       remediation.set(ref, claimed ? "claimed" : "alreadyClaimed");
       if (claimed) remediable.push(entry.row);
     }
 
-    result.incidentsRaised += await raiseRowIncidents(tx, deps, classified, remediation, now);
+    result.incidentsRaised += await raiseRowIncidents(tx, deps, findings, remediation, held, now);
     result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
+    // The first transaction refreshed the alert at this same `now`, and every other writer of a
+    // hold or an outcome refreshes it in its own transaction.
+    if (wroteHold && (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null }))) {
+      result.incidentsRaised += 1;
+    }
   });
 
   // One failure does not abort the pass. See `PaymentReconcileResult.remediationFailures` for why
@@ -332,16 +390,21 @@ const PAYMENT_CHECK = jobOrigin("payment_check");
 
 /** One aggregate incident per class, returning how many were really inserted. Aggregate because
  * the open-incident dedup keys on `(source, device, code, sale_id)` and these rows share the payment
- * check's source and a null sale_id, so per-payment incidents would collapse into one. */
+ * check's source and a null sale_id, so per-payment incidents would collapse into one. A held
+ * payment is named by the held alert instead of the orphan and drift ones. */
 async function raiseRowIncidents(
   tx: Transaction,
   deps: ReconcileDeps,
-  classified: Classification,
+  findings: ClassifiedRow[],
   remediation: Map<string, OrphanRemediation>,
+  held: Set<string>,
   now: Date,
 ): Promise<number> {
   const groups = new Map<MismatchClass, ClassifiedRow[]>();
-  for (const entry of classified.rows) {
+  for (const entry of findings) {
+    if ((entry.klass === "orphan" || entry.klass === "drift") && held.has(entry.row.paymentRef)) {
+      continue;
+    }
     const group = groups.get(entry.klass);
     if (group === undefined) groups.set(entry.klass, [entry]);
     else group.push(entry);
@@ -397,7 +460,7 @@ function incidentFor(
         amount: row.amount,
         workingOrderId: row.workingOrderId,
         workingOrderStatus: row.workingOrderStatus,
-        // The claim loop sets an entry for every orphan.
+        // The claim loop sets an entry for every orphan that is not held.
         remediation: remediation.get(row.paymentRef)!,
       })),
     });

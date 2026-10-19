@@ -336,3 +336,20 @@ it("explains an unresolved post-invoice return without claiming the invoice is b
     "factura original no cambia",
   );
 });
+
+it("never says the payments check may not look at a payment again", () => {
+  for (const code of [
+    "payment.reconcile_unsettled",
+    "payment.reconcile_lost_settlement",
+    "payment.reconcile_orphan",
+    "payment.reconcile_missing_local",
+    "payment.reconcile_drift",
+  ]) {
+    const en = alertMessage(code, { count: 2 }, "en");
+    const es = alertMessage(code, { count: 2 }, "es");
+    expect(en, code).toContain("Marking it handled does not fix it.");
+    expect(es, code).toContain("Marcarla como resuelta no lo soluciona.");
+    expect(en, code).not.toContain("may not check");
+    expect(es, code).not.toContain("no vuelva a comprobar");
+  }
+});

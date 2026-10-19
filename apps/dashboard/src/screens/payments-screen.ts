@@ -47,6 +47,8 @@ import type {
   StuckPaymentRow,
   StuckBillPaymentRow,
   StuckBillRefundRow,
+  HeldOutcome,
+  HeldPaymentRow,
 } from "../api/client.js";
 import { dashboardPath } from "../navigation.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -88,6 +90,7 @@ type BillTarget =
   | { kind: "tender"; row: StuckTenderRefundRow };
 
 type BillDraft = { outcome: string; note: string; pin: string };
+type HeldField = "outcome" | "note" | "pin";
 
 function billAmount(target: BillTarget): string {
   return target.kind === "payment"
@@ -311,6 +314,10 @@ export class PaymentsScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         margin: 0 0 var(--wt-space-2);
       }
+      .held-amounts {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+      }
       .stuck-details {
         display: grid;
         grid-template-columns: auto 1fr;
@@ -322,6 +329,17 @@ export class PaymentsScreen extends LitElement {
       }
       .bill-outcome {
         margin-block: var(--wt-space-3);
+      }
+      .held-dialog-amounts {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: var(--wt-space-1) var(--wt-space-3);
+        margin: 0;
+      }
+      .held-dialog-amounts dd {
+        margin: 0;
+        font-weight: var(--wt-font-weight-bold);
+        text-align: end;
       }
       .reader-tools wt-combobox {
         flex: 0 1 calc(var(--wt-space-6) * 7);
@@ -409,6 +427,9 @@ export class PaymentsScreen extends LitElement {
   #tenderRefundRead = 0;
   @state() private billPaymentLoadError: string | null = null;
   @state() private billRefundLoadError: string | null = null;
+  @state() private heldPayments: HeldPaymentRow[] = [];
+  @state() private heldLoadError: string | null = null;
+  #heldRead = 0;
   @state() private billResult: { text: string; refused: boolean } | null = null;
   @state() private billAction: { target: BillTarget; mode: "check" | "attest" } | null = null;
   @state() private billBusy = false;
@@ -418,6 +439,13 @@ export class PaymentsScreen extends LitElement {
   @state() private billAttempted = false;
   @state() private billFormError: string | null = null;
   @state() private billFormErrorText: string | null = null;
+  @state() private heldAction: HeldPaymentRow | null = null;
+  @state() private heldOutcome = "";
+  @state() private heldNote = "";
+  @state() private heldPin = "";
+  @state() private heldAttempted = false;
+  @state() private heldRefusal: { code: string; text: string; field: HeldField | null } | null =
+    null;
   /** The id of the reader the delete dialog is open on. Each opening and close is a new generation, so a
    * delete's answer for an earlier one is never applied; an impact read for an earlier one is
    * dropped by its query slot, which the next `watch` or `release` replaces. */
@@ -466,6 +494,14 @@ export class PaymentsScreen extends LitElement {
     },
   );
 
+  readonly #heldQuery = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.heldLoadError = codeOf(error);
+    },
+  );
+
   readonly #tenderRefundQuery = new DashboardQueries(
     this,
     () => this.api,
@@ -504,6 +540,38 @@ export class PaymentsScreen extends LitElement {
         ?.requestClose("cancel")
     ) {
       if (this.billAction === action) this.#closeBillAction();
+    }
+  }
+
+  #heldLeave?: LeaveCoordinator;
+  #heldScope?: DraftScope<BillDraft>;
+  readonly #beforeHeldClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.#heldLeave ||
+    !this.#heldScope ||
+    (await this.#heldLeave.request({ scopes: [this.#heldScope.id], reason, proceed() {} })) ===
+      "proceeded";
+
+  #heldDraft(): BillDraft {
+    return { outcome: this.heldOutcome, note: this.heldNote.trim(), pin: this.heldPin };
+  }
+
+  #closeHeldAction(): void {
+    this.#heldScope?.dispose();
+    this.#heldScope = undefined;
+    this.heldAction = null;
+    this.heldOutcome = "";
+    this.heldNote = "";
+    this.heldPin = "";
+  }
+
+  async #requestHeldClose(): Promise<void> {
+    const action = this.heldAction;
+    if (
+      await this.renderRoot
+        .querySelector<WtDialog>("[data-test=held-outcome-dialog]")
+        ?.requestClose("cancel")
+    ) {
+      if (this.heldAction === action) this.#closeHeldAction();
     }
   }
 
@@ -560,11 +628,19 @@ export class PaymentsScreen extends LitElement {
         this.billRefundLoadError = null;
       })
       .catch(() => undefined);
+    void this.#heldQuery
+      .watch("listHeldPayments", [], (rows) => {
+        this.#heldRead++;
+        this.heldPayments = rows;
+        this.heldLoadError = null;
+      })
+      .catch(() => undefined);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#tenderRefundRead++;
+    this.#heldRead++;
     this.#closeDelete();
     this.#statusVersion++;
     this.#billOperation = undefined;
@@ -572,6 +648,10 @@ export class PaymentsScreen extends LitElement {
       .querySelector<WtDialog>("[data-test=bill-attest-dialog]")
       ?.closeAfter("security");
     this.#closeBillAction();
+    this.renderRoot
+      .querySelector<WtDialog>("[data-test=held-outcome-dialog]")
+      ?.closeAfter("security");
+    this.#closeHeldAction();
     this.billBusy = false;
     this.#readerOperation = undefined;
     this.#editScope?.dispose();
@@ -1086,11 +1166,13 @@ export class PaymentsScreen extends LitElement {
 
   async #loadBillRecovery(background: boolean): Promise<void> {
     const tenderRead = ++this.#tenderRefundRead;
+    const heldRead = ++this.#heldRead;
     const client = background ? (this.api.background ?? this.api) : this.api;
-    const [payments, refunds, tenders] = await Promise.allSettled([
+    const [payments, refunds, tenders, held] = await Promise.allSettled([
       client.listStuckBillPayments(),
       client.listStuckBillRefunds(),
       client.listStuckTenderRefunds(),
+      client.listHeldPayments(),
     ]);
     if (payments.status === "fulfilled") {
       this.billPayments = payments.value;
@@ -1100,6 +1182,12 @@ export class PaymentsScreen extends LitElement {
       this.billRefunds = refunds.value;
       this.billRefundLoadError = null;
     } else this.billRefundLoadError = codeOf(refunds.reason);
+    if (heldRead === this.#heldRead && this.isConnected) {
+      if (held.status === "fulfilled") {
+        this.heldPayments = held.value;
+        this.heldLoadError = null;
+      } else this.heldLoadError = codeOf(held.reason);
+    }
     if (tenderRead === this.#tenderRefundRead && this.isConnected) {
       if (tenders.status === "fulfilled") {
         this.tenderRefunds = tenders.value;
@@ -1277,6 +1365,97 @@ export class PaymentsScreen extends LitElement {
     if (this.#billPinRefused()) this.#focusFirstInvalid("[data-test=bill-attest-dialog]");
   }
 
+  #openHeldAction(row: HeldPaymentRow): void {
+    if (this.billBusy) return;
+    this.#closeHeldAction();
+    this.heldAction = row;
+    this.heldAttempted = false;
+    this.heldRefusal = null;
+    const { coordinator, scope } = draftScopeFor(this, {
+      id: {},
+      current: () => this.#heldDraft(),
+      snapshot: (value: BillDraft) => ({ ...value }),
+      equal: (a, b) => a.outcome === b.outcome && a.note === b.note && a.pin === b.pin,
+      restore: () => {},
+    });
+    this.#heldLeave = coordinator;
+    this.#heldScope = scope;
+  }
+
+  async #recordHeld(): Promise<void> {
+    const row = this.heldAction;
+    if (row === null || this.billBusy) return;
+    const scope = this.#heldScope;
+    if (saveActionState(scope).unchanged) return;
+    const outcome = this.heldOutcome;
+    const note = this.heldNote.trim();
+    const pin = this.heldPin;
+    this.heldAttempted = true;
+    this.heldRefusal = null;
+    if (!outcome || !pin) {
+      this.#focusFirstInvalid("[data-test=held-outcome-dialog]");
+      return;
+    }
+    const operation = {};
+    this.#billOperation = operation;
+    this.billBusy = true;
+    const order = this.#heldOrder(row);
+    try {
+      await this.api.recordHeldOutcome(row.holdId, {
+        outcome: outcome as HeldOutcome,
+        ...(note ? { note } : {}),
+        pin,
+      });
+      if (!this.isConnected || this.heldAction !== row) return;
+      scope?.commit({ outcome, note, pin });
+      this.billResult = { text: `${order}: ${t("payments.held.recorded")}`, refused: false };
+      if (!scope?.isDirty()) {
+        this.renderRoot
+          .querySelector<WtDialog>("[data-test=held-outcome-dialog]")
+          ?.closeAfter("saved");
+        this.#closeHeldAction();
+      }
+      await this.#loadBillRecovery(true);
+    } catch (error) {
+      if (!this.isConnected || this.heldAction !== row) return;
+      const code = codeOf(error);
+      if (code === "payment.hold_not_found" || code === "payment.hold_already_recorded") {
+        this.renderRoot
+          .querySelector<WtDialog>("[data-test=held-outcome-dialog]")
+          ?.closeAfter("security");
+        this.#closeHeldAction();
+        this.billResult = { text: `${order}: ${codeMessage(code)}`, refused: true };
+        await this.#loadBillRecovery(true);
+      } else {
+        const named = (error as { params?: { field?: unknown } } | null)?.params?.field;
+        const field: HeldField | null =
+          code === "pin.invalid" || code === "pin.throttled"
+            ? "pin"
+            : code === "management.request_invalid" && (named === "outcome" || named === "note")
+              ? named
+              : null;
+        this.heldRefusal = { code, text: codeMessage(code), field };
+      }
+    } finally {
+      if (this.#billOperation === operation) {
+        this.#billOperation = undefined;
+        this.billBusy = false;
+      }
+    }
+    if (this.heldRefusal?.field) this.#focusFirstInvalid("[data-test=held-outcome-dialog]");
+  }
+
+  #heldErrors(): Partial<Record<HeldField, string>> {
+    const errors: Partial<Record<HeldField, string>> = {};
+    if (this.heldAttempted) {
+      if (!this.heldOutcome) errors.outcome = t("payments.held.outcome_required");
+      if (!this.heldPin) errors.pin = t("payments.bill.pin_required");
+    }
+    const refusal = this.heldRefusal;
+    if (refusal?.field) errors[refusal.field] = refusal.text;
+    return errors;
+  }
+
   #billPinRefused(): boolean {
     return this.billFormError === "pin.invalid" || this.billFormError === "pin.throttled";
   }
@@ -1421,21 +1600,24 @@ export class PaymentsScreen extends LitElement {
   #renderBillRecovery(): TemplateResult | typeof nothing {
     const errors = [
       ...new Set(
-        [this.billPaymentLoadError, this.billRefundLoadError, this.tenderRefundLoadError]
+        [
+          this.billPaymentLoadError,
+          this.billRefundLoadError,
+          this.tenderRefundLoadError,
+          this.heldLoadError,
+        ]
           .filter((code): code is string => code !== null)
           .map((code) => codeMessage(code)),
       ),
     ];
-    if (
-      !this.billPayments.length &&
-      !this.billRefunds.length &&
-      !this.tenderRefunds.length &&
-      !this.billResult &&
-      !errors.length
-    )
-      return nothing;
+    const pending =
+      this.billPayments.length ||
+      this.billRefunds.length ||
+      this.tenderRefunds.length ||
+      this.heldPayments.length;
+    if (!pending && !this.billResult && !errors.length) return nothing;
     return html`<section
-      class="stuck-section ${this.billPayments.length || this.billRefunds.length || this.tenderRefunds.length ? "pending" : ""}"
+      class="stuck-section ${pending ? "pending" : ""}"
       data-test="bill-recovery"
       aria-labelledby="bill-recovery-heading"
     >
@@ -1474,7 +1656,158 @@ export class PaymentsScreen extends LitElement {
               </ul>`
           : nothing
       }
+      ${
+        this.heldPayments.length
+          ? html`<div data-test="held-payments">
+              <h3>${t("payments.held.heading")}</h3>
+              <ul class="stuck-list">
+                ${this.heldPayments.map((row) => this.#renderHeldRow(row))}
+              </ul>
+            </div>`
+          : nothing
+      }
     </section>`;
+  }
+
+  #heldOrder(row: HeldPaymentRow): string {
+    const order = fill("payments.stuck.order", { number: String(row.orderNumber) });
+    return row.label ? `${order} · ${row.label}` : order;
+  }
+
+  #heldOrderAndTime(row: HeldPaymentRow): string {
+    const order = this.#heldOrder(row);
+    return row.settledAt ? `${order} · ${formatAlertTime(row.settledAt)}` : order;
+  }
+
+  #heldOrderLine(row: HeldPaymentRow): TemplateResult {
+    return html`<p class="stuck-order">
+      ${this.#heldOrder(row)}${
+        row.settledAt
+          ? html` · <time datetime=${row.settledAt}>${formatAlertTime(row.settledAt)}</time>`
+          : nothing
+      }
+    </p>`;
+  }
+
+  #renderHeldRow(row: HeldPaymentRow): TemplateResult {
+    const order = this.#heldOrderAndTime(row);
+    return html`<li class="stuck" data-test=${`held-payment-${row.holdId}`}>
+      <div class="stuck-body">
+        ${this.#heldOrderLine(row)}
+        <p class="held-amounts">
+          ${fill("payments.held.amounts", {
+            amount: formatMoney(row.amount, currentLocale()),
+            provider: this.#providerName(row.provider),
+            providerAmount: formatMoney(row.providerAmount, currentLocale()),
+          })}
+        </p>
+      </div>
+      <wt-button
+        variant="secondary"
+        data-test=${`record-held-${row.holdId}`}
+        aria-label=${`${t("payments.held.record")}: ${order}`}
+        ?disabled=${this.billBusy}
+        @click=${() => this.#openHeldAction(row)}
+        >${t("payments.held.record")}</wt-button
+      >
+    </li>`;
+  }
+
+  #renderHeldDialog(): TemplateResult | typeof nothing {
+    const row = this.heldAction;
+    if (row === null) return nothing;
+    const errors = this.#heldErrors();
+    const refusal = this.heldRefusal;
+    const invalid = this.heldAttempted && (!this.heldOutcome || !this.heldPin);
+    const record = saveActionState(this.#heldScope);
+    const bottom = [
+      ...(refusal && !refusal.field ? [refusal.text] : []),
+      ...(Object.keys(errors).length > 0 ? [t("form.fix_fields")] : []),
+    ].join(" ");
+    const provider = this.#providerName(row.provider);
+    const change = (field: HeldField, value: string) => {
+      if (!this.isConnected || this.heldAction !== row) return;
+      if (field === "outcome") this.heldOutcome = value;
+      else if (field === "note") this.heldNote = value;
+      else this.heldPin = value;
+      this.#heldScope?.changed();
+      if (this.heldRefusal?.field === field) this.heldRefusal = null;
+    };
+    return html`<wt-dialog
+      data-test="held-outcome-dialog"
+      .open=${true}
+      .beforeClose=${this.#heldLeave ? this.#beforeHeldClose : undefined}
+      ?dismissible=${!this.billBusy}
+      heading=${t("payments.held.dialog_heading")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (!this.billBusy && this.heldAction === row) this.#closeHeldAction();
+      }}
+    >
+      ${this.#heldOrderLine(row)}
+      <dl class="held-dialog-amounts">
+        <dt>${t("payments.held.charged_here")}</dt>
+        <dd>${formatMoney(row.amount, currentLocale())}</dd>
+        <dt>${fill("payments.held.provider_paid", { provider })}</dt>
+        <dd>${formatMoney(row.providerAmount, currentLocale())}</dd>
+      </dl>
+      <wt-combobox
+        class="bill-outcome"
+        name="outcome"
+        required
+        data-test="held-outcome-outcome"
+        label=${t("payments.held.outcome")}
+        search="auto"
+        placeholder=${t("payments.bill.choose_outcome")}
+        .options=${[
+          { value: "refunded_at_provider", label: t("payments.held.refunded_option") },
+          { value: "kept", label: t("payments.held.kept_option") },
+        ]}
+        .value=${this.heldOutcome}
+        error=${errors.outcome ?? ""}
+        ?disabled=${this.billBusy}
+        @wt-change=${(event: CustomEvent<{ value: string }>) =>
+          change("outcome", event.detail.value)}
+      ></wt-combobox>
+      <wt-input
+        name="note"
+        data-test="held-outcome-note"
+        label=${t("payments.held.note")}
+        .value=${this.heldNote}
+        .error=${errors.note ?? ""}
+        ?disabled=${this.billBusy}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => change("note", event.detail.value)}
+      ></wt-input>
+      <wt-input
+        name="pin"
+        type="password"
+        autocomplete="off"
+        required
+        data-test="held-outcome-pin"
+        label=${t("payments.bill.pin")}
+        .value=${this.heldPin}
+        .error=${errors.pin ?? ""}
+        ?disabled=${this.billBusy}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => change("pin", event.detail.value)}
+      ></wt-input>
+      <wt-form-actions slot="footer" .error=${bottom}>
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          ?disabled=${this.billBusy}
+          @click=${() => void this.#requestHeldClose()}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="confirm-held-outcome"
+          variant=${record.variant}
+          ?loading=${this.billBusy}
+          ?disabled=${record.unchanged || invalid}
+          @click=${() => void this.#recordHeld()}
+          >${t("payments.held.confirm")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-dialog>`;
   }
 
   #renderBillDialog(): TemplateResult | typeof nothing {
@@ -2302,6 +2635,7 @@ export class PaymentsScreen extends LitElement {
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
       ${keyed(this.editor, this.#renderEditor())} ${this.#renderDeleteDialog()}
       ${this.#renderResolveDialog()} ${keyed(this.billAction, this.#renderBillDialog())}
+      ${keyed(this.heldAction, this.#renderHeldDialog())}
       ${
         this.labelReader === null
           ? nothing

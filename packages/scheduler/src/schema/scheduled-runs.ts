@@ -4,7 +4,8 @@ import { count, id, json, label, newId, nowIso, table, tsString } from "@waitron
 
 /**
  * The lifecycle of one scheduled run. `pending` is work enqueued but not yet attempted (a
- * re-sweep); `failed` will be retried; `parked` has exhausted its attempts and never will be.
+ * re-sweep, or a parked period's retry); `failed` will be retried; `parked` has exhausted its
+ * attempts and is never retried itself; a parked period's retry is a new row.
  * `succeeded` and `parked` are the two TERMINAL states (`TERMINAL` in `derive.ts`).
  */
 export const runState = ["pending", "running", "succeeded", "failed", "parked"] as const;
@@ -14,8 +15,8 @@ export type RunState = (typeof runState)[number];
  * One attempt-carrying record of one duty over one period. The runner holds no queue: it derives
  * due work by asking which periods have NO row here.
  *
- * `generation` is in the unique key because a re-sweep must run a period AGAIN without
- * overwriting what the first sweep recorded.
+ * `generation` is in the unique key because a re-sweep or a parked period's retry must run a
+ * period AGAIN without overwriting what the first sweep recorded.
  */
 export const scheduledRuns = table(
   "scheduled_runs",
@@ -27,7 +28,8 @@ export const scheduledRuns = table(
      * timezone-aware cadence must change how periods are COMPUTED, not what past rows mean. */
     periodFrom: tsString("period_from").notNull(),
     periodTo: tsString("period_to").notNull(),
-    /** 0 = derived from a gap; N > 0 = the Nth re-sweep of the same period. */
+    /** 0 = derived from a gap; N > 0 = the Nth successor of the same period (a re-sweep, or a
+     * parked period's retry). */
     generation: count("generation").notNull().default(0),
     state: label("state").$type<RunState>().notNull(),
     /** Incremented at CLAIM, not at completion — so a run stranded by a crash has already spent

@@ -31,6 +31,8 @@ declare module "@waitron/shared" {
     /** The payment↔sale link is write-once: a second association is refused rather than
      * re-pointing the payment at a different sale. */
     "payment.already_associated": { paymentRef: string; saleId: string | null };
+    "payment.hold_not_found": { holdId: string };
+    "payment.hold_already_recorded": { holdId: string };
     /** An INCIDENT, never thrown. The sale already chained and is immutable, so this is an
      * uncollected-receivable notice, not a fiscal reversal. */
     "payment.offline_forward_declined": { paymentRef: string; amount: string };
@@ -76,6 +78,15 @@ declare module "@waitron/shared" {
     /** The amount is never auto-corrected; a human decides. */
     "payment.reconcile_drift": {
       payments: { paymentRef: string; captured: string; settled: string }[];
+      count: number;
+    };
+    "payment.reconcile_held": {
+      payments: {
+        paymentRef: string;
+        workingOrderId: string;
+        amount: string;
+        providerAmount: string;
+      }[];
       count: number;
     };
     /** `reason` is the failed reversal's `AppError` code, or `"unknown"`; never prose. The
