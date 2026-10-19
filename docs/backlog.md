@@ -3740,15 +3740,15 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   auth. Gated on the deli having a Stripe account, which it does not.
 
 
-- **Slice 2 — the handheld NFC/QR link: paying at the table from a handheld (A796).** Designed
-  2026-10-19 and revised the same day to the owner's answer: no question about which reader is in
-  the waiter's hand; the payment form carries the phone's card reader and receipt printer, last
-  chosen on that phone and folded away until the waiter changes one. Six owner questions are open
-  (design §9): where the screen names the reader (folded row, charge button, both or neither); the
-  form on a phone's first payment; when the reader, or the printer, used last can no longer be
-  used; whether the form's printer is the phone's own printer or a separate receipt memory as A790
-  proposes (the two designs must agree); and whether taking a reader another phone holds still
-  asks first:
+- **Slice 2 — the handheld NFC/QR link: paying at the table from a handheld (A796).** Design
+  decided (Revision 4, 2026-10-19; no questions open); the build is to be planned as its own item,
+  in the design's §5 slices. The payment form carries the phone's card reader and receipt printer —
+  its Equipment settings, one setting each, which A790 follows too — last chosen on that phone and
+  folded away; the folded row and the charge button name the reader. A QR button on the folded row
+  scans a reader's or a printer's sticker, and the till's existing NFC listener keeps working while
+  the form is open, with the form updating at once. A phone with no usable reader opens the row
+  with the reader empty (a profile with exactly one free reader picks it automatically); a printer
+  that has gone never holds up a payment. Taking another phone's reader from the list still asks:
   [design](superpowers/specs/2026-10-19-a796-handheld-payments-design.md),
   [mockups](backlog/mockups/a796-handheld-payments/). Restoring `stripe_on_device` (Tap-to-Pay)
   remains open; it waits for the one-time native-app decision
