@@ -63,7 +63,11 @@ export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInp
   rules: number[];
 } {
   const rules: number[] = [];
-  const document = buildReceiptDocument({ ...input, surface: "thermal" });
+  const document = buildReceiptDocument({
+    ...input,
+    surface: "thermal",
+    paper: printer.paperWidth,
+  });
   const b = esc(printer);
   const { columns, widthDots } = b.grid;
   b.init().printArea(widthDots);

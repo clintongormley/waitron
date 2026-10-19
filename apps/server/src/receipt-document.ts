@@ -23,7 +23,7 @@ import {
   type FiledLine,
   type GroupDiscount,
 } from "./receipt-figures.js";
-import { receiptDateTime, receiptDay } from "./receipt-dates.js";
+import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
 import { groupByParent, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
@@ -44,6 +44,8 @@ export interface ReceiptTrim {
 
 export interface ReceiptDocumentInput {
   surface?: "thermal" | "a4";
+  /** The roll's width; absent (A4, PDF, a raster preview) prints the date in words. */
+  paper?: "58mm" | "80mm";
   logo?: ReceiptLogoRaster | null;
   result: Omit<TillSaleResult, keyof ReceiptPresentation>;
   issuer: ReceiptIssuer;
@@ -121,6 +123,7 @@ export function buildReceiptDocument({
   receipt,
   venueAddress = [],
   surface = "thermal",
+  paper,
   invoiceLocale,
   namesLocale = invoiceLocale,
   simulated = false,
@@ -204,25 +207,26 @@ export function buildReceiptDocument({
   rule();
   align("left");
 
-  const orderText = [result.orderLabel, `${label.order} ${result.orderNumber}`]
-    .filter(Boolean)
-    .join(" · ");
-  if (simplified) {
-    // Two spaces at least, or an order number running into the date reads as one figure.
-    row(orderText, receiptDateTime(result.issuedAt, locale), 0, undefined, 2);
-    row(label.simplifiedInvoice, result.invoiceNumber);
+  // Two spaces at least, or an order number running into the date reads as one figure.
+  row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
+  if (simplified && result.operationDate === undefined) {
+    const date =
+      paper === "58mm"
+        ? receiptDateTimeNumeric(result.issuedAt, locale)
+        : receiptDateTime(result.issuedAt, locale);
+    row(result.invoiceNumber, date, 0, undefined, 2);
   } else {
-    row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
-    row(
-      orderText,
-      receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes),
-      0,
-      undefined,
-      2,
-    );
-  }
-  if (!simplified && result.operationDate !== undefined) {
-    row(label.operationDate, receiptDay(result.operationDate, locale));
+    if (simplified) {
+      const heading = paper === "58mm" ? label.simplifiedInvoiceShort : label.simplifiedInvoice;
+      row(heading, result.invoiceNumber);
+    } else {
+      row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
+    }
+    const offset = simplified ? undefined : result.issuedOffsetMinutes;
+    row(label.date, receiptDateTime(result.issuedAt, locale, offset));
+    if (result.operationDate !== undefined) {
+      row(label.operationDate, receiptDay(result.operationDate, locale));
+    }
   }
   rule();
   if (!simplified && result.recipient) {
