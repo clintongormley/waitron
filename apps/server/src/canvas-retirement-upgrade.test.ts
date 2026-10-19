@@ -422,6 +422,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
       ...before!,
       ...journals,
       department_floor_plan_sets: [],
+      service_steps: [],
       device_profile_admission_roles: [],
       tender_refunds: [],
       sale_receipt_guests: [],

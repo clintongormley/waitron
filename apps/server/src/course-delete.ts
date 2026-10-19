@@ -9,6 +9,7 @@ import {
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
+import { serviceSteps } from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -18,6 +19,7 @@ export const COURSE_REFERENCES: readonly Reference[] = [
   { table: orderDraftLines, column: orderDraftLines.courseId },
   { table: workingOrderLines, column: workingOrderLines.courseId },
   { table: ticketItems, column: ticketItems.courseId },
+  { table: serviceSteps, column: serviceSteps.courseId },
 ];
 
 export function coursesInUse(tx: Transaction, ids: readonly string[]): Promise<Set<string>> {
