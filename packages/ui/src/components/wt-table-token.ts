@@ -21,7 +21,8 @@ export interface TableTokenLabels {
 
 /**
  * Presentational only: the consumer wraps it in whatever tappable or draggable element it needs. The
- * manual status's colour is data, so it rides on an inline style rather than in the stylesheet.
+ * status chip's colour comes from the consumer, so it rides on an inline style rather than in the
+ * stylesheet.
  */
 @customElement("wt-table-token")
 export class WtTableToken extends LitElement {
@@ -108,7 +109,7 @@ export class WtTableToken extends LitElement {
          perceive its flash still sees the escalation). A small CSS-only TRIANGLE — never text, since
          this package carries no inline copy and a spatial token has no room for a text chip like the
          list card's — and deliberately a DIFFERENT silhouette from the round .dot/.badge.status
-         swatch, so it cannot be mistaken for a manual-status marker. Positioned over the card's
+         swatch, so it cannot be mistaken for a status marker. Positioned over the card's
          corner via the position: relative on .card above; every dimension is token-driven, never a
          literal length (this package's no-hardcoded-chrome guard bans it). */
       .forgotten-marker {
@@ -211,7 +212,7 @@ export class WtTableToken extends LitElement {
         border: 1px solid var(--wt-color-warning);
       }
 
-      /* The manual-status chip: text in the theme colour on a neutral chip, with the DATA-driven status
+      /* The status chip: text in the theme colour on a neutral chip, with the DATA-driven status
          colour as a border + a small swatch — never as a text background, so contrast stays token-fixed
          and the arbitrary colour cannot fail a11y. Verbatim from FP-1's .badge.status. */
       .badge.status {

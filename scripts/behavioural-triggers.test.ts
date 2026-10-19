@@ -62,7 +62,7 @@ import {
  * `packages/db/drizzle/0064_line_locale_triggers_text_only.sql` re-creates the two locale update
  * triggers to fire only when an update changes the name map each one checks or moves the line.
  * Some triggers ACT rather than refuse.
- * The two of `packages/db/drizzle/0038_main_bill_release.sql`, re-created by `0045` too: a
+ * The two of `packages/db/drizzle/0038_main_bill_release.sql`, re-created by `0045`: a
  * party's `main_bill_id` is cleared when that bill leaves `open`, or leaves the party (to another
  * party or to the counter).
  * `packages/db/drizzle/0024_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
@@ -123,7 +123,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * than one event is split and the suffix names the event), the `products_*` names of
  * `0004_variant_one_level.sql` and `0047_product_ordering_check.sql`, the
  * `working_orders_release_main_bill*` names of
- * `0038_main_bill_release.sql` (those three re-created by
+ * `0038_main_bill_release.sql` (both re-created by
  * `0045_recreate_triggers_after_rebuild.sql`), and the `bill_payment*` names of
  * `0024_bill_payment_triggers.sql`. A later migration that RECREATES a table drops its triggers
  * silently — the `products_*` ones on `products` — and
@@ -268,15 +268,6 @@ function table(id, label) {
   );
 }
 
-/** A table's membership of a party; `leftAt` null while the table belongs to it. */
-function membership(id, partyId, tableId, leftAt) {
-  const left = leftAt === null ? "null" : `'${leftAt}'`;
-  return (
-    `insert into party_tables (id, party_id, table_id, joined_at, left_at) ` +
-    `values ('${id}', '${partyId}', '${tableId}', '${STAMP}', ${left})`
-  );
-}
-
 function tender(id, saleId, amount, tip = 0) {
   return (
     `insert into tenders (id, sale_id, method, amount, tip_amount, settled_at) ` +
@@ -318,7 +309,6 @@ function seed(connection) {
     workingOrder("wo-lines-update", "open"),
     workingOrder("wo-lines-delete", "open"),
     workingOrder("wo-orphaned-parent", "open"),
-    workingOrder("wo-tab", "open", { partyId: "party-bill-settles" }),
     // A location that does not exist, so the order resolves to no location.
     workingOrder("wo-orphan", "open", { locationId: "ghost-location" }),
 
@@ -328,24 +318,8 @@ function seed(connection) {
     line("line-delete", "wo-lines-delete", '{"es":"Plato","ca":"Plat"}'),
     line("line-orphaned", "wo-orphaned-parent", '{"es":"Plato","ca":"Plat"}'),
 
-    party("party-bill-settles"),
-    table("dt-closes", "1"),
-    membership("vt-closes", "party-bill-settles", "dt-closes", null),
-
-    // Parties, tables and memberships. The working_orders_enforce_transition cases move orders to
-    // `party-frozen` and `dt-bystander`; no case reads the others.
-    party("party-finishes"),
-    party("party-bumped"),
     party("party-frozen"),
-    table("dt-member-a", "3"),
-    table("dt-member-b", "4"),
-    table("dt-left-earlier", "5"),
     table("dt-bystander", "6"),
-    table("dt-bumped", "8"),
-    membership("vt-a", "party-finishes", "dt-member-a", null),
-    membership("vt-b", "party-finishes", "dt-member-b", null),
-    membership("vt-left", "party-finishes", "dt-left-earlier", STAMP),
-    membership("vt-bumped", "party-bumped", "dt-bumped", null),
 
     // A party per main-bill case, each with the open bill its case names as the main bill, so no
     // case's write changes what another case reads. `party-main-other` also holds a second open

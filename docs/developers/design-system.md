@@ -383,9 +383,9 @@ tile takes black or white for its labels and its icon, whichever `readableTextCo
 (`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
 meaning and the colour is never the only signal. `wt-lozenge` takes a colour the same way, filling
 its background and computing black or white text, though no screen passes it one. This is a
-different idiom from a neutral chip with the colour shown only as a border and a dot — which the
-floor's venue-made table statuses used until A757 slice 2 retired them (2026-10-19), and which was
-tried for categories and declined: a pale colour nearly disappears as a border in the
+different idiom from the one the floor map's status chip uses (since A757 slice 2, 2026-10-19, it
+carries only Needs clearing) — a neutral chip with the colour shown only as a border and a dot —
+which was tried for categories and declined: a pale colour nearly disappears as a border in the
 theme where it's already pale (light colours in light mode, dark colours in dark mode). A painted
 sold-out till tile borrows that idiom's neutral tile, without the dot. Every sold-out till tile,
 painted or not, is filled `--wt-color-surface-sunken` with `--wt-color-text` labels in place of
@@ -4143,13 +4143,13 @@ html`<wt-tabs
   label="Venue settings"
   .items=${[
     { key: "receipts", label: "Receipts" },
-    { key: "tables", label: "Tables" },
+    { key: "kitchen", label: "Kitchen" },
   ]}
   .value=${this.view}
   @wt-tab-change=${this.selectView}
 >
   <section slot="receipts">${this.renderReceipts()}</section>
-  <section slot="tables">${this.renderTables()}</section>
+  <section slot="kitchen">${this.renderKitchen()}</section>
 </wt-tabs>`;
 ```
 

@@ -526,7 +526,7 @@ export class TillFloorScreen extends LitElement {
 
       /* "N listos" -- kitchen-done, waiting to be carried out (KDS-1 §3d). Distinguished from to-serve by
          the success-coloured border rather than a coloured fill, so the label stays theme text on a
-         neutral chip (the a11y-safe pattern the status chip uses); there is no on-success token. */
+         neutral chip (the a11y-safe pattern wt-table-token's status chip uses); there is no on-success token. */
       .badge.ready {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);

@@ -255,7 +255,7 @@ for (const locale of ["en", "es"]) {
             {
               zones,
               tables: [
-                { ...tables[0]!, hasAllergy: true, today: todayRow(2), status: null },
+                { ...tables[0]!, hasAllergy: true, today: todayRow(2) },
                 { ...tables[2]!, today: todayRow(12) },
               ],
             },
