@@ -1129,6 +1129,40 @@ describe("listReconcilable", () => {
     expect(rows[0]).toMatchObject({ paymentId: id, holdResolved: false });
   });
 
+  it("reports held for a payment with a hold, with or without an outcome", async () => {
+    const seeded = await seedTenant();
+    const heldKey = await capture(seeded, "held");
+    await capture(seeded, "neighbour");
+    const heldId = (await getRow(heldKey))!.id;
+    await suite.db.transaction((tx) =>
+      recordHold(tx, {
+        paymentId: heldId,
+        providerAmount: decimal("9.50"),
+        foundAt: new Date("2026-07-23T01:00:00Z"),
+      }),
+    );
+    const heldOf = async () =>
+      Object.fromEntries(
+        (await suite.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD))).map((r) => [
+          r.paymentRef,
+          r.held,
+        ]),
+      );
+    expect(await heldOf()).toEqual({ held: true, neighbour: false });
+
+    const [hold] = await suite.db.transaction((tx) => listOpenHolds(tx));
+    await suite.db.transaction((tx) =>
+      recordHoldOutcome(tx, {
+        holdId: hold!.holdId,
+        outcome: "kept",
+        note: null,
+        personId: "22222222-2222-4222-8222-222222222222",
+        at: new Date("2026-07-23T09:00:00Z"),
+      }),
+    );
+    expect(await heldOf()).toEqual({ held: true, neighbour: false });
+  });
+
   it("reports holdResolved false for a hold with no outcome and true once one is recorded", async () => {
     const seeded = await seedTenant();
     const heldKey = await capture(seeded, "held");

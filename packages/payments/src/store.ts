@@ -700,6 +700,8 @@ export interface ReconcilableRow {
   // placed order is not settled.
   workingOrderStatus: "open" | "placed" | "settled" | "abandoned";
   reconcileRemediatedAt: string | null;
+  /** The payment has a hold, with or without an outcome. */
+  held: boolean;
   /** The payment has a hold with a recorded outcome. */
   holdResolved: boolean;
 }
@@ -732,6 +734,7 @@ export async function listReconcilable(
         workingOrderId: payments.workingOrderId,
         workingOrderStatus: workingOrders.status,
         reconcileRemediatedAt: payments.reconcileRemediatedAt,
+        held: sql<boolean>`${paymentHolds.id} is not null`.mapWith(Boolean),
         holdResolved: sql<boolean>`${paymentHoldOutcomes.id} is not null`.mapWith(Boolean),
       })
       .from(payments)

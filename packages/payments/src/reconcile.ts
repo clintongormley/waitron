@@ -217,9 +217,9 @@ const SEVERITY = {
 
 /**
  * Audit one period's payments against the processor's settlement report, raise one incident per
- * class, and reverse the orphans that pass every gate.
+ * class (a held payment only in the held alert), and reverse the orphans that pass every gate.
  *
- * T1 reads, the report fetch runs outside every transaction, T2 writes incidents and markers, and
+ * T1 refreshes the held alert and reads, the report fetch runs outside every transaction, T2 writes incidents and markers, and
  * the reversals run outside every transaction (each is a network call). The report is fetched even
  * when T1 read nothing: zero local rows against a non-empty report is the silent-data-loss case.
  * The remediation marker is stamped BEFORE the reversal, so a crash between the processor refunding
@@ -289,6 +289,8 @@ export async function reconcilePayments(
     //   - `alreadyClaimed`: an earlier sweep, or a concurrent one that won the race, owns the
     //     reversal. It precedes the drift gate because that reversal has already happened or already
     //     failed for good, so settling the drift cannot unblock it.
+    //   - held: a payment with a hold waits for a person to record its outcome, whatever this
+    //     sweep's report says.
     //   - `amountDrifted`: the reversal sends no amount, so the processor would refund its figure
     //     while we record ours. Sending our amount is no fix: where the processor's charge is the
     //     smaller, the refund is refused after the permanent marker is stamped.
@@ -307,6 +309,10 @@ export async function reconcilePayments(
       }
       if (entry.row.reconcileRemediatedAt !== null) {
         remediation.set(ref, "alreadyClaimed");
+        continue;
+      }
+      if (entry.row.held) {
+        held.add(ref);
         continue;
       }
       if (driftedRefs.has(ref)) {
@@ -430,7 +436,7 @@ function incidentFor(
         amount: row.amount,
         workingOrderId: row.workingOrderId,
         workingOrderStatus: row.workingOrderStatus,
-        // The claim loop sets an entry for every orphan.
+        // The claim loop sets an entry for every orphan that is not held.
         remediation: remediation.get(row.paymentRef)!,
       })),
     });

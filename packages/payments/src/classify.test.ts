@@ -25,6 +25,7 @@ function row(over: Partial<ReconcilableRow> = {}): ReconcilableRow {
     workingOrderStatus: "settled",
     reconcileRemediatedAt: null,
     paymentId: "pay-1",
+    held: false,
     holdResolved: false,
     ...over,
   };

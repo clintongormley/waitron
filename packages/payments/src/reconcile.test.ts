@@ -847,8 +847,13 @@ describe("orphan remediation", () => {
         sql`select params from incidents where code = 'payment.reconcile_held'`,
       ),
     );
-    expect(held.rows[0].params.payments).toMatchObject([
-      { paymentRef: "p1", amount: "10.00", providerAmount: "12.50" },
+    expect(held.rows[0].params.payments).toEqual([
+      {
+        paymentRef: "p1",
+        workingOrderId: seeded.workingOrderId,
+        amount: "10.00",
+        providerAmount: "12.50",
+      },
     ]);
   });
 
@@ -999,8 +1004,56 @@ describe("orphan remediation", () => {
       "payment.reconcile_drift",
       "payment.reconcile_orphan",
     ]);
+    const orphan = parseParams<{ payments: unknown[] }>(
+      await suite.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
+      ),
+    );
+    expect(orphan.rows[0].params.payments).toEqual([
+      {
+        paymentRef: "p1",
+        amount: "10.00",
+        workingOrderId: seeded.workingOrderId,
+        workingOrderStatus: "abandoned",
+        remediation: "amountDrifted",
+      },
+    ]);
     const { rows } = await suite.db.execute(sql`select id from payment_holds`);
     expect(rows).toEqual([]);
+  });
+
+  it("never claims a held payment, even when a later report omits its settlement", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    await reconcilePayments(
+      deps(new FakeSettlementReport([settlement({ amount: decimal("12.50") })])),
+      PERIOD,
+      NOW,
+    );
+
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(
+      deps(new FakeSettlementReport([]), reverse.fn),
+      PERIOD,
+      NOW,
+    );
+    expect(result.remediated).toBe(0);
+    expect(reverse.calls).toEqual([]);
+    const { rows } = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
+      sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
+    );
+    expect(rows[0].reconcile_remediated_at).toBeNull();
+    expect(await openIncidentCodes()).toEqual([
+      "payment.reconcile_held",
+      "payment.reconcile_unsettled",
+    ]);
+    const held = parseParams<{ payments: { paymentRef: string }[] }>(
+      await suite.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_held'`,
+      ),
+    );
+    expect(held.rows[0].params.payments.map(({ paymentRef }) => paymentRef)).toEqual(["p1"]);
   });
 
   it("stops checking a held payment once its outcome is recorded", async () => {
