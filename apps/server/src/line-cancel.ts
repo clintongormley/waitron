@@ -15,6 +15,7 @@ import { requireCancellationContext } from "./line-cancel-context.js";
 import type { TillConfig } from "./till-config.js";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
+import { refusePaidLines } from "./bill-payments.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { requireBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -22,7 +23,14 @@ import { refuseRecalledWrite } from "./draft-source.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { bumpPartyRevision, partyRevision, runServiceCommand } from "./parties.js";
-import { quantityOfLine, bumpRevision, type OrderAttendance } from "./working-order.js";
+import {
+  assertTabOpen,
+  refusePaymentInFlight,
+  removeFromLine,
+  quantityOfLine,
+  bumpRevision,
+  type OrderAttendance,
+} from "./working-order.js";
 import "./errors.js";
 
 export interface CancelItemAsk {
@@ -123,6 +131,40 @@ export async function cancelItem(
       )
         throw invalid("outcome");
       if (ask.outcome === "remove_charge") {
+        if (context.stage === "not_started") {
+          await assertTabOpen(tx, bill!.id);
+          await refusePaymentInFlight(tx, [bill!.id]);
+          await refusePaidLines(tx, bill!.id, [
+            { id: lineId, lineNo: line!.lineNo, keeps: line!.quantity - removed },
+          ]);
+          const [ticket] = await tx
+            .select()
+            .from(ticketItems)
+            .where(eq(ticketItems.workingOrderLineId, lineId));
+          await removeFromLine(
+            tx,
+            cfg,
+            bill!.id,
+            {
+              ...line!,
+              ticketItemId: ticket?.id ?? null,
+              firedAt: ticket?.firedAt ?? null,
+              stationId: ticket?.stationId ?? null,
+              state: ticket?.state ?? null,
+              firedQuantity: ticket?.quantity ?? 0,
+            },
+            removed === line!.quantity ? null : removed,
+            operatorId,
+            attendance === undefined
+              ? undefined
+              : {
+                  recorder: attendance.recorder,
+                  at: attendance.clock.now().instant.toISOString(),
+                },
+          );
+          await policy.completeAdjustment?.(bill!.id);
+          return { revision: await partyRevision(tx, partyId) };
+        }
         if (typeof ask.reasonId !== "string" || ask.reasonId.length === 0)
           throw invalid("reasonId");
         const [group] =

@@ -2215,9 +2215,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
 - **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
-  A773-1 remains unlanded: integrate A758's revised cancellation and Finish-table design,
+  A773-1 remains unlanded: finish integrating A758's published cancellation and Finish-table design,
   and complete the remaining prose audit, whole-path, ownership, native-screen, physical-till and
-  delivery checks. Preserve the completed behavioral checks and their receipts; the detail's
+  delivery checks. The command and HTTP removal path now removes unpaid, unstarted dishes without
+  a reason or adjustment, retaining the open-bill, payment-in-flight and paid-quantity refusals.
+  Preserve the completed behavioral checks and their receipts; the detail's
   Decisions section records their scope and limits. The product guide separates stored-line
   availability from the saved New order payment refusal; the till README distinguishes fresh-dish
   availability from recalled bill rows and points to the modifier-save rules. The product guide's

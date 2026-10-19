@@ -133,6 +133,88 @@ async function startExtra(order: Fixture) {
 }
 
 describe("Cancel item service command", () => {
+  it.each(["hold", "fire"] as const)(
+    "removes an unpaid unstarted %s dish without a reason or an adjustment, once",
+    async (release) => {
+      const order = await fixture(release);
+      const ask = await askFor(order, "remove_charge", "2");
+      const beforeJobs = await inTx(venue, (tx) => tx.select().from(printJobs));
+      await cancel(order, ask);
+      const after = await snapshot(order);
+      expect(
+        after.lines.map((row) => ({ id: row.id, quantity: row.quantity, total: row.lineTotal })),
+      ).toEqual([
+        { id: order.parent.id, quantity: 1000, total: 900 },
+        { id: order.extra!.id, quantity: 2000, total: 300 },
+      ]);
+      expect(after.adjustments).toEqual([]);
+      expect(after.cancellations).toEqual([]);
+      expect(after.bill[0]!.revision).toBe(ask.expectedBillRevision + 1);
+      expect(after.party[0]!.revision).toBe(ask.expectedPartyRevision + 1);
+      const notices = [];
+      for (const station of new Set(order.tickets.map((row) => row.stationId)))
+        notices.push(...(await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, station))));
+      const added = notices.filter((row) => row.workingOrderId === order.billId);
+      const jobs = (await inTx(venue, (tx) => tx.select().from(printJobs))).filter(
+        (row) => !beforeJobs.some((old) => old.id === row.id),
+      );
+      if (release === "fire") {
+        expect(added).toHaveLength(2);
+        expect(added).toMatchObject([
+          { kind: "void", lineName: "PIZZA", quantity: "2.000", wasStarted: false },
+          {
+            kind: "void",
+            lineName: expect.stringContaining("ACEIT"),
+            quantity: "4.000",
+            wasStarted: false,
+          },
+        ]);
+        expect(jobs).toHaveLength(1);
+        expect(printedLines(jobs[0]!.payload).join("\n")).toContain("2.000 x PIZZA");
+      } else {
+        expect(added).toEqual([]);
+        expect(jobs).toEqual([]);
+      }
+      await cancel(order, ask);
+      expect(await snapshot(order)).toEqual(after);
+      expect(await inTx(venue, (tx) => tx.select().from(printJobs))).toEqual([
+        ...beforeJobs,
+        ...jobs,
+      ]);
+    },
+  );
+
+  it("refuses removing unstarted food from a presented bill without a reason", async () => {
+    const order = await fixture("hold");
+    await inTx(venue, (tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, order.billId)),
+    );
+    const ask = await askFor(order, "remove_charge");
+    const before = await snapshot(order);
+    await expect(cancel(order, ask)).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId: order.billId },
+    });
+    expect(await snapshot(order)).toEqual(before);
+  });
+
+  it("refuses removing unstarted food while its bill is being paid", async () => {
+    const order = await fixture("hold");
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: "2026-10-19T12:00:00.000Z" })
+        .where(eq(workingOrders.id, order.billId)),
+    );
+    const ask = await askFor(order, "remove_charge");
+    const before = await snapshot(order);
+    await expect(cancel(order, ask)).rejects.toMatchObject({
+      code: "order.payment_in_flight",
+      params: { workingOrderId: order.billId },
+    });
+    expect(await snapshot(order)).toEqual(before);
+  });
+
   it("keeps the charge and family identities while reducing the dish and extra kitchen work", async () => {
     const order = await fixture();
     await startExtra(order);
@@ -443,6 +525,7 @@ describe("Cancel item service command", () => {
 
   it("requires the usual reason and required note for off-bill cancellation", async () => {
     const order = await fixture();
+    await startExtra(order);
     const ask = await askFor(order, "remove_charge");
     const before = await snapshot(order);
     await expect(cancel(order, ask)).rejects.toMatchObject({
@@ -558,14 +641,15 @@ describe("Cancel item service command", () => {
         const jobs = (await inTx(venue, (tx) => tx.select().from(printJobs))).filter(
           (row) => !beforeJobs.some((old) => old.id === row.id),
         );
-        expect(jobs).toHaveLength(1);
-        expect(printedLines(jobs[0]!.payload).join("\n")).toContain("2.000 x PIZZA");
+        expect(jobs).toHaveLength(printed ? 1 : 0);
+        if (printed) expect(printedLines(jobs[0]!.payload).join("\n")).toContain("2.000 x PIZZA");
         const notices = await inTx(venue, (tx) =>
           listStationNotices(tx, venue.cfg, venue.stationId),
         );
-        expect(notices.filter((row) => row.workingOrderId === order.billId)).toMatchObject([
-          { kind: "void", quantity: "2.000", wasStarted: false },
-        ]);
+        const added = notices.filter((row) => row.workingOrderId === order.billId);
+        if (printed)
+          expect(added).toMatchObject([{ kind: "void", quantity: "2.000", wasStarted: false }]);
+        else expect(added).toEqual([]);
       } finally {
         await inTx(venue, (tx) => writePrintHeldWork(tx, false));
       }
@@ -618,6 +702,7 @@ describe("Cancel item service command", () => {
 
   it("uses the existing cancel approval policy and records the manager without storing the PIN", async () => {
     const order = await fixture();
+    await startExtra(order);
     const reason = await inTx(venue, (tx) =>
       createAdjustmentReason(tx, {
         name: `Manager cancel ${randomUUID()}`,

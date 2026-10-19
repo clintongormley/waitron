@@ -108,14 +108,16 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
     body.reasonId === undefined
       ? undefined
       : requireBodyUuid(body.reasonId, "reasonId").toLowerCase();
-  if (outcome === "remove_charge" && reasonId === undefined) throw invalid("reasonId");
+  const expectedContext = parseContext(body.expectedContext);
+  if (outcome === "remove_charge" && expectedContext.stage === "started" && reasonId === undefined)
+    throw invalid("reasonId");
   return {
     quantity: body.quantity,
     expectedEdit: parseBillEditExpected(body.expectedEdit),
     outcome,
     expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
     expectedBillRevision: requireRevision(body.expectedBillRevision, "expectedBillRevision"),
-    expectedContext: parseContext(body.expectedContext),
+    expectedContext,
     submissionId: submissionIdOf(body),
     reasonId,
     note: body.note as string | undefined,
@@ -176,7 +178,9 @@ export function mountLineCancelApi(
         .from(workingOrderLines)
         .where(eq(workingOrderLines.id, lineId));
       const toCheck =
-        ask.outcome !== "remove_charge" || line === undefined
+        ask.outcome !== "remove_charge" ||
+        ask.expectedContext.stage !== "started" ||
+        line === undefined
           ? undefined
           : await approverToCheck(
               deps.db,

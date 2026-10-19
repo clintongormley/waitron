@@ -87,6 +87,15 @@ async function fixture(release: "hold" | "fire" = "hold", madeHere = false) {
   const [parent, extra, water] = await rowsOf(venue, p.billId);
   return { ...p, parent: parent!, extra: extra!, water: water! };
 }
+async function startedFixture() {
+  const p = await fixture("fire");
+  const [extra] = await venue.db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderLineId, p.extra.id));
+  await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, extra!.id, "preparing"));
+  return p;
+}
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 const path = (p: Fixture, read = false) =>
   `/api/parties/${p.partyId}/lines/${p.parent.id}/${read ? "cancellation" : "cancel-item"}`;
@@ -143,6 +152,67 @@ async function managerReason() {
 }
 
 describe("the public cancellation read and command", () => {
+  it.each(["hold", "fire"] as const)(
+    "removes unpaid unstarted %s food through HTTP with no reason and no adjustment",
+    async (release) => {
+      const p = await fixture(release);
+      const body = await bodyFor(p, { reasonId: undefined });
+      const result = await post(p, body);
+      expect(result.status, JSON.stringify(result.json)).toBe(200);
+      expect(await rowsOf(venue, p.billId)).toEqual([p.water]);
+      const after = await frozen();
+      expect(after.adjustments.filter((a) => a.workingOrderId === p.billId)).toEqual([]);
+      expect((await post(p, body)).json).toEqual(result.json);
+      expect(await frozen()).toEqual(after);
+    },
+  );
+
+  it("does not check a supplied reason's PIN for removing unpaid unstarted food", async () => {
+    const p = await fixture();
+    const reason = await managerReason();
+    watchDerivationsAndLock(venue.db, "9999", async () => {});
+    const answer = await post(
+      p,
+      await bodyFor(p, {
+        reasonId: reason.id,
+        approver: { personId: venue.managerId, pin: "9999" },
+      }),
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(watchedDerivationCount()).toBe(0);
+    expect(await rowsOf(venue, p.billId)).toEqual([p.water]);
+    expect((await frozen()).adjustments.filter((a) => a.workingOrderId === p.billId)).toEqual([]);
+  });
+
+  it("refuses removing an unstarted dish quantity already paid for", async () => {
+    const p = await fixture();
+    const paid = await send(
+      venue.app,
+      venue.cookie.staff,
+      "POST",
+      `/api/working-orders/${p.billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "items",
+        lines: [{ lineNo: p.parent.lineNo }],
+        method: "cash",
+        tendered: "24.00",
+        applied: "24.00",
+        tip: "0.00",
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const body = await bodyFor(p, { reasonId: undefined });
+    const before = await frozen();
+    const refused = await post(p, body);
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual({
+      code: "bill.line_paid",
+      params: { workingOrderId: p.billId, lineNo: p.parent.lineNo },
+    });
+    expect(await frozen()).toEqual(before);
+  });
+
   it("identifies the cancelled dish's own filed sale among paid party bills without writing", async () => {
     const first = await fixture();
     const second = await fixture("fire");
@@ -199,7 +269,7 @@ describe("the public cancellation read and command", () => {
     expect(first.json).toEqual({ revision: body.expectedPartyRevision + 1 });
     expect(await rowsOf(venue, p.billId)).toEqual([p.water]);
     const after = await frozen();
-    expect(after.adjustments.filter((a) => a.workingOrderId === p.billId)).toHaveLength(1);
+    expect(after.adjustments.filter((a) => a.workingOrderId === p.billId)).toHaveLength(0);
     expect((await post(p, body)).json).toEqual(first.json);
     expect(await frozen()).toEqual(after);
   });
@@ -372,7 +442,7 @@ describe("the public cancellation read and command", () => {
   );
 
   it("derives a required manager PIN once outside the write lock", async () => {
-    const p = await fixture();
+    const p = await startedFixture();
     const reason = await managerReason();
     const body = await bodyFor(p, {
       reasonId: reason.id,
@@ -392,7 +462,7 @@ describe("the public cancellation read and command", () => {
   });
 
   it("counts wrong manager PINs on the existing device throttle", async () => {
-    const p = await fixture();
+    const p = await startedFixture();
     const reason = await managerReason();
     const throttle = createPinThrottle({ now: () => 1_000_000 });
     const app = new Hono();
@@ -550,7 +620,7 @@ describe("the public cancellation read and command", () => {
   });
 
   it("uses the venue language for the recorded reason when the request configuration differs", async () => {
-    const p = await fixture();
+    const p = await startedFixture();
     const reason = await managerReason();
     const app = new Hono();
     mountTillApi(
@@ -582,7 +652,7 @@ describe("the public cancellation read and command", () => {
   });
 
   it("refuses a session ended while its manager PIN is being checked", async () => {
-    const p = await fixture();
+    const p = await startedFixture();
     const reason = await managerReason();
     const body = await bodyFor(p, {
       reasonId: reason.id,
@@ -614,7 +684,7 @@ describe("the public cancellation read and command", () => {
   });
 
   it("checks the new profile's zones when the device changes profile during its PIN check", async () => {
-    const p = await fixture();
+    const p = await startedFixture();
     const reason = await managerReason();
     const body = await bodyFor(p, {
       reasonId: reason.id,
@@ -763,7 +833,7 @@ describe("the public cancellation read and command", () => {
   });
 
   it("refuses take-orders revoked during a manager PIN check", async () => {
-    const p = await fixture();
+    const p = await startedFixture();
     const reason = await managerReason();
     const body = await bodyFor(p, {
       reasonId: reason.id,

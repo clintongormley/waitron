@@ -2254,9 +2254,14 @@ build after A757's board if it has been decided, else name the table alone.
 [plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md), preserving earlier behavioral checks.
 The remaining work includes:
 
-- Integrate the owner's Q43 cancellation changes after A758's revised design is published,
-  as the watcher's 2026-10-18 instruction requires. Finish the held-dish resolution before Finish
-  table (plan T20/T22); the earlier picture-03 implementation is not that revised design.
+- Finish integrating the published [A758 revision, section 10](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#10-for-other-lanes)
+  (main `8e15b02a25828cdd47c2400cb7292b1793ca93cc`) into plan T20/T22. Unpaid, unstarted
+  removal now takes no reason, approval or adjustment record through the command and HTTP route;
+  it retains the open-bill, payment-in-flight and paid-quantity checks. A held dish tells the kitchen
+  only when its HOLD ticket was queued; fired work retains its correction. The preparation
+  question, charged-cancel reasons, buttons and paid-table unserved-dish resolution remain open.
+  The earlier picture-03 implementation is not the completed revised design. A758's later slices
+  own the changed reason rules, starter list, reports and filled refund screen.
 - Reconcile the full branch with current main, including migration collisions and prose describing
   changed behavior beyond the documented fresh/recalled modifiers and checks before closing.
   The current checkpoint includes main's department-specific clearing and installed-module table
