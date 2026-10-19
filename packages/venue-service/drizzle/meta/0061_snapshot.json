@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "634f114f-744c-444b-84ba-77960700ef0c",
+  "id": "896f3816-1562-439d-9811-c45963372a52",
   "prevId": "1c3d22e1-c06d-4131-a8a0-36f674beba05",
   "tables": {
     "department_sale_policies": {
@@ -858,14 +858,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": true
-        },
-        "clearing_workflow": {
-          "name": "clearing_workflow",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
         },
         "kitchen_ticket_grouping": {
           "name": "kitchen_ticket_grouping",
