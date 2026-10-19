@@ -53,6 +53,10 @@ export class WtModal extends WtDialog {
         flex: 1;
       }
 
+      .footer {
+        --wt-field-max-width: var(--wt-form-max-width);
+      }
+
       .footer.has-content {
         padding-inline: var(--wt-modal-inline-padding);
       }

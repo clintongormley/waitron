@@ -11,7 +11,7 @@ the one-line version of each rule and points here for the rest.
 
 Required fields are visibly marked; an attempted invalid submission shows explanatory text beside
 every bad field and one localized message at the bottom of the form, on its own line above the
-buttons (in a dialog, at the end of its body; owner, 2026-09-30, C97), and the action stays disabled until
+buttons (owner, 2026-09-30, C97; in a dialog, in its footer directly above them, owner, 2026-10-17, A849), and the action stays disabled until
 the form's own checks pass — no summary at the top (owner, 2026-09-28). A form that saves opens
 with that action quiet (`secondary`) and disabled until its draft changes (owner decision,
 2026-10-07, A331: "open a form with the Save button transparent (and disabled?). but as soon as you

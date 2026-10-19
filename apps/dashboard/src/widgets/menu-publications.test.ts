@@ -462,7 +462,7 @@ describe("a menu's scheduled versions", () => {
     expect(table(el).shadowRoot!.textContent).toContain("No versions are scheduled.");
   });
 
-  it("shows a refusal at the end of the dialog and keeps it open", async () => {
+  it("shows a refusal above the dialog's buttons and keeps it open", async () => {
     const api = stubApi({
       cancelMenuPublication: vi.fn().mockRejectedValue({
         code: "menu_publication.not_queued",

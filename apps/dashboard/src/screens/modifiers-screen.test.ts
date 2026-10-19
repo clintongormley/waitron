@@ -1694,7 +1694,7 @@ it("keeps a refused delete in the dialog with its reason, then closes and reload
     expect((await formMessageOf(actions))?.textContent).toBe(codeMessage("extras.not_found")),
   );
   const message = await formMessageOf(actions);
-  expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+  expect(dialog.shadowRoot!.querySelector(".footer")!.contains(message)).toBe(true);
   expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
   expect(dialog.textContent).not.toContain(codeMessage("extras.not_found"));
   expect(dialog.open).toBe(true);

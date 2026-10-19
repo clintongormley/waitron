@@ -61,7 +61,7 @@ export class WtFormActions extends LitElement {
   /** The form's one message about a failed submission, shown on its own line above the actions. */
   @property() error = "";
 
-  /** Off while a container shows `error` instead — `wt-dialog` does, at the end of its body. */
+  /** Off while a container shows `error` instead — `wt-dialog` does, above its footer's content. */
   @property({ attribute: false }) showError = true;
 
   override updated(changed: Map<string, unknown>): void {

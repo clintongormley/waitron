@@ -458,7 +458,7 @@ describe("servers screen removal", () => {
     const actions = dialog(el).querySelector("wt-form-actions")!;
     const message = await formMessageOf(actions);
     expect(message?.textContent).toBe(codeMessage(code));
-    expect(dialog(el).shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+    expect(dialog(el).shadowRoot!.querySelector(".footer")!.contains(message)).toBe(true);
     expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
     expect(dialog(el).textContent).not.toContain(codeMessage(code));
     expect(codeMessage(code)).not.toBe(codeMessage("server.internal"));
@@ -666,7 +666,7 @@ describe("servers screen clearing", () => {
     const actions = clearDialog(el).querySelector("wt-form-actions")!;
     const message = await formMessageOf(actions);
     expect(message?.textContent).toBe(codeMessage(code));
-    expect(clearDialog(el).shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+    expect(clearDialog(el).shadowRoot!.querySelector(".footer")!.contains(message)).toBe(true);
     expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
     expect(clearDialog(el).textContent).not.toContain(codeMessage(code));
     expect(codeMessage(code)).not.toBe(codeMessage("server.internal"));

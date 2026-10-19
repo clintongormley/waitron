@@ -90,7 +90,7 @@ describe.each(["light", "dark"] as const)("wt-modal a11y (%s theme)", (theme) =>
     }
   });
 
-  test("with the form's message at the end of the body", async () => {
+  test("with the form's message in the footer, above the buttons", async () => {
     const modal = (await mountThemed(
       `<wt-modal heading="Add passkey">
         <wt-input name="passkey-name" label="Passkey name"></wt-input>
@@ -107,6 +107,7 @@ describe.each(["light", "dark"] as const)("wt-modal a11y (%s theme)", (theme) =>
     actions.error = "This device already holds a passkey for your account.";
     await actions.updateComplete;
     await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector(".footer > [data-error]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
   test.each(["danger", "primary"] as const)(

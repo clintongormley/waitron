@@ -918,9 +918,8 @@ registered as `venue-service:week`, and the others register theirs when they exi
 - **A form's bottom message in a full-height dialog goes in the footer, on its own line just above
   the buttons, so it is always visible (owner, 2026-10-17).** Found by A507's look: a short form in
   a full-height `wt-modal` left about 150 px between the message and the buttons (the Prep stations
-  station editor). Not built yet: `wt-dialog` still puts the message at the end of the body
-  (`packages/ui/src/components/wt-dialog.ts`), and design-system.md → Forms still says "in a
-  dialog, at the end of the dialog's body" (A849).
+  station editor). Built for every `wt-dialog`, and so every `wt-modal`, not only full-height ones
+  (`packages/ui/src/components/wt-dialog.ts`); design-system.md → Forms states it (A849).
 
 - **The two dropdown explanations on venue service's Kitchen panel stay as hints (owner,
   2026-10-17).** "Applies to new kitchen tickets and to reprints." and the release reminder's are

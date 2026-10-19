@@ -79,10 +79,6 @@ export class WtDialog extends LitElement {
         overscroll-behavior: contain;
       }
 
-      .body > .form-message {
-        margin: var(--wt-space-4) 0 0;
-      }
-
       /* The space below the heading is the row's, not the h2's: a margin inside a flex row does not
          collapse with the next block's, so a body starting with a <p> would get both. */
       .heading-row {
@@ -105,6 +101,16 @@ export class WtDialog extends LitElement {
 
       .footer {
         flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+      }
+
+      .footer > .form-message {
+        margin: 0;
+      }
+
+      .footer-row {
         display: flex;
         justify-content: flex-end;
         gap: var(--wt-space-2);
@@ -207,8 +213,8 @@ export class WtDialog extends LitElement {
   private readonly headingId = uniqueId("wt-dialog-heading");
   private readonly descriptionId = uniqueId("wt-dialog-description");
 
-  /** The messages of the `wt-form-actions` rows in the footer, shown at the end of the body instead,
-   * so they sit below the fields they are about rather than between the pinned buttons. */
+  /** The messages of the `wt-form-actions` rows in the footer, shown once on its own line above
+   * the footer's content rather than inside each row. */
   @state() private footerMessage = "";
   private footerActions: WtFormActions[] = [];
 
@@ -284,11 +290,6 @@ export class WtDialog extends LitElement {
         // this update completes must already see where focus will stay.
         this.refocus();
       }
-    }
-    // A footer row's message set while the dialog was shut could not be scrolled to then, so
-    // opening does it.
-    if (changed.has("open") || (changed.has("footerMessage") && !this.editing)) {
-      this.renderRoot.querySelector(".body > [data-error]")?.scrollIntoView({ block: "nearest" });
     }
     this.syncBodyTabStop();
   }
@@ -478,14 +479,16 @@ export class WtDialog extends LitElement {
               : nothing
           }
           <slot @wt-form-error=${this.onBodyMessage} @slotchange=${this.observeBody}></slot>
-          ${formMessage(this.footerMessage)}
         </div>
         <div class="footer">
-          <slot
-            name="footer"
-            @slotchange=${this.updateHasFooter}
-            @wt-form-error=${this.readFooterMessage}
-          ></slot>
+          ${formMessage(this.footerMessage)}
+          <div class="footer-row">
+            <slot
+              name="footer"
+              @slotchange=${this.updateHasFooter}
+              @wt-form-error=${this.readFooterMessage}
+            ></slot>
+          </div>
         </div>
       </dialog>
     `;

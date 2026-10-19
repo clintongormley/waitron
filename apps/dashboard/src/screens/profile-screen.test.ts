@@ -855,7 +855,7 @@ describe("your profile", () => {
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
   });
 
-  it("puts the already-registered message at the end of the Add passkey dialog's body, below its last field, not in the footer", async () => {
+  it("puts the already-registered message in the Add passkey dialog's footer, above its buttons, not in the body", async () => {
     const { el } = await mount();
     vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
       new DOMException("already registered", "InvalidStateError"),
@@ -867,15 +867,18 @@ describe("your profile", () => {
     await modal.updateComplete;
     const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
     const footer = modal.shadowRoot!.querySelector<HTMLElement>(".footer")!;
-    const message = body.querySelector<HTMLElement>(":scope > [data-error]");
+    const message = footer.querySelector<HTMLElement>(":scope > [data-error]");
     expect(message?.textContent).toBe(codeMessage("passkey.already_registered"));
     expect(message!.getAttribute("role")).toBe("alert");
-    expect(body.lastElementChild).toBe(message);
+    expect(footer.firstElementChild).toBe(message);
+    expect(body.querySelector("[data-error]")).toBeNull();
     const fields = [...modal.querySelectorAll("wt-input")];
     const lastField = fields.at(-1)!.getBoundingClientRect();
     const box = message!.getBoundingClientRect();
     expect(box.top).toBeGreaterThanOrEqual(lastField.bottom);
-    expect(box.bottom).toBeLessThanOrEqual(footer.getBoundingClientRect().top);
+    for (const button of modal.querySelectorAll("wt-form-actions wt-button")) {
+      expect(box.bottom).toBeLessThanOrEqual(button.getBoundingClientRect().top);
+    }
     expect(
       modal.querySelector("wt-form-actions")!.shadowRoot!.querySelector("[data-error]"),
     ).toBeNull();

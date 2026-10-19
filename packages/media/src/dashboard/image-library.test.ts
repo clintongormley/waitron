@@ -798,7 +798,7 @@ it("retains deletion confirmation after a failure and allows it to be dismissed"
     expect((await formMessageOf(actions))?.textContent).toBe("The image could not be deleted."),
   );
   const message = await formMessageOf(actions);
-  expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+  expect(dialog.shadowRoot!.querySelector(".footer")!.contains(message)).toBe(true);
   expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
   expect(dialog.textContent).not.toContain("could not be deleted");
   el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(new CustomEvent("wt-close"));
