@@ -2257,11 +2257,13 @@ build after A757's board if it has been decided, else name the table alone.
 
 ## A773. Courses, groups and the pass
 
-**A773-2**, firing and the pass, is planned from the
-[approved design](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md) after
-A773-1 lands. It covers Requested and pass release, retiring Away/Done, station settings and
-counter changes. Coordinate A756's settings, A803's station/pass additions and A797's pass/kitchen
-design before building. The table panel and per-bill editing contracts belong to
+**A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
+from the [approved design](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md).
+The build remains: service lifetime and waiter authority, Requested and scoped pass release,
+station configuration, then tickets and schema retirement. Recheck A756's settings and current
+lane reservations before each working slice. A803's station/pass additions follow it. The plan
+records A797's completed Q42 amendments; its revised design/pictures remain a UI prerequisite.
+This plan adds no runtime behavior. The table panel and per-bill editing contracts belong to
 [A773-1's plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and the
 [ownership amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md).
 

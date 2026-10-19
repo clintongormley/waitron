@@ -85,8 +85,9 @@ Ranked by the owner on 2026-10-16, for the time they are away (17 October to 2 N
 is its own brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 Everything not listed here needs more spec work first.
 
-1. **A773-2 — firing and the pass** (_The till, devices and table service_). Plan the remaining
-   kitchen and pass work from the approved design, following A773-1's Sent and New order panel.
+1. **A773-2 — firing and the pass** (_The till, devices and table service_). Implement the
+   [reviewed plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) for the remaining
+   kitchen and pass work, following A773-1's Sent and New order panel.
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
 2. **A682 — translations: nothing required, every missing name reported, all languages side by
@@ -2221,9 +2222,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A773-2. Firing and the pass.** Plan from the approved courses/groups design after the
-  table-panel branch lands. Add Requested and pass release, remove Away/Done, and finish the
-  station settings and counter changes. Coordinate A756, A803 and A797 before building.
+- **A773-2. Firing and the pass.** The [reviewed implementation plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
+  is ready; the build remains. Add Requested and pass release, remove Away/Done, and finish the
+  station settings, tickets and counter changes. Recheck A756 and other lanes' reservations before
+  each slice. The plan carries A797's completed Q42 amendments; its revised pictures/design remain
+  a UI prerequisite. A803's pass/station tail follows this build.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
