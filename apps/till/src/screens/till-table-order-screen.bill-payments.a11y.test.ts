@@ -98,7 +98,6 @@ describe.each(["light", "dark"] as const)(
               servedAt: "2026-09-30T20:00:00.000Z",
             }),
           ],
-          statuses: [],
           orderId: "wo-4",
           party,
           bills: [shownBill],

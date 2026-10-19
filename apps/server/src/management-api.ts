@@ -85,15 +85,7 @@ import {
   type DeviceProfileRow,
   type ProfilePrinterLists,
 } from "@waitron/layouts";
-import {
-  createStatus,
-  deactivateStatus,
-  listStatuses,
-  listTables,
-  listZones,
-  updateStatus,
-  updateZone,
-} from "./tables.js";
+import { listTables, listZones, updateZone } from "./tables.js";
 import {
   createCourse,
   createStation,
@@ -267,8 +259,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "image.invalid_file": 422,
   "theme.invalid": 400,
   "shared.invalid_id": 400,
-  "status.not_found": 404,
-  "status.label_taken": 409,
   "zone.not_found": 404,
   "zone.table_in_use": 409,
   "zone.order_in_progress": 409,
@@ -312,11 +302,6 @@ const run = createErrorBoundary(STATUS, "management.failed");
  */
 function requirePersonId(id: string): string {
   if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
-  return id;
-}
-
-function requireStatusId(id: string): string {
-  if (!isUuid(id)) throw new AppError("status.not_found", { statusId: id });
   return id;
 }
 
@@ -1459,117 +1444,6 @@ export function mountManagementApi(
       const id = requireDeviceProfileId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
         await deleteDeviceProfile(tx, {
-          managementSessionId: sessionId,
-          id,
-        });
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  // ── Service statuses ──
-  app.post("/management-api/service-statuses", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ label?: unknown; color?: unknown; displayOrder?: unknown }>(
-        c,
-      );
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      if (typeof body.label !== "string")
-        throw new AppError("management.request_invalid", { field: "label" });
-      if (typeof body.color !== "string")
-        throw new AppError("management.request_invalid", { field: "color" });
-      const displayOrder = parseDisplayOrder(body.displayOrder);
-      const { label, color } = body;
-      const result = await withTransaction(deps.db, async (tx) => {
-        return createStatus(tx, {
-          managementSessionId: sessionId,
-          label,
-          color,
-          displayOrder,
-        });
-      });
-      return c.json(result, 201);
-    }),
-  );
-
-  app.get("/management-api/service-statuses", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const statuses = await withTransaction(deps.db, async (tx) => {
-        return listStatuses(tx, { managementSessionId: sessionId });
-      });
-      return c.json(statuses);
-    }),
-  );
-
-  app.patch("/management-api/service-statuses/:id", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireStatusId(c.req.param("id"));
-      const body = await readJsonBody<{
-        label?: unknown;
-        color?: unknown;
-        displayOrder?: unknown;
-        active?: unknown;
-      }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      const patch: {
-        managementSessionId: string;
-        id: string;
-        label?: string;
-        color?: string;
-        displayOrder?: number;
-        active?: boolean;
-      } = {
-        managementSessionId: sessionId,
-        id,
-      };
-      if (body.label !== undefined) {
-        if (typeof body.label !== "string")
-          throw new AppError("management.request_invalid", { field: "label" });
-        patch.label = body.label;
-      }
-      if (body.color !== undefined) {
-        if (typeof body.color !== "string")
-          throw new AppError("management.request_invalid", { field: "color" });
-        patch.color = body.color;
-      }
-      if (body.displayOrder !== undefined) {
-        patch.displayOrder = parseDisplayOrder(body.displayOrder);
-      }
-      if (body.active !== undefined) {
-        if (typeof body.active !== "boolean")
-          throw new AppError("management.request_invalid", { field: "active" });
-        patch.active = body.active;
-      }
-      // An empty patch is a 204 no-op: Drizzle refuses an empty `.set()` ("No values to set"), which
-      // would answer 500. The zone, table, station and course PATCH routes do the same.
-      if (
-        patch.label === undefined &&
-        patch.color === undefined &&
-        patch.displayOrder === undefined &&
-        patch.active === undefined
-      ) {
-        return c.body(null, 204);
-      }
-      await withTransaction(deps.db, async (tx) => {
-        await updateStatus(tx, patch);
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  app.delete("/management-api/service-statuses/:id", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireStatusId(c.req.param("id"));
-      await withTransaction(deps.db, async (tx) => {
-        await deactivateStatus(tx, {
           managementSessionId: sessionId,
           id,
         });

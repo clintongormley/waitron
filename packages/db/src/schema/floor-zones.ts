@@ -8,8 +8,7 @@ import { locations } from "./tenants.js";
  * renders tables under: an authorable ROW (rename once, reorder, deactivate) rather than a value
  * re-typed onto every table. `dining_tables.zone_id` points at one of these.
  *
- * Location-scoped, unlike the venue-wide `table_service_statuses`: a floor plan belongs to one
- * venue.
+ * Location-scoped: a floor plan belongs to one venue.
  */
 export const floorZones = table(
   "floor_zones",

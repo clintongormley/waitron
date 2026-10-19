@@ -72,7 +72,6 @@ function table(over: Partial<TableState> = {}): TableState {
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],
@@ -271,7 +270,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
     listZones: vi.fn().mockResolvedValue([zone]),
-    listStatuses: vi.fn().mockResolvedValue([]),
     seatTable: vi
       .fn()
       .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
@@ -3066,13 +3064,26 @@ describe("till-app: a table action's answer once the waiter has opened another p
     expect(lock(el)).not.toBeNull();
   });
 
+  const mesa9SeatedNew = seated(
+    { id: "t9", label: "9" },
+    { id: "v-new", revision: 0, mainBillId: "wo-new", tableIds: ["t9"], displayName: "9" },
+  );
+
+  async function signOutAndInAgain(el: TillApp): Promise<void> {
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+  }
+
   it("Move guests answering while a free table is being seated leaves that table the one on screen", async () => {
     const moved = held();
     const seating = held();
+    let seatedAtNine = false;
     const { el } = await mountApp({
       moveGuests: moved.call,
       seatTable: seating.call,
-      setTableStatus: vi.fn().mockResolvedValue(undefined),
+      getTablesState: vi.fn(async () => [mesa4, mesa7, seatedAtNine ? mesa9SeatedNew : mesa9]),
     });
     const order = await openMesa(el);
     emit(order, "move-guests", { toTableId: "t7", bills: "merge" });
@@ -3084,23 +3095,24 @@ describe("till-app: a table action's answer once the waiter has opened another p
 
     moved.answer.settle({ partyId: "v7", mainBillId: "wo-7", merged: false });
     await flush(el);
+    seatedAtNine = true;
     seating.answer.settle({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 });
-    await flush(el);
-    emit(tableOrder(el)!, "set-status", { statusId: "s1" });
     await flush(el);
 
     expect(moved.call).toHaveBeenCalledOnce();
     expect(tableOrder(el)!.orderId).toBe("wo-new");
-    expect(api.setTableStatus).toHaveBeenCalledWith("t9", "s1");
+    await signOutAndInAgain(el);
+    expect(tableOrder(el)?.orderId).toBe("wo-new");
   });
 
   it("Finish answering while a free table is being seated leaves that table the one on screen", async () => {
     const finished = held();
     const seating = held();
+    let seatedAtNine = false;
     const { el } = await mountApp({
       finishTable: finished.call,
       seatTable: seating.call,
-      setTableStatus: vi.fn().mockResolvedValue(undefined),
+      getTablesState: vi.fn(async () => [mesa4, mesa7, seatedAtNine ? mesa9SeatedNew : mesa9]),
     });
     const order = await openMesa(el);
     emit(order, "finish-table", {});
@@ -3112,14 +3124,14 @@ describe("till-app: a table action's answer once the waiter has opened another p
 
     finished.answer.settle({ state: "closed" });
     await flush(el);
+    seatedAtNine = true;
     seating.answer.settle({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 });
-    await flush(el);
-    emit(tableOrder(el)!, "set-status", { statusId: "s1" });
     await flush(el);
 
     expect(finished.call).toHaveBeenCalledOnce();
     expect(tableOrder(el)!.orderId).toBe("wo-new");
-    expect(api.setTableStatus).toHaveBeenCalledWith("t9", "s1");
+    await signOutAndInAgain(el);
+    expect(tableOrder(el)?.orderId).toBe("wo-new");
   });
 
   it("Join answering after the waiter logged out reads nothing more", async () => {

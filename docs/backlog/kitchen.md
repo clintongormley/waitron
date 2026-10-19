@@ -8,9 +8,9 @@ their full text.
 Order routing is built (item→station, station→printer, receipt→printer). Gaps: a routing audit
 view (a routing cell keeps no record of who changed it or when — the most useful to close); no
 station `type`/`kind`; single-target only (no fan-out or per-modifier rules; period choices came
-with A366 slice 4). Table and service statuses have full CRUD; kitchen statuses are partial —
-`bump_mode` and `fire_control` are configurable fixed enums, but a user-definable kitchen-status
-list does not exist.
+with A366 slice 4). Venue-made table statuses were retired by A757 slice 2 (2026-10-19); kitchen
+statuses are partial — `bump_mode` and `fire_control` are configurable fixed enums, but a
+user-definable kitchen-status list does not exist.
 
 ## Task 5 (#750, kitchen, pass and table screen by group; printing problems)
 
@@ -270,7 +270,8 @@ change; check that against the code when PR 8 is picked up.
   tickets and kitchen screen" beneath it. "Print a slip when sent dishes move table" offers
   "Venue setting: Print" or "Venue setting: Don't print", "Print", and "Don't print". Spanish matches.
 - Configuration bundles use version 4. Older exports must be exported again from a compatible
-  source; there is no conversion of station-order settings.
+  source; there is no conversion of station-order settings. **2026-10-19:** A757 slice 2 moved the
+  export to version 5.
 
 The populated predecessor test carries ticket, printer, timing and staffing references through the
 native column drop and compares every recorded table value except the retired column. Run

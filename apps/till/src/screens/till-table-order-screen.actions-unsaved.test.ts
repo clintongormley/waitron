@@ -70,7 +70,6 @@ const tables: TableState[] = ["t1", "t2"].map((id) => ({
   readyToServe: 0,
   enRoute: 0,
   timingBand: "fresh",
-  status: null,
   nextReservation: null,
   today: null,
 }));

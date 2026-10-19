@@ -91,7 +91,7 @@ needs CLAUDE.md §3's classification line and nothing else.
 | 9 | Dashboard home — business overview | dashboard | ⬜ | |
 | 10 | Menu management — products, recipes, images, allergens, dietary, modifiers, membership | dashboard | ⬜ | |
 | 11 | Floor plan editor (spatial canvas) | dashboard | ⬜ | |
-| 12 | Table & service status config | dashboard | ⬜ | |
+| 12 | Table & service status config | dashboard | ⬜ | 2026-10-19: venue-made table statuses and their screen were retired by A757 slice 2 |
 | 13 | Stations, routing & printers (Impresoras) config | dashboard | ⬜ | |
 | 14 | Reporting — daily close, cierre Z, VAT, modelo 303, purchase invoices | dashboard | ⬜ | |
 | 15 | Staff / users / roles / login methods | dashboard | ⬜ | |

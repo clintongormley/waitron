@@ -110,7 +110,6 @@ import type {
   DeadEndAnswer,
   PrintProblem,
   TabLine,
-  TableServiceStatus,
   TableState,
   TableParty,
   TabTransfer,
@@ -145,8 +144,6 @@ import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
-
-export type { TableServiceStatus };
 
 /** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
  * Narrower, the draft opens on its own Review view. */
@@ -655,12 +652,6 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .status-options {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
-
       .action-options {
         display: flex;
         flex-direction: column;
@@ -692,14 +683,6 @@ export class TillTableOrderScreen extends LitElement {
         min-width: 3ch;
         text-align: center;
         font-variant-numeric: tabular-nums;
-      }
-
-      .dot {
-        display: inline-block;
-        width: var(--wt-space-2);
-        height: var(--wt-space-2);
-        margin-right: var(--wt-space-1);
-        border-radius: 50%;
       }
 
       .draft-sections {
@@ -1044,7 +1027,6 @@ export class TillTableOrderScreen extends LitElement {
   /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
   @property() selectedMenuId = "";
   @property({ type: Boolean }) menuSelectionRequired = false;
-  @property({ attribute: false }) statuses: TableServiceStatus[] = [];
   /** The venue's ACTIVE kitchen courses, in `displayOrder`. */
   @property({ attribute: false }) courses: TillCourse[] = [];
   @property({ attribute: false }) stations: Station[] = [];
@@ -2158,12 +2140,6 @@ export class TillTableOrderScreen extends LitElement {
 
   #toggleDrawer(): void {
     this.drawerOpen = !this.drawerOpen;
-  }
-
-  #pickStatus(statusId: string | null): void {
-    this.dispatchEvent(
-      new CustomEvent("set-status", { detail: { statusId }, bubbles: true, composed: true }),
-    );
   }
 
   #back(): void {
@@ -3815,7 +3791,7 @@ export class TillTableOrderScreen extends LitElement {
             >${formatMoney(this.#payStore!.total, currentLocale())}</span
           >
         </div>
-        ${this.#billsSection()} ${this.#statusSection()} ${this.#actionSection()}
+        ${this.#billsSection()} ${this.#actionSection()}
       </aside>
     `;
   }
@@ -4424,34 +4400,6 @@ export class TillTableOrderScreen extends LitElement {
         </wt-button>
       </div>
     </wt-dialog>`;
-  }
-
-  #statusSection(): TemplateResult {
-    return html`<section class="status">
-      <h2>${t("table.status_title")}</h2>
-      <div class="status-options">
-        ${this.statuses.map(
-          (status) =>
-            html`<wt-button
-              class="status-option"
-              data-status=${status.id}
-              variant="secondary"
-              @click=${() => this.#pickStatus(status.id)}
-            >
-              <span class="dot" style="background: ${status.color}" aria-hidden="true"></span>
-              ${status.label}
-            </wt-button>`,
-        )}
-        <wt-button
-          class="status-clear"
-          data-status-clear
-          variant="secondary"
-          @click=${() => this.#pickStatus(null)}
-        >
-          ${t("table.status_clear")}
-        </wt-button>
-      </div>
-    </section>`;
   }
 
   #partyScope(party: TableParty): string {

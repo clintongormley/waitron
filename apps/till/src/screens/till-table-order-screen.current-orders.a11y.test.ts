@@ -23,7 +23,6 @@ describe.each(["light", "dark"] as const)("Sent service a11y (%s theme)", (theme
         products,
         menus: menuOf(products),
         lines: [],
-        statuses: [],
         orderId: "wo-4",
         draftStore: new DraftStore(),
         groups,

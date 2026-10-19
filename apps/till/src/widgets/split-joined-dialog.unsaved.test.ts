@@ -35,7 +35,6 @@ function table(id: string, label: string, todayRow: TableToday): TableState {
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: todayRow,
     signals: [],

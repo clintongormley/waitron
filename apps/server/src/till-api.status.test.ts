@@ -2,12 +2,7 @@ import { createZone } from "./testing/service-zone.js";
 
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-  kitchenTimingDefaults,
-  locations,
-  tableServiceStatuses,
-  withTransaction,
-} from "@waitron/db";
+import { kitchenTimingDefaults, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -24,16 +19,11 @@ import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 
-// The HTTP wiring of `POST /api/tables/:id/status`: session guard, isUuid screen and STATUS mapping.
-// The `setTableStatus` verb is pinned in `set-table-status.test.ts`; the clearing of the status
-// when a party ends in `scripts/behavioural-triggers.test.ts`.
+// Venue-made table statuses are retired: the till API serves neither the status list nor the
+// set-status route, and the floor read carries no manual status.
 let cfg: TillConfig;
 let ana: { id: string };
-// The inactive status is seeded inactive (rather than deactivated at runtime) so no test mutates a
-// status out from under another.
 let TABLE_ID: string;
-let STATUS_ID: string;
-let INACTIVE_STATUS_ID: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -60,28 +50,13 @@ const suite = useVenueDb({
       .returning({ id: persons.id });
     ana = { id: person!.id };
     cfg = makeCfg(locationId, nodeId);
-    const seeded = await withTransaction(db, async (tx) => {
+    TABLE_ID = await withTransaction(db, async (tx) => {
       const { id: tableId } = await createTable(tx, cfg, {
         label: "T1",
         zoneId: (await createZone(tx, cfg, { name: "Tables" })).id,
       });
-      const [active] = await tx
-        .insert(tableServiceStatuses)
-        .values({ label: "Bill requested", color: "#ef4444" })
-        .returning({ id: tableServiceStatuses.id });
-      const [inactive] = await tx
-        .insert(tableServiceStatuses)
-        .values({ label: "Retired", color: "#000", active: false })
-        .returning({ id: tableServiceStatuses.id });
-      return {
-        tableId,
-        activeStatusId: active!.id,
-        inactiveStatusId: inactive!.id,
-      };
+      return tableId;
     });
-    TABLE_ID = seeded.tableId;
-    STATUS_ID = seeded.activeStatusId;
-    INACTIVE_STATUS_ID = seeded.inactiveStatusId;
   },
 });
 
@@ -91,7 +66,6 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** `seriesId` is unused by this route (no fiscal write on the status path), so it carries a fresh uuid. */
 function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
     nodeId: brandNodeId(nodeId),
@@ -116,7 +90,7 @@ function systemClock(): TrustedClock {
       };
     },
     anchor: () => {
-      throw new Error("till-api.status.test: anchor() is not used by the status route");
+      throw new Error("till-api.status.test: anchor() is not used here");
     },
     currentAnchor: () => null,
   };
@@ -125,7 +99,6 @@ function systemClock(): TrustedClock {
 function deps(db: Database): TillApiDeps {
   return {
     db,
-    // Never called by the status route — it files no fiscal doc.
     backend: {} as FiscalBackend,
     clock: systemClock(),
     cfg,
@@ -162,105 +135,20 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   });
 }
 
-describe("POST /api/tables/:id/status", () => {
-  it("sets a table's status (200) and GET /api/tables/state reflects it", async () => {
-    const res = await request(`/api/tables/${TABLE_ID}/status`, {
-      method: "POST",
-      body: JSON.stringify({ statusId: STATUS_ID }),
-    });
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe("");
-    const state = (await (await request("/api/tables/state")).json()) as {
-      id: string;
-      status: { id: string } | null;
-    }[];
-    expect(state.find((t) => t.id === TABLE_ID)!.status).toMatchObject({ id: STATUS_ID });
-  });
-
-  it("clears a table's status with { statusId: null } (200)", async () => {
-    await request(`/api/tables/${TABLE_ID}/status`, {
-      method: "POST",
-      body: JSON.stringify({ statusId: STATUS_ID }),
-    });
+describe("venue-made statuses are retired (A757 slice 2)", () => {
+  it("no longer serves the status list or the set-status route", async () => {
+    expect((await request("/api/statuses")).status).toBe(404);
     const res = await request(`/api/tables/${TABLE_ID}/status`, {
       method: "POST",
       body: JSON.stringify({ statusId: null }),
     });
-    expect(res.status).toBe(200);
-    const state = (await (await request("/api/tables/state")).json()) as {
-      id: string;
-      status: unknown;
-    }[];
-    expect(state.find((t) => t.id === TABLE_ID)!.status).toBeNull();
-  });
-
-  it("a deactivated status → 409 status.inactive", async () => {
-    const res = await request(`/api/tables/${TABLE_ID}/status`, {
-      method: "POST",
-      body: JSON.stringify({ statusId: INACTIVE_STATUS_ID }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "status.inactive" } });
-  });
-
-  it("a malformed :id → 404 table.not_found (isUuid guard, not a 500)", async () => {
-    const res = await request("/api/tables/not-a-uuid/status", {
-      method: "POST",
-      body: JSON.stringify({ statusId: null }),
-    });
     expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
   });
 
-  it("a malformed statusId → 404 status.not_found (isUuid guard on the body, not a 500)", async () => {
-    // A present-but-malformed `statusId` is screened to status.not_found before any query.
-    const res = await request(`/api/tables/${TABLE_ID}/status`, {
-      method: "POST",
-      body: JSON.stringify({ statusId: "not-a-uuid" }),
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "status.not_found" } });
-  });
-
-  it("an unknown status uuid → 404 status.not_found", async () => {
-    const res = await request(`/api/tables/${TABLE_ID}/status`, {
-      method: "POST",
-      body: JSON.stringify({ statusId: "00000000-0000-4000-8000-000000000000" }),
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "status.not_found" } });
-  });
-
-  it("REJECTS the status route with 401 session.required when no cookie is present", async () => {
-    // A fresh app driven WITHOUT the session cookie.
-    const noAuth = new Hono();
-    mountTillApi(noAuth, deps(suite.db), collect([]));
-    const res = await noAuth.request(`/api/tables/${TABLE_ID}/status`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ statusId: null }),
-    });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
-  });
-});
-
-describe("GET /api/statuses", () => {
-  it("returns the tenant's ACTIVE statuses as pickable options, excluding a deactivated one", async () => {
-    const res = await request("/api/statuses");
-    expect(res.status).toBe(200);
-    const options = (await res.json()) as { id: string; label: string; color: string }[];
-    // The active status is offered with exactly { id, label, color }; the inactive "Retired" is not —
-    // a status you cannot apply must not be offered.
-    expect(options).toContainEqual({ id: STATUS_ID, label: "Bill requested", color: "#ef4444" });
-    expect(options.some((o) => o.id === INACTIVE_STATUS_ID)).toBe(false);
-  });
-
-  it("REJECTS with 401 session.required when no cookie is present", async () => {
-    const noAuth = new Hono();
-    mountTillApi(noAuth, deps(suite.db), collect([]));
-    const res = await noAuth.request("/api/statuses");
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
+  it("sends no manual status on the floor read", async () => {
+    const state = (await (await request("/api/tables/state")).json()) as { id: string }[];
+    const row = state.find((t) => t.id === TABLE_ID);
+    expect(row).toBeDefined();
+    expect(row).not.toHaveProperty("status");
   });
 });

@@ -104,7 +104,6 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
       fixedReceiptLanguage: null,
       defaultProductVatClass: "reduced",
     }),
-    listStatuses: vi.fn().mockResolvedValue([]),
     listCourses: vi.fn().mockResolvedValue([]),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
     getKitchenTimingDefaults: vi.fn().mockResolvedValue({
@@ -152,10 +151,10 @@ it("puts a module's panels on their tab by their stated order, the core panel co
 
 it("leaves out a panel the session lacks the permission for, and a disabled module's panel", async () => {
   const el = await mount("/manage/venue-settings/view/adjustment-reasons");
-  expect(tabKeys(el)).toEqual(["tables", "kitchen"]);
+  expect(tabKeys(el)).toEqual(["kitchen"]);
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-reasons]")).toBeNull();
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-gadgets]")).toBeNull();
-  expect(location.pathname).toBe("/manage/venue-settings/view/tables");
+  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
 });
 
 it("refuses to start when a module names an unknown settings tab", async () => {

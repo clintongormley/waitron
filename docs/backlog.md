@@ -2125,9 +2125,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
   and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
-  2026-10-17.** Slices 1 (Needs clearing per department) and 7 (service steps: the settings) landed
-  (plans `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md` and
-  `docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slices 2–6 and 8 are left
+  2026-10-17.** Slices 1 (Needs clearing per department), 2 (retire venue-made statuses) and 7
+  (service steps: the settings) landed (plans
+  `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`,
+  `docs/superpowers/plans/2026-10-19-a757-2-retire-venue-statuses.md` and
+  `docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`); slices 3–6 and 8 are left
   (design §11).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
@@ -2135,7 +2137,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
   Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
-  settle the two suggestions in the detail. Waits for the whole of A757 (slices 2–6 and 8 are left).
+  settle the two suggestions in the detail. Waits for the whole of A757 (slices 3–6 and 8 are left).
   [Detail](backlog/till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
 
 - **A900. A757 slice 7's open questions, built with defaults (left open by slice 7, 2026-10-19).**
@@ -4500,13 +4502,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   remains unverified.
   [Detail](backlog/dashboard.md#one-earlier-spanish-dark-theme-390-px-demo-probe-reached-its-12-second-deadline-before-the-bottom)
 
-- **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
-  The native status colour fields show an ellipsis instead of the full label in the inspected
-  EN/ES service-status captures at 390 and 1280 px, both themes. Next action: reproduce in Venue
-  settings → Tables and adjust the colour-field width using the shared field contract without
-  changing status colour data.
-  [Detail](backlog/dashboard.md#service-status-colour-field-labels-are-clipped-found-during-w69-2026-10-06)
-
 - **A password manager filling the profile's current-password field** — the owner tried Chrome's
   password manager on 2026-10-08 and reported that it works well; other password managers are
   untried. Left open by A331 batch 3a (#1401).
@@ -6259,10 +6254,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
 
 - **`station_printers`: decide the remaining UPDATE restriction (A805 follow-up).**
-  Check the intended retention and mutation paths before adding enforcement.
-  [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
-
-- **`table_service_statuses`: decide the remaining DELETE restriction (A805 follow-up).**
   Check the intended retention and mutation paths before adding enforcement.
   [Audit](developers/grants-retirement-audit.md#unresolved-restrictions)
 

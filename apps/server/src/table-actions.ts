@@ -125,9 +125,8 @@ export async function moveGuests(
     const leaving = held.filter((id) => id !== toTableId);
     await leaveForClearing(tx, leaving, nowIso());
     const mainBillId = await readMainBill(tx, partyId);
-    // A turnover, as seating one: no manual status carries over to these guests.
     if (table.holding === null) {
-      await addTable(tx, partyId, toTableId, { clearStatus: true });
+      await addTable(tx, partyId, toTableId);
     }
     // The table moved to is now the party's only one.
     if (table.zoneId !== zoneBefore) {
@@ -190,7 +189,7 @@ export async function joinTables(
     options.slipsLater === undefined ? { parties: [partyId] } : { later: options.slipsLater };
   return withMovedSlips(tx, cfg, reach, async () => {
     const mainBillId = await readMainBill(tx, partyId);
-    await addTable(tx, partyId, tableId, { clearStatus: false });
+    await addTable(tx, partyId, tableId);
     return { partyId, mainBillId, merged: false };
   });
 }
@@ -352,8 +351,6 @@ export async function combineParties(
     .update(parties)
     .set({ guestCount: combinedGuests(partyOf(from).guestCount, partyOf(into).guestCount) })
     .where(eq(parties.id, into));
-  // Only after `from`'s memberships have ended: closing a party clears the manual status of every
-  // table it still holds (`parties_clear_table_status`), which a joining table keeps.
   await tx
     .update(parties)
     .set({ state: "closed", closedAt: at, closedBy: args.operatorId, mergedIntoPartyId: into })
@@ -476,17 +473,8 @@ async function refuseUnsplittableBill(
   if (billId === partyMain) throw new AppError("party.main_bill_stays", { partyId });
 }
 
-/** The table joins the party; `clearStatus` also clears its manual status. */
-async function addTable(
-  tx: Transaction,
-  partyId: string,
-  tableId: string,
-  options: { clearStatus: boolean },
-): Promise<void> {
+async function addTable(tx: Transaction, partyId: string, tableId: string): Promise<void> {
   await tx.insert(partyTables).values({ partyId, tableId });
-  if (options.clearStatus) {
-    await tx.update(diningTables).set({ statusId: null }).where(eq(diningTables.id, tableId));
-  }
 }
 
 async function billsTaking(

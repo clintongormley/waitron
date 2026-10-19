@@ -57,13 +57,6 @@ function onGrid(table: PermilleTable): SeedTable {
   };
 }
 
-/** `color` is not validated here, because the raw insert bypasses `createStatus`; keep it to what
- *  `validateStatusColor` in `tables.ts` accepts. */
-export interface SeedStatus {
-  label: Record<SeedLocale, string>;
-  color: string;
-}
-
 export const DEMO_ZONES: SeedZone[] = [
   { key: "dining", name: { en: "Dining room", es: "Comedor" }, displayOrder: 0 },
   { key: "terrace", name: { en: "Terrace", es: "Terraza" }, displayOrder: 1 },
@@ -194,9 +187,3 @@ const PERMILLE_TABLES: PermilleTable[] = [
 ];
 
 export const DEMO_TABLES: SeedTable[] = PERMILLE_TABLES.map(onGrid);
-
-export const DEMO_STATUSES: SeedStatus[] = [
-  { label: { en: "VIP", es: "VIP" }, color: "#8b5cf6" },
-  { label: { en: "Allergy at this table", es: "Alergia en esta mesa" }, color: "#ef4444" },
-  { label: { en: "Birthday", es: "Cumpleaños" }, color: "#ec4899" },
-];

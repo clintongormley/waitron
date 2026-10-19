@@ -129,7 +129,6 @@ export async function mount(over: Partial<TillTableOrderScreen> = {}) {
     products: offered,
     menus: menuOf(offered),
     lines: [],
-    statuses: [],
     orderId: "wo-4",
     draftStore: new DraftStore(),
     ...over,

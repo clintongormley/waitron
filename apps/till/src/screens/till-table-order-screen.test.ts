@@ -25,11 +25,7 @@ import {
   servedMenus,
 } from "../widgets/test-helpers.js";
 import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.js";
-import {
-  TillTableOrderScreen,
-  type AdjustDetail,
-  type TableServiceStatus,
-} from "./till-table-order-screen.js";
+import { TillTableOrderScreen, type AdjustDetail } from "./till-table-order-screen.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -127,8 +123,6 @@ const servedLine: TabLine = {
   parentProductId: null,
 };
 
-const reserved: TableServiceStatus = { id: "s1", label: "Reservada", color: "#cc0000" };
-
 /** A menu listing `offered` in order, with a default layout holding no shortcuts, so the browser's
  * first tiles are these products. */
 function servedMenu(
@@ -151,7 +145,6 @@ const mount = async (over: Partial<TillTableOrderScreen> = {}) => {
     products,
     menus: [servedMenu("menu-table", "Carta", true, over.products ?? products)],
     lines: [],
-    statuses: [],
     draftStore,
     ...over,
   });
@@ -687,17 +680,12 @@ describe("till-table-order-screen", () => {
     expect(leaked).toBe(false);
   });
 
-  it("offers a status picker that emits set-status { statusId } and a clear that sends null", async () => {
-    const { el } = await mount({ lines: [pendingLine], statuses: [reserved] });
+  it("has no Status section", async () => {
+    const { el } = await mount({ lines: [pendingLine] });
     await openDrawer(el);
-    let captured: CustomEvent | undefined;
-    el.addEventListener("set-status", (e) => (captured = e as CustomEvent));
-
-    el.shadowRoot!.querySelector<HTMLElement>('[data-status="s1"]')!.click();
-    expect(captured!.detail).toEqual({ statusId: "s1" });
-
-    el.shadowRoot!.querySelector<HTMLElement>("[data-status-clear]")!.click();
-    expect(captured!.detail).toEqual({ statusId: null });
+    expect(el.shadowRoot!.querySelector("[data-drawer]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("section.status")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-status-clear]")).toBeNull();
   });
 
   it("renders an ENABLED Table actions trigger that opens the action menu (TS-3/TS-4)", async () => {
@@ -4080,7 +4068,6 @@ describe("till-table-order-screen", () => {
       readyToServe: 0,
       enRoute: 0,
       timingBand: "fresh",
-      status: null,
       nextReservation: null,
       today: null,
       signals: [],

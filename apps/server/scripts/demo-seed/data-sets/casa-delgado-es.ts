@@ -6,7 +6,7 @@ import {
   PRODUCT_OPTION_LISTS,
   PRODUCT_EXTRA_LISTS,
 } from "../menu.js";
-import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "../floor.js";
+import { DEMO_TABLES, DEMO_ZONES } from "../floor.js";
 import { DEMO_STAFF } from "../staff.js";
 import { DEMO_ADJUSTMENT_REASONS } from "../seed-adjustments.js";
 
@@ -34,7 +34,6 @@ export const CASA_DELGADO_ES: DemoDataSet<CasaDelgadoLanguage> = {
   floor: {
     zones: DEMO_ZONES,
     tables: DEMO_TABLES,
-    statuses: DEMO_STATUSES,
     departmentNames: {
       restaurant: { en: "Restaurant and bar", es: "Restaurante y bar" },
       deli: { en: "Deli", es: "Charcutería" },

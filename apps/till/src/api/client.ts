@@ -2151,11 +2151,10 @@ export interface FloorAnswer {
  * One row of the live-floor occupancy read-model from `GET /api/tables/state`. A table is
  * `"open-tab"` while a party holds it, paid or not. `hasOpenTab` says the party has an open bill,
  * and `tabLineCount`/`tabTotal` are present exactly then: the line count and gross draft total of
- * the party's open bills, the total as a two-place decimal string. `status` is the table's MANUAL
- * service status, independent of occupancy. `pendingToServe` counts the lines still to deliver,
- * `readyToServe` those the kitchen has bumped `ready` but the waiter has not served, and `enRoute`
- * those the pass has dispatched but the waiter has not acknowledged; all three are DISTINCT from
- * `pendingDeliveries` (uncollected counter deliveries).
+ * the party's open bills, the total as a two-place decimal string. `pendingToServe` counts the
+ * lines still to deliver, `readyToServe` those the kitchen has bumped `ready` but the waiter has
+ * not served, and `enRoute` those the pass has dispatched but the waiter has not acknowledged; all
+ * three are DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
  */
 export interface TableState {
   id: string;
@@ -2180,7 +2179,6 @@ export interface TableState {
    * next `getTablesState` fetch.
    */
   timingBand: TimingBand;
-  status: { id: string; label: string; color: string } | null;
   /**
    * The table's next imminent `booked` reservation today, or `null`. Only `time` (venue-local "HH:MM")
    * is projected, so the party size and contact name are deliberately kept off every till device.
@@ -2192,13 +2190,6 @@ export interface TableState {
   hasAllergy?: true;
   /** What wants attention at the table; several at once. */
   signals: TableSignal[];
-}
-
-/** One ACTIVE table service status from `GET /api/statuses`, for the Estado picker. */
-export interface TableServiceStatus {
-  id: string;
-  label: string;
-  color: string;
 }
 
 /** `POST /api/tables/:id/seat` success — the new party, its tab and the tab's order number. */
@@ -3624,11 +3615,6 @@ export class TillApi {
     return this.#request<FloorZone[]>("/api/zones", "GET");
   }
 
-  /** The venue's ACTIVE service statuses → `GET /api/statuses`; a deactivated status can't be applied. */
-  listStatuses(): Promise<TableServiceStatus[]> {
-    return this.#request<TableServiceStatus[]>("/api/statuses", "GET");
-  }
-
   /** The live-floor occupancy read-model → `GET /api/tables/state`, one row per active table. */
   getTablesState(options: ReadOptions = {}): Promise<TableState[]> {
     return this.#request<TableState[]>("/api/tables/state", "GET", undefined, options.signal);
@@ -4335,15 +4321,6 @@ export class TillApi {
       request,
       options.signal,
     );
-  }
-
-  /**
-   * Set or clear a table's MANUAL service status → `POST /api/tables/:tableId/status`. Keyed by TABLE
-   * id: the status belongs to the table, not to any tab. `null` CLEARS it, sent as an explicit null.
-   * Rejects `status.not_found`, `status.inactive` or `table.not_found`.
-   */
-  async setTableStatus(tableId: string, statusId: string | null): Promise<void> {
-    await this.#request<void>(`/api/tables/${tableId}/status`, "POST", { statusId });
   }
 
   /**

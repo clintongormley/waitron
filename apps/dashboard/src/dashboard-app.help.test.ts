@@ -70,7 +70,6 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listProducts: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     putReceipt: vi.fn().mockResolvedValue(undefined),
-    listStatuses: vi.fn().mockResolvedValue([]),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
     getKitchenTimingDefaults: vi.fn().mockResolvedValue({
       warmAfterMinutes: 5,

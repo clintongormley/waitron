@@ -994,7 +994,6 @@ const table = {
   readyToServe: 0,
   enRoute: 0,
   timingBand: "fresh",
-  status: null,
   nextReservation: null,
   today: null,
   signals: [],
@@ -1065,7 +1064,6 @@ function tableStubs(
         serviceMode: "table_tab",
       },
     ]),
-    listStatuses: vi.fn().mockResolvedValue([]),
     getTabLines: vi
       .fn()
       .mockResolvedValue({ lines: [tabLemonade], revision: 0, editSentLines: true }),

@@ -1,8 +1,8 @@
 // A stand-in for boot's `core.seatTable` (apps/server/src/parties.ts), which a module cannot import.
 // It reproduces the table read, the `table.not_found`/`table.inactive`/`tab.already_open` guards on
 // a table a party holds, and these writes of seating: a party, the `working_orders` insert whose id
-// is the tab id, opened from the dashboard as boot binds it, the party's membership of the table,
-// and clearing the table's manual status. It records no main bill for the party. The order number
+// is the tab id, opened from the dashboard as boot binds it, and the party's membership of the
+// table. It records no main bill for the party. The order number
 // is a counter; the verbs ignore it.
 //
 // `table.inactive`/`tab.already_open` are apps/server's codes, declared here so the package's
@@ -81,7 +81,6 @@ export function fakeCore(cfg: FakeCoreConfig): CoreServices {
         partyId: party!.id,
       });
       await tx.insert(partyTables).values({ partyId: party!.id, tableId: req.tableId });
-      await tx.update(diningTables).set({ statusId: null }).where(eq(diningTables.id, req.tableId));
       return { tabId, partyId: party!.id };
     },
   };

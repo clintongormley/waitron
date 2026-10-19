@@ -171,7 +171,6 @@ it("picking a theme in the person's menu with an unsent order open asks nothing 
       listCounterWaiting: vi.fn().mockResolvedValue([]),
       getTablesState: vi.fn().mockResolvedValue([]),
       listZones: vi.fn().mockResolvedValue([]),
-      listStatuses: vi.fn().mockResolvedValue([]),
       listStations: vi.fn().mockResolvedValue([]),
       getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     }),

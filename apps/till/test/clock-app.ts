@@ -164,7 +164,6 @@ export async function clockApp(
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
-    listStatuses: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
     getHours: vi

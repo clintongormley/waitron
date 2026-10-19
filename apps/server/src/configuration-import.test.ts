@@ -46,7 +46,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 4,
+  version: 5,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -126,8 +126,19 @@ describe("staged configuration import", () => {
       },
     ],
     ["A725 pre-station-order export without the column", { version: 3 }],
+    [
+      "A757 pre-status-retirement export with a status",
+      {
+        version: 4,
+        tables: {
+          ...bundle.tables,
+          table_service_statuses: [{ id: "s1", label: "VIP", color: "#8b5cf6" }],
+        },
+      },
+    ],
+    ["A757 pre-status-retirement export without statuses", { version: 4 }],
     ["old version", { version: 1 }],
-    ["future version", { version: 5 }],
+    ["future version", { version: 6 }],
     [
       "retired drawer value",
       {

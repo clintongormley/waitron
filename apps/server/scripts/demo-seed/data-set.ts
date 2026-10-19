@@ -7,7 +7,7 @@ import {
   type VenueGeography,
 } from "@waitron/country-packs";
 import type { SeedLocale } from "./menu.js";
-import type { SeedStatus, SeedTable, SeedZone } from "./floor.js";
+import type { SeedTable, SeedZone } from "./floor.js";
 import type { SeedPerson } from "./staff.js";
 import type { SeedReason } from "./seed-adjustments.js";
 import { CASA_DELGADO_ES } from "./data-sets/casa-delgado-es.js";
@@ -126,7 +126,6 @@ export interface DemoDataSet<L extends string = string> {
   readonly floor: {
     readonly zones: readonly SeedZone[];
     readonly tables: readonly SeedTable[];
-    readonly statuses: readonly SeedStatus[];
     readonly departmentNames: { readonly restaurant: StaffText; readonly deli: StaffText };
     readonly upstairsBarZone: StaffText;
     readonly deliCounterZone: StaffText;

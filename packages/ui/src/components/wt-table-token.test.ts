@@ -131,7 +131,7 @@ test("shows the to-serve badge with its count only when something is pending", a
   expect(none.shadowRoot!.querySelector(".badge.to-serve")).toBeNull();
 });
 
-test("shows the manual status badge with its DATA colour, mirroring FP-1", async () => {
+test("shows the status badge with the colour it is given", async () => {
   const el = await mountToken(
     table({ status: { id: "s1", label: "Reservada", color: "rgb(10, 20, 30)" } }),
   );

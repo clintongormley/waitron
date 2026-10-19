@@ -510,6 +510,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
       bill_edit_states: [],
     };
     delete retained.canvases;
+    delete retained.table_service_statuses;
     retained.device_profiles = before!.device_profiles!.map((row) =>
       Object.fromEntries(
         Object.entries(row as Record<string, unknown>).filter(([key]) => key !== "canvas_id"),

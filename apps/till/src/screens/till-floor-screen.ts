@@ -526,7 +526,7 @@ export class TillFloorScreen extends LitElement {
 
       /* "N listos" -- kitchen-done, waiting to be carried out (KDS-1 §3d). Distinguished from to-serve by
          the success-coloured border rather than a coloured fill, so the label stays theme text on a
-         neutral chip (the a11y-safe pattern the status chip uses); there is no on-success token. */
+         neutral chip (the a11y-safe pattern wt-table-token's status chip uses); there is no on-success token. */
       .badge.ready {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
@@ -538,15 +538,6 @@ export class TillFloorScreen extends LitElement {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
         border: 1px solid var(--wt-color-warning);
-      }
-
-      /* The manual-status chip: label in the theme's text colour on a neutral chip, with the DATA-driven
-         status colour as a border + a small swatch — never as a text background, so contrast is fixed by
-         the tokens and the arbitrary status colour cannot fail a11y. */
-      .badge.status {
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
       }
 
       .unsent {
@@ -601,13 +592,6 @@ export class TillFloorScreen extends LitElement {
       .station-tables {
         min-width: 0;
         overflow-wrap: anywhere;
-      }
-
-      .dot {
-        display: inline-block;
-        width: var(--wt-space-2);
-        height: var(--wt-space-2);
-        border-radius: 50%;
       }
     `,
   ];
@@ -1975,7 +1959,7 @@ export class TillFloorScreen extends LitElement {
   /**
    * A `TableState` carries both the placement half and the occupancy half, so it is passed as both. A
    * seated party's token shows what it still owes; a table needing clearing shows that in the status
-   * chip, which it has free because the status is cleared when the party leaves.
+   * chip.
    */
   #toFloorTable(table: TableState): FloorTable {
     const tabTotal =
@@ -1984,16 +1968,13 @@ export class TillFloorScreen extends LitElement {
         : isZeroDecimal(decimal(table.party.outstanding))
           ? null
           : table.party.outstanding;
-    const status =
-      table.status !== null
-        ? table.status
-        : needsClearing(table)
-          ? {
-              id: "needs-clearing",
-              label: t("floor.needs_clearing"),
-              color: "var(--wt-color-warning)",
-            }
-          : null;
+    const status = needsClearing(table)
+      ? {
+          id: "needs-clearing",
+          label: t("floor.needs_clearing"),
+          color: "var(--wt-color-warning)",
+        }
+      : null;
     return toFloorTable(
       { id: table.id, label: shownUnder(table), seats: seatsFor(table) },
       {
@@ -2395,18 +2376,6 @@ export class TillFloorScreen extends LitElement {
             : nothing
         }
         ${renderFloorChips(tableChips(table))}
-        ${
-          table.status !== null
-            ? html`<span
-                class="badge status"
-                data-status
-                style="border-color: ${table.status.color}"
-              >
-                <span class="dot" style="background: ${table.status.color}"></span
-                >${table.status.label}
-              </span>`
-            : nothing
-        }
       </span>
     </button>`;
   }

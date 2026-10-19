@@ -287,7 +287,6 @@ import type {
   SubmittedDraft,
   TabLine,
   TabTransfer,
-  TableServiceStatus,
   TableState,
   TableParty,
   TicketState,
@@ -2636,11 +2635,9 @@ export class TillApp extends LitElement {
    * server checks each permission itself. Reset at logout.
    */
   @state() private permissions: string[] = [];
-  /** Every active status, not only those applied to a table, so an unused status can still be picked. */
-  @state() private statuses: TableServiceStatus[] = [];
   /** The working-order id of the tab opened from the floor. */
   @state() private activeTabId?: string;
-  /** The table id of that tab: `set-status` is keyed by table, not by order. */
+  /** The table id of that tab. */
   @state() private activeTableId?: string;
   /** The open tab's lines at their locked add-time prices; a tab does not re-price. */
   @state() private tabLines: TabLine[] = [];
@@ -8925,15 +8922,10 @@ export class TillApp extends LitElement {
     const zonesRead = ++this.#floorZonesRead;
     const tablesRead = this.#startTablesRead();
     try {
-      const [tables, zones, statuses] = await Promise.all([
-        this.api.getTablesState(),
-        this.api.listZones(),
-        this.api.listStatuses(),
-      ]);
+      const [tables, zones] = await Promise.all([this.api.getTablesState(), this.api.listZones()]);
       if (replaced()) return;
       this.#applyTables(tablesRead, tables);
       if (zonesRead === this.#floorZonesRead) this.zones = zones;
-      this.statuses = statuses;
       this.#floorLoaded = true;
     } catch {
       // Non-fatal: the last-known floor stays.
@@ -9029,7 +9021,7 @@ export class TillApp extends LitElement {
     this.#floorPoll = undefined;
   }
 
-  /** Tables only: a placement write changes neither the zones nor the statuses. A failed read keeps
+  /** Tables only: a placement write does not change the zones. A failed read keeps
    * the last-known floor, and so does one whose signal aborted before it answered. Answers whether
    * this read's answer, or a newer one's, has been applied; `this.tables` then holds it or a list
    * equal to it. */
@@ -9282,7 +9274,6 @@ export class TillApp extends LitElement {
         );
         this.tableSelectedCatalogueId = "";
       }
-      // `set-status` is keyed by table id, so it is remembered alongside the tab's order id.
       this.activeTableId = tableId;
       this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
       this.finishRefused = false;
@@ -12650,18 +12641,6 @@ export class TillApp extends LitElement {
       : undefined;
   }
 
-  /** Keyed by {@link activeTableId}, not the tab's order id. */
-  async #onSetStatus(event: Event): Promise<void> {
-    const { statusId } = (event as CustomEvent<{ statusId: string | null }>).detail;
-    if (this.activeTableId === undefined) return;
-    this.errorKey = undefined;
-    try {
-      await this.api.setTableStatus(this.activeTableId, statusId);
-    } catch (error) {
-      this.errorKey = tableWriteError(error);
-    }
-  }
-
   /** Re-reads occupancy without leaving the screen. Unlike {@link #refreshFloor}, a failed read
    * empties the floor. */
   async #reloadTables(): Promise<void> {
@@ -15648,7 +15627,6 @@ export class TillApp extends LitElement {
       .selectedMenuId=${this.tableSelectedCatalogueId}
       .menuSelectionRequired=${true}
       .selectedDiet=${this.selectedDiet}
-      .statuses=${this.statuses}
       .courses=${this.courses}
       .stations=${this.stations}
       .fireControl=${this.fireControl}
@@ -15781,7 +15759,6 @@ export class TillApp extends LitElement {
           .selectedMenuId=${this.tableSelectedCatalogueId}
           .menuSelectionRequired=${true}
           .selectedDiet=${this.selectedDiet}
-          .statuses=${this.statuses}
           .courses=${this.courses}
           .stations=${this.stations}
           .fireControl=${this.fireControl}
@@ -16113,7 +16090,6 @@ export class TillApp extends LitElement {
         @cancel-item=${(event: CustomEvent<{ lineId: string }>) => void this.#onCancelItem(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
-        @set-status=${(event: Event) => void this.#onSetStatus(event)}
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#onMoveGuests(event)}
         @move-bill=${(event: Event) => void this.#onMoveBill(event)}

@@ -11,7 +11,6 @@ import {
   locations,
   sales,
   serviceCommands,
-  tableServiceStatuses,
   parties,
   partyTables,
   saleSettlements,
@@ -86,19 +85,6 @@ async function partyForTable(
 
 async function membershipsOf(partyId: string) {
   return inTx(suite, (tx) => tx.select().from(partyTables).where(eq(partyTables.partyId, partyId)));
-}
-
-async function giveStatus(tableIds: string[]): Promise<string> {
-  return inTx(suite, async (tx) => {
-    const [status] = await tx
-      .insert(tableServiceStatuses)
-      .values({ label: `Postre ${randomUUID()}`, color: "#ef4444" })
-      .returning({ id: tableServiceStatuses.id });
-    for (const id of tableIds) {
-      await tx.update(diningTables).set({ statusId: status!.id }).where(eq(diningTables.id, id));
-    }
-    return status!.id;
-  });
 }
 
 /** Joins a free table to the party, as the till's join does. */
@@ -349,7 +335,7 @@ describe("finish table", () => {
     expect(await statusOf(suite, checkId)).toBe("open");
   });
 
-  it("closes the party and its membership, frees the table and clears its status once everything is paid", async () => {
+  it("closes the party and its membership, frees the table once everything is paid", async () => {
     const venue = await setupPartyVenue(suite.db);
     const mesa4 = await venue.table("Mesa 4");
     const { partyId, tabId } = await seat(venue, mesa4, 2);
@@ -357,7 +343,6 @@ describe("finish table", () => {
     const checkId = await split(venue, partyId, tabId, [2]);
     await pay(venue, tabId, "14.00");
     await pay(venue, checkId, "30.00");
-    await giveStatus([mesa4]);
 
     const result = await inTx(suite, (tx) =>
       finishTable(tx, { partyId, expectedPartyRevision: 1, operatorId: OPERATOR }),
@@ -369,7 +354,6 @@ describe("finish table", () => {
     expect(closed.closedAt).not.toBeNull();
     expect(await membershipsOf(partyId)).toEqual([]);
     expect(closed.tableNames).toEqual(["Mesa 4"]);
-    expect((await tableRow(suite, mesa4)).statusId).toBeNull();
     expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toBeNull();
   });
 
@@ -461,20 +445,18 @@ describe("finish table", () => {
     ).toEqual({ state: "closed" });
   });
 
-  it("frees every table of a joined party and clears each one's status", async () => {
+  it("frees every table of a joined party", async () => {
     const venue = await setupPartyVenue(suite.db);
     const mesa4 = await venue.table("Mesa 4");
     const mesa5 = await venue.table("Mesa 5");
     const { partyId } = await seat(venue, mesa4);
     await join(venue.cfg, partyId, mesa5);
-    await giveStatus([mesa4, mesa5]);
 
     await inTx(suite, (tx) =>
       finishTable(tx, { partyId, expectedPartyRevision: 1, operatorId: OPERATOR }),
     );
 
     for (const table of [mesa4, mesa5]) {
-      expect((await tableRow(suite, table)).statusId).toBeNull();
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toBeNull();
     }
     expect(await membershipsOf(partyId)).toEqual([]);
@@ -514,7 +496,6 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
     expect(await partyRow(v, partyId)).toMatchObject({ state: "closed", closedBy: OPERATOR });
     expect(await activeTablesOf(v, partyId)).toEqual([]);
     for (const table of [mesa4, mesa5]) {
-      expect((await tableRow(v, table)).statusId).toBeNull();
       expect((await tableRow(v, table)).needsClearingSince).not.toBeNull();
       expect(await condition(table)).toBe("needs_clearing");
       expect((await floorRow(v, table)).party).toBeNull();
@@ -588,15 +569,6 @@ describe("a table needs clearing, not its party (P8, P9)", () => {
       code: "table.not_found",
       params: { tableId: unknown },
     });
-  });
-
-  it("clears the table's manual status at Finish, as today", async () => {
-    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
-    const mesa10 = await v.table("Mesa 10c");
-    const { partyId } = await seat(v, mesa10);
-    await giveStatus([mesa10]);
-    await finish(partyId);
-    expect((await tableRow(v, mesa10)).statusId).toBeNull();
   });
 });
 
@@ -1024,7 +996,6 @@ describe("merge (D2)", () => {
     await merge(venue.cfg, t, s, true);
 
     expect(await inTx(suite, (tx) => partyForTable(tx, mesa6))).toBeNull();
-    expect((await tableRow(suite, mesa6)).statusId).toBeNull();
     expect((await floorRow(venue, mesa6)).state).toBe("free");
     expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toMatchObject({
       partyId: t.partyId,
@@ -1033,11 +1004,10 @@ describe("merge (D2)", () => {
     expect((await partyRow(suite, s.partyId)).tableNames).toEqual(["Mesa 6"]);
   });
 
-  it("moves the absorbed party's tables to T when T joins them, keeping their status", async () => {
+  it("moves the absorbed party's tables to T when T joins them", async () => {
     const { venue, mesa4, mesa6, t, s } = await mergePair();
     const mesa9 = await venue.table("Mesa 9");
     await join(venue.cfg, s.partyId, mesa9);
-    const statusId = await giveStatus([mesa6, mesa9]);
 
     await merge(venue.cfg, t, s, false);
 
@@ -1045,9 +1015,6 @@ describe("merge (D2)", () => {
       expect(await inTx(suite, (tx) => partyForTable(tx, table))).toMatchObject({
         partyId: t.partyId,
       });
-    }
-    for (const table of [mesa6, mesa9]) {
-      expect((await tableRow(suite, table)).statusId).toBe(statusId);
     }
     expect(await membershipsOf(s.partyId)).toEqual([]);
     expect([...(await partyRow(suite, s.partyId)).tableNames!].sort()).toEqual([

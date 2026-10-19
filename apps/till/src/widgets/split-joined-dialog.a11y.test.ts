@@ -36,7 +36,6 @@ function table(id: string, label: string, todayRow: TableToday, over: Partial<Ta
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: { time: "21:00" },
     today: todayRow,
     signals: [],

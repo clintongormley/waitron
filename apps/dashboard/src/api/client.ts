@@ -644,17 +644,6 @@ export type EmailSettingsView =
 export type EmailSettingsTestResult =
   { accepted: true } | { accepted: false; code: "email.test_refused" | "email.test_timeout" };
 
-// ── Table service-status configuration types ──────────────────────────────────────────────────────
-
-export interface ServiceStatus {
-  id: string;
-  label: string;
-  color: string;
-  displayOrder: number;
-  active: boolean;
-  createdAt: string;
-}
-
 // ── Floor-plan types ─────────────────────────────────────────────────────────────────────────────
 
 export interface FloorZone {
@@ -3059,31 +3048,6 @@ export class DashboardApi {
       "POST",
       options.passive === true ? { ...draft, passive: true } : draft,
     );
-  }
-
-  // ── Table service-status configuration ──────────────────────────────────────────────────────────
-
-  listStatuses(): Promise<ServiceStatus[]> {
-    return this.#request<ServiceStatus[]>("/management-api/service-statuses", "GET");
-  }
-
-  createStatus(input: {
-    label: string;
-    color: string;
-    displayOrder?: number;
-  }): Promise<{ id: string }> {
-    return this.#request<{ id: string }>("/management-api/service-statuses", "POST", input);
-  }
-
-  updateStatus(
-    id: string,
-    patch: { label?: string; color?: string; displayOrder?: number; active?: boolean },
-  ): Promise<void> {
-    return this.#request<void>(`/management-api/service-statuses/${id}`, "PATCH", patch);
-  }
-
-  deactivateStatus(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/service-statuses/${id}`, "DELETE");
   }
 
   // ── Floor-plan zone + table configuration ──────────────────────────────────────────────────────

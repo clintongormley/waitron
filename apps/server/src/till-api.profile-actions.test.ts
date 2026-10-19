@@ -151,7 +151,7 @@ import {
  *   `/api/device/pass-screen/done` is the device's own mark, made on its pass screen: by a kitchen
  *   display on its cookie alone, and on any other device by the person signed in on it, which the
  *   route requires;
- * - the table status and cleared marks, and `/api/sales/:id/receipt/handover` (a printed receipt
+ * - the table's cleared mark, and `/api/sales/:id/receipt/handover` (a printed receipt
  *   handed over): none is an ordering, payment or drawer write;
  * - `/api/demo-reader/cancel`: mounted only when the card provider is the simulator.
  *

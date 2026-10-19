@@ -69,7 +69,6 @@ import type {
   ServiceZoneSummary,
   StationQueue,
   TabLine,
-  TableServiceStatus,
   TableState,
   TillApi,
   TillProduct,
@@ -156,7 +155,6 @@ const freeTable: TableState = {
   readyToServe: 0,
   enRoute: 0,
   timingBand: "fresh",
-  status: null,
   nextReservation: null,
   today: null,
   signals: [],
@@ -177,7 +175,6 @@ const openTable: TableState = {
   readyToServe: 0,
   enRoute: 0,
   timingBand: "fresh",
-  status: null,
   nextReservation: null,
   today: null,
   signals: [],
@@ -509,13 +506,11 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
     ...adjustmentStubs(),
-    setTableStatus: vi.fn().mockResolvedValue(undefined),
     moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
     joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
     transferItems: vi.fn().mockResolvedValue(undefined),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
-    listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
     listDrafts: drafts.listDrafts,
     saveDraft: drafts.saveDraft,
@@ -1993,7 +1988,6 @@ describe("till-app", () => {
   });
 
   it("boots a HANDHELD device into the phone shell (stays on lock) and lands on the floor after login", async () => {
-    const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
       getDeviceIdentity: vi
@@ -2003,7 +1997,6 @@ describe("till-app", () => {
       // `screen` to an empty one.
       getTablesState: vi.fn().mockResolvedValue([freeTable]),
       listZones: vi.fn().mockResolvedValue([floorZone]),
-      listStatuses: vi.fn().mockResolvedValue([status]),
     });
     await flush(el);
     // A handheld waits on the lock screen (unlike a kds_station, which skips it) — but in handheld mode.
@@ -2020,7 +2013,6 @@ describe("till-app", () => {
     // The floor was LOADED, not just shown.
     expect(currentApi.getTablesState).toHaveBeenCalled();
     expect(currentApi.listZones).toHaveBeenCalled();
-    expect(currentApi.listStatuses).toHaveBeenCalled();
     const f = floor(el);
     expect(f).not.toBeNull();
     expect(f!.tables).toEqual([freeTable]);
@@ -8976,24 +8968,6 @@ describe("till-app", () => {
         expect(screen.canSettle).toBe(true);
       });
 
-      it("loads the ACTIVE service-status catalogue and threads it to the Estado picker", async () => {
-        const catalogue = [
-          { id: "s1", label: "Reservada", color: "#cc0000" },
-          { id: "s2", label: "Cuenta pedida", color: "#0a8a0a" },
-        ];
-        const listStatuses = vi.fn().mockResolvedValue(catalogue);
-        const { el } = await mountApp({
-          // openTable carries `status: null`, so a list DERIVED from the occupancy read-model would be
-          // empty — the picker must be fed the loaded catalogue (incl. a status applied to no table).
-          getTablesState: vi.fn().mockResolvedValue([openTable]),
-          listZones: vi.fn().mockResolvedValue([floorZone]),
-          listStatuses,
-        });
-        const screen = await toTableOrder(el, openTable);
-        expect(listStatuses).toHaveBeenCalled();
-        expect(screen.statuses).toEqual(catalogue);
-      });
-
       it("submit-draft submits the round to the table's party then reloads its lines", async () => {
         const submitDraft = answering({ tabId: "wo-7", revision: 4, groups: [] });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
@@ -9261,7 +9235,7 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("a failed round/serve/status write surfaces a non-fatal error, leaving the screen up", async () => {
+      it("a failed round/serve/course write surfaces a non-fatal error, leaving the screen up", async () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -9269,7 +9243,6 @@ describe("till-app", () => {
           submitDraft: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
           markServed: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
           setLineCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }),
-          setTableStatus: vi.fn().mockRejectedValue({ code: "status.not_found" }),
         });
         const screen = await toTableOrder(el, openTable);
 
@@ -9277,29 +9250,12 @@ describe("till-app", () => {
           ["submit-draft", await ringCafe(el, screen)],
           ["serve-lines", { items: [{ lineId: "line-1", quantity: "2" }] }],
           ["set-line-course", { lineNo: 1, courseId: "c2" }],
-          ["set-status", { statusId: "s1" }],
         ] as const) {
           emit(screen, type, detail);
           await flush(el);
           expect(tableOrder(el)).not.toBeNull();
           expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
         }
-      });
-
-      it("set-status sets the table's manual status keyed by TABLE id (not the tab's order id)", async () => {
-        const setTableStatus = vi.fn().mockResolvedValue(undefined);
-        const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([openTable]),
-          listZones: vi.fn().mockResolvedValue([floorZone]),
-          setTableStatus,
-        });
-        const screen = await toTableOrder(el, openTable);
-
-        emit(screen, "set-status", { statusId: "s1" });
-        await flush(el);
-
-        // Keyed by the TABLE id "t2", never the tab's order id "wo-7".
-        expect(setTableStatus).toHaveBeenCalledWith("t2", "s1");
       });
 
       // ── Coursing corrections: send / recall / cancel line actions ─────────────────────────────
@@ -13123,7 +13079,6 @@ describe("till-app", () => {
 
     it("a handheld renders the shell with Floor selected", async () => {
       const phoneFormFactor: FormFactor = "phone-portrait";
-      const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
         getDeviceIdentity: vi
@@ -13131,7 +13086,6 @@ describe("till-app", () => {
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        listStatuses: vi.fn().mockResolvedValue([status]),
       });
       await flush(el);
       expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
@@ -13302,7 +13256,6 @@ describe("till-app", () => {
 
   describe("handheld table-order mount duality (SP-B2.2 Task 7)", () => {
     const phoneFormFactor: FormFactor = "phone-portrait";
-    const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
     const shell = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElement & { activeScreen?: string }>("till-shell");
 
@@ -13314,7 +13267,6 @@ describe("till-app", () => {
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        listStatuses: vi.fn().mockResolvedValue([status]),
       });
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -13361,7 +13313,6 @@ describe("till-app", () => {
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState,
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        listStatuses: vi.fn().mockResolvedValue([status]),
       });
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -13403,7 +13354,6 @@ describe("till-app", () => {
           .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
         getTablesState,
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        listStatuses: vi.fn().mockResolvedValue([status]),
       });
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
@@ -13640,12 +13590,10 @@ describe("till-app", () => {
       // `.tables`/`.zones` or the floor-plan card renders a BLANK floor with no table to tap, and
       // table-service ordering is unreachable from the shell. So this asserts the data actually loaded
       // and reached the card.
-      const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: shellFormFactor }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
-        listStatuses: vi.fn().mockResolvedValue([status]),
       });
       await toCounter(el);
       emit(shell(el)!, "screen-select", { screen: "floor" });

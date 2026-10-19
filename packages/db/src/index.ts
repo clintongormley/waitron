@@ -173,7 +173,6 @@ export {
 export { printerHolders } from "./schema/printer-holders.js";
 export { tenantThemes } from "./schema/tenant-themes.js";
 export { tenantReceipts } from "./schema/tenant-receipts.js";
-export { tableServiceStatuses } from "./schema/table-service-statuses.js";
 export { workingOrderCounters } from "./schema/working-order-counters.js";
 export {
   fiscalState,
@@ -198,7 +197,6 @@ export {
 export { CORE_ALERTS } from "./alerts.js";
 export { CORE_CLASSIFICATION } from "./classification.js";
 export { CORE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
-export { isStatusColor } from "./status-color.js";
 export { drawerOpens } from "./schema/drawer-opens.js";
 export type { DrawerOpenReason } from "./schema/drawer-opens.js";
 export { dailyCloseChain, dailyCloses } from "./schema/daily-closes.js";

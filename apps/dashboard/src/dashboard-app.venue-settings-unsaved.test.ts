@@ -30,7 +30,7 @@ afterEach(() => {
   setLocale("en-GB");
 });
 async function mount(
-  path = "/manage/venue-settings/view/tables",
+  path = "/manage/venue-settings/view/kitchen",
   locale = "en-GB",
   theme: "light" | "dark" = "light",
   apiOverrides: Partial<DashboardApi> = {},
@@ -45,17 +45,6 @@ async function mount(
       api: {
         liveData: new LiveData(),
         getVenueDetails: async () => venueDetailsFixture(),
-        listStatuses: async () => [
-          {
-            id: "s1",
-            label: "Bill requested",
-            color: "#ef4444",
-            displayOrder: 0,
-            active: true,
-            createdAt: "2026-08-17T00:00:00Z",
-          },
-        ],
-        updateStatus: async () => {},
         listStations: async () => [],
         listCourses: async () => [],
         getKitchenTimingDefaults: async () => ({
@@ -138,8 +127,8 @@ async function mount(
     .poll(() =>
       app
         .shadowRoot!.querySelector("dashboard-venue-settings-screen")
-        ?.shadowRoot?.querySelector("dashboard-service-status-screen")
-        ?.shadowRoot?.querySelector("[data-test=label-s1]"),
+        ?.shadowRoot?.querySelector("dashboard-kitchen-screen")
+        ?.shadowRoot?.querySelector("[data-test=edit-timing]"),
     )
     .toBeTruthy();
   return { app, host, logouts: () => logouts, locales };
@@ -161,22 +150,23 @@ async function editTiming(app: DashboardApp) {
 it("the actual Kitchen tab keeps late flags through Keep and restores them only after Discard", async () => {
   const { app } = await mount("/manage/venue-settings/view/kitchen");
   const { input } = await editTiming(app);
-  await select(app, "tables");
+  await select(app, "venue-details");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   expect(selected(app)).toBe("kitchen");
   expect(input.checkVisibility()).toBe(true);
   expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
   await choose(app, "keep");
   expect(input.value).toBe("6");
-  await select(app, "tables");
+  await select(app, "venue-details");
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("tables");
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
   expect(input.value).toBe("5");
   expect(input.checkVisibility()).toBe(false);
 });
 
 it("real history Back waits for a Kitchen timing decision and Forward restores its accepted baseline", async () => {
-  const { app } = await mount();
+  const { app } = await mount("/manage/venue-settings/view/venue-details");
   await select(app, "kitchen");
   const { input } = await editTiming(app);
   history.back();
@@ -186,7 +176,7 @@ it("real history Back waits for a Kitchen timing decision and Forward restores i
   expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
   history.back();
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("tables");
+  await expect.poll(() => selected(app)).toBe("venue-details");
   history.forward();
   await expect.poll(() => selected(app)).toBe("kitchen");
   expect(input.value).toBe("5");
@@ -222,7 +212,7 @@ it("Kitchen timing protects sidebar, voluntary logout and language replacement b
 it("forced expiry clears a Kitchen timing draft and makes its unanswered Discard inert", async () => {
   const { app, logouts } = await mount("/manage/venue-settings/view/kitchen");
   const { kitchen, input } = await editTiming(app);
-  await select(app, "tables");
+  await select(app, "venue-details");
   const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => warning.open).toBe(true);
   await warning.updateComplete;
@@ -246,21 +236,10 @@ function settings(app: DashboardApp) {
 function tabs(app: DashboardApp) {
   return settings(app).shadowRoot!.querySelector<WtTabs>("wt-tabs")!;
 }
-function status(app: DashboardApp) {
-  return settings(app).shadowRoot!.querySelector("dashboard-service-status-screen")!;
-}
-function field(app: DashboardApp) {
-  return status(app).shadowRoot!.querySelector<WtInput>("[data-test=label-s1]")!;
-}
 function selected(app: DashboardApp) {
   return tabs(app)
     .shadowRoot!.querySelector("[role=tab][aria-selected=true]")
     ?.getAttribute("data-key");
-}
-async function edit(app: DashboardApp, value = "Please bring the bill") {
-  await field(app).updateComplete;
-  await userEvent.fill(page.elementLocator(field(app).shadowRoot!.querySelector("input")!), value);
-  await status(app).updateComplete;
 }
 async function select(app: DashboardApp, key: string) {
   await userEvent.click(
@@ -277,47 +256,28 @@ async function choose(app: DashboardApp, decision: "keep" | "discard") {
   await expect.poll(() => question.open).toBe(false);
 }
 
-it("keeps the actual Tables panel visible while a tab leave is unanswered or kept", async () => {
+it("ignores a repeated tab target and another leave target while deciding and changes only to the accepted target", async () => {
   const { app } = await mount();
-  await edit(app);
-  await select(app, "kitchen");
-  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
-  expect(selected(app)).toBe("tables");
-  expect(field(app).checkVisibility()).toBe(true);
-  expect(location.pathname).toBe("/manage/venue-settings/view/tables");
-  await choose(app, "keep");
-  expect(selected(app)).toBe("tables");
-  expect(field(app).checkVisibility()).toBe(true);
-  expect(field(app).value).toBe("Please bring the bill");
-  await select(app, "kitchen");
-  await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("kitchen");
-  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
-  expect(field(app).value).toBe("Bill requested");
-  expect(field(app).checkVisibility()).toBe(false);
-});
-
-it("ignores repeated tab targets while deciding and changes only to the accepted target", async () => {
-  const { app } = await mount();
-  await edit(app);
-  await select(app, "kitchen");
+  await editTiming(app);
+  await select(app, "venue-details");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=venue-details]")!.click();
+  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
   await tabs(app).updateComplete;
-  expect(selected(app)).toBe("tables");
+  expect(selected(app)).toBe("kitchen");
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("kitchen");
-  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
 });
 
-it("a reverted status lets the real container tab switch without warning", async () => {
+it("a reverted Kitchen timing lets the real container tab switch without warning", async () => {
   const { app } = await mount();
-  await edit(app);
-  await edit(app, "Bill requested");
-  await select(app, "kitchen");
-  await expect.poll(() => selected(app)).toBe("kitchen");
+  const { input } = await editTiming(app);
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), "5");
+  await select(app, "venue-details");
+  await expect.poll(() => selected(app)).toBe("venue-details");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
 });
 
 it("a real Venue details draft stays visible through its container tab warning", async () => {
@@ -332,16 +292,16 @@ it("a real Venue details draft stays visible through its container tab warning",
     page.elementLocator(street.shadowRoot!.querySelector("input")!),
     "Different street",
   );
-  await select(app, "tables");
+  await select(app, "kitchen");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   expect(selected(app)).toBe("venue-details");
   expect(street.checkVisibility()).toBe(true);
   await choose(app, "keep");
   expect(street.value).toBe("Different street");
   expect(selected(app)).toBe("venue-details");
-  await select(app, "tables");
+  await select(app, "kitchen");
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("tables");
+  await expect.poll(() => selected(app)).toBe("kitchen");
   await panel.updateComplete;
   expect(street.isConnected).toBe(false);
   expect(panel.shadowRoot!.querySelector("wt-input")).toBeNull();
@@ -369,8 +329,8 @@ function inViewMode(panel: HTMLElementTagNameMap["dashboard-venue-details-panel"
 it("a Venue details edit with nothing changed ends when its tab is left", async () => {
   const { app } = await mount("/manage/venue-settings/view/venue-details");
   const { panel } = await editVenueDetails(app);
-  await select(app, "tables");
-  await expect.poll(() => selected(app)).toBe("tables");
+  await select(app, "kitchen");
+  await expect.poll(() => selected(app)).toBe("kitchen");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await select(app, "venue-details");
   await expect.poll(() => selected(app)).toBe("venue-details");
@@ -384,16 +344,16 @@ it("a changed Venue details edit survives Keep and ends in view mode after Disca
     page.elementLocator(street.shadowRoot!.querySelector("input")!),
     "Different street",
   );
-  await select(app, "tables");
+  await select(app, "kitchen");
   await choose(app, "keep");
   expect(selected(app)).toBe("venue-details");
   expect(inViewMode(panel)).toBe(false);
   expect(panel.shadowRoot!.querySelector<WtInput>("[name=addressLine1]")!.value).toBe(
     "Different street",
   );
-  await select(app, "tables");
+  await select(app, "kitchen");
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("tables");
+  await expect.poll(() => selected(app)).toBe("kitchen");
   await select(app, "venue-details");
   await expect.poll(() => selected(app)).toBe("venue-details");
   await panel.updateComplete;
@@ -405,49 +365,14 @@ it("a changed Venue details edit survives Keep and ends in view mode after Disca
 
 it("keyboard tab navigation holds the edited panel until Discard", async () => {
   const { app } = await mount();
-  await edit(app);
-  tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=tables]")!.focus();
-  await userEvent.keyboard("{End}");
+  const { input } = await editTiming(app);
+  tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=kitchen]")!.focus();
+  await userEvent.keyboard("{Home}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
-  expect(selected(app)).toBe("tables");
-  expect(field(app).checkVisibility()).toBe(true);
+  expect(selected(app)).toBe("kitchen");
+  expect(input.checkVisibility()).toBe(true);
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("kitchen");
-});
-
-it("real Back and Forward retain edited Tables until the requested traversal is accepted", async () => {
-  const { app } = await mount("/manage/venue-settings/view/kitchen");
-  await select(app, "tables");
-  await edit(app);
-  history.back();
-  await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/venue-settings/view/tables");
-  expect(selected(app)).toBe("tables");
-  expect(field(app).value).toBe("Please bring the bill");
-  history.back();
-  await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("kitchen");
-  history.forward();
-  await expect.poll(() => selected(app)).toBe("tables");
-  expect(field(app).value).toBe("Bill requested");
-  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-});
-
-it("sidebar and voluntary sign-out consult the actual retained status draft", async () => {
-  const { app, logouts } = await mount();
-  await edit(app);
-  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
-  await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/venue-settings/view/tables");
-  expect(field(app).value).toBe("Please bring the bill");
-  app.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
-  await choose(app, "keep");
-  expect(logouts()).toBe(0);
-  expect(field(app).value).toBe("Please bring the bill");
-  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
-  await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
-  expect(app.shadowRoot!.querySelector("dashboard-venue-settings-screen")).toBeNull();
+  await expect.poll(() => selected(app)).toBe("venue-details");
 });
 
 for (const locale of ["en-GB", "es-ES"]) {
@@ -472,7 +397,7 @@ for (const locale of ["en-GB", "es-ES"]) {
           page.elementLocator(street.shadowRoot!.querySelector("input")!),
           "Different street",
         );
-        await select(app, "tables");
+        await select(app, "kitchen");
         const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
         await expect.poll(() => warning.open).toBe(true);
         expect(selected(app)).toBe("venue-details");
@@ -488,9 +413,9 @@ for (const locale of ["en-GB", "es-ES"]) {
         await page.screenshot({
           path: `node_modules/.cache/w69-venue-look/${locale}-${theme}-${width}-kept.png`,
         });
-        await select(app, "tables");
+        await select(app, "kitchen");
         await choose(app, "discard");
-        await expect.poll(() => selected(app)).toBe("tables");
+        await expect.poll(() => selected(app)).toBe("kitchen");
       });
     }
   }
@@ -597,13 +522,13 @@ it("an obsolete receipt department query cannot bypass a venue draft leave decis
     page.elementLocator(address.shadowRoot!.querySelector("input")!),
     "Draft street",
   );
-  await select(app, "tables");
+  await select(app, "kitchen");
   await choose(app, "keep");
   expect(selected(app)).toBe("venue-details");
   expect(address.value).toBe("Draft street");
-  await select(app, "tables");
+  await select(app, "kitchen");
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("tables");
+  await expect.poll(() => selected(app)).toBe("kitchen");
   expect(address.isConnected).toBe(false);
   await select(app, "venue-details");
   await expect.poll(() => selected(app)).toBe("venue-details");
@@ -692,11 +617,11 @@ it("leaving Venue details by Back and Discard closes a changed legal-name dialog
   const { host, dialog, native } = await openLegalName(app, "Proposed SL");
   history.back();
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("tables");
+  await expect.poll(() => selected(app)).toBe("kitchen");
   await host.updateComplete;
   expect(dialog.open).toBe(false);
   expect(native.matches(":modal")).toBe(false);
-  expect(await tabStillClickable(app, "tables")).toBe(true);
+  expect(await tabStillClickable(app, "kitchen")).toBe(true);
   await select(app, "kitchen");
   await expect.poll(() => selected(app)).toBe("kitchen");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -734,7 +659,7 @@ it("a rename answered after Back and Discard closed its dialog still updates the
   await expect.poll(() => answer).toBeTypeOf("function");
   history.back();
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("tables");
+  await expect.poll(() => selected(app)).toBe("kitchen");
   await host.updateComplete;
   expect(dialog.open).toBe(false);
   expect(native.matches(":modal")).toBe(false);
@@ -760,7 +685,7 @@ it("a rename refused after Back and Discard closed its dialog shows nothing", as
   await expect.poll(() => refuse).toBeTypeOf("function");
   history.back();
   await choose(app, "discard");
-  await expect.poll(() => selected(app)).toBe("tables");
+  await expect.poll(() => selected(app)).toBe("kitchen");
   refuse();
   await new Promise((resolve) => setTimeout(resolve, 0));
   await host.updateComplete;
@@ -787,7 +712,7 @@ it("leaving Venue details by Back closes an unchanged legal-name dialog", async 
   const { app } = await mount();
   const { host, dialog, native } = await openLegalName(app);
   history.back();
-  await expect.poll(() => selected(app)).toBe("tables");
+  await expect.poll(() => selected(app)).toBe("kitchen");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await host.updateComplete;
   expect(dialog.open).toBe(false);

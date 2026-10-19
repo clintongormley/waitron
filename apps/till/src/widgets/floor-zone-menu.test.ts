@@ -35,7 +35,6 @@ function table(id: string, over: Partial<TableToday> = {}): TableState {
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: {
       placement: { x: 2, y: 2, width: 8, height: 8, shape: "rect", rotation: 0 },

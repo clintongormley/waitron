@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtTabs } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import "./venue-settings-screen.js";
+import { isVenueSettingsTab } from "./venue-settings-screen.js";
 import type { VenueSettingsPanel, VenueSettingsScreen } from "./venue-settings-screen.js";
 
 const initialUrl = location.href;
@@ -54,6 +54,10 @@ async function select(el: VenueSettingsScreen, key: string): Promise<void> {
 }
 
 describe("the Venue settings page", () => {
+  it("has no Tables tab", () => {
+    expect(isVenueSettingsTab("tables")).toBe(false);
+  });
+
   it("owns the one h1 and shows only the tabs that have a panel, in core's order", async () => {
     setLocale("en-GB");
     navigate("/manage/venue-settings/view/kitchen");
@@ -87,9 +91,9 @@ describe("the Venue settings page", () => {
     const query = location.search;
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    const el = await mount([panel("s", "tables"), panel("k", "kitchen")]);
-    expect(selected(el)).toBe("tables");
-    expect(location.pathname).toBe("/manage/venue-settings/view/tables");
+    const el = await mount([panel("r", "venue-details"), panel("k", "kitchen")]);
+    expect(selected(el)).toBe("venue-details");
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
     expect(location.search).toBe(query);
     expect(replace).toHaveBeenCalledTimes(1);
     expect(push).not.toHaveBeenCalled();
@@ -192,14 +196,13 @@ describe("the Venue settings page", () => {
     navigate("/manage/venue-settings");
     const el = await mount([
       panel("r", "venue-details"),
-      panel("s", "tables"),
       panel("a", "adjustment-reasons"),
       panel("k", "kitchen"),
     ]);
     expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Ajustes del local");
     expect(
       [...tabs(el)!.shadowRoot!.querySelectorAll('[role="tab"]')].map((t) => t.textContent!.trim()),
-    ).toEqual(["Datos del local", "Mesas", "Motivos de ajuste", "Cocina"]);
+    ).toEqual(["Datos del local", "Motivos de ajuste", "Cocina"]);
   });
 });
 

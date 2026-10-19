@@ -50,7 +50,7 @@ import {
   placeSpareToday,
   ensureToday,
 } from "./floor-today-store.js";
-import { listTables, listZones, updateZone, setTableStatus } from "./tables.js";
+import { listTables, listZones, updateZone } from "./tables.js";
 import { seatTable } from "./parties.js";
 import { jobOrigin } from "@waitron/shared";
 import { mountManagementApi } from "./management-api.js";
@@ -563,7 +563,6 @@ describe("stale floor identifiers", () => {
       "table.not_found",
       (tx, f) => placeSpareToday(tx, v.cfg, f.tableId, { x: 2, y: 2 }),
     ],
-    ["table status", "table.not_found", (tx, f) => setTableStatus(tx, v.cfg, f.tableId, null)],
     [
       "table seat",
       "table.inactive",

@@ -1608,12 +1608,15 @@ tables, caught by hand in review.
 A182 part 2 removes `canvases` from the transfer declarations. Every earlier format-2 export
 includes that table key, even when it has no rows. With the format left unchanged, the real setup
 route refused both empty and populated canvas lists as `setup.request_invalid` on `tables`.
-Format 3 now refuses those older files as `setup.configuration_outdated`, before replacing staged
+Format 3 refused those older files as `setup.configuration_outdated`, before replacing staged
 files. Current exports still round-trip; future formats keep their version refusal. The cases in
 `apps/server/src/configuration-import.test.ts` cover both old canvas lists and retained staging
 files; `configuration-transfer.test.ts` retains the receipt-choice round-trip and pins format 3.
 No old settings are converted. Cost: the whole-branch run-it review found the generic refusal
 while checking this reset-only release.
+A725 (format 4) and A757 slice 2 (format 5, 2026-10-19, when it dropped `table_service_statuses`)
+moved the format for the same reason; `configuration-transfer.test.ts` now pins format 5, and older
+files are refused as `setup.configuration_outdated`.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 
@@ -2027,6 +2030,7 @@ Measured on 2026-10-11, Node v26.7.0, after applying every manifest migration to
 `floor_today_tables.table_id`, `floor_today_join_tables.table_id` and `bookings.table_id`.
 Cascading here would allow removal to discard the records the release and refusal paths must
 handle. The only trigger whose SQL names `dining_tables` is `parties_clear_table_status`.
+**2026-10-19:** A757 slice 2 dropped `parties_clear_table_status` (core 0180).
 
 > Added 2026-10-13 by A503 part 3: two more incoming keys, `floor_today_split_parts.joined_table_id`
 > and `.part_table_id`, both `no action`.

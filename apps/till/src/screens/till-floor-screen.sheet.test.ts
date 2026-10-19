@@ -56,7 +56,6 @@ function planned(
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: {
       placement: { x, y: 3, width: 2, height: 2, shape: "round", rotation: 0 },

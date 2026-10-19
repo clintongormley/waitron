@@ -33,7 +33,6 @@ function table(id: string, label: string, x: number, over: Partial<TableToday> =
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: {
       placement: { x, y: 20, width: 2, height: 2, shape: "rect", rotation: 0 },

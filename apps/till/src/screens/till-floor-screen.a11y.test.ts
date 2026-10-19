@@ -54,12 +54,11 @@ const tables: TableState[] = [
     tabTotal: "47.50",
     pendingDeliveries: 0,
     // All three counts positive — a dispatched line is still ready + unserved — so en camino wins and
-    // its filled-primary chip is what axe scans (alongside the status swatch on this card).
+    // its filled-primary chip is what axe scans.
     pendingToServe: 2,
     readyToServe: 1,
     enRoute: 1,
     timingBand: "fresh",
-    status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
     nextReservation: { time: "20:30" },
     today: null,
     signals: [],
@@ -77,7 +76,6 @@ const tables: TableState[] = [
     readyToServe: 0,
     enRoute: 0,
     timingBand: "warm",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],
@@ -95,7 +93,6 @@ const tables: TableState[] = [
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],
@@ -113,7 +110,6 @@ const tables: TableState[] = [
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],
@@ -133,7 +129,6 @@ const tables: TableState[] = [
     readyToServe: 2,
     enRoute: 0,
     timingBand: "overdue",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],
@@ -153,7 +148,6 @@ const tables: TableState[] = [
     readyToServe: 0,
     enRoute: 0,
     timingBand: "forgotten",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],
@@ -179,7 +173,6 @@ const partyTables: TableState[] = [
     ...tables[0]!,
     id: "t5",
     label: "5",
-    status: null,
     nextReservation: null,
     condition: "held",
     party: {
@@ -197,7 +190,6 @@ const partyTables: TableState[] = [
     hasOpenTab: false,
     tabLineCount: undefined,
     tabTotal: undefined,
-    status: null,
     nextReservation: null,
     condition: "held",
     party: {
@@ -219,7 +211,6 @@ const partyTables: TableState[] = [
     pendingToServe: 0,
     readyToServe: 0,
     enRoute: 0,
-    status: null,
     nextReservation: null,
     state: "free",
     condition: "needs_clearing",
@@ -264,7 +255,7 @@ for (const locale of ["en", "es"]) {
             {
               zones,
               tables: [
-                { ...tables[0]!, hasAllergy: true, today: todayRow(2), status: null },
+                { ...tables[0]!, hasAllergy: true, today: todayRow(2) },
                 { ...tables[2]!, today: todayRow(12) },
               ],
             },

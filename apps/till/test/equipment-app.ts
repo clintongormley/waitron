@@ -84,7 +84,6 @@ export async function mountEquipmentApp(
     getExpoQueue: vi.fn().mockResolvedValue([]),
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
-    listStatuses: vi.fn().mockResolvedValue([]),
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
     getDeviceEquipment: vi.fn().mockResolvedValue(NFC_EQUIPMENT),
     setDeviceEquipment: client.setDeviceEquipment.bind(client),
