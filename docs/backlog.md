@@ -2130,15 +2130,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   limit the venue's own, with an approver's PIN above it; the bill-wide limit a euro amount of comps
   with its own approver list. Then the page "Voids and comps" under Service, with search, drag
   handles and Delete. **Design revised 2026-10-19 for the owner's Q43 notes (settled and
-  buildable):** what Cancel item… does follows where the dish is — not started: just removed, no
-  reason; fired but not started: the till asks "Has preparation started?"; started: "Cancel, still
-  charge" or "Cancel, don't charge", with a reason; paid: cancelled with a reason, refunded or not.
-  Any money off an unpaid bill or back from a paid one needs the refund permission, which replaces
-  the Void reasons' own rules; no "Ask for approval" button; the reason is a drop-down; nine
-  starter reasons (with Not served and Other). Finish table on a paid table cancels every dish not
-  served, with a Refund tick each, or sends the order to the counter to be collected (its own
-  slice). A773-1 builds the till dialogs (design §10); A758's slices follow it. **One question is
-  open: the Spanish for the new till words and the cash refund's tick (§11).**
+  buildable):** what Cancel item… does follows where the dish is — not sent or held, bill unpaid:
+  just removed, no reason; fired but not started: the till asks "Has preparation started?";
+  started: "Cancel, still charge" or "Cancel, don't charge", with a reason; paid: cancelled with a
+  reason, refunded or not. "Cancel, don't charge" on an unpaid bill, and any refund on a paid one,
+  need the refund permission, which replaces the Void reasons' own rules (comps keep theirs); no
+  "Ask for approval" button; the reason is a drop-down; nine starter reasons (with Not served and
+  Other). Finish table on a paid table cancels every dish not served, with a Refund tick each, or
+  sends the order to the counter to be collected (its own slice). A773-1 builds the till dialogs
+  (design §10); A758's slices follow it. **One question, in four parts, is open (§11): the Spanish
+  for the new till words, the cash refund's switch, whether a fired dish removed before preparation
+  started is listed in the report, and the refund screen's Reason.**
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)

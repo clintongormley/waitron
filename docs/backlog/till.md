@@ -1384,10 +1384,10 @@ roles are a ranking, and "does the logic work? are we asking the right questions
 with [mock-ups](mockups/a758-adjustment-reasons/). Revised 2026-10-18 for food left on the pass after
 a table has paid (§3.8, pictures 06–09), then rewritten the same day for the owner's Q40 answer.
 Revised again on 2026-10-19 for the owner's Q43 notes, and settled: Cancel item… follows where the
-dish is (§3.3, picture 03), the refund permission decides every cancel that takes money off or
-gives it back, a Void reason is a label, and Finish table on a paid table cancels every dish not
+dish is (§3.3, picture 03), the refund permission decides "Cancel, don't charge" on an unpaid bill
+and every refund, a Void reason is a label, and Finish table on a paid table cancels every dish not
 served with a Refund tick each (§3.8, pictures 06–08). What A773-1 builds is in the design's §10;
-one wording question is open (§11). The notes below are the review as written before the
+one question, in four parts, is open (§11). The notes below are the review as written before the
 answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against
 100% discount, "Invitación", role lists "with or after" editable roles, approval for a Void by
 reason or by stage — the design wins.
