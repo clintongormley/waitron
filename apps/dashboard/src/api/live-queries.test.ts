@@ -958,6 +958,7 @@ it("kitchen delete impact subscribes to every refusal, setting and naming source
   expect(dashboardQuery(api, "getCourseDeleteImpact", ["course"]).dependencies).toEqual([
     { type: "kitchen_courses" },
     { type: "products" },
+    { type: "service_steps" },
   ]);
 });
 it("kitchen delete receives an arriving blocker and removed binding through passive rereads", async () => {
