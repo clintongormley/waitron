@@ -207,13 +207,13 @@ export function buildReceiptDocument({
   rule();
   align("left");
 
-  // Two spaces at least, or an order number running into the date reads as one figure.
   row(result.orderLabel ?? "", `${label.order} ${result.orderNumber}`, 0, undefined, 2);
   if (simplified && result.operationDate === undefined) {
     const date =
       paper === "58mm"
         ? receiptDateTimeNumeric(result.issuedAt, locale)
         : receiptDateTime(result.issuedAt, locale);
+    // Two spaces at least, or the invoice number running into the date reads as one figure.
     row(result.invoiceNumber, date, 0, undefined, 2);
   } else {
     if (simplified) {

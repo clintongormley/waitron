@@ -2164,12 +2164,12 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
   }
 
   it("prints a named party's name and all its tables", async () => {
-    expect(await receiptOfJoinedParty("Ana")).toContain("Ana · Mesa 4, 5 · Pedido");
+    expect(await receiptOfJoinedParty("Ana")).toMatch(/^Ana · Mesa 4, 5 +Pedido \d+$/mu);
   });
 
   it("prints an unnamed party's tables alone", async () => {
     const receipt = await receiptOfJoinedParty();
-    expect(receipt).toContain("Mesa 4, 5 · Pedido");
+    expect(receipt).toMatch(/^Mesa 4, 5 +Pedido \d+$/mu);
     expect(receipt).not.toContain("· Mesa 4, 5");
   });
 

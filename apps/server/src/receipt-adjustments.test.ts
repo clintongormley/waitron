@@ -582,7 +582,7 @@ describe("receiptLines", () => {
         },
       }),
     );
-    const start = printed.findIndex((line) => line.startsWith("Factura simplificada")) + 2;
+    const start = printed.findIndex((line) => line.startsWith(`${result.invoiceNumber} `)) + 2;
 
     const at80 = (label: string, amount: string) =>
       label + " ".repeat(42 - label.length - amount.length) + amount;
@@ -655,7 +655,7 @@ describe("receiptLines", () => {
         },
       }),
     );
-    const start = printed.findIndex((line) => line.startsWith("Factura simplificada")) + 2;
+    const start = printed.findIndex((line) => line.startsWith(`${result.invoiceNumber} `)) + 2;
     const at80 = (label: string, amount: string) =>
       label + " ".repeat(42 - label.length - amount.length) + amount;
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));

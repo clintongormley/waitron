@@ -3408,6 +3408,7 @@ describe("the simplified receipt's own layout (A663)", () => {
       }),
     );
     const at = lines.findIndex((line) => /^ +Pedido 112$/u.test(line)) + 1;
+    expect(at, "the order line").toBeGreaterThan(0);
     return [lines[at]!, lines[at + 1]];
   };
 
