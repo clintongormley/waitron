@@ -5714,6 +5714,7 @@ describe("mountCatalogueApi — sections", () => {
   it("requires a management session and refuses staff on every section route", async () => {
     const app = mountApp();
     const id = (await createSectionVia(app, `Gate ${crypto.randomUUID()}`)).id;
+    const owned = await ownedSectionVia(app, id);
     const member = crypto.randomUUID();
     const routes: [
       method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
@@ -5745,7 +5746,7 @@ describe("mountCatalogueApi — sections", () => {
         "/management-api/section-members/remove",
         { members: [{ listId: id, memberId: member }] },
       ],
-      ["POST", "/management-api/sections/delete", { sectionIds: [id] }],
+      ["POST", "/management-api/sections/delete", { sectionIds: [owned] }],
     ];
     for (const [method, path, body] of routes) {
       const options = body === undefined ? {} : { body };
@@ -5760,6 +5761,7 @@ describe("mountCatalogueApi — sections", () => {
       (await json<Section>(await send(app, "GET", `/management-api/sections/${id}`), 200))
         .internalName,
     ).toMatch(/^Gate /);
+    expect((await send(app, "GET", `/management-api/sections/${owned}`)).status).toBe(200);
   });
 });
 
