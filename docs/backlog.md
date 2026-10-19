@@ -116,7 +116,8 @@ come after the list above:
   [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
-  installer (B3); the degraded-but-trading recovery spec.
+  installer (B3); what the box does when a part fails but it can still sell (A798,
+  [designed](superpowers/specs/2026-10-19-a798-degraded-trading-design.md); awaiting the owner's answers).
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
   _Printers, the print agent and receipts_) — till, handheld and KDS through
   [ui-review.md](ui-review.md), and the first physical print since #327.
@@ -5106,7 +5107,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **What showing the failed start's reason (#695) left:** [Detail](backlog/box.md#what-showing-the-failed-starts-reason-695-left)
 
-- **The recovery spec** — a degraded-but-trading mode and the module-contract field it needs.
+- **A798. Degraded but trading: what the box does, and tells staff, when a part fails but it can still sell.**
+  [Design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) and
+  [mock-ups](backlog/mockups/a798-degraded-trading/README.md) await the owner's answers to three
+  questions (the disk reserve, who is told when a printer is down, whether the box may correct its own
+  clock). No module-contract field and no migration. The build is planned separately.
 
 - **The recovery page's secret bound is a convention, not a guard.** #310 masks URL credentials on every log line — the connection-string shape and nothing else. [Detail](backlog/box.md#the-recovery-pages-secret-bound-is-a-convention-not-a-guard)
 
