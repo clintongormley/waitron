@@ -455,7 +455,7 @@ step-name checks compare against hand-written lists, so a step added later is no
 
 **The Amazon S3 pause rehearsal's open edges (A538-8).** Left open by #1658, in
 `apps/server/src/testing/aws-rehearsal.ts`, `testing/aws-pause-gate.ts` and
-`aws-stream-pause.aws-rehearsal.test.ts` (its bucket-policy method is A822): (1) the scenario's
+`aws-stream-pause.aws-rehearsal.test.ts`: (1) the scenario's
 `beforeRestart` hook is called only by the AWS file, so no local test fails if the call goes (the
 AWS run would stop with "step 7's restart was never watched"); (2) the held-check evidence counts
 a held call at the server's own proxy but cannot say which call it is (TLS hides it) — the later

@@ -4812,13 +4812,6 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   `s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`.
   [Detail](backlog/box.md#the-amazon-s3-delete-and-archive-rehearsals-open-edges-a538-9)
 
-- **A822. The pause rehearsal's bucket policy is built by a `denyListing(prefix)` method (owner,
-  2026-10-17).** `ctx.bucketPolicy.put(document)` (`apps/server/src/testing/aws-rehearsal.ts`)
-  accepts any policy text and checks it back down to the one allowed shape; a `denyListing(prefix)`
-  method that builds the document itself cannot be handed a wrong one. Test tooling only. Done when
-  the `ctx.bucketPolicy` cases in `apps/server/src/testing/aws-listing-denial.test.ts` exercise the
-  new method and pass.
-
 - **The Amazon S3 pause rehearsal's open edges (A538-8).** Left open by #1658, in
   `apps/server/src/testing/aws-rehearsal.ts`, `testing/aws-pause-gate.ts` and
   `aws-stream-pause.aws-rehearsal.test.ts`.

@@ -40,7 +40,7 @@ function standIn() {
       return uploads;
     },
     record: (event) => calls.push(["record", event]),
-    bucketPolicy: { put: async () => {}, remove: async () => {} },
+    bucketPolicy: { denyListing: async () => {}, remove: async () => {} },
   };
   return { ctx, calls, signal, uploads };
 }

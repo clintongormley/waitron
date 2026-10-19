@@ -250,7 +250,9 @@ the run's `pause` prefix):
 }
 ```
 
-The runner refuses any other document before sending it (`policy-refused`). After putting the rule, a negative control
+Pass the exact prefix to `ctx.bucketPolicy.denyListing(prefix)`; the runner builds this document
+for its own bucket. It refuses a prefix outside or equal to an issued label prefix, or one containing
+`*`, `?` or `$`, before sending it (`policy-refused`). After putting the rule, a negative control
 lists that prefix every two seconds until AWS answers 403, starting no new listing after 60 seconds. Only then does the
 scenario release the server's held connections, so the supervisor's held question reaches AWS under
 the rule, and it waits up to 60 seconds more for the server to log `stream.pause_check_failed` with

@@ -226,71 +226,30 @@ describe("listingDenialPolicy", () => {
 });
 
 describe("ctx.bucketPolicy", () => {
-  function statementWith(change: Record<string, unknown>): string {
-    const parsed = parsePolicy(listingDenialPolicy(BUCKET, EXACT));
-    return JSON.stringify({ ...parsed, Statement: [{ ...parsed.Statement[0], ...change }] });
-  }
-  const withPrefix = (prefix: string) =>
-    statementWith({ Condition: { StringLike: { "s3:prefix": `${prefix}*` } } });
-  const refusedDocuments: [string, string][] = [
-    ["another bucket", listingDenialPolicy("waitron-rehearsal-waitron-zzzzzzzzzzzz", EXACT)],
-    ["the bucket's objects", statementWith({ Resource: `${ARN}/*` })],
-    ["an Allow", statementWith({ Effect: "Allow" })],
-    ["s3:*", statementWith({ Action: "s3:*" })],
-    ["a second action", statementWith({ Action: ["s3:ListBucket", "s3:GetObject"] })],
-    ["a NotAction", statementWith({ NotAction: "s3:GetObject" })],
-    ["a named principal", statementWith({ Principal: { AWS: "*" } })],
-    ["a prefix outside the run", withPrefix("rehearsal-other-run/pause/gen/")],
-    ["a prefix outside the issued labels", withPrefix(`${RUN_ROOT}other/gen/`)],
-    ["the label prefix itself", withPrefix(LABEL_PREFIX)],
-    ["a * inside the prefix", withPrefix(`${LABEL_PREFIX}g*n/`)],
-    ["a ? inside the prefix", withPrefix(`${LABEL_PREFIX}g?n/`)],
-    ["a policy variable", withPrefix(`${LABEL_PREFIX}\${aws:username}/`)],
-    [
-      "a prefix with no trailing *",
-      statementWith({ Condition: { StringLike: { "s3:prefix": EXACT } } }),
-    ],
-    [
-      "another condition operator",
-      statementWith({ Condition: { StringEquals: { "s3:prefix": `${EXACT}*` } } }),
-    ],
-    [
-      "a second condition key",
-      statementWith({
-        Condition: { StringLike: { "s3:prefix": `${EXACT}*`, "s3:delimiter": "/" } },
-      }),
-    ],
-    [
-      "a second statement",
-      (() => {
-        const parsed = parsePolicy(listingDenialPolicy(BUCKET, EXACT));
-        return JSON.stringify({ ...parsed, Statement: [parsed.Statement[0], parsed.Statement[0]] });
-      })(),
-    ],
-    [
-      "an extra top-level key",
-      JSON.stringify({ ...parsePolicy(listingDenialPolicy(BUCKET, EXACT)), Id: "x" }),
-    ],
-    [
-      "another version",
-      JSON.stringify({ ...parsePolicy(listingDenialPolicy(BUCKET, EXACT)), Version: "2008-10-17" }),
-    ],
-    [
-      "a duplicated key",
-      listingDenialPolicy(BUCKET, EXACT).replace(
-        '"Action":"s3:ListBucket"',
-        '"Action":"s3:*","Action":"s3:ListBucket"',
-      ),
-    ],
-    ["text that is not JSON", "not json"],
+  const refusedPrefixes: [string, unknown][] = [
+    ["an empty prefix", ""],
+    ["another run", "rehearsal-other-run/pause/gen/"],
+    ["an unissued label", `${RUN_ROOT}other/gen/`],
+    ["the run root", RUN_ROOT],
+    ["the label prefix itself", LABEL_PREFIX],
+    ["a * inside the prefix", `${LABEL_PREFIX}g*n/`],
+    ["a ? inside the prefix", `${LABEL_PREFIX}g?n/`],
+    ["a policy variable", `${LABEL_PREFIX}\${aws:username}/`],
+    ["a dollar sign", `${LABEL_PREFIX}price$/`],
+    ["a policy document", listingDenialPolicy(BUCKET, EXACT)],
+    ["an absent prefix", undefined],
+    ["a null prefix", null],
+    ["a numeric prefix", 42],
+    ["a prefix array", [EXACT]],
+    ["a prefix object", { prefix: EXACT }],
   ];
 
-  it.each(refusedDocuments)("refuses %s before sending anything", async (_, document) => {
+  it.each(refusedPrefixes)("refuses %s before sending anything", async (_, prefix) => {
     const h = harness();
     const error = await rejection(
       withAwsRehearsal(async (ctx) => {
         ctx.prefix("pause");
-        await ctx.bucketPolicy.put(document);
+        await ctx.bucketPolicy.denyListing(prefix as string);
       }, h.deps),
     );
     expect(error).toBeInstanceOf(AwsRehearsalRefused);
@@ -302,11 +261,26 @@ describe("ctx.bucketPolicy", () => {
     const h = harness();
     await withAwsRehearsal(async (ctx) => {
       ctx.prefix("pause");
-      await ctx.bucketPolicy.put(listingDenialPolicy(ctx.bucket, EXACT));
+      await ctx.bucketPolicy.denyListing(EXACT);
       await ctx.bucketPolicy.remove();
     }, h.deps);
     const put = h.fake.calls.find((call) => call.name === "PutBucketPolicy")!;
-    expect(put.input).toEqual({ Bucket: BUCKET, Policy: listingDenialPolicy(BUCKET, EXACT) });
+    expect(put.input).toEqual({
+      Bucket: BUCKET,
+      Policy: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Sid: "WaitronRehearsalListingDenial",
+            Effect: "Deny",
+            Principal: "*",
+            Action: "s3:ListBucket",
+            Resource: ARN,
+            Condition: { StringLike: { "s3:prefix": `${EXACT}*` } },
+          },
+        ],
+      }),
+    });
     expect(denialEvents((await receipt()).events)).toEqual([
       expect.objectContaining({ api: "PutBucketPolicy", phase: "listing-denial", outcome: "ok" }),
       expect.objectContaining({
@@ -326,7 +300,7 @@ describe("ctx.bucketPolicy", () => {
     const error = await rejection(
       withAwsRehearsal(async (ctx) => {
         ctx.prefix("pause");
-        await ctx.bucketPolicy.put(listingDenialPolicy(ctx.bucket, EXACT));
+        await ctx.bucketPolicy.denyListing(EXACT);
       }, h.deps),
     );
     expect(error.name).toBe("AwsRehearsalFailed");
@@ -341,7 +315,7 @@ describe("ctx.bucketPolicy", () => {
       kept = ctx;
     }, h.deps);
     for (const attempt of [
-      () => kept!.bucketPolicy.put(listingDenialPolicy(BUCKET, EXACT)),
+      () => kept!.bucketPolicy.denyListing(EXACT),
       () => kept!.bucketPolicy.remove(),
     ]) {
       const error = await rejection(attempt());
