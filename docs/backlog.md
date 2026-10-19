@@ -2286,7 +2286,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   grouped and sent is A773's, not A738's.
   [Detail](backlog/till.md#a738-the-counter-screen-fewer-distractions), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
   [Implementation plan](superpowers/plans/2026-10-19-a738-counter-cleanup.md). Implementation is in
-  progress; the cleanup remains open, and custom-item permission and reporting identity remain undecided.
+  progress: shared filtering, the fixed top bar and the selected Parked/Waiting views are implemented.
+  Item previews, line windows, the last-added/status layout and the Park dialog remain open,
+  and custom-item permission and reporting identity remain undecided.
 
 - **A739 — paying: Hold · Pay and one payment window (owner, 2026-10-15; open).** Pay opens one
   window: how much (An amount, Split equally, Items, Whole bill), the reader and printer (Change,

@@ -1351,6 +1351,48 @@ describe("till-app: a table's draft is kept on the server", () => {
     expect(api.submitDraft).not.toHaveBeenCalled();
   });
 
+  it("A738 asks before leaving a staged table line for Parked and Keep retains the draft", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+    await tap(el, "Beer");
+    const store = draft(el);
+    const picker = await openDraftLine(order, 0);
+    const note = picker
+      .shadowRoot!.querySelector("wt-textarea")!
+      .shadowRoot!.querySelector("textarea")!;
+    await userEvent.fill(note, "No onions");
+    await picker.updateComplete;
+    const bar = shell(el) as import("./widgets/till-shell.js").TillShell;
+    emit(bar, "show-counter-orders", { kind: "parked" });
+    await flush(el);
+    const warning =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+        "wt-unsaved-changes",
+      )!;
+    await warning.updateComplete;
+    expect(warning.open).toBe(true);
+    expect(bar.activeOrderList).toBeNull();
+    emit(warning, "wt-unsaved-choice", { decision: "keep" });
+    await flush(el);
+    expect(tableOrder(el)).toBe(order);
+    expect(draft(el)).toBe(store);
+    expect(note.value).toBe("No onions");
+    expect(store.lines.map((line) => [line.product.name, line.quantity, line.note])).toEqual([
+      ["Beer", "1", undefined],
+    ]);
+    emit(bar, "show-counter-orders", { kind: "parked" });
+    await flush(el);
+    expect(warning.open).toBe(true);
+    emit(warning, "wt-unsaved-choice", { decision: "discard" });
+    await flush(el, 6);
+    expect(bar.activeOrderList).toBe("parked");
+    expect(tableOrder(el)).toBeNull();
+    expect(store.lines.map((line) => [line.product.name, line.quantity, line.note])).toEqual([
+      ["Beer", "1", undefined],
+    ]);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
   it("saves a course picked for a line with the draft", async () => {
     const { el } = await mountApp();
     await openMesa(el);

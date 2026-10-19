@@ -271,13 +271,13 @@ describe("till-counter-screen", () => {
         signals: [],
       },
     ];
-    const { el } = await mount({ heldOrders });
+    const { el } = await mount({ heldOrders, orderList: "parked" });
     expect(heldList(el).orders).toBe(heldOrders);
   });
 
   it("passes the floor tables to held orders for Move to table", async () => {
     const tables = [{ id: "t9", label: "Mesa 9" }];
-    const { el } = await mount({ tables, heldOrders: [heldOrder] } as never);
+    const { el } = await mount({ tables, heldOrders: [heldOrder], orderList: "parked" } as never);
     expect(heldList(el).tables).toBe(tables);
   });
 
@@ -309,12 +309,20 @@ describe("till-counter-screen", () => {
 
   it("passes canMoveStation to Waiting, off by default", async () => {
     expect(
-      waitingList((await mount({ canMoveStation: true, counterWaiting: [waitingOrder] })).el)
-        .canMoveStation,
+      waitingList(
+        (
+          await mount({
+            canMoveStation: true,
+            counterWaiting: [waitingOrder],
+            orderList: "waiting",
+          })
+        ).el,
+      ).canMoveStation,
     ).toBe(true);
-    expect(waitingList((await mount({ counterWaiting: [waitingOrder] })).el).canMoveStation).toBe(
-      false,
-    );
+    expect(
+      waitingList((await mount({ counterWaiting: [waitingOrder], orderList: "waiting" })).el)
+        .canMoveStation,
+    ).toBe(false);
   });
 
   it("defaults cardProvider 'none'/tipsEnabled false, reproducing the #62 manual path unchanged", async () => {
@@ -562,6 +570,7 @@ it("lets a held-order retrieve event reach the fixed Counter host", async () => 
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     store: new WorkingOrderStore(),
     heldOrders: [{ ...heldOrder, id: "wo-2" }],
+    orderList: "parked",
   });
   let captured: CustomEvent<{ id: string }> | undefined;
   el.addEventListener(

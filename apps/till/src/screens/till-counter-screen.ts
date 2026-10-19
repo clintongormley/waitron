@@ -206,6 +206,7 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) menuSelectionRequired = false;
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
   @property() selectedServiceZoneId = "";
+  @property({ attribute: false }) orderList: "parked" | "waiting" | null = null;
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
   /** The floor, which a held order's Move to table lists. */
@@ -322,20 +323,23 @@ export class TillCounterScreen extends LitElement {
   }
 
   #lists(): TemplateResult | typeof nothing {
-    if (this.heldOrders.length === 0 && this.counterWaiting.length === 0) return nothing;
+    if (this.orderList === null) return nothing;
     const orders = this.heldOrders.some((order) => order.id === this.store.id)
       ? this.heldOrders.filter((order) => order.id !== this.store.id)
       : this.heldOrders;
-    return html`<till-held-orders
-        .orders=${orders}
-        .tables=${this.tables}
-        .zones=${this.zones}
-      ></till-held-orders>
-      <till-counter-waiting
-        .orders=${this.counterWaiting}
-        .canEditKitchenNote=${this.canEditKitchenNote}
-        .canMoveStation=${this.canMoveStation}
-      ></till-counter-waiting>`;
+    return this.orderList === "parked"
+      ? html`<till-held-orders
+          .orders=${orders}
+          .tables=${this.tables}
+          .zones=${this.zones}
+        ></till-held-orders>`
+      : this.counterWaiting.length === 0
+        ? html`<p role="status">${t("shell.waiting_empty")}</p>`
+        : html`<till-counter-waiting
+            .orders=${this.counterWaiting}
+            .canEditKitchenNote=${this.canEditKitchenNote}
+            .canMoveStation=${this.canMoveStation}
+          ></till-counter-waiting>`;
   }
 
   #takeRest(outstanding: string): TemplateResult {
@@ -357,8 +361,12 @@ export class TillCounterScreen extends LitElement {
     return html`<div class="body grid-body">
       <div class="sale-grid">
         <div class="menu-cell">
-          <div class="menu-controls">${this.#menuControls()}</div>
-          ${this.#menu()}${this.#phone.matches ? nothing : this.#lists()}
+          ${
+            this.orderList === null
+              ? html`<div class="menu-controls">${this.#menuControls()}</div>
+                  ${this.#menu()}`
+              : this.#lists()
+          }
         </div>
         <div class="basket-cell">
           <till-basket
@@ -392,7 +400,6 @@ export class TillCounterScreen extends LitElement {
             .receiptGuests=${this.receiptGuests}
           ></till-tender-pay>
         </div>
-        ${this.#phone.matches ? this.#lists() : nothing}
       </div>
     </div>`;
   }

@@ -89,6 +89,50 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     await expectNoA11yViolations(host);
   });
 
+  it.each([
+    [390, "en-GB"],
+    [1280, "en-GB"],
+    [390, "es-ES"],
+    [1280, "es-ES"],
+  ] as const)(
+    "A738 counted till bar and Testing at %i in %s have no violations",
+    async (width, locale) => {
+      const original = currentLocale();
+      setLocale(locale);
+      try {
+        await atViewport(width, 844, async () => {
+          const { el, host } = await mountWidget<TillShell>(
+            "till-shell",
+            {
+              ...full,
+              parkedCount: 12,
+              waitingCount: 3,
+              activeOrderList: "waiting",
+              testingKitchen: true,
+            },
+            theme,
+          );
+          await expectNoA11yViolations(host);
+          const menu =
+            el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+              '[data-test="more-menu"]',
+            )!;
+          await menu.updateComplete;
+          await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+          await expectNoA11yViolations(host);
+          await userEvent.click(menu.querySelector("summary")!);
+          await expectNoA11yViolations(host);
+          await userEvent.keyboard("{Escape}");
+          el.waitingCount = 0;
+          await el.updateComplete;
+          await expectNoA11yViolations(host);
+        });
+      } finally {
+        setLocale(original);
+      }
+    },
+  );
+
   it("kiosk mode (header-less body) has no violations", async () => {
     const { host } = await mountWidget<TillShell>(
       "till-shell",
@@ -108,8 +152,8 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     const { el, host } = await mountWidget<TillShell>(
       "till-shell",
       {
-        formFactor: "till",
-        activeScreen: "counter",
+        formFactor: "tablet-landscape",
+        activeScreen: "floor",
         operatorName: "Ana",
         affordances,
         loadLocales,
@@ -139,7 +183,9 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
             const { el, host } = await mountWidget<TillShell>("till-shell", full, theme);
             await expectNoA11yViolations(host);
             const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
-            expect(menu.querySelector("wt-count-badge")).not.toBeNull();
+            expect(
+              el.shadowRoot!.querySelector("[data-test=department-transfers]")?.textContent,
+            ).toContain("2");
             menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
             await vi.waitFor(() =>
               expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(
@@ -160,7 +206,7 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     await atViewport(2560, 844, async () => {
       const { el, host } = await mountWidget<TillShell>("till-shell", full, theme);
       const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
-      await vi.waitFor(() => expect(menu.querySelectorAll(":scope > *")).toHaveLength(2));
+      await vi.waitFor(() => expect(menu.querySelectorAll(":scope > *")).toHaveLength(6));
       expect(menu.querySelector("wt-button.find-bill")).not.toBeNull();
       expect(menu.querySelector("wt-button.settings")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("wt-row-actions.operator-menu")).not.toBeNull();
@@ -190,7 +236,7 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
           const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
           expect(menu).not.toBeNull();
           expect(
-            el.shadowRoot!.querySelector("header .session > .operator-menu .logout"),
+            el.shadowRoot!.querySelector("header .session > [data-test=more-menu] .logout"),
           ).not.toBeNull();
           await expectNoA11yViolations(host);
           menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();

@@ -2569,7 +2569,7 @@ export class TillApp extends LitElement {
   /** The schedule screen leaves the operator out of the colleague picker. */
   @state() private operatorPersonId = "";
   @state() private staff: StaffMember[] = [];
-  /** Every open working order in the venue, across devices. */
+  @state() private counterOrderList: "parked" | "waiting" | null = null;
   @state() private heldOrders: HeldOrderSummary[] = [];
   @state() private counterWaiting: CounterWaitingOrder[] = [];
   @state() private findingBill = false;
@@ -3195,7 +3195,7 @@ export class TillApp extends LitElement {
     }
     if (changed.has("api") || changed.has("operatorName") || changed.has("permissions"))
       this.#syncDepartmentTransfers();
-    if (changed.has("formFactor") || changed.has("capabilities"))
+    if (changed.has("formFactor") || changed.has("capabilities") || changed.has("onboardingIntent"))
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
@@ -4281,6 +4281,7 @@ export class TillApp extends LitElement {
       this.#counterDefaultMenuId,
     );
     if (retainedZone === undefined) this.#selectMenu(menuId);
+    this.counterOrderList = null;
     this.#selectFilters(EMPTY_MENU_FILTERS);
     this.operatorName = displayName;
     this.#loginPending = false;
@@ -8959,6 +8960,7 @@ export class TillApp extends LitElement {
     const tab = this.#resolveScreen(key);
     if (tab === undefined) return;
     key = tab;
+    this.counterOrderList = null;
     this.#dismissStationChoices();
     const wasShowingOrder = this.#tableCatalogueActive();
     const wasLoadingOrder = this.tableOpening && this.#orderScreenShown();
@@ -15498,10 +15500,16 @@ export class TillApp extends LitElement {
       : undefined;
   }
 
+  #testingKitchen(): boolean {
+    return this.onboardingIntent === "demo" || this.onboardingIntent === "prepare";
+  }
+
   #affordances(): ShellAffordance[] {
     return [
-      ...(["station", "expo", "schedule"] as const).filter((screen) =>
-        this.capabilities.includes(`show-${screen}`),
+      ...(["station", "expo", "schedule"] as const).filter(
+        (screen) =>
+          this.capabilities.includes(`show-${screen}`) &&
+          (screen !== "station" || this.formFactor !== "till" || this.#testingKitchen()),
       ),
       "find-bill",
     ];
@@ -15539,6 +15547,7 @@ export class TillApp extends LitElement {
         }
         .selectedServiceZoneId=${this.counterServiceZoneId}
         .selectedFilters=${this.selectedFilters}
+        .orderList=${this.counterOrderList}
         .heldOrders=${this.heldOrders}
         .counterWaiting=${this.counterWaiting}
         .tables=${this.tables}
@@ -16525,6 +16534,25 @@ export class TillApp extends LitElement {
                           .selectedCounterZoneId=${this.counterServiceZoneId}
                           .showCounter=${this.formFactor !== "till" || (this.#deviceNavigation()?.counterZoneIds.length ?? 0) > 0}
                           .showFloor=${this.formFactor !== "till" || (this.#deviceNavigation()?.floorZoneIds.length ?? 0) > 0}
+                          .parkedCount=${this.heldOrders.filter((order) => order.id !== this.#store.id).length}
+                          .waitingCount=${this.counterWaiting.length}
+                          .activeOrderList=${this.counterOrderList}
+                          .testingKitchen=${this.#testingKitchen()}
+                          @show-counter-orders=${(
+                            event: CustomEvent<{ kind: "parked" | "waiting" }>,
+                          ) => {
+                            const kind = event.detail.kind;
+                            if (
+                              (kind !== "parked" && kind !== "waiting") ||
+                              this.formFactor !== "till" ||
+                              !this.#deviceNavigation()?.counterZoneIds.length
+                            )
+                              return;
+                            this.#requestLeave(() => {
+                              this.#onTabSelect("counter");
+                              this.counterOrderList = kind;
+                            });
+                          }}
                           .operatorName=${this.operatorName}
                           .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
                           .clockState=${this.clockSnapshot.state}
@@ -16546,7 +16574,11 @@ export class TillApp extends LitElement {
                               !builtInScreensFor(this.formFactor).includes(e.detail.screen)
                             )
                               return;
-                            if (e.detail.screen === this.activeTabKey && this.drill === undefined)
+                            if (
+                              e.detail.screen === this.activeTabKey &&
+                              this.drill === undefined &&
+                              this.counterOrderList === null
+                            )
                               return;
                             this.#requestLeave(() => this.#onTabSelect(e.detail.screen));
                           }}

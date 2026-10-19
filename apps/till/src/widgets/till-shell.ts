@@ -136,6 +136,73 @@ export class TillShell extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      .till-strip {
+        display: flex;
+        flex: 1;
+        min-width: 0;
+        overflow-x: auto;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      .till-strip > * {
+        flex: none;
+      }
+      .head.phone .till-strip .tabs {
+        flex: none;
+      }
+      .head:has(.till-strip) .operator {
+        max-width: calc(var(--wt-tap-min) * 6);
+      }
+      .head.phone:has(.till-strip) .operator {
+        max-width: calc(var(--wt-tap-min) * 3);
+      }
+      .head:has(.till-strip) .operator-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .head:has(.till-strip) .clock-dot {
+        flex: none;
+      }
+      [data-testing] summary {
+        min-height: var(--wt-tap-min);
+        cursor: pointer;
+        padding: var(--wt-space-2) var(--wt-space-4);
+      }
+      .bar-action {
+        min-height: var(--wt-tap-min);
+        min-width: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        color: var(--wt-color-text);
+        background: var(--wt-color-surface);
+        font: inherit;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .bar-action[data-attention] {
+        border-color: var(--wt-color-warning);
+        animation: waiting-attention 2s ease-in-out infinite;
+      }
+      @keyframes waiting-attention {
+        50% {
+          border-color: transparent;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .bar-action[data-attention] {
+          animation: none;
+        }
+      }
+      .bar-action[aria-pressed="true"] {
+        background: var(--wt-color-surface-raised);
+      }
+      .bar-action:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
       .tab {
         flex: none;
         white-space: nowrap;
@@ -295,6 +362,10 @@ export class TillShell extends LitElement {
   @property() selectedCounterZoneId = "";
   @property({ type: Boolean }) showCounter = true;
   @property({ type: Boolean }) showFloor = true;
+  @property({ type: Number }) parkedCount = 0;
+  @property({ type: Number }) waitingCount = 0;
+  @property({ attribute: false }) activeOrderList: "parked" | "waiting" | null = null;
+  @property({ type: Boolean }) testingKitchen = false;
   @property() operatorName = "";
   @property({ attribute: false }) clockState: TillClockState | null = null;
   @property({ type: Boolean }) clockAvailable = false;
@@ -324,7 +395,7 @@ export class TillShell extends LitElement {
     this.#phoneWidth = window.matchMedia(PHONE_WIDTH);
     this.phone = this.#phoneWidth.matches;
     this.#phoneWidth.addEventListener("change", this.#onPhoneWidth);
-    if (this.hasUpdated) this.#observe();
+    if (this.hasUpdated && this.formFactor !== "till") this.#observe();
   }
 
   override disconnectedCallback(): void {
@@ -401,11 +472,12 @@ export class TillShell extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     super.willUpdate(changed);
-    this.#release();
+    if (this.formFactor !== "till") this.#release();
   }
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
+    if (this.formFactor === "till") return;
     this.#observe();
     const contentChanged = CONTENT_PROPERTIES.some((key) => changed.has(key));
     if (contentChanged || currentLocale() !== this.#fittedLocale) {
@@ -481,7 +553,14 @@ export class TillShell extends LitElement {
   async #fit(): Promise<void> {
     const run = ++this.#run;
     await this.#settled();
-    if (run !== this.#run || this.kiosk || this.phone || !this.isConnected) return;
+    if (
+      run !== this.#run ||
+      this.formFactor === "till" ||
+      this.kiosk ||
+      this.phone ||
+      !this.isConnected
+    )
+      return;
     this.#fittedLocale = currentLocale();
     const stale = async (): Promise<boolean> => {
       await this.#settled();
@@ -512,9 +591,11 @@ export class TillShell extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  #chooser(): TemplateResult | typeof nothing {
+  #chooser(layout: "menu" | "group" = "menu"): TemplateResult | typeof nothing {
     return this.loadLocales !== undefined
       ? html`<wt-language-chooser
+          layout=${layout}
+          label=${t("shell.language")}
           active=${currentLocale()}
           .loadLocales=${this.loadLocales}
         ></wt-language-chooser>`
@@ -588,7 +669,7 @@ export class TillShell extends LitElement {
       label=${`${this.operatorName}${this.clockAvailable ? `: ${this.#clockLabel()}` : ""}`}
     >
       <span slot="trigger">${this.#operatorName()}</span>
-      ${this.#operatorActions(variant)}
+      ${this.#operatorActions(variant, this.formFactor !== "till")}
     </wt-row-actions>`;
   }
 
@@ -605,7 +686,7 @@ export class TillShell extends LitElement {
 
   #operatorName(): TemplateResult {
     return html`<span class="operator"
-      >${this.operatorName}${
+      ><span class="operator-label">${this.operatorName}</span>${
         this.clockAvailable
           ? html` ${this.clockState?.state === "out" ? nothing : html`<span class=${`clock-dot ${this.clockState?.state ?? "unknown"}`} aria-hidden="true"></span>`}
               <span class="visually-hidden" data-clock-state>${this.#clockLabel()}</span>`
@@ -614,7 +695,7 @@ export class TillShell extends LitElement {
     >`;
   }
 
-  #operatorActions(variant: ActionVariant): TemplateResult {
+  #operatorActions(variant: ActionVariant, logout = true): TemplateResult {
     const state = this.clockState;
     const foreign =
       state !== null &&
@@ -631,54 +712,58 @@ export class TillShell extends LitElement {
         >${label}</wt-button
       >`;
     return html`${
-        this.clockAvailable
-          ? html`
-              ${this.clockError ? html`<span class="clock-message" role="status">${this.clockError}</span>` : nothing}
-              ${foreign ? html`<span class="clock-message">${t("clock.other_location")}</span>` : nothing}
-              ${
-                state === null
-                  ? html`<wt-button
-                      data-clock-retry
-                      variant="secondary"
-                      align="start"
-                      .disabled=${this.clockBusy}
-                      @click=${() => this.#emit("retry-clock-read")}
-                      >${t("clock.retry")}</wt-button
-                    >`
-                  : state.state === "out"
-                    ? action("in", t("clock.in"))
-                    : html` ${state.state === "working" ? action("break-start", t("clock.break_start")) : action("break-end", t("clock.break_end"))}
-                      ${action("out", t("clock.out"))}`
-              }
-              <wt-button
-                data-my-hours
-                variant="secondary"
-                align="start"
-                .disabled=${this.hoursBusy}
-                @click=${() => this.#emit("my-hours")}
-                >${t("hours.mine")}</wt-button
-              >
-              <wt-button
-                data-fix-hours
-                variant="secondary"
-                align="start"
-                .disabled=${this.hoursBusy}
-                @click=${() => this.#emit("fix-my-hours")}
-                >${t("attendance.fix_hours")}</wt-button
-              >
-            `
-          : nothing
-      }<wt-button
-        class="logout"
-        variant=${variant}
-        align=${variant === "ghost" ? "start" : nothing}
-        @click=${() => this.#emit("logout")}
-        >${t("shell.logout")}</wt-button
-      >${themeChoices({
-        active: currentThemeChoice(),
-        labels: themeLabels(),
-        onPick: (choice) => this.#emit(THEME_SELECTED_EVENT, { choice }),
-      })}`;
+      this.clockAvailable
+        ? html`
+            ${this.clockError ? html`<span class="clock-message" role="status">${this.clockError}</span>` : nothing}
+            ${foreign ? html`<span class="clock-message">${t("clock.other_location")}</span>` : nothing}
+            ${
+              state === null
+                ? html`<wt-button
+                    data-clock-retry
+                    variant="secondary"
+                    align="start"
+                    .disabled=${this.clockBusy}
+                    @click=${() => this.#emit("retry-clock-read")}
+                    >${t("clock.retry")}</wt-button
+                  >`
+                : state.state === "out"
+                  ? action("in", t("clock.in"))
+                  : html` ${state.state === "working" ? action("break-start", t("clock.break_start")) : action("break-end", t("clock.break_end"))}
+                    ${action("out", t("clock.out"))}`
+            }
+            <wt-button
+              data-my-hours
+              variant="secondary"
+              align="start"
+              .disabled=${this.hoursBusy}
+              @click=${() => this.#emit("my-hours")}
+              >${t("hours.mine")}</wt-button
+            >
+            <wt-button
+              data-fix-hours
+              variant="secondary"
+              align="start"
+              .disabled=${this.hoursBusy}
+              @click=${() => this.#emit("fix-my-hours")}
+              >${t("attendance.fix_hours")}</wt-button
+            >
+          `
+        : nothing
+    }${
+      logout
+        ? html`<wt-button
+            class="logout"
+            variant=${variant}
+            align=${variant === "ghost" ? "start" : nothing}
+            @click=${() => this.#emit("logout")}
+            >${t("shell.logout")}</wt-button
+          >`
+        : nothing
+    }${themeChoices({
+      active: currentThemeChoice(),
+      labels: themeLabels(),
+      onPick: (choice) => this.#emit(THEME_SELECTED_EVENT, { choice }),
+    })}`;
   }
 
   #menu(moved: ReadonlySet<BarItem>): TemplateResult {
@@ -710,8 +795,99 @@ export class TillShell extends LitElement {
     </wt-row-actions>`;
   }
 
+  #tillMenu(): TemplateResult {
+    const action = (cls: string, event: string, label: string) =>
+      html`<wt-button class=${cls} variant="ghost" align="start" @click=${() => this.#emit(event)}
+        >${label}</wt-button
+      >`;
+    return html`<wt-row-actions
+      icon="hamburger"
+      align="end"
+      data-test="more-menu"
+      .iconSize=${"lg"}
+      label=${t("shell.more")}
+    >
+      ${this.affordances.includes("find-bill") ? action("find-bill", "find-bill", t("find_bill.open")) : nothing}
+      ${this.affordances.includes("schedule") ? action("schedule", "show-schedule", t("schedule.open")) : nothing}
+      ${this.canSwitchProfile ? action("profile", "open-profile", t("profile.open")) : nothing}
+      ${this.#chooser("group")} ${action("settings", "open-settings", t("device_zones.settings"))}
+      ${action("logout", "logout", t("shell.logout"))}
+      ${
+        this.testingKitchen && this.affordances.includes("station")
+          ? html`<details data-testing>
+              <summary>${t("shell.testing")}</summary>
+              ${action("station", "show-station", t("station.open"))}
+            </details>`
+          : nothing
+      }
+    </wt-row-actions>`;
+  }
+
+  #counterOrders(kind: "parked" | "waiting", count: number): TemplateResult {
+    return html`<button
+      type="button"
+      class="bar-action"
+      data-counter-orders=${kind}
+      ?data-attention=${kind === "waiting" && count > 0}
+      aria-pressed=${resolveBuiltInScreen(this.formFactor, this.activeScreen ?? null) === "counter" && this.activeOrderList === kind ? "true" : "false"}
+      @click=${() => this.#emit("show-counter-orders", { kind })}
+    >
+      <span role=${kind === "waiting" ? "status" : nothing}
+        >${t(kind === "parked" ? "shell.parked" : "shell.waiting")} <span>${count}</span></span
+      >
+    </button>`;
+  }
+
   #screenTitle(screen: BuiltInScreen): string {
     return screen === "kitchen" ? "" : t(`tab.${screen}`);
+  }
+
+  #primaryTabs(
+    screens: readonly BuiltInScreen[],
+    activeScreen: BuiltInScreen | undefined,
+    counterMenu: boolean,
+    counterLabel: string,
+  ): TemplateResult {
+    return html` <nav class="tabs" role=${counterMenu ? nothing : "tablist"}>
+      ${screens.map((screen) =>
+        screen === "counter" && this.counterZones.length > 1
+          ? html`<wt-row-actions
+              data-counter-zones
+              ?data-active=${screen === activeScreen}
+              label=${counterLabel}
+            >
+              <span slot="trigger">${`${counterLabel} ▾`}</span>
+              <div role="menu">
+                ${this.counterZones.map(
+                  (zone) =>
+                    html`<button
+                      type="button"
+                      role="menuitemradio"
+                      data-counter-zone=${zone.id}
+                      aria-checked=${zone.id === this.selectedCounterZoneId ? "true" : "false"}
+                      @click=${() => this.#emit("counter-zone-selected", { zoneId: zone.id })}
+                    >
+                      <span class="zone-check" aria-hidden="true"
+                        >${zone.id === this.selectedCounterZoneId ? "✓" : ""}</span
+                      >${zone.name}
+                    </button>`,
+                )}
+              </div>
+            </wt-row-actions>`
+          : html`
+              <button
+                type="button"
+                class="tab"
+                role=${counterMenu ? nothing : "tab"}
+                aria-selected=${counterMenu ? nothing : screen === activeScreen ? "true" : "false"}
+                aria-pressed=${counterMenu ? (screen === activeScreen ? "true" : "false") : nothing}
+                @click=${() => this.#emit("screen-select", { screen })}
+              >
+                ${this.#screenTitle(screen)}
+              </button>
+            `,
+      )}
+    </nav>`;
   }
 
   override render(): TemplateResult {
@@ -737,53 +913,21 @@ export class TillShell extends LitElement {
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
-                  ${this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill") ? nothing : html`<span class="brand">${BRAND}</span>`}
-                  <nav class="tabs" role=${counterMenu ? nothing : "tablist"}>
-                    ${screens.map((screen) =>
-                      screen === "counter" && this.counterZones.length > 1
-                        ? html`<wt-row-actions
-                            data-counter-zones
-                            ?data-active=${screen === activeScreen}
-                            label=${counterLabel}
-                          >
-                            <span slot="trigger">${`${counterLabel} ▾`}</span>
-                            <div role="menu">
-                              ${this.counterZones.map(
-                                (zone) =>
-                                  html`<button
-                                    type="button"
-                                    role="menuitemradio"
-                                    data-counter-zone=${zone.id}
-                                    aria-checked=${zone.id === this.selectedCounterZoneId ? "true" : "false"}
-                                    @click=${() => this.#emit("counter-zone-selected", { zoneId: zone.id })}
-                                  >
-                                    <span class="zone-check" aria-hidden="true"
-                                      >${zone.id === this.selectedCounterZoneId ? "✓" : ""}</span
-                                    >${zone.name}
-                                  </button>`,
-                              )}
-                            </div>
-                          </wt-row-actions>`
-                        : html`
-                            <button
-                              type="button"
-                              class="tab"
-                              role=${counterMenu ? nothing : "tab"}
-                              aria-selected=${counterMenu ? nothing : screen === activeScreen ? "true" : "false"}
-                              aria-pressed=${counterMenu ? (screen === activeScreen ? "true" : "false") : nothing}
-                              @click=${() => this.#emit("screen-select", { screen })}
-                            >
-                              ${this.#screenTitle(screen)}
-                            </button>
-                          `,
-                    )}
-                  </nav>
+                  ${this.formFactor === "till" || this.steps > 0 || this.phone || [...moved].some((item) => item !== "find-bill") ? nothing : html`<span class="brand">${BRAND}</span>`}
+                  ${
+                    this.formFactor === "till"
+                      ? html`<div class="till-strip">
+                          ${this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)}
+                          ${this.showCounter ? html`${this.#counterOrders("parked", this.parkedCount)}${this.#counterOrders("waiting", this.waitingCount)}` : nothing}
+                          ${this.transferAvailable ? html`<wt-button data-open-transfers variant="secondary" @click=${() => this.#emit("open-transfers")}>${t("department_transfer.short")}${this.transferCount === undefined ? nothing : html` <span role="status" data-test="department-transfers" aria-label=${this.#transferText()}>${this.transferCount}</span>`}</wt-button>` : nothing}
+                          ${this.affordances.includes("expo") ? html`<wt-button class="expo" variant="secondary" @click=${() => this.#emit("show-expo")}>${t("expo.open")}</wt-button>` : nothing}
+                        </div>`
+                      : this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)
+                  }
                   <div class="session">
-                    ${this.#items(moved, false)}${this.#chooser()}${
-                      moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")
-                    }${moved.size > 0 ? this.#menu(moved) : nothing}
+                    ${this.formFactor === "till" ? html`${this.#operatorAndLogout("secondary")}${this.#tillMenu()}` : html`${this.#items(moved, false)}${this.#chooser()}${moved.has("operator") ? nothing : this.#operatorAndLogout("secondary")}${moved.size > 0 ? this.#menu(moved) : nothing}`}
                   </div>
-                  ${this.phone || moved.has("transfers") ? this.#transferStatus() : nothing}
+                  ${this.formFactor !== "till" && (this.phone || moved.has("transfers")) ? this.#transferStatus() : nothing}
                 </header>
               `
         }
