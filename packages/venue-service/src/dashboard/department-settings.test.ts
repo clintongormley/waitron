@@ -1809,6 +1809,83 @@ it("a step list another manager changed while a rename is in progress shows thei
   await expect.poll(() => save(el).disabled).toBe(true);
   expect(el.hasUnsavedChanges).toBe(false);
 });
+for (const refresh of ["before any refreshed model arrives", "after the refresh failed"]) {
+  it(`a rename made after saving a new step, ${refresh}, keeps the new step and sends it with the next step save`, async () => {
+    const { el, writes } = await mount(stepsView());
+    await selectDepartmentTab(el, "service");
+    await settled(el);
+    await addStep(el);
+    await editStep(el, 3, "Name", "Coffee");
+    save(el).click();
+    await expect.poll(() => writes.length).toBe(1);
+    await expect.poll(() => save(el).disabled).toBe(true);
+    if (refresh === "after the refresh failed") {
+      el.refreshing = true;
+      await settled(el);
+      el.refreshing = false;
+      await settled(el);
+    }
+    await change(el, "name", "Restaurant revised");
+    await settled(el);
+    expect(stepList(el).steps.map((step) => step.name)).toEqual([
+      "Set up",
+      "Take order",
+      "Dessert?",
+      "Coffee",
+    ]);
+    await addStep(el);
+    await editStep(el, 4, "Name", "Tea");
+    save(el).click();
+    await expect.poll(() => writes.length).toBe(2);
+    expect((writes[1]!.body as { serviceSteps: unknown }).serviceSteps).toEqual([
+      ...SENT_STEPS,
+      { name: "Coffee", start: "after_previous", courseId: null, minutes: 0 },
+      { name: "Tea", start: "after_previous", courseId: null, minutes: 0 },
+    ]);
+  });
+}
+it("while a rename is unsaved, another manager's change back of a just-saved step name is followed once the saved list has arrived", async () => {
+  const { el } = await mount(stepsView());
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  await editStep(el, 2, "Name", "Pudding?");
+  save(el).click();
+  await expect.poll(() => save(el).disabled).toBe(true);
+  await change(el, "name", "Restaurant revised");
+  const saved = stepsView();
+  saved.serviceSteps[2]!.name = "Pudding?";
+  el.model = saved;
+  await settled(el);
+  expect(stepControl(el, 2, "Name").value).toBe("Pudding?");
+  el.model = stepsView();
+  await settled(el);
+  expect(stepControl(el, 2, "Name").value).toBe("Dessert?");
+  expect(field(el, "name").value).toBe("Restaurant revised");
+});
+it("a rename saves when another manager put a just-saved step's start back and deleted the course it had moved to", async () => {
+  const { el, writes } = await mount(stepsView());
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  await chooseStart(el, 2, "course_served:c2");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await expect.poll(() => save(el).disabled).toBe(true);
+  await change(el, "name", "Restaurant revised");
+  const back = stepsView();
+  back.courses = [{ id: "c1", name: "Mains" }];
+  el.model = back;
+  await settled(el);
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1]!.body).toMatchObject({ name: "Restaurant revised" });
+  expect(writes[1]!.body).not.toHaveProperty("serviceSteps");
+  expect(stepErrors(el)).toEqual([
+    ["", "", ""],
+    ["", "", ""],
+    ["", "", ""],
+  ]);
+});
 it("changing a step and changing it back sends no steps", async () => {
   const { el, writes } = await mount(stepsView());
   await selectDepartmentTab(el, "service");

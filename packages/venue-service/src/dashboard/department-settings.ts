@@ -377,31 +377,35 @@ export class DepartmentSettings extends LitElement {
     )
       void this.loadTransfers(row.id, this.transferGeneration);
   }
-  /** A dirty draft still follows the model's steps where no edit of the user's is at stake: an
-   * unchanged list takes the model's, and rows a save added take the ids the model gave them, so
-   * the next save keeps those rows rather than replacing them. */
+  /** A dirty draft still follows a model whose steps changed since the form last saw them, where
+   * no edit of the user's is at stake: an unchanged list takes the model's, and rows a save added
+   * take the ids the model gave them, so the next save keeps those rows rather than replacing them.
+   * A model the form has already seen is never followed: until the refresh after a save lands it
+   * still lacks the rows that save added. */
   private followSteps(steps: ServiceStepDraft[]) {
     const draft = this.draft!,
       baseline = this.baseline!;
-    if (stepsEqual(steps, baseline.serviceSteps)) return;
-    if (stepsEqual(draft.serviceSteps, baseline.serviceSteps)) {
-      this.draft = { ...draft, serviceSteps: steps.map((step) => ({ ...step })) };
-      this.baseline = { ...baseline, serviceSteps: steps.map((step) => ({ ...step })) };
-    } else {
-      const saved = withSavedIds(baseline.serviceSteps, steps);
-      if (!saved) return;
-      const ids = new Map(saved.map((step) => [step.key, step.id]));
-      this.draft = {
-        ...draft,
-        serviceSteps: draft.serviceSteps.map((step) => ({
-          ...step,
-          id: ids.get(step.key) ?? step.id,
-        })),
-      };
-      this.baseline = { ...baseline, serviceSteps: saved };
+    if (stepsEqual(steps, this.source!.serviceSteps)) return;
+    if (!stepsEqual(steps, baseline.serviceSteps)) {
+      if (stepsEqual(draft.serviceSteps, baseline.serviceSteps)) {
+        this.draft = { ...draft, serviceSteps: steps.map((step) => ({ ...step })) };
+        this.baseline = { ...baseline, serviceSteps: steps.map((step) => ({ ...step })) };
+      } else {
+        const saved = withSavedIds(baseline.serviceSteps, steps);
+        if (!saved) return;
+        const ids = new Map(saved.map((step) => [step.key, step.id]));
+        this.draft = {
+          ...draft,
+          serviceSteps: draft.serviceSteps.map((step) => ({
+            ...step,
+            id: ids.get(step.key) ?? step.id,
+          })),
+        };
+        this.baseline = { ...baseline, serviceSteps: saved };
+      }
+      this.scope!.commit(this.baseline);
     }
     this.source = { ...this.source!, serviceSteps: steps.map((step) => ({ ...step })) };
-    this.scope!.commit(this.baseline);
   }
   private current(id: string, generation: object) {
     return (
@@ -495,10 +499,14 @@ export class DepartmentSettings extends LitElement {
     this.changed("serviceSteps", steps);
     if (Object.keys(kept).length) this.refused = { ...this.refused, serviceSteps: "" };
   }
+  /** A list equal to the baseline is not sent, so it is not judged: it may be a copy the form could
+   * not follow, such as one a save left that another manager has since changed back. */
   private get stepErrors(): ServiceStepErrors {
-    const courses = new Set(this.model?.courses.map((course) => course.id));
     const found: ServiceStepErrors = {};
-    this.draft?.serviceSteps.forEach((step, index) => {
+    if (!this.draft || stepsEqual(this.draft.serviceSteps, this.baseline!.serviceSteps))
+      return found;
+    const courses = new Set(this.model?.courses.map((course) => course.id));
+    this.draft.serviceSteps.forEach((step, index) => {
       const row: Partial<Record<ServiceStepField, string>> = {};
       if (!step.name.trim()) row.name = t("venue.field_required");
       if (index === 0 && step.start === "after_previous")
