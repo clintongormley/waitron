@@ -1333,6 +1333,10 @@ async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
 describe("listHeldOrders", () => {
   it("lists the node's open orders with itemCount, GROSS total and label, ordered by number", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await tx.update(products).set({ name: "Coffee" }).where(eq(products.id, cafeId));
+      await tx.update(products).set({ name: "Water" }).where(eq(products.id, aguaId));
+    });
     const idA = randomUUID();
     const idB = randomUUID();
 
@@ -1363,7 +1367,7 @@ describe("listHeldOrders", () => {
       {
         id: idA,
         items: [
-          { lineId: expect.any(String), name: "Café", quantity: "2.000", note: null, extras: [] },
+          { lineId: expect.any(String), name: "Coffee", quantity: "2.000", note: null, extras: [] },
         ],
         orderNumber: 1,
         label: "Mesa 4",
@@ -1378,8 +1382,8 @@ describe("listHeldOrders", () => {
       {
         id: idB,
         items: [
-          { lineId: expect.any(String), name: "Café", quantity: "1.000", note: null, extras: [] },
-          { lineId: expect.any(String), name: "Agua", quantity: "3.000", note: null, extras: [] },
+          { lineId: expect.any(String), name: "Coffee", quantity: "1.000", note: null, extras: [] },
+          { lineId: expect.any(String), name: "Water", quantity: "3.000", note: null, extras: [] },
         ],
         orderNumber: 2,
         label: null,
