@@ -1,4 +1,11 @@
-import { AppError, compareDecimal, decimal, isAppError, jobOrigin } from "@waitron/shared";
+import {
+  AppError,
+  compareDecimal,
+  decimal,
+  decimalToCents,
+  isAppError,
+  jobOrigin,
+} from "@waitron/shared";
 import type { Decimal, Origin, SaleId } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -297,8 +304,9 @@ export async function reconcilePayments(
         remediation.set(ref, "amountDrifted");
         // Non-null: a drifted row matched a settlement, and its orphan entry carries the same one.
         const providerAmount = entry.settled!.amount;
-        // `payment_holds` refuses a figure that is not positive; that refusal would undo all of T2.
-        if (compareDecimal(providerAmount, decimal("0")) > 0) {
+        // `payment_holds` refuses a stored count of whole cents that is not positive, and that
+        // refusal would undo all of T2, so no hold is written unless the figure rounds to a cent.
+        if (decimalToCents(providerAmount) > 0) {
           await recordHold(tx, { paymentId: entry.row.paymentId, providerAmount, foundAt: now });
         }
         continue;

@@ -900,6 +900,27 @@ describe("orphan remediation", () => {
     expect(rows).toEqual([]);
   });
 
+  it("records no hold when the provider's figure rounds to zero cents, and still reports the orphan", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    const reverse = recordingReverse();
+    const result = await reconcilePayments(
+      deps(new FakeSettlementReport([settlement({ amount: decimal("0.004") })]), reverse.fn),
+      PERIOD,
+      NOW,
+    );
+    expect(result.orphan).toHaveLength(1);
+    expect(result.drift).toHaveLength(1);
+    expect(reverse.calls).toEqual([]);
+    expect(await openIncidentCodes()).toEqual([
+      "payment.reconcile_drift",
+      "payment.reconcile_orphan",
+    ]);
+    const { rows } = await suite.db.execute(sql`select id from payment_holds`);
+    expect(rows).toEqual([]);
+  });
+
   it("stops checking a held payment once its outcome is recorded", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
