@@ -11379,7 +11379,9 @@ export class TillApp extends LitElement {
     if (!this.#cancellationReady(open)) return;
     const choice = event.detail;
     if (choice.outcome === "remove_charge") {
-      await this.#openCancelAdjustment(open, choice);
+      if (choice.consent.context.stage === "started" || choice.preparationStarted === true)
+        await this.#openCancelAdjustment(open, choice);
+      else await this.#sendItemCancellation(open, choice);
       return;
     }
     if (choice.outcome === "keep_charge" || choice.outcome === "refund")
@@ -11460,6 +11462,9 @@ export class TillApp extends LitElement {
       expectedEdit: open.bill.expectedEdits[0]!,
       quantity: choice.quantity,
       outcome: choice.outcome === "refund" ? "keep_charge" : choice.outcome,
+      ...(choice.preparationStarted === undefined
+        ? {}
+        : { preparationStarted: choice.preparationStarted }),
       expectedPartyRevision: choice.consent.revision,
       expectedBillRevision: choice.consent.billRevision,
       expectedContext: structuredClone(choice.consent.context),

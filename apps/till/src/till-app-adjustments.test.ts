@@ -1473,6 +1473,55 @@ describe("till-app: service cancellation consent", () => {
     ...more,
   });
 
+  it("No removes fired food directly without asking for a reason and preserves the original kitchen read", async () => {
+    const read = consent("open", "not_started");
+    const methods = apiFor(read);
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[name="preparation"][value="no"]');
+    await clickChoice(el, "[data-confirm]");
+    expect(methods.cancelItem).toHaveBeenCalledExactlyOnceWith(
+      "v1",
+      "line-1",
+      {
+        quantity: "1",
+        outcome: "remove_charge",
+        preparationStarted: false,
+        expectedPartyRevision: 3,
+        expectedBillRevision: 6,
+        expectedEdit: billEdit,
+        expectedContext: read.context,
+        submissionId: expect.any(String),
+      },
+      expect.any(Object),
+    );
+    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+    expect(api.previewAdjustment).not.toHaveBeenCalled();
+    expect(dialog(el)).toBeNull();
+    expect(cancelDialog(el)).toBeNull();
+  });
+
+  it("Yes reaches the started cancellation path with its original context", async () => {
+    const read = consent("open", "not_started");
+    const methods = apiFor(read);
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[name="preparation"][value="yes"]');
+    await clickChoice(el, 'input[value="remove_charge"]');
+    await removeCharge(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(methods.cancelItem.mock.calls[0]?.[2]).toMatchObject({
+      outcome: "remove_charge",
+      preparationStarted: true,
+      expectedContext: read.context,
+      reasonId: "r-mistake",
+      note: "Wrong dish",
+    });
+    expect(read.context.stage).toBe("not_started");
+  });
+
   it.each([
     ["open", "not_started", ["remove_charge"]],
     ["open", "started", ["keep_charge", "remove_charge"]],
@@ -1558,6 +1607,15 @@ describe("till-app: service cancellation consent", () => {
         expect.any(Object),
       );
       expect(widget.consent).toEqual(read);
+      if (stage === "not_started") {
+        expect(widget.shadowRoot!.querySelectorAll('input[name="preparation"]')).toHaveLength(2);
+        await userEvent.click(
+          page.elementLocator(
+            widget.shadowRoot!.querySelector<HTMLElement>('input[name="preparation"][value="no"]')!,
+          ),
+        );
+        await flush(el);
+      }
       expect(
         [...widget.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="outcome"]')].map(
           (radio) => radio.value,
@@ -1900,6 +1958,16 @@ describe("till-app: service cancellation consent", () => {
   });
 
   async function removeCharge(el: TillApp) {
+    const widget = cancelDialog(el)!;
+    const preparation = widget.shadowRoot!.querySelector<HTMLInputElement>(
+      'input[name="preparation"][value="yes"]',
+    );
+    if (preparation !== null && !preparation.checked)
+      await clickChoice(el, 'input[name="preparation"][value="yes"]');
+    const outcome = widget.shadowRoot!.querySelector<HTMLInputElement>(
+      'input[value="remove_charge"]',
+    )!;
+    if (!outcome.checked) await clickChoice(el, 'input[value="remove_charge"]');
     await clickChoice(el, "[data-confirm]");
     expect(dialog(el)?.kind).toBe("cancel");
     await chooseReason(el, "Mistake");
@@ -1934,6 +2002,7 @@ describe("till-app: service cancellation consent", () => {
       {
         quantity: "1",
         outcome: "remove_charge",
+        preparationStarted: true,
         expectedPartyRevision: 3,
         expectedBillRevision: 6,
         expectedEdit: billEdit,
@@ -2344,6 +2413,8 @@ describe("till-app: service cancellation consent", () => {
     const { el } = await mountApp(methods);
     await openMesa4(el);
     await openCancel(el);
+    await clickChoice(el, 'input[name="preparation"][value="yes"]');
+    await clickChoice(el, 'input[value="remove_charge"]');
     await clickChoice(el, "[data-confirm]");
     expect(cancelDialog(el)?.refusal).toBe(t("adjust.reasons_error"));
     expect(cancelDialog(el)?.busy).toBe(false);
@@ -2631,6 +2702,10 @@ describe("till-app: service cancellation consent", () => {
       await openMesa4(el);
       await chooseRefund(el);
       expect(cancelDialog(el)?.consent).toEqual(fresh);
+      expect(
+        cancelDialog(el)!.shadowRoot!.querySelectorAll('input[name="preparation"]:checked'),
+      ).toHaveLength(0);
+      await clickChoice(el, 'input[name="preparation"][value="no"]');
       expect(
         cancelDialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[value="refund"]')!
           .checked,

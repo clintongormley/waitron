@@ -3,11 +3,12 @@
 // fails typecheck.
 export const en = {
   "cancel_item.title": "Cancel item",
-  "cancel_item.not_started": "Not started in the kitchen",
+  "cancel_item.preparation": "Has preparation started?",
+  "cancel_item.yes": "Yes",
+  "cancel_item.no": "No",
   "cancel_item.started": "Already being prepared or served",
   "cancel_item.paid": "This bill is paid",
   "cancel_item.choice": "What happens to the charge?",
-  "cancel_item.cancel": "Cancel: remove from the kitchen and the bill",
   "cancel_item.still_charge": "Cancel, still charge",
   "cancel_item.dont_charge": "Cancel, don't charge",
   "cancel_item.keep_payment": "Cancel, keep the payment",
@@ -1593,11 +1594,12 @@ export type StringKey = keyof typeof en;
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
   "cancel_item.title": "Cancelar plato",
-  "cancel_item.not_started": "Cocina aún no lo ha empezado",
+  "cancel_item.preparation": "En preparación",
+  "cancel_item.yes": "Sí",
+  "cancel_item.no": "No",
   "cancel_item.started": "Ya se está preparando o se ha servido",
   "cancel_item.paid": "Esta cuenta está pagada",
   "cancel_item.choice": "¿Qué pasa con el cobro?",
-  "cancel_item.cancel": "Cancelar: quitar de cocina y de la cuenta",
   "cancel_item.still_charge": "Cancelar y cobrar",
   "cancel_item.dont_charge": "Cancelar sin cobrar",
   "cancel_item.keep_payment": "Cancelar sin devolver el pago",

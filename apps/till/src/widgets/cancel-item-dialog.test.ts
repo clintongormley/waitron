@@ -30,7 +30,7 @@ const read = (
         id: "ticket-1",
         lineId: "dish-1",
         state: stage === "started" ? "preparing" : "queued",
-        firedAt: "2026-10-17T10:00:00Z",
+        firedAt: stage === "started" ? "2026-10-17T10:00:00Z" : null,
         quantity: "3.000",
         kitchenQuantity: "3.000",
         servedQuantity: "0.000",

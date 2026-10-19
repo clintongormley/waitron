@@ -20,12 +20,13 @@ import { trimQuantity } from "./dish-format.js";
 import { trackDialog } from "./track-dialog.js";
 
 type Outcome = "keep_charge" | "remove_charge" | "refund";
-type Draft = { quantity: string; outcome: Outcome | null };
+type Draft = { quantity: string; outcome: Outcome | null; preparationStarted: boolean | null };
 export interface CancelItemChoice {
   lineId: string;
   quantity: string;
   outcome: Outcome;
   consent: CancellationRead;
+  preparationStarted?: boolean;
 }
 
 function quantityValue(value: string): string {
@@ -105,7 +106,7 @@ export class TillCancelItemDialog extends LitElement {
   @property({ type: Boolean }) refundAvailable = false;
   @property({ type: Boolean }) busy = false;
   @property() refusal = "";
-  @state() private draft: Draft = { quantity: "", outcome: null };
+  @state() private draft: Draft = { quantity: "", outcome: null, preparationStarted: null };
   @state() private attempted = false;
   @state() private active = true;
   @state() private sending = false;
@@ -147,9 +148,19 @@ export class TillCancelItemDialog extends LitElement {
       compareDecimal(decimal(this.#remaining()), decimal("0")) <= 0
     )
       return [];
+    if (this.#asksPreparation() && this.draft.preparationStarted === null) return [];
     if (context.billStatus === "settled")
       return this.refundAvailable ? ["keep_charge", "refund"] : ["keep_charge"];
-    return context.stage === "started" ? ["keep_charge", "remove_charge"] : ["remove_charge"];
+    return this.#started() ? ["keep_charge", "remove_charge"] : ["remove_charge"];
+  }
+  #asksPreparation(): boolean {
+    return (
+      this.consent?.context.stage === "not_started" &&
+      this.consent.context.components.some((component) => component.firedAt !== null)
+    );
+  }
+  #started(): boolean {
+    return this.consent?.context.stage === "started" || this.draft.preparationStarted === true;
   }
   #currentKey(): string {
     return JSON.stringify([this.lineId, this.unitPrecision, consentKey(this.consent)]);
@@ -164,8 +175,10 @@ export class TillCancelItemDialog extends LitElement {
     const key = this.#currentKey();
     if (key !== this.#key) {
       this.#key = key;
+      this.draft = { ...this.draft, preparationStarted: null };
       const options = this.#options();
       this.draft = {
+        preparationStarted: null,
         quantity: this.unitPrecision === 0 ? trimQuantity(this.#remaining()) : this.#remaining(),
         // Only the pre-start unpaid case has no money choice to make.
         outcome: options.length === 1 && options[0] === "remove_charge" ? "remove_charge" : null,
@@ -185,7 +198,9 @@ export class TillCancelItemDialog extends LitElement {
         current: () => this.draft,
         snapshot: (value) => ({ ...value }),
         equal: (a, b) =>
-          a.outcome === b.outcome && quantityValue(a.quantity) === quantityValue(b.quantity),
+          a.outcome === b.outcome &&
+          a.preparationStarted === b.preparationStarted &&
+          quantityValue(a.quantity) === quantityValue(b.quantity),
         restore: (value) => {
           this.draft = { ...value };
         },
@@ -207,6 +222,14 @@ export class TillCancelItemDialog extends LitElement {
   #set(change: Partial<Draft>): void {
     if (!this.isConnected || !this.active || this.#busy()) return;
     this.draft = { ...this.draft, ...change };
+    this.#scope?.changed();
+  }
+  #preparation(started: boolean): void {
+    if (!this.isConnected || !this.active || this.#busy()) return;
+    this.draft = { ...this.draft, preparationStarted: started, outcome: null };
+    const options = this.#options();
+    if (options.length === 1 && options[0] === "remove_charge")
+      this.draft = { ...this.draft, outcome: "remove_charge" };
     this.#scope?.changed();
   }
   async #confirm(): Promise<void> {
@@ -233,6 +256,9 @@ export class TillCancelItemDialog extends LitElement {
           quantity: quantityValue(this.draft.quantity),
           outcome,
           consent: structuredClone(this.consent!),
+          ...(this.#asksPreparation()
+            ? { preparationStarted: this.draft.preparationStarted! }
+            : {}),
         },
         bubbles: true,
         composed: true,
@@ -257,15 +283,14 @@ export class TillCancelItemDialog extends LitElement {
           ? "cancel_item.keep_payment"
           : "cancel_item.still_charge",
       );
-    return t(
-      this.consent?.context.stage === "started" ? "cancel_item.dont_charge" : "cancel_item.cancel",
-    );
+    return t(this.#started() ? "cancel_item.dont_charge" : "action.remove");
   }
   override render() {
     const options = this.#options();
     const invalid = this.attempted && !this.#quantityValid();
     const allowed = this.draft.outcome !== null && options.includes(this.draft.outcome);
     const unavailable = options.length === 0;
+    const waitingForPreparation = this.#asksPreparation() && this.draft.preparationStarted === null;
     const disabled = this.#busy() || !allowed || unavailable || invalid;
     return html`<wt-dialog
       ${trackDialog()}
@@ -279,11 +304,38 @@ export class TillCancelItemDialog extends LitElement {
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector<HTMLElement>("[data-confirm]"))}
       >
         <p class="name">${this.name}</p>
-        <p data-stage>
-          ${t(this.consent?.context.billStatus === "settled" ? "cancel_item.paid" : this.consent?.context.stage === "started" ? "cancel_item.started" : "cancel_item.not_started")}
-        </p>
         ${
-          this.unitPrecision === 0 && !unavailable
+          this.#asksPreparation()
+            ? html`<fieldset data-preparation>
+                <legend>
+                  ${t("cancel_item.preparation")} <span class="required" aria-hidden="true">*</span>
+                </legend>
+                ${[true, false].map(
+                  (started) =>
+                    html`<label
+                      ><input
+                        type="radio"
+                        name="preparation"
+                        required
+                        value=${started ? "yes" : "no"}
+                        .checked=${this.draft.preparationStarted === started}
+                        ?disabled=${this.#busy()}
+                        @change=${() => this.#preparation(started)}
+                      />${t(started ? "cancel_item.yes" : "cancel_item.no")}</label
+                    >`,
+                )}
+              </fieldset>`
+            : nothing
+        }
+        ${
+          this.consent?.context.billStatus === "settled" || this.#started()
+            ? html`<p data-stage>
+                ${t(this.consent?.context.billStatus === "settled" ? "cancel_item.paid" : "cancel_item.started")}
+              </p>`
+            : nothing
+        }
+        ${
+          this.unitPrecision === 0 && (!unavailable || waitingForPreparation)
             ? html`<wt-number-stepper
                 name="quantity"
                 required
@@ -300,34 +352,36 @@ export class TillCancelItemDialog extends LitElement {
                   this.#set({ quantity: event.detail.value });
                 }}
               ></wt-number-stepper>`
-            : unavailable
+            : unavailable && !waitingForPreparation
               ? nothing
               : html`<p data-whole-quantity>
                   ${t("adjust.quantity")}: ${trimQuantity(this.#remaining())}
                 </p>`
         }
         ${
-          unavailable
-            ? html`<p>${t("cancel_item.unavailable")}</p>`
-            : html`<fieldset>
-                <legend>
-                  ${t("cancel_item.choice")} <span class="required" aria-hidden="true">*</span>
-                </legend>
-                ${options.map(
-                  (outcome) =>
-                    html`<label>
-                      <input
-                        type="radio"
-                        name="outcome"
-                        required
-                        .value=${outcome}
-                        .checked=${this.draft.outcome === outcome}
-                        ?disabled=${this.#busy()}
-                        @change=${() => this.#set({ outcome })}
-                      />${this.#label(outcome)}</label
-                    >`,
-                )}
-              </fieldset>`
+          waitingForPreparation
+            ? nothing
+            : unavailable
+              ? html`<p>${t("cancel_item.unavailable")}</p>`
+              : html`<fieldset>
+                  <legend>
+                    ${t("cancel_item.choice")} <span class="required" aria-hidden="true">*</span>
+                  </legend>
+                  ${options.map(
+                    (outcome) =>
+                      html`<label>
+                        <input
+                          type="radio"
+                          name="outcome"
+                          required
+                          .value=${outcome}
+                          .checked=${this.draft.outcome === outcome}
+                          ?disabled=${this.#busy()}
+                          @change=${() => this.#set({ outcome })}
+                        />${this.#label(outcome)}</label
+                      >`,
+                  )}
+                </fieldset>`
         }
         <wt-form-actions
           .error=${[invalid ? t("form.fix_fields") : "", this.shownRefusal].filter(Boolean).join(" ")}
@@ -349,7 +403,7 @@ export class TillCancelItemDialog extends LitElement {
             .disabled=${disabled}
             .busy=${this.#busy()}
             @click=${() => void this.#confirm()}
-            >${t("adjust.continue")}</wt-button
+            >${this.consent?.context.billStatus !== "settled" && this.draft.outcome !== null ? this.#label(this.draft.outcome) : t("adjust.continue")}</wt-button
           >
         </wt-form-actions>
       </div>

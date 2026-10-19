@@ -157,3 +157,36 @@ it("a selected money choice is staged input even when the quantity is unchanged"
   close(form);
   expect((await question(app)).open).toBe(true);
 });
+
+it("a preparation answer is staged input and Keep retains the native selected answer", async () => {
+  const { app, form } = await mount();
+  const consent = structuredClone(app.consent);
+  consent.context.components[0]!.firedAt = "2026-10-19T10:00:00Z";
+  app.consent = consent;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  expect(unload()).toBe(false);
+  await userEvent.click(
+    page.elementLocator(
+      form.shadowRoot!.querySelector<HTMLInputElement>('input[name="preparation"][value="yes"]')!,
+    ),
+  );
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  close(form);
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(
+    form.shadowRoot!.querySelector<HTMLInputElement>('input[name="preparation"][value="yes"]')!
+      .checked,
+  ).toBe(true);
+  expect(app.closes).toBe(0);
+  close(form);
+  await question(app);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await expect.poll(() => app.closes).toBe(1);
+  expect(unload()).toBe(false);
+});
