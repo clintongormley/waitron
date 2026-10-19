@@ -6,7 +6,14 @@ import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
 import { pendingCard } from "../../test/bill-pay-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
-import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/client.js";
+import type {
+  AllocationPreview,
+  BillBalance,
+  BillPaymentView,
+  DeviceEquipment,
+  EquipmentItem,
+  RoleEquipment,
+} from "../api/client.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));
@@ -1796,6 +1803,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
       takesReaderCard: true,
       takesCash: true,
       takesManualCard: true,
+      equipment: equipmentWith(LECTOR_2),
       ...over,
     });
   const radios = (el: TillBillPayDialog, name: string) =>
@@ -1992,5 +2000,288 @@ describe("till-bill-pay-dialog: on a handheld", () => {
     expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
       t("bill_pay.title"),
     );
+  });
+});
+
+function equipmentItem(
+  id: string,
+  name: string,
+  extra: Partial<EquipmentItem> = {},
+): EquipmentItem {
+  return { id, name, portable: false, available: true, busy: false, heldBy: null, ...extra };
+}
+const LECTOR_2 = equipmentItem("r2", "Lector 2", { portable: true, provider: "sumup" });
+const LECTOR_3 = equipmentItem("r3", "Lector 3", { portable: true, provider: "sumup" });
+const BARRA = equipmentItem("p1", "Barra");
+
+function roleOf(
+  name: RoleEquipment["role"],
+  chosen: EquipmentItem | null,
+  choices: EquipmentItem[],
+): RoleEquipment {
+  return {
+    role: name,
+    selection: chosen === null ? "default" : "item",
+    chosenId: chosen?.id ?? null,
+    resolved:
+      chosen === null
+        ? null
+        : {
+            id: chosen.id,
+            name: chosen.name,
+            available: chosen.available,
+            provider: chosen.provider,
+          },
+    chosen,
+    default: null,
+    choices,
+  };
+}
+
+/** The phone's equipment with `reader` (none when null) and the Barra receipt printer chosen. */
+function equipmentWith(reader: EquipmentItem | null): DeviceEquipment {
+  return {
+    roles: [
+      roleOf("receipt", BARRA, [BARRA]),
+      roleOf("card_terminal", reader, [LECTOR_2, LECTOR_3]),
+    ],
+  };
+}
+
+describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
+  const handheld = (over: Partial<TillBillPayDialog> = {}) =>
+    mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      takesManualCard: true,
+      balance: balanceOf({ total: "20.80", outstanding: "20.80" }),
+      equipment: equipmentWith(LECTOR_2),
+      ...over,
+    });
+  const row = (el: TillBillPayDialog) =>
+    root(el).querySelector<HTMLElement & { open: boolean; updateComplete: Promise<unknown> }>(
+      "till-pay-equipment",
+    );
+  const summary = async (el: TillBillPayDialog) => {
+    await row(el)!.updateComplete;
+    return text(row(el)!.shadowRoot!.querySelector("[data-pay-equipment-summary]"));
+  };
+  const cardPreview: AllocationPreview = {
+    kind: "allocated",
+    choice: null,
+    applied: "20.80",
+    tip: "0.00",
+    change: null,
+    charged: "20.80",
+  };
+
+  it("names Lector 2 and Barra in the closed row, and Cobrar names the reader it charges", async () => {
+    setLocale("es");
+    const el = await handheld();
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+
+    expect(row(el)!.open).toBe(false);
+    expect(await summary(el)).toBe("Lector 2 · ticket en Barra");
+    await previewed(el, cardPreview);
+    expect(row(el)).not.toBeNull();
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(
+      `Cobrar ${money("20.80")} en Lector 2`.replace(/\s+/g, " "),
+    );
+
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{ readerId: "r2" }]);
+  });
+
+  it("charges the reader picked while the confirmation is shown", async () => {
+    setLocale("es");
+    const el = await handheld();
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+    await previewed(el, cardPreview);
+
+    el.equipment = equipmentWith(LECTOR_3);
+    await el.updateComplete;
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(
+      `Cobrar ${money("20.80")} en Lector 3`.replace(/\s+/g, " "),
+    );
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{ readerId: "r3" }]);
+  });
+
+  it("opens the row and holds Continue while Tarjeta has no reader; cash needs none", async () => {
+    const el = await handheld({ equipment: equipmentWith(null) });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+
+    expect(row(el)!.open).toBe(true);
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+    await click(el, "[data-pay-continue]");
+    expect(asked).toEqual([]);
+
+    await pick(el, "method", "cash");
+    await type(el, "tendered", "25");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+    await pick(el, "method", "manual");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+  });
+
+  it("holds Continue on Tarjeta until the equipment has been read, without opening the row", async () => {
+    const el = await handheld({ equipment: null });
+    expect(row(el)!.open).toBe(false);
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+
+    el.equipment = equipmentWith(LECTOR_2);
+    await el.updateComplete;
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+  });
+
+  it("holds Continue and Cobrar while an equipment change is out, whatever the method", async () => {
+    const el = await handheld({ equipmentBusy: true });
+    const confirmed = capture<unknown>(el, "bill-pay-confirm");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+    await pick(el, "method", "manual");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+
+    el.equipmentBusy = false;
+    await el.updateComplete;
+    await previewed(el, cardPreview);
+    el.equipmentBusy = true;
+    await el.updateComplete;
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(true);
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([]);
+  });
+
+  it("sends nothing when a change goes out between the drawing and the press", async () => {
+    const el = await handheld();
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    const confirmed = capture<unknown>(el, "bill-pay-confirm");
+    el.equipmentBusy = true;
+    button(el, "[data-pay-continue]").click();
+    await el.updateComplete;
+    expect(asked).toEqual([]);
+
+    el.equipmentBusy = false;
+    await el.updateComplete;
+    await previewed(el, cardPreview);
+    el.equipment = equipmentWith(null);
+    button(el, "[data-pay-confirm]").click();
+    await el.updateComplete;
+    expect(confirmed).toEqual([]);
+  });
+
+  it("opens the row by itself once the reader is lost, and leaves it to the waiter after", async () => {
+    const el = await handheld();
+    expect(row(el)!.open).toBe(false);
+    el.equipment = equipmentWith(null);
+    await el.updateComplete;
+    expect(row(el)!.open).toBe(true);
+
+    el.equipment = equipmentWith(LECTOR_3);
+    await el.updateComplete;
+    expect(row(el)!.open).toBe(true);
+  });
+
+  it("opens the row on Cambiar", async () => {
+    const el = await handheld();
+    await row(el)!.updateComplete;
+    row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]")!.click();
+    await el.updateComplete;
+    expect(row(el)!.open).toBe(true);
+  });
+
+  it("starts closed again when the dialog is opened again with a ready reader", async () => {
+    const first = await handheld({ equipment: equipmentWith(null) });
+    expect(row(first)!.open).toBe(true);
+    const closed = capture<unknown>(first, "bill-pay-close");
+    await click(first, "[data-pay-close]");
+    await expect.poll(() => closed.length).toBe(1);
+    first.remove();
+
+    const again = await handheld();
+    expect(row(again)!.open).toBe(false);
+  });
+
+  it("on a practice venue charges the fixed demo reader, with no reader to choose", async () => {
+    const el = await handheld({
+      cardReader: "simulator",
+      equipment: null,
+      fixedReader: { id: "demo-1", name: "Demo reader" },
+    });
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+    expect(root(el).querySelector("[data-pay-reader]")).toBeNull();
+    expect(root(el).querySelector("[data-pay-simulation]")).toBeNull();
+
+    await previewed(el, cardPreview);
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{ readerId: "demo-1" }]);
+
+    el.equipment = equipmentWith(null);
+    el.asked = null;
+    el.preview = null;
+    await el.updateComplete;
+    row(el)!.open = true;
+    await row(el)!.updateComplete;
+    const combobox = row(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      'wt-combobox[name="cardReaderId"]',
+    )!;
+    expect(combobox.disabled).toBe(true);
+  });
+
+  it("puts the row in the lock when the kept card has no reader, and allows Check again once one is ready", async () => {
+    const el = await handheld({
+      equipment: equipmentWith(null),
+      unanswered: {
+        applied: "20.80",
+        method: "card",
+        guests: false,
+        waiting: false,
+        readerRefused: false,
+        noReader: true,
+      },
+    });
+    expect(row(el)!.open).toBe(true);
+    expect(button(el, "[data-pay-recheck]").disabled).toBe(true);
+
+    el.equipment = equipmentWith(LECTOR_2);
+    await el.updateComplete;
+    expect(button(el, "[data-pay-recheck]").disabled).toBe(false);
+    const rechecked = capture<unknown>(el, "bill-pay-recheck");
+    await click(el, "[data-pay-recheck]");
+    expect(rechecked).toEqual([{}]);
+
+    el.equipment = equipmentWith(null);
+    button(el, "[data-pay-recheck]").click();
+    await el.updateComplete;
+    expect(rechecked).toEqual([{}]);
+  });
+
+  it("shows no row in the lock when the kept payment is not waiting on a reader", async () => {
+    const el = await handheld({
+      unanswered: {
+        applied: "20.80",
+        method: "cash",
+        guests: false,
+        waiting: false,
+        readerRefused: false,
+        noReader: false,
+      },
+    });
+    expect(row(el)).toBeNull();
+  });
+
+  it("shows none of this on a counter till", async () => {
+    const el = await mount({ cardReader: "stripe_terminal", equipment: equipmentWith(null) });
+    const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
+    expect(row(el)).toBeNull();
+    await pick(el, "method", "card");
+    await pick(el, "line", "1");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+    await previewed(el, cardPreview);
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(t("bill_pay.take"));
+    await click(el, "[data-pay-confirm]");
+    expect(confirmed).toEqual([{}]);
   });
 });

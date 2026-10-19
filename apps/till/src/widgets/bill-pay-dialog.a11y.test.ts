@@ -5,7 +5,14 @@ import { setLocale } from "../i18n/t.js";
 import "./bill-pay-dialog.js";
 import { pendingCard } from "../../test/bill-pay-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
-import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/client.js";
+import type {
+  AllocationPreview,
+  BillBalance,
+  BillPaymentView,
+  DeviceEquipment,
+  EquipmentItem,
+  RoleEquipment,
+} from "../api/client.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es-ES"));
@@ -57,6 +64,45 @@ async function previewed(el: TillBillPayDialog, preview: AllocationPreview): Pro
 const lockBackgrounds = new Map<string, string>();
 const askBackgrounds = new Map<string, string>();
 const handheldBackgrounds = new Map<string, string>();
+const rowBackgrounds = new Map<string, string>();
+
+const LECTOR_2: EquipmentItem = {
+  id: "r2",
+  name: "Lector 2",
+  portable: true,
+  available: true,
+  busy: false,
+  heldBy: null,
+  provider: "sumup",
+};
+const BARRA: EquipmentItem = {
+  id: "p1",
+  name: "Barra",
+  portable: false,
+  available: true,
+  busy: false,
+  heldBy: null,
+};
+const role = (name: RoleEquipment["role"], item: EquipmentItem): RoleEquipment => ({
+  role: name,
+  selection: "item",
+  chosenId: item.id,
+  resolved: { id: item.id, name: item.name, available: true, provider: item.provider },
+  chosen: item,
+  default: null,
+  choices: [item],
+});
+const equipment: DeviceEquipment = {
+  roles: [role("receipt", BARRA), role("card_terminal", LECTOR_2)],
+};
+const shareOf3: AllocationPreview = {
+  kind: "allocated",
+  choice: null,
+  applied: "20.80",
+  tip: "0.00",
+  change: null,
+  charged: "20.80",
+};
 
 describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)", (theme) => {
   const mount = (over: Partial<TillBillPayDialog> = {}) =>
@@ -439,6 +485,99 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
           panelWidth: box.width,
           methodsLeft: shown.left - box.left,
           methodsRight: box.right - shown.right,
+          background,
+        }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
+  const withRow = () =>
+    mount({
+      handheld: true,
+      way: "share",
+      tableName: "Mesa 4",
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      takesManualCard: true,
+      tipsEnabled: false,
+      canScan: true,
+      balance: {
+        ...balance,
+        total: "62.40",
+        received: "0.00",
+        reserved: "0.00",
+        outstanding: "62.40",
+        paidLines: [],
+      },
+      equipment,
+    });
+
+  it("has no violations on a handheld confirming a card on the reader the row names", async () => {
+    const { host, el } = await withRow();
+    await typed(el, "people", "3");
+    await previewed(el, shareOf3);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on a handheld with the row opened and no reader", async () => {
+    const { host } = await mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "stripe_terminal",
+      takesReaderCard: true,
+      takesCash: true,
+      equipment: { roles: [role("receipt", BARRA)] },
+    });
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    ["form", 390],
+    ["form", 1280],
+    ["confirm", 390],
+    ["confirm", 1280],
+  ] as const)("looks right on a handheld with the row, the %s, at %i px", async (step, width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const { el } = await withRow();
+      await typed(el, "people", "3");
+      if (step === "confirm") await previewed(el, shareOf3);
+      const panel = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      rowBackgrounds.set(`${theme}-${step}-${width}`, background);
+      if (theme === "dark") {
+        const light = rowBackgrounds.get(`light-${step}-${width}`);
+        expect(light, "run the light case first").toBeDefined();
+        expect(background).not.toBe(light);
+      }
+      const shot = `__screenshots__/look/a796-row-${step}-${theme}-${width}`;
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-row-${step}-${theme}-${width}.png`,
+      });
+      const box = panel.getBoundingClientRect();
+      const row = el.shadowRoot!.querySelector<HTMLElement>("till-pay-equipment")!;
+      const shown = row.getBoundingClientRect();
+      const action = el.shadowRoot!.querySelector<HTMLElement>(
+        step === "form" ? "[data-pay-continue]" : "[data-pay-confirm]",
+      )!;
+      const pressed = action.getBoundingClientRect();
+      await commands.writeFile(
+        `src/widgets/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          rowLeft: shown.left - box.left,
+          rowRight: box.right - shown.right,
+          actionRight: box.right - pressed.right,
+          actionText: action.textContent!.replace(/\s+/g, " ").trim(),
           background,
         }),
       );

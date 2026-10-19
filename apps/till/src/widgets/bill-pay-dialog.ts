@@ -26,6 +26,8 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "./pay-equipment.js";
+import type { PayEquipmentRole } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -36,6 +38,7 @@ import type {
   AllocationPreview,
   BillBalance,
   BillPaymentView,
+  DeviceEquipment,
   TillActiveReader,
 } from "../api/client.js";
 import {
@@ -49,6 +52,7 @@ import {
   typedAmount,
 } from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
+import { payPrinterOf, payReaderOf, rowStartsOpen } from "../state/pay-equipment.js";
 import type { CardProvider, ReceiptGuestsDetail } from "./tender-pay.js";
 
 /** `whole` is the till's own: it asks for a contribution of what is left. */
@@ -76,6 +80,9 @@ export interface PayRequest {
   card?: CardEntry;
   allocation?: AllocationChoice;
 }
+
+/** `bill-pay-confirm`'s detail: on a handheld, a reader card names the reader to charge. */
+export type BillPayConfirmDetail = ReceiptGuestsDetail & { readerId?: string };
 
 /** A refusal's code, the request field it names when it names one, for a tip the venue does not
  * take the most the card can be charged, and the permission an `authorization.not_permitted`
@@ -498,6 +505,18 @@ export class TillBillPayDialog extends LitElement {
   @property({ type: Boolean }) takesManualCard = false;
   /** On a handheld, the table the title names. */
   @property() tableName = "";
+  /** On a handheld, the reader and printer row's inputs, passed straight to it. */
+  @property({ attribute: false }) equipment: DeviceEquipment | null = null;
+  @property({ attribute: false }) equipmentSaving: { role: PayEquipmentRole; id: string } | null =
+    null;
+  @property({ attribute: false }) equipmentErrors: Partial<Record<PayEquipmentRole, string>> = {};
+  @property({ attribute: false }) readerReason: string | null = null;
+  @property({ type: Boolean }) canScan = false;
+  @property({ type: Boolean }) askNfc = false;
+  /** An equipment change is out: nothing is taken until it is answered. */
+  @property({ type: Boolean }) equipmentBusy = false;
+  /** A practice venue's demo reader, charged whatever the equipment says. */
+  @property({ attribute: false }) fixedReader: { id: string; name: string } | null = null;
 
   @state() private chosenWay: PayWay = "items";
   @state() private picks = new Map<number, number>();
@@ -520,6 +539,8 @@ export class TillBillPayDialog extends LitElement {
   @state() private guestsEntry?: string;
   @state() private guestsAttempted = false;
   @state() private askingSecondCard = false;
+  @state() private rowOpen = false;
+  #rowWanted = false;
 
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<PaymentDraft>;
@@ -698,6 +719,9 @@ export class TillBillPayDialog extends LitElement {
     if (changed.has("amount")) this.typedAmountValue = this.amount;
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
     if (changed.has("taken") && this.taken !== null) this.paymentAccepted();
+    const wanted = this.#rowWantsOpen();
+    if (wanted && !this.#rowWanted) this.rowOpen = true;
+    this.#rowWanted = wanted;
     if (changed.has("busy") && this.busy) {
       if (this.#entryBaseline) this.#entry?.commit(this.#entryBaseline);
       if (this.#tipBaseline) this.#tip?.commit(this.#tipBaseline);
@@ -827,7 +851,35 @@ export class TillBillPayDialog extends LitElement {
     );
   }
 
+  /** The reader a card would be charged on now: the practice venue's demo reader, else the
+   * equipment's ready one; null before the equipment has been read. */
+  #readyReader(): { id: string; name: string } | null {
+    if (this.fixedReader !== null) return this.fixedReader;
+    if (this.equipment === null) return null;
+    const reader = payReaderOf(this.equipment);
+    return reader.kind === "ready" ? reader : null;
+  }
+
+  /** Whether a handheld holds the payment for its equipment: a change is out, or a reader card has
+   * no ready reader. */
+  #heldForEquipment(method: Method): boolean {
+    if (!this.handheld) return false;
+    if (this.equipmentBusy) return true;
+    return method === "card" && this.#readyReader() === null;
+  }
+
+  /** An unread equipment does not open the row; the demo reader counts as ready. */
+  #rowWantsOpen(): boolean {
+    if (!this.handheld || this.equipment === null) return false;
+    const printer = payPrinterOf(this.equipment);
+    if (this.fixedReader !== null)
+      return printer.kind === "switched_off" || printer.kind === "unset";
+    return rowStartsOpen(payReaderOf(this.equipment), printer);
+  }
+
   #readerEntry(): CardEntry {
+    // A handheld names its reader when the payment is taken (`bill-pay-confirm`), not here.
+    if (this.handheld) return { entry: "reader" };
     if (this.cardReader === "simulator" && this.chosenReaderId === undefined)
       return { entry: "reader", simulationOutcome: this.simulationOutcome };
     return this.chosenReaderId === undefined
@@ -898,6 +950,7 @@ export class TillBillPayDialog extends LitElement {
 
   async #continue(): Promise<void> {
     if (!this.isConnected || !this.#active || this.busy || !this.#canAsk()) return;
+    if (this.#heldForEquipment(this.method)) return;
     this.attempted = true;
     this.shownRefusal = null;
     if (this.#ownErrors().size > 0) {
@@ -1003,6 +1056,8 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #lock(unanswered: UnansweredPayment): TemplateResult {
+    const choosing = this.handheld && (unanswered.readerRefused || unanswered.noReader);
+    const noReader = this.#lockWantsReader(unanswered);
     const invalid = unanswered.guests && this.guestsAttempted && this.#guestsInvalid();
     const parts: string[] = [];
     if (invalid) parts.push(t("form.fix_fields"));
@@ -1018,6 +1073,7 @@ export class TillBillPayDialog extends LitElement {
           ? this.#guests(invalid ? t("seat.guest_count_invalid") : undefined)
           : nothing
       }
+      ${choosing ? this.#equipmentRow(true) : nothing}
       <wt-form-actions .error=${parts.join(" ")}>
         <wt-button
           slot="cancel"
@@ -1032,7 +1088,7 @@ export class TillBillPayDialog extends LitElement {
           variant="primary"
           data-pay-recheck
           .loading=${this.busy}
-          .disabled=${this.busy || unanswered.waiting || unanswered.noReader || invalid}
+          .disabled=${this.busy || unanswered.waiting || noReader || invalid}
           @click=${() => void this.#recheck()}
         >
           ${t("bill_pay.recheck")}
@@ -1040,10 +1096,15 @@ export class TillBillPayDialog extends LitElement {
       </wt-form-actions>`;
   }
 
+  /** A handheld's ready reader answers the lock's "no reader". */
+  #lockWantsReader(unanswered: UnansweredPayment): boolean {
+    return unanswered.noReader && !(this.handheld && this.#readyReader() !== null);
+  }
+
   async #recheck(): Promise<void> {
     const unanswered = this.unanswered;
     if (!this.isConnected || !this.#active || this.busy || unanswered === null) return;
-    if (unanswered.waiting || unanswered.noReader) return;
+    if (unanswered.waiting || this.#lockWantsReader(unanswered)) return;
     if (unanswered.guests) this.guestsAttempted = true;
     if (unanswered.guests && this.#guestsInvalid()) {
       await this.#focusInvalid();
@@ -1340,7 +1401,13 @@ export class TillBillPayDialog extends LitElement {
           variant="primary"
           data-pay-continue
           .loading=${this.busy}
-          .disabled=${this.busy || own.size > 0 || this.askingSecondCard || !this.#canAsk()}
+          .disabled=${
+            this.busy ||
+            own.size > 0 ||
+            this.askingSecondCard ||
+            !this.#canAsk() ||
+            this.#heldForEquipment(this.method)
+          }
           @click=${() => void this.#continue()}
         >
           ${t("bill_pay.continue")}
@@ -1513,7 +1580,27 @@ export class TillBillPayDialog extends LitElement {
                   : nothing
               }
               ${this.#keyed(this.method) ? this.#manualCardFields() : this.#readerFields()}`
-      }`;
+      }
+      ${offered ? this.#equipmentRow(this.method === "card") : nothing}`;
+  }
+
+  /** A handheld's reader and printer row; its events bubble out to the app unchanged. */
+  #equipmentRow(cardRequired: boolean): TemplateResult | typeof nothing {
+    if (!this.handheld) return nothing;
+    return html`<till-pay-equipment
+      .equipment=${this.equipment}
+      .cardRequired=${cardRequired}
+      .open=${this.rowOpen}
+      .saving=${this.equipmentSaving}
+      .fieldErrors=${this.equipmentErrors}
+      .readerReason=${this.readerReason}
+      .canScan=${this.canScan}
+      .askNfc=${this.askNfc}
+      .disabled=${this.busy}
+      .fixedReader=${this.fixedReader}
+      @pay-equipment-toggle=${(event: CustomEvent<{ open: boolean }>) =>
+        (this.rowOpen = event.detail.open)}
+    ></till-pay-equipment>`;
   }
 
   #manualCardFields(): TemplateResult {
@@ -1528,6 +1615,7 @@ export class TillBillPayDialog extends LitElement {
 
   /** The practice simulator's result, or the reader when the venue has more than one. */
   #readerFields(): TemplateResult | typeof nothing {
+    if (this.handheld) return nothing;
     if (this.cardReader === "simulator") {
       const demoReaders = this.readers.filter((reader) => reader.provider === "simulator");
       return html`${
@@ -1656,6 +1744,8 @@ export class TillBillPayDialog extends LitElement {
    * it is not the tip shown, asks the server for the allocation with it. */
   async #take(asked: PayRequest, preview: Allocated, cash: Cash | null): Promise<void> {
     if (!this.isConnected || !this.#active || this.busy) return;
+    const onReader = asked.card?.entry === "reader";
+    if (this.#heldForEquipment(onReader ? "card" : "cash")) return;
     const tipChecked = cash !== null && this.tipMode === "part";
     const guestsShown = this.#guestsShown(preview);
     if (tipChecked) this.tipAttempted = true;
@@ -1672,7 +1762,11 @@ export class TillBillPayDialog extends LitElement {
       }
     }
     this.shownRefusal = null;
-    this.#emit("bill-pay-confirm", this.#guestsDetail(guestsShown));
+    const reader = this.handheld && onReader ? this.#readyReader() : null;
+    this.#emit("bill-pay-confirm", {
+      ...this.#guestsDetail(guestsShown),
+      ...(reader === null ? {} : { readerId: reader.id }),
+    } satisfies BillPayConfirmDetail);
   }
 
   /** Only the payment that pays what is left records the sale; `outstanding` leaves out what a
@@ -1729,6 +1823,8 @@ export class TillBillPayDialog extends LitElement {
       stepErrors.set("guests", t("seat.guest_count_invalid"));
     const errors = this.#fieldErrors(stepErrors);
     const bottom = this.#bottomMessage(errors);
+    const onReader = asked.card?.entry === "reader";
+    const reader = this.handheld && onReader ? this.#readyReader() : null;
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
     return html`<p class="scope" data-pay-scope>${this.#scope()}</p>
       <dl class="allocation">
@@ -1765,6 +1861,7 @@ export class TillBillPayDialog extends LitElement {
             : nothing
         }
       </dl>
+      ${this.#equipmentRow(onReader)}
       ${
         this.tipsEnabled &&
         cash !== null &&
@@ -1784,10 +1881,18 @@ export class TillBillPayDialog extends LitElement {
           variant="primary"
           data-pay-confirm
           .loading=${this.busy}
-          .disabled=${this.busy || stepErrors.size > 0}
+          .disabled=${
+            this.busy || stepErrors.size > 0 || this.#heldForEquipment(onReader ? "card" : "cash")
+          }
           @click=${() => void this.#take(asked, preview, cash)}
         >
-          ${t("bill_pay.take")}
+          ${
+            reader === null
+              ? t("bill_pay.take")
+              : t("bill_pay.take_on_reader")
+                  .replace("{amount}", () => this.#money(preview.charged!))
+                  .replace("{reader}", () => reader.name)
+          }
         </wt-button>
       </wt-form-actions>`;
   }
