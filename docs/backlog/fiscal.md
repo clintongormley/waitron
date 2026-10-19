@@ -794,7 +794,7 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
       refused: taking the payment on the placed order (`working_order.not_open`), and placing an
       order already holding one (`bill.payments_received`). Other ways were not looked for. If an
       order does hold one, the cancel refuses it with `bill.payments_received`, after the
-      `sale.rectify` check (A845), and the dialog says so.
+      `sale.rectify` check, and the dialog says so.
   - **`GET /api/cancel-credit-authorizers` (B33) lists the active holders of `sale.rectify`.**
     Every role holding `sale.rectify` today also holds `sale.refund`, `sale.void` and
     `cash.drawer`, so its cases cannot tell which of those it reads.
@@ -968,9 +968,9 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   box emails every active person holding `system.manage` who has an email address, at most once per
   person and stage. Receipt: [plan §1](../superpowers/plans/2026-10-18-a795-aeat-certificate-after-setup.md).
 
-- **Owner decision 2026-10-17: cancelling an invoiced bill checks the permission first**, as the
-  drawer, refund and unpaid-departure routes do: "not permitted" (with the PIN checked and counted)
-  comes before any payment refusal. Built by A845.
+- **A845, owner decision 2026-10-17: cancelling an invoiced bill checks the permission first**, as
+  the drawer, refund and unpaid-departure routes do: "not permitted" (with the PIN checked and
+  counted) comes before any payment refusal.
 
 - **A741, owner decision 2026-10-15: one large-bill limit of €3,000** (#1774). A sale of exactly
   €3,000.00 is accepted and one of €3,000.01 refused (`simplifiedInvoiceLimit`,
