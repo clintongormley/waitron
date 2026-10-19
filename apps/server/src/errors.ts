@@ -6,6 +6,7 @@ import type { ProbeFailure } from "@waitron/stream";
 import type { AllocationPreview } from "./bill-allocation.js";
 import type { CancellationContext } from "./line-cancel-context.js";
 import type { BillEditState } from "./order-drafts.js";
+import type { UnservedDish } from "./finish-party-service.js";
 
 /**
  * This host's contribution to the shared error registry, by declaration merging. A code names the
@@ -437,6 +438,7 @@ declare module "@waitron/shared" {
      * is placed, or open with items on it: the table cannot be finished while a bill is unpaid.
      */
     "party.bill_outstanding": { partyId: string };
+    "party.unserved_dishes": { partyId: string; dishes: UnservedDish[] };
     /**
      * Record unpaid departure found no bill of the party's family still to pay — none presented,
      * and none open with items on it. Finish table is the action then.

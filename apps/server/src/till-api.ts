@@ -136,7 +136,6 @@ import type { LineExtras, OrderLinePatch, TicketState, OrderAttendance } from ".
 import { listStationsToday } from "./kitchen.js";
 import {
   partyFamily,
-  finishTable,
   holderOf,
   markTableCleared,
   memberTables,
@@ -148,6 +147,8 @@ import {
   partyRevisionOfOrder,
   partyZone,
 } from "./parties.js";
+import { finishPartyService } from "./finish-party-service.js";
+import { parseFinishCancellations } from "./finish-party-input.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
 import { moveBill, moveWouldSend } from "./move-bill.js";
@@ -577,6 +578,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "party.out_of_date": 409,
   "tab.cancel_context_changed": 409,
   "party.bill_outstanding": 409,
+  "party.unserved_dishes": 409,
   "unpaid_departure.nothing_outstanding": 409,
   "unpaid_departure.unfired_dishes": 409,
   "unpaid_departure.bill_holds_payment": 409,
@@ -632,6 +634,10 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
 export const run = createErrorBoundary(STATUS, "till.failed");
 const runSplitLine = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
 const runSaveDraft = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
+const runFinishParty = createErrorBoundary(
+  { ...STATUS, "adjustment_reason.not_found": 400 },
+  "till.failed",
+);
 
 export type Run = typeof run;
 
@@ -2791,34 +2797,75 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/parties/:id/finish", (c) =>
-    run(c, log, async () => {
+    runFinishParty(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
       const partyId = requirePartyParam(c.req.param("id"));
       const body = await readJsonBody<{
         expectedPartyRevision?: unknown;
         expectedEdits?: unknown;
+        submissionId?: unknown;
+        cancellations?: unknown;
+        approver?: { personId?: unknown; pin?: unknown };
       }>(c);
       const expectedPartyRevision = requireRevision(
         body.expectedPartyRevision,
         "expectedPartyRevision",
       );
-      const result = await withTransaction(deps.db, async (tx) => {
-        await catchUpFloor(tx);
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return finishTable(
-          tx,
-          {
-            partyId,
-            expectedPartyRevision,
-            operatorId: personId,
-            expectedEdits: body.expectedEdits as BillEditExpected[],
-          },
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, locationId: deps.cfg.locationId },
-        );
-      });
+      const resolution = parseFinishCancellations(body);
+      const approver = parseDrawerOverride(body.approver);
+      const refundHandoff =
+        resolution.cancellations?.some((item) => item.refundHandoff === true) === true;
+      const attempts = overridePinAttempts(pinThrottle, session.deviceId);
+      const toCheck = refundHandoff
+        ? await overrideToCheck(
+            deps.db,
+            { sessionId: session.sessionId, permission: "sale.refund" },
+            approver,
+          )
+        : undefined;
+      const result = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>
+        withTransaction(deps.db, async (tx) => {
+          await assertStillSignedIn(tx, session);
+          const device = await assertDeviceStillProven(tx, {
+            device: session.device,
+            tokenHash: null,
+          });
+          if (device.locationId !== deps.cfg.locationId)
+            throw new AppError("device.unauthorized", {});
+          assertProfileAction(device, "take-orders");
+          if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
+            throw new AppError("device_profile.not_admitted", {});
+          const current = { ...session, device };
+          await catchUpFloor(tx);
+          await checkZones(tx, deps.cfg, current, [{ partyId }]);
+          if (refundHandoff)
+            await authorize(
+              tx,
+              {
+                sessionId: session.sessionId,
+                permission: "sale.refund",
+                override: withCheck(approver, checked),
+              },
+              attempts,
+            );
+          return finishPartyService(
+            tx,
+            sendingCfg(requestCfg(deps.cfg, current), c, device),
+            {
+              ...resolution,
+              approver: withCheck(approver, checked),
+              partyId,
+              expectedPartyRevision,
+              operatorId: personId,
+              expectedEdits: body.expectedEdits as BillEditExpected[],
+            },
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+          );
+        }),
+      );
       return c.json(result);
     }),
   );

@@ -2265,7 +2265,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   staff to the receipt at a till. Cancel and refund now checks refund permission before cancelling
   food and opens the existing approver PIN prompt after a refusal. The refund screen offers only
   payment methods this device can return; existing pending attempts remain available to inspect.
-  Paid Finish-table resolution remains open.
+  The Finish-table HTTP command now refuses unserved paid dishes across the party's bills,
+  including paid bills retained by merged parties. Its confirmed command cancels the complete
+  observed set and closes in one transaction; HTTP cases check rollback, replay, served quantities,
+  zero-reduction adjustments and unchanged filed rows. Fired, not-started food needs an explicit
+  preparation answer, and refund handoffs check refund permission before kitchen writes.
+  The Finish-table dialog, its per-dish Refund choices and the public refund handoff remain open.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,

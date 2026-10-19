@@ -2281,8 +2281,11 @@ The remaining work includes:
   cancellation and opens the existing approver prompt after a refusal. The PIN is sent with that
   cancellation request; the later money request keeps its independent public approval and retry
   flow. Mixed-payment refund choices follow the device's cash, hand-keyed-card and connected-card
-  actions, while pending refunds remain inspectable. Paid-table unserved-dish resolution remains
-  open. The new record uses today's adjustment schema; A758 still owns its later report
+  actions, while pending refunds remain inspectable. Paid-table Finish now has a server command:
+  it refuses without the complete current unserved-dish confirmation, then cancels and closes in
+  one transaction. The HTTP suite checks served remainders, merged-party paid bills, rollback,
+  replay, preparation answers and refund approval. The dialog and its public refund handoff
+  remain open. The new record uses today's adjustment schema; A758 still owns its later report
   changes, including crediting zero-reduction cancels, and the preparation flag migration.
   The earlier picture-03 implementation is not the completed revised design. A758's later slices
   own the changed reason rules, starter list, reports and filled refund screen.

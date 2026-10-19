@@ -2,23 +2,22 @@ import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
   sales,
-  ticketState,
   workingOrders,
   workingOrderLines,
-  workingOrderStatus,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
 import { authorize, canUseDeviceProfile, type PinThrottle } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody, requireBodyUuid } from "@waitron/server-kit";
+import { parseCancellationContext } from "./line-cancel-input.js";
 import { parseBillEditExpected } from "./bill-editing.js";
 import { approverToCheck } from "./adjustments-api.js";
 import { invalid } from "./bill-allocation.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
 import { asObject, submissionIdOf } from "./bill-payments-api.js";
 import { assertDeviceStillProven, assertProfileAction } from "./device-session.js";
-import { readCancellationContext, type CancellationContext } from "./line-cancel-context.js";
+import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import type { Logger } from "./logger.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
@@ -56,42 +55,6 @@ function oneOf<T extends string>(value: unknown, choices: readonly T[], field: s
   return value as T;
 }
 
-function parseContext(raw: unknown): CancellationContext {
-  const field = "expectedContext";
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) throw invalid(field);
-  const value = raw as Record<string, unknown>;
-  if (!Array.isArray(value.components) || value.components.length === 0) throw invalid(field);
-  const quantity = (value: unknown, nullable = false) => {
-    if (nullable && value === null) return null;
-    if (typeof value !== "string" || !/^\d{1,12}\.\d{3}$/.test(value)) throw invalid(field);
-    return value;
-  };
-  const components = value.components.map((raw: unknown) => {
-    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) throw invalid(field);
-    const item = raw as Record<string, unknown>;
-    if (
-      item.firedAt !== null &&
-      (typeof item.firedAt !== "string" || !Number.isFinite(Date.parse(item.firedAt)))
-    )
-      throw invalid(field);
-    return {
-      id: item.id === null ? null : requireBodyUuid(item.id, field).toLowerCase(),
-      lineId: requireBodyUuid(item.lineId, field).toLowerCase(),
-      state: item.state === null ? null : oneOf(item.state, ticketState.enumValues, field),
-      firedAt: item.firedAt as string | null,
-      quantity: quantity(item.quantity)!,
-      kitchenQuantity: quantity(item.kitchenQuantity, true),
-      servedQuantity: quantity(item.servedQuantity)!,
-      cancelledQuantity: quantity(item.cancelledQuantity)!,
-    };
-  });
-  return {
-    billStatus: oneOf(value.billStatus, workingOrderStatus.enumValues, field),
-    stage: oneOf(value.stage, ["not_started", "started"], field),
-    components,
-  };
-}
-
 function parseAsk(body: Record<string, unknown>): CancelItemAsk {
   const outcome = oneOf(body.outcome, ["remove_charge", "keep_charge"], "outcome");
   if (body.preparationStarted !== undefined && typeof body.preparationStarted !== "boolean")
@@ -114,7 +77,7 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
     body.reasonId === undefined
       ? undefined
       : requireBodyUuid(body.reasonId, "reasonId").toLowerCase();
-  const expectedContext = parseContext(body.expectedContext);
+  const expectedContext = parseCancellationContext(body.expectedContext);
   if (body.refundHandoff === true && expectedContext.billStatus !== "settled")
     throw invalid("refundHandoff");
   if (

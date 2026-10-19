@@ -5,6 +5,7 @@ import { AppError, thousandthsToDecimal } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { isStarted, type TicketState } from "./kitchen-print.js";
 import { readLineCancellations } from "./line-service-state.js";
+import { partyFamily } from "./parties.js";
 import "./errors.js";
 
 export interface CancellationContext {
@@ -22,7 +23,7 @@ export interface CancellationContext {
   }[];
 }
 
-function ordered(context: CancellationContext): CancellationContext {
+export function orderedCancellationContext(context: CancellationContext): CancellationContext {
   return {
     ...context,
     components: [...context.components].sort((a, b) => {
@@ -44,7 +45,11 @@ export async function readCancellationContext(
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(eq(workingOrderLines.id, lineId));
   if (subject === undefined || subject.parentId !== null) throw invalid("lineId");
-  if (subject.bill.partyId !== partyId)
+  if (
+    subject.bill.partyId !== partyId &&
+    (subject.bill.partyId === null ||
+      !(await partyFamily(tx, partyId)).includes(subject.bill.partyId))
+  )
     throw new AppError("bill.other_party", { workingOrderId: subject.bill.id });
   if (subject.bill.status === "abandoned")
     throw new AppError("tab.not_open", { tabId: subject.bill.id });
@@ -70,7 +75,7 @@ export async function readCancellationContext(
     tx,
     family.map((line) => line.lineId),
   );
-  return ordered({
+  return orderedCancellationContext({
     billStatus: subject.bill.status,
     stage: family.some((line) => isStarted(line.state) || line.servedQuantity > 0)
       ? "started"
@@ -97,7 +102,7 @@ export async function requireCancellationContext(
 ): Promise<CancellationContext> {
   // Kitchen transitions need not advance a bill or party revision.
   const context = await readCancellationContext(tx, partyId, lineId);
-  if (!isDeepStrictEqual(ordered(expected), context))
+  if (!isDeepStrictEqual(orderedCancellationContext(expected), context))
     throw new AppError("tab.cancel_context_changed", { context });
   return context;
 }
