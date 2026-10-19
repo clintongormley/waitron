@@ -85,6 +85,30 @@ async function drop(el: TillTableOrderScreen, target: HTMLElement, destination: 
 }
 const places = (draft: DraftStore) => draft.lines.map((line) => line.place);
 
+it("Move creates a group after its joined held group beyond existing new slots", async () => {
+  const { el, draft } = await open();
+  const before = [...draft.lines];
+  await userEvent.click(lead(el, 3));
+  await el.updateComplete;
+  await userEvent.click(q(el, "[data-draft-move]"));
+  await el.updateComplete;
+  await userEvent.click(q(el, '[data-draft-move-to="new"]'));
+  await el.updateComplete;
+  expect(places(draft)).toEqual([
+    { kind: "fire" },
+    { kind: "new", slot: 1 },
+    { kind: "new", slot: 2 },
+    { kind: "new", slot: 3, afterGroupId: "g3" },
+  ]);
+  expect(draft.lines.every((line, index) => line === before[index])).toBe(true);
+  expect(draft.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+    ["Beer", "2"],
+    ["Flan", "1"],
+    ["Pie", "1"],
+    ["Cake", "1"],
+  ]);
+});
+
 it("a held row shows that it is ready to drag before moving", async () => {
   const { el } = await open();
   const control = lead(el, 0);

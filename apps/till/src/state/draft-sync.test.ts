@@ -1525,6 +1525,43 @@ describe("A773 drafts on a bill that is no longer open", () => {
     },
   );
 
+  it("automatically saves retained dishes when a presented bill reopens", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    draft.billStatus = "placed";
+    await settle();
+    expect(server.drafts).toEqual([]);
+    draft.billStatus = "open";
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS - 1);
+    expect(server.drafts).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(server.drafts).toHaveLength(1);
+    expect(server.drafts[0]!.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      ["offer-beer", "1"],
+    ]);
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(draft.lineIds([0])).toEqual([server.drafts[0]!.lines[0]!.id]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    draft.drop();
+  });
+
+  it("a bill presenting before takeover starts prevents the takeover request", async () => {
+    const theirs = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    const taking = draft.takeOver(theirs.id, theirs.revision);
+    draft.billStatus = "placed";
+    expect(await taking).toEqual({ refused: "bill.presented" });
+    expect(server.takeOverDraft).not.toHaveBeenCalled();
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(draft.candidate).toBeNull();
+    expect(draft.store.sending).toBe(false);
+    expect(draft.store.editsLocked).toBe(true);
+    expect(server.drafts[0]!.ownerId).toBe("p2");
+    draft.drop();
+  });
+
   it("an authoritative read cannot clear the bill's edit restriction", async () => {
     seed("p1", beer);
     const s = sync();

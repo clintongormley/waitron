@@ -555,6 +555,59 @@ describe("bill-scoped saved work and retained local candidates", () => {
     expect(api.saveDraft).toHaveBeenCalledTimes(1);
   });
 
+  it("a queued flush observes a takeover received before the save starts", async () => {
+    const { sync, api } = fixture(saved());
+    await sync.load();
+    const flushing = sync.flush();
+    sync.applyBillSnapshot(saved("luis", 2), sync.generation);
+    expect(await flushing).toEqual({ refused: "draft.taken_over", ownerName: "Luis" });
+    expect(sync.edit).toEqual(saved("luis", 2).edit);
+    expect(sync.store.lines.map((line) => line.product.name)).toEqual(["Steak"]);
+    expect(sync.store.editsLocked).toBe(true);
+    expect(api.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("a queued unsaved flush keeps its candidate when a takeover arrives before saving", async () => {
+    const { sync, api } = fixture();
+    await sync.load();
+    sync.store.addProduct(salad, "1");
+    const flushing = sync.flush();
+    sync.applyBillSnapshot(saved("luis", 2), sync.generation);
+    expect(await flushing).toEqual({ refused: "draft.taken_over", ownerName: "Luis" });
+    expect(sync.candidate?.lines.map((line) => line.product.name)).toEqual(["Salad"]);
+    expect(sync.store.lines.map((line) => line.product.name)).toEqual(["Steak"]);
+    expect(sync.store.editsLocked).toBe(true);
+    expect(api.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("an old save cannot revive discarded local dishes after a newer snapshot", async () => {
+    const { sync, api, set } = fixture();
+    await sync.load();
+    sync.store.addProduct(salad, "1");
+    const pending = deferred<BillDraftSnapshot>();
+    api.saveDraft.mockImplementationOnce(() => pending.promise);
+    const saving = sync.flush();
+    await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
+    const newer = saved("ana", 2, 2);
+    sync.applyBillSnapshot(newer, sync.generation);
+    expect(sync.candidate?.lines[0]?.product.name).toBe("Salad");
+    sync.resolveCandidate(null);
+    expect(sync.candidate).toBeNull();
+    pending.resolve(saved());
+    expect(await saving).toBe("failed");
+    expect(sync.edit).toEqual(newer.edit);
+    expect(sync.store.lines.map((line) => line.product.name)).toEqual(["Steak"]);
+    expect(sync.candidate?.lines.map((line) => line.product.name)).toEqual(["Steak"]);
+    expect(sync.store.editsLocked).toBe(true);
+    expect(await sync.flush()).toBe("failed");
+    set(newer);
+    expect(await sync.load()).toBe(true);
+    sync.resolveCandidate(null);
+    expect(await sync.flush()).toBe("saved");
+    expect(sync.store.editsLocked).toBe(false);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+  });
+
   it("an unchanged passive read preserves a newer completing save", async () => {
     const { sync, api } = fixture();
     await sync.load();
@@ -626,6 +679,74 @@ describe("bill-scoped saved work and retained local candidates", () => {
     expect(sync.store.lines.map((line) => line.product.name)).toEqual(["Steak"]);
     expect(sync.store.editsLocked).toBe(true);
   });
+
+  it.each(["sending", "locked"] as const)(
+    "a recalled quantity reduction waits while %s protects the source charge",
+    async (gate) => {
+      const source: RecalledDraftLine = {
+        id: "reference",
+        sourceLineId: "recorded",
+        quantity: "2",
+        note: null,
+        courseId: null,
+        makeAt: null,
+        noMerge: true,
+        slot: 0,
+        joinGroupId: null,
+        afterGroupId: null,
+        unavailable: false,
+        source: {
+          extras: [],
+          netAmount: "4.00",
+          line: {
+            id: "recorded",
+            lineNo: 1,
+            parentLineNo: null,
+            productId: "steak",
+            parentProductId: null,
+            menuItemId: null,
+            name: "Recorded steak",
+            quantity: "2",
+            priceQuantity: "1",
+            unitPrecision: 0,
+            unitPriceGross: "4.00",
+            listUnitPriceGross: "4.00",
+            servedAt: null,
+            courseId: null,
+            sentAt: "2026-10-17T18:00:00.000Z",
+            firedAt: null,
+            state: null,
+            stationId: null,
+            movable: true,
+            groupId: "group-1",
+            note: null,
+            listId: null,
+          },
+        },
+      };
+      const initial = saved();
+      initial.draft!.lines = [source];
+      const { sync, api } = fixture(initial);
+      await sync.load();
+      let cancelled = "0";
+      sync.store.cancelSource = (_line, quantity) => {
+        cancelled = quantity;
+      };
+      const unlock = gate === "locked" ? sync.store.lockEdits() : () => {};
+      sync.store.sending = gate === "sending";
+      sync.store.setLineQuantity(0, "1");
+      expect(cancelled).toBe("0");
+      expect(sync.store.lines[0]!.quantity).toBe("2");
+      expect(sync.store.lines[0]!.source!.netAmount).toBe("4.00");
+      expect(api.saveDraft).not.toHaveBeenCalled();
+      sync.store.sending = false;
+      unlock();
+      sync.store.setLineQuantity(0, "1");
+      expect(cancelled).toBe("1");
+      expect(sync.store.lines[0]!.quantity).toBe("2");
+      expect(api.saveDraft).not.toHaveBeenCalled();
+    },
+  );
 
   it("explicit review cannot revive a recalled source absent from the current outbox", async () => {
     const source: RecalledDraftLine = {
