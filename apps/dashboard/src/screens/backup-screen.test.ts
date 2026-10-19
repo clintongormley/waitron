@@ -1,7 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, quietRejection } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { BackupStatusView, DashboardApi, StreamSettingsView } from "../api/client.js";
@@ -1626,17 +1626,18 @@ it("keeps the minted key on screen when the clipboard refuses the copy", async (
     },
   });
   const unhandled: unknown[] = [];
+  const marker = new Error("marker");
   const onRejection = (event: PromiseRejectionEvent) => {
     unhandled.push(event.reason);
     event.preventDefault();
   };
+  const quietMarker = quietRejection(marker);
   window.addEventListener("unhandledrejection", onRejection);
   try {
     q(el, "[data-test=copy-key]")!.click();
     expect(copied).toEqual(["MINTED-KEY-abcdef012345"]);
     // Rejections are reported in the order they went unhandled, so once this marker arrives any
     // unhandled clipboard refusal from the click above has been reported too.
-    const marker = new Error("marker");
     void Promise.reject(marker);
     await vi.waitFor(() => expect(unhandled).toContain(marker));
 
@@ -1645,6 +1646,7 @@ it("keeps the minted key on screen when the clipboard refuses the copy", async (
     expect(q(el, "[role=alert]")).toBeNull();
   } finally {
     window.removeEventListener("unhandledrejection", onRejection);
+    quietMarker.mockRestore();
     delete (navigator.clipboard as unknown as Record<string, unknown>)["writeText"];
   }
 });

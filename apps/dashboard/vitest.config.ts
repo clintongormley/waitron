@@ -97,6 +97,9 @@ const nodeTimezoneProject = {
 export default defineConfig({
   // Pre-bundled so Vite cannot discover it mid-run and reload an in-flight browser test.
   optimizeDeps: { include: ["axe-core"] },
+  // Under an AI agent, Vite would print every browser console.error, console.warn, uncaught error
+  // and unhandled rejection to the terminal, a passing test's deliberate ones included.
+  server: { forwardConsole: false },
   test: {
     projects: [browserProject, touchProject, nodeTimezoneProject],
     coverage: {

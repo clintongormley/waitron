@@ -112,8 +112,6 @@ Left open:
   _(2026-10-06, A294: a section's square now sits before its name, so this no longer applies to
   sections — A294's look pass saw a long-named section's square at 390 px; a product's square still
   trails its name, so it stays open for products)_.
-- The "[Unhandled rejection] Error: marker" noise in `catalogue-screen.test.ts` is now A811 (CI
-  area).
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
   during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
   its final head.

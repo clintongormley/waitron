@@ -29,6 +29,7 @@ import {
   closeReportsDelivered,
   dialogClosed,
   mountWidget,
+  quietRejection,
 } from "../widgets/test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -2594,10 +2595,12 @@ describe("catalogue-screen", () => {
       const api = courseApi();
       const el = await openCourses(api, "k1");
       const unhandled: unknown[] = [];
+      const marker = new Error("marker");
       const onRejection = (event: PromiseRejectionEvent) => {
         unhandled.push(event.reason);
         event.preventDefault();
       };
+      const quietMarker = quietRejection(marker);
       window.addEventListener("unhandledrejection", onRejection);
       try {
         // Clicked in script, not through the browser: the native close is reported a task later,
@@ -2621,12 +2624,12 @@ describe("catalogue-screen", () => {
         ]);
         // Rejections are reported in the order they went unhandled, so once this marker arrives a
         // failure of the late close's handling has been reported too.
-        const marker = new Error("marker");
         void Promise.reject(marker);
         await vi.waitFor(() => expect(unhandled).toContain(marker));
         expect(unhandled).toEqual([marker]);
       } finally {
         window.removeEventListener("unhandledrejection", onRejection);
+        quietMarker.mockRestore();
       }
     });
 

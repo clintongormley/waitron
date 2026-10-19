@@ -115,6 +115,21 @@ export async function closeReportsDelivered(): Promise<void> {
 }
 
 /**
+ * Stops console.error printing the rejection of `reason` and passes every other call through; call
+ * `mockRestore()` on the result. While a test listens for rejections itself, Vitest's browser
+ * runner prints each one from a listener added before any test's (@vitest/browser 4.1.11,
+ * dist/client/error-catcher.js).
+ */
+export function quietRejection(reason: unknown) {
+  const printError = console.error.bind(console);
+  return vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    const [event] = args;
+    if (event instanceof PromiseRejectionEvent && event.reason === reason) return;
+    printError(...args);
+  });
+}
+
+/**
  * Resolves when `dialog` sends `wt-close`. `wt-dialog` sends it only once Chromium reports the
  * native close, which Chromium queues for the next rendered frame, so a test checking what a screen
  * does on `wt-close` waits for this rather than for `vi.waitFor`'s one second.

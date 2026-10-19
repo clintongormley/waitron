@@ -1,7 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, quietRejection } from "../widgets/test-helpers.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -582,17 +582,18 @@ describe("stream-settings-panel: once set up", () => {
       },
     });
     const unhandled: unknown[] = [];
+    const marker = new Error("marker");
     const onRejection = (event: PromiseRejectionEvent) => {
       unhandled.push(event.reason);
       event.preventDefault();
     };
+    const quietMarker = quietRejection(marker);
     window.addEventListener("unhandledrejection", onRejection);
     try {
       q(el, "[data-test=copy-kit]")!.click();
       expect(copied).toEqual([KIT]);
       // Rejections are reported in the order they went unhandled, so once this marker arrives any
       // unhandled clipboard refusal from the click above has been reported too.
-      const marker = new Error("marker");
       void Promise.reject(marker);
       await vi.waitFor(() => expect(unhandled).toContain(marker));
       expect(unhandled).toEqual([marker]);
@@ -600,6 +601,7 @@ describe("stream-settings-panel: once set up", () => {
       expect(q(el, "[role=alert]")).toBeNull();
     } finally {
       window.removeEventListener("unhandledrejection", onRejection);
+      quietMarker.mockRestore();
       delete (navigator.clipboard as unknown as Record<string, unknown>)["writeText"];
     }
   });
