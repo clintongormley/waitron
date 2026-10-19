@@ -1350,6 +1350,10 @@ export interface VenueServiceContribution {
   /** How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one. */
   readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
   readPartyAllergy(tx: Transaction, partyId: string): Promise<PartyAllergySnapshot>;
+  partiesWithAllergicGuests(
+    tx: Transaction,
+    partyIds: readonly string[],
+  ): Promise<ReadonlySet<string>>;
   savePartyAllergy(
     tx: Transaction,
     partyId: string,

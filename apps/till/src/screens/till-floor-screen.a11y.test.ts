@@ -10,6 +10,7 @@ import {
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState } from "../api/client.js";
+import type { WtFloorMap } from "@waitron/ui";
 
 const zones: FloorZone[] = [
   {
@@ -246,6 +247,58 @@ const plannedTables: TableState[] = [
 ];
 
 afterEach(cleanupWidgets);
+
+for (const locale of ["en", "es"]) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      it(`A669 floor allergy mark ${locale}/${theme}/${width}`, async () => {
+        const previous = currentLocale();
+        try {
+          setLocale(locale);
+          await page.viewport(width, 900);
+          expect(window.innerWidth).toBe(width);
+          const { el, host } = await mountWidget<TillFloorScreen>(
+            "till-floor-screen",
+            {
+              zones,
+              tables: [
+                { ...tables[0]!, hasAllergy: true, today: todayRow(2), status: null },
+                { ...tables[2]!, today: todayRow(12) },
+              ],
+            },
+            theme,
+          );
+          const map = el.shadowRoot!.querySelector<WtFloorMap>("wt-floor-map")!;
+          await new Promise(requestAnimationFrame);
+          await new Promise(requestAnimationFrame);
+          await map.updateComplete;
+          const mark = map.shadowRoot!.querySelector<HTMLElement>('[part="allergy"]')!;
+          expect(mark.textContent).toBe("!");
+          expect(mark.closest("button")!.getAttribute("aria-label")).toContain(
+            locale === "es" ? "Alergia" : "Allergy",
+          );
+          const marker = mark.getBoundingClientRect();
+          const bounds = map.getBoundingClientRect();
+          expect(marker.width).toBeGreaterThan(0);
+          expect(marker.left).toBeGreaterThanOrEqual(bounds.left);
+          expect(marker.right).toBeLessThanOrEqual(bounds.right);
+          expect(marker.top).toBeGreaterThanOrEqual(bounds.top);
+          expect(marker.bottom).toBeLessThanOrEqual(bounds.bottom);
+          const dot = map.shadowRoot!.querySelector('[part="dot"]')!.getBoundingClientRect();
+          expect(marker.right).toBeLessThanOrEqual(dot.left);
+          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+          await expectNoA11yViolations(host);
+          await page.screenshot({
+            path: `../__screenshots__/a669-floor/${locale}-${theme}-${width}.png`,
+          });
+        } finally {
+          setLocale(previous);
+          await page.viewport(1280, 768);
+        }
+      });
+    }
+  }
+}
 
 describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (theme) => {
   it("has no violations rendering the LIST view (occupancy cards grouped by zone)", async () => {

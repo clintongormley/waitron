@@ -700,7 +700,7 @@ export class TillFloorScreen extends LitElement {
   #pending: Map<string, TodayPlacement> | null = null;
   /** Each room's revision as this screen's last change there answered it, and that answer's `nextFloorMoment`. */
   #carried = new Map<string | null, { revision: number; answeredAt: number }>();
-  #mapCopy = { locale: "", copy: { label: "" } };
+  #mapCopy = { locale: "", copy: { label: "", allergy: "" } };
 
   /** The clock the last render judged reminders by. */
   #drawnAt = 0;
@@ -2056,10 +2056,13 @@ export class TillFloorScreen extends LitElement {
   }
 
   /** Rebuilt only when the language changes, so a redraw hands the map the same copy. */
-  #floorMapCopy(): { label: string } {
+  #floorMapCopy(): { label: string; allergy: string } {
     const locale = currentLocale();
     if (this.#mapCopy.locale !== locale)
-      this.#mapCopy = { locale, copy: { label: t("floor.map_label") } };
+      this.#mapCopy = {
+        locale,
+        copy: { label: t("floor.map_label"), allergy: t("floor.allergy") },
+      };
     return this.#mapCopy.copy;
   }
 

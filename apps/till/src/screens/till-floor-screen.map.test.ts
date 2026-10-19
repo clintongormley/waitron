@@ -113,6 +113,33 @@ async function click(el: TillFloorScreen, selector: string): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe("till-floor-screen on the new map", () => {
+  it("A669 names the allergy mark in the floor's language and removes it after a new read", async () => {
+    const previous = currentLocale();
+    try {
+      for (const [locale, words] of [
+        ["en", "Seated, Allergy"],
+        ["es", "Ocupada, Alergia"],
+      ]) {
+        setLocale(locale!);
+        const el = await mount({ tables: [planned("t1", { ...seated, hasAllergy: true })] });
+        const map = mapOf(el);
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+        await map.updateComplete;
+        const button = map.shadowRoot!.querySelector('[data-table-id="t1"]')!;
+        expect(button.getAttribute("aria-label")).toBe(`1, ${words}`);
+        expect(button.querySelector('[part="allergy"]')?.textContent).toBe("!");
+        el.tables = [planned("t1", seated)];
+        await el.updateComplete;
+        await map.updateComplete;
+        expect(map.shadowRoot!.querySelector('[part="allergy"]')).toBeNull();
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(previous);
+    }
+  });
+
   it("draws a planned zone on the new map, not the old canvas", async () => {
     const t1 = planned("t1");
     const el = await mount({ tables: [t1] });

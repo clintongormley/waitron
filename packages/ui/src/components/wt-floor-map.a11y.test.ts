@@ -59,6 +59,18 @@ async function mountMap(theme: "light" | "dark", tables: FloorMapTable[]): Promi
 }
 
 describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme) => {
+  test("A669 allergy marks alongside ready and forgotten dots, including a merge", async () => {
+    await mountMap(theme, [
+      t("T1", { x: 0 }, { allergy: true, fill: "seated", dot: "ready" }),
+      t("T2", { x: 8 }, { allergy: true, fill: "seated", dot: "forgotten", joinId: "j" }),
+      t("T3", { x: 14 }, { allergy: true, fill: "seated", dot: "forgotten", joinId: "j" }),
+      t("T4", { x: 30, width: 1, height: 1 }, { allergy: true }),
+    ]);
+    const root = host.querySelector("wt-floor-map")!.shadowRoot!;
+    expect(root.querySelectorAll('[part="allergy"]')).toHaveLength(3);
+    await expectNoA11yViolations(host);
+  });
+
   test("one table in each fill", async () => {
     await mountMap(
       theme,

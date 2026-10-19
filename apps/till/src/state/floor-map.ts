@@ -133,10 +133,15 @@ function pinWords({ members, statuses, status, fillFrom, dotFrom }: Sources): st
   return fillWords(fillFrom, status.fill);
 }
 
-type Look = Pick<FloorMapTable, "fill" | "dot" | "description">;
+type Look = Pick<FloorMapTable, "fill" | "dot" | "description" | "allergy">;
 
 function lookOf(from: Sources): Look {
-  return { fill: from.status.fill, dot: from.status.dot, description: wordsOf(from) };
+  return {
+    fill: from.status.fill,
+    dot: from.status.dot,
+    description: wordsOf(from),
+    ...(from.members.some((member) => member.hasAllergy) ? { allergy: true } : {}),
+  };
 }
 
 /** The group a table is drawn and named with: its linked party's, else its merge's, else its own. */

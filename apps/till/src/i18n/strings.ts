@@ -770,6 +770,7 @@ export const en = {
   "product_info.dietary": "Dietary",
   "product_info.not_reviewed": "Allergens not yet reviewed",
   "allergens.contains": "Contains",
+  "floor.allergy": "Allergy",
   "allergens.as_served_none": "No declared allergens",
   // Dietary classification
   "diet.label": "Diet",
@@ -2343,6 +2344,7 @@ export const es: Record<StringKey, string> = {
   "product_info.dietary": "Dieta",
   "product_info.not_reviewed": "Alérgenos pendientes de revisión",
   "allergens.contains": "Contiene",
+  "floor.allergy": "Alergia",
   "allergens.as_served_none": "Sin alérgenos declarados",
   "diet.label": "Dieta",
   "diet.vegan": "Vegano",

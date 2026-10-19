@@ -2250,7 +2250,7 @@ build after A757's board if it has been decided, else name the table alone.
   clash turns red and can still be sent. Kitchen paper prints an allergy block under the guest's
   dish and a heading on the ticket; the screens match. The answer belongs to the party, shows as a
   banner with Change, and is in Actions → Allergies; a change to a dish the kitchen has sends a
-  notice; the floor plan marks the table. Every table send path runs it; the counter does not. A
+  notice. Every table send path runs it; the counter does not. A
   table leaving the party copies the allergic guests to both parties, and a guest can be deleted.
   After A668's data shape. [Spec](../superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](mockups/a669-allergy-at-the-table/)

@@ -2215,7 +2215,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
 - **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** The send
-  routes, till prompts, kitchen copy/notices and floor signal remain. At the first Send, ask
+  routes, till prompts and kitchen copy/notices remain. At the first Send, ask
   "Any allergies at this table?" on every table send path; the counter has no allergy step.
   [Detail](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
