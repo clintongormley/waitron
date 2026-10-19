@@ -263,6 +263,10 @@ export const ALERT_MESSAGES: Readonly<
     en: `A check found {count} card payments paid out for a different amount than was charged.${MORE_EN}${NOT_RECHECKED_EN}`,
     es: `Una comprobación encontró {count} pagos con tarjeta liquidados por un importe distinto del cobrado.${MORE_ES}${NOT_RECHECKED_ES}`,
   },
+  "payment.reconcile_held": {
+    en: "{count} card payments for closed orders were paid out at a different amount than was charged. Waitron will not refund them. Record what was done with each on Card payments.",
+    es: "{count} pagos con tarjeta de pedidos cerrados se liquidaron por un importe distinto del cobrado. Waitron no los devolverá. Registra qué se hizo con cada uno en Pagos con tarjeta.",
+  },
   "payment.reconcile_remediation_failed": {
     en: `Automatic refunds failed for {count} card payments. Waitron will not try them again; refund them in the card provider's own dashboard.${MORE_EN}`,
     es: `Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Waitron no las volverá a intentar; devuélvelos desde el panel del proveedor.${MORE_ES}`,
