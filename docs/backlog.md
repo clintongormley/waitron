@@ -1063,12 +1063,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `primaryCategoryId` always hold the same value.
   [Detail](backlog/catalogue.md#sales-classification-and-the-menus-plan--what-they-left-open)
 
-- **Opening another menu while a bulk Remove or Delete is being sent.** On success focus is pulled
-  onto the other menu's tree; on a refusal no message shows anywhere, because the confirm already
-  closed. Measured by the A817 review for both actions; Remove's code predates it (`e2346ec7c`,
-  A337). Fix: note the menu id before the request, skip the focus move afterwards if it changed,
-  and show a refusal beside the list as this screen's other writes do. Left open by A817.
-
 - **A682. Translations: every missing name reported, all languages side by side
   (owner, 2026-10-14; design decisions closed, 2026-10-17).** The translations dialog shows one
   field per enabled language on each row. Translate all and its "Use fix" action use the same editor.

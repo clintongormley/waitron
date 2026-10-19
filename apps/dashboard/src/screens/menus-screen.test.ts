@@ -247,6 +247,16 @@ function lunchNodes(): MenuStructureNode[] {
   ];
 }
 
+/** Lunch with Favourites holding Beer twice: on its own, and inside the Drinks it also holds. */
+function lunchWithBeerTwiceInFavourites(): MenuStructureNode[] {
+  const nodes = lunchNodes();
+  const beer = drinksNode("m-unused").children!.find((node) => node.memberId === "m-beer")!;
+  nodes
+    .find((node) => node.memberId === "m-fav")!
+    .children!.push({ ...beer, memberId: "m-fav-beer" });
+  return nodes;
+}
+
 /** Lemonade sits in Favourites and Drinks; Lager only inside Drinks' Beer. */
 function lunchPrices(): MenuPriceRow[] {
   return [
@@ -2779,6 +2789,14 @@ it("edits section details and deletes its owned descendants while keeping includ
   expect(client.removeSectionMember).not.toHaveBeenCalled();
 });
 
+it("counts a section shown twice below the one being deleted once", async () => {
+  const el = await mountLunch(api({}, lunchWithBeerTwiceInFavourites()));
+  await rowAction(el, "m-fav", "delete");
+  expect(text(modal(el, "delete-section").querySelector("p"))).toBe(
+    t("menus.delete_section_note").replace("{name}", "Favourites").replace("{count}", "2"),
+  );
+});
+
 it("ArrowUp and ArrowDown reorder the list being edited, and focus stays on the moved row", async () => {
   const client = api();
   const el = await mountLunch(client);
@@ -5017,6 +5035,14 @@ describe("the Structure tree", () => {
         expect(deleteLines(el)).toEqual(["Drinks and the section below it"]);
       });
 
+      it("counts a section shown twice below a listed section once", async () => {
+        const el = await mountLunch(api({}, lunchWithBeerTwiceInFavourites()));
+        await pressSelect(el);
+        await tick(el, "m-fav");
+        await openDelete(el);
+        expect(deleteLines(el)).toEqual(["Favourites and the 2 sections below it"]);
+      });
+
       it("keeps the confirm open with the refusal's message and its Delete enabled", async () => {
         const deleting = deferred<void>();
         const client = api({ deleteSections: vi.fn(() => deleting.promise) });
@@ -6291,6 +6317,120 @@ describe("the Structure tree", () => {
         expect(modal(el, "move-selected").getAttribute("heading")).toBe("Mover 2 elementos");
         expect(labels(el)[0]).toBe("Nivel principal");
         expect(text(confirm(el))).toBe("Mover");
+      });
+    });
+
+    describe("a bulk change answered once another menu is open", () => {
+      const changes = {
+        remove: {
+          method: "removeSectionMembers",
+          row: "m-burger",
+          button: "selection-remove",
+          dialog: "remove-selected",
+          destination: null,
+        },
+        delete: {
+          method: "deleteSections",
+          row: "m-drinks",
+          button: "selection-delete",
+          dialog: "delete-selected",
+          destination: null,
+        },
+        move: {
+          method: "moveSectionMembersInto",
+          row: "m-burger",
+          button: "selection-move",
+          dialog: "move-selected",
+          destination: "s-drinks",
+        },
+      } as const;
+      const names = Object.keys(changes) as (keyof typeof changes)[];
+
+      /** Confirms the change in Lunch, its request answered by `answer`, then opens Dinner. */
+      async function sendFromLunchThenOpenDinner(
+        name: keyof typeof changes,
+        answer: Promise<unknown>,
+      ): Promise<MenusScreen> {
+        const change = changes[name];
+        const send = vi.fn(() => answer);
+        const client = api({ [change.method]: send });
+        // Dinner holds a row, so its table draws the Select button a focus move could land on.
+        const read = client.getMenuStructure.getMockImplementation() as (
+          id: string,
+        ) => Promise<MenuStructure>;
+        client.getMenuStructure.mockImplementation(async (id: string) => {
+          const answered = await read(id);
+          return id === "menu-dinner"
+            ? { ...answered, nodes: [productNode("m-dinner-burger", "p-burger")] }
+            : answered;
+        });
+        const el = await mountLunch(client);
+        await pressSelect(el);
+        await tick(el, change.row);
+        q(el, `[data-test="${change.button}"]`)!.click();
+        await vi.waitFor(() => expect(modal(el, change.dialog).open).toBe(true));
+        await el.updateComplete;
+        if (change.destination) {
+          await chooseOption(
+            inModal<HTMLElementTagNameMap["wt-combobox"]>(
+              el,
+              change.dialog,
+              'wt-combobox[name="destination"]',
+            ),
+            change.destination,
+          );
+          await el.updateComplete;
+        }
+        inModal(el, change.dialog, `[data-test="${change.dialog}-save"]`).click();
+        await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+        await visit(el, DINNER_PATH, "Dinner Menu");
+        return el;
+      }
+
+      const refusedInLunch = (code: string) =>
+        t("menus.change_not_saved")
+          .replace("{name}", "Lunch Menu")
+          .replace("{reason}", codeMessage(code));
+
+      it.each(names)("%s: a refusal shows on Dinner, naming Lunch", async (name) => {
+        const answer = deferred<void>();
+        const el = await sendFromLunchThenOpenDinner(name, answer.promise);
+        answer.reject({ code: "menu_section.not_found" });
+        await vi.waitFor(() =>
+          expect(text(q(el, '[data-test="member-error"]'))).toBe(
+            refusedInLunch("menu_section.not_found"),
+          ),
+        );
+        await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+        expect(modal(el, changes[name].dialog).open).toBe(false);
+        expect(currentPlace(el)).toBe("Dinner Menu");
+      });
+
+      it.each(names)("%s: a success leaves focus where the person is on Dinner", async (name) => {
+        const answer = deferred<void>();
+        const el = await sendFromLunchThenOpenDinner(name, answer.promise);
+        const back = q<HTMLAnchorElement>(el, '[data-test="back"]')!;
+        back.focus();
+        answer.resolve();
+        await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+        await el.updateComplete;
+        await new Promise((resolve) => setTimeout(resolve));
+        expect(el.shadowRoot!.activeElement).toBe(back);
+        expect(currentPlace(el)).toBe("Dinner Menu");
+        expect(q(el, '[data-test="member-error"]')).toBeNull();
+      });
+
+      it("shows a refusal on Lunch when the person has gone to Dinner and back", async () => {
+        const answer = deferred<void>();
+        const el = await sendFromLunchThenOpenDinner("delete", answer.promise);
+        await visit(el, LUNCH_PATH, "Lunch Menu");
+        answer.reject({ code: "menu_section.not_found" });
+        await vi.waitFor(() =>
+          expect(text(q(el, '[data-test="member-error"]'))).toBe(
+            refusedInLunch("menu_section.not_found"),
+          ),
+        );
+        expect(modal(el, "delete-selected").open).toBe(false);
       });
     });
   });

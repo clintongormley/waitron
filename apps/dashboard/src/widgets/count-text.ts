@@ -12,6 +12,7 @@ export function countOf(
     | "folders.selected"
     | "menus.section_count"
     | "menus.delete_sections_heading"
+    | "menus.delete_sections_note"
     | "product.variant_count"
     | "modifiers.delete_warning_products"
     | "kitchen.delete_course_products",

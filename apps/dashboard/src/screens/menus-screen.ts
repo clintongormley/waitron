@@ -225,6 +225,12 @@ function ownedKeys(nodes: readonly MenuStructureNode[], parent = ""): string[] {
   });
 }
 
+/** The id of the section at tree row `key` when the menu owns it, not an included menu. */
+function ownedSectionAt(structure: MenuStructure | null, key: string): string | undefined {
+  const node = nodeAt(structure, key.split("/"));
+  return node?.ref.kind === "section" && !node.includedMenuId ? node.ref.sectionId : undefined;
+}
+
 /** The ids of the sections the menu owns among `nodes` and below them. */
 function ownedSectionIds(nodes: readonly MenuStructureNode[]): string[] {
   return nodes.flatMap((node) =>
@@ -760,6 +766,15 @@ export class MenusScreen extends LitElement {
   #includedStatusesFor: string | null = null;
   #menuReadKey = "";
   #menuReadGeneration = 0;
+  /** Counts menus opened, so an answer can tell whether the menu it was asked in is still the one
+   * open, even after going to another and back. */
+  #menuOpenings = 0;
+  #lastSentSelection: {
+    structure: MenuStructure | null;
+    selected: string[];
+    sent: string[];
+    sections: number;
+  } | null = null;
   readonly #priceQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -954,11 +969,12 @@ export class MenusScreen extends LitElement {
    * refusal, so the refusal is not read as being about what is on screen. Says whether it did. */
   #reportRefusedElsewhere(target: ListTarget, error: unknown): boolean {
     if (target.menuId === this.menuId && target.listId === this.#listId) return false;
-    this.memberError = fill("menus.change_not_saved", {
-      name: target.name,
-      reason: codeMessage(codeOf(error)),
-    });
+    this.#reportRefused(target.name, error);
     return true;
+  }
+
+  #reportRefused(name: string, error: unknown): void {
+    this.memberError = fill("menus.change_not_saved", { name, reason: codeMessage(codeOf(error)) });
   }
 
   /** Closes a window whose request was refused while another menu, or none, is on screen, so it is
@@ -1247,6 +1263,7 @@ export class MenusScreen extends LitElement {
 
   #select(menuId: string | null): void {
     if (menuId === this.menuId) return;
+    this.#menuOpenings++;
     this.#menuFormGeneration++;
     this.menuForm = null;
     this.#menuReads.release();
@@ -2582,12 +2599,7 @@ export class MenusScreen extends LitElement {
 
   #renderSelectionBar() {
     const count = this.structureSelected.length;
-    const sent = this.#sentKeys(this.structureSelected);
-    const ownsSection = (key: string) => {
-      const node = nodeAt(this.structure, key.split("/"));
-      return node?.ref.kind === "section" && !node.includedMenuId;
-    };
-    const sections = sent.filter(ownsSection).length;
+    const { sent, sections } = this.#sentSelection();
     const removable = sent.length > 0 && sections === 0;
     const deletable = sent.length > 0 && sections === sent.length;
     const mixed = sections > 0 && sections < sent.length;
@@ -2706,12 +2718,7 @@ export class MenusScreen extends LitElement {
    * every place that section is shown, and a member shown in two places is sent once: the server
    * refuses a request naming one member twice. */
   #sentKeys(selected: readonly string[]): string[] {
-    const sections = new Set(
-      selected.flatMap((key) => {
-        const node = nodeAt(this.structure, key.split("/"));
-        return node?.ref.kind === "section" && !node.includedMenuId ? [node.ref.sectionId] : [];
-      }),
-    );
+    const sections = new Set(selected.flatMap((key) => ownedSectionAt(this.structure, key) ?? []));
     const members = new Set<string>();
     return selected.filter((key) => {
       const path = key.split("/");
@@ -2723,6 +2730,18 @@ export class MenusScreen extends LitElement {
       members.add(member);
       return true;
     });
+  }
+
+  /** The rows the selection sends and how many of them are sections the menu owns, worked out
+   * again only when the structure or the selection is replaced. */
+  #sentSelection(): { sent: string[]; sections: number } {
+    const { structure, structureSelected: selected } = this;
+    const last = this.#lastSentSelection;
+    if (last?.structure === structure && last.selected === selected) return last;
+    const sent = this.#sentKeys(selected);
+    const sections = sent.filter((key) => ownedSectionAt(structure, key) !== undefined).length;
+    this.#lastSentSelection = { structure, selected, sent, sections };
+    return this.#lastSentSelection;
   }
 
   /** Each selected row as the list holding it and its member id, with the names the confirm shows. */
@@ -2745,6 +2764,42 @@ export class MenusScreen extends LitElement {
     });
   }
 
+  /** Sends a change confirmed from Select mode's bar. Its answer is shown in the confirm, which
+   * `saved` closes, only while the menu it was asked in is still open; once another menu has been
+   * opened, a refusal is named with the menu it was for, and a saved change clears nothing and
+   * moves no focus there. `reread` runs after a saved change is read back. */
+  async #sendSelected(change: {
+    send: () => Promise<unknown>;
+    refused: (message: string) => void;
+    saved: () => void;
+    reread?: () => void;
+  }): Promise<void> {
+    const opened = this.#menuOpenings;
+    const menu = this.#menuName();
+    const here = () => opened === this.#menuOpenings;
+    this.busy = true;
+    try {
+      await change.send();
+    } catch (error) {
+      if (here()) change.refused(codeMessage(codeOf(error)));
+      else this.#reportRefused(menu, error);
+      this.busy = false;
+      return;
+    }
+    if (here()) {
+      change.saved();
+      this.structureSelected = [];
+    }
+    await this.#refresh();
+    if (here()) change.reread?.();
+    this.busy = false;
+    await this.updateComplete;
+    if (!here()) return;
+    if (this.structureSelecting)
+      this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
+    else this.renderRoot.querySelector("dashboard-menu-structure-table")?.focusRowMenu("");
+  }
+
   async #removeSelected(): Promise<void> {
     const keys = this.removingSelected;
     if (!keys || this.busy) return;
@@ -2752,24 +2807,16 @@ export class MenusScreen extends LitElement {
       listId,
       memberId,
     }));
-    this.busy = true;
     this.removeSelectedError = "";
-    try {
-      await this.api.removeSectionMembers(members);
-    } catch (error) {
-      this.removeSelectedError = codeMessage(codeOf(error));
-      this.busy = false;
-      return;
-    }
-    this.removingSelected = null;
-    this.structureSelected = [];
-    await this.#refresh();
-    this.busy = false;
-    await this.updateComplete;
-    const tree = this.renderRoot.querySelector("dashboard-menu-structure-table");
-    if (this.structureSelecting)
-      this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
-    else tree?.focusRowMenu("");
+    await this.#sendSelected({
+      send: () => this.api.removeSectionMembers(members),
+      refused: (message) => {
+        this.removeSelectedError = message;
+      },
+      saved: () => {
+        this.removingSelected = null;
+      },
+    });
   }
 
   /** Each section the selected rows name, once however many places show it, with how many of the
@@ -2789,7 +2836,7 @@ export class MenusScreen extends LitElement {
       .map(({ id, node }) => ({
         id,
         name: memberName(node.ref, NO_NAMES, this.#sectionNames),
-        below: this.#ownedDescendants(node.children ?? []),
+        below: new Set(ownedSectionIds(node.children ?? [])).size,
       }));
   }
 
@@ -2797,24 +2844,16 @@ export class MenusScreen extends LitElement {
     const keys = this.deletingSelected;
     if (!keys || this.busy) return;
     const ids = this.#selectedSections(keys).map(({ id }) => id);
-    this.busy = true;
     this.deleteSelectedError = "";
-    try {
-      await this.api.deleteSections(ids);
-    } catch (error) {
-      this.deleteSelectedError = codeMessage(codeOf(error));
-      this.busy = false;
-      return;
-    }
-    this.deletingSelected = null;
-    this.structureSelected = [];
-    await this.#refresh();
-    this.busy = false;
-    await this.updateComplete;
-    const tree = this.renderRoot.querySelector("dashboard-menu-structure-table");
-    if (this.structureSelecting)
-      this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
-    else tree?.focusRowMenu("");
+    await this.#sendSelected({
+      send: () => this.api.deleteSections(ids),
+      refused: (message) => {
+        this.deleteSelectedError = message;
+      },
+      saved: () => {
+        this.deletingSelected = null;
+      },
+    });
   }
 
   #inTreeOrder(keys: readonly string[]): string[] {
@@ -2879,24 +2918,21 @@ export class MenusScreen extends LitElement {
       listId,
       memberId,
     }));
-    this.busy = true;
     this.moveSelectedError = "";
-    try {
-      await this.api.moveSectionMembersInto(destination, members);
-    } catch (error) {
-      this.moveSelectedError = codeMessage(codeOf(error));
-      this.busy = false;
-      return;
-    }
-    this.#moveScope?.commit(destination);
-    this.movingSelected = null;
-    this.structureSelected = [];
-    await this.#refresh();
-    const path = this.#moveDestinations([]).find(({ value }) => value === destination)?.path;
-    if (path) this.#edit(path);
-    this.busy = false;
-    await this.updateComplete;
-    this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
+    await this.#sendSelected({
+      send: () => this.api.moveSectionMembersInto(destination, members),
+      refused: (message) => {
+        this.moveSelectedError = message;
+      },
+      saved: () => {
+        this.#moveScope?.commit(destination);
+        this.movingSelected = null;
+      },
+      reread: () => {
+        const path = this.#moveDestinations([]).find(({ value }) => value === destination)?.path;
+        if (path) this.#edit(path);
+      },
+    });
   }
 
   async #leaveSelecting(): Promise<void> {
@@ -3310,6 +3346,9 @@ export class MenusScreen extends LitElement {
   }
 
   #renderNewSection() {
+    const below = this.deletingSection
+      ? new Set(ownedSectionIds(this.#sectionNode(this.deletingSection.id)?.children ?? [])).size
+      : 0;
     return html`<dashboard-section-details-form
         data-test="section-form"
         .open=${this.creatingSection !== null || this.editingSection !== null}
@@ -3372,23 +3411,10 @@ export class MenusScreen extends LitElement {
         open: this.deletingSection !== null,
         heading: t("menus.delete_section"),
         body: html`<p>
-          ${fill(
-            this.deletingSection &&
-              this.#ownedDescendants(this.#sectionNode(this.deletingSection.id)?.children ?? []) ===
-                1
-              ? "menus.delete_section_one"
-              : "menus.delete_section_note",
-            {
-              name: this.deletingSection?.internalName ?? "",
-              count: String(
-                this.deletingSection
-                  ? this.#ownedDescendants(
-                      this.#sectionNode(this.deletingSection.id)?.children ?? [],
-                    )
-                  : 0,
-              ),
-            },
-          )}
+          ${fill(below === 1 ? "menus.delete_section_one" : "menus.delete_section_note", {
+            name: this.deletingSection?.internalName ?? "",
+            count: String(below),
+          })}
         </p>`,
         save: "delete-section-save",
         saveLabel: t("action.delete"),
@@ -3498,8 +3524,6 @@ export class MenusScreen extends LitElement {
 
   #renderDeleteSelected() {
     const sections = this.#selectedSections(this.deletingSelected ?? []);
-    const note =
-      sections.length === 1 ? "menus.delete_sections_note_one" : "menus.delete_sections_note";
     return this.#formModal({
       test: "delete-selected",
       open: this.deletingSelected !== null,
@@ -3521,7 +3545,9 @@ export class MenusScreen extends LitElement {
               </li>`,
           )}
         </ul>
-        <p data-test="delete-selected-note">${t(note)}</p>`,
+        <p data-test="delete-selected-note">
+          ${countOf("menus.delete_sections_note", sections.length)}
+        </p>`,
       save: "delete-selected-save",
       saveLabel: t("action.delete"),
       saveVariant: "danger",
@@ -3531,17 +3557,6 @@ export class MenusScreen extends LitElement {
       },
       submit: () => void this.#deleteSelected(),
     });
-  }
-
-  #ownedDescendants(nodes: readonly MenuStructureNode[]): number {
-    return nodes.reduce(
-      (count, node) =>
-        count +
-        (node.ref.kind === "section" && !node.includedMenuId
-          ? 1 + this.#ownedDescendants(node.children ?? [])
-          : 0),
-      0,
-    );
   }
 
   #sectionNode(id: string): MenuStructureNode | undefined {
