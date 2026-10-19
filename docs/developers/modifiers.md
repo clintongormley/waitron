@@ -143,16 +143,45 @@ and the integrated card pay `POST /api/pay` — the last on its WALK-UP branch o
 placed order ignores the request's lines and files its own stored ones (`IntegratedPayRequest`,
 `apps/server/src/till-sale.ts`).
 
-One more route takes them, for a seated party's unsent order (`apps/server/src/order-drafts.ts`):
-the draft save `PUT /api/parties/:id/drafts`. It stores the answers UNPRICED, so it checks only their
-shape, through `readOptionSelections` and `readExtraSelections` (`packages/catalogue/src/`): each
-refuses what its validator below refuses without consulting a list — a malformed entry, two answers
-to one options list, one extras list answered twice or one product picked twice from it — under the
-same `options.invalid` or `extras.invalid` naming the same field, and also refuses an id that is no
-UUID. What needs the lists (an unanswered list, a withdrawn label, a count a list refuses) is left
-to the draft submission `POST /api/parties/:id/drafts/:did/submit`. Its body carries no answers,
-only groups of the draft's line ids; it prices the answers the save stored, through `placeGroups`
-(`apps/server/src/order-groups.ts`), as a group submission does.
+The table draft save, `PUT /api/parties/:id/drafts`, also takes these selections
+(`apps/server/src/order-drafts.ts`). A draft can mix fresh dishes with recalled ones. Keep the two
+paths separate: a fresh dish has not been priced by the server, whereas a recalled dish already
+has bill rows and may carry a discount.
+
+For a fresh line, the save screens the selections through `readOptionSelections` and
+`readExtraSelections` (`packages/catalogue/src/`). These reject malformed entries, duplicate
+list answers and duplicate products within a pick list, under `options.invalid` or `extras.invalid`,
+and require UUIDs for the ids. The save keeps the selections unpriced. List completeness and pricing
+are checked when that line is submitted: an unanswered required options list, for example, refuses
+with `options.label_required`. A saved line's `unavailable` flag reports some current offer
+problems; it does not replace submission validation.
+
+A recalled line names its existing bill row through `sourceLineId`. Its `source` read holds the
+recorded dish, extras and net amount, rather than a fresh estimate. When you save changed selections,
+`prepareRecalledModifiers` (`apps/server/src/working-order.ts`) checks them against the offered
+lists, falling back to the product's current options lists when its menu offer has gone. It retains
+the recorded dish price and kept extras' prices and discounts; added extras take the current offered
+price. Those changes reach the bill during the draft save, before another Send. Omitting `options`
+or `extras` on a recalled line keeps that selection. Explicit replacement selections on a source
+without retained choice metadata refuse rather than guessing.
+
+For example, the recalled-modifier test starts with two discounted dishes and their recorded extras,
+totalling €28.50. Adding an extra priced at €2 per dish changes the saved source amount to €32.50.
+The existing dish and extra rows keep their prices and adjustment history. Sending that source
+again retains those amounts; replaying the same submission does not add the extra twice. Run the
+example and its invalid-choice controls with:
+
+```bash
+pnpm --filter @waitron/server exec vitest run src/draft-recall.modifiers.test.ts
+```
+
+The submission route, `POST /api/parties/:id/drafts/:did/submit`, carries groups of saved draft-line
+ids, not replacement modifier answers. `submitDraft` separates selected fresh lines from recalled
+sources before calling `placeGroups` (`apps/server/src/order-groups.ts`). Fresh selections are priced
+there; recalled bill rows are placed into their selected groups. Unselected draft lines remain
+unsent. Save and submit also compare the bill's editor state; taking over another bill does not
+grant access to this one. The [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
+defines that separate contract.
 
 An `options` answer names a list and one of its labels. An `extras` answer names a list and the
 PRODUCTS picked from it, each with how many of that product this dish takes — a pick never names
@@ -278,8 +307,8 @@ change like any other: the kitchen gets a recall notice and a new ticket. An EXT
 the list's and the picked product's ids, so renaming the list — or the product — disturbs nothing and
 the line is preserved.
 
-The till sends one `options` entry per answered list and one `extras` entry per list picked from,
-reads a line's frozen answers back as `optionSnapshots` on all five mirrors it keeps
+For a parked-order edit, the till sends one `options` entry per answered list and one `extras` entry
+per list picked from. It reads a line's frozen answers back as `optionSnapshots`
 (`apps/till/src/api/client.ts`), and tells a child extras row from a dish by `parentLineNo` rather
 than by a null product. A retrieved line's options answers ARE re-sendable, even though a frozen answer carries
 six names and no ids: `deriveOptionSelections` (`apps/till/src/state/held-options.ts`) matches each
@@ -352,9 +381,9 @@ Six things it is worth knowing about that payload:
   `productId`), the same refusal as a pick the list never offered. That filter is the served
   version's `available` flag on each item (`applyLiveFields`), which the order path drops items by
   (`offerModifiers`, `apps/server/src/working-order.ts`) for a basket priced afresh, which includes
-  a new line or a new pick in an edit of a saved order. A pick the stored line already
-  holds is kept even when its product has since sold out — through an edit of a line the kitchen
-  does not have (held or recalled), and a quantity drop of one it has — with two exceptions: a
+  a new line or a new pick in an edit of a saved order. On the held-order edit path, a pick the stored
+  line already holds is kept even when its product has since sold out — through an edit of a line
+  the kitchen does not have (held or recalled), and a quantity drop of one it has — with two exceptions: a
   CHANGE to a line the kitchen has sends the line again with the picks it keeps, so a sold-out one
   is refused `product.unavailable`; and a line whose quantity rises, the kitchen's or not, is priced
   afresh as a check, so there it is refused like a new pick. All of these are pinned by "keeps an extra whose product sold out on a line the kitchen does not have, and

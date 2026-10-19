@@ -1554,6 +1554,13 @@ visible numbers alone do not imply a numbering defect.
 
 ### Replacement order controls (A773)
 
+The [modifiers integration guide](../developers/modifiers.md#ordering-and-stored-facts) distinguishes
+fresh table-draft selections, priced on submission, from recalled sources whose modifier changes
+are saved to their existing bill rows. The 2026-10-19 documentation check ran the complete
+`draft-recall.modifiers`, `draft-recall`, `till-api.drafts` and `order-drafts.db` server suites:
+419 cases passed, including the €28.50-to-€32.50 added-extra example, invalid-choice refusals and
+submission replay. This is a check of those paths, not completion of the whole-branch prose audit.
+
 Phone Review counts the fixture's two Beers, one Flan with three Sauces, one weighed dish and
 two recalled portions as six dishes. The extras add no items to that count. The native Review
 and Back checks in `till-table-order-screen.review-acceptance.test.ts` retain the quantities,
@@ -2211,8 +2218,9 @@ The remaining work includes:
   as the watcher's 2026-10-18 instruction requires. Finish the held-dish resolution before Finish
   table (plan T20/T22); the earlier picture-03 implementation is not that revised design.
 - Reconcile the full branch with current main, including migration collisions and prose describing
-  changed behavior. Complete the remaining ownership/copy/native-screen acceptance, the physical
-  till trial and final whole-branch validation and review before publication. Read the campaign's
+  changed behavior beyond the documented fresh/recalled modifier paths. Complete the remaining
+  ownership/copy/native-screen acceptance, the physical till trial and final whole-branch validation
+  and review before publication. Read the campaign's
   local checkpoint ledger for exact remaining checks and receipts; do not treat earlier focused
   checks as whole-item acceptance.
 
