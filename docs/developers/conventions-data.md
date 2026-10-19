@@ -831,17 +831,16 @@ calendar.
 
 `tenants`, `nodes`, `deployment`, `mirror_config` and `node_roles`. `node_roles` joined on
 2026-09-23, when a node's mode, singleton role and break-glass verifier left `deployment` (#548);
-it inherits `deployment`'s rule and is not in the frozen matrix, which the guard's
-`ADDED_SINCE_THE_MATRIX` records. NOTHING BUT `scripts/write-path-tables.test.ts` REFUSES THEM.
+it inherits `deployment`'s rule. The guard pins all five names directly. NOTHING BUT
+`scripts/write-path-tables.test.ts` REFUSES THEM.
 SQLite has no roles and no grants — one process opens one file, and every path, request and
 provisioning alike, shares that one venue handle. So the rule is a convention over source text, and
 that guard is not a second opinion on an engine that would refuse the write anyway.
 
-The list comes from `packages/fiscal-verifactu/src/privileges.expected.ts`, a FROZEN RECORD rather
-than a measurement: nothing checks it against a database. The guard says so itself, and states the
-ways it is weaker than "no write path touches a forbidden table", among them — it reads TEXT; it
-judges a FILE rather than a call chain; and it walks `<member>/src` under `apps` and `packages`
-alone (`docs/backlog.md` → B9). Read those hedges in the guard rather than trusting this line.
+The guard reads `scripts/write-path-tables.json` and pins its table set independently. It reads
+TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `apps` and `packages`
+alone. Read its header for the full limits. The [2026-10-19 grants-record audit](grants-retirement-audit.md)
+records the removal of the old matrix and the restrictions still awaiting individual decisions.
 
 Real code does write all five, legitimately: the setup-mode provision route reaches `tenants`,
 `nodes` and `deployment`; the setup-mode adopt route reaches `deployment`, `node_roles` and

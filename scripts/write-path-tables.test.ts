@@ -2,7 +2,6 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import { blankComments } from "../packages/shared/src/source-comments.js";
-import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected.js";
 
 /**
  * Five tables the application code may read and never write: `tenants`, `nodes`, `deployment`,
@@ -16,11 +15,6 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  * It is about WHICH FILE does the write, not about being a request: a request may reach these
  * tables by calling into one of the files `write-path-tables.json` names, which is where such a
  * write is allowed to live.
- *
- * The list comes from `packages/fiscal-verifactu/src/privileges.expected.ts`, the frozen record of
- * `app_user`'s table grants: the four tables it records as `S`, plus `node_roles`, which inherits
- * `deployment`'s rule (`ADDED_SINCE_THE_MATRIX` below). Nothing checks that record against a
- * database. The case below cross-checks it with `write-path-tables.json` while both exist.
  *
  * It is WEAKER than "no write path touches a forbidden table", in four ways:
  *
@@ -37,16 +31,14 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  *    under a `testing/` directory, where fixtures seed `tenants` and `nodes` outright. Outside the
  *    walk entirely, and so unseen: a package's `test/` directory, `apps/<app>/scripts`, and
  *    anything at a package root.
- * 4. **It is about the tables that were refused AT ALL**, plus `node_roles`. The grants used to
- *    refuse plenty more one operation at a time — no DELETE on the sale tables, UPDATE narrowed to
- *    named columns on two others — and none of that is checked here or refused now.
+ * 4. **It checks whole-table write placement only.** Operation-specific restrictions on other
+ *    tables, and restrictions to particular columns, are outside this guard.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 
 /**
- * table -> the files allowed to write it, repo-relative. A frozen JSON file rather than a constant
- * here, because it has to outlive the grants it was taken from. Why each entry is allowed:
+ * table -> the files allowed to write it, repo-relative. Why each entry is allowed:
  *
  *   `packages/provisioning/src/venue-apply.ts`   creates the taxpayer row and the node, under the
  *                                                setup-mode provision route, the
@@ -169,10 +161,6 @@ function productionSources(): string[] {
 const SOURCES = productionSources();
 const ALLOWANCES = new Map(TABLES.map((table) => [table, new Set(ALLOWED[table])]));
 
-// Tables created after the privilege matrix froze, each inheriting a frozen table's rule.
-// `node_roles` holds the three columns that left `deployment` (#548).
-const ADDED_SINCE_THE_MATRIX = ["node_roles"];
-
 describe("no source writes a table the application role may only read", () => {
   it("finds no forbidden write", () => {
     const offenders: string[] = [];
@@ -195,11 +183,14 @@ describe("no source writes a table the application role may only read", () => {
     ).toEqual([]);
   });
 
-  it("holds exactly the tables the privilege matrix records as readable but not writable, plus those added since", () => {
-    const readOnly = Object.entries(PRIVILEGES)
-      .filter(([, letters]) => !/[IUDT]/.test(letters))
-      .map(([table]) => table);
-    expect(TABLES.slice().sort()).toEqual([...readOnly, ...ADDED_SINCE_THE_MATRIX].sort());
+  it("keeps every table whose writes belong in the named provisioning or identity files", () => {
+    expect(TABLES.slice().sort()).toEqual([
+      "deployment",
+      "mirror_config",
+      "node_roles",
+      "nodes",
+      "tenants",
+    ]);
   });
 
   // Non-vacuity, end to end, and deliberately NOT a count of how many files were read: every
