@@ -5006,7 +5006,8 @@ note opens the same existing modifiers window. Quantity, extras and note are sta
 An unchanged Save stays quiet and disabled; Cancel, Escape and leaving retain the shared draft
 protection. Sent lines are read-only. A sent, unpaid Counter dish can offer Move to station in that
 window using its separately checked movement facts. Table draft, group, course and sending controls
-keep their own placement and permissions.
+keep their own placement and permissions. A recalled table quantity decrease requests the existing
+cancellation flow; that request does not apply other staged note or modifier changes.
 
 The status row above the menu or selected list shows the service, zone and receipt-equipment
 availability. Tapping the service text opens today's keep-open action. Unknown, unconfigured,

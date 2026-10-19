@@ -1507,7 +1507,9 @@ Held, Fire and the table's Send controls retain their own meanings.
 
 Use the existing modifiers window for line details. Sent extras and notes remain read-only; moving
 a sent unpaid Counter dish uses its separate current movement facts. A739 owns the payment-window
-redesign. The custom item's permission and catalogue/report/invoice identity remain undecided.
+redesign. A recalled table quantity decrease retains its cancellation flow and does not apply
+other staged note or modifier changes with that request. The custom item's permission and
+catalogue/report/invoice identity remain undecided.
 
 
 ### Installed modules release removed tables (A894, owner decision 2026-10-19)

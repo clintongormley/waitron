@@ -2100,6 +2100,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **Remove the Filter's unused session-storage write.** Filter selections live in the active
+  operator's app state and reset on sign-out. `till-app.ts` writes `waitron.dietFilter` but never
+  reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
+  adding cross-login restoration. Found during A738 review; retain the filter-lifetime tests.
+
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design, not built; A773-1 has landed, queued in lane G.
   Six-slice plan: portions and current ticket/receipt grouping; named, stable-numbered bills;
