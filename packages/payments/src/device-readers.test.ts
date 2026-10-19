@@ -290,12 +290,17 @@ describe("appending a new reader to profiles", () => {
     expect(await rows(s.profileId)).toEqual([]);
   });
 
-  it("acquires nothing for a device on Use default on that profile", async () => {
+  it("leaves a device on Use default paying on the default it holds, acquiring nothing new", async () => {
     const s = await seed();
-    await inTx((tx) => appendReaderToProfiles(tx, s.r1, [s.profileId]));
+    await inTx((tx) =>
+      setProfileReaderList(tx, s.profileId, { readerIds: [s.r1], defaultReaderId: s.r1 }),
+    );
+    await inTx((tx) => settleDeviceReader(tx, s.deviceA, { acquire: true }));
+    expect(await holders(s.r1)).toEqual({ [s.r1]: s.deviceA });
+    await inTx((tx) => appendReaderToProfiles(tx, s.r2, [s.profileId]));
     expect(await chosen(s.deviceA)).toBeNull();
-    expect(await holders(s.r1)).toEqual({});
-    expect(await inTx((tx) => resolveDeviceReaderId(tx, s.deviceA))).toBeNull();
+    expect(await holders(s.r1, s.r2)).toEqual({ [s.r1]: s.deviceA });
+    expect(await inTx((tx) => resolveDeviceReaderId(tx, s.deviceA))).toBe(s.r1);
   });
 });
 

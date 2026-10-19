@@ -87,7 +87,7 @@ export async function setProfileReaderList(
 
 /**
  * Puts the reader at the end of each named profile's list, never as its default, skipping a
- * profile that already lists it. Acquires nothing: no device on a profile was using it.
+ * profile that already lists it. Writes no holder and no device choice.
  */
 export async function appendReaderToProfiles(
   tx: Transaction,
