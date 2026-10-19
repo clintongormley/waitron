@@ -322,14 +322,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   attached, before any build.
   [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
-- **A679. First Live setup: one page and one recovery PDF.** Finish integration checks,
-  both final installed Claude reviews, the normal push hook and current-head CI before landing.
-  Preserve current-main certificate-install recording and configuration-transfer format 4.
-  PDF viewing and the exact retained CLI-launch patch are already approved.
-  [Plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md);
-  [detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route);
-  [changed-check inventory](operations/a679-changed-checks.md).
-
 - **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
   bypassing that internal stale-reading check survived the hour suites. Add both the refusal
   and its legitimate-order positive without changing clock policy.
@@ -340,19 +332,29 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   boundary separately from the real public promotion retry, which already preserves its result.
   [Detail](backlog/fiscal.md#pin-committed-hour-preparations-action-boundary).
 
+- **A679 follow-up: pin the early recovery-source refusal.** The later selected-source guard
+  catches the review fault; the earlier refusal at `recovery-preparation.ts:271` lacks its own
+  distinguishing case. Preserve both guards while adding that qualification.
+  [Detail](backlog/fiscal.md#pin-the-early-recovery-source-refusal).
+
+- **Align the root fiscal-summary wording with the approved hour policy.** `CLAUDE.md:858–863`
+  still describes outside signed names and denies clock-based naming. The detailed restore
+  topic is current; the campaign runner prohibits editing root rules. Correct that summary in
+  separately authorised instruction housekeeping, preserving key/source/working-time safeguards.
+
 - **A731. Recover from backup from the first-setup repair page.** Required before go-live.
   Add the existing archive, bucket and managed-Cloud recovery flow behind real owner proof,
-  with the selected backup’s recovery key and current outside evidence. Depends on A679.
+  with the selected backup’s recovery key and current outside evidence.
   [Detail](backlog/fiscal.md#a731-recover-from-backup-from-the-first-setup-repair-page).
 
 - **A732. Keep old data and start fresh on this box.** Required before go-live. When business
   data exists or may exist and the password is lost, require a new custodian-signed authorisation
   for a separate empty workspace, preserving the old data. Propose the exact authorisation format
-  before building. Depends on A679. [Detail](backlog/fiscal.md#a732-keep-old-data-and-start-fresh-on-this-box).
+  before building. [Detail](backlog/fiscal.md#a732-keep-old-data-and-start-fresh-on-this-box).
 
 - **A733. Set up secure connection from the first-setup repair page.** Required before go-live.
   Guide certificate restoration when the box’s certificate is missing or unusable. Keep secrets
-  off HTTP and preserve existing trust material. Depends on A679.
+  off HTTP and preserve existing trust material.
   [Detail](backlog/fiscal.md#a733-set-up-secure-connection-from-the-first-setup-repair-page).
 
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery,

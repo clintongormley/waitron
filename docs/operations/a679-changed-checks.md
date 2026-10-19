@@ -3209,3 +3209,50 @@ The seat labels the PDF/manual-reader and publication-only claims unverified by 
 experiments, rather than adopting the driver's earlier receipts. The second installed review
 must assess those remaining boundaries. No whole-branch approval or CI result is inferred
 from the wrapper's successful exit alone. Its candidate is clean and its scratch probes removed.
+
+
+## Second final installed review and closing checks, 2026-10-19
+
+The second independent installed seat reviewed complete candidate
+`fe263a31d4558d2a2e0065279f74e4b44648dd97`, matching all 7,729 tracked file bytes and
+its normalized full diff against the captured main. Its completed report records no proven
+material bug, six caught faults and one surviving early recovery-source comparison. Its wall
+time is 1,332 seconds. That internal test gap remains a separate fiscal backlog entry; the
+later selected-source refusal is caught by an actual different-artifact assertion.
+
+The seat tested current-PDF verifier invalidation, committed-result and recovered-ownership
+Finish guards, password throttling, recovery-source binding and actual printed-key agreement
+with the attachment/manual reader. Its malformed printed-key fault fails ten Node/Chromium
+assertions, including the relocated real bundle and rendered manual-entry cases. Its temporary
+300-random-secret codec probe passes its round-trip, typed-normalisation and altered-key
+assertions. The raw mutation totals were hidden by the reporter, so the report does not offer a
+printed-count receipt. These results do not qualify physical replacement or a real provider.
+
+The seat's command-stamp experiment never ran because of its shell expansion mistake. The
+driver completed it with explicit argument arrays in the independent checkout. Removing only
+`await stampDeployment(db, request.environment)` fails the existing refusal-after-stamping
+case at its exact assertion: expected preproduction, received null. Restoring the bytes passes
+that same selected case, with 66 intentionally unselected cases. No earlier test changed.
+
+The release-floor concern was also followed to its consumer. A missing/null embedded timestamp
+sets `releaseBlocked` in `hour-clock.ts:122–126`; it does not permit an earlier clock. The
+restored nine-file fiscal selection passes 252 cases, including default-provider refusal with
+no journal write and manual confirmation failing to override an unavailable release floor.
+The release-generator/runnable-artifact suite passes 24. No Docker image was built for this
+triage; a plain unstamped development image remains unable to grant Live hour admission.
+The restored source-binding selection passes one case with128 intentionally unselected.
+No production change followed these reviews.
+
+Eight final combined setup-app captures cover EN/ES, light/dark and390/1280. The real app,
+client, module, theme chooser and language chooser use controlled HTTP/clock/readiness inputs.
+All eight were opened and inspected: no clipped headings, controls or actions, no horizontal
+overflow, and consistent shell/module themes. Axe reports zero violations, with
+`aria-allowed-attr` remaining marked incomplete/manual in each capture. This is widget/client
+integration evidence, not a live-provider or physical recovery journey. The fixture/server/browser
+were closed and removed.
+
+The active backlog removes A679's completed implementation and retains three internal test-gap
+follow-ups. It also flags the stale root fiscal-summary wording: the detailed restore topic is
+current, while RUNNER section7 prohibits changing `CLAUDE.md`'s rules in this campaign. That
+root paragraph is left unchanged for separately authorised instruction housekeeping. Its
+clock-denial wording is not a statement of the approved hour policy.

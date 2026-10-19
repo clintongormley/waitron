@@ -239,25 +239,6 @@ owes (`settleSale`, `packages/core/src/settle-sale.ts`, refuses a settlement tha
 whether the Orders screen is enough as the list of unpaid invoices; how the daily close shows an
 invoice still owed; and what happens when the customer never pays. An F1 also needs A231's build.
 
-## A venue without Cloud needs a usable paper-custodian route
-
-A679 replaces register-based naming with the approved
-[hour-code design](../superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
-and [implementation plan](../superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
-Keep the item open until integration checks, both final installed Claude reviews, the normal
-push hook and current-head CI pass. The owner approved the generated recovery PDF and the exact
-retained CLI-launch patch on 19 October; those decisions do not need repeating.
-
-Current-main integration must preserve certificate-install records and configuration-transfer
-format 4 alongside the owned setup flow. The [check inventory](../operations/a679-changed-checks.md)
-records the observed failures and follow-up checks. Earlier coverage receipts qualify their
-stated trees; CI must qualify the integrated candidate.
-
-Repair-page backup recovery, authorised fresh setup and secure-connection repair remain A731,
-A732 and A733. Venue-copy adoption and a promotion browser screen remain outside A679.
-The [historical checkpoints](../operations/a679-development-checkpoints.md) retain earlier
-status reports and superseded custody decisions without making them current instructions.
-
 ## Pin the clock's future-finished sample refusal
 
 A679's first final installed review replaced
@@ -278,6 +259,15 @@ Public promotion retry is a separate path: the existing real-mirror HTTPS case i
 rows, counters and hour journal. The driver reran that case after review and it passed;
 `promoteMirrorToPrimary` returns already-primary before invoking its preparation runner.
 Do not change that public outcome to make the internal check execute.
+
+## Pin the early recovery-source refusal
+
+A679's second installed review removed `input.binding.sourceId !== copy.sourceId` from
+`createInteractiveRecoveryPreparation` in `apps/server/src/recovery-preparation.ts:271`.
+All 15 API and 129 host cases still passed. Removing the later source comparison at line118
+failed the assertion rejecting a different artifact; a restored driver selection passes.
+The earlier refusal lacks a distinguishing case. Add that qualification without changing either
+guard or claiming the two checks are equivalent for every input. No combined-fault probe was run.
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
@@ -846,7 +836,7 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 ## Decisions and deliberate limits
 
 
-### A679 naming and recovery custody
+### A venue without Cloud needs a usable paper-custodian route
 
 The owner approved the hour-code design on 16 October 2026 at 14:50, replacing paper/Cloud
 allocation and S/P/C/E naming with taxpayer-wide coordination, clock/history checks and one
@@ -1416,7 +1406,7 @@ conflict and behind a cancellation of a refused invoice were dropped on 2026-10-
 
 ## A731. Recover from backup from the first-setup repair page
 
-Required before any venue goes live; owner 2026-10-15 at about 17:15. After A679, connect the repair
+Required before any venue goes live; owner 2026-10-15 at about 17:15. Connect the repair
 page to existing archive, bucket and managed-Cloud recovery, retaining real owner proof and the
 selected backup’s named node recovery key, archive encryption key where applicable and current
 outside recovery evidence. Follow [the offline restore procedure](../developers/offline-fiscal-restore.md).
@@ -1425,7 +1415,7 @@ available until this item lands. Do not expose retained business records without
 
 ## A732. Keep old data and start fresh on this box
 
-Required before any venue goes live; owner 2026-10-15 at about 17:15. After A679, support a fresh
+Required before any venue goes live; owner 2026-10-15 at about 17:15. Support a fresh
 isolated deployment when business data exists or may exist and the old password is lost. Propose
 the exact new custodian-signed authorisation format for owner approval before building. Bind it to
 the box’s fresh recovery request and obtain a fresh signed assignment. Preserve the old workspace
@@ -1435,7 +1425,7 @@ cannot authorise this action. Until this item lands, explain that it is not yet 
 
 ## A733. Set up secure connection from the first-setup repair page
 
-Required before any venue goes live; owner 2026-10-15 at about 17:15. After A679, guide restoration
+Required before any venue goes live; owner 2026-10-15 at about 17:15. Guide restoration
 when the box’s certificate is missing or unusable. Preserve old material, prefer the retained CA
 when usable and guide installation/trust of the new public certificate. HTTP serves public
 connection/bootstrap information only and accepts no password or key. Until this item lands,

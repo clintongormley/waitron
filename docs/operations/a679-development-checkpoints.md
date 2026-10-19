@@ -2,7 +2,7 @@
 
 This is a historical snapshot of the former A679 backlog detail, retained verbatim below.
 Its dated statuses and earlier designs describe those checkpoints, rather than the current
-candidate. Follow the [current backlog](../backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route)
+candidate. Follow the [current backlog](../backlog/fiscal.md)
 for unfinished work, the [hour-code plan](../superpowers/plans/2026-10-16-a679-hour-code-implementation.md)
 for the approved implementation, and the [check inventory](a679-changed-checks.md) for qualification.
 
