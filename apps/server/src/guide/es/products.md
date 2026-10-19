@@ -38,7 +38,10 @@ ejemplo **Precio por kg**. En la caja, un producto vendido en una de las unidade
 Waitron (gramos, kilogramos o miligramos), o en una unidad cuya **Precisión** admite decimales, pide la
 cantidad cada vez, con no más decimales de los que admite la unidad. Cualquier otro producto se vende
 de uno en uno con cada toque. El ticket imprime la cantidad con la abreviatura de la unidad, por ejemplo
-0,35 kg. Un producto cuya cantidad pide la caja no admite extras.
+0,35 kg. Un producto cuya cantidad pide la caja no admite extras. Tampoco un producto en una unidad
+con **Mide una cantidad (ml, g…) — sin extras** activado: los mililitros, litros, gramos, kilogramos y
+miligramos que trae Waitron empiezan con él activado, una unidad que añades empieza con él desactivado,
+y un cambio llega a la caja cuando vuelves a publicar los menús que venden los productos de esa unidad.
 
 ## Da a un producto hasta tres nombres {#names}
 

@@ -133,7 +133,8 @@ porque es texto, no algo que se come.
 Al tocar un plato que lleva una lista se abre una sola ventana que pregunta todas sus listas, en el
 orden en que las colocaste. Un plato que se vende por peso, o en una unidad que admite decimales,
 pregunta primero la cantidad y después muestra solo sus listas de opciones: no se le pueden añadir
-extras. Una lista de extras muestra el precio por porción de cada elemento, con una casilla para cada
+extras. Un plato en una unidad con **Mide una cantidad (ml, g…) — sin extras** activado también muestra
+solo sus listas de opciones. Una lista de extras muestra el precio por porción de cada elemento, con una casilla para cada
 uno, o un selector de cantidad donde permitiste más de uno; una lista que hiciste obligatoria mantiene
 **Añadir** desactivado hasta que se elige algo. Una lista de opciones muestra sus opciones disponibles
 como botones de opción, para elegir exactamente una, con tu opción predeterminada ya elegida. Mientras la
