@@ -184,7 +184,7 @@ otherwise. Each is restated in its task.
    on a bill while the first is still out, which default 7 forbids ("Until an answer comes … no new
    payment of any way or method"). What they protected — a late answer never overwrites a newer
    send — is A773-1's turn check, unchanged; with Task 3R's hold no screen can start the newer
-   send, so the case is now unreachable, not broken (Task 3R covers the check by a unit test).
+   send, so the case is now unreachable, not broken (Task 3R unit-tests the comparison; the early return in `settle` stays unreachable from the screen, and the package-wide branch bar is read in Task 3R step 4's `test:coverage`).
    Every branch test the rebuild drops or Tasks 1R, 2R-a and 2R-b rewrite is listed under
    "Revision 5: tests to name in the PR".
    Superseded text, kept for the record: a send still out counts as unanswered (default 7: "no
@@ -347,7 +347,7 @@ called. Reading `apps/server/src/bill-payments.ts` at `96f93c52d` (`takeReaderBi
 pending row is written in its own transaction before `collect` (`:1341-1360`); a `collect` throw
 outside `REFUSED_START` leaves it pending (`:1378-1385`); the capture transaction runs after. So
 inside the server, a 5xx raised by that handler comes after the row is committed or never wrote
-it. But the till does not only talk to that handler directly: the box also serves requests that
+it. But a client can also reach the box through a relay that lives outside this repository: the box serves requests that
 arrive through a relay it dials out to (`apps/server/src/boot.ts:2227-2232`, `@waitron/tunnel`),
 and the relay belongs to Waitron Cloud, a separate repository. What it answers when the box is
 slow — a 502 or 504 while the box goes on to write the row and charge the card — cannot be read or
@@ -669,7 +669,7 @@ that does **not** find it changes nothing (B2: A773-1's hold stays). No automati
 the same rule): a read sent while the send was out can answer after it ended and show the payment
 pending although it has since settled the bill, which would free the bill with no ticket. So
 `#onBillPayConfirm` records, per bill, a tick when each send ends (`#sendEndedAt: Map<string,
-number>`, from one counter `#payTicks`), `#rereadBillPaying` takes `const sentAt = ++this.#payTicks`
+number>`, from one NEW counter `#payTicks` — none exists after Task R; the tick is recorded in `settle`, which runs before the re-read `#onBillPayRefused` sends, never in `finally`, or that immediate re-read would always count as sent before the end), `#rereadBillPaying` takes `const sentAt = ++this.#payTicks`
 before it sends, and acts below only when `sentAt > (this.#sendEndedAt.get(billId) ?? 0)`.
 
 **Behaviour:** on an answer to such a read, when the bill's entry is unconfirmed, no send is out on
@@ -725,7 +725,7 @@ the bill (`#paymentsOut`), and a payment in `balance.payments` has the entry's
   right locked at %i px".
 - **Changed by Task 3R, rewritten by the design (default 7)** (pre-existing, B15, #956): the two
   cases named in its "Tests the spec changes" and in decision 1 — what they protected is now
-  unreachable from the screen, not broken, and pinned by `isLatestSend`'s unit cases.
+  unreachable from the screen, not broken; the comparison is pinned by `isLatestSend`'s unit cases, while the early return in `settle` itself stays unreachable from the screen (package-wide branch bar read in `test:coverage`).
 - **A773-1 tests:** none changed. Every task's run is the "A773-1 run" (the files holding A773-1's
   tests and the pay-tab and find-bill sites), and Tasks R, 3R and 3T run the whole till package.
 
