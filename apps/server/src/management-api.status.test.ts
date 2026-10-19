@@ -14,7 +14,7 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 /**
  * The dashboard no longer serves venue-made table statuses: every `/management-api/service-statuses`
- * method answers the router's plain 404. `setupTenant` is shared with other suites.
+ * method answers the router's 404. `setupTenant` is shared with other suites.
  */
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse";

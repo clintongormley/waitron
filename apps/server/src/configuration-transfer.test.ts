@@ -4263,7 +4263,7 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
   },
 );
 
-it("A725 transfers station and department choices in format 4", async () => {
+it("A725 transfers station and department choices", async () => {
   const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,

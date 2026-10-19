@@ -173,7 +173,7 @@ describe("seedFloor", () => {
     );
   });
 
-  it("creates restaurant and deli service zones, the placed restaurant floor", async () => {
+  it("creates restaurant and deli service zones and the placed restaurant floor", async () => {
     const { locationId } = await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {

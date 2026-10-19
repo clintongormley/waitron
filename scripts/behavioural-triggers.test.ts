@@ -332,8 +332,8 @@ function seed(connection) {
     table("dt-closes", "1"),
     membership("vt-closes", "party-bill-settles", "dt-closes", null),
 
-    // Parties and their memberships, for the clear-when-the-party-leaves-open trigger. Each case
-    // moves its own party, so no case's write changes what another case reads.
+    // Parties, tables and memberships. The working_orders_enforce_transition cases move orders to
+    // `party-frozen` and `dt-bystander`; no case reads the others.
     party("party-finishes"),
     party("party-bumped"),
     party("party-frozen"),
