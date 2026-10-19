@@ -4060,6 +4060,15 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   390 px case holding every row menu's right edge to the screen's and to the box around its
   table's.
 
+- **A904. Correct the list of users in `--wt-cell-name-max-width`'s comment
+  (`packages/ui-core/src/tokens/structure.css`) (left open by A827, #1889).** It names "the modifier
+  form's choices" as a cap and "the options list form" as a floor, but on main `c11e3572c` no
+  modifier form and not `option-list-form.ts` read the token (`grep -rln wt-cell-name-max-width apps
+  packages`), while `orders-screen.ts`, `page-printers-panel.ts` and venue-service's
+  `periods-list.ts`, `routing-grid.ts` and `departments-list.ts` do and are not named. Read each
+  user's rule, then rewrite the list from what they do, or describe the directions without naming
+  users.
+
 - The reasons screen keeps its own copy of the role list and role names (C51 sorts its dropdowns by
   displayed name, with a separate seniority order for validation) and of the dashboard's
   placeholder-filling `fill` (`apps/dashboard/src/i18n/t.ts`). **Next action:** move both into
