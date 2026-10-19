@@ -2183,9 +2183,35 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   switch on a cash refund; a fired dish removed before preparation started is not listed; the refund
   screen's Reason is the same drop-down. **The owner answered the last question (§11, D28): a cash
   refund only on a device whose profile takes cash, as today.** No question is open.
+  **A758-1 built the rules** ([plan](superpowers/plans/2026-10-19-a758-reason-rules.md)): Void and Comp
+  reasons, Comp role lists, limits that ask for a PIN, the bill's comp limit in euros, nine starter
+  reasons, and the till naming whose PIN it needs. Left: A758-2 (the page), A758-3 (the report),
+  A758-4 ("Descuento 100%" on receipts), A758-5 (the till's Comp words), and the §3.8 and
+  "collect it at the counter" slices.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)
+
+- **A909. A recalled draft's Discard asks for a refund PIN for a dish that may not have been
+  started (left open by A758-1).** Cancel item… asks "Has preparation started?" and removes a dish
+  not started with no PIN (`apps/server/src/line-cancel.ts`). A recalled draft's Discard previews
+  each sent dish as a cancel through the adjustment path (`apps/till/src/till-app.ts`
+  `#onAdjustPreview`), which cannot ask, so a fired dish counts as possibly started and needs
+  someone who can give refunds (`evaluateCancel`, `packages/adjustments/src/policy.ts`). Stricter
+  than design D12. Decide whether Discard should ask the question too.
+
+- **A910. A reason's item limit errs toward asking (left open by A758-1).** Each comp row's share of
+  an item is rounded up to a whole basis point (`packages/adjustments/src/record.ts`), and a comp on
+  the whole bill counts against items added to the bill after it. It never lets through what should
+  ask. Revisit if a venue meets an approval it did not expect.
+
+- **A911. When an amount comp prints "Descuento 100%" (left open by A758-1, for A758-4).** "Full"
+  means the comp took the item's whole list price. An amount comp that takes what another comp left
+  prints "Descuento" with its amount. Confirm with the owner when A758-4 is built.
+
+- **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
+  A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
+  in `provisioning.test.ts` and `packages/provisioning/src/venue-apply.test.ts`). Reword it.
 
 - **Review follow-up: nutrition for extras in Sent.** The Current orders wire's extra summaries
   carry no nutrition. The Sent dish window can recover an extra's nutrition from matching bill

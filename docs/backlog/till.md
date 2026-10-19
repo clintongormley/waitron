@@ -1380,7 +1380,9 @@ column are «En preparación»), no confirmation switch on a cash refund (§3.8.
 and its count do), a fired dish removed before preparation started not listed, and the refund
 screen's Reason as the same drop-down (§3.8 item 3). What A773-1 builds is in the design's §10. The
 owner answered the last question on 2026-10-19 (§11, D28): a cash refund only on a device whose
-profile takes cash, as today; no question is open. The notes below are the review as written before the
+profile takes cash, as today; no question is open. **A758-1 built the rules** ([plan](../superpowers/plans/2026-10-19-a758-reason-rules.md));
+A758-2 to A758-5 and the §3.8 and "collect it at the counter" slices follow, and A909–A912 are what it
+left open. The notes below are the review as written before the
 answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against
 100% discount, "Invitación", role lists "with or after" editable roles, approval for a Void by
 reason or by stage — the design wins.
