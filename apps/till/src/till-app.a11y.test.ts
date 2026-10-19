@@ -277,7 +277,6 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
         .mockResolvedValue([
           { id: "z1", name: "Comedor", displayOrder: 0, active: true, serviceMode: "table_tab" },
         ]),
-      listStatuses: vi.fn().mockResolvedValue([]),
       getTablesState: vi.fn().mockResolvedValue([
         {
           id: "t4",
@@ -292,7 +291,6 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
           readyToServe: 0,
           enRoute: 0,
           timingBand: "fresh",
-          status: null,
           nextReservation: null,
           today: null,
           signals: [],

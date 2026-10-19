@@ -72,7 +72,6 @@ function table(over: Partial<TableState> = {}): TableState {
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],
@@ -271,7 +270,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
     listZones: vi.fn().mockResolvedValue([zone]),
-    listStatuses: vi.fn().mockResolvedValue([]),
     seatTable: vi
       .fn()
       .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),

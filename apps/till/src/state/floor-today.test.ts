@@ -77,7 +77,6 @@ function table(id: string, label: string, over: Partial<TableState> = {}): Table
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: today(),
     signals: [],

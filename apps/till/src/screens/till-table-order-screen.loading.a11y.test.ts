@@ -18,7 +18,6 @@ describe.each(["light", "dark"] as const)(
           products,
           menus: menuOf(products),
           lines: [],
-          statuses: [],
           orderId: "wo-4",
           draftStore: new DraftStore(),
           loading: true,

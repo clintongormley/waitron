@@ -89,7 +89,6 @@ async function mountScreen(over: Partial<TillTableOrderScreen> = {}) {
   const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products: [],
     lines,
-    statuses: [],
     orderId: "wo-4",
     party,
     bills: [openBill],

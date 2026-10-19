@@ -49,7 +49,6 @@ function table(over: Partial<TableState> = {}): TableState {
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],
@@ -120,7 +119,6 @@ describe("till-floor-screen", () => {
           tabLineCount: 3,
           tabTotal: "47.50",
           pendingToServe: 2,
-          status: null,
         }),
       ],
     });
@@ -310,25 +308,14 @@ describe("till-floor-screen", () => {
     expect(card.textContent).toContain("3");
   });
 
-  it("shows a manual service-status badge (label + colour) when the table carries one", async () => {
+  it("draws no venue-made status chip, even if a read still carried one", async () => {
     const { el } = await mount({
       tables: [
         table({
           id: "t1",
           status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
-        }),
+        } as unknown as TableState),
       ],
-    });
-    const badge = el.shadowRoot!.querySelector('[data-table="t1"] [data-status]')!;
-    expect(badge).not.toBeNull();
-    expect(badge.textContent).toContain("Reservada");
-    // The manual status colour is applied as a data-driven accent, not baked into the class list.
-    expect(badge.getAttribute("style")).toContain("#8b5cf6");
-  });
-
-  it("omits the status badge when the table has no manual status", async () => {
-    const { el } = await mount({
-      tables: [table({ id: "t1", status: null })],
     });
     expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-status]')).toBeNull();
   });

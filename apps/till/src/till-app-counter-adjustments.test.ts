@@ -209,7 +209,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
-    listStatuses: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     logout: vi.fn().mockResolvedValue(undefined),

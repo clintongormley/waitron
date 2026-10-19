@@ -36,7 +36,6 @@ function table(id: string, zoneId: string, today: Partial<TableToday> | null): T
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today:
       today === null

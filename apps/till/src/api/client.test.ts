@@ -21,7 +21,6 @@ import {
   type ProductCatalogue,
   type KitchenNotice,
   type TabLine,
-  type TableServiceStatus,
   type TableState,
   type TillMenuOffer,
   type UnpaidDepartureRequest,
@@ -2180,22 +2179,9 @@ describe("TillApi", () => {
     expect(r).toEqual(zones);
   });
 
-  it("listStatuses GETs the venue's ACTIVE service statuses and returns them", async () => {
-    // Typed `TableServiceStatus[]` so the mock is a compile-time proof the client mirror carries every
-    // field the `GET /api/statuses` route sends (`id`, `label`, `color`).
-    const statuses: TableServiceStatus[] = [
-      { id: "s1", label: "Bill requested", color: "#ef4444" },
-      { id: "s2", label: "Needs cleaning", color: "amber" },
-    ];
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(statuses));
-
-    const r = await new TillApi("", fetchStub).listStatuses();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/statuses",
-      expect.objectContaining({ method: "GET", credentials: "include" }),
-    );
-    expect(r).toEqual(statuses);
+  it("offers no venue-made status calls", () => {
+    expect("listStatuses" in TillApi.prototype).toBe(false);
+    expect("setTableStatus" in TillApi.prototype).toBe(false);
   });
 
   it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe + enRoute + timingBand and the tab fields", async () => {
@@ -2214,7 +2200,6 @@ describe("TillApi", () => {
         readyToServe: 3,
         enRoute: 1,
         timingBand: "forgotten",
-        status: { id: "s1", label: "Reservada", color: "#ff0000" },
         nextReservation: { time: "20:30" },
         today: {
           placement: { x: 2, y: 3, width: 8, height: 8, shape: "round", rotation: 15 },
@@ -2243,7 +2228,6 @@ describe("TillApi", () => {
         readyToServe: 0,
         enRoute: 0,
         timingBand: "fresh",
-        status: null,
         nextReservation: null,
         today: null,
         signals: [],
@@ -2588,55 +2572,6 @@ describe("TillApi", () => {
         }),
       }),
     );
-  });
-
-  it("setTableStatus POSTs { statusId } to the TABLE's /status route (empty 200 body)", async () => {
-    // Keyed by TABLE id (not order id): a manual service status belongs to the table, not to a tab.
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
-
-    await expect(
-      new TillApi("", fetchStub).setTableStatus("tbl-1", "st-1"),
-    ).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tables/tbl-1/status",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ statusId: "st-1" }),
-      }),
-    );
-  });
-
-  it("setTableStatus POSTs { statusId: null } to CLEAR a table's status", async () => {
-    // `null` is a first-class value the route accepts (`statusId: string | null`) — clearing the badge,
-    // not an absent field — so it must ride the body as an explicit null.
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
-
-    await new TillApi("", fetchStub).setTableStatus("tbl-1", null);
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tables/tbl-1/status",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ statusId: null }),
-      }),
-    );
-  });
-
-  it("setTableStatus surfaces { code } for an unknown status", async () => {
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ error: { code: "status.not_found" } }), { status: 404 }),
-      );
-
-    await expect(new TillApi("", fetchStub).setTableStatus("tbl-1", "gone")).rejects.toMatchObject({
-      code: "status.not_found",
-    });
   });
 
   // --- Table actions on a party (/api/parties/:id/<verb>) and bill actions (/api/bills/:id/<verb>) ---

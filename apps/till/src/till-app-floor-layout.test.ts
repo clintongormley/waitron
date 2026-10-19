@@ -40,7 +40,6 @@ const placed: TableState = {
   readyToServe: 0,
   enRoute: 0,
   timingBand: "fresh",
-  status: null,
   nextReservation: null,
   today: {
     placement: { x: 2, y: 3, width: 8, height: 8, shape: "rect", rotation: 0 },
@@ -101,7 +100,6 @@ async function mount(over: Record<string, unknown>) {
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
     getTablesState: vi.fn().mockResolvedValue([placed]),
-    listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
     putLocale: vi.fn().mockResolvedValue(undefined),
     ...over,

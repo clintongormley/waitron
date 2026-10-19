@@ -88,7 +88,6 @@ function planned(
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: today(x, over),
     signals: [],

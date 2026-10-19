@@ -87,7 +87,6 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],

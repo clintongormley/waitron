@@ -102,7 +102,6 @@ describe.each(["light", "dark"] as const)(
         {
           products: [],
           lines,
-          statuses: [],
           orderId: "wo-4",
           party,
           bills: [bill],

@@ -267,7 +267,6 @@ describe("till-held-orders: moving a counter order to a table", () => {
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],

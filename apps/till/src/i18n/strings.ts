@@ -967,8 +967,6 @@ export const en = {
   "table.none_pending": "Nothing to serve",
   "table.serve": "Mark served",
   "table.pay_title": "Charge",
-  "table.status_title": "Status",
-  "table.status_clear": "No status",
   // `table.course_default` means the product's default course; `table.course_none` an explicit
   // "no course".
   "table.course_label": "Course",
@@ -2531,8 +2529,6 @@ export const es: Record<StringKey, string> = {
   "table.none_pending": "Nada por servir",
   "table.serve": "Marcar servido",
   "table.pay_title": "Cobrar",
-  "table.status_title": "Estado",
-  "table.status_clear": "Sin estado",
   "table.course_label": "Curso",
   "table.course_default": "Por defecto",
   "table.course_none": "Sin curso",

@@ -181,7 +181,6 @@ function table(id: string, label: string, tableParty: TableParty | null): TableS
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: null,
     signals: [],
@@ -267,7 +266,6 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       .mockResolvedValue([
         { id: "z1", name: "Comedor", displayOrder: 0, active: true, serviceMode: "table_tab" },
       ]),
-    listStatuses: vi.fn().mockResolvedValue([]),
     getBillBalance: vi.fn(async (workingOrderId: string) => ({
       workingOrderId,
       status: "open",

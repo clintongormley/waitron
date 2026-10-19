@@ -21,7 +21,6 @@ import "../widgets/adjustment-dialog.js";
 import type {
   AdjustDetail,
   SubmitDraftDetail,
-  TableServiceStatus,
   TillTableOrderScreen,
 } from "./till-table-order-screen.js";
 import type { TillAdjustmentDialog } from "../widgets/adjustment-dialog.js";
@@ -117,8 +116,6 @@ const lines: TabLine[] = [
 
 const courses = [{ id: "c1", name: "Entrantes", displayOrder: 0, heldUntilFired: true }];
 
-const statuses: TableServiceStatus[] = [{ id: "s1", label: "Reservada", color: "#cc0000" }];
-
 const weightProduct: TillProduct = {
   ...products[0]!,
   id: "jamon",
@@ -184,7 +181,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
   it("has no violations with the round grid, the per-line course picker and the open tab drawer", async () => {
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
-      { products, menus, lines, statuses, courses, fireControl: "waiter", orderId: "wo-1" },
+      { products, menus, lines, courses, fireControl: "waiter", orderId: "wo-1" },
       theme,
     );
     // Ring a café into the current round so the per-line COURSE PICKER renders and is scanned.
@@ -232,7 +229,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     };
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
-      { products, lines: [...lines, childLine], statuses, courses, orderId: "wo-1" },
+      { products, lines: [...lines, childLine], courses, orderId: "wo-1" },
       theme,
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
@@ -390,7 +387,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         {
           products,
           lines: [],
-          statuses,
           orderId: "wo-1",
           party: party,
           bills: partyBills,
@@ -417,7 +413,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       readyToServe: 0,
       enRoute: 0,
       timingBand: "fresh",
-      status: null,
       nextReservation: null,
       today: null,
       party,
@@ -425,7 +420,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     };
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
-      { products, lines: [], statuses, orderId: "wo-1", party, bills: partyBills, tables: [asked] },
+      { products, lines: [], orderId: "wo-1", party, bills: partyBills, tables: [asked] },
       theme,
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
@@ -439,7 +434,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     async function withDraft(over: Partial<TillTableOrderScreen>, select: boolean) {
       const mounted = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
-        { products, menus, lines: [], statuses, courses, orderId: "wo-1", ...over },
+        { products, menus, lines: [], courses, orderId: "wo-1", ...over },
         theme,
       );
       const { el } = mounted;
@@ -599,7 +594,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
           menus,
           lines: groupLines,
           groups,
-          statuses,
           courses,
           fireControl: "waiter",
           orderId: "wo-1",
@@ -739,7 +733,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       {
         products,
         lines,
-        statuses,
         orderId: "wo-2",
         party,
         bills: [partyBills[0]!, { ...partyBills[1]!, outstanding: "10.00", hasPayments: true }],
@@ -759,7 +752,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       {
         products,
         lines,
-        statuses,
         orderId: "wo-2",
         party,
         bills: [
@@ -786,7 +778,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       {
         products,
         lines,
-        statuses,
         orderId: "wo-2",
         party,
         bills: [
@@ -826,7 +817,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       readyToServe: 0,
       enRoute: 0,
       timingBand: "fresh",
-      status: null,
       nextReservation: null,
       today: null,
       signals: [],
@@ -852,7 +842,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     async function toAction(action: string, orderId = "wo-1") {
       const mounted = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
-        { products, lines, statuses, orderId, party: ana, bills: partyBills, tables },
+        { products, lines, orderId, party: ana, bills: partyBills, tables },
         theme,
       );
       const { el } = mounted;
@@ -983,7 +973,7 @@ describe.each(["light", "dark"] as const)(
     async function phoneDraft() {
       const mounted = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
-        { products, menus, lines: [], statuses, courses, orderId: "wo-1" },
+        { products, menus, lines: [], courses, orderId: "wo-1" },
         theme,
       );
       const { el, host } = mounted;

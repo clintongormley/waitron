@@ -60,7 +60,6 @@ function planned(id: string, x: number, over: Partial<TableToday> = {}): TableSt
     readyToServe: 0,
     enRoute: 0,
     timingBand: "fresh",
-    status: null,
     nextReservation: null,
     today: today(x, over),
     signals: [],
