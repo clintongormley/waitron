@@ -1,3 +1,67 @@
+# A790: C approved; D next, 2026-10-19
+
+**A+B+C are approved only in their answered scope. D is the sole next owner question;
+the complete design, plan and build remain unapproved.** This addendum takes precedence
+over conflicting text and boards below. All existing text, including the previous
+addendum, remains verbatim as history.
+
+Authority for C: the owner answer in
+`/Users/clintongormley/waitron-campaign-f/questions.md`, 2026-10-19 about 12:45:
+**“INLINE AND FOLDABLE”**. Invoice's printer selector is a folded row in the same form
+as the named final print button, matching Receipt and the payment form. There is no
+separate invoice-printer step.
+
+For Harbour's `F/1042`, choose Invoice and see **Office · A4** in the folded row. Expand
+it, choose **Terrace belt · Receipt paper**, then press **Print a copy on Terrace belt**
+when the server designates a copy. The selector and final button stay in the same form.
+This approves C's inline interaction only. It implies no invoice memory and does not
+approve C's supporting document-step, sole-printer preselection/default, zero-printer or
+persistence proposals.
+
+A, B and the single Equipment-setting answer continue as recorded in the previous
+addendum. Device paths use their profile's receipt list for Receipt and invoice list for
+Invoice. B is the dashboard exception: without a device profile, offer every active
+printer at the sale's venue, bypassing profile lists, with browser-last-use preselection
+and a collapsible selector. No other-venue or disabled printer, borrowed till identity or
+dashboard Equipment update. The phone's receipt selector is its one Equipment setting
+at and after payment, with no separate receipt memory or new receipt-preference storage.
+
+## D: the sole next owner question
+
+**For the simplified sale `S/318` (€14.50, Spanish, one guest), should Print/reprint open
+Receipt directly (recommended), or show a document choice with only Receipt enabled and
+Invoice unavailable?**
+
+Recommend direct Receipt to skip a choice with only one available document. In either
+proposal, the Receipt form has an inline, foldable eligible-printer selector and retains
+the named final confirmation. For example, choose **Patio receipt**, retain Spanish,
+then press **Print a copy on Patio receipt** when the server designates a copy. Choosing
+a printer or folding the row does not print. This example does not settle which printer
+is initially selected or how a sole or missing printer is handled.
+
+Both alternatives keep the same recorded simplified invoice, `S/318`, €14.50 and one
+guest, and retain the offered language choice. Neither issues or converts a full invoice,
+treats A4 paper as a full invoice, or adds email. The dashboard follows B's every-active
+sale-venue list, not the historical profile suggestion; a device follows its receipt
+list and the phone's single Equipment setting. D asks only about the document choice;
+broader sole-printer, zero-printer and fallback behavior remains proposed.
+
+Retain the previous addendum's authorization, sale-location rechecks, fixed request facts
+and outcome reconciliation. No silent rerouting or implicit print is authorized. Keep
+server-derived original/copy, the shared full-invoice delivery guard and the closed public
+F1 gate. No payment, fiscal or drawer behavior change is proposed. First-use/further
+fallback, exact browser storage, Equipment save/rollback/concurrency, portable-receipt
+holder enforcement and remaining persistence choices still need agreement before build.
+
+The [C-and-D static illustrations](../../backlog/mockups/a790-document-and-printer-choice/revision-c-and-d/README.md)
+show approved C and D's two alternatives. Eight PNGs were rendered in headless Chromium
+and visually inspected in English/Spanish, both themes, at 390/1280 px; native SVG text
+boxes were measured within the drawings. Earlier boards remain historical wherever they
+conflict. These static checks supply no runtime, test, hardware or legal evidence; the
+source map remains historical and runtime-unverified.
+
+---
+
 # A790: latest decisions, 2026-10-19, after the dashboard and Equipment answers
 
 **A and B are approved; C is the sole next owner question. The complete design is not

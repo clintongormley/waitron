@@ -1,3 +1,43 @@
+# A790: C approved; D next, 2026-10-19
+
+**A+B+C are approved only in their answered scope; ask D alone next. The complete
+design, plan and build remain unapproved.** This addendum and the
+[latest design addendum](../../../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+take precedence over conflicting text and boards. All existing README bytes, including
+the previous addendum, remain below as history.
+
+C authority: the owner's **“INLINE AND FOLDABLE”** answer in lane F's `questions.md`,
+2026-10-19 about 12:45. For `F/1042`, Invoice shows **Office · A4** folded; expand and
+choose **Terrace belt · Receipt paper**, then **Print a copy on Terrace belt** when the
+server designates a copy. The selector shares the final button's form, matching Receipt
+and payment; no separate printer step. C approves no invoice memory, supporting
+document-step, sole-printer/default, zero-printer or persistence proposal.
+
+**D:** for the simplified sale `S/318` (€14.50, Spanish, one guest), should Print/reprint
+open Receipt directly (recommended), or show a document choice with only Receipt enabled
+and Invoice unavailable? Direct Receipt skips a choice with one available document.
+Both proposals retain an inline, foldable eligible-printer selector and final named
+confirmation, for example **Print a copy on Patio receipt** when server-designated.
+Keep the recorded simplified invoice, number, amount, guest count and offered language;
+neither alternative issues/converts a full invoice, treats A4 as F1, or adds email.
+
+Preserve B's every-active-printer list at the sale's venue for a dashboard without a
+device profile, with collapsible browser-last-use preselection. Device lists remain by
+role; the phone's receipt choice is its one Equipment setting, without separate memory
+or new receipt storage. No silent rerouting or implicit print; retain server-derived
+original/copy, the shared delivery guard and the closed public-F1 gate, with no fiscal
+or drawer change. D does not approve broader sole/zero-printer or fallback behavior.
+Browser storage, Equipment save/rollback/concurrency, portable receipt-holder enforcement,
+remaining persistence and full-design/build agreement stay open.
+
+[C-and-D static illustrations](revision-c-and-d/README.md) show approved C and D's two
+alternatives. Eight PNGs were rendered in headless Chromium and visually inspected in
+EN/ES, light/dark, at 390/1280 px; native SVG text boxes were measured within the drawings.
+Earlier boards retain historical status where superseded. These static checks supply no
+runtime, test, hardware or legal evidence.
+
+---
+
 # A790: latest dashboard and Equipment decisions, 2026-10-19
 
 **A and B are approved; C is the sole next owner question. The complete design is not

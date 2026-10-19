@@ -3403,21 +3403,33 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A790. Choose a document and its permitted printer.** The owner's A661 Q1–Q6 answers
   and latest 2026-10-19 decisions are recorded in the [design addendum](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
   with [mock-ups](backlog/mockups/a790-document-and-printer-choice/README.md).
-  **A+B approved:** Receipt and Invoice retain the same recorded full invoice. A dashboard
-  without a device profile offers every active printer at the sale's venue, bypassing
+  **A+B+C approved only in their answered scope:** Receipt and Invoice retain the same
+  recorded full invoice. C's 2026-10-19 ~12:45 **“INLINE AND FOLDABLE”** answer puts
+  Invoice's folded printer row in the same form as its named final print button, matching
+  Receipt/payment, with no separate printer step: `F/1042`, Office · A4 folded, expand to
+  Terrace belt · Receipt paper, then **Print a copy on Terrace belt** when server-designated.
+  No invoice memory or supporting document-step/sole-printer/default/zero-printer approval.
+  A dashboard without a device profile offers every active printer at the sale's venue, bypassing
   profile lists, with browser-last-use preselected and collapsible; no Change profile,
   dedicated profile, borrowed till identity or Equipment update. Harbour's sale excludes
   Hillside and disabled printers. Active portable printers stay listed; receipt-holder
   enforcement remains unresolved. The phone's inline receipt selector at/after payment
   is its one Equipment setting: Mesa 4 chooses Terraza, Mesa 9 and Equipment show Terraza;
-  no accepted-print-only memory or new receipt-preference storage. Ask **C only** next:
-  inline collapsible Invoice selector with named final confirmation (recommended), or a
-  separate printer step. Step/one-option/zero-option details, D, first-use and further
-  fallback, exact browser storage/persistence, Equipment save/rollback/concurrency and
-  full-design/build agreement remain open. Preserve authorization, sale-location rechecks,
-  request facts, uncertain-outcome reconciliation, original/copy and fiscal/public-F1 gates;
-  no silent destination replacement or implicit print. [Revised boards](backlog/mockups/a790-document-and-printer-choice/revision-dashboard-equipment/README.md);
-  existing design/README bodies and conflicting boards remain history. Docs only, with no
+  no accepted-print-only memory or new receipt-preference storage. Device paths retain
+  their receipt and invoice lists by role. Ask **D only** next: for simplified `S/318`,
+  €14.50, Spanish, one guest, open Receipt directly (recommended), or show a document
+  choice with only Receipt enabled and Invoice unavailable? Both retain an inline,
+  foldable eligible-printer selector and final named confirmation, for example Patio
+  receipt; keep the recorded invoice/number/amount/guests and offered language. Neither
+  issues/converts a full invoice, treats A4 as F1, or adds email. Supporting document-step,
+  sole/zero-printer and fallback proposals, exact browser storage/persistence, Equipment
+  save/rollback/concurrency, portable receipt-holder enforcement and complete design/plan/build
+  agreement remain open. Preserve authorization, sale-location rechecks,
+  request facts, uncertain-outcome reconciliation, server-derived original/copy, shared
+  delivery guard and closed public-F1 gate; no silent destination replacement, implicit
+  print, fiscal or drawer change. [C-and-D static illustrations](backlog/mockups/a790-document-and-printer-choice/revision-c-and-d/README.md)
+  include eight inspected EN/ES/theme/width PNGs, with native SVG text boxes measured.
+  Existing design/README bodies and conflicting boards remain history. Docs only, with no
   runtime/test/hardware evidence; the source map stays historical and runtime-unverified.
 
 - **Loose ends left by A661 (#1745).**
