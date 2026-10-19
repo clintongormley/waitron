@@ -234,7 +234,7 @@ describe("Cancel item service command", () => {
           quantity: "2",
           reasonId: ask.reasonId,
           note: ask.note,
-          operatorId: venue.supervisorId,
+          operatorId: venue.staffId,
         },
         venue.cfg.locale,
       ),
@@ -242,7 +242,7 @@ describe("Cancel item service command", () => {
     expect(preview).toMatchObject({
       reduction: "60.00",
       nominalValue: "60.00",
-      needsApproval: null,
+      needsApproval: { by: "refund" },
     });
     expect(await snapshot(order)).toEqual(before);
     await cancel(order, ask);

@@ -378,6 +378,19 @@ describe("the public cancellation read and command", () => {
     expect(JSON.stringify((await frozen()).commands)).not.toContain(`"${PINS.manager}"`);
   });
 
+  it("refuses a staff member's don't-charge cancel of a started dish without a PIN", async () => {
+    const p = await fixture("fire");
+    const body = await bodyFor(p, { preparationStarted: true });
+    const before = await frozen();
+    const refused = await post(p, body);
+    expect(refused.status).toBe(403);
+    expect(refused.json).toEqual({
+      code: "adjustment.approval_required",
+      params: { approval: "refund" },
+    });
+    expect(await frozen()).toEqual(before);
+  });
+
   it("removes fired food without a reason after preparation No", async () => {
     const p = await fixture("fire");
     const answer = await post(
