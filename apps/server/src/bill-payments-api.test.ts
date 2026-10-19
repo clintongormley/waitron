@@ -2,6 +2,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
+import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
@@ -425,7 +426,11 @@ async function request(
             await observedPaymentBody(
               suite.db,
               path,
-              await observedGroupSubmitBody(suite.db, path, body),
+              await observedGroupSubmitBody(
+                suite.db,
+                path,
+                observedWholePaymentBody(suite.db, path, body),
+              ),
             ),
           ),
         }),

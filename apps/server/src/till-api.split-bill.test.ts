@@ -1,6 +1,7 @@
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
+import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -552,11 +553,13 @@ describe("a split-off check after the till that made it has forgotten it", () =>
     const pay = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-        workingOrderId: checkId,
-      }),
+      body: JSON.stringify(
+        observedWholePaymentBody(venueSuite.db, "/api/sales", {
+          lines: [],
+          tender: { method: "cash", amount: "5.00" },
+          workingOrderId: checkId,
+        }),
+      ),
     });
     expect(pay.status).toBe(200);
     expect(await pay.json()).toMatchObject({ total: "1.50", orderLabel: "Mesa 5" });

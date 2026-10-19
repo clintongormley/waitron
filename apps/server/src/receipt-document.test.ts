@@ -22,6 +22,31 @@ function withoutOperationDate(): ReceiptDocumentInput["result"] {
 }
 
 describe("format-neutral invoice content", () => {
+  it("keeps separate filed discount families when two positions reuse the same line object", () => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    const line = {
+      descriptions: { "es-ES": "Repeated dish" },
+      quantity: "1",
+      gross: "8.00",
+      net: { unitPrice: "8.00", priceQuantity: "1.000", base: "8.00", tax: "0.00", rate: "0" },
+      listGross: "10.00",
+      listUnitPriceGross: "10.00",
+      adjustments: [{ kind: "discount" as const, amount: "2.00" }],
+    };
+    input.result.total = "16.00";
+    input.result.vatBreakdown = [{ rate: "0", base: "16.00", tax: "0.00" }];
+    input.result.lines = [line, line];
+    const rows = buildReceiptDocument(input).elements.flatMap((element) =>
+      element.kind === "table" ? element.table.rows : [],
+    );
+    expect(rows.map((row) => [row.item, row.amount])).toEqual([
+      ["Repeated dish", "10,00"],
+      ["Descuento", "-2,00"],
+      ["Repeated dish", "10,00"],
+      ["Descuento", "-2,00"],
+    ]);
+  });
+
   it("keeps late extras and their neighbours' separate discount families on the invoice", () => {
     const row = (name: string, amount: string, list?: string) => ({
       descriptions: { "es-ES": name },

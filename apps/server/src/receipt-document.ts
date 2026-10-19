@@ -302,12 +302,14 @@ export function buildReceiptDocument({
   const groups = groupByParent(result.lines);
   const filedGroups: FiguredGroup[] = [];
   if (!simplified) {
-    const filedIndex = new Map(result.lines.map((line, index) => [line, index]));
+    let nextLine = 0;
     groups.forEach(({ dish, options }, at) => {
+      const filedIndex = result.lines.indexOf(dish, nextLine);
+      nextLine = filedIndex + 1;
       if (!isFiled(dish) || !options.every(isFiled)) return;
       filedGroups.push({
         at,
-        family: dish.dishFamily ?? filedIndex.get(dish)!,
+        family: dish.dishFamily ?? filedIndex,
         lines: [dish, ...options].map(figured),
       });
     });

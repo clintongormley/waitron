@@ -1384,6 +1384,24 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
     });
     expect(total(after)).toBe("0.00");
 
+    const unserved = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${t.partyId}/finish`,
+      { expectedPartyRevision: await revisionOf(suite, t.partyId) },
+    );
+    expect([unserved.status, unserved.json.code]).toEqual([409, "party.unserved_dishes"]);
+    const dishes = (unserved.json.params as { dishes: { lineId: string; quantity: string }[] })
+      .dishes;
+    expect(dishes).toHaveLength(1);
+    const served = await send(venue.app, venue.cookie, "POST", `/api/parties/${t.partyId}/served`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(suite, t.partyId),
+      items: dishes.map(({ lineId, quantity }) => ({ lineId, quantity })),
+    });
+    expect(served.status, JSON.stringify(served.json)).toBe(200);
+
     const finished = await send(
       venue.app,
       venue.cookie,

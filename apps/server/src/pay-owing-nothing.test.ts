@@ -211,9 +211,22 @@ describe("Pay on a bill whose every line was given away", () => {
     expect(registroCount(venue, tabId)).toBe(0);
   });
 
-  it("lets Finish table close the party once the bill is paid", async () => {
+  it("lets Finish table close the party once the bill is paid and its food served", async () => {
     const { partyId, tabId } = await givenAwayBill();
     expect((await pay(tabId, { method: "cash", amount: "0.00" })).status).toBe(200);
+    const unserved = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/finish`, {
+      expectedPartyRevision: await partyRevisionOf(venue, tabId),
+    });
+    expect([unserved.status, unserved.json.code]).toEqual([409, "party.unserved_dishes"]);
+    const dishes = (unserved.json.params as { dishes: { lineId: string; quantity: string }[] })
+      .dishes;
+    expect(dishes).toHaveLength(1);
+    const served = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/served`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await partyRevisionOf(venue, tabId),
+      items: dishes.map(({ lineId, quantity }) => ({ lineId, quantity })),
+    });
+    expect(served.status, JSON.stringify(served.json)).toBe(200);
     const expectedPartyRevision = await partyRevisionOf(venue, tabId);
 
     const finished = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/finish`, {

@@ -658,6 +658,19 @@ describe("paying a moved bill, by its state", () => {
     const collected = await post(`/api/working-orders/${id}/collect`, {
       tender: { method: "cash", amount: "18.00" },
     });
+    const unserved = await post(`/api/parties/${ana.partyId}/finish`, {
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+    expect([unserved.status, unserved.json.code]).toEqual([409, "party.unserved_dishes"]);
+    const dishes = (unserved.json.params as { dishes: { lineId: string; quantity: string }[] })
+      .dishes;
+    expect(dishes).toHaveLength(2);
+    const served = await post(`/api/parties/${ana.partyId}/served`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: revisionOf(ana.partyId),
+      items: dishes.map(({ lineId, quantity }) => ({ lineId, quantity })),
+    });
+    expect(served.status, JSON.stringify(served.json)).toBe(200);
     const finished = await post(`/api/parties/${ana.partyId}/finish`, {
       expectedPartyRevision: revisionOf(ana.partyId),
     });
