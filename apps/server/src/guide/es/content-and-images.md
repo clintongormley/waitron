@@ -92,8 +92,7 @@ de contenido predeterminado, o en otro de tus idiomas de contenido donde un nomb
 él, sea cual sea el idioma del ticket. Se guardan en ese idioma cuando se añade un plato a un pedido,
 así que cambiar el idioma de contenido predeterminado no reescribe los tickets ya emitidos. Si el
 idioma del ticket no es uno de tus idiomas de contenido, esta página y la tarjeta Valores
-predeterminados de Ajustes del local muestran una nota que lo indica, salvo si solo puedes ver esa
-tarjeta.
+predeterminados de Ajustes del local muestran una nota que lo indica.
 
 Las pantallas de cocina, los pedidos que recuperas y los informes de ventas conservan los nombres
 registrados, aunque más tarde quites ese idioma de tus ajustes de contenido. El idioma de los
