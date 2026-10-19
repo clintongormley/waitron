@@ -28,10 +28,11 @@ export interface DutyReport {
   /** How long this duty took, by the monotonic clock; present when the duty threw too. */
   durationMs: number;
   /**
-   * How many runs this pass ended `outcome: "parked"`: they exhausted `maxAttempts`, and nothing will
-   * claim that (duty, period) again. A `runDue` that parked every run still returns normally, so
-   * `recordPass` reads this as it reads `skipped`. `failed` is excluded because a failed run retries
-   * on its own backoff. Always `0` for `fiscal.drain`; undefined when the duty threw.
+   * How many runs this pass ended `outcome: "parked"`: they exhausted `maxAttempts`, and only the
+   * duty's `retryParkedAfterMs` brings that (duty, period) back. A `runDue` that parked every run
+   * still returns normally, so `recordPass` reads this as it reads `skipped`. `failed` is excluded
+   * because a failed run retries on its own backoff. Always `0` for `fiscal.drain`; undefined when
+   * the duty threw.
    */
   parked?: number;
 }
@@ -201,7 +202,7 @@ function noteAwaitingCert(deps: PassDeps, awaiting: boolean): void {
 
 /**
  * One line per run that did not succeed: `warn` for `failed`, which still retries on its own backoff,
- * and `error` for `parked`, which nothing will claim again.
+ * and `error` for `parked`, which has spent its attempts.
  */
 function logNonSucceededRun(log: Logger, record: RunRecord): void {
   if (record.outcome === "succeeded") return;

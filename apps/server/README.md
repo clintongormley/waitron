@@ -15,7 +15,7 @@ This document is written for whoever deploys this process, not whoever reads its
 **The one thing worth remembering before anything else:** `drain` carries a legal, hourly submission
 duty under Spain's Veri\*Factu regulation (art. 16.4). A `/health` that reports `200` is a claim that
 the pass was not wholesale abandoned and no Stripe settlement-audit period has been
-permanently parked — it is **not** a claim that every individual fiscal record has actually been
+parked — it is **not** a claim that every individual fiscal record has actually been
 accepted by AEAT. A database whose records reach AEAT but are individually rejected reads `200` with
 `lastOkAt` refreshing every pass; that is visible only via `recordsHalted`/`incidentsRaised` in the
 `drain.complete` log line, the `incidents` and `filing_cases` tables, and the dashboard's alerts
@@ -526,8 +526,9 @@ things — three visible in the body above without needing the logs, one that ne
   via the `drain.tenant_skipped` / `reconcile.pair_skipped` log lines (next section); the most
   common cause is a missing, unreadable, or stale-shaped credential.
 - **`parked` > 0, `payments.reconcile.stripe` only** — a Stripe reconcile run exhausted
-  `WAITRON_SCHEDULER_MAX_ATTEMPTS` (default 3) and is now permanently abandoned for that (duty,
-  period): nothing claims it again automatically, unlike a `skipped` pair (which retries within one
+  `WAITRON_SCHEDULER_MAX_ATTEMPTS` (default 3) for that (duty, period), and a fresh run of the same
+  period is queued for a day later (`retryParkedAfterMs`, `src/reconcile-duty.ts`), unlike a
+  `skipped` pair (which retries within one
   `WAITRON_SKIP_RETRY_MS` interval, folded as a minimum against an earlier gate — see the env-var
   table above) or a `failed` one (which retries on its own backoff and does NOT flip this field —
   see `src/pass.ts`'s own comment on why). `fiscal.drain` has no equivalent terminal outcome at
@@ -562,10 +563,10 @@ as a minimum against whatever a healthy duty computed the same pass, so it can o
 sooner, never later. That means the fix lands within one skip-retry interval, not necessarily the
 very next pass as it would for a whole-duty failure below — still comfortably inside `drain`'s
 hourly legal cadence, and no longer the 5-second-forever loop a missing certificate used to produce
-(see `WAITRON_SKIP_RETRY_MS` in the table above). A **parked** reconcile run is different: nothing
-re-attempts it on its own, ever — there is no
-remediation UI or re-sweep of an abandoned period, so a parked settlement audit needs a
-human to investigate directly, via the `reconcile.run_parked` line's duty/period. If the
+(see `WAITRON_SKIP_RETRY_MS` in the table above). A **parked** reconcile run is different: it is tried
+again a day after it parked, as a new run with fresh attempts, and again a day after each later
+park, so a cause that does not clear on its own needs a human to investigate, via the
+`reconcile.run_parked` line's duty/period. If the
 WHOLE pass is failing rather than one duty, restart is unlikely to help either — the process
 already retries every pass on its own at `WAITRON_MIN_TICK_MS`'s fast cadence (unlike a skip, a
 whole-duty throw still reports `now`), so a repeating `503` past a few cycles means the underlying
@@ -601,8 +602,8 @@ The ones worth grepping for:
   reconcile run failed this attempt but is still retrying on its own backoff — a `next_attempt_at`
   exists. Never flips `/health`; see the `skipped`/`parked` bullets above.
 - **`reconcile.run_parked`** (`error`) — `{ duty, period, errorCode }`. One claimed
-  reconcile run exhausted `WAITRON_SCHEDULER_MAX_ATTEMPTS` and is now abandoned for that
-  (duty, period) permanently — nothing will claim it again. This is what `/health`'s
+  reconcile run exhausted `WAITRON_SCHEDULER_MAX_ATTEMPTS`; a fresh run of that (duty, period) is
+  due a day later. This is what `/health`'s
   `parked` count (above) is counting.
 - **`duty.failed`** (`error`) — `{ duty, errorCode }`. The WHOLE duty threw for this pass (not a
   contained skip) — `fiscal.drain` or `payments.reconcile.stripe` itself.

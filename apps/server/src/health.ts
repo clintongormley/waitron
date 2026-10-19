@@ -70,7 +70,7 @@ export interface DutyRecord {
 /**
  * A pass with `skipped > 0` or `parked > 0` counts as a FAILURE even though it reports `ok: true`
  * (`ok: false` means only that the duty threw): a skip leaves an obligation unmet, and a parked run
- * is never claimed again. A `failed` run is still retried, so it does not count.
+ * has spent its attempts. A `failed` run is still retried, so it does not count.
  *
  * `/health` holds one verdict per top-level duty, so one skipped or parked item marks the whole
  * duty degraded.

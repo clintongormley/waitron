@@ -22,11 +22,9 @@ export interface DutyOutcome {
  * One recurring duty over calendar periods. Typed structurally and injected, so no non-test file in
  * this package imports `@waitron/payments` or `@waitron/fiscal`.
  *
- * `drain` must not become a `PeriodDuty`: once `maxAttempts` attempts are spent the period parks,
- * and a parked period is tried again only when the duty sets `retryParkedAfterMs`, and only after
- * that delay, while drain's hourly retry is a legal duty. It also keeps its own persisted
- * schedule (`envio_flujo.proximo_envio_en`, and `envios.proximo_intento_en` per record), which a
- * ledger row would duplicate. There is no second duty kind for `nextDueAt`-shaped duties: one was
+ * `drain` must not become a `PeriodDuty`: it keeps its own persisted schedule
+ * (`envio_flujo.proximo_envio_en`, and `envios.proximo_intento_en` per record), which a ledger row
+ * would duplicate. There is no second duty kind for `nextDueAt`-shaped duties: one was
  * ruled out for `drain` and deferred for `forward`.
  */
 export interface PeriodDuty {
