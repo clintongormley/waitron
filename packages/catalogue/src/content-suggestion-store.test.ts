@@ -741,9 +741,11 @@ it("a later run replaces more than one batch of an item's rows in one store", as
   const seeded = [ref(venue.bread), ref(venue.wine), ref(venue.cheese)];
   const one = await runningJob(suite.db);
   await store(one.id, done(answer(one.sent, "ONE", false), seeded));
+  expect(await jobRow(one.id)).toMatchObject({ state: "done", failure: null });
   await app((tx) => recordSuggestionJobReleased(tx, one.id));
   const two = await runningJob(suite.db);
   await store(two.id, done(answer(two.sent, "TWO", true), seeded));
+  expect(await jobRow(two.id)).toMatchObject({ state: "done", failure: null });
   const rows = await app((tx) =>
     tx.select().from(contentSuggestions).where(inArray(contentSuggestions.itemId, ids)),
   );
@@ -970,6 +972,8 @@ it("a last page whose accounted items fall short of Cloud's total ends the job",
   );
   expect(await store(job.id, page(0, null, translateAll(job.sent)))).toBe("ended");
   expect(await jobRow(job.id)).toMatchObject({ state: "failed", failure: "rejected" });
+  expect(await jobRow(job.id)).toMatchObject({ released: true });
+  expect(await app(allJobs)).toHaveLength(1);
 });
 
 it("a last page that accounts for Cloud's total but not every sent item ends the job", async () => {

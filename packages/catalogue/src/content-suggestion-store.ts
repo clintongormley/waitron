@@ -84,8 +84,9 @@ export type PageStored = "stored" | "complete" | "ended" | "stale";
 /**
  * Stores one page of a job's results, only at the job's saved position. The last page also finishes
  * the job and, in the same transaction, inserts the run's next job, so a run never has a moment with
- * no active job between two of its jobs. A last page that leaves an item of the job unaccounted for
- * ends the job failed instead, and Cloud is not told the walk is complete.
+ * no active job between two of its jobs. A last page that leaves an item of the job unaccounted for,
+ * or leaves a count of accounted items other than Cloud's total, ends the job failed instead, and
+ * Cloud is not told the walk is complete.
  */
 export async function storeSuggestionPage(
   tx: Transaction,

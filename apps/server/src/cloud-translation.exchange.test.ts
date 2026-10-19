@@ -59,6 +59,20 @@ it("submits, polls, collects and releases one job", () =>
     expect(f.jobs.get(job.jobId)!.state).toBe("collected");
   }));
 
+it("collect signs its cursor even when it is 0", () =>
+  withFake(async (f) => {
+    const job = await f.client.translation.submit(op(), body(1));
+    await f.client.translation.status(job.jobId);
+    await f.client.translation.status(job.jobId);
+    const fetch = vi.spyOn(globalThis, "fetch");
+    await f.client.translation.collect(job.jobId, 0);
+    const [url, init] = fetch.mock.calls.at(-1)!;
+    expect(String(url)).toMatch(/\/translation-collect$/);
+    const { payload } = JSON.parse(String(init!.body)) as { payload: string };
+    const values = JSON.parse(Buffer.from(payload, "base64url").toString()) as unknown[];
+    expect(values[7]).toBe(JSON.stringify({ version: 1, jobId: job.jobId, cursor: 0 }));
+  }));
+
 it("a lost submit reply retried with the same operation ID returns the same job", () =>
   withFake(async (f) => {
     const id = op();

@@ -386,17 +386,25 @@ it("the status reply's limit reason reaches the last page of a multi-page walk",
   }
 });
 
-/** Stores page 0 of three, then stops the step on a failed collect at cursor 1. */
-async function stopBetweenPages(f: Fake) {
+/**
+ * Stores page 0 of three, then stops the step on a failed collect at cursor 1. `beforeResume` runs
+ * once, just before the next collect at cursor 1 reaches the fake.
+ */
+async function stopBetweenPages(f: Fake, beforeResume?: () => void) {
   await venue(THREE);
   f.pageItems(1);
   await inTx((tx) => startSuggestionRun(tx, context));
   let failedOnce = false;
+  let resumed = false;
   const runner = createContentSuggestionRunner(
     lossy(f, (cursor, call) => {
       if (cursor === 1 && !failedOnce) {
         failedOnce = true;
         return Promise.reject(new AppError("cloud.unavailable", {}));
+      }
+      if (cursor === 1 && beforeResume && !resumed) {
+        resumed = true;
+        beforeResume();
       }
       return call();
     }),
@@ -410,19 +418,20 @@ async function stopBetweenPages(f: Fake) {
 
 const notices = () => inTx((tx) => contentSuggestionsAlertSource().read({ tx, now: new Date() }));
 
-const endedByCloud: [string, (f: Fake, jobId: string) => void][] = [
+const endedByCloud: [string, (f: Fake, jobId: string) => void, string][] = [
   [
     "expired, so collect answers 410",
     (f, jobId) => {
       f.expire(jobId);
       f.statusOverride({ state: "done" });
     },
+    COLLECT,
   ],
-  ["deleted, so Cloud answers 404", (f, jobId) => void f.jobs.delete(jobId)],
+  ["deleted, so Cloud answers 404", (f, jobId) => void f.jobs.delete(jobId), STATUS],
 ];
 it.each(endedByCloud)(
   "a walk Cloud ends between pages (%s) keeps the stored page, sends no release and says what could not be done",
-  async (_name, arrange) => {
+  async (_name, arrange, refusedAt) => {
     const f = await connected();
     try {
       const runner = await stopBetweenPages(f);
@@ -430,6 +439,8 @@ it.each(endedByCloud)(
 
       await runToIdle(runner);
       expect(actions(f)).not.toContain(RELEASE);
+      expect(actions(f).at(-1)).toBe(refusedAt);
+      if (refusedAt === COLLECT) expect(cursors(f)).toEqual([0, 1]);
       const read = await notices();
       expect(read).toHaveLength(1);
       expect(read[0]).toMatchObject({
@@ -447,6 +458,37 @@ it.each(endedByCloud)(
     }
   },
 );
+
+it("a job Cloud deletes during a walk is refused at the next collect between pages (404) and ends like an expired one", async () => {
+  const f = await connected();
+  try {
+    let deleted = false;
+    const runner = await stopBetweenPages(f, () => {
+      deleted = f.jobs.delete([...f.jobs.keys()][0]!);
+    });
+
+    await runToIdle(runner);
+    expect(deleted).toBe(true);
+    expect(actions(f).slice(-2)).toEqual([STATUS, COLLECT]);
+    // The fake records a collect's cursor only for a job it finds, so the refused one shows none.
+    expect(cursors(f)).toEqual([0, undefined]);
+    expect(actions(f)).not.toContain(RELEASE);
+    const read = await notices();
+    expect(read).toHaveLength(1);
+    expect(read[0]).toMatchObject({
+      code: "content.suggestions_ready_partly",
+      params: { count: 1, failed: 2 },
+    });
+    expect(await runView()).toMatchObject({
+      state: "expired",
+      code: "content.suggestion_expired",
+      waiting: 1,
+      failed: 2,
+    });
+  } finally {
+    await f.close();
+  }
+});
 
 it("a cursor Cloud refuses as invalid ends the job rejected without a release", async () => {
   const f = await connected();
@@ -482,6 +524,12 @@ it("a walk the box ends itself between pages keeps the stored page and sends no 
       code: "cloud.not_configured",
       waiting: 1,
       failed: 2,
+    });
+    const read = await notices();
+    expect(read).toHaveLength(1);
+    expect(read[0]).toMatchObject({
+      code: "content.suggestions_ready_partly",
+      params: { failed: 2 },
     });
   } finally {
     await f.close();
