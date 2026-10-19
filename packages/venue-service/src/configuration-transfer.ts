@@ -716,7 +716,8 @@ function validateServiceSteps(tables: Tables): void {
   const lowest = new Map<unknown, number>();
   for (const row of tables.service_steps ?? []) {
     if (!departments.has(row.department_id)) refuse("service_steps.department_id");
-    if (typeof row.name !== "string" || row.name.trim() === "") refuse("service_steps.name");
+    if (typeof row.name !== "string" || row.name === "" || row.name.trim() !== row.name)
+      refuse("service_steps.name");
     const position = row.position;
     if (typeof position !== "number" || !Number.isInteger(position) || position < 0)
       refuse("service_steps.position");

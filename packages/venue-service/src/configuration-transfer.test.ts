@@ -2022,6 +2022,8 @@ describe("validateServiceSteps", () => {
   it.each<[string, Row]>([
     ["not text", { name: 7 }],
     ["blank once trimmed", { name: "   " }],
+    ["empty", { name: "" }],
+    ["with spaces around it", { name: " Set up " }],
   ])("refuses a name %s", (_label, overrides) => {
     expect(() => validate(bundle([stepRow(overrides)]))).toThrowError(
       refusal("service_steps.name"),
