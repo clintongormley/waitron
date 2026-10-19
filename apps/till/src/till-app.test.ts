@@ -19979,6 +19979,60 @@ describe("switching the device's profile from the header", () => {
     expect(counter(el)).toBeNull();
     expect(profileDialog(el)).toBeNull();
   });
+  it("Bill gate cannot reopen the profile chooser from an identity reply after logout", async () => {
+    let finish!: (value: Awaited<ReturnType<TillApi["getDeviceIdentity"]>>) => void;
+    const { el } = await openProfile();
+    emit(profileDialog(el)!, "close");
+    await flush(el);
+    vi.mocked(currentApi.getDeviceIdentity).mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          finish = done;
+        }),
+    );
+    profileButton(el)!.click();
+    await flush(el);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    finish({ ...identity, kitchenScreens: [] });
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(profileDialog(el)).toBeNull();
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+  });
+  it("Bill gate sends only one profile switch while its request is pending", async () => {
+    let finish!: (value: { activeProfileId: string }) => void;
+    const switchDeviceProfile = vi.fn(
+      () =>
+        new Promise<{ activeProfileId: string }>((done) => {
+          finish = done;
+        }),
+    );
+    const { el } = await openProfile({ switchDeviceProfile });
+    const dialog = profileDialog(el)!;
+    emit(dialog, "profile-switch", { profileId: BAR.id });
+    emit(dialog, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    expect(switchDeviceProfile).toHaveBeenCalledExactlyOnceWith(BAR.id);
+    expect(dialog.busy).toBe(true);
+    finish({ activeProfileId: BAR.id });
+    await vi.waitFor(() => expect(profileDialog(el)).toBeNull());
+  });
+  it("Bill gate refuses a pending profile change when its chooser closes before discard", async () => {
+    const { el, owner } = await scheduleWithProfile("Family visit");
+    const chooser = profileDialog(el)!;
+    emit(chooser, "profile-switch", { profileId: BAR.id });
+    await flush(el);
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    expect(question.open).toBe(true);
+    emit(chooser, "close");
+    await flush(el);
+    emit(question, "wt-unsaved-choice", { decision: "discard" });
+    await flush(el);
+    expect(profileDialog(el)).toBeNull();
+    expect(schedule(el)).toBe(owner);
+    expect(currentApi.switchDeviceProfile).not.toHaveBeenCalled();
+  });
   it("offers no Profile button on a device approved for one profile", async () => {
     const { el } = await mountApp({
       getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity, approvedProfiles: [COUNTER] }),
@@ -22211,6 +22265,66 @@ describe("A737 Find a bill page", () => {
     last4: "0091",
   };
   const refundView = (el: TillApp) => el.shadowRoot!.querySelector("till-refund-acknowledgment");
+  it("Bill gate reports an acknowledgment print refusal, permits retry, and blocks original opening while printing", async () => {
+    let refuse!: (error: Error) => void;
+    const reprintTenderRefund = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            refuse = reject;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    const getTransactionReceipt = vi.fn().mockResolvedValue(saleResult);
+    const { el, view } = await open({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES"] }),
+      getTenderRefundAcknowledgment: vi.fn().mockResolvedValue(acknowledgment),
+      reprintTenderRefund,
+      getTransactionReceipt,
+    });
+    emit(view, "find-transaction-open", { row: refundRow() });
+    await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
+    const receipt = refundView(el)!;
+    emit(receipt, "reprint");
+    await vi.waitFor(() => expect(receipt.busy).toBe(true));
+    emit(receipt, "refund-original");
+    await flush(el);
+    expect(getTransactionReceipt).not.toHaveBeenCalled();
+    expect(refundView(el)).toBe(receipt);
+    refuse(new TypeError("printer offline"));
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("reprint.error")));
+    expect(receipt.busy).toBe(false);
+    emit(receipt, "reprint");
+    await vi.waitFor(() => expect(reprintTenderRefund).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(receipt.busy).toBe(false);
+    expect(el.shadowRoot!.textContent).not.toContain(t("reprint.error"));
+    emit(receipt, "refund-original");
+    await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+    expect(getTransactionReceipt).toHaveBeenCalledExactlyOnceWith("sale-1", {
+      signal: expect.any(AbortSignal),
+    });
+  });
+  it("Bill gate opens only the first transaction while its receipt is loading", async () => {
+    let finish!: (value: TillSaleResult) => void;
+    const getTransactionReceipt = vi.fn(
+      () =>
+        new Promise<TillSaleResult>((done) => {
+          finish = done;
+        }),
+    );
+    const { el, view } = await open({ getTransactionReceipt });
+    emit(view, "find-transaction-open", { row: transactionRow({ saleId: "sale-first" }) });
+    emit(view, "find-transaction-open", { row: transactionRow({ saleId: "sale-second" }) });
+    await flush(el);
+    expect(getTransactionReceipt).toHaveBeenCalledExactlyOnceWith("sale-first", {
+      signal: expect.any(AbortSignal),
+    });
+    expect(ticket(el)).toBeNull();
+    finish(saleResult);
+    await vi.waitFor(() => expect(ticket(el)?.result).toEqual(saleResult));
+  });
   it("opens a refund as its own payment acknowledgment, with no invoice reads or refund-on-refund", async () => {
     const getTenderRefundAcknowledgment = vi.fn().mockResolvedValue(acknowledgment);
     const getTransactionReceipt = vi.fn().mockResolvedValue(saleResult),
