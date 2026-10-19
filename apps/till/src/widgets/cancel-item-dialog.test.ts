@@ -31,6 +31,7 @@ const read = (
   stage: CancellationRead["context"]["stage"] = "not_started",
 ): CancellationRead => ({
   billId: "bill-1",
+  ...(status === "settled" ? { refundValue: { quantity: "3.000", gross: "10.00" } } : {}),
   revision: 4,
   billRevision: 2,
   context: {
@@ -137,13 +138,13 @@ it.each(["not_started", "started"] as const)(
   "paid %s work offers refund only when its public handoff is available",
   async (stage) => {
     const el = await mount({ consent: read("settled", stage) });
-    expect(choices(el)).toEqual(["keep_charge"]);
+    expect(choices(el)).toEqual([]);
     el.refundAvailable = true;
     await el.updateComplete;
-    expect(choices(el)).toEqual(["keep_charge", "refund"]);
+    expect(choices(el)).toEqual([]);
     expect(button(el).disabled).toBe(true);
     const calls = collect(el);
-    await click(el, "input[value=refund]");
+    await click(el, 'input[name="refund"]');
     await pickReason(el);
     await click(el);
     expect(calls).toEqual([
@@ -161,8 +162,7 @@ it.each(["not_started", "started"] as const)(
 it("requires paid keep-payment consent even when refund is unavailable", async () => {
   const el = await mount({ consent: read("settled") });
   expect(button(el).disabled).toBe(true);
-  expect(root(el).textContent).toContain("Cancel, keep the payment");
-  await click(el, "input[value=keep_charge]");
+  expect(button(el).textContent?.trim()).toBe("Cancel");
   await pickReason(el);
   expect(button(el).disabled).toBe(false);
 });
@@ -238,12 +238,14 @@ it("clears pre-start consent when a refresh reports kitchen advancement", async 
 });
 it("forgets a chosen refund when it becomes unavailable", async () => {
   const el = await mount({ consent: read("settled"), refundAvailable: true });
-  await click(el, "input[value=refund]");
+  expect(root(el).querySelector<HTMLInputElement>('input[name="refund"]')!.checked).toBe(true);
   await pickReason(el);
   el.refundAvailable = false;
   await el.updateComplete;
-  expect(button(el).disabled).toBe(true);
-  expect(choices(el)).toEqual(["keep_charge"]);
+  expect(button(el).disabled).toBe(false);
+  expect(button(el).textContent?.trim()).toBe("Cancel");
+  expect(root(el).querySelector('input[name="refund"]')).toBeNull();
+  expect(choices(el)).toEqual([]);
 });
 it("a generic refusal permits retry and retains the chosen quantity", async () => {
   const el = await mount();
@@ -441,4 +443,119 @@ it("the native minus and plus controls stop at one and the active maximum", asyn
   expect(calls).toEqual([
     { lineId: "dish-1", quantity: "2", outcome: "remove_charge", consent: read() },
   ]);
+});
+
+it.each(["not_started", "started"] as const)(
+  "uses one Refund tick and a named paid %s action",
+  async (stage) => {
+    const consent = {
+      ...read("settled", stage),
+      saleId: "sale",
+      refundValue: { quantity: "3.000", gross: "10.00" },
+    };
+    const el = await mount({ consent, refundAvailable: true });
+    expect(choices(el)).toEqual([]);
+    const tick = root(el).querySelector<HTMLInputElement>('input[name="refund"]');
+    expect(tick).not.toBeNull();
+    expect(tick!.checked).toBe(stage === "not_started");
+    expect(button(el).textContent?.trim()).toBe(
+      stage === "not_started" ? "Cancel and refund €10.00" : "Cancel",
+    );
+    expect(button(el).disabled).toBe(true);
+    await pickReason(el);
+    expect(button(el).disabled).toBe(false);
+    const calls = collect(el);
+    await click(el);
+    expect(calls).toEqual([
+      {
+        lineId: "dish-1",
+        quantity: "3",
+        outcome: stage === "not_started" ? "refund" : "keep_charge",
+        reasonId: "house",
+        consent,
+      },
+    ]);
+  },
+);
+it("updates the paid refund label from the filed value and allocates the last cent after earlier cancellations", async () => {
+  const consent = {
+    ...read("settled"),
+    saleId: "sale",
+    refundValue: { quantity: "3.000", gross: "10.00" },
+  };
+  consent.context.components[0]!.cancelledQuantity = "2.000";
+  const el = await mount({ consent, refundAvailable: true });
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €3.33");
+  await click(el, 'input[name="refund"]');
+  expect(button(el).textContent?.trim()).toBe("Cancel");
+  await click(el, 'input[name="refund"]');
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €3.33");
+});
+it("asks preparation before defaulting a fired paid dish's Refund tick", async () => {
+  const consent = {
+    ...read("settled"),
+    saleId: "sale",
+    refundValue: { quantity: "3.000", gross: "10.00" },
+  };
+  consent.context.components[0]!.firedAt = "2026-10-19T10:00:00Z";
+  const el = await mount({ consent, refundAvailable: true });
+  expect(root(el).querySelector('input[name="refund"]')).toBeNull();
+  await click(el, 'input[name="preparation"][value="no"]');
+  expect(root(el).querySelector<HTMLInputElement>('input[name="refund"]')!.checked).toBe(true);
+  await click(el, 'input[name="preparation"][value="yes"]');
+  expect(root(el).querySelector<HTMLInputElement>('input[name="refund"]')!.checked).toBe(false);
+});
+it("offers no paid cancellation for a served dish", async () => {
+  const consent = read("settled", "started");
+  consent.context.components[0]!.servedQuantity = "1.000";
+  const el = await mount({ consent, refundAvailable: true });
+  expect(choices(el)).toEqual([]);
+  expect(root(el).querySelector('input[name="refund"]')).toBeNull();
+  expect(button(el).disabled).toBe(true);
+});
+it("does not offer a paid Refund tick without a filed value", async () => {
+  const missing = read("settled");
+  delete missing.refundValue;
+  const el = await mount({ consent: missing, refundAvailable: true });
+  expect(root(el).querySelector('input[name="refund"]')).toBeNull();
+  expect(button(el).textContent?.trim()).toBe("Cancel");
+  await pickReason(el);
+  const calls = collect(el);
+  await click(el);
+  expect(calls).toEqual([
+    {
+      lineId: "dish-1",
+      quantity: "3",
+      outcome: "keep_charge",
+      reasonId: "house",
+      consent: missing,
+    },
+  ]);
+});
+
+it("recomputes a partial Refund amount with exact cent allocation", async () => {
+  const consent = read("settled");
+  const el = await mount({ consent, refundAvailable: true });
+  await fill(el, "1");
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €3.33");
+  await fill(el, "2");
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €6.67");
+  const next = structuredClone(consent);
+  next.context.components[0]!.cancelledQuantity = "1.000";
+  el.consent = next;
+  await el.updateComplete;
+  await fill(el, "1");
+  expect(button(el).textContent?.trim()).toBe("Cancel and refund €3.34");
+});
+it("uses Back and the required-note hint in the cancellation form", async () => {
+  const el = await mount({
+    consent: read("open", "started"),
+    reasons: [{ ...cancelReason, noteRequired: true }],
+  });
+  expect(root(el).querySelector("[data-close]")!.textContent?.trim()).toBe("Back");
+  await click(el, 'input[value="keep_charge"]');
+  await pickReason(el);
+  expect(
+    root(el).querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="note"]')!.placeholder,
+  ).toBe("Say why");
 });

@@ -197,9 +197,10 @@ it("requires the paid cancellation's reason before entering the independent refu
   const consent = read();
   consent.context.billStatus = "settled";
   consent.saleId = "sale";
+  consent.refundValue = { quantity: "3.000", gross: "10.00" };
   Object.assign(el, { consent, refundAvailable: true, reasons: [house] });
   await el.updateComplete;
-  await click(el, "input[value=refund]");
+  await click(el, 'input[name="refund"]');
   expect(confirm(el).disabled).toBe(true);
   await reason(el, "House decision");
   await click(el, "[data-confirm]");

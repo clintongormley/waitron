@@ -26,6 +26,7 @@ const consent = (
   stage: "not_started" | "started",
 ): CancellationRead => ({
   billId: "b",
+  ...(status === "settled" ? { refundValue: { quantity: "3.000", gross: "10.00" } } : {}),
   revision: 1,
   billRevision: 1,
   context: {

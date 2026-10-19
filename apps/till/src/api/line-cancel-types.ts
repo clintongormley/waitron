@@ -21,6 +21,7 @@ export interface CancellationRead {
   billRevision: number;
   billId: string;
   saleId?: string;
+  refundValue?: { quantity: string; gross: string };
 }
 
 export interface CancelItemRequest {

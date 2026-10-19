@@ -1434,6 +1434,7 @@ describe("till-app: service cancellation consent", () => {
     stage: CancellationRead["context"]["stage"] = "started",
   ): CancellationRead => ({
     billId: "wo-4",
+    ...(status === "settled" ? { refundValue: { quantity: "1.000", gross: "30.00" } } : {}),
     revision: 3,
     billRevision: 6,
     context: {
@@ -2019,12 +2020,13 @@ describe("till-app: service cancellation consent", () => {
         [...widget.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="outcome"]')].map(
           (radio) => radio.value,
         ),
-      ).toEqual(choices);
+      ).toEqual(status === "settled" ? [] : choices);
       expect(order.shadowRoot!.querySelector("[data-sent-line-dialog]")!.hasAttribute("open")).toBe(
         false,
       );
       expect(methods.cancelItem).not.toHaveBeenCalled();
-      expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+      if (status === "settled") expect(api.listAdjustmentReasons).toHaveBeenCalledOnce();
+      else expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
       expect(api.applyAdjustment).not.toHaveBeenCalled();
     },
   );
@@ -2297,14 +2299,16 @@ describe("till-app: service cancellation consent", () => {
     expect(cancelDialog(el)?.consent).toEqual(fresh);
     expect(methods.cancelItem).toHaveBeenCalledTimes(1);
     const widget = cancelDialog(el)!;
+    expect(widget.shadowRoot!.querySelector('input[name="outcome"]')).toBeNull();
     expect(
-      widget.shadowRoot!.querySelector<HTMLInputElement>('input[value="keep_charge"]')!.checked,
-    ).toBe(false);
+      widget.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        'wt-combobox[name="reason"]',
+      )!.value,
+    ).toBe("");
     expect(
       widget.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-confirm]")!
         .disabled,
     ).toBe(true);
-    await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     expect(methods.cancelItem).toHaveBeenCalledTimes(2);
@@ -2525,7 +2529,6 @@ describe("till-app: service cancellation consent", () => {
     await openCancel(el);
     expect(cancelDialog(el)?.name).toBe("Recorded wine");
     expect(cancelDialog(el)?.consent?.context.billStatus).toBe("settled");
-    await clickChoice(el, 'input[value="keep_charge"]');
     await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     expect(cancelDialog(el)).toBeNull();
@@ -2932,7 +2935,7 @@ describe("till-app: service cancellation consent", () => {
       );
     async function chooseRefund(el: TillApp) {
       await openCancel(el);
-      await clickChoice(el, 'input[value="refund"]');
+      await clickChoice(el, 'input[name="refund"]');
       await chooseChargedReason(el);
       await clickChoice(el, "[data-confirm]");
     }
@@ -3007,7 +3010,7 @@ describe("till-app: service cancellation consent", () => {
       const { el } = await mountApp(methods);
       await openMesa4(el);
       await openCancel(el);
-      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[value="refund"]')).not.toBeNull();
+      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
       expect(methods.cancelItem).not.toHaveBeenCalled();
     });
 
@@ -3134,12 +3137,11 @@ describe("till-app: service cancellation consent", () => {
       ).toHaveLength(0);
       await clickChoice(el, 'input[name="preparation"][value="no"]');
       expect(
-        cancelDialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[value="refund"]')!
+        cancelDialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="refund"]')!
           .checked,
-      ).toBe(false);
+      ).toBe(true);
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
       expect(api.refundTransaction).not.toHaveBeenCalled();
-      await clickChoice(el, 'input[value="refund"]');
       await chooseChargedReason(el);
       await clickChoice(el, "[data-confirm]");
       await expect.poll(() => refundForm(el)).not.toBeNull();
@@ -3313,10 +3315,15 @@ describe("till-app: service cancellation consent", () => {
       const { el } = await mountApp(methods);
       await openMesa4(el);
       await openCancel(el);
-      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[value="refund"]')).toBeNull();
+      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
+      expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="outcome"]')).toBeNull();
       expect(
-        cancelDialog(el)!.shadowRoot!.querySelector('input[value="keep_charge"]'),
-      ).not.toBeNull();
+        cancelDialog(el)!.shadowRoot!.querySelector("[data-confirm]")!.textContent?.trim(),
+      ).toBe("Cancel");
+      await chooseChargedReason(el);
+      await clickChoice(el, "[data-confirm]");
+      expect(methods.cancelItem).toHaveBeenCalledOnce();
+      expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({ outcome: "keep_charge" });
     });
   });
 });

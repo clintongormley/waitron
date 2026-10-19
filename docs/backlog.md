@@ -2234,7 +2234,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   reason and note in that same dialog. Its main action checks the adjustment preview and either
   sends the cancellation or opens the existing role-based PIN prompt. Returning from the prompt
   keeps the draft; a failed preview remains retryable without saying a cancellation was sent.
-  Finish the revised paid choices and refund-PIN handoff, and resolve every unserved dish before
+  The paid dialog now uses one Refund tick, defaulted by preparation, and a named action whose
+  amount comes from the filed dish and its extras; paid served food is unavailable. The read
+  matches sorted working-line positions to filed lines, including stored-number gaps, and omits
+  the value when the compositions do not match. Finish the refund-PIN handoff and device/payment
+  eligibility checks, and resolve every unserved dish before
   closing a paid table.
   Preserve the completed behavioral checks and their receipts; the detail's
   Decisions section records their scope and limits. The product guide separates stored-line

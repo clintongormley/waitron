@@ -1,7 +1,15 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
-import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
+import {
+  addDecimal,
+  compareDecimal,
+  decimal,
+  divideDecimal,
+  formatMoney,
+  multiplyDecimal,
+  subtractDecimal,
+} from "@waitron/shared";
 import {
   baseStyles,
   draftScopeFor,
@@ -18,7 +26,8 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { AdjustmentReason } from "../api/client.js";
 import type { CancellationRead } from "../api/line-cancel-types.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import { trimQuantity } from "./dish-format.js";
 import { trackDialog } from "./track-dialog.js";
 
@@ -48,6 +57,8 @@ function consentKey(read: CancellationRead | null): string {
   if (read === null) return "";
   return JSON.stringify([
     read.billId,
+    read.saleId,
+    read.refundValue,
     read.revision,
     read.billRevision,
     read.context.billStatus,
@@ -166,13 +177,48 @@ export class TillCancelItemDialog extends LitElement {
     if (
       !context ||
       context.billStatus === "abandoned" ||
+      (context.billStatus === "settled" &&
+        context.components.some(
+          (row) => compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0,
+        )) ||
       compareDecimal(decimal(this.#remaining()), decimal("0")) <= 0
     )
       return [];
     if (this.#asksPreparation() && this.draft.preparationStarted === null) return [];
     if (context.billStatus === "settled")
-      return this.refundAvailable ? ["keep_charge", "refund"] : ["keep_charge"];
+      return this.#canRefund() ? ["keep_charge", "refund"] : ["keep_charge"];
     return this.#started() ? ["keep_charge", "remove_charge"] : ["remove_charge"];
+  }
+  #canRefund(): boolean {
+    const value = this.consent?.refundValue;
+    return (
+      this.refundAvailable &&
+      value !== undefined &&
+      compareDecimal(decimal(value.quantity), decimal("0")) > 0 &&
+      compareDecimal(decimal(value.gross), decimal("0")) > 0
+    );
+  }
+  #defaultOutcome(): Outcome | null {
+    const options = this.#options();
+    if (this.consent?.context.billStatus === "settled" && options.length > 0)
+      return !this.#started() && options.includes("refund") ? "refund" : "keep_charge";
+    return options.length === 1 && options[0] === "remove_charge" ? "remove_charge" : null;
+  }
+  #refundAmount(): string {
+    const value = this.consent?.refundValue;
+    if (value === undefined || !this.#quantityValid()) return "";
+    const cancelled = decimal(
+      this.consent!.context.components.find((row) => row.lineId === this.lineId)!.cancelledQuantity,
+    );
+    const share = (quantity: ReturnType<typeof decimal>) =>
+      divideDecimal(multiplyDecimal(decimal(value.gross), quantity), decimal(value.quantity), 2);
+    return formatMoney(
+      subtractDecimal(
+        share(addDecimal(cancelled, decimal(quantityValue(this.draft.quantity)))),
+        share(cancelled),
+      ),
+      currentLocale(),
+    );
   }
   #asksPreparation(): boolean {
     return (
@@ -198,14 +244,12 @@ export class TillCancelItemDialog extends LitElement {
     if (key !== this.#key) {
       this.#key = key;
       this.draft = { ...this.draft, preparationStarted: null };
-      const options = this.#options();
       this.draft = {
         preparationStarted: null,
         reasonId: "",
         note: "",
         quantity: this.unitPrecision === 0 ? trimQuantity(this.#remaining()) : this.#remaining(),
-        // Only the pre-start unpaid case has no money choice to make.
-        outcome: options.length === 1 && options[0] === "remove_charge" ? "remove_charge" : null,
+        outcome: this.#defaultOutcome(),
       };
       this.#baseline = { ...this.draft };
       this.attempted = false;
@@ -213,7 +257,10 @@ export class TillCancelItemDialog extends LitElement {
       this.#scope?.commit(this.#baseline);
     }
     if (this.draft.outcome !== null && !this.#options().includes(this.draft.outcome)) {
-      this.draft = { ...this.draft, outcome: null };
+      this.draft = {
+        ...this.draft,
+        outcome: this.consent?.context.billStatus === "settled" ? this.#defaultOutcome() : null,
+      };
       this.#scope?.changed();
     }
     if (changed.has("reasons") && this.draft.reasonId !== "" && this.#reason() === undefined) {
@@ -239,6 +286,14 @@ export class TillCancelItemDialog extends LitElement {
       this.#leave = coordinator;
       scope.commit(this.#baseline!);
     }
+  }
+  override updated(changed: PropertyValues<this>): void {
+    if (
+      (changed.has("consent") || changed.has("refundAvailable")) &&
+      this.#needsReason() &&
+      this.reasons === null
+    )
+      this.#requestReasons();
   }
   #quantityValid(): boolean {
     const quantity = quantityValue(this.draft.quantity);
@@ -294,10 +349,9 @@ export class TillCancelItemDialog extends LitElement {
   #preparation(started: boolean): void {
     if (!this.isConnected || !this.active || this.#busy()) return;
     this.draft = { ...this.draft, preparationStarted: started, outcome: null };
-    const options = this.#options();
-    if (options.length === 1 && options[0] === "remove_charge")
-      this.draft = { ...this.draft, outcome: "remove_charge" };
+    this.draft = { ...this.draft, outcome: this.#defaultOutcome() };
     this.#scope?.changed();
+    if (this.#needsReason() && this.reasons === null) this.#requestReasons();
   }
   async #confirm(): Promise<void> {
     if (!this.isConnected || !this.active || this.#busy()) return;
@@ -354,11 +408,12 @@ export class TillCancelItemDialog extends LitElement {
     );
   }
   #label(outcome: Outcome): string {
-    if (outcome === "refund") return t("cancel_item.refund");
+    if (outcome === "refund")
+      return t("cancel_item.refund").replace("{amount}", () => this.#refundAmount());
     if (outcome === "keep_charge")
       return t(
         this.consent?.context.billStatus === "settled"
-          ? "cancel_item.keep_payment"
+          ? "table.cancel_line"
           : "cancel_item.still_charge",
       );
     return t(this.#started() ? "cancel_item.dont_charge" : "action.remove");
@@ -450,25 +505,37 @@ export class TillCancelItemDialog extends LitElement {
             ? nothing
             : unavailable
               ? html`<p>${t("cancel_item.unavailable")}</p>`
-              : html`<fieldset>
-                  <legend>
-                    ${t("cancel_item.choice")} <span class="required" aria-hidden="true">*</span>
-                  </legend>
-                  ${options.map(
-                    (outcome) =>
-                      html`<label>
-                        <input
-                          type="radio"
-                          name="outcome"
-                          required
-                          .value=${outcome}
-                          .checked=${this.draft.outcome === outcome}
-                          ?disabled=${this.#busy()}
-                          @change=${() => this.#set({ outcome })}
-                        />${this.#label(outcome)}</label
-                      >`,
-                  )}
-                </fieldset>`
+              : this.consent?.context.billStatus === "settled"
+                ? this.#canRefund()
+                  ? html`<label
+                      ><input
+                        type="checkbox"
+                        name="refund"
+                        .checked=${this.draft.outcome === "refund"}
+                        ?disabled=${this.#busy()}
+                        @change=${(event: Event) => this.#set({ outcome: (event.target as HTMLInputElement).checked ? "refund" : "keep_charge" })}
+                      />${t("find_page.refund")}</label
+                    >`
+                  : nothing
+                : html`<fieldset>
+                    <legend>
+                      ${t("cancel_item.choice")} <span class="required" aria-hidden="true">*</span>
+                    </legend>
+                    ${options.map(
+                      (outcome) =>
+                        html`<label>
+                          <input
+                            type="radio"
+                            name="outcome"
+                            required
+                            .value=${outcome}
+                            .checked=${this.draft.outcome === outcome}
+                            ?disabled=${this.#busy()}
+                            @change=${() => this.#set({ outcome })}
+                          />${this.#label(outcome)}</label
+                        >`,
+                    )}
+                  </fieldset>`
         }
         ${
           this.#needsReason()
@@ -501,6 +568,7 @@ export class TillCancelItemDialog extends LitElement {
                         required
                         autocomplete="off"
                         .label=${t("adjust.note")}
+                        .placeholder=${codeMessage("working_order.reason_required")}
                         .value=${live(this.draft.note)}
                         .disabled=${this.#busy()}
                         .error=${noteInvalid ? t("adjust.note_required") : this.shownRefusalField === "note" ? this.shownRefusal : ""}
@@ -538,7 +606,7 @@ export class TillCancelItemDialog extends LitElement {
               if (this.isConnected && this.active && !this.#busy())
                 void this.renderRoot.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
             }}
-            >${t("adjust.close")}</wt-button
+            >${t("action.back")}</wt-button
           >
           <wt-button
             data-confirm
@@ -546,7 +614,7 @@ export class TillCancelItemDialog extends LitElement {
             .disabled=${disabled}
             .busy=${this.#busy()}
             @click=${() => void this.#confirm()}
-            >${this.consent?.context.billStatus !== "settled" && this.draft.outcome !== null ? this.#label(this.draft.outcome) : t("adjust.continue")}</wt-button
+            >${this.draft.outcome !== null ? this.#label(this.draft.outcome) : this.consent?.context.billStatus === "settled" ? t("table.cancel_line") : t("adjust.continue")}</wt-button
           >
         </wt-form-actions>
       </div>

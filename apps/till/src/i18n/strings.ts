@@ -11,8 +11,7 @@ export const en = {
   "cancel_item.choice": "What happens to the charge?",
   "cancel_item.still_charge": "Cancel, still charge",
   "cancel_item.dont_charge": "Cancel, don't charge",
-  "cancel_item.keep_payment": "Cancel, keep the payment",
-  "cancel_item.refund": "Cancel and refund",
+  "cancel_item.refund": "Cancel and refund {amount}",
   "cancel_item.unavailable": "This dish cannot be cancelled here.",
 
   "device_zones.title": "Zones on this device",
@@ -1602,8 +1601,7 @@ export const es: Record<StringKey, string> = {
   "cancel_item.choice": "¿Qué pasa con el cobro?",
   "cancel_item.still_charge": "Cancelar y cobrar",
   "cancel_item.dont_charge": "Cancelar sin cobrar",
-  "cancel_item.keep_payment": "Cancelar sin devolver el pago",
-  "cancel_item.refund": "Cancelar y devolver el pago",
+  "cancel_item.refund": "Cancelar y devolver {amount}",
   "cancel_item.unavailable": "Este plato no se puede cancelar aquí.",
 
   "device_zones.title": "Zonas en este dispositivo",

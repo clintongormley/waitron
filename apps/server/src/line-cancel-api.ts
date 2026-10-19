@@ -23,6 +23,7 @@ import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import type { Logger } from "./logger.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
 import { partyRevision } from "./parties.js";
+import { cancellationRefundValue } from "./cancellation-refund-value.js";
 import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { requestCfg } from "./request-config.js";
 import {
@@ -161,12 +162,17 @@ export function mountLineCancelApi(
           .select({ id: sales.id })
           .from(sales)
           .where(eq(sales.workingOrderId, bill!.id));
+        const refundValue =
+          context.billStatus === "settled" && sale !== undefined
+            ? await cancellationRefundValue(tx, bill!.id, sale.id, lineId)
+            : undefined;
         return {
           context,
           revision: await partyRevision(tx, partyId),
           billRevision: bill!.revision,
           billId: bill!.id,
           ...(sale === undefined ? {} : { saleId: sale.id }),
+          ...(refundValue === undefined ? {} : { refundValue }),
         };
       });
       return c.json(answer);

@@ -27,6 +27,7 @@ import { createPinThrottle, sessions, persons, setProfileAdmission } from "@wait
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listDepartments, setProfileServiceAccess, setRoutingCell } from "@waitron/venue-service";
 import { readCancellationContext } from "./line-cancel-context.js";
+import { cancellationRefundValue } from "./cancellation-refund-value.js";
 import { AppError } from "@waitron/shared";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -349,6 +350,53 @@ describe("the public cancellation read and command", () => {
     }
     expect(await frozen()).toEqual(before);
   });
+
+  it("reads the filed family value through stored-number gaps, excluding another dish and without writes", async () => {
+    const p = await fixture();
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ lineNo: sql`${workingOrderLines.lineNo} + 10` })
+        .where(eq(workingOrderLines.workingOrderId, p.billId)),
+    );
+    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
+      id: p.billId,
+      tender: { method: "cash", amount: "26.00" },
+      lines: [],
+    });
+    const before = await frozen();
+    const result = await send(venue.app, venue.cookie.staff, "GET", path(p, true));
+    expect(result.status).toBe(200);
+    expect(result.json.refundValue).toEqual({ quantity: "2.000", gross: "24.00" });
+    expect(await frozen()).toEqual(before);
+  });
+
+  it.each(["quantity", "length"] as const)(
+    "does not value mismatched %s compositions",
+    async (shape) => {
+      const p = await fixture();
+      const other = await billWith(
+        venue,
+        shape === "length"
+          ? [{ name: "Water" }]
+          : [{ name: "Pizza", olives: 2 }, { name: "Water" }],
+      );
+      await payWorkingOrder(
+        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        venue.cfg,
+        { id: other.billId, tender: { method: "cash", amount: "26.00" }, lines: [] },
+      );
+      const [sale] = await venue.db
+        .select()
+        .from(sales)
+        .where(eq(sales.workingOrderId, other.billId));
+      const before = await frozen();
+      expect(
+        await inTx(venue, (tx) => cancellationRefundValue(tx, p.billId, sale!.id, p.parent.id)),
+      ).toBeUndefined();
+      expect(await frozen()).toEqual(before);
+    },
+  );
 
   it("reads every component and both revisions without updating device activity", async () => {
     const p = await fixture();
