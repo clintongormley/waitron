@@ -17,8 +17,8 @@ the till's floor changes: slice 8 shows the steps there.
 order, a `start` out of five, an optional `course_id` into the core `kitchen_courses`, and
 `minutes`). The department dialog loads the steps and the venue's live courses from the
 venue-service model (`GET /management-api/venue-service`) and saves them with the existing
-department save (`PUT …/departments/:departmentId/settings`) as an optional `serviceSteps` list,
-written as a change set that keeps each kept step's id. `createDepartment` and the provisioning seed
+department save (`PUT …/departments/:departmentId/settings`) as an optional `serviceSteps` list, sent only when
+the steps changed and written as a change set that keeps each kept step's id. `createDepartment` and the provisioning seed
 write the starter set; the configuration export carries the table; deleting a course or a department
 deletes the steps that depend on it and says so in the delete dialog.
 
@@ -61,12 +61,19 @@ Decided section's Q29, Q30 and Q31. Picture
   - messages: name blank → the existing `This field is required.` (`strings.ts:479`); minutes →
     `Whole minutes, 0 to 120.`; the repeating start with 0 → `At least 1 minute.`; first step
     "after the step before" → `The first step has no step before it.`; a course deleted while the
-    dialog was open → `That course was deleted. Choose another start.`;
+    dialog was open → `That course was deleted. Choose another start.`; a step deleted or replaced
+    on another screen while the dialog was open → `A step was changed elsewhere. Cancel to see the latest.`;
+    the course delete window, for a step that becomes its department's first and started "after
+    the step before" (Decision 3) → `1 service step now starts When seated.` /
+    `{count} service steps now start When seated.`;
   - Spanish: sub-heading `Pasos de servicio`; heads `Paso`, `Empieza`; starts `Al sentarse`,
     `Tras el paso anterior`, `Al servir {course}`, `Al servirlo todo`,
     `Se repite tras el último pedido`; button `Añadir paso`; empty `Sin pasos de servicio.`;
     messages `Minutos enteros, de 0 a 120.`, `Al menos 1 minuto.`,
-    `El primer paso no tiene paso anterior.`, `Ese curso se ha eliminado. Elige otro inicio.`
+    `El primer paso no tiene paso anterior.`, `Ese curso se ha eliminado. Elige otro inicio.`,
+    `Un paso se ha cambiado en otra pantalla. Cancela para ver lo último.`,
+    `1 paso de servicio pasa a empezar Al sentarse.` /
+    `{count} pasos de servicio pasan a empezar Al sentarse.`
     ("curso" is the dashboard's Spanish word for a course: `"kitchen.delete_course": "Eliminar curso"`,
     `apps/dashboard/src/i18n/strings.ts:4282`); reorder `Cambiar orden: {name}` and
     `{name} está ahora en la posición {index} de {total}.` as the prep stations say
@@ -206,6 +213,26 @@ Decided section's Q29, Q30 and Q31. Picture
    out before the clearing, the steps and product defaults are cleared, and the course goes inactive.
    With the reference added, `in-use-references.test.ts` and `course-delete.test.ts` printed
    `Tests 16 passed (16)` in the scratch copy.
+   **A step left first with "after the step before" becomes When seated** (plan review,
+   2026-10-19). Example: a department's steps are [Dessert? · Mains served, Coffee · After the step
+   before]; deleting Mains deletes Dessert?, and Coffee is now first with no step before it. Left so,
+   the dialog would block every Save until that row changed (Decision 10's first-row rule), and an
+   export of the venue would be refused when imported: `validateServiceSteps` refuses
+   `after_previous` at a department's lowest position (Decision 6), and every bundle passes through
+   the module validators before an import is staged or applied (`validateConfigurationBundle`,
+   `apps/server/src/configuration-transfer.ts:591-615`, called at `:625` and from
+   `apps/server/src/boot.ts:1087`). So `clearCourseDeleteSettings`, after deleting the steps, looks
+   at each department it touched and turns a first remaining step that starts `after_previous`
+   into `seated`, keeping its minutes; `readCourseDeleteSettings` counts those steps the same way,
+   and the course delete window says `1 service step now starts When seated.` beside the removed
+   steps. **No other delete path can leave such a first step:** a department delete takes all of
+   its steps (Decision 4), the dialog's save refuses it (Decision 8), and the import refuses it
+   (Decision 6); `kitchen_courses` loses a live row only through `deleteCourse` (`updateCourse`
+   refuses `active`, `apps/server/src/kitchen.ts:403-405`). **A step lower in the list that starts
+   "after the step before" now follows whichever step is above it; the window does not say so.**
+   "After the step before" means the step above it in the list (spec §8, start 2), which stays
+   true, and the window already lists the steps removed; a further line per follower would repeat
+   that.
 
 4. **What deleting a department does.** A department delete marks the department inactive and
    deletes its own settings rows — sale policy, transfer desks, periods, days
@@ -218,7 +245,7 @@ Decided section's Q29, Q30 and Q31. Picture
    `floor-delete`, `floor-delete.bookings` and `delete-impact` suites passed, and
    `management-api.service-delete.test.ts`'s "returns the exact full department preview and
    recomputed delete impact" failed only by the new `{ "count": 3, "key": "service_steps",
-   "targets": [] }` — the one assertion Task 4 changes.
+   "targets": [] }` — the one assertion Task 4b changes.
 
 5. **Where the starter set is written.** The writers of `departments` outside tests
    (`git grep -n "insert(departments)" -- packages apps` without test files): `createDepartment`
@@ -290,8 +317,11 @@ Decided section's Q29, Q30 and Q31. Picture
    (not a bundle department), `service_steps.course_id` (set for a non-course start, missing for
    `course_served`, or not a bundle `kitchen_courses` id — the validator already reads core tables,
    `kitchen_stations` at `:546`), `service_steps.start` (not one of five, or `after_previous` at a
-   department's lowest position) and `service_steps.minutes` (not a whole number 0–120, or 0 for
-   `since_last_order`), as `validateOrderStarts` checks an enum a CHECK also holds (`:701-710`).
+   department's lowest position), `service_steps.minutes` (not a whole number 0–120, or 0 for
+   `since_last_order`), `service_steps.name` (not a string, or blank once trimmed — the save stores
+   names trimmed and refuses a blank one, Decision 8) and `service_steps.position` (not a whole
+   number at or above 0: the lowest-position rule above reads it), as `validateOrderStarts` checks
+   an enum a CHECK also holds (`:701-710`).
 
    **Data-retention inventories.** `docs/superpowers/specs/2026-10-16-a664-personal-data-audit.md`
    and `…-retention-table-inventory.md` are dated readings of the snapshots; slice 1 added dated
@@ -318,14 +348,49 @@ Decided section's Q29, Q30 and Q31. Picture
    `:443-455`). Body: `serviceSteps: { id?: string; name: string; start: ServiceStepStart;
    courseId?: string | null; minutes: number }[]`, at most 20 entries. The route
    (`requireServiceSteps`, beside `requireTransferSettings` at `:202`) refuses the shape and the
-   per-row rules; the operation refuses what needs the database (an id that is not a step of this
-   department, the same id twice, a course that is not a live course of the venue). **Every refusal
-   is `management.request_invalid`** (declared in `packages/shared/src/errors.ts:58`, already
-   thrown by this route) with `field` `serviceSteps` (not an array, more than 20) or
-   `serviceSteps.<index>.<id|name|start|courseId|minutes>` (an entry that is not an object or has
-   an unknown key → `serviceSteps.<index>`). **No new error code**, so `scripts/alert-codes.test.ts`
-   and `scripts/errors-reachable.test.ts` are unaffected and no code needs a dashboard message
-   (`apps/dashboard/src/i18n/codes.ts`). The model gains `serviceSteps: ServiceStep[]` (the steps of
+   per-row rules; the operation refuses what needs the database. **The codes:**
+   - A malformed body — `management.request_invalid` (declared in `packages/shared/src/errors.ts:58`)
+     with `field` `serviceSteps` (not an array, more than 20) or
+     `serviceSteps.<index>.<id|name|start|courseId|minutes>`; an entry that is not an object or has
+     an unknown key → `serviceSteps.<index>`; the same id twice → `serviceSteps.<index>.id` (the
+     second). This is the code the route already throws for every other malformed field of this
+     save (`requireName`, `routes.ts:256-260`; `needsClearing`, `:828-829`). **`requireServiceSteps`
+     does not call `onlyKeys` on an entry:** `onlyKeys` names the extra key itself as the field
+     (`{ field: extra }`, `packages/venue-service/src/request-keys.ts:5-8`), which would say
+     `field: "colour"` rather than which entry; it checks entry keys itself and throws
+     `serviceSteps.<index>`. (The body's own keys still go through `onlyKeys`, with `serviceSteps`
+     added to its list, `:819-827`.)
+   - A step id that is not a step of this department — **`service_step.not_found`
+     `{ stepId }`** (new, declared in `packages/venue-service/src/errors.ts`, `404` in `STATUS`
+     beside `department.not_found`, `routes.ts:103`): another manager deleted the step, or the
+     department's steps were replaced, while this dialog was open.
+   - A course that is not a live course of the venue — **`course.not_found` `{ courseId }`**,
+     the code a course read already uses (`apps/server/src/errors.ts:845`; dashboard message
+     `apps/dashboard/src/i18n/codes.ts:658`). venue-service declares it again in its own
+     `errors.ts` with the same params, because venue-service cannot import `apps/server`'s
+     registry and every file that throws a code imports its registry (CLAUDE.md §3). Two identical
+     declarations merge: checked 2026-10-19 with the packages' `tsc` 7.0.2 on a scratch file
+     declaring one property twice in two merged interfaces — the identical pair compiled, and a
+     control pair with different types failed `TS2717: Subsequent property declarations must have
+     the same type`. `404` in `STATUS`. (`device.not_found` is the reverse case: declared in
+     venue-service's `errors.ts:13`, thrown by `apps/server/src/device-api.ts:720`.)
+   **Why not one domain code for everything, as transfers have?** The same save refuses transfer
+   settings with `department_transfer.settings_invalid` (`packages/venue-service/src/department-transfers.ts:135,149`,
+   mapped in the dialog's `fieldRefusal`, `department-settings.ts:459-468`) because
+   `setDepartmentTransferSettings` is also called by the transfers route of its own
+   (`routes.ts:1150`), and every one of its refusals is a database fact. The steps have one
+   writer, and the split above gives the dialog what it needs: a shape refusal it cannot fix by
+   editing (the dialog checks the same rules first), and two facts that each need their own
+   message. `scripts/errors-reachable.test.ts` keeps holding (venue-service's `errors.ts` stays
+   reachable from its barrel); `scripts/alert-codes.test.ts` is about recorded incident codes, and
+   neither code is recorded as one.
+   **The dialog sends `serviceSteps` only when its steps differ from the ones it opened with**
+   (plan review, 2026-10-19), compared with the same entry-by-entry rule as the draft's `equal`
+   (Task 5). A save that changes only the name, a sale setting or Needs clearing leaves the steps
+   to whoever last changed them, so a dialog opened before another manager's step change does not
+   undo it. When both managers change steps, the later save wins, as it does for every other field
+   of this form; if the later one names a step the earlier one deleted, it is refused
+   `service_step.not_found` and told so (Decision 10). The model gains `serviceSteps: ServiceStep[]` (the steps of
    the venue's active departments, ordered by department id, then position, then id) and
    `courses: { id: string; name: string }[]` (the venue's active courses in firing order, as
    `listCourses` orders them, `apps/server/src/kitchen.ts:351-362`), next to
@@ -353,6 +418,14 @@ Decided section's Q29, Q30 and Q31. Picture
       component may name its events plainly, CLAUDE.md §3); the dialog holds the steps in its one
       draft, so the existing draft scope (`draftScopeFor`, `:320-334`), Save's quiet state
       (`saveActionState`, `:484`) and the leave guard cover them with no new scope.
+    - **The list is a `<table>` whose `<tbody>` holds one `<tr>` per step, in draft order, keyed by
+      the row's draft key** (a saved step's id, or a key made when the row is added): the controller
+      requires it — "The tbody renders one `<tr>` per id in this order — the invariant the pointer
+      geometry relies on" (`ReorderModel.order`, `packages/ui/src/reorder-table.ts:105-108`) — and
+      `ReorderController.tableStyles` styles that table (`:199`). Each row has three cells: the
+      handle, one cell holding the name, start and minutes in a wrapping flex box, and the menu. At
+      390 px the box wraps inside its cell — the name on its own line, the start and minutes on the
+      next — so the row stays one `<tr>` and nothing scrolls sideways.
     - **Rows, as the Courses page draws them:** a drag handle driven by `ReorderController` from
       `@waitron/ui` (keyboard and pointer; the Courses page wires it at
       `apps/dashboard/src/widgets/course-list.ts:143-157`, and the in-form precedent that reorders a
@@ -380,13 +453,19 @@ Decided section's Q29, Q30 and Q31. Picture
       sits under its own field, the form's one message stays at the bottom, and Save stays disabled
       until they are fixed, as the form contract says (CLAUDE.md §3 Forms).
     - **Refusals from the server:** `management.request_invalid` with
-      `serviceSteps.<index>.<field>` marks that row's field (`courseId` under the start, with the
-      deleted-course message; others with the existing `This value was not accepted. Change it and
-      save again.`, `strings.ts:480`); `serviceSteps`, or `.id`, marks the list. Service is shown and
-      the first marked field focused, as `fieldRefusal` and `showFirstInvalid` do today
-      (`:437-473`, `:227`). A refusal never disables Save by itself.
+      `serviceSteps.<index>.<name|start|courseId|minutes>` marks that row's field with the existing
+      `This value was not accepted. Change it and save again.` (`strings.ts:480`; a `courseId`
+      shape refusal goes under the start); `serviceSteps`, `serviceSteps.<index>` or
+      `serviceSteps.<index>.id` marks the list with the same words. `course.not_found` marks the
+      start of every submitted row naming that `courseId` with `That course was deleted. Choose
+      another start.` — only this code shows that message. `service_step.not_found` marks the list
+      with `A step was changed elsewhere. Cancel to see the latest.` (Cancel restores the opened
+      copy, and the clean dialog then follows the model). Service is shown and the first marked
+      field focused, as `fieldRefusal` and `showFirstInvalid` do today (`:437-473`, `:227`). A
+      refusal never disables Save by itself.
     - **After a save**, the model's copy (with the new rows' ids) replaces the clean draft through
-      the existing "follow while clean" path (`:337-345`), so saving again sends the ids.
+      the existing "follow while clean" path (`:337-345`), so the next save that changes the steps
+      sends the ids.
     - **Read-only** (a supervisor): no handles, no menus, fields disabled, no Add step.
     - **Every department shows the list**, as it shows Needs clearing (slice 1 plan, open question
       3): a zone can take table orders when its department does not (`zone_sale_policies.order_start`).
@@ -418,7 +497,7 @@ Decided section's Q29, Q30 and Q31. Picture
 
 **Whole-suite measurement.** Measured 2026-10-19 in the scratch copy with Task 1's table and
 transfer declaration and Task 3's starter set (English names, written by `createDepartment` and the
-seed's insert branch), but none of Task 4: `pnpm exec vitest run` in `apps/server` printed
+seed's insert branch), but none of Tasks 4a and 4b: `pnpm exec vitest run` in `apps/server` printed
 `Test Files 3 failed | 753 passed (756)`, `Tests 8 failed | 17954 passed | 25 skipped (17987)`.
 The three files, each read:
 - `src/in-use-references.test.ts` — the course reference list lacks `service_steps.course_id`
@@ -433,14 +512,14 @@ The three files, each read:
   and reaches `departments` while the seeded steps remain. Setup, not an assertion: Task 3 adds
   `"service_steps"` before `"departments"` in that list; with it, `provision.test.ts` printed
   `Tests 22 passed (22)`.
-No other server file failed. Task 4's delete-impact item adds the one assertion change Decision 4
+No other server file failed. Task 4b's delete-impact item adds the one assertion change Decision 4
 measured.
 
 ## Review focus
 
 1. **A course a step names is deleted:** the steps go, the dialog listed them, the course is kept
    inactive (it was in use) and the delete succeeds; a course nothing names is still deleted
-   outright — Task 4.
+   outright — Task 4a.
 2. **A save keeps ids:** a renamed or moved step keeps its id; a removed one is deleted; a new one
    gets a new id — Task 2.
 3. **A step id from another department, or a course from nowhere, sent to the save** is refused and
@@ -448,6 +527,10 @@ measured.
 4. **A re-run of the provisioning seed** does not put back deleted steps — Task 3.
 5. **Another dashboard deletes the course a dirty draft's step names:** the step is marked with the
    deleted-course message and Save stays disabled until it changes — Task 7.
+6. **Deleting a course leaves a step first with "after the step before":** it becomes When seated,
+   the window said so, and an export of the venue still imports — Task 4a.
+7. **A save that does not touch the steps** sends no `serviceSteps`, so it cannot undo another
+   manager's step change — Tasks 5 and 7.
 
 ---
 
@@ -518,8 +601,13 @@ unchanged; the list it compares against grows. **Fixtures grown:** none.
 - Modify: `packages/venue-service/src/index.ts` (export the new functions and types)
 - Modify: `packages/venue-service/src/operations.ts:746-783` (`DepartmentEditInput.serviceSteps?`;
   `saveDepartmentEditSettings` calls `saveServiceSteps` after `updateDepartment`)
-- Modify: `packages/venue-service/src/routes.ts` (`requireServiceSteps` near `:202`; the PUT's
-  `onlyKeys` list and body at `:819-852`; the GET model at `:706-731`)
+- Modify: `packages/venue-service/src/routes.ts` (`requireServiceSteps` near `:202` — it checks an
+  entry's keys itself and does not call `onlyKeys`, which would name the extra key rather than the
+  entry, `packages/venue-service/src/request-keys.ts:5-8`; `serviceSteps` joins the body's
+  `onlyKeys` list at `:819-827`; the body at `:830-852`; the GET model at `:706-731`; `STATUS`
+  gains `"service_step.not_found": 404` and `"course.not_found": 404`, `:95-150`)
+- Modify: `packages/venue-service/src/errors.ts` (declare `"service_step.not_found": { stepId: string }`
+  and `"course.not_found": { courseId: string }`, Decision 8)
 - Test: `packages/venue-service/src/routes.test.ts` (new cases in `describe("whole service settings saves")`, `:297`)
 
 **Interfaces — produces:**
@@ -530,9 +618,9 @@ unchanged; the list it compares against grows. **Fixtures grown:** none.
 - `listStepCourses(tx, cfg): Promise<{ id: string; name: string }[]>` — active `kitchen_courses` of
   `cfg.locationId`, `order by display_order, name`.
 - `saveServiceSteps(tx, cfg, departmentId, steps: readonly ServiceStepInput[]): Promise<void>` —
-  checks ids (each a step of this department, none twice) and courses (each a live course of the
-  venue), refusing `management.request_invalid` `{ field: "serviceSteps.<i>.id" | "serviceSteps.<i>.courseId" }`
-  before writing anything; then deletes the department's steps not sent, updates each sent one
+  checks ids (each a step of this department, else `service_step.not_found` `{ stepId }`) and
+  courses (each a live course of the venue, else `course.not_found` `{ courseId }`) before writing
+  anything (the same id twice is refused by the route, Decision 8); then deletes the department's steps not sent, updates each sent one
   (`name`, `start`, `courseId`, `minutes`, `position` = its index), inserts the new ones.
 - GET model gains `serviceSteps` and `courses` (Decision 8). PUT accepts optional `serviceSteps`.
 
@@ -542,9 +630,11 @@ unchanged; the list it compares against grows. **Fixtures grown:** none.
   - `"keeps a renamed or moved step's id, deletes one not sent, and gives a new one an id"` — save
     three; save again with the second renamed and moved first, the first dropped, a new one added;
     read back: ids of the kept step unchanged, the dropped id gone, positions 0..n-1.
-  - `"refuses a step id of another department and writes nothing"`, `"refuses the same id twice"`,
-    `"refuses a course that is inactive or of no venue"` — each `toMatchObject({ code: "management.request_invalid", params: { field } })`
-    and the department's rows unchanged (read before and after).
+  - `"refuses a step id of another department, naming it, and writes nothing"` →
+    `toMatchObject({ code: "service_step.not_found", params: { stepId } })`;
+    `"refuses a course that is inactive or of no venue, naming it, and writes nothing"` →
+    `toMatchObject({ code: "course.not_found", params: { courseId } })`; each with the
+    department's rows unchanged (read before and after).
   - `"an empty list deletes the department's steps"`.
   In `routes.test.ts`, using `settingsFixture()` and `departmentSettings` (`:230-268`):
   - `"saves a department's service steps and lists them in the model"` — PUT with
@@ -556,9 +646,13 @@ unchanged; the list it compares against grows. **Fixtures grown:** none.
     `serviceSteps.0`; `id: "nope"` → `serviceSteps.0.id`; name `"  "` → `serviceSteps.0.name`;
     start `"later"` → `serviceSteps.0.start`; first row `after_previous` → `serviceSteps.0.start`;
     `courseId` on a `seated` row and missing on a `course_served` row → `serviceSteps.<i>.courseId`;
-    minutes `121`, `-1`, `2.5`, `"2"`, and `0` with `since_last_order` → `serviceSteps.<i>.minutes`.
+    minutes `121`, `-1`, `2.5`, `"2"`, and `0` with `since_last_order` → `serviceSteps.<i>.minutes`;
+    the same id in two entries → `serviceSteps.1.id`.
     Each: 400, `toEqual({ error: { code: "management.request_invalid", params: { field } } })`,
     and `rawSettingsSnapshot()` (`:283`) unchanged plus the department's steps unchanged.
+  - `"answers 404 naming a step another manager deleted, and a course deleted meanwhile"` — the two
+    database refusals through the route: 404 with `service_step.not_found` `{ stepId }` and
+    `course.not_found` `{ courseId }`.
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/venue-service exec vitest run --project node src/service-steps.test.ts src/routes.test.ts`
 - [ ] **Step 3: Implement** the reads, the save, the route validation and the model fields. Names
@@ -617,38 +711,53 @@ same starts and minutes (Decision 5).
 **Assertions changed:** none. **Fixtures grown:** none; one test setup list grows
 (`clear-provision-fixture.ts`).
 
-### Task 4: deleting a course or a department deletes the steps that depend on it
+### Task 4a: deleting a course deletes the steps that start from it
+
+An implementer past about 150 tool calls with this task unfinished stops at a passing or cleanly
+red point, commits, and returns a handover (done, left, files, each check's state); a fresh
+implementer continues from it.
 
 **Files:**
 - Create: `packages/venue-service/src/course-delete-settings.ts` (`readCourseDeleteSettings(tx, cfg, courseId): Promise<DeleteImpactItem[]>`,
   `clearCourseDeleteSettings(tx, cfg, courseId): Promise<void>`), its test
   `packages/venue-service/src/course-delete-settings.test.ts`; export both from `src/index.ts`
   beside `readStationDeleteSettings` (`:71-75`)
-- Modify: `apps/server/src/course-delete.ts:27-85` (`courseDeleteRules` adds the item to `removes`;
-  `deleteCourse` calls `clearCourseDeleteSettings` after `retained` is worked out and before the
-  deactivation — a course a step named is always retained, Decision 3)
+- Modify: `apps/server/src/course-delete.ts:27-85` (`courseDeleteRules` adds the items to
+  `removes`; `deleteCourse` calls `clearCourseDeleteSettings` after `retained` is worked out and
+  before the deactivation — a course a step named is always retained, Decision 3)
 - Create: `apps/server/src/course-delete.service-steps.test.ts` (not `course-delete.test.ts`, which
   lane G edits — Decision 11)
-- Modify: `packages/venue-service/src/service-delete-settings.ts` (the `service_steps` item after
-  `department_policy`, `:338`; the delete beside `departmentSalePolicies`, `:440-442`)
-- Modify: `packages/venue-service/src/dashboard/service-delete-copy.ts:24` and `strings.ts`
-  (`"venue.delete_item_service_steps": "Removes {count} service steps."` /
-  `"Quita {count} pasos de servicio."`, beside `venue.delete_item_department_policy`, `:36`, `:908`)
 - Modify: `apps/dashboard/src/widgets/course-delete-copy.ts` (`item` chooses its text by
   `item.key`), `apps/dashboard/src/widgets/count-text.ts` (the key union),
   `apps/dashboard/src/i18n/strings.ts` after `:1276` and `:4284`:
   `"kitchen.delete_course_service_steps": "{count} service steps that start when it is served."`,
-  `_one`: `"1 service step that starts when it is served."`; ES
-  `"{count} pasos de servicio que empiezan al servirlo."`, `"1 paso de servicio que empieza al servirlo."`
+  `_one`: `"1 service step that starts when it is served."`;
+  `"kitchen.delete_course_seated_steps": "{count} service steps now start When seated."`,
+  `_one`: `"1 service step now starts When seated."`; ES
+  `"{count} pasos de servicio que empiezan al servirlo."`, `"1 paso de servicio que empieza al servirlo."`,
+  `"{count} pasos de servicio pasan a empezar Al sentarse."`, `"1 paso de servicio pasa a empezar Al sentarse."`
 - Modify: `apps/dashboard/src/api/live-queries.ts:478` (`getCourseDeleteImpact` gains `"service_steps"`)
-- Test: `apps/server/src/management-api.service-delete.test.ts:187`, the course delete dialog's
-  dashboard test (find it: `git grep -ln courseDeleteCopy -- apps/dashboard/src`), and the
-  venue-service dashboard test that renders `service-delete-copy` items
+- Test: the course delete dialog's dashboard test (find it: `git grep -ln courseDeleteCopy -- apps/dashboard/src`)
+
+**Interfaces — produces:** `readCourseDeleteSettings` answers, with zero counts dropped,
+`[{ key: "course_service_steps", count, targets: [] }, { key: "course_seated_steps", count, targets: [] }]`
+— the second counts the departments whose first step left after the deletion starts
+`after_previous` (Decision 3). `clearCourseDeleteSettings` deletes the steps naming the course,
+then, for each department it touched, sets `start = 'seated'` (minutes kept) on the first remaining
+step (`order by position, id`) when it starts `after_previous`.
 
 - [ ] **Step 1: Write the failing tests.**
-  - `course-delete-settings.test.ts`: `"counts the steps that start when the course is served, in every department"`
-    (steps in two departments) → `[{ key: "course_service_steps", count: 2, targets: [] }]`;
-    `"reports nothing when no step names it"` → `[]`; `"clears them and leaves other steps"`.
+  - `course-delete-settings.test.ts`:
+    `"counts the steps that start when the course is served, in every department"` (steps in two
+    departments) → `[{ key: "course_service_steps", count: 2, targets: [] }]`;
+    `"reports nothing when no step names it"` → `[]`; `"clears them and leaves other steps"`;
+    `"a step left first that started after the step before now starts When seated, its minutes kept"`
+    — [Dessert? · course_served · 10, Coffee · after_previous · 5]; read → also
+    `{ key: "course_seated_steps", count: 1, targets: [] }`; clear → Coffee is `seated`, 5 minutes;
+    `"a step that stays below another keeps After the step before"` — [Set up · seated,
+    Dessert? · course_served, Coffee · after_previous] → Coffee unchanged, no `course_seated_steps`;
+    `"a first step that does not start after the step before is left as it is"` —
+    [Dessert? · course_served, Anything else? · all_served] → unchanged.
   - `course-delete.service-steps.test.ts` (setup as `course-delete.test.ts`: `useVenueDb`,
     `setupPartyVenue`, `inTx`): `"deleting a course nothing names deletes the row outright"`;
     `"deleting a course only a step names deletes the step and keeps the course inactive, as a product default does"`
@@ -656,36 +765,83 @@ same starts and minutes (Decision 5).
     `"deleting a course an order still names keeps it inactive and still deletes its steps"`
     (a working-order line names the course first, as `course-delete.test.ts`'s retained cases do);
     `"the delete impact lists the steps beside the product defaults"` — `readCourseDeleteImpact`'s
-    `removes` `toEqual([{ key: "course_products", … }, { key: "course_service_steps", count: 1, targets: [] }])`.
-  - `service-delete-settings.test.ts`: `"lists and deletes a deleted department's service steps"`.
+    `removes` `toEqual([{ key: "course_products", … }, { key: "course_service_steps", count: 1, targets: [] }])`;
+    `"after the delete the venue's export still imports"` — the Dessert?/Coffee case, then
+    `validateConfigurationBundle` (`apps/server/src/configuration-transfer.ts:591`) on a bundle
+    built from the venue does not throw (build it as `configuration-transfer.test.ts`'s cases do).
   - Dashboard: the course delete copy renders `1 service step that starts when it is served.` for a
-    `course_service_steps` item and keeps the product sentence for `course_products`; the service
-    delete copy renders `Removes 3 service steps.`
+    `course_service_steps` item, `1 service step now starts When seated.` for a
+    `course_seated_steps` item, and keeps the product sentence for `course_products`.
 - [ ] **Step 2: Run and watch them fail.**
-  `pnpm --filter @waitron/venue-service exec vitest run --project node src/course-delete-settings.test.ts src/service-delete-settings.test.ts`,
-  `pnpm --filter @waitron/server exec vitest run src/course-delete.service-steps.test.ts src/management-api.service-delete.test.ts src/course-delete.test.ts`,
-  and the two dashboard test files (browser runs; check memory first).
-- [ ] **Step 3: Implement**, then change the one assertion below.
-- [ ] **Step 4: Run Step 2's commands, plus** `pnpm --filter @waitron/server exec vitest run src/service-delete.history.test.ts src/service-delete.integration.test.ts src/service-delete.disabled-bookings.test.ts src/floor-delete.test.ts src/floor-delete.bookings.test.ts src/delete-impact.test.ts src/kitchen-delete.integration.test.ts src/management-api.kitchen-delete.test.ts`
+  `pnpm --filter @waitron/venue-service exec vitest run --project node src/course-delete-settings.test.ts`,
+  `pnpm --filter @waitron/server exec vitest run src/course-delete.service-steps.test.ts src/course-delete.test.ts`,
+  and the dashboard test file (a browser run; check memory first).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run Step 2's commands, plus**
+  `pnpm --filter @waitron/server exec vitest run src/in-use-references.test.ts src/kitchen-delete.integration.test.ts src/management-api.kitchen-delete.test.ts`
   and `pnpm exec vitest run scripts/live-subscriptions.test.ts` — PASS.
 - [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/server`, `@waitron/dashboard`;
-  prettier; commit — `"Deleting a course or a department deletes its service steps and says so (A757 slice 7)"`.
+  prettier; commit — `"Deleting a course deletes the service steps that start from it, and says so (A757 slice 7)"`.
+
+**Assertions changed:** none. **Fixtures grown:** none.
+
+### Task 4b: deleting a department deletes its steps
+
+An implementer past about 150 tool calls with this task unfinished stops at a passing or cleanly
+red point, commits, and returns a handover (done, left, files, each check's state); a fresh
+implementer continues from it.
+
+**Files:**
+- Modify: `packages/venue-service/src/service-delete-settings.ts` (the `service_steps` item after
+  `department_policy`, `:338`; the delete beside `departmentSalePolicies`, `:440-442`)
+- Modify: `packages/venue-service/src/dashboard/service-delete-copy.ts:24` and `strings.ts`
+  (`"venue.delete_item_service_steps": "Removes {count} service steps."` /
+  `"Quita {count} pasos de servicio."`, beside `venue.delete_item_department_policy`, `:36`, `:908`)
+- Test: `packages/venue-service/src/service-delete-settings.test.ts`,
+  `apps/server/src/management-api.service-delete.test.ts:187`, and the venue-service dashboard test
+  that renders `service-delete-copy` items (`git grep -ln serviceDeleteCopy -- packages/venue-service/src/dashboard`)
+
+- [ ] **Step 1: Write the failing tests.**
+  - `service-delete-settings.test.ts`: `"lists and deletes a deleted department's service steps"`
+    (and another department's steps stay).
+  - Dashboard: the service delete copy renders `Removes 3 service steps.`
+- [ ] **Step 2: Run and watch them fail.**
+  `pnpm --filter @waitron/venue-service exec vitest run --project node src/service-delete-settings.test.ts`,
+  `pnpm --filter @waitron/server exec vitest run src/management-api.service-delete.test.ts`, and the
+  dashboard test file (a browser run).
+- [ ] **Step 3: Implement**, then change the one assertion below.
+- [ ] **Step 4: Run Step 2's commands, plus** `pnpm --filter @waitron/server exec vitest run src/service-delete.history.test.ts src/service-delete.integration.test.ts src/service-delete.disabled-bookings.test.ts src/floor-delete.test.ts src/floor-delete.bookings.test.ts src/delete-impact.test.ts`
+  — PASS.
+- [ ] **Step 5:** typecheck `@waitron/venue-service`, `@waitron/server`; prettier; commit —
+  `"Deleting a department deletes its service steps and says so (A757 slice 7)"`.
 
 **Assertions changed** (the spec's steps belong to a department, and Decision 4 deletes them with
 it): `apps/server/src/management-api.service-delete.test.ts:187` — the department case's expected
 `removes` gains `{ key: "service_steps", count: 3, targets: [] }` after `department_policy`
-(measured, Decision 4). Anything else red is a stop.
+(measured, Decision 4). Anything else red is a stop. **Fixtures grown:** none.
 
 ### Task 5: the dialog's model and save carry the steps (no list drawn yet)
 
 **Files:**
+- Create: `packages/venue-service/src/dashboard/service-step-draft.ts` — the draft's row shape and
+  its helpers, so Tasks 6 and 7 import them and do not reshape the draft:
+  `type ServiceStepDraft = { key: string; id: string | null; name: string; start: ServiceStepStart; courseId: string | null; minutes: string }`
+  (`minutes` is text so a blank or a fraction can be shown and refused; `key` is the saved id, or
+  one made when a row is added); `toStepDrafts(rows: ServiceStep[]): ServiceStepDraft[]`;
+  `stepsEqual(a, b)` (entry by entry, in order: `id`, trimmed `name`, `start`, `courseId`, and
+  `minutes` compared as the numbers they spell when both are whole numbers, else as trimmed text);
+  `toStepInputs(drafts): ServiceStepInput[]` (`id` left out when null, names trimmed, minutes as
+  numbers). Its own test file, `service-step-draft.test.ts` (node or browser project, wherever the
+  package's other pure dashboard helpers are tested).
 - Modify: `packages/venue-service/src/dashboard/client.ts` (`VenueServiceModel` gains
   `serviceSteps: ServiceStep[]` and `courses: { id: string; name: string }[]`;
-  `DepartmentSettingsInput` gains `serviceSteps: ServiceStepInput[]`)
-- Modify: `packages/venue-service/src/dashboard/department-settings.ts` (`fieldTab.serviceSteps = "service"`;
-  `copy` deep-copies the list; `equal` compares the lists entry by entry in order — `id`, trimmed
-  `name`, `start`, `courseId`, `minutes`; `source` in `willUpdate` takes this department's steps
-  from `model.serviceSteps`; `save` sends them with names trimmed)
+  `DepartmentSettingsInput` gains the **optional** `serviceSteps?: ServiceStepInput[]`)
+- Modify: `packages/venue-service/src/dashboard/department-settings.ts` — the draft becomes
+  `DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & { serviceSteps: ServiceStepDraft[] }`
+  from this task on: `fieldTab.serviceSteps = "service"`; `copy` deep-copies the list; `equal` adds
+  `stepsEqual`; `source` in `willUpdate` takes this department's steps from `model.serviceSteps`
+  through `toStepDrafts`; `save` adds `serviceSteps: toStepInputs(draft.serviceSteps)` **only when
+  `!stepsEqual(draft.serviceSteps, baseline.serviceSteps)`** (Decision 8)
 - Modify: `packages/venue-service/src/dashboard/live-queries.ts:229` (`operations` gains
   `"service_steps"`, `"kitchen_courses"`)
 - Modify (fixtures, one change each): every model fixture naming `needsClearingDepartmentIds`
@@ -700,39 +856,50 @@ it): `apps/server/src/management-api.service-delete.test.ts:187` — the departm
   `departments-list`, `index`, `venue-departments-shell.actions`, `venue-departments-shell`,
   `venue-departments-shell.unsaved`, `venue-navigation`, `venue-operations-loader` under
   `packages/venue-service/src/dashboard/`)
-- Test: `department-settings.test.ts`, `client.test.ts`, and the exact-body files below
+- Test: `service-step-draft.test.ts`, `department-settings.test.ts`, `client.test.ts`
 
-- [ ] **Step 1: Write the failing tests** in `department-settings.test.ts`:
-  - `"saves the department's steps as the model holds them"` — model with two steps for d1 (one
-    naming a course in `courses`) and one for d2; change the name field; Save; the body
-    `toMatchObject({ serviceSteps: [d1's two, as { id, name, start, courseId, minutes }] })`.
-  - `"follows a change to the steps another dashboard makes while the form is clean, and keeps the draft while it is not"`.
-  - `"after a save, the model's copy with new ids replaces the clean draft, and the next save sends the ids"`
-    (drive the draft through the component's public `changed`-style path the existing tests use;
-    the list UI arrives in Task 7).
-  In `client.test.ts`: `saveDepartmentSettings` sends `serviceSteps` in the PUT body.
+- [ ] **Step 1: Write the failing tests.**
+  - `service-step-draft.test.ts`: `toStepDrafts` keys each row by its id and turns minutes into
+    text; `stepsEqual` is true for the same rows, and false for a renamed, moved, added or removed
+    row, a changed start or course, or minutes `"2"` against `"3"`; true for `"2"` against `"02"`
+    and for names differing only in outer spaces; `toStepInputs` leaves out a null id, trims names
+    and turns minutes into numbers.
+  - `department-settings.test.ts`, through the dialog's public surface only (the `model` property,
+    the name field, Save — no private method):
+    `"a save that does not touch the steps sends none"` — model with two steps for d1 (one naming a
+    course in `courses`) and one for d2; change the name field; Save; the body
+    `not.toHaveProperty("serviceSteps")`.
+  - `client.test.ts`: `"saveDepartmentSettings sends the steps when given"` — the PUT body carries
+    `serviceSteps` as passed.
+  The cases that need a step edited — the steps sent when they change, following another
+  dashboard's change while clean, and the new ids after a save — are Task 7's, once the list can be
+  edited.
 - [ ] **Step 2: Run and watch them fail.**
-  `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/department-settings.test.ts src/dashboard/client.test.ts`
+  `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/service-step-draft.test.ts src/dashboard/department-settings.test.ts src/dashboard/client.test.ts`
+  (browser runs; check memory first).
 - [ ] **Step 3: Implement**, update the fixtures.
 - [ ] **Step 4: Run the whole venue-service dashboard and the dashboard app.**
   `pnpm --filter @waitron/venue-service exec vitest run --project browser` and
   `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/dashboard-app.receipt-tab.test.ts`.
-  The failures expected are exact-body assertions on a department save, which now carry the steps.
-  In each, add only `serviceSteps: []` (the fixture's value): the bodies slice 1 listed —
-  `client.test.ts` (its department-save case), `department-settings.test.ts` (the save body near
-  `:236-248`), `department-settings.unsaved.test.ts` (four bodies), `department-edit-dialog.test.ts:45-55`,
-  `service-edit-dialog.legacy.test.ts:378`, `venue-departments-policy.test.ts:47,142`,
-  `venue-departments-shell.actions.test.ts:500-510`, `venue-departments-shell.unsaved.test.ts:254`
-  (line numbers from slice 1; find each by `needsClearing: false`). Any other red case is a stop.
-  Then `pnpm exec vitest run scripts/live-subscriptions.test.ts`.
+  **No exact save body should change:** a save that leaves the steps alone sends no
+  `serviceSteps`, so the existing exact department-save bodies stay as they are. Re-grepped
+  2026-10-19 (`git grep -n "needsClearing: false" -- packages/venue-service/src/dashboard apps/dashboard/src`),
+  they are `client.test.ts:423` (the input) and `:442` (the body), `department-edit-dialog.test.ts:55`,
+  `department-settings.test.ts:246`, `department-settings.unsaved.test.ts:484`, `:544`, `:617`,
+  `:703`, `venue-departments-policy.test.ts:153` and `venue-departments-shell.actions.test.ts:510`.
+  Any of them turning red, or any other red case, is a stop. Then
+  `pnpm exec vitest run scripts/live-subscriptions.test.ts`.
 - [ ] **Step 5:** typecheck `@waitron/venue-service` and `@waitron/dashboard`; prettier; commit —
-  `"The department dialog loads and saves its service steps with the department (A757 slice 7)"`.
+  `"The department dialog loads its service steps and saves them only when they change (A757 slice 7)"`.
 
-**Assertions changed:** the exact-body expectations listed in Step 4 gain `serviceSteps: []` (the
-spec adds the steps to the department save). **Fixtures grown:** the model fixtures listed gain
+**Assertions changed:** none. **Fixtures grown:** the model fixtures listed gain
 `serviceSteps: []` and `courses: []`.
 
 ### Task 6: the step list component, on its own
+
+An implementer past about 150 tool calls with this task unfinished stops at a passing or cleanly
+red point, commits, and returns a handover (done, left, files, each check's state); a fresh
+implementer continues from it.
 
 **Files:**
 - Create: `packages/venue-service/src/dashboard/department-service-steps.ts`,
@@ -741,8 +908,7 @@ spec adds the steps to the department save). **Fixtures grown:** the model fixtu
   Global constraints)
 
 **Interfaces — produces:** `<department-service-steps>` with properties
-`steps: ServiceStepDraft[]` (`{ key: string; id: string | null; name: string; start: ServiceStepStart; courseId: string | null; minutes: string }`
-— `minutes` is text so a blank or a fraction can be shown and refused), `courses: { id; name }[]`,
+`steps: ServiceStepDraft[]` (Task 5's `service-step-draft.ts`), `courses: { id; name }[]`,
 `errors: Record<string /* key */, Partial<Record<"name" | "start" | "minutes", string>>>`,
 `listError: string`, `disabled: boolean`; event `steps-change` (`detail: { steps }`, `bubbles`,
 `composed`); inner `wt-change` events are stopped. Keys: `venue.service_steps`,
@@ -772,6 +938,8 @@ spec adds the steps to the department save). **Fixtures grown:** the model fixtu
   - `"drags a step into place"` — pointer, as `option-list-form`'s tests drive the controller.
   - `"shows each error under its own field"` — `errors` for a name and a minutes field;
     `aria-invalid` on both; `listError` under the list.
+  - `"draws one table row per step, in order, keyed by the step's key"` — the `<tbody>`'s `<tr>`s
+    carry the keys in `steps` order (what the controller reads).
   - `"read-only: no handles, no menus, no Add step, fields disabled"`.
   - `"reads in Spanish"` — `Pasos de servicio`, `Paso`, `Empieza`, `Al servir Principales`,
     `Añadir paso`; restore the language after (CLAUDE.md §4).
@@ -779,10 +947,15 @@ spec adds the steps to the department save). **Fixtures grown:** the model fixtu
   list, a row with errors, and the read-only list (as `courses-screen.a11y.test.ts` does).
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/department-service-steps.test.ts src/dashboard/department-service-steps.a11y.test.ts`
-- [ ] **Step 3: Implement.** Use `wt-input`, `wt-combobox`, `wt-row-actions`, `wt-button` — no
-  native `<select>`/`<input>` (`scripts/native-form-fields.test.ts`); every colour and space from a
-  `--wt-*` token. At 390 px the row may wrap (name and menu on one line, start and minutes on the
-  next) but must not scroll sideways; Task 9 looks.
+- [ ] **Step 3: Implement.** The list is a `<table>` with one `<tr>` per step's `key` in its
+  `<tbody>`, in `steps` order — `ReorderController` requires it (`packages/ui/src/reorder-table.ts:105-108`)
+  — styled with `ReorderController.styles` and `.tableStyles` as `course-list.ts` is (`:50-53`).
+  Three cells per row: handle; one cell whose flex box (`flex-wrap: wrap`) holds the name, start and
+  minutes; the row menu. At 390 px the box wraps inside its cell — the name on its own line, the
+  start and minutes on the next — so the row stays one `<tr>` and nothing scrolls sideways; Task 9
+  looks. A new row's `key` comes from `crypto.randomUUID()`. Use `wt-input`, `wt-combobox`,
+  `wt-row-actions`, `wt-button` — no native `<select>`/`<input>` (`scripts/native-form-fields.test.ts`);
+  every colour and space from a `--wt-*` token.
 - [ ] **Step 4: Run Step 2's command** — PASS; then `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts`.
 - [ ] **Step 5:** typecheck `@waitron/venue-service`, prettier, commit —
   `"A service step list: add, edit, reorder and delete steps (A757 slice 7)"`.
@@ -791,18 +964,26 @@ spec adds the steps to the department save). **Fixtures grown:** the model fixtu
 
 ### Task 7: the Service tab shows the list, checks it, and maps refusals
 
+An implementer past about 150 tool calls with this task unfinished stops at a passing or cleanly
+red point, commits, and returns a handover (done, left, files, each check's state); a fresh
+implementer continues from it.
+
 **Files:**
-- Modify: `packages/venue-service/src/dashboard/department-settings.ts` (the draft holds
-  `ServiceStepDraft[]` — a key per row, minutes as text — and turns it into `ServiceStepInput[]` on
-  save; the `<h4>` and `<department-service-steps>` after the Needs clearing block, `:694-712`; the
-  validation in `errors`, `:431-436`; refusal mapping in `fieldRefusal`, `:437-473`;
+- Modify: `packages/venue-service/src/dashboard/department-settings.ts` (the draft already has
+  Task 5's shape; this task adds the `<h4>` and `<department-service-steps>` after the Needs
+  clearing block, `:694-712`, wiring `steps-change` into the draft; the validation in `errors`,
+  `:431-436`; refusal mapping in `fieldRefusal`, `:437-473`, for the codes of Decision 10;
   `showFirstInvalid` reaches the list's marked field)
 - Test: `department-settings.test.ts`, `department-settings.unsaved.test.ts`,
   `department-settings.a11y.test.ts`
 
 - [ ] **Step 1: Write the failing tests** in `department-settings.test.ts`:
   - `"shows Service steps under Table states, below Needs clearing, with this department's steps"`.
-  - `"adding a step enables Save; saving sends it without an id"`.
+  - `"adding a step enables Save; saving sends the whole list, the new step without an id"`.
+  - `"follows a change to the steps another dashboard makes while the form is clean, and keeps the draft while it is not"`.
+  - `"after a save, the model's copy with the new step's id replaces the clean draft, and the next step change sends that id"`.
+  - `"changing a step and changing it back sends no steps"` — then change the name and Save: the
+    body `not.toHaveProperty("serviceSteps")`.
   - `"a blank name, a fraction of a minute, 0 for a repeating step and a first step after the step before are each marked after Save, and Save stays disabled until fixed"`
     — one case per rule; the message under the field; the bottom message; Save disabled; fixing it
     enables Save.
@@ -810,9 +991,16 @@ spec adds the steps to the department save). **Fixtures grown:** the model fixtu
     — dirty draft naming course c1; a model update without c1; Save attempted → marked; choosing
     Everything served clears it.
   - `"a refusal naming a step's field, sent while Details shows, brings back Service, marks that field and focuses it"`
-    — PUT 400 `management.request_invalid` `{ field: "serviceSteps.1.name" }`; and
-    `{ field: "serviceSteps.0.courseId" }` → the deleted-course message under the start;
-    `{ field: "serviceSteps" }` → the list's message. Save not disabled by the refusal alone.
+    — PUT 400 `management.request_invalid` `{ field: "serviceSteps.1.name" }` → the refused words
+    under that name; `{ field: "serviceSteps.0.courseId" }` → the refused words (not the
+    deleted-course message) under the start; `{ field: "serviceSteps" }` → the list's message. Save
+    not disabled by the refusal alone.
+  - `"a course deleted meanwhile is named under every step that starts from it"` — PUT 404
+    `course.not_found` `{ courseId: c1 }` → `That course was deleted. Choose another start.` under
+    each submitted row naming c1, and nowhere else.
+  - `"a step another manager deleted says so, and Cancel brings back the latest"` — PUT 404
+    `service_step.not_found` → `A step was changed elsewhere. Cancel to see the latest.` under the
+    list; Cancel → the model's steps and a quiet Save.
   - `"the read-only dialog shows the steps without handles, menus or Add step"`.
   - `"reads in Spanish"` — `Pasos de servicio` under `Estados de la mesa`.
   In `department-settings.unsaved.test.ts`:
@@ -892,6 +1080,31 @@ with `git grep -n "Table states" docs/developers/design-system.md`),
 - [ ] **Step 3:** Delete the throwaway test; `git status` shows it gone.
 
 ---
+
+## Open points for the owner at land
+
+Where the build departs from picture 10, and why:
+
+1. **Delete is in each row's ⋮ menu, not a trash icon beside the row.** The design system puts
+   Delete "in each row's menu" (`docs/developers/design-system.md:4636-4642`); A756's approved
+   Courses page does the same (`docs/backlog/mockups/a756-kitchen-settings/02-courses-page.png`);
+   and no trash icon is registered (`git grep -n '"trash"' -- packages/ui packages/ui-core` finds
+   none).
+2. **The button reads "Add step", not "+ Add step".** The spec says the pictures' symbols stand in
+   for icons (spec lines 11-14), and the Courses page's button reads "Add course" with no "+".
+3. **Each row has two fields for its start — a start list and a minutes box — where the picture
+   draws one box reading "When seated · 0 min".** Editing needs both values; one box would have to
+   be a new kind of field primitive (CLAUDE.md §3: a screen does not draw its own field). The row
+   still reads in the picture's order: name, start, minutes.
+
+The candidate owner points this plan builds with a default:
+
+4. **The fifth start's wording:** "Repeats after the last order" (Spanish "Se repite tras el último
+   pedido"), with the other Spanish words in Global constraints.
+5. **A department added later also gets the starter set** (Decision 5), on the spec's "a bar that
+   does not visit tables deletes them all".
+6. **Deleting a course deletes its steps** rather than refusing the delete, and a step left first
+   with "after the step before" becomes When seated (Decision 3); the delete window lists both.
 
 ## Open questions (each with the default this plan uses)
 
