@@ -1251,6 +1251,72 @@ async function boxChip(el: CatalogueBrowser) {
 }
 
 it.each([
+  ["rename-b", "#b12525", "#777777", "rgb(177, 37, 37)", true],
+  ["add-category-b", "#b12525", "#777777", "rgb(177, 37, 37)", true],
+  ["rename-d", null, "#777777", "rgb(119, 119, 119)", false],
+  ["add-category-root", null, "#777777", "rgb(119, 119, 119)", false],
+] as const)(
+  "keeps the inherited colour painted while typing a category name (%s)",
+  async (action, parentColor, defaultColor, painted, nested) => {
+    const el = await mountBrowser({
+      categories: [{ ...CATEGORIES[0]!, color: parentColor }, ...CATEGORIES.slice(1)],
+      defaultColor,
+    });
+    if (nested) await toggleCategory(el, "d");
+    await menuAction(el, action);
+    const box = await nameBox(el);
+    await userEvent.keyboard("Beverages");
+    const chip = await boxChip(el);
+    expect(getComputedStyle(chip).backgroundColor).toBe(painted);
+    expect(getComputedStyle(chip).borderTopStyle).toBe("dashed");
+    expect(box.shadowRoot!.querySelector("input")!.value).toBe("Beverages");
+    await userEvent.click(await boxSquare(el));
+    const form = await colorChooser(el);
+    expect(form.shadowRoot!.querySelector('[data-color=""]')!.getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    const closed = chooserCloseReported(el);
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    await nameBox(el);
+    await userEvent.keyboard("{Enter}");
+    if (action.startsWith("rename"))
+      expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([
+        [nested ? "b" : "d", { name: "Beverages" }],
+      ]);
+    else
+      expect(vi.mocked(el.api.createCategory).mock.calls).toStrictEqual([
+        [{ name: "Beverages", parentId: nested ? "b" : null }],
+      ]);
+  },
+);
+
+it("previews inheritance after clearing a category's own colour while renaming", async () => {
+  const el = await mountBrowser({
+    categories: [
+      { ...CATEGORIES[0]!, color: "#b12525" },
+      { ...CATEGORIES[1]!, color: "#256bb1" },
+      CATEGORIES[2]!,
+    ],
+    defaultColor: "#777777",
+  });
+  await toggleCategory(el, "d");
+  await menuAction(el, "rename-b");
+  await nameBox(el);
+  expect(getComputedStyle(await boxChip(el)).backgroundColor).toBe("rgb(37, 107, 177)");
+  expect(getComputedStyle(await boxChip(el)).borderTopStyle).toBe("solid");
+  await userEvent.click(await boxSquare(el));
+  await choose(el, "");
+  await nameBox(el);
+  expect(getComputedStyle(await boxChip(el)).backgroundColor).toBe("rgb(177, 37, 37)");
+  expect(getComputedStyle(await boxChip(el)).borderTopStyle).toBe("dashed");
+  await userEvent.keyboard("Lager{Enter}");
+  expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([
+    ["b", { name: "Lager", color: null }],
+  ]);
+});
+
+it.each([
   ["en-GB", "Colour of Drinks"],
   ["es", "Color de Drinks"],
 ] as const)(

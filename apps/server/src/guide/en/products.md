@@ -75,6 +75,11 @@ to another category on the Products screen, by turning on **Select** and draggin
 with **Move to…**. The main category also plays a part in choosing the kitchen station a dish goes
 to, as described below.
 
+While you add or rename a category, the square beside its name shows its own colour, or the colour
+it inherits from the nearest coloured category above it, then the venue's default. A dashed border
+marks an inherited colour. Choose the square to set a colour of its own; **No colour** keeps
+inheritance, so renaming alone does not change where the colour comes from.
+
 Where the dish is made is set in the routing grid, on the **Routes** tab of **Prep
 stations**. The product's own row decides first, then its category's row and each parent
 category's in turn (the **No category** row for a product with no category), then **All

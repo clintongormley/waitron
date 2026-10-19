@@ -800,7 +800,8 @@ export class ProductList extends LitElement {
   /** The open name box's colour square, in the row's leading slot. A press keeps the cursor in the
    * input; it is no Tab stop, so Tab still leaves the box. On a phone the slot shows only while
    * naming, as `naming-frame`. */
-  #nameFrame() {
+  #nameFrame(parentId: string | null) {
+    const color = this.nameColor ?? this.#inheritedColor(parentId).color;
     return html`<span part="folder-frame naming-frame"
       ><button
         part="swatch-button"
@@ -815,7 +816,7 @@ export class ProductList extends LitElement {
           this.#send("name-color", {});
         }}
       >
-        ${swatchChip(this.nameColor)}
+        ${swatchChip(color, this.nameColor === null)}
       </button></span
     >`;
   }
@@ -1412,7 +1413,7 @@ export class ProductList extends LitElement {
         if (row.kind === "draft")
           return column.key === "name"
             ? html`<span part="folder-cell naming"
-                >${this.#nameLine()}${this.#nameFrame()}${this.#nameBox()}</span
+                >${this.#nameLine()}${this.#nameFrame(row.parentKey === ROOT_KEY ? null : row.parentKey.slice(7))}${this.#nameBox()}</span
               >`
             : nothing;
         if (row.kind === "root") {
@@ -1459,7 +1460,7 @@ export class ProductList extends LitElement {
           return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
             >${
               this.#renaming(folder.id)
-                ? html`${this.#nameLine()}${this.#nameFrame()}${this.#nameBox()}<span
+                ? html`${this.#nameLine()}${this.#nameFrame(folder.parentId)}${this.#nameBox()}<span
                       part="name-after"
                       >${after}</span
                     >`

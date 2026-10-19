@@ -1742,8 +1742,10 @@ taking the room from there to the pinned cell. Keep the grip in its leading colu
 the line above, and the asterisk wraps in what they leave of that room; the count is hidden
 at that width (above). While a category is being renamed or added, the name box's colour square
 takes the row's colour-square slot, where the row's own square sits at rest, and the box starts
-where the name started. The name box's square shows only a colour chosen for the category itself,
-so an inheriting category's shows the empty outline while it is being named. At phone width that slot shows only while naming, on the row's first line
+where the name started. The name box's square shows the category's own colour, else the nearest
+coloured category above it, else the venue's default, else an empty outline. An inherited colour
+keeps its dashed inset border while the name is typed. The chooser still starts on No colour when
+the category has no colour of its own. At phone width that slot shows only while naming, on the row's first line
 above the box. That square is not a Tab stop, so Tab still leaves the box.
 
 Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
