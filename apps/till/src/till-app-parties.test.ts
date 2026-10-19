@@ -10648,3 +10648,804 @@ describe("till-app: closing editing observations", () => {
     );
   }
 });
+
+describe("till-app: Finish table confirms paid unserved dishes", () => {
+  type Dish = import("./api/finish-table-types.js").UnservedDish;
+  type Consent = import("./api/line-cancel-types.js").CancellationRead;
+  type FinishDialog = HTMLElementTagNameMap["till-finish-table-dialog"];
+  const cash = {
+    tenderId: "cash-1",
+    method: "cash",
+    manual: false,
+    last4: null,
+    appliedRemaining: "30.00",
+    tipRemaining: "2.00",
+    pendingRefundId: null,
+  };
+  function dish(lineId = "line-1", billId = "wo-4"): Dish {
+    return {
+      billId,
+      billRevision: 0,
+      lineId,
+      name: lineId === "line-1" ? "Flan" : "Water",
+      quantity: "1.000",
+      context: {
+        billStatus: "settled",
+        stage: "not_started",
+        components: [
+          {
+            id: `ticket-${lineId}`,
+            lineId,
+            state: "queued",
+            firedAt: null,
+            quantity: "2.000",
+            kitchenQuantity: "2.000",
+            servedQuantity: "1.000",
+            cancelledQuantity: "0.000",
+          },
+        ],
+      },
+    };
+  }
+  function consent(row = dish()): Consent {
+    return {
+      billId: row.billId,
+      billRevision: row.billRevision,
+      revision: 3,
+      context: structuredClone(row.context),
+      saleId: `sale-${row.billId}`,
+      refundValue: { quantity: "2.000", gross: "11.00" },
+    };
+  }
+  const refusal = (rows = [dish()]) => ({
+    code: "party.unserved_dishes",
+    partyId: "v1",
+    dishes: rows,
+  });
+  const finishDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<FinishDialog>("till-finish-table-dialog");
+  const approval = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>("[data-finish-approval]");
+  async function mountFinish(overrides: Record<string, unknown> = {}) {
+    return mountApp({
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-cash"] }),
+      finishTable: vi.fn().mockRejectedValueOnce(refusal()).mockResolvedValue({ state: "closed" }),
+      getPartyBills: vi.fn().mockResolvedValue(
+        [tabBill, checkBill].map((row) => ({
+          ...row,
+          status: "settled",
+          outstanding: "0.00",
+          hasPayments: true,
+        })),
+      ),
+      getCancellation: vi.fn(async (_party: string, lineId: string) =>
+        consent(dish(lineId, lineId === "line-1" ? "wo-4" : "wo-check")),
+      ),
+      getRefundableTenders: vi.fn().mockResolvedValue([cash]),
+      getTransactionReceipt: vi.fn().mockResolvedValue(saleResult),
+      listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m1", displayName: "Marta" }]),
+      refundTransaction: vi.fn(),
+      ...overrides,
+    });
+  }
+  async function openFinish(el: TillApp) {
+    emit(await openMesa(el), "finish-table");
+    await flush(el, 8);
+    return finishDialog(el);
+  }
+  async function choose(el: TillApp, refund = false) {
+    const dialog = finishDialog(el)!;
+    expect(dialog).not.toBeNull();
+    await dialog.updateComplete;
+    emit(dialog.shadowRoot!.querySelector('wt-combobox[name="reason"]')!, "wt-change", {
+      value: "r-cancel",
+    });
+    await dialog.updateComplete;
+    if (!refund)
+      for (const input of dialog.shadowRoot!.querySelectorAll<HTMLInputElement>(
+        'input[name="refund"]',
+      )) {
+        if (input.checked) await userEvent.click(input);
+      }
+    await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!);
+    await flush(el, 8);
+  }
+
+  it("opens the paid-food dialog with the authoritative filed remainder and no guessed reason", async () => {
+    const { el } = await mountFinish();
+    const dialog = await openFinish(el);
+    expect(dialog).not.toBeNull();
+    expect(dialog!.dishes).toEqual([dish()]);
+    expect(dialog!.refunds).toEqual({ "line-1": "5.50" });
+    expect(dialog!.defaultReasonId).toBe("");
+    expect(dialog!.reasons?.map((row) => row.id)).toEqual(["r-cancel"]);
+    expect(api.getCancellation).toHaveBeenCalledWith(
+      "v1",
+      "line-1",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(api.getRefundableTenders).toHaveBeenCalledWith(
+      "sale-wo-4",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(api.finishTable).toHaveBeenCalledOnce();
+    expect(tableOrder(el)).not.toBeNull();
+  });
+
+  it("cancels the complete observed set and closes with every family editing observation", async () => {
+    const { el } = await mountFinish();
+    await openFinish(el);
+    await choose(el);
+    expect(api.finishTable).toHaveBeenCalledTimes(2);
+    const call = vi.mocked(api.finishTable).mock.calls[1]!;
+    expect(call.slice(0, 3)).toEqual(["v1", 3, closingEdits]);
+    expect(call[3]).toEqual({
+      submissionId: expect.any(String),
+      cancellations: [
+        {
+          lineId: "line-1",
+          quantity: "1.000",
+          expectedBillRevision: 0,
+          expectedContext: dish().context,
+          reasonId: "r-cancel",
+        },
+      ],
+    });
+    expect(call[4]).toEqual({ signal: expect.any(AbortSignal) });
+    expect(finishDialog(el)).toBeNull();
+    expect(tableOrder(el)).toBeNull();
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
+  it.each(["none", "pending", "tip-only"])(
+    "shows no Refund tick for %s principal on this device",
+    async (kind) => {
+      const { el } = await mountFinish(
+        kind === "none"
+          ? {
+              getTill: vi.fn().mockResolvedValue(till),
+            }
+          : {
+              getRefundableTenders: vi.fn().mockResolvedValue([
+                {
+                  ...cash,
+                  ...(kind === "pending"
+                    ? { pendingRefundId: "pending" }
+                    : { appliedRemaining: "0.00" }),
+                },
+              ]),
+            },
+      );
+      const dialog = await openFinish(el);
+      expect(dialog).not.toBeNull();
+      expect(dialog!.refunds).toEqual({});
+      expect(dialog!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
+      expect(dialog!.refundAtTill).toBe(kind === "none");
+      await choose(el);
+      expect(vi.mocked(api.finishTable).mock.calls[1]![3]!.cancellations[0]).not.toHaveProperty(
+        "refundHandoff",
+      );
+      expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["getCancellation", "getRefundableTenders"])(
+    "retries a failed %s rather than assuming no refund",
+    async (method) => {
+      const read = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue(method === "getCancellation" ? consent() : [cash]);
+      const { el } = await mountFinish({
+        [method]: read,
+        finishTable: vi.fn().mockRejectedValue(refusal()),
+      });
+      await openFinish(el);
+      expect(finishDialog(el)).toBeNull();
+      expect(banner(el)).not.toBeNull();
+      emit(tableOrder(el)!, "finish-table");
+      await flush(el, 8);
+      expect(finishDialog(el)).not.toBeNull();
+      expect(finishDialog(el)!.refunds).toEqual({ "line-1": "5.50" });
+    },
+  );
+
+  it("retains a failed reason read and retries it in the dialog", async () => {
+    const reasons = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue([]);
+    const { el } = await mountFinish({ listAdjustmentReasons: reasons });
+    const dialog = await openFinish(el);
+    expect(dialog).not.toBeNull();
+    expect(dialog!.reasons).toBeNull();
+    expect(dialog!.refusal).toBe(t("adjust.reasons_error"));
+    emit(dialog!, "finish-table-reasons");
+    await flush(el);
+    expect(finishDialog(el)!.reasons).toEqual([]);
+    expect(finishDialog(el)!.refusal).toBe("");
+  });
+
+  it.each(["getCancellation", "getRefundableTenders", "listAdjustmentReasons"])(
+    "drops late %s answers after API replacement",
+    async (method) => {
+      const pending = held();
+      const { el } = await mountFinish({ [method]: pending.call });
+      await openFinish(el);
+      el.api = stubApi();
+      await flush(el);
+      pending.answer.settle(
+        method === "getCancellation" ? consent() : method === "getRefundableTenders" ? [cash] : [],
+      );
+      await flush(el, 6);
+      expect(finishDialog(el)).toBeNull();
+      expect(approval(el)).toBeNull();
+      expect(banner(el)).toBeNull();
+    },
+  );
+
+  it("keeps the finish action single while the first dish is being read", async () => {
+    const pending = held();
+    const { el } = await mountFinish({ getCancellation: pending.call });
+    await openFinish(el);
+    emit(tableOrder(el)!, "finish-table");
+    await flush(el);
+    expect(api.finishTable).toHaveBeenCalledOnce();
+    pending.answer.settle(consent());
+    await flush(el, 6);
+    expect(finishDialog(el)).not.toBeNull();
+  });
+
+  it("opens the independent public refund only after the table closes", async () => {
+    const pending = held();
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockImplementation(() => pending.call());
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el, true);
+    expect(tableOrder(el)).not.toBeNull();
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    pending.answer.settle({ state: "closed" });
+    await flush(el, 10);
+    expect(tableOrder(el)).toBeNull();
+    expect(api.getTransactionReceipt).toHaveBeenCalledWith(
+      "sale-wo-4",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-tender-refund-dialog"]>(
+        "till-tender-refund-dialog",
+      )!.attempt,
+    ).toBeNull();
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+  });
+
+  it("asks refund approval from the main action and keeps a wrong PIN retryable without storing it", async () => {
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockRejectedValueOnce({ code: "pin.invalid" })
+      .mockResolvedValue({ state: "closed" });
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el, true);
+    expect(approval(el)?.authorizers).toEqual([{ personId: "m1", displayName: "Marta" }]);
+    expect(approval(el)?.approverRole).toBeNull();
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    const first = finish.mock.calls[1]![3];
+    expect(first.cancellations[0].refundHandoff).toBe(true);
+    emit(approval(el)!, "override-confirm", { personId: "m1", pin: "1111" });
+    await flush(el, 8);
+    expect(approval(el)?.error).toBe("pin.invalid");
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    emit(approval(el)!, "override-confirm", { personId: "m1", pin: "7777" });
+    await flush(el, 10);
+    expect(finish.mock.calls[3]![3]).toEqual({
+      ...first,
+      approver: { personId: "m1", pin: "7777" },
+    });
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    for (const storage of [localStorage, sessionStorage])
+      for (const key of Object.keys(storage)) expect(storage.getItem(key)).not.toContain("7777");
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the chosen fields when approval is cancelled", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    await openFinish(el);
+    await choose(el, true);
+    expect(approval(el)).not.toBeNull();
+    emit(approval(el)!, "override-cancel");
+    await flush(el);
+    expect(approval(el)).toBeNull();
+    const dialog = finishDialog(el)!;
+    expect(dialog.busy).toBe(false);
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLInputElement>('input[name="refund"]')!.checked,
+    ).toBe(true);
+    expect(dialog.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="reason"]')!.value).toBe(
+      "r-cancel",
+    );
+  });
+
+  it("retries an approver read failure from the retained main action", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValue({ code: "authorization.not_permitted" }),
+      listRefundAuthorizers: vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue([]),
+    });
+    await openFinish(el);
+    await choose(el, true);
+    expect(approval(el)).toBeNull();
+    expect(finishDialog(el)!.busy).toBe(false);
+    expect(finishDialog(el)!.refusal).toBe(codeMessage("server.internal"));
+    await userEvent.click(
+      finishDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!,
+    );
+    await flush(el, 8);
+    expect(approval(el)?.authorizers).toEqual([]);
+  });
+
+  it("drops a late approver read after closing the paid-food dialog", async () => {
+    const people = held();
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValue({ code: "authorization.not_permitted" }),
+      listRefundAuthorizers: people.call,
+    });
+    await openFinish(el);
+    await choose(el, true);
+    emit(finishDialog(el)!, "finish-table-close");
+    await flush(el);
+    people.answer.settle([{ personId: "old", displayName: "Old" }]);
+    await flush(el, 8);
+    expect(finishDialog(el)).toBeNull();
+    expect(approval(el)).toBeNull();
+  });
+
+  it("re-prompts a raced kitchen set without confirming its new facts automatically", async () => {
+    const changed = {
+      ...dish(),
+      quantity: "0.500",
+      context: { ...dish().context, stage: "started" as const },
+    };
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValueOnce(refusal([changed]))
+      .mockResolvedValue({ state: "closed" });
+    const read = vi.fn().mockResolvedValueOnce(consent()).mockResolvedValue(consent(changed));
+    const { el } = await mountFinish({ finishTable: finish, getCancellation: read });
+    await openFinish(el);
+    await choose(el);
+    expect(finish).toHaveBeenCalledTimes(2);
+    expect(tableOrder(el)).not.toBeNull();
+    expect(finishDialog(el)!.dishes).toEqual([changed]);
+    expect(
+      finishDialog(el)!.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="reason"]')!.value,
+    ).toBe("");
+    expect(
+      finishDialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="refund"]')!
+        .checked,
+    ).toBe(false);
+    await choose(el);
+    expect(finish.mock.calls[2]![3].cancellations[0].quantity).toBe("0.500");
+    expect(finish.mock.calls[2]![3].submissionId).not.toBe(finish.mock.calls[1]![3].submissionId);
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it.each(["bill", "party", "kitchen"])(
+    "refuses an opening %s observation that changed during its reads",
+    async (kind) => {
+      const value = consent();
+      if (kind === "bill") value.billRevision++;
+      if (kind === "party") value.revision++;
+      if (kind === "kitchen") value.context.stage = "started";
+      const { el } = await mountFinish({ getCancellation: vi.fn().mockResolvedValue(value) });
+      await openFinish(el);
+      expect(finishDialog(el)).toBeNull();
+      expect(api.finishTable).toHaveBeenCalledOnce();
+      expect(banner(el)?.textContent).toContain(codeMessage("tab.cancel_context_changed"));
+    },
+  );
+
+  it("keeps a changed editing observation from reaching the Finish command", async () => {
+    let changed = false;
+    const listDrafts = vi.fn(async () => {
+      const snapshot = await drafts.listDrafts("v1");
+      if (changed) snapshot.billEdits.find((row) => row.billId === "wo-check")!.editorVersion++;
+      return snapshot;
+    });
+    const { el } = await mountFinish({ listDrafts });
+    await openFinish(el);
+    changed = true;
+    const count = listDrafts.mock.calls.length;
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(count);
+    await flush(el, 6);
+    await choose(el);
+    expect(api.finishTable).toHaveBeenCalledOnce();
+    expect(finishDialog(el)!.busy).toBe(false);
+    expect(finishDialog(el)!.refusal).toBe(codeMessage("draft.out_of_date"));
+  });
+
+  it.each(["missing", "extra", "refund"])(
+    "rejects a synthetic %s cancellation choice",
+    async (fault) => {
+      const { el } = await mountFinish(
+        fault === "refund" ? { getTill: vi.fn().mockResolvedValue(till) } : {},
+      );
+      await openFinish(el);
+      const cancellation = {
+        lineId: "line-1",
+        quantity: "1.000",
+        expectedBillRevision: 0,
+        expectedContext: dish().context,
+        reasonId: "r-cancel",
+        ...(fault === "refund" ? { refundHandoff: true } : {}),
+      };
+      emit(finishDialog(el)!, "finish-table-choice", {
+        cancellations:
+          fault === "missing"
+            ? []
+            : fault === "extra"
+              ? [cancellation, { ...cancellation, lineId: "other" }]
+              : [cancellation],
+      });
+      await flush(el, 6);
+      expect(api.finishTable).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("deduplicates receipt reads and allocates remaining principal across two dishes on one sale", async () => {
+    const rows = [dish(), dish("line-2")];
+    const { el } = await mountFinish({
+      finishTable: vi.fn().mockRejectedValue(refusal(rows)),
+      getCancellation: vi.fn(async (_p: string, id: string) =>
+        consent(rows.find((row) => row.lineId === id)!),
+      ),
+      getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, appliedRemaining: "8.00" }]),
+    });
+    const dialog = await openFinish(el);
+    expect(dialog).not.toBeNull();
+    expect(dialog!.refunds).toEqual({ "line-1": "5.50", "line-2": "2.50" });
+    expect(api.getRefundableTenders).toHaveBeenCalledOnce();
+  });
+
+  it("offers every selected paid bill after closing instead of losing the second receipt", async () => {
+    const rows = [dish(), dish("line-2", "wo-check")];
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal(rows))
+        .mockResolvedValue({ state: "closed" }),
+    });
+    await openFinish(el);
+    await choose(el, true);
+    expect(tableOrder(el)).toBeNull();
+    const choices = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-finish-refund]")];
+    expect(choices.map((row) => row.getAttribute("data-finish-refund"))).toEqual([
+      "sale-wo-4",
+      "sale-wo-check",
+    ]);
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    await userEvent.click(choices[1]!);
+    await flush(el, 10);
+    expect(api.getTransactionReceipt).toHaveBeenCalledWith(
+      "sale-wo-check",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    emit(el.shadowRoot!.querySelector("till-tender-refund-dialog")!, "tender-refund-close");
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-ticket-view")!, "back-to-find-bill");
+    await flush(el, 8);
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-finish-refund]")].map((row) =>
+        row.getAttribute("data-finish-refund"),
+      ),
+    ).toEqual(["sale-wo-4"]);
+  });
+
+  it("reuses the exact command identity when an unanswered write is resent", async () => {
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue({ state: "closed" });
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el);
+    await expect.poll(() => finish.mock.calls.length).toBe(3);
+    expect(finish.mock.calls[2]!.slice(0, 4)).toEqual(finish.mock.calls[1]!.slice(0, 4));
+    await flush(el, 8);
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("locks an unanswered choice and retries the same body after all automatic resends fail", async () => {
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue({ state: "closed" });
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el);
+    await expect
+      .poll(() => finishDialog(el)?.refusal, { timeout: 5000 })
+      .toBe(t("adjust.unconfirmed"));
+    const command = finish.mock.calls[1]![3];
+    const dialog = finishDialog(el)!;
+    expect(
+      dialog.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="reason"]')!.disabled,
+    ).toBe(true);
+    await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!);
+    await flush(el, 8);
+    expect(finish.mock.calls[4]![3]).toEqual(command);
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("asks the same approver again without retaining the PIN when an approved answer is lost", async () => {
+    let approved = 0;
+    const finish = vi.fn(async (...args: unknown[]) => {
+      if (args[3] === undefined) throw refusal();
+      const command = args[3] as { approver?: { personId: string; pin: string } };
+      if (command.approver === undefined) throw { code: "authorization.not_permitted" };
+      if (++approved <= 3) throw new TypeError("Failed to fetch");
+      return { state: "closed" };
+    });
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el, true);
+    emit(approval(el)!, "override-confirm", { personId: "m1", pin: "7777" });
+    await expect
+      .poll(() => finishDialog(el)?.refusal, { timeout: 5000 })
+      .toBe(t("adjust.unconfirmed"));
+    expect(approval(el)).toBeNull();
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    vi.mocked(api.listRefundAuthorizers).mockResolvedValue([
+      { personId: "m1", displayName: "Marta" },
+      { personId: "m2", displayName: "Other" },
+    ]);
+    const sends = finish.mock.calls.length;
+    await userEvent.click(
+      finishDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!,
+    );
+    await flush(el, 8);
+    expect(finish).toHaveBeenCalledTimes(sends);
+    expect(approval(el)?.authorizers).toEqual([{ personId: "m1", displayName: "Marta" }]);
+    emit(approval(el)!, "override-confirm", { personId: "m1", pin: "8888" });
+    await flush(el, 10);
+    expect((finish.mock.calls.at(-1)![3] as { submissionId: string }).submissionId).toBe(
+      (finish.mock.calls[2]![3] as { submissionId: string }).submissionId,
+    );
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    for (const storage of [localStorage, sessionStorage])
+      for (const key of Object.keys(storage)) {
+        expect(storage.getItem(key)).not.toContain("7777");
+        expect(storage.getItem(key)).not.toContain("8888");
+      }
+  });
+
+  it("ignores a late receipt after a new table is opened following Finish", async () => {
+    const receipt = held();
+    const { el } = await mountFinish({ getTransactionReceipt: receipt.call });
+    await openFinish(el);
+    await choose(el, true);
+    expect(receipt.call).toHaveBeenCalledOnce();
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el, 8);
+    receipt.answer.settle(saleResult);
+    await flush(el, 10);
+    expect(tableOrder(el)?.party?.id).toBe("v7");
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+  });
+
+  it("reveals a newly required note beside the field and retains the paid choices for retry", async () => {
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValueOnce({ code: "adjustment.note_required" })
+      .mockResolvedValue({ state: "closed" });
+    const { el } = await mountFinish({ finishTable: finish });
+    await openFinish(el);
+    await choose(el);
+    const dialog = finishDialog(el)!;
+    const note =
+      dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="note"]');
+    expect(note).not.toBeNull();
+    expect(note!.required).toBe(true);
+    expect(note!.error).toBe(codeMessage("adjustment.note_required"));
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+    emit(note!, "wt-change", { value: "Guests left" });
+    await flush(el);
+    expect(note!.error).toBe("");
+    await userEvent.click(dialog.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!);
+    await flush(el, 8);
+    expect(finish.mock.calls[2]![3].cancellations[0]).toMatchObject({
+      reasonId: "r-cancel",
+      note: "Guests left",
+    });
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("places a refused reason under its field and clears it when another reason is selected", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValueOnce({ code: "adjustment.reason_inactive" })
+        .mockResolvedValue({ state: "closed" }),
+    });
+    await openFinish(el);
+    await choose(el);
+    const dialog = finishDialog(el)!;
+    const field = dialog.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="reason"]')!;
+    expect(field.error).toBe(codeMessage("adjustment.reason_inactive"));
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+    emit(field, "wt-change", { value: "r-cancel" });
+    await flush(el);
+    expect(field.error).toBe("");
+  });
+
+  it("rereads a changed party after confirmation and requires a fresh Finish action", async () => {
+    let changed = false;
+    const finish = vi.fn(async (...args: unknown[]) => {
+      if (args[3] === undefined) throw refusal();
+      changed = true;
+      throw { code: "party.out_of_date", partyId: "v1", revision: 4 };
+    });
+    const { el } = await mountFinish({
+      finishTable: finish,
+      getTablesState: vi.fn(async () =>
+        changed ? [seated({}, { revision: 4 }), mesa7, mesa9] : [mesa4, mesa7, mesa9],
+      ),
+    });
+    await openFinish(el);
+    await choose(el);
+    expect(finish).toHaveBeenCalledTimes(2);
+    expect(finishDialog(el)).toBeNull();
+    expect(tableOrder(el)?.party?.revision).toBe(4);
+    expect(banner(el)).not.toBeNull();
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("returns to Take payment when a family bill becomes outstanding before confirmation", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValueOnce({ code: "party.bill_outstanding" }),
+    });
+    await openFinish(el);
+    await choose(el);
+    expect(finishDialog(el)).toBeNull();
+    expect(tableOrder(el)?.finishRefused).toBe(true);
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+  });
+
+  for (const locale of ["en", "es"] as const)
+    for (const theme of ["light", "dark"] as const)
+      for (const width of [390, 1280]) {
+        it(`paid Finish is accessible in ${locale}/${theme}/${width}`, async () => {
+          const previousWidth = innerWidth,
+            previousHeight = innerHeight;
+          const bodyBackground = document.body.style.background;
+          const documentBackground = document.documentElement.style.background;
+          await page.viewport(width, 844);
+          try {
+            const rows = [dish(), dish("line-2", "wo-check")];
+            const finish = vi
+              .fn()
+              .mockRejectedValueOnce(refusal(rows))
+              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+              .mockResolvedValue({ state: "closed" });
+            const { el, host } = await mountFinish({ finishTable: finish });
+            host.setAttribute("data-theme", theme);
+            document.body.style.background = getComputedStyle(host).backgroundColor;
+            document.documentElement.style.background = getComputedStyle(host).backgroundColor;
+            await openMesa(el);
+            setLocale(locale);
+            await flush(el);
+            emit(tableOrder(el)!, "finish-table");
+            await flush(el, 8);
+            const dialog = finishDialog(el)!;
+            expect(dialog.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
+              locale === "es" ? "2 platos sin servir" : "2 dishes not served",
+            );
+            await expectNoA11yViolations(dialog);
+            expect(innerWidth).toBe(width);
+            for (const selector of ["[data-confirm]", "[data-close]"]) {
+              const button =
+                dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(selector)!;
+              const bounds = button.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+              expect(bounds.left).toBeGreaterThanOrEqual(0);
+              expect(bounds.right).toBeLessThanOrEqual(width);
+              expect(bounds.top).toBeGreaterThanOrEqual(0);
+              expect(bounds.bottom).toBeLessThanOrEqual(844);
+            }
+            await page.screenshot({
+              path: `__screenshots__/a773-finish-app/dishes-${locale}-${theme}-${width}.png`,
+            });
+            await choose(el, true);
+            expect(approval(el)).not.toBeNull();
+            await expectNoA11yViolations(approval(el)!);
+            await page.screenshot({
+              path: `__screenshots__/a773-finish-app/approval-${locale}-${theme}-${width}.png`,
+            });
+            emit(approval(el)!, "override-confirm", { personId: "m1", pin: "7777" });
+            await flush(el, 10);
+            expect([...el.shadowRoot!.querySelectorAll("[data-finish-refund]")]).toHaveLength(2);
+            const chooser = el
+              .shadowRoot!.querySelector("[data-finish-refund]")!
+              .closest("wt-dialog")!;
+            await expectNoA11yViolations(chooser);
+            for (const button of chooser.querySelectorAll<HTMLElementTagNameMap["wt-button"]>(
+              "wt-button",
+            )) {
+              const bounds = button.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+              expect(bounds.left).toBeGreaterThanOrEqual(0);
+              expect(bounds.right).toBeLessThanOrEqual(width);
+            }
+            await page.screenshot({
+              path: `__screenshots__/a773-finish-app/receipts-${locale}-${theme}-${width}.png`,
+            });
+          } finally {
+            setLocale("en");
+            document.body.style.background = bodyBackground;
+            document.documentElement.style.background = documentBackground;
+            await page.viewport(previousWidth, previousHeight);
+          }
+        });
+      }
+
+  it("returns a changed editing refusal from the PIN prompt without sending stale authority", async () => {
+    let changed = false;
+    const listDrafts = vi.fn(async () => {
+      const snapshot = await drafts.listDrafts("v1");
+      if (changed) snapshot.billEdits.find((row) => row.billId === "wo-check")!.editorVersion++;
+      return snapshot;
+    });
+    const finish = vi
+      .fn()
+      .mockRejectedValueOnce(refusal())
+      .mockRejectedValue({ code: "authorization.not_permitted" });
+    const { el } = await mountFinish({ finishTable: finish, listDrafts });
+    await openFinish(el);
+    await choose(el, true);
+    expect(approval(el)).not.toBeNull();
+    changed = true;
+    const count = listDrafts.mock.calls.length;
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(count);
+    await flush(el, 6);
+    emit(approval(el)!, "override-confirm", { personId: "m1", pin: "7777" });
+    await flush(el, 6);
+    expect(finish).toHaveBeenCalledTimes(2);
+    expect(approval(el)).toBeNull();
+    expect(finishDialog(el)!.busy).toBe(false);
+    expect(finishDialog(el)!.refusal).toBe(codeMessage("draft.out_of_date"));
+  });
+});

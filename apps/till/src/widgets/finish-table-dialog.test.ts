@@ -335,7 +335,11 @@ it("retries a failed reason read only while the live dialog can ask", async () =
   expect(button(el).disabled).toBe(true);
   el.reasonsLoading = false;
   await el.updateComplete;
+  const closed = new Promise<void>((resolve) =>
+    el.addEventListener("finish-table-close", () => resolve(), { once: true }),
+  );
   await click(el, "[data-close]");
+  await closed;
   await expect.poll(() => root(el).querySelector("wt-dialog")!.open).toBe(false);
   root(el).querySelector<HTMLElement>("[data-retry]")!.click();
   expect(reads).toBe(1);
@@ -395,4 +399,25 @@ it("keeps the confirmation busy until the parent clears its own in-flight state"
   expect(button(el).disabled).toBe(false);
   await click(el, "[data-confirm]");
   expect(calls).toHaveLength(2);
+});
+
+it("locks the unanswered fields while keeping the same confirmation available for retry", async () => {
+  const el = await mount();
+  await reason(el);
+  const locked = el as typeof el & { confirmationLocked: boolean };
+  locked.confirmationLocked = true;
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(
+    root(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>('wt-combobox[name="reason"]')!
+      .disabled,
+  ).toBe(true);
+  expect(root(el).querySelector<HTMLInputElement>('input[name="refund"]')!.disabled).toBe(true);
+  expect(button(el).disabled).toBe(false);
+  const calls = collect(el);
+  await click(el, "[data-confirm]");
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({
+    cancellations: [expect.objectContaining({ refundHandoff: true }), expect.any(Object)],
+  });
 });

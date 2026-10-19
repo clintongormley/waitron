@@ -80,7 +80,10 @@ export class TillFinishTableDialog extends LitElement {
   @property() defaultReasonId = "";
   @property({ type: Boolean }) reasonsLoading = false;
   @property({ type: Boolean }) busy = false;
+  @property({ type: Boolean }) confirmationLocked = false;
   @property() refusal = "";
+  @property({ attribute: false }) refusalField: "reason" | "note" | null = null;
+  @state() private refusalCleared = false;
   @state() private draft: Draft = { choices: [], reasonId: "", note: "" };
   @state() private attempted = false;
   @state() private active = true;
@@ -136,6 +139,7 @@ export class TillFinishTableDialog extends LitElement {
     );
   }
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("refusal") || changed.has("refusalField")) this.refusalCleared = false;
     if ((changed.has("busy") && !this.busy) || changed.has("refusal")) this.sending = false;
     const key = this.#currentKey();
     if (key !== this.#key) {
@@ -179,7 +183,12 @@ export class TillFinishTableDialog extends LitElement {
     }
   }
   #set(change: Partial<Draft>): void {
-    if (!this.isConnected || !this.active || this.#busy()) return;
+    if (!this.isConnected || !this.active || this.#busy() || this.confirmationLocked) return;
+    if (
+      (this.refusalField === "reason" && change.reasonId !== undefined) ||
+      (this.refusalField === "note" && (change.note !== undefined || change.reasonId !== undefined))
+    )
+      this.refusalCleared = true;
     this.draft = { ...this.draft, ...change };
     this.#scope?.changed();
   }
@@ -261,6 +270,7 @@ export class TillFinishTableDialog extends LitElement {
       decimal("0"),
     );
     const total = this.#refundTotal();
+    const serverField = this.refusalCleared ? null : this.refusalField;
     const invalidReason = this.attempted && this.#reason() === undefined;
     const invalidNote = this.attempted && this.#noteInvalid();
     const invalidPreparation =
@@ -297,7 +307,7 @@ export class TillFinishTableDialog extends LitElement {
                             name=${`preparation-${dish.lineId}`}
                             value=${started ? "yes" : "no"}
                             .checked=${choice?.preparationStarted === started}
-                            ?disabled=${this.#busy()}
+                            ?disabled=${this.#busy() || this.confirmationLocked}
                             @change=${() => this.#preparation(dish, started)}
                           />${t(started ? "cancel_item.yes" : "cancel_item.no")}</label
                         >`,
@@ -316,7 +326,7 @@ export class TillFinishTableDialog extends LitElement {
                       type="checkbox"
                       name="refund"
                       .checked=${choice?.refund === true}
-                      ?disabled=${this.#busy()}
+                      ?disabled=${this.#busy() || this.confirmationLocked}
                       @change=${(event: Event) => this.#refund(dish, (event.target as HTMLInputElement).checked)}
                     />${t("find_page.refund")}</label
                   >`
@@ -334,8 +344,8 @@ export class TillFinishTableDialog extends LitElement {
           noResultsLabel=${t("form.combobox_no_results")}
           .options=${this.#reasons().map((reason) => ({ value: reason.id, label: reason.name }))}
           .value=${this.draft.reasonId}
-          .disabled=${this.#busy() || this.reasonsLoading}
-          .error=${invalidReason ? t("adjust.reason_required") : ""}
+          .disabled=${this.#busy() || this.reasonsLoading || this.confirmationLocked}
+          .error=${serverField === "reason" ? this.refusal : invalidReason ? t("adjust.reason_required") : ""}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.#set({ reasonId: event.detail.value, note: "" });
@@ -350,8 +360,8 @@ export class TillFinishTableDialog extends LitElement {
                 .label=${t("adjust.note")}
                 .placeholder=${codeMessage("working_order.reason_required")}
                 .value=${live(this.draft.note)}
-                .disabled=${this.#busy()}
-                .error=${invalidNote ? t("adjust.note_required") : ""}
+                .disabled=${this.#busy() || this.confirmationLocked}
+                .error=${serverField === "note" ? this.refusal : invalidNote ? t("adjust.note_required") : ""}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => {
                   event.stopPropagation();
                   this.#set({ note: event.detail.value });
@@ -365,7 +375,7 @@ export class TillFinishTableDialog extends LitElement {
             ? html`<wt-button
                 variant="secondary"
                 data-retry
-                .disabled=${this.#busy() || this.reasonsLoading}
+                .disabled=${this.#busy() || this.reasonsLoading || this.confirmationLocked}
                 .loading=${this.reasonsLoading}
                 @click=${() => {
                   if (this.isConnected && this.active && !this.#busy() && !this.reasonsLoading)
@@ -384,7 +394,7 @@ export class TillFinishTableDialog extends LitElement {
       </div>
       <wt-form-actions
         slot="footer"
-        .error=${[invalidReason || invalidNote || invalidPreparation ? t("form.fix_fields") : "", this.refusal].filter(Boolean).join(" ")}
+        .error=${[invalidReason || invalidNote || invalidPreparation || serverField !== null ? t("form.fix_fields") : "", serverField === null && !this.refusalCleared ? this.refusal : ""].filter(Boolean).join(" ")}
       >
         <wt-button
           slot="cancel"

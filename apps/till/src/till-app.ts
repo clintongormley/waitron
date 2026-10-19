@@ -25,6 +25,8 @@ import {
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
+  addDecimal,
+  subtractDecimal,
   compareDecimal,
   decimal,
   divideDecimal,
@@ -148,6 +150,9 @@ import "./widgets/supervisor-override-dialog.js";
 import "./widgets/adjustment-dialog.js";
 import "./widgets/cancel-item-dialog.js";
 import type { CancelItemChoice } from "./widgets/cancel-item-dialog.js";
+import "./widgets/finish-table-dialog.js";
+import type { FinishTableChoice } from "./widgets/finish-table-dialog.js";
+import type { FinishTableResolution, UnservedDish } from "./api/finish-table-types.js";
 import type { CancellationRead, CancelItemRequest } from "./api/line-cancel-types.js";
 import {
   refusalField,
@@ -872,6 +877,50 @@ interface CancellingItem {
   };
 }
 
+function sameFinishContext(
+  a: CancellationRead["context"],
+  b: CancellationRead["context"],
+): boolean {
+  const values = (context: CancellationRead["context"]) => [
+    context.billStatus,
+    context.stage,
+    context.components
+      .map((row) => [
+        row.id,
+        row.lineId,
+        row.state,
+        row.firedAt,
+        row.quantity,
+        row.kitchenQuantity,
+        row.servedQuantity,
+        row.cancelledQuantity,
+      ])
+      .sort(
+        (x, y) =>
+          String(x[1]).localeCompare(String(y[1])) || String(x[0]).localeCompare(String(y[0])),
+      ),
+  ];
+  return JSON.stringify(values(a)) === JSON.stringify(values(b));
+}
+
+interface FinishingTable {
+  composition: BillComposition;
+  partyRevision: number;
+  dishes: UnservedDish[];
+  refunds: Record<string, string>;
+  receipts: { saleId: string; workingOrderId: string; lineId: string; label: string }[];
+  refundAtTill: boolean;
+  reasons: AdjustmentReason[] | null;
+  reasonsLoading: boolean;
+  busy: boolean;
+  refusal: string;
+  refusalField?: "reason" | "note" | null;
+  command?: Omit<FinishTableResolution, "approver">;
+  unconfirmed?: boolean;
+  retryApproverId?: string;
+  approval?: { authorizers: StaffMember[]; error: string | null };
+}
+
 interface Adjusting {
   id: number;
   bill?: BillComposition;
@@ -1359,6 +1408,12 @@ export class TillApp extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      .finish-refund-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+      }
+
       :host {
         display: block;
         height: 100%;
@@ -1902,6 +1957,8 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#closeFinishTable();
+    this.finishRefunds = null;
     clearTimeout(this.#servedTimer);
     this.servedCommand = null;
     this.#closeDeviceZones();
@@ -2812,6 +2869,17 @@ export class TillApp extends LitElement {
   @state() private adjusting: Adjusting | null = null;
   @state() private cancellingItem: CancellingItem | null = null;
   #cancelItems = 0;
+  @state() private finishingTable: FinishingTable | null = null;
+  #finishOpening?: { composition: BillComposition; controller: AbortController; reading?: boolean };
+  @state() private finishRefunds: {
+    api: TillApi;
+    session: number;
+    visit: number;
+    tab: BuiltInScreen | undefined;
+    receipts: FinishingTable["receipts"];
+    busy: boolean;
+    refusal: string;
+  } | null = null;
   #cancelItemRead?: {
     partyId: string;
     billId: string;
@@ -3071,6 +3139,17 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (this.finishRefunds !== null && !this.#finishRefundsCurrent(this.finishRefunds))
+      this.finishRefunds = null;
+    if (
+      (this.finishingTable !== null && !this.#finishCurrent(this.finishingTable.composition)) ||
+      (this.#finishOpening !== undefined &&
+        (this.#finishOpening.reading
+          ? !this.#finishCurrent(this.#finishOpening.composition)
+          : this.api !== this.#finishOpening.composition.api ||
+            this.#operatorSession !== this.#finishOpening.composition.session))
+    )
+      this.#closeFinishTable();
     if (this.cancellingItem !== null && !this.#cancellationCurrent(this.cancellingItem))
       this.#closeCancelItem();
     if (this.#cancelItemRead !== undefined && !this.#cancellationCurrent(this.#cancelItemRead))
@@ -6476,9 +6555,15 @@ export class TillApp extends LitElement {
       workingOrderId: string | null;
       refundId: string | null;
     },
-    cancellation?: CancellingItem,
+    cancellation?: CancellingItem | (() => boolean),
   ): Promise<void> {
-    if (cancellation !== undefined && !this.#cancellationCurrent(cancellation)) return;
+    const originCurrent =
+      cancellation === undefined
+        ? undefined
+        : typeof cancellation === "function"
+          ? cancellation
+          : () => this.#cancellationCurrent(cancellation);
+    if (originCurrent !== undefined && !originCurrent()) return;
     if (this.findBillBusy) return;
     this.#cancelFindBillRead();
     const controller = (this.#findBillRead = new AbortController());
@@ -6488,8 +6573,8 @@ export class TillApp extends LitElement {
     const origin = this.historicalReceipt;
     const current = () =>
       this.isConnected &&
-      (cancellation !== undefined
-        ? this.#cancellationCurrent(cancellation)
+      (originCurrent !== undefined
+        ? originCurrent()
         : this.drill?.kind === "find-bill" ||
           (this.drill?.kind === "ticket" && this.historicalReceipt === origin)) &&
       api === this.api &&
@@ -13325,21 +13410,40 @@ export class TillApp extends LitElement {
     await this.#reloadOrder();
   }
 
+  #finishCurrent(composition: BillComposition): boolean {
+    return (
+      this.isConnected &&
+      this.#billCompositionCurrent(composition) &&
+      this.#orderVisit === composition.visit
+    );
+  }
+
+  #closeFinishTable(): void {
+    this.#finishOpening?.controller.abort();
+    this.#finishOpening = undefined;
+    this.finishingTable = null;
+  }
+
   async #onFinishTable(): Promise<void> {
     const party = this.orderParty;
-    if (party === null) return;
+    if (party === null || this.#finishOpening !== undefined || this.finishingTable !== null) return;
     const asked = this.#billComposition(this.partyBills.map((bill) => bill.workingOrderId));
     if (asked === null || !this.#billCompositionUnchanged(asked)) return;
-    const visit = this.#orderVisit;
-    const sent = this.#sentNow();
+    const opening = { composition: asked, controller: new AbortController() };
+    this.#finishOpening = opening;
     const live = () => this.api === asked.api && this.#operatorSession === asked.session;
     this.errorKey = undefined;
     this.finishRefused = false;
     try {
       await asked.api.finishTable(party.id, party.revision, asked.expectedEdits);
     } catch (error) {
-      if (!live() || this.#hasLeftParty(party.id, sent)) return;
-      if ((error as { code?: string } | undefined)?.code === "party.bill_outstanding") {
+      if (!live() || this.#hasLeftParty(party.id, asked.sent)) return;
+      const code = (error as { code?: string } | undefined)?.code;
+      if (code === "party.unserved_dishes") {
+        await this.#readFinishDishes(opening, party.revision, error as { dishes: UnservedDish[] });
+        return;
+      }
+      if (code === "party.bill_outstanding") {
         this.finishRefused = true;
         await this.#loadPartyBills();
         return;
@@ -13349,13 +13453,466 @@ export class TillApp extends LitElement {
         await this.#loadPartyBills();
         return;
       }
-      const code = (error as { code?: string } | undefined)?.code;
       if (code === "draft.out_of_date" || code === "draft.taken_over") this.errorKey = { code };
       else await this.#onTableRefusal(error, live);
-      if (live() && !this.#hasLeftParty(party.id, sent)) await this.#refreshBillDraft();
+      if (live() && !this.#hasLeftParty(party.id, asked.sent)) await this.#refreshBillDraft();
+      return;
+    } finally {
+      if (this.#finishOpening === opening) this.#finishOpening = undefined;
+    }
+    if (live()) await this.#onTableClosed(party.id, asked.visit, asked.sent);
+  }
+
+  async #readFinishDishes(
+    opening: { composition: BillComposition; controller: AbortController; reading?: boolean },
+    partyRevision: number,
+    observation: { dishes: UnservedDish[] },
+  ): Promise<void> {
+    opening.reading = true;
+    const asked = opening.composition;
+    const current = () => this.#finishOpening === opening && this.#finishCurrent(asked);
+    const refunds: Record<string, string> = {};
+    const receipts: FinishingTable["receipts"] = [];
+    const budgets = new Map<string, ReturnType<typeof decimal>>();
+    let refundAtTill = false;
+    try {
+      for (const dish of observation.dishes) {
+        const consent = await asked.api.getCancellation(asked.partyId, dish.lineId, {
+          signal: opening.controller.signal,
+        });
+        if (!current()) return;
+        if (
+          consent.billId !== dish.billId ||
+          consent.billRevision !== dish.billRevision ||
+          consent.revision !== partyRevision ||
+          !sameFinishContext(consent.context, dish.context)
+        )
+          throw { code: "tab.cancel_context_changed" };
+        if (
+          consent.saleId === undefined ||
+          consent.refundValue === undefined ||
+          this.#tenderRefundSession === undefined
+        )
+          continue;
+        if (!budgets.has(consent.saleId)) {
+          const payments = await this.#cancellationTenders(
+            asked.api,
+            consent,
+            opening.controller.signal,
+          );
+          if (!current()) return;
+          const available = payments.filter((row) => this.#cancellationPaymentAvailable(row));
+          const eligible = available.filter((row) => this.#refundMethodAllowed(row));
+          refundAtTill ||= available.length > 0 && eligible.length === 0;
+          budgets.set(
+            consent.saleId,
+            sumDecimals(eligible.map((row) => decimal(row.appliedRemaining))),
+          );
+        }
+        const value = consent.refundValue;
+        if (compareDecimal(decimal(value.quantity), decimal("0")) <= 0) continue;
+        const cancelled = decimal(
+          consent.context.components.find((row) => row.lineId === dish.lineId)!.cancelledQuantity,
+        );
+        const share = (quantity: ReturnType<typeof decimal>) =>
+          divideDecimal(
+            multiplyDecimal(decimal(value.gross), quantity),
+            decimal(value.quantity),
+            2,
+          );
+        const gross = subtractDecimal(
+          share(addDecimal(cancelled, decimal(dish.quantity))),
+          share(cancelled),
+        );
+        const budget = budgets.get(consent.saleId)!;
+        const amount = compareDecimal(gross, budget) < 0 ? gross : budget;
+        if (compareDecimal(amount, decimal("0")) <= 0) continue;
+        refunds[dish.lineId] = toScale(amount, MONEY_SCALE);
+        budgets.set(consent.saleId, subtractDecimal(budget, amount));
+        receipts.push({
+          saleId: consent.saleId,
+          workingOrderId: dish.billId,
+          lineId: dish.lineId,
+          label: this.#paymentBillLabel(dish.billId) ?? dish.name,
+        });
+      }
+      if (!current() || !this.#billCompositionUnchanged(asked)) return;
+      this.finishingTable = {
+        composition: asked,
+        partyRevision,
+        dishes: structuredClone(observation.dishes),
+        refunds,
+        receipts,
+        refundAtTill,
+        reasons: null,
+        reasonsLoading: false,
+        busy: false,
+        refusal: "",
+      };
+      await this.#loadFinishReasons();
+    } catch (error) {
+      if (current())
+        this.errorKey = { code: (error as { code?: string })?.code ?? "server.internal" };
+    }
+  }
+
+  async #loadFinishReasons(): Promise<void> {
+    const open = this.finishingTable;
+    if (open === null || open.busy || open.reasonsLoading || !this.#finishCurrent(open.composition))
+      return;
+    this.finishingTable = { ...open, reasonsLoading: true, refusal: "" };
+    try {
+      const reasons = await open.composition.api.listAdjustmentReasons();
+      if (
+        this.finishingTable?.composition === open.composition &&
+        this.#finishCurrent(open.composition)
+      )
+        this.finishingTable = {
+          ...this.finishingTable,
+          reasons,
+          reasonsLoading: false,
+          refusal: "",
+        };
+    } catch {
+      if (
+        this.finishingTable?.composition === open.composition &&
+        this.#finishCurrent(open.composition)
+      )
+        this.finishingTable = {
+          ...this.finishingTable,
+          reasonsLoading: false,
+          refusal: t("adjust.reasons_error"),
+        };
+    }
+  }
+
+  async #confirmFinishTable(event: CustomEvent<FinishTableChoice>): Promise<void> {
+    event.stopPropagation();
+    const open = this.finishingTable;
+    if (
+      open === null ||
+      open.busy ||
+      open.approval !== undefined ||
+      !this.#finishCurrent(open.composition)
+    )
+      return;
+    if (!open.unconfirmed && !this.#billCompositionUnchanged(open.composition)) {
+      this.finishingTable = { ...open, busy: false, refusal: codeMessage("draft.out_of_date") };
       return;
     }
-    if (live()) await this.#onTableClosed(party.id, visit, sent);
+    const choices = event.detail.cancellations;
+    if (
+      choices.length !== open.dishes.length ||
+      new Set(choices.map((row) => row.lineId)).size !== choices.length ||
+      open.dishes.some((dish) => {
+        const choice = choices.find((row) => row.lineId === dish.lineId);
+        return (
+          choice === undefined ||
+          choice.quantity !== dish.quantity ||
+          choice.expectedBillRevision !== dish.billRevision ||
+          !sameFinishContext(choice.expectedContext, dish.context) ||
+          (choice.refundHandoff === true && open.refunds[dish.lineId] === undefined)
+        );
+      })
+    )
+      return;
+    const command = open.command ?? {
+      submissionId: crypto.randomUUID(),
+      cancellations: structuredClone(event.detail.cancellations),
+    };
+    if (open.unconfirmed && open.retryApproverId !== undefined) {
+      this.finishingTable = { ...open, command, busy: true, refusal: "" };
+      await this.#askFinishApprover({ ...open, command });
+    } else await this.#sendFinishTable({ ...open, command });
+  }
+
+  async #sendFinishTable(
+    open: FinishingTable,
+    approver?: { personId: string; pin: string },
+  ): Promise<void> {
+    const asked = open.composition;
+    if (!this.#finishCurrent(asked)) return;
+    if (!open.unconfirmed && !this.#billCompositionUnchanged(asked)) {
+      this.finishingTable = {
+        ...open,
+        busy: false,
+        approval: undefined,
+        command: undefined,
+        refusal: codeMessage("draft.out_of_date"),
+      };
+      return;
+    }
+    this.finishingTable = { ...open, busy: true, refusal: "", refusalField: null };
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      await this.#resend(
+        (signal) =>
+          asked.api.finishTable(
+            asked.partyId,
+            open.partyRevision,
+            asked.expectedEdits,
+            { ...open.command!, ...(approver === undefined ? {} : { approver }) },
+            { signal },
+          ),
+        limit.signal,
+        () => this.#finishCurrent(asked),
+      );
+      if (!this.#finishCurrent(asked)) return;
+      this.#closeFinishTable();
+      const selected = new Set(
+        open.command!.cancellations.filter((row) => row.refundHandoff).map((row) => row.lineId),
+      );
+      const receipts = open.receipts.filter(
+        (row, index, all) =>
+          selected.has(row.lineId) &&
+          all.findIndex((other) => selected.has(other.lineId) && other.saleId === row.saleId) ===
+            index,
+      );
+      await this.#onTableClosed(asked.partyId, asked.visit, asked.sent);
+      if (
+        receipts.length > 0 &&
+        this.isConnected &&
+        this.api === asked.api &&
+        this.#operatorSession === asked.session &&
+        this.orderParty === null
+      ) {
+        this.finishRefunds = {
+          api: asked.api,
+          session: asked.session,
+          visit: this.#orderVisit,
+          tab: this.activeTabKey,
+          receipts,
+          busy: false,
+          refusal: "",
+        };
+        if (receipts.length === 1) await this.#openFinishRefund(receipts[0]!);
+      }
+    } catch (error) {
+      if (!this.#finishCurrent(asked) || this.finishingTable?.composition !== asked) return;
+      const code = (error as { code?: string })?.code ?? "server.internal";
+      if (isPartyOutOfDate(error) || code === "party.not_open") {
+        this.#closeFinishTable();
+        await this.#onTableRefusal(
+          error,
+          () => this.api === asked.api && this.#operatorSession === asked.session,
+        );
+        if (this.#finishCurrent(asked)) await this.#refreshBillDraft();
+      } else if (code === "party.bill_outstanding" || isPaymentsReceived(error)) {
+        this.#closeFinishTable();
+        if (code === "party.bill_outstanding") this.finishRefused = true;
+        else this.errorKey = "table.finish_bill_holds_money";
+        await this.#loadPartyBills();
+      } else if (code === "party.unserved_dishes") {
+        const opening = { composition: asked, controller: new AbortController() };
+        this.#finishOpening = opening;
+        this.finishingTable = null;
+        try {
+          await this.#readFinishDishes(
+            opening,
+            open.partyRevision,
+            error as { dishes: UnservedDish[] },
+          );
+        } finally {
+          if (this.#finishOpening === opening) this.#finishOpening = undefined;
+        }
+      } else if (
+        code === "authorization.not_permitted" &&
+        approver === undefined &&
+        open.command!.cancellations.some((row) => row.refundHandoff)
+      ) {
+        await this.#askFinishApprover(open);
+      } else if (
+        approver !== undefined &&
+        APPROVER_REFUSALS.has(code) &&
+        open.approval !== undefined
+      ) {
+        this.finishingTable = { ...open, busy: false, approval: { ...open.approval, error: code } };
+      } else {
+        const field = refusalField(code, "cancel", false);
+        this.finishingTable = {
+          ...open,
+          busy: false,
+          refusalField: field === "reason" || field === "note" ? field : null,
+          reasons:
+            code === "adjustment.note_required"
+              ? (open.reasons?.map((reason) =>
+                  open.command!.cancellations.some((row) => row.reasonId === reason.id)
+                    ? { ...reason, noteRequired: true }
+                    : reason,
+                ) ?? null)
+              : open.reasons,
+          command: isNetworkFailure(error) ? open.command : undefined,
+          approval: undefined,
+          unconfirmed: isNetworkFailure(error),
+          retryApproverId: isNetworkFailure(error)
+            ? (approver?.personId ?? open.retryApproverId)
+            : undefined,
+          refusal: isNetworkFailure(error) ? t("adjust.unconfirmed") : codeMessage(code),
+        };
+        if (DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
+      }
+    } finally {
+      limit.done();
+    }
+  }
+
+  async #askFinishApprover(open: FinishingTable): Promise<void> {
+    const asked = open.composition;
+    try {
+      const all = await asked.api.listRefundAuthorizers();
+      if (this.finishingTable?.composition !== asked || !this.#finishCurrent(asked)) return;
+      const authorizers =
+        open.retryApproverId === undefined
+          ? all
+          : all.filter((row) => row.personId === open.retryApproverId);
+      this.finishingTable = { ...open, busy: false, approval: { authorizers, error: null } };
+    } catch {
+      if (this.finishingTable?.composition === asked && this.#finishCurrent(asked))
+        this.finishingTable = {
+          ...open,
+          busy: false,
+          command: open.unconfirmed ? open.command : undefined,
+          refusal: codeMessage("server.internal"),
+        };
+    }
+  }
+
+  async #approveFinishTable(
+    event: CustomEvent<{ personId: string; pin: string }>,
+    offered: FinishingTable,
+  ): Promise<void> {
+    event.stopPropagation();
+    const open = this.finishingTable;
+    if (
+      open === null ||
+      open.composition !== offered.composition ||
+      open.approval === undefined ||
+      open.approval !== offered.approval ||
+      open.busy ||
+      (open.retryApproverId !== undefined && open.retryApproverId !== event.detail.personId)
+    )
+      return;
+    await this.#sendFinishTable(
+      { ...open, approval: { ...open.approval, error: null } },
+      event.detail,
+    );
+  }
+
+  #finishRefundsCurrent(open: NonNullable<TillApp["finishRefunds"]>): boolean {
+    return (
+      this.isConnected &&
+      this.api === open.api &&
+      this.#operatorSession === open.session &&
+      this.#orderVisit === open.visit &&
+      this.activeTabKey === open.tab &&
+      this.orderParty === null
+    );
+  }
+
+  async #openFinishRefund(receipt: FinishingTable["receipts"][number]): Promise<void> {
+    const open = this.finishRefunds;
+    if (open === null || open.busy || !this.#finishRefundsCurrent(open)) return;
+    this.finishRefunds = { ...open, busy: true, refusal: "" };
+    const origin = this.drill;
+    await this.#openHistoricalReceipt(
+      { saleId: receipt.saleId, workingOrderId: receipt.workingOrderId, refundId: null },
+      () =>
+        this.finishRefunds !== null && this.#finishRefundsCurrent(open) && this.drill === origin,
+    );
+    if (this.finishRefunds === null || !this.#finishRefundsCurrent(open)) return;
+    if (
+      this.historicalReceipt?.kind === "invoice" &&
+      this.historicalReceipt.saleId === receipt.saleId
+    ) {
+      const receipts = open.receipts.filter((row) => row.saleId !== receipt.saleId);
+      this.finishRefunds =
+        receipts.length === 0 ? null : { ...open, receipts, busy: false, refusal: "" };
+    } else
+      this.finishRefunds = { ...open, busy: false, refusal: t("find_bill.invoice_load_failed") };
+  }
+
+  #renderFinishTable(): TemplateResult | typeof nothing {
+    const open = this.finishingTable;
+    const handoff = this.finishRefunds;
+    return html`${
+      open === null
+        ? nothing
+        : html`<till-finish-table-dialog
+              .dishes=${open.dishes}
+              .refunds=${open.refunds}
+              .refundAtTill=${open.refundAtTill}
+              .reasons=${open.reasons}
+              .reasonsLoading=${open.reasonsLoading}
+              .busy=${open.busy || open.approval !== undefined}
+              .refusal=${open.refusal}
+              .confirmationLocked=${open.unconfirmed === true}
+              .refusalField=${open.refusalField ?? null}
+              @finish-table-choice=${(event: CustomEvent<FinishTableChoice>) => void this.#confirmFinishTable(event)}
+              @finish-table-reasons=${() => void this.#loadFinishReasons()}
+              @finish-table-close=${() => this.#closeFinishTable()}
+            ></till-finish-table-dialog>
+            ${
+              open.approval === undefined
+                ? nothing
+                : html`<till-supervisor-override-dialog
+                    data-finish-approval
+                    .approverRole=${null}
+                    .authorizers=${open.approval.authorizers}
+                    .error=${open.approval.error}
+                    @override-confirm=${(event: CustomEvent<{ personId: string; pin: string }>) => void this.#approveFinishTable(event, open)}
+                    @override-cancel=${(event: Event) => {
+                      event.stopPropagation();
+                      if (
+                        this.finishingTable?.approval === open.approval &&
+                        !this.finishingTable?.busy
+                      )
+                        this.finishingTable = {
+                          ...open,
+                          approval: undefined,
+                          command: open.unconfirmed ? open.command : undefined,
+                        };
+                    }}
+                  ></till-supervisor-override-dialog>`
+            }`
+    }
+    ${
+      handoff === null || this.drill?.kind === "ticket"
+        ? nothing
+        : html`<wt-dialog
+            ${trackDialog()}
+            .open=${true}
+            .heading=${t("find_page.refund")}
+            .beforeClose=${async () => !this.finishRefunds?.busy}
+            @wt-close=${(event: Event) => {
+              event.stopPropagation();
+              this.finishRefunds = null;
+            }}
+          >
+            <div class="finish-refund-list">
+              ${handoff.receipts.map(
+                (receipt) =>
+                  html`<wt-button
+                    data-finish-refund=${receipt.saleId}
+                    .disabled=${handoff.busy}
+                    .loading=${handoff.busy}
+                    @click=${() => void this.#openFinishRefund(receipt)}
+                    >${receipt.label}</wt-button
+                  >`,
+              )}
+            </div>
+            <wt-form-actions slot="footer" .error=${handoff.refusal}>
+              <wt-button
+                slot="cancel"
+                variant="secondary"
+                .disabled=${handoff.busy}
+                @click=${() => {
+                  if (!this.finishRefunds?.busy) this.finishRefunds = null;
+                }}
+                >${t("action.back")}</wt-button
+              >
+            </wt-form-actions>
+          </wt-dialog>`
+    }`;
   }
 
   /** The party closed by Finish table or an unpaid departure leaves the screen as Finish leaves it. */
@@ -15808,8 +16365,9 @@ export class TillApp extends LitElement {
               ></till-supervisor-override-dialog>`
             : nothing
         }
-        ${this.#renderCancelItem()} ${this.#renderAdjusting()} ${this.#renderBillPaying()}
-        ${this.#renderDeparting()} ${this.#renderTenderRefund()} ${this.#renderCancelCrediting()}
+        ${this.#renderCancelItem()} ${this.#renderFinishTable()} ${this.#renderAdjusting()}
+        ${this.#renderBillPaying()} ${this.#renderDeparting()} ${this.#renderTenderRefund()}
+        ${this.#renderCancelCrediting()}
         ${this.movingStation === null ? nothing : this.#renderMoveStationDialog(this.movingStation)}
         ${this.makingAt === null ? nothing : this.#renderMakeAtDialog(this.makingAt)}
         ${this.#renderEditDeadEnds()} ${this.#renderDifferentPeopleConfirmation()}

@@ -2215,9 +2215,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
 - **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
-  A773-1 remains unlanded: finish integrating A758's published cancellation and Finish-table design,
-  and complete the remaining prose audit, whole-path, ownership, native-screen, physical-till and
-  delivery checks. The command and HTTP removal path now removes unpaid, unstarted dishes without
+  A773-1 remains unlanded: check the combined cancellation and Finish-table paths against current
+  main, and complete the remaining prose audit, whole-path, ownership, native-screen, physical-till
+  and delivery checks. The command and HTTP removal path now removes unpaid, unstarted dishes without
   a reason or adjustment, retaining the open-bill, payment-in-flight and paid-quantity refusals.
   The command and HTTP route now carry a fired dish's preparation answer: Yes uses the started
   path and marks its correction as started; No cannot override stored preparation state. The dialog
@@ -2237,9 +2237,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The paid dialog now uses one Refund tick, defaulted by preparation, and a named action whose
   amount comes from the filed dish and its extras; paid served food is unavailable. The read
   matches sorted working-line positions to filed lines, including stored-number gaps, and omits
-  the value when the compositions do not match. Finish the refund-PIN handoff and device/payment
-  eligibility checks, and resolve every unserved dish before
-  closing a paid table.
+  the value when the compositions do not match. The paid cancellation and Finish-table handoffs
+  use the refund PIN prompt and this device's eligible payment methods.
   Preserve the completed behavioral checks and their receipts; the detail's
   Decisions section records their scope and limits. The product guide separates stored-line
   availability from the saved New order payment refusal; the till README distinguishes fresh-dish
@@ -2273,8 +2272,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The Finish-table client now carries the complete closing confirmation and an optional refund
   approver, with an abort signal. A standalone dialog collects each dish's preparation answer and
   Refund tick, the shared reason and its required note, and protects staged choices on Back or
-  Escape. It is not yet rendered by the app: connect it to the unserved-dish refusal, authoritative
-  refund eligibility reads, approval and the public refund handoff.
+  Escape. Finish table now opens it from the unserved-dish refusal, reading each dish's current
+  context and filed value plus the available payment principal. Failed reads remain retryable;
+  changed observations are not confirmed automatically. The app retains every family bill's
+  editing observation through approval and the single cancellation-and-close request. Unanswered
+  requests keep their identity and lock the chosen fields; an approved retry asks the same person
+  for a fresh PIN. After closing succeeds, selected refunds open their historical receipt, with
+  a bill choice when more than one receipt is involved. The public refund keeps its independent
+  amounts and approval. A758 still owns filling that form, its reason defaults and refund links.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,

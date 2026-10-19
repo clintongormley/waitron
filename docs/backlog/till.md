@@ -2284,8 +2284,14 @@ The remaining work includes:
   actions, while pending refunds remain inspectable. Paid-table Finish now has a server command:
   it refuses without the complete current unserved-dish confirmation, then cancels and closes in
   one transaction. The HTTP suite checks served remainders, merged-party paid bills, rollback,
-  replay, preparation answers and refund approval. The dialog and its public refund handoff
-  remain open. The new record uses today's adjustment schema; A758 still owns its later report
+  replay, preparation answers and refund approval. Finish table now opens the dialog from that
+  refusal, checks each dish's context and device-eligible payment principal, and retains all family
+  editing observations through the single cancellation-and-close request. Unanswered confirmations
+  keep their request identity and lock their choices; an approved retry asks the same approver for
+  a fresh PIN. Raced kitchen facts are shown for another confirmation, and a changed party returns
+  to the refreshed table. Selected receipts open only after successful closure, with a bill choice
+  for multiple receipts. Each public refund still needs its own amounts and approval. The new
+  record uses today's adjustment schema; A758 still owns its later report
   changes, including crediting zero-reduction cancels, and the preparation flag migration.
   The earlier picture-03 implementation is not the completed revised design. A758's later slices
   own the changed reason rules, starter list, reports and filled refund screen.
