@@ -692,9 +692,7 @@ Cloud and Waitron candidates jointly prove multi-page collection, crash/reply-lo
 deduplication, bounded decoded reads and release only after durable completion." The owner chose
 on 2026-10-19 (open question 4) a Cloud script beside Cloud's `scripts/test-waitron-pairing.mjs`,
 built by lane D (D85): a lost page reply, a box restart between pages, a lost release reply, and
-expiry between pages. Lane D reported on 2026-10-19 that the Waitron process its script starts,
-`apps/server/scripts/cloud-integration-fixture.ts`, stops at start with `sif.allocation_invalid`
-(reason `reauthentication_required`), and asked for that fixture to be repaired on Waitron's side.
+expiry between pages.
 
 - **Cloud must support version 2 before any box built from `main` talks to it.** The box asks for
   the service with `servicesVersion` 2, which a Cloud without version 2 refuses as an invalid

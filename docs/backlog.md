@@ -1001,9 +1001,7 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   completion." The Santet run (A689-21, 2026-10-19, recorded under Task 21 of
   `docs/superpowers/plans/2026-10-14-translate-all.md`) proved multi-page collection and release
   after the last page by hand, with no faults. Lane D is writing the fault script on Cloud's side
-  (D85); on 2026-10-19 it reported that Waitron's `apps/server/scripts/cloud-integration-fixture.ts`
-  stops at start with `sif.allocation_invalid`, and asked for that fixture to be repaired. Cloud's
-  `servicesVersion` 2 must be deployed before a box built from `main` talks to it
+  (D85). Cloud's `servicesVersion` 2 must be deployed before a box built from `main` talks to it
   ([cloud-connection.md](developers/cloud-connection.md)).
   [Detail](backlog/catalogue.md#translate-all-the-joint-fault-proof-clouds-release-gate-asks-for)
 

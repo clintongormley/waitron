@@ -50,8 +50,8 @@ export interface ProvisionRequest {
   /** The import goes to a different taxpayer: the request's tax ID must differ from the bundle's. */
   newTaxpayer?: boolean;
   initialOperations?: InitialVenueInput;
-  /** Set only by the setup route: the venue's enabled module that offers one makes its own
-   * preproduction allocation. Never together with `initialOperations`. */
+  /** The venue's enabled module that offers one makes its own preproduction allocation. Never
+   * together with `initialOperations`. */
   initialAllocation?: {
     readonly kind: "throwaway";
     readonly hostEnvironment: DeploymentEnvironment;
