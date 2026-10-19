@@ -2262,6 +2262,11 @@ and New order, with recorded answers and prices retained and new extras checked 
 offer. Their parked-counter guidance is scoped separately. This closes that guide-prose subset;
 the remaining whole-branch audit and cancellation/Finish work above stay open.
 
+The till README now separates the table's bill-specific Sent/New order workflow from its historical
+counter slice. The design-system button examples name the direct New order actions rather than
+the removed send-preview confirmation. These prose updates do not complete cancellation/Finish,
+the physical trial or final delivery.
+
 The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
 uses the authenticated routes and a real venue database. A fresh route instance reads the saved
 arrangement before another person takes it over. Sending only the fresh beer leaves the measured

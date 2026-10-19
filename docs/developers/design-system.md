@@ -2543,13 +2543,15 @@ and the staffing grid's block editor in the A761 entry):
   editor is open, which keeps its own variant while the Products screen is sending a request for the
   product (its `busy`). A417 brought the till's under it: the Confirm that asks which station makes
   a dish after a refused edit; Transfer; Split's Add bill, which stays blue when its own quantity
-  check refuses a press; the send preview's Confirm, while the station check is out or a dish has
-  no station; the dead-ends dialog's Continue; the extras picker's Add when adding a dish (when
-  editing one it is a save); and Cash and Card on the pay card, while the basket or bill has no
+  check refuses a press; the dead-ends dialog's Continue; the extras picker's Add when adding a
+  dish (when editing one it is a save); and Cash and Card on the pay card, while the basket or bill has no
   lines, or while the basket's pay controls are held for a line not yet saved that cannot be sold
   as it stands or is stale, or for a part-paid order, keeping blue through a payment being sent,
   through an order being placed from the counter tab, and when only an invalid tip disables Card
   (in dark, while switched off in those cases, the dim disabled blue, A535).
+  On the table screen, New order sends directly: Send all waits for at least one sendable dish,
+  Fire for a selected sendable dish, and Move to… for a selection. Those actions are quiet while
+  disabled and use their primary colour when available. There is no send-preview confirmation.
   A649 brought Add a device's Pair (Enable for a returning device) in the waiting-devices table
   under it (owner, 2026-10-14): it is drawn `secondary` while the screen holds no pairing hold.
   A689 brought the translations dialog's Translate all under it: it is drawn `secondary` while the
