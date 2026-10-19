@@ -31,10 +31,10 @@ export async function renderRecoveryPdfWithFont(
       timeStyle: "short",
       hourCycle: "h23",
     }).format(date);
-    const zone = new Intl.DateTimeFormat(language, { timeZone, timeZoneName: "long" })
+    const zone = new Intl.DateTimeFormat(language, { timeZone, timeZoneName: "short" })
       .formatToParts(date)
       .find((part) => part.type === "timeZoneName")!.value;
-    created = `${day}, ${time} (${zone})`;
+    created = `${day}, ${time} ${zone}`;
   } catch {
     refuseRecovery();
   }

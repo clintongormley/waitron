@@ -328,7 +328,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Keep the completed work and every changed-check inventory in
   [the qualification record](operations/a679-changed-checks.md).
   Obtain viewing approval for the revised real EN/ES A4 PDFs through Drive; the owner's combined
-  key/check and single current installation-code decisions are implemented in the candidate.
+  key/check, single current installation-code and short time-zone decisions are implemented in the candidate.
   Complete native adoption/promotion and the remaining entry/recovery journeys, including restored
   trading boot and committed browser acceptance tests. Local browser probes remain separate evidence.
   Reconcile the remaining public-input CLI launch case with the owned command interface; the exact

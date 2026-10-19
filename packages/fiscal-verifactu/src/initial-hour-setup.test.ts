@@ -146,7 +146,7 @@ it("the command recovery sheet uses the frozen venue zone", async () => {
       .map((item) => ("str" in item ? item.str : ""))
       .join(" ");
     expect(text).toContain("16 October 2026, 12:40");
-    expect(text).toContain("Western European Summer Time");
+    expect(text).toContain("WEST");
   } finally {
     await task.destroy();
   }

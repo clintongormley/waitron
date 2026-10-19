@@ -390,7 +390,7 @@ it("the wizard PDF uses the reviewed Canary venue zone", async () => {
         .map((item) => ("str" in item ? item.str : ""))
         .join(" ");
       expect(text).toContain("18 October 2026, 13:30");
-      expect(text).toContain("Western European Summer Time");
+      expect(text).toContain("WEST");
     } finally {
       await task.destroy();
     }

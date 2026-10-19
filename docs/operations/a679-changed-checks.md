@@ -2534,3 +2534,38 @@ owner's Drive is a viewing request, not approval. Whole A679 remains incomplete 
 the unchanged CLI launch failure, remaining entry/native acceptance, coverage, protocol/prose
 retirement, current-main integration, both final installed Claude reviews, push hook, current-head
 CI and PDF viewing approval still gate landing.
+
+
+## Recovery PDF zone abbreviations, 2026-10-19
+
+Authority: the owner's 04:45 request and 04:50 choice in Lane E's questions. The shared renderer
+now asks Intl for the short zone name and places it after the local time without parentheses.
+The eight observed English/Spanish Madrid/Canary summer/winter formatter results are CEST, CET,
+WEST and WET. This is measured on Node 26.11.1; the real Chromium PDF consumer also ran.
+
+Changed checks, all under `packages/fiscal-verifactu/src/`:
+
+| File | Before and after |
+| --- | --- |
+| `recovery-pdf-presentation.test.ts` | The four summer rows expect CEST/WEST instead of spelled-out zone names, and assert the adjacent complete date/time/abbreviation. Four winter rows add literal CET/WET dates. Page count, two-column alignment, labels, instructions, short node ID and exact attachment equality remain. Winter attachment equality uses the corresponding winter input. |
+| `initial-hour-setup.test.ts` | The prepared PDF's Canary zone text expects WEST instead of Western European Summer Time. Other preparation, secret and attachment assertions remain. |
+| `completed-recovery-document.test.ts` | The completed reissue PDF's Canary zone text expects WEST instead of Western European Summer Time. Current-identity, key and attachment checks remain. |
+| `setup/first-hour.browser.test.ts` | The browser-generated Canary PDF expects WEST instead of Western European Summer Time. The native setup and content checks remain. |
+
+The presentation run first failed eight assertions against the long names, with its three invalid-zone
+refusals passing. After implementation, four complete Node files pass 99 cases and the two browser
+files pass 20. Fiscal-package types, scoped lint and formatting pass. No protected fiscal identity,
+hash, counter, filing or login-refusal assertion changes in this revision. No package coverage claim.
+
+Four real-code A4 PDFs, EN/ES for Madrid/Canary summer dates, were rendered with Poppler and each
+page visually inspected. Each Created line fits on one line. PDFs and PNGs were copied and
+byte-compared to `~/My Drive/Waitron mockups/2026-10-19 A679 recovery PDF/`. Viewing approval
+remains pending; no physical printing or typing exercise is requested. Logs, samples and copy
+digests are in Lane E's `receipts/a679-zone-abbreviations-20261019`.
+
+The retained launch suite still reports one CLI refusal and two passing HTTPS launch cases. The
+CLI is rejected by `provisioning/cli.ts` before legacy JSON input can become owned preparation
+authority. Its original test bytes and S000001 expectation remain. The planned committed
+document-download acceptance file is absent; naming it beside the existing launch suite did not
+select or qualify a download case. Entry/coverage/retirement/integration/final-review/CI and owner
+PDF acceptance gates remain open.

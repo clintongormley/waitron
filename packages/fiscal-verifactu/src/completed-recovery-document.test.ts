@@ -175,7 +175,7 @@ it("the completed manager sheet uses the saved venue zone rather than the host z
       .join(" ")
       .replace(/\s+/g, " ");
     expect(text).toContain("18 October 2026, 13:00");
-    expect(text).toContain("Western European Summer Time");
+    expect(text).toContain("WEST");
   } finally {
     await task.destroy();
   }

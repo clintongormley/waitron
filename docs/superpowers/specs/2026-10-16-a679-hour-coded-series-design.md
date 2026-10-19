@@ -404,3 +404,12 @@ requirements remain.
 
 The generated EN/ES A4 samples still require the owner's viewing approval before product landing.
 See [the qualification record](../../operations/a679-changed-checks.md#approved-pdf-dependencies-and-launch-checks-2026-10-19).
+
+
+## Owner PDF time-zone decision, 2026-10-19 at 04:50
+
+The Created line uses the venue's local date and time followed by its zone abbreviation:
+CEST for Madrid summer dates, CET in winter, WEST for Canary summer dates and WET in winter.
+The language still controls the date wording. This replaces the spelled-out zone name in the
+18 October presentation addition. The key-name identifier stays unchanged. The revised EN/ES
+Madrid/Canary samples still require viewing approval.

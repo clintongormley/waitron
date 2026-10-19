@@ -19,12 +19,17 @@ const document: RecoveryDocument = {
 };
 
 it.each([
-  ["en", "Europe/Madrid", "18 October 2026, 19:29", "Central European Summer Time"],
-  ["en", "Atlantic/Canary", "18 October 2026, 18:29", "Western European Summer Time"],
-  ["es", "Europe/Madrid", "18 de octubre de 2026, 19:29", "hora de verano de Europa central"],
-  ["es", "Atlantic/Canary", "18 de octubre de 2026, 18:29", "hora de verano de Europa occidental"],
-] as const)("prints readable %s dates in the venue's %s zone", async (locale, zone, date, name) => {
-  const bytes = await renderRecoveryPdf(document, locale, zone);
+  ["en", "Europe/Madrid", "2026-10-18T17:29:32.728Z", "18 October 2026, 19:29", "CEST"],
+  ["en", "Atlantic/Canary", "2026-10-18T17:29:32.728Z", "18 October 2026, 18:29", "WEST"],
+  ["es", "Europe/Madrid", "2026-10-18T17:29:32.728Z", "18 de octubre de 2026, 19:29", "CEST"],
+  ["es", "Atlantic/Canary", "2026-10-18T17:29:32.728Z", "18 de octubre de 2026, 18:29", "WEST"],
+  ["en", "Europe/Madrid", "2026-01-18T17:29:32.728Z", "18 January 2026, 18:29", "CET"],
+  ["en", "Atlantic/Canary", "2026-01-18T17:29:32.728Z", "18 January 2026, 17:29", "WET"],
+  ["es", "Europe/Madrid", "2026-01-18T17:29:32.728Z", "18 de enero de 2026, 18:29", "CET"],
+  ["es", "Atlantic/Canary", "2026-01-18T17:29:32.728Z", "18 de enero de 2026, 17:29", "WET"],
+] as const)("prints readable %s dates in %s at %s", async (locale, zone, createdAt, date, name) => {
+  const input = { ...document, createdAt };
+  const bytes = await renderRecoveryPdf(input, locale, zone);
   const task = getDocument({ data: bytes.slice(), useSystemFonts: false, useWasm: false });
   try {
     const pdf = await task.promise;
@@ -35,7 +40,8 @@ it.each([
     const text = items.map((item) => ("str" in item ? item.str : "")).join(" ");
     expect(text).toContain(date);
     expect(text).toContain(name);
-    expect(text).not.toContain(document.createdAt);
+    expect(text).toContain(`${date} ${name}`);
+    expect(text).not.toContain(input.createdAt);
     expect(text).toContain("3262 BF78");
     expect(text).not.toContain(document.nodeKey.nodeId);
     const label = items.find(
@@ -66,7 +72,7 @@ it.each([
         ])
       expect(text).toContain(instruction);
     expect(await pdf.getAttachmentContent("waitron-recovery-key-v1.json")).toEqual(
-      recoveryDocumentBytes(document),
+      recoveryDocumentBytes(input),
     );
   } finally {
     await task.destroy();
