@@ -12,7 +12,7 @@ import {
 import { deleteCourse, readCourseDeleteImpact } from "./course-delete.js";
 import { createCourse } from "./kitchen.js";
 import { inTx, setupPartyVenue, seat, type PartyVenue } from "./testing/party-venue.js";
-import { addTabRound } from "./working-order.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { buildConfigurationBundle, validateConfigurationBundle } from "./configuration-transfer.js";

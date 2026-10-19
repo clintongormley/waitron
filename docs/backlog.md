@@ -2214,73 +2214,19 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
 
-- **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
-  A773-1 remains unlanded: check the combined cancellation and Finish-table paths against current
-  main, and complete the remaining prose audit, whole-path, ownership, native-screen, physical-till
-  and delivery checks. The command and HTTP removal path now removes unpaid, unstarted dishes without
-  a reason or adjustment, retaining the open-bill, payment-in-flight and paid-quantity refusals.
-  The command and HTTP route now carry a fired dish's preparation answer: Yes uses the started
-  path and marks its correction as started; No cannot override stored preparation state. The dialog
-  now asks for fired, not-started food, retains the answer as unsaved input and sends it with the
-  original kitchen context. No removes an unpaid dish without a reason read; Yes can continue
-  through the existing off-bill reason and approval flow. Held food uses Remove without a stage
-  claim. A keep-charge cancellation now
-  requires an active cancel reason and its required note, recording a cancel adjustment with
-  zero reduction beside the service cancellation. Paid-bill HTTP tests retain their bill rows,
-  sales, tenders and payments while adding that adjustment. Recorded reasons use the operator's
-  language. The charged choices now collect a cancel reason and required note in the dialog,
-  including before the paid refund handoff; a failed reason read can retry, and a server-required
-  note is revealed without discarding the choice. Started off-bill cancellation now collects its
-  reason and note in that same dialog. Its main action checks the adjustment preview and either
-  sends the cancellation or opens the existing role-based PIN prompt. Returning from the prompt
-  keeps the draft; a failed preview remains retryable without saying a cancellation was sent.
-  The paid dialog now uses one Refund tick, defaulted by preparation, and a named action whose
-  amount comes from the filed dish and its extras; paid served food is unavailable. The read
-  matches sorted working-line positions to filed lines, including stored-number gaps, and omits
-  the value when the compositions do not match. The paid cancellation and Finish-table handoffs
-  use the refund PIN prompt and this device's eligible payment methods.
-  Preserve the completed behavioral checks and their receipts; the detail's
-  Decisions section records their scope and limits. The product guide separates stored-line
-  availability from the saved New order payment refusal; the till README distinguishes fresh-dish
-  availability from recalled bill rows and points to the modifier-save rules. The product guide's
-  course section now describes New order's firing and held groups. Recheck subsequent
-  main changes before the final whole-branch review, push and CI. The direct group-submission client
-  type now requires the bill's editing state, matching the server's existing refusal contract.
-  The line-Recall client also carries that observation, and Recall to New order exposes the
-  returned editing state. Stored station choices now carry the original bill observation through
-  the question and an inactive-station retry; a changed app identity or bill observation stops
-  the waiting path before another request. API replacement during a preceding draft save is also
-  checked for Recall and recalled-dish splitting: neither command reaches the replacement client,
-  and the local changes remain available for review. Fresh Discard and confirmed recalled removal
-  and Discard also retire waiting commands after an API replacement; fresh unsaved dishes stay
-  available for review and the checked recorded source rows remain. Recalled-dish removal retains
-  its opening bill context while reading reasons and checking a preview, confirmation or manager PIN; a newer
-  draft revision refuses the old action, including a command delayed after confirmation. Held-dish
-  splitting retains the bill observation from before a pending kitchen-note save; it stops after
-  that observation or the API client changes. Continue auditing the remaining public ownership
-  contracts against their app callers and server checks.
-  Paid Cancel now checks the original payment's remaining principal and this device's payment
-  capabilities before showing Refund; a device that cannot return any available method directs
-  staff to the receipt at a till. Cancel and refund now checks refund permission before cancelling
-  food and opens the existing approver PIN prompt after a refusal. The refund screen offers only
-  payment methods this device can return; existing pending attempts remain available to inspect.
-  The Finish-table HTTP command now refuses unserved paid dishes across the party's bills,
-  including paid bills retained by merged parties. Its confirmed command cancels the complete
-  observed set and closes in one transaction; HTTP cases check rollback, replay, served quantities,
-  zero-reduction adjustments and unchanged filed rows. Fired, not-started food needs an explicit
-  preparation answer, and refund handoffs check refund permission before kitchen writes.
-  The Finish-table client now carries the complete closing confirmation and an optional refund
-  approver, with an abort signal. A standalone dialog collects each dish's preparation answer and
-  Refund tick, the shared reason and its required note, and protects staged choices on Back or
-  Escape. Finish table now opens it from the unserved-dish refusal, reading each dish's current
-  context and filed value plus the available payment principal. Failed reads remain retryable;
-  changed observations are not confirmed automatically. The app retains every family bill's
-  editing observation through approval and the single cancellation-and-close request. Unanswered
-  requests keep their identity and lock the chosen fields; an approved retry asks the same person
-  for a fresh PIN. After closing succeeds, selected refunds open their historical receipt, with
-  a bill choice when more than one receipt is involved. The public refund keeps its independent
-  amounts and approval. A758 still owns filling that form, its reason defaults and refund links.
-  A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+- **A773-2. Firing and the pass.** Plan from the approved courses/groups design after the
+  table-panel branch lands. Add Requested and pass release, remove Away/Done, and finish the
+  station settings and counter changes. Coordinate A756, A803 and A797 before building.
+  [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+
+- **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
+  headings on a physical till. Keep drag only if it works reliably; Move to… and the held heading's
+  Move earlier/later actions remain available. Browser gesture checks do not settle this choice.
+  [Spec §11](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#11-left-for-later-backlog)
+
+- **A773 physical-till trial: serving part of a line.** Try marking part of a line served through
+  the dish window during service. Decide whether it is practical before changing that workflow.
+  [Spec §11](superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#11-left-for-later-backlog)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,
   2026-10-16).** For example, the bar pours the dessert wine when the kitchen marks the tarta ready,

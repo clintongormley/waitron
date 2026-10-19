@@ -1511,16 +1511,16 @@ Direct group submissions carry the observed bill editing state too. The till cli
 `GroupSubmission` type requires `expectedEdit`; its compiler checks reject an omitted observation
 and check its exact type. The existing client payload fixtures now include that field.
 `bill-editing.group-submit.test.ts` checks the server's refusal for a missing observation and its
-use of the observed bill when the redundant `billId` is omitted. The client type change completes
-that interface; cancellation and Finish-table integration remain open below.
+use of the observed bill when the redundant `billId` is omitted. The client type and server checks cover that interface.
 
 Closing compares every bill's editing state, including bills retained by a merged party. A
 colleague's outbox refuses `draft.taken_over`; stale editing state refuses `draft.out_of_date`;
 the editor's remaining saved dishes refuse `bill.unsent_dishes` rather than being discarded.
 `apps/server/src/bill-editing.finish.test.ts` checks these refusals and unchanged database rows
 through direct Finish/close and authenticated Finish/unpaid-departure requests. It also checks
-closing with current empty observations while another party keeps its outbox. These ownership
-checks do not complete plan T22's held-dish resolution, which still waits for A758's revised design.
+closing with current empty observations while another party keeps its outbox. The separate paid-food confirmation and cancellation checks are in
+`apps/server/src/finish-party-service.test.ts`; the app cases are in
+`apps/till/src/till-app-parties.test.ts`.
 
 The floor shows each nonempty bill/editor pair. A compact map badge may remain "Unsent" when its
 accessible label names those pairs and the expanded detail shows them, as ownership design §6
@@ -2250,148 +2250,26 @@ build after A757's board if it has been decided, else name the table alone.
 
 ## A773. Courses, groups and the pass
 
-**A773-1 is unlanded on `feat/a773-1-unsent-list`.** Finish the table screen from its
-[plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md), preserving earlier behavioral checks.
-The remaining work includes:
+**A773-2**, firing and the pass, is planned from the
+[approved design](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md) after
+A773-1 lands. It covers Requested and pass release, retiring Away/Done, station settings and
+counter changes. Coordinate A756's settings, A803's station/pass additions and A797's pass/kitchen
+design before building. The table panel and per-bill editing contracts belong to
+[A773-1's plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and the
+[ownership amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md).
 
-- Finish integrating the published [A758 revision, section 10](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#10-for-other-lanes)
-  (main `8e15b02a25828cdd47c2400cb7292b1793ca93cc`) into plan T20/T22. Unpaid, unstarted
-  removal now takes no reason, approval or adjustment record through the command and HTTP route;
-  it retains the open-bill, payment-in-flight and paid-quantity checks. A held dish tells the kitchen
-  only when its HOLD ticket was queued; fired work retains its correction. The command and HTTP
-  route now carry the explicit preparation answer. Yes on fired food uses the started path and
-  marks the correction started; No cannot override stored preparation state. Held food cannot
-  claim preparation Yes, and the answer is part of replay consent. Keep-charge cancellations now
-  require an active reason that allows cancel and its required note; they write one zero-reduction
-  adjustment beside the service cancellation, with no approval. Paid-bill HTTP tests retain their
-  bill rows, sales, tenders and payments while adding that adjustment; replay adds no second record, and a
-  discounted dish records its current value separately from its original list value. The dialog
-  now asks the preparation question only for fired, not-started food, keeps the answer as staged
-  input, resets it after changed kitchen facts and sends it with the original context. No on an
-  unpaid bill bypasses the reason read; Yes can use the existing off-bill reason and approval flow.
-  Held food uses Remove without a stage claim, and an unpaid selected action names its outcome.
-  Charged choices now load cancel-capable reasons into the dialog's shared dropdown and collect
-  the selected reason's required note. The reason and note reach the keep-charge command and
-  the kitchen cancellation before the separate paid refund flow. Failed reason reads can retry;
-  an old reply cannot replace a reopened dialog's reasons. A server note-required refusal reveals
-  the required field, retaining the selected reason. Changed kitchen facts clear the reason and
-  note; equivalent reads retain them. The off-bill choice still uses the existing adjustment
-  path. Paid cancellation uses one Refund tick and the filed dish value, with Refund initially
-  selected only before preparation. Cancel and refund checks refund permission before any kitchen
-  cancellation and opens the existing approver prompt after a refusal. The PIN is sent with that
-  cancellation request; the later money request keeps its independent public approval and retry
-  flow. Mixed-payment refund choices follow the device's cash, hand-keyed-card and connected-card
-  actions, while pending refunds remain inspectable. Paid-table Finish now has a server command:
-  it refuses without the complete current unserved-dish confirmation, then cancels and closes in
-  one transaction. The HTTP suite checks served remainders, merged-party paid bills, rollback,
-  replay, preparation answers and refund approval. Finish table now opens the dialog from that
-  refusal, checks each dish's context and device-eligible payment principal, and retains all family
-  editing observations through the single cancellation-and-close request. Unanswered confirmations
-  keep their request identity and lock their choices; an approved retry asks the same approver for
-  a fresh PIN. Raced kitchen facts are shown for another confirmation, and a changed party returns
-  to the refreshed table. Selected receipts open only after successful closure, with a bill choice
-  for multiple receipts. Each public refund still needs its own amounts and approval. The new
-  record uses today's adjustment schema; A758 still owns its later report
-  changes, including crediting zero-reduction cancels, and the preparation flag migration.
-  The earlier picture-03 implementation is not the completed revised design. A758's later slices
-  own the changed reason rules, starter list, reports and filled refund screen.
-- Reconcile the full branch with current main, including migration collisions and prose describing
-  changed behavior beyond the documented fresh/recalled modifiers and checks before closing.
-  The current checkpoint includes main's department-specific clearing and installed-module table
-  removal. Recheck later main changes before publication; this integration does not complete the
-  cancellation or Finish-table design.
-  The original service spec and plan now carry dated pointers for their superseded draft rules.
-  The table-actions spec/plan and the two station/extra plans also point to the replacement
-  bill-selection and table Recall contracts, preserving their historical bodies.
-  Superseded source comments describing personal drafts, lost local edits, owner-only floor labels
-  and Recall-to-held have been removed without changing executable code.
-  The older Task 7 draft and Task 8 floor-read notes now point to the per-bill ownership design;
-  their original unresolved observations remain for reassessment.
-  The whole-branch prose audit remains open. Complete the remaining
-  ownership/copy/native-screen acceptance, the physical till trial and final whole-branch validation
-  and review before publication. Read the campaign's
-  local checkpoint ledger for exact remaining checks and receipts; do not treat earlier focused
-  checks as whole-item acceptance.
+Two physical-till trials remain separate from browser and API checks:
 
-The shipped English and Spanish modifier guides describe editing sent table dishes through Recall
-and New order, with recorded answers and prices retained and new extras checked against the current
-offer. Their parked-counter guidance is scoped separately. This closes that guide-prose subset;
-the remaining whole-branch audit and cancellation/Finish work above stay open. The English and
-Spanish product guides also distinguish a dish's default course from New order's firing and held
-groups, replacing the old whole-table course-section description.
+- Try long-press dragging of New order lines and held headings. If it does not work reliably,
+  keep Move to… and the heading's Move earlier/later actions.
+- Try serving part of a line through the dish window during service before deciding whether
+  the interaction needs to change.
 
-The till README now separates the table's bill-specific Sent/New order workflow from its historical
-counter slice. It distinguishes fresh-dish availability from recalled bill rows, which can be resent
-after their offer is removed, and links to the modifier contract for changes saved before Send.
-The schema and availability-helper comments no longer describe every draft line as unpriced or
-unsendable when it has an availability flag. The design-system button examples name the direct
-New order actions rather than the removed send-preview confirmation. These prose updates do not
-complete cancellation/Finish, the physical trial or final delivery.
-
-The product guide scopes fresh-dish availability checks separately from recalled bill rows and
-links to their modifier contract. It also distinguishes stored-line pricing from the bill's saved
-New order payment refusal, including the other-bill and payment-replay boundaries.
-The original six-choice mock-up page now points to the owner's
-2026-10-17 answers while preserving the proposal and drawings. These changes close those prose
-findings; they do not complete the whole-branch audit or the remaining work above.
-
-The client-contract audit also covers the older line-Recall route: `recallLines` requires an
-explicit bill editing observation, or `null` for a counter order, and sends it with the line
-numbers. `recallToDraft` exposes the server's returned `edit` alongside its draft and party
-revision. The request-body and compiler checks are in `client.recall-ownership.test.ts`.
-`TillApi.setMakeAt` also requires and sends that observation, with explicit `null` for a counter
-order. Its app callers cover table-bill relocation, held counter relocation and payment preview.
-The stored-station question retains the caller's original API and editing observation through an
-inactive-station retry; it checks the caller's current context before reading, after the read, and
-before saving a choice. The payment path captures its observation before that preparatory read.
-The request/compiler cases in `client.station-ownership.test.ts` and the app payment cases cover
-serialization, changed identity/ownership, stale choices and retry. These checks close that T24
-client finding; the remaining whole-path audit and delivery work above stay open.
-
-Recalled-dish removal captures its bill context after flushing the draft and before reading the
-stored lines and reasons. The existing adjustment checks then refuse a preview, confirmation or
-manager PIN after that bill's draft revision changes. A check inside the delayed source command
-also compares that original context before sending, and Discard stops its remaining source
-previews after a changed observation. Seven added cases in `till-app-drafts.test.ts` cover those
-stages, a late reasons answer, the delayed command, a paused Discard preview and an unrelated
-bill's changed version. These checks concern the confirmation's editing state; the revised cancellation and
-Finish-table policies still wait for A758 above.
-
-The app's held-dish split handler captures the dish's bill observation and API client before
-waiting for a kitchen-note save. It checks that context before sending the split.
-The Current orders cases in `till-app-parties.test.ts` cover changed editor versions,
-draft identity and revision, an API replacement, and an allowed split when only another bill
-changes. These checks cover that existing command handler; whole-item acceptance remains open.
-
-Two more cases in `till-app-drafts.test.ts` hold a preceding draft save through an API-client
-replacement, then release its reply. Recall and recalled-dish splitting send no command to either
-client, release their busy state, and keep the local changes for review. Removing the existing
-API-change draft restart in a disposable installed checkout makes each case observe the forbidden
-command on the replacement client. This closes that API-lifetime follow-up without changing
-production code; the remaining ownership audit and whole-item acceptance stay open.
-
-The same suite also pauses fresh Discard's preparatory save and the confirmed recalled removal
-and Discard commands across an API replacement. Neither API receives the retired command. The
-fresh dish stays in the retained candidate, while the recalled dish remains in its saved outbox;
-the old adjustment window closes and the new synchronizer reads through the replacement API.
-These cases concern client lifetime, without changing cancellation reasons, permissions or money.
-
-The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
-uses the authenticated routes and a real venue database. A fresh route instance reads the saved
-arrangement before another person takes it over. Sending only the fresh beer leaves the measured
-dish, recalled source and recorded discount in the outbox; replay leaves the checked financial
-and kitchen rows unchanged. These cases complement the native app's controlled API checks.
-They do not join a browser to a running server or replace the physical till trial.
-
-The approved [courses/groups spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md)
-and [one-editor-per-bill amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
-remain the design authority. Their owner-approved wording and the six answers in spec §14 remain
-in force. [Course mockups](mockups/a773-courses-and-groups/),
+[Course mockups](mockups/a773-courses-and-groups/),
 [panel mockups](mockups/a773-order-panel/), [ownership pictures](mockups/a773-one-editor/).
-
-**A773-2**, firing and the pass, is planned from the spec after A773-1 lands. It covers Requested
-and pass release, retiring Away/Done, station settings and counter changes. Coordinate the A756
-settings, A803 station/pass additions and A797 pass/kitchen design before building that part.
+A758 owns its later reason rules, starter list, reports, filled refund form, refund links and
+counter-collection path. Its [section 10](../superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#10-for-other-lanes)
+defines the cancellation and Finish-table handoff built by A773-1.
 
 ## A678. Two readers answer "where is this order"
 
