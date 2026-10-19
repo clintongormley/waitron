@@ -1744,7 +1744,7 @@ at that width (above). While a category is being renamed or added, the name box'
 takes the row's colour-square slot, where the row's own square sits at rest, and the box starts
 where the name started. The name box's square shows the category's own colour, else the nearest
 coloured category above it, else the venue's default, else an empty outline. An inherited colour
-keeps its dashed inset border while the name is typed. The chooser still starts on No colour when
+keeps its dashed border while the name is typed. The chooser still starts on No colour when
 the category has no colour of its own. At phone width that slot shows only while naming, on the row's first line
 above the box. That square is not a Tab stop, so Tab still leaves the box.
 
