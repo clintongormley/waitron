@@ -381,4 +381,14 @@ describe("A669 allergy dialog", () => {
     );
     expect(field.value).toBe("Second guest");
   });
+  it("reopens a guest field when Send is refused from the ticking page", async () => {
+    const el = await mount("allergies");
+    await click(el, "[data-primary]");
+    el.fieldRefusal = { guestIndex: 1, field: "who", message: "Check this guest" };
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-1-who"]');
+    expect(field).not.toBeNull();
+    expect(field!.error).toBe("Check this guest");
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe("");
+  });
 });

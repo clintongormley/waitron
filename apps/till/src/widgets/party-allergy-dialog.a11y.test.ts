@@ -80,6 +80,10 @@ for (const width of [390, 1280])
         );
         await expectNoA11yViolations(host);
         await capture(el, `ticks-${locale}-${theme}-${width}`);
+        el.fieldRefusal = { guestIndex: 0, field: "who", message: t("allergy.who_invalid") };
+        await el.updateComplete;
+        await expectNoA11yViolations(host);
+        await capture(el, `refusal-${locale}-${theme}-${width}`);
       });
       it(`allergy editor, deletion confirmation and empty answer accessible in ${locale}/${theme}/${width}`, async () => {
         await page.viewport(width, 900);

@@ -191,6 +191,14 @@ export class TillPartyAllergyDialog extends LitElement {
       this.#open();
     else if (changed.has("view") && !this.#scope?.isDirty() && !this.busy && !this.#submitted)
       this.#load();
+    if (
+      changed.has("fieldRefusal") &&
+      this.fieldRefusal &&
+      this.draft.guests[this.fieldRefusal.guestIndex]
+    ) {
+      this.editingGuest = this.fieldRefusal.guestIndex;
+      this.page = this.mode === "edit" ? "editor" : "guests";
+    }
   }
   #load(): void {
     const snapshot = this.view.snapshot;
@@ -257,6 +265,7 @@ export class TillPartyAllergyDialog extends LitElement {
   }
   override updated(changed: PropertyValues): void {
     if (changed.has("page") || changed.has("editingGuest")) void this.#focusPage();
+    if (changed.has("fieldRefusal") && this.fieldRefusal) void focusFirstInvalid(this.shadowRoot!);
   }
   async #focusPage(): Promise<void> {
     const key = this.#opening?.key;
