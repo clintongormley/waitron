@@ -64,6 +64,7 @@ describe("VENUE_SERVICE", () => {
       "openStationForToday",
       "orderInZones",
       "orderZoneIdSql",
+      "partiesWithAllergicGuests",
       "readDepartmentLogoRasters",
       "readDepartmentReceipt",
       "readDepartmentReceiptPolicy",
