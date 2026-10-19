@@ -165,6 +165,86 @@ describe("bill-scoped saved work and retained local candidates", () => {
     expect(sync.edit).toEqual(saved("ana", 4, 5).edit);
   });
 
+  it.each(["adoptLines", "removeLines", "clear"] as const)(
+    "keeps the retained candidate separate when %s runs during takeover",
+    async (operation) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const { sync, api, set } = fixture();
+      await sync.load();
+      sync.store.addProduct(salad, "2", { note: "No salt" });
+      set(saved("luis", 3, 4));
+      await sync.load();
+      const candidate = structuredClone(sync.candidate);
+      expect(candidate).toMatchObject({
+        personId: "ana",
+        partyId: "party-1",
+        billId: "bill-1",
+        base: { billId: "bill-1", editorVersion: 0, draftId: null, draftRevision: null },
+        lines: [{ product: { name: "Salad" }, quantity: "2", note: "No salt" }],
+      });
+      const pending = deferred<BillDraftSnapshot>();
+      api.takeOverDraft.mockImplementationOnce(() => pending.promise);
+      const taking = sync.takeOver("draft-1", 4);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.takeOverDraft).toHaveBeenCalledOnce();
+      expect(sync.store.sending).toBe(true);
+
+      if (operation === "adoptLines")
+        sync.store.adoptLines(new Map([[0, { product: salad, quantity: "7" }]]));
+      else if (operation === "removeLines") sync.store.removeLines([...sync.store.lines]);
+      else sync.store.clear();
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+      expect(api.saveDraft).not.toHaveBeenCalled();
+      expect(sync.candidate).toEqual(candidate);
+
+      const taken = saved("ana", 4, 5);
+      set(taken);
+      pending.resolve(taken);
+      expect(await taking).toBe("taken");
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+      expect(sync.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+        ["Steak", "1"],
+      ]);
+      expect(sync.edit).toEqual({
+        billId: "bill-1",
+        editorId: "ana",
+        editorName: "Ana",
+        editorVersion: 4,
+        draftId: "draft-1",
+        draftRevision: 5,
+      });
+      expect(sync.candidate).toEqual(candidate);
+      expect(sync.store.editsLocked).toBe(true);
+      expect(await sync.flush()).toBe("failed");
+      expect(api.saveDraft).not.toHaveBeenCalled();
+
+      sync.resolveCandidate(null);
+      expect(sync.candidate).toBeNull();
+      expect(sync.store.editsLocked).toBe(false);
+      sync.store.addProduct(salad, "3");
+      expect(await sync.flush()).toBe("saved");
+      expect(api.saveDraft).toHaveBeenCalledExactlyOnceWith(
+        "party-1",
+        {
+          billId: "bill-1",
+          draftId: "draft-1",
+          revision: 5,
+          expectedEdit: {
+            billId: "bill-1",
+            editorVersion: 4,
+            draftId: "draft-1",
+            draftRevision: 5,
+          },
+          lines: [
+            expect.objectContaining({ menuItemId: "offer-steak", quantity: "1" }),
+            expect.objectContaining({ menuItemId: "offer-salad", quantity: "3" }),
+          ],
+        },
+        { signal: expect.any(AbortSignal) },
+      );
+    },
+  );
+
   it("retains a local first-save loser separately, cancels autosave and never sends it", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { sync, api, set } = fixture();

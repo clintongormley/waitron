@@ -646,8 +646,6 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
   - Other people's drafts:
     - At phone width nothing on the menu view says other people have drafts on the table; the
       button reads "Review (0)". The floor's mark does say so.
-    - Three automatic changes to the draft (`adoptLines`, `removeLines` and `clear` on the
-      till's store) are not blocked while a take-over is out. Read in the code, not run.
     - The Spanish "has taken over this order" wording has no test.
   - The table screen:
     - Seating a table whose answer arrives while a newer table is still opening shows the seated
@@ -1529,6 +1527,13 @@ A successful read restores editing authority, and applying a retained copy still
 explicit review. The sync suite checks both a draft refusal and a lost save answer, including a
 bill with previously saved dishes. The app suite checks the native Discard action and recovery
 on focus. This replaces Task 8's old refusal-and-repeat-send observation.
+
+The takeover-helper cases in `state/draft-editing.test.ts` call `adoptLines`, `removeLines`
+and `clear` while a controlled takeover request waits for its answer. None sends a save; the
+answer restores the saved dishes and leaves your retained local copy separate and read-only.
+After you explicitly discard that copy, a new edit saves with the new editor version. This
+replaces Task 8's unrun observation about those internal store helpers; it does not add a blanket
+lock to helpers also used to apply server answers.
 
 While the table is visible, drafts refresh every 15 seconds and on window focus. The app's draft
 suite checks the interval, an unchanged focus refresh preserving selection and its Move window,
