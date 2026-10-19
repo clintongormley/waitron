@@ -654,36 +654,46 @@ describe("till-basket", () => {
   });
 
   it("marks each line a menu change blocks, in words for why, and leaves the others unmarked", async () => {
-    setLocale("en-GB");
-    const store = new WorkingOrderStore();
-    store.addProduct(cafe, "1");
-    store.addProduct({ ...cafe, id: "burger", name: "Burger" }, "1");
-    store.addProduct({ ...cafe, id: "wine", name: "Wine" }, "1");
-    store.addProduct({ ...cafe, id: "soup", name: "Soup" }, "1");
-    store.setBlocked([undefined, "unavailable", "removed", "extra_unavailable"]);
-    const { el } = await mountWidget<TillBasket>("till-basket", { store });
-    const names = [...el.shadowRoot!.querySelectorAll(".line > .name")].map((name) =>
-      (name.textContent ?? "").replace(/\s+/g, " ").trim(),
-    );
-    expect(names).toEqual([
-      "Café",
-      "Burger Sold out",
-      "Wine No longer on the menu",
-      "Soup An extra or choice has changed",
-    ]);
+    const previousLocale = currentLocale();
+    try {
+      setLocale("en-GB");
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      store.addProduct({ ...cafe, id: "burger", name: "Burger" }, "1");
+      store.addProduct({ ...cafe, id: "wine", name: "Wine" }, "1");
+      store.addProduct({ ...cafe, id: "soup", name: "Soup" }, "1");
+      store.setBlocked([undefined, "unavailable", "removed", "extra_unavailable"]);
+      const { el } = await mountWidget<TillBasket>("till-basket", { store });
+      const names = [...el.shadowRoot!.querySelectorAll(".line > .name")].map((name) =>
+        (name.textContent ?? "").replace(/\s+/g, " ").trim(),
+      );
+      expect(names).toEqual([
+        "Café",
+        "Burger Sold out",
+        "Wine No longer on the menu",
+        "Soup An extra or choice has changed",
+      ]);
+    } finally {
+      setLocale(previousLocale);
+    }
   });
 
   it("marks a line whose dish is sold only as an extra, in English and in Spanish", async () => {
-    const store = new WorkingOrderStore();
-    store.addProduct({ ...cafe, id: "bacon", name: "Bacon" }, "1");
-    store.setBlocked(["not_sold_separately"]);
-    const said = async (locale: string) => {
-      setLocale(locale);
-      const { el } = await mountWidget<TillBasket>("till-basket", { store });
-      return el.shadowRoot!.querySelector(".line > .name .not-offered")!.textContent!.trim();
-    };
-    expect(await said("en-GB")).toBe("Only sold as an extra");
-    expect(await said("es-ES")).toBe("Solo se vende como extra");
+    const previousLocale = currentLocale();
+    try {
+      const store = new WorkingOrderStore();
+      store.addProduct({ ...cafe, id: "bacon", name: "Bacon" }, "1");
+      store.setBlocked(["not_sold_separately"]);
+      const said = async (locale: string) => {
+        setLocale(locale);
+        const { el } = await mountWidget<TillBasket>("till-basket", { store });
+        return el.shadowRoot!.querySelector(".line > .name .not-offered")!.textContent!.trim();
+      };
+      expect(await said("en-GB")).toBe("Only sold as an extra");
+      expect(await said("es-ES")).toBe("Solo se vende como extra");
+    } finally {
+      setLocale(previousLocale);
+    }
   });
 
   it.each([
