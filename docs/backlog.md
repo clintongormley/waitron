@@ -3830,6 +3830,15 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   `[Cancel] [Delete…] … [Save]` row (design-system.md → Forms) has each dialog space its own group;
   move it into `packages/ui/src/components/wt-form-actions.ts`. Left open by A719 (#1838).
 
+- **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
+  2026-10-19).** The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:71`)
+  and a dialog's background is `--wt-color-surface-raised` (`packages/ui/src/components/wt-dialog.ts:57`).
+  Computed with the WCAG contrast formula from the values declared in
+  `packages/ui-core/src/tokens/colors.css`: dark `#333945` on `#22262e` is 1.31:1 (1.47:1 on
+  `--wt-color-surface`, `#191c22`); light `#d6d9e0` on `#ffffff` is 1.41:1. WCAG 2.1's non-text
+  contrast criterion (1.4.11) asks 3:1. Not measured on a rendered page. Fix it in the primitive,
+  not per screen.
+
 - **A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by
   #1828).** `wt-colour-chooser` copies the panel placement (which since A783 also picks two or four
   columns) and the arrow-key handling that other `wt-*` components (`wt-combobox` among them)
