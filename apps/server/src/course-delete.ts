@@ -48,7 +48,7 @@ async function courseDeleteRules(
       ),
     );
   if (!target) throw new AppError("course.not_found", { courseId: id });
-  // Product-only references retain the row too, even though deletion clears those settings.
+  // A product default or a service step alone retains the row too, though deletion clears both.
   const retained = (await coursesInUse(tx, [id])).has(id);
   const [defaults] = await tx
     .select({ count: count() })
