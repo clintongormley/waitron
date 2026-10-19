@@ -140,8 +140,9 @@ colour, with black or white text chosen by `readableTextColor`
 dashboard banner shows Waitron's own logo, picking its light or dark drawing from the theme choice
 (`apps/dashboard/src/dashboard-app.ts:189,1738`).
 
-**Script reads of tokens by a literal name.** `grep` for `getPropertyValue("--wt-` outside tests
-found nine lines, all of spacing, tap size or a duration (`product-appearance.ts:114`,
+**Script reads of tokens by a literal name.** `grep` for `getPropertyValue("--wt-` outside test
+files and test helpers (`apps/dashboard/src/widgets/test-helpers.ts:252` also matches) found nine
+lines, all of spacing, tap size or a duration (`product-appearance.ts:114`,
 `wt-floor-plan-canvas.ts:542,545,546`, `wt-tabs.ts:221`, `drag-edge-scroll.ts:49`,
 `opening-hours-week.ts:134,532`, `departments-zones-drag.ts:329`). That grep cannot see a read
 through a variable name, such as the recovery sheet's above.
@@ -171,8 +172,8 @@ and surface, text 4.5:1 on it (171-177); a field's line 3:1 on the fill, the sur
 `--wt-color-primary` 3:1 on the fill, label, hint, value, text and error 4.5:1 on the fill, muted
 text 4.5:1 on the disabled fill (199-229); primary text 4.5:1 on the page, both surfaces and the
 lifted surface (251-265); the highlight's text (277-285); hover fills keep their button's text at
-4.5:1 and stand 1.2:1 from rest (301-320); in dark, disabled fills within 1.5:1 of the surfaces and
-their text 4.5:1 (338-351); the Google button's line 3:1 on its fill and three surfaces (403-417);
+4.5:1 and stand 1.2:1 from rest (301-320); in dark, the primary and the danger disabled fills within 1.5:1 of
+the surface and the raised surface (339-348), and their text 4.5:1 (351); the Google button's line 3:1 on its fill and three surfaces (403-417);
 table fills, and the success and danger dots 3:1 on the surface (482-498); station fills, dots 3:1
 on the surface and each fill, and the focus colour 3:1 on every station fill and the lifted surface
 (531-576). No test holds a button's fill against the page, or the text on a button: those are
@@ -275,8 +276,12 @@ Thinking wide, four levels were possible:
 1. **One brand colour**, nothing else.
 2. **A few knobs** — brand colour, background, corners — from which every affected token, light and
    dark, is worked out.
-3. **Knobs plus every colour by hand** — the knobs, and a folded list of all 112 colour tokens with a
-   light and a dark value each (mock-up `08-q1-knobs-or-every-colour-light.png`, right).
+3. **Knobs plus colours by hand** — the knobs, and a list you open of the 23 colour tokens that carry
+   no meaning, each with a light and a dark value (mock-up `08-q1-knobs-or-every-colour-light.png`,
+   right). Listing the light block's names and leaving out the station, palette, table, day, danger,
+   success, warning, Google and highlight families left 23: bg, the four surfaces, track, text,
+   muted text, the six primary-family colours, border, focus, scrim, the five field colours and the
+   stepper button. The meaning colours stay out, as section 2 rules out.
 4. **Raw editing only** — every token, typed in. This is roughly what today's seven-token
    `tenant_themes` document allows, without a dark value (section 3).
 
@@ -312,8 +317,12 @@ All my call; the plan pins the exact numbers.
   editor's preview and by the server. Browser-safe and free of Lit, so the server can import it. It
   takes Waitron's default values from `colors.css` itself, never from a hand-kept copy (the trust
   page and guide pages show what a copy costs: section 3).
-- "Waitron's" brand colour with Neutral and Standard is no theme at all: no row, no derived values,
-  Waitron's exact tokens. A custom colour typed as Waitron's own `#1f6feb` is a theme like any
+- "Waitron's" brand colour is stored as `brandColor: null`, and keeps Waitron's own primary family
+  in each mode: the theme writes none of the brand-colour tokens. With Neutral and Standard as well
+  it is no theme at all: no row, Waitron's exact tokens. With Tinted, the tint takes the hue of
+  Waitron's own primary. The prototype, run for `brandColor: null`, wrote 0 tokens for Neutral in
+  both modes, and 6 (light) and 8 (dark) background tokens for Tinted with the tint at full
+  strength, every rule passing. A custom colour typed as Waitron's own `#1f6feb` is a theme like any
   other and does not reproduce Waitron's dark set: the prototype gives a dark button of `#1f6feb`
   with white text and link text `#67a0fd`, where Waitron's own dark set has `#4c8dff`, `#06101f` and
   `#78a9ff` (`colors.css:136-139`).
@@ -337,7 +346,7 @@ All my call; the plan pins the exact numbers.
   colour.
 - **Worked examples**, from a prototype of this function
   (`/Users/clintongormley/waitron-campaign/a841-mockups-src/derive.mjs`, outside the repository;
-  `node build.mjs` there prints them). The prototype checks 67 rules in light and 70 in dark: every
+  `node build.mjs` there prints them). The prototype checks 67 rules in light and 72 in dark: every
   rule of `colors.test.ts` listed in section 3 that reads a token the theme writes, plus Waitron's
   own button rules of section 9.
   - Bar Lucía, `#1e5b3a`, tinted: light buttons keep `#1e5b3a` with white text at 8.04:1; dark
@@ -347,7 +356,8 @@ All my call; the plan pins the exact numbers.
     `#9f8b18` (3.40:1 on white, 3.17:1 on the page, black text on it 6.18:1); dark mode keeps the
     lemon itself. All rules passed. Kept unmoved, the light set failed three: the button colour on
     the field fill at 1.32:1, on the page at 1.39:1 and on the surface at 1.49:1.
-- **Sweep** (`node sweep.mjs` in the same folder): 216 brand colours (every combination of 0, 51,
+- **Sweep** (`node sweep.mjs` in the same folder, run again after the dark rule count rose to 72
+  with the danger-disabled rule): 216 brand colours (every combination of 0, 51,
   102, 153, 204 and 255 per channel) × Neutral and Tinted × light and dark, 864 cases, printed
   `failing 0, tint weakened in 0 tinted cases`. The first run of the sweep, with a darker light tint,
   had the tint weakened in every light case (the bar track fell to 1.38:1 on the page) and 44 cases
@@ -432,7 +442,12 @@ Waitron's light blue stands 4.33:1 on the page and 4.63:1 on the surface, with w
 outside these rules, and Waitron's own blue already reads under 4.5:1 on its page. My call: the build
 moves each one that is text to `--wt-color-primary-text` (an icon or line may stay, under the 3:1
 fill rule), and adds a guard refusing `color: var(--wt-color-primary)` outside an allowlist of the
-graphic uses (slice 4).
+graphic uses (slice 4). Two of the 15 are in `apps/setup` (`form-styles.ts:49`,
+`screens/provisioning-screen.ts:41`), which the theme does not reach (section 8): moving them is
+optional. The guard is weaker than its name: it reads `color:` declarations as text, so it misses a
+redeclared token (`printers-screen.ts:218`, `--wt-color-text: var(--wt-color-primary)`), a `fill:` or
+`stroke:` (`apps/setup/src/setup-app.ts:472`, `packages/ui/src/components/wt-floor-map.ts:319`), and a
+read from script; the plan lists those by hand.
 
 **On a bad choice** (Q2): recommended, Waitron moves the colour just enough and says so beside the
 field; Save stays enabled. The alternative refuses the colour with the form's usual field message
@@ -472,7 +487,7 @@ My call: **reuse and reshape what exists** rather than adding a parallel table.
   (`design-system.md:3256-3261`, the banner shows "the deployment tenant's legal name, not a
   location name"), and a single row needs no location key. Its `theme` document changes from
   `{ tokens }` to the owner's **choices only**: `{ brandColor, background, corners }`
-  (`brandColor` `#rrggbb`, the other two from fixed lists). No worked-out values are stored, so a
+  (`brandColor` is `#rrggbb`, or `null` for Waitron's; the other two from fixed lists). No worked-out values are stored, so a
   release that improves Waitron's defaults reaches a themed venue too; the cost is that a release
   changing the defaults or the formula can shift a venue's colours slightly, which the editor shows
   as it works them out now. If Q1 comes back B, the document also holds the hand-typed values.
@@ -480,13 +495,14 @@ My call: **reuse and reshape what exists** rather than adding a parallel table.
   code. Before go-live any installation may be reset (CLAUDE.md §3), so an old `{ tokens }` row is
   not carried forward: the server reads one as no theme (my call).
 - **Routes:** `GET` and `PUT /management-api/theme` stay and take the new document; `GET` answers
-  the choices and the worked-out values for the editor.
+  the choices and the worked-out values for the editor. Gates: section 13.
 - **Error code:** `theme.invalid` stays. It carries `field` (`brandColor`, `background`, `corners`)
   and `reason`, replacing `token`, so the card can put the sentence under the field (CLAUDE.md §3:
   "A screen puts a refusal beside a field by what the error CARRIES"); renaming params is free
   before go-live.
 - **Retired:** `THEMEABLE_TOKENS` and `MAX_THEME_VALUE_LENGTH` (`theme.ts:12-22`) and
-  `validateThemeOverride`, replaced by the choice check and the derived token list; the till's unused
+  `validateThemeOverride`, with their exports (`packages/layouts/src/index.ts:28-29`) and the case
+  that checks one (`packages/layouts/src/index.test.ts:7`), replaced by the choice check and the derived token list; the till's unused
   `ThemeOverride` copy (`apps/till/src/layout.ts:58-60`); the `--wt-font-family` override (no knob
   for it).
 - **Backlog this closes or changes:** the `--wt-color-primary-text` entry (`backlog.md:4379-4385`,
@@ -515,18 +531,22 @@ fetched without holding anything** (B4: I chose the stored copy).
   `applyTokens`, adopts a second sheet holding the copy stored in the browser under
   `waitron-venue-theme` (if any), then fetches `/api/theme` with a time limit; a newer answer
   replaces the sheet's text and the stored copy. Nothing waits on the fetch.
-- **Experiment** (`a841-mockups-src/probe7.mjs`, Chromium 156.0.8078.4): a page shaped like that
-  (`index.html` styled from `--wt-color-bg`, a module script applying the tokens and the stored copy,
-  then fetching with a 2 s limit). Stored copy present, server never answers: the module ran at
-  6 ms, first paint at 8 ms, the first frame and the frame 1.5 s later both showed the stored theme's
-  page colour `rgb(237, 246, 240)`. No stored copy, server never answers: first paint at 8 ms in
-  Waitron's `rgb(247, 247, 248)`, staying so. No stored copy, server answering after 500 ms: Waitron's
-  colour first, the theme's 1.5 s later — the one flash, on a browser's first visit or the first
-  load after a change. In that case the first paint (40 ms) came before the module ran (50 ms); I
-  believe today's apps already have such a frame, since `index.html` reads `--wt-color-bg` before
-  `main.ts` applies tokens (section 3), but I did not measure the real apps. WebKit was not measured:
-  Playwright 1.64.1's WebKit is not installed here (`Executable doesn't exist at
-  …/ms-playwright/webkit-2370/pw_run.sh`). Slice 3 measures both engines in the real apps (B4).
+- **Experiment** (`a841-mockups-src/probe7.mjs`, Chromium 156.0.8078.4): a one-file page shaped
+  like that (`index.html` styled from `--wt-color-bg`, a module script applying the tokens and the
+  stored copy, then fetching with a 2 s limit). In every case the browser may paint an empty page
+  before the script runs: the tokens are not applied yet, so it is blank, as today. The round-2
+  reviewer's `/tmp/a841-r2/prepaint.mjs`, re-run with the module delayed 1.5 s, printed
+  `first-paint@12` with the body background `rgba(0, 0, 0, 0)`. The first frame after the script ran
+  showed the stored theme `rgb(237, 246, 240)` with a stored copy and the server never answering, and
+  Waitron's `rgb(247, 247, 248)` without one (`/tmp/a841-r2/probe7-rep.mjs`, re-run and
+  counted: 16 stored-copy runs, all `rgb(237, 246, 240)`; both no-copy runs `rgb(247, 247, 248)`). With no stored
+  copy and the server answering after 500 ms, the theme's colour showed 1.5 s later — the one flash,
+  on a browser's first visit or the first load after a change. The probe's millisecond timings come
+  from a one-file script, the stored-copy case after a warm-up visit (`/tmp/a841-r2/probe7-warm.mjs`,
+  re-run: warmed with no stored copy, module at 5-6 ms and first paint at 8 ms), and say nothing
+  about the real apps' bundles. WebKit was not measured: Playwright 1.64.1's WebKit is not installed
+  here (`Executable doesn't exist at …/ms-playwright/webkit-2370/pw_run.sh`). Slice 3 measures both
+  engines in the real apps (B4).
 - The round-1 finding that Vite rewrites `<link href="/api/theme.css">` to `/manage/…` in the
   dashboard's development server no longer applies: there is no link. (The reviewer's
   `/tmp/a841-review/run.mjs`, re-run with its fixture carrying `vite-ignore`, printed
@@ -547,6 +567,11 @@ fetched without holding anything** (B4: I chose the stored copy).
 
 My call:
 
+- Reading: `GET /management-api/theme` moves from `layout.configure`
+  (`apps/server/src/management-api.ts:1278-1282`) to `venue.view`, like
+  `GET /management-api/venue-defaults` (`apps/server/src/location-settings-api.ts:297-302`); a
+  supervisor holds `venue.view` but not `layout.configure` (`permissions.ts:46-55`), so the
+  read-only card would otherwise be refused.
 - Editing: `venue.configure`, replacing `layout.configure` on `PUT /management-api/theme`. The card
   sits on Venue settings, whose other cards edit under `venue.configure`
   (`dashboard-app.ts:1915`), and one page should not ask for two editing permissions. Both are held
@@ -580,7 +605,7 @@ My call:
   list never changes. Proof by deletion: remove the darkening step and the lemon case must fail at
   1.39:1 on the page.
 - Server: `PUT` refuses invalid choices with `theme.invalid` naming the field; refuses without
-  `venue.configure`; a configuration import with a bad theme row is refused; `/api/theme` answers
+  `venue.configure`; a supervisor's `GET` is answered and its `PUT` refused; a configuration import with a bad theme row is refused; `/api/theme` answers
   empty with no row and the three blocks with one, and the hash changes after Reset then a new save;
   the till's revision moves when the theme changes. The six existing cases in
   `management-api.canvas-retirement.test.ts:146-229` are rewritten for the new document, keeping
@@ -595,7 +620,7 @@ My call:
 1. **The derivation and the shared checks.** `deriveTheme`, the contrast rules moved out of
    `colors.test.ts`, the sweep, the token-list guard. No screen.
 2. **The stored document and the server.** `tenant_themes`'s new document, the routes' new body and
-   permission, `theme.invalid` with `field`, the import check, `/api/theme`, the till's `themeHash`;
+   permissions (a supervisor reads, and is refused a save), `theme.invalid` with `field`, the import check, `/api/theme`, the till's `themeHash`;
    retire `THEMEABLE_TOKENS`, `validateThemeOverride` and the till's copy.
 3. **Delivery.** The stored copy and the fetch in the dashboard's and till's `main.ts`, the
    dashboard's live read, the till's `#applyVenueSetup` swap, the start-up probes in Chromium and
@@ -607,7 +632,7 @@ My call:
 
 ### If an answer comes back B
 
-- **Q1 B (every colour by hand):** the document also holds hand-typed light and dark values; the
+- **Q1 B (23 colours by hand):** the document also holds hand-typed light and dark values; the
   editor gains a folded list; each typed value goes through the same checks, and a failing one is
   refused under its row (the formula cannot adjust a value the owner typed exactly).
 - **Q2 B (refuse):** `deriveTheme` stops adjusting the button colour and reports the failing rules;
@@ -622,7 +647,8 @@ My call:
 ## 17. Risks
 
 - **First visit.** A browser's first load, and the first load after a change, shows Waitron's
-  colours until the fetch answers (probe7). The stored copy makes every later start immediate.
+  colours until the fetch answers (probe7). On every later start the stored copy shows the theme
+  from the app's first frame.
 - **WebKit not yet measured** (section 12); slice 3 measures it.
 - **Old till browsers.** The sheet uses nothing newer than `:not()`, media queries and constructed
   stylesheets (which `applyTokens` already uses); which browsers venues' tills run I do not know.
@@ -664,12 +690,14 @@ Chromium (sources and the prototype outside the repository, in
 **Q1 of 4 — How much can the owner change?**
 Bar Lucía's owner wants the dashboard and tills in the bar's dark green. With A, she picks the green,
 "Tinted" and "Round", and Waitron works out every light and dark colour from them; the preview shows
-both. With B she gets the same three choices, plus a folded list of all 112 colours, each with a
-light and a dark value she can type, for the odd colour she wants exactly. Pictures:
+both. With B she gets the same three choices, plus a list you open of 23 more colours (the page,
+cards, borders, text, the buttons and fields), each with a light and a dark value she can type, for
+the odd colour she wants exactly. Colours that carry a meaning, such as red for danger, stay
+Waitron's either way. Pictures:
 `08-q1-knobs-or-every-colour-light.png`.
 
 - **A (recommended):** three choices — brand colour, background, corners — and Waitron works out the rest.
-- **B:** the same three choices, plus every colour editable by hand.
+- **B:** the same three choices, plus 23 colours editable by hand.
 
 **Q2 of 4 — What happens when a chosen colour would be hard to see?**
 Café Limón's owner picks lemon yellow. On a white page a lemon button is almost invisible: 1.5 to 1,
