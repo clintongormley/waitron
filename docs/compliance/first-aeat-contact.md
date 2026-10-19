@@ -55,6 +55,12 @@ to return. It is a well-formed reply to a well-formed query, not a fault.
    > it off like a network failure and raises no "awaiting certificate" alert. That AEAT refuses the
    > same way is assumed, not measured. See A795's design, §2.3
    > ([2026-10-18-a795-aeat-certificate-after-setup-design.md](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)).
+   >
+   > **Pointer, 2026-10-19:** A795 adds expiry warnings: a dashboard alert as the AEAT certificate
+   > nears expiry and once it has expired, and an email to each active manager and administrator
+   > with an email address, at most once each when the warning starts, when it turns urgent and when
+   > the certificate expires. How AEAT itself answers an expired certificate is still one of the owner's
+   > checks before A795 lands (A888 in [the backlog](../backlog/fiscal.md)).
 2. **The obligado's NIF is not the certificate holder's ID.** The certificate identifies a natural
    person acting for the company; the filing is made for the company. `ObligadoEmision.NIF` must be
    the deli's NIF, never the `SERIALNUMBER` in the certificate subject. Easy to get backwards, and

@@ -37,6 +37,7 @@ const USAGE = [
   `purposes: ${Object.keys(PURPOSES).join(", ")}`,
   "",
   "There is no `get`: this tool never prints a decrypted credential.",
+  "Writing fiscal.aeat here records no install, so the dashboard's AEAT certificate card keeps showing the previous one.",
 ].join("\n");
 
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {

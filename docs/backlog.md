@@ -115,10 +115,7 @@ come after the list above:
   file): [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
   [mockups](backlog/mockups/a797-device-screens/).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
-  upgrades and recovery_, except the certificate, under _Fiscal records, invoices and the asesor_):
-  installing or renewing the AEAT certificate after setup (A795: designed, three owner questions
-  open); upgrade testing with rows the product
-  itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
+  upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
   installer (B3); the degraded-but-trading recovery spec.
 - **The displays and the printers walked at the real box** (_The till, devices and table service_;
   _Printers, the print agent and receipts_) — till, handheld and KDS through
@@ -441,15 +438,17 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   exactly one. **Remaining:** contain repeated F2 requests per sale, with the invoice number on the
   slip. [Detail](backlog/fiscal.md#one-original-per-invoice-structurally)
 
-- **A795 — installing or renewing the AEAT certificate after setup: DESIGNED, waiting on three owner
-  questions.** Only the setup wizard can set it (`apps/server/src/setup-api.ts`), and nothing watches
-  when it expires. Against a test server that refuses an expired certificate during the connection,
-  the filing pass treats it as a network failure, so only the four-hour delay alert fires; that AEAT
-  refuses the same way is assumed. The [design](superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)
-  puts a card on Venue settings → Venue details, checks file, passphrase, dates, tax ID and a
-  read-only AEAT query before replacing, records every install, and adds expiry alerts. Open: who
-  may replace it, when the warning turns amber and red, and whether the box emails. FULL review; the
-  owner lands it. [Detail](backlog/fiscal.md#installing-or-renewing-the-aeat-certificate-after-setup)
+- **A888. Before landing A795: the owner's checks with real certificates** (left open by A795).
+  A landing condition, run with the operator harness `apps/server/src/aeat-certificate-check.preprod.test.ts`:
+  production and `www10` consultas, each type at the other's address, an expired certificate, where
+  the tax ID sits, RC2 in real exports, a non-ASCII passphrase, and where AEAT puts its error number.
+  If any answers differently from the design, that part is redesigned before landing.
+  [Detail](backlog/fiscal.md#a888-before-landing-a795-the-owners-checks-with-real-certificates)
+
+- **A889. A box set up before A795 shows "Installed: not recorded"** (left open by A795). Its
+  certificate has no install record, so the card shows no details and the expiry alert and emails
+  cannot see its date until it is installed again on the card, or the box is reset. No migration
+  code, by the pre-production rule.
 
 - **A853. The box makes a company seal's private key itself** (decided out of A795, 2026-10-18).
   FNMT issues a seal only for a key pair and certificate request made on the subscriber's machine,
@@ -505,7 +504,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   key and an expired one are all accepted; a preproduction setup seals them as given. A
   production setup needs its fiscal test to pass, which the first three cannot (their connection
   fails before it reaches AEAT; for a wrong passphrase the test says "uncertain, retry"); that AEAT
-  refuses an expired one is assumed.
+  refuses an expired one is assumed. A795 built the opening as `openCertificateFile`
+  (`packages/fiscal-verifactu/src/certificate-file.ts`), which A852 reuses; it reads the dates but
+  refuses none, and A795's date refusals sit in the unexported `checkLocally`
+  (`certificate-install.ts`).
   [Detail](backlog/setup.md#a852-setup-accepts-certificate-files-filing-cannot-use)
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
@@ -6550,7 +6552,7 @@ partial scope; the detail for a live thread is in its area.
 | --- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Design system                | `@waitron/ui` token layer + primitives (`--wt-*`); brand assets (#284); the till web-app manifest and its icons; the dashboard shell restyle — collapsible nav, account menu, profile modal (#333)                                                                                                                                                                                                                                | sorting `wt-combobox` options (_Users, sign-in and the dashboard shell_)                                                                                                      |
 | 2   | Sales spine                  | Immutable hash-chained sales, per-node series, catalogue, the one-taxpayer model                                                                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
-| 3   | Fiscal layer                 | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`)                                                                                                                                                                                                                                                                                   | F3 asesor/XSD confirmations; AEAT certificate install and renewal after setup; cert distribution to a promoted node; a foreign business customer's identifier type (A1a)      |
+| 3   | Fiscal layer                 | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`)                                                                                                                                                                                                                                                                                   | F3 asesor/XSD confirmations; A795's real-certificate checks before landing (A888); cert distribution to a promoted node; a foreign business customer's identifier type (A1a)      |
 | 4   | Payment layer                | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329)                                                                                                                                                                                                                                                    | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (_Payments and card readers_)                                                               |
 | 5   | Identity                     | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in and for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby                                                        | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce                                                                |
 | 6   | Locations                    | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297)                                                                                                                                                                                                                                                                                                                                       | multiple-location creation/editing/deactivation; then location-scope the by-id verb family                                                                                    |

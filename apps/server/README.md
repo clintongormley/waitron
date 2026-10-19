@@ -279,7 +279,10 @@ Use `packages/credentials`'s CLI to provision and rotate credentials (`fiscal.ae
 `--tenant` flag because one database holds one taxpayer. Run
 `waitron-credentials` with no arguments for its own usage text (`set` / `list` / `delete` /
 `rotate` — `packages/credentials/src/cli.ts`'s `USAGE` constant); there is no `get`, since that CLI
-never prints a decrypted credential.
+never prints a decrypted credential. A `fiscal.aeat` certificate written with this CLI records no
+install; see
+["Installing or replacing the AEAT certificate after setup"](#installing-or-replacing-the-aeat-certificate-after-setup)
+for what that leaves out of date.
 
 For outgoing mail, the live trading server also accepts manager-authorised settings through
 `GET` and `PUT /management-api/email/settings`, with `POST /management-api/email/settings/test`
@@ -294,6 +297,62 @@ and development Live provisioning may omit them. You can enter these settings in
 or, with `system.manage`, on the dashboard's Account email page (`/manage/email`). The dashboard shows the server and sender
 without returning the saved password; you enter fresh credentials to change an authenticated
 gateway, or explicitly switch authentication off.
+
+### Installing or replacing the AEAT certificate after setup
+
+The setup wizard installs the first AEAT certificate. After that, a manager or administrator
+installs or replaces it on the dashboard, under Venue settings → Venue details → AEAT certificate.
+The card behind it uses `GET /management-api/fiscal-certificate`, which needs `fiscal.view`, and
+`POST /management-api/fiscal-certificate`, which needs `system.manage`
+(`src/fiscal-certificate-api.ts`). Boot mounts both only when the enabled fiscal module offers a
+certificate seat, which today means Veri\*Factu. The read answers `filing: false` on a box that does
+not send records to AEAT: a Demo or Prepare box, a preproduction box without
+`WAITRON_FISCAL_TEST_SUBMISSIONS=enabled`, or a node that is not the primary. On such a box the POST
+is refused with `fiscal.certificate_not_used` (409).
+
+The POST body carries `pfxBase64`, `passphrase`, `certKind` (`sello` or `representante`) and
+`expectedRevision`, the revision the card read. Before anything is replaced it checks, in order
+(`installCertificate`, `packages/fiscal-verifactu/src/certificate-install.ts`):
+
+1. the file is at most 100 KiB;
+2. it opens with the passphrase, is not encrypted with the old RC2 scheme, and holds a private key;
+3. it is already valid and not yet expired;
+4. it is not the certificate already installed;
+5. the company tax ID it carries, when it carries one, is the taxpayer's;
+6. AEAT answers a read-only query (a `consultar`, which files nothing) made with it, at the address
+   for this environment and certificate type, within 30 seconds.
+
+A refusal is the request's normal answer, `outcome: "refused"` with a `reason` and, where it
+belongs, the `field` it concerns. When every check passes, one transaction seals the certificate
+under `fiscal.aeat` and records the install, unless the vault changed after the card was read, which
+is refused with `fiscal.certificate_changed` (409). The next filing pass reads the new certificate,
+so no restart is needed.
+
+`waitron-credentials set --purpose fiscal.aeat` still writes the certificate, but it records no
+install. The dashboard card, the expiry alerts and the reminder emails read the latest install
+record, so after a write from the command line they go on describing the previous certificate. Use
+the dashboard unless you have no other way in.
+
+To check a real certificate against AEAT with the same code an install runs, without installing it,
+run the operator harness `src/aeat-certificate-check.preprod.test.ts`. It sends one read-only
+`consultar` and files nothing. Set:
+
+- `WAITRON_CERT_CHECK_PFX_BASE64`: the .p12/.pfx file, base64-encoded
+- `WAITRON_CERT_CHECK_PASSPHRASE`: its passphrase
+- `WAITRON_CERT_CHECK_KIND`: `sello` or `representante`
+- `WAITRON_CERT_CHECK_ENVIRONMENT`: `preproduction` or `production`
+- `WAITRON_CERT_CHECK_NIF`: the taxpayer's tax ID
+- `WAITRON_CERT_CHECK_NOMBRE`: the taxpayer's legal name
+- `WAITRON_CERT_CHECK_ADDRESS_KIND` (optional): `sello` or `representante`, to send to that type's
+  address instead and see how AEAT answers the wrong type
+
+```sh
+pnpm --filter @waitron/server test:preprod --reporter=default src/aeat-certificate-check.preprod.test.ts
+```
+
+`--reporter=default` is there because under an AI agent Vitest hides a passing test's console
+output, which is all this suite produces. With any required variable unset or empty the suite is
+skipped and makes no network call.
 
 ### Account email
 
@@ -492,7 +551,9 @@ parked runs. Then grep stdout for that duty's own `duty.degraded` line — it na
 in one line, and is the fastest way to see why a duty reads unhealthy without correlating individual
 skip/failure/park events yourself. For a skipped
 `fiscal.drain` pass, the fix is almost always provisioning or repairing the venue's `fiscal.aeat`
-credential (via `packages/credentials`'s CLI) — credentials are read fresh every pass, so
+credential, on the dashboard's AEAT certificate card (see
+["Installing or replacing the AEAT certificate after setup"](#installing-or-replacing-the-aeat-certificate-after-setup))
+or with `packages/credentials`'s CLI — credentials are read fresh every pass, so
 there is no restart needed once the credential is fixed. The exception is a skip logged beside
 `drain.restart_reset_failed`: the restart reset failed before any work was looked for, and the cause
 is the database, not the credential. A skipped duty reports itself due
