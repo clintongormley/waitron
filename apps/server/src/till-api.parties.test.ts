@@ -711,9 +711,9 @@ describe("a table that needs clearing", () => {
   }
   /** A table whose party has finished with every department's Needs clearing on. */
   async function finishedWithClearing(): Promise<{ tableId: string; partyId: string }> {
+    const { tableId, partyId } = await seat();
+    await withTransaction(suite.db, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     try {
-      const { tableId, partyId } = await seat();
-      await withTransaction(suite.db, (tx) => setNeedsClearingInEveryDepartment(tx, true));
       const finished = await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: 0 });
       expect(await finished.json()).toEqual({ state: "closed" });
       return { tableId, partyId };

@@ -4470,7 +4470,7 @@ it("transfers a department's customer and staff period menus to its zone under n
     ),
     "a strong passphrase",
   );
-  await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B24681358"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: async (tx, result) =>
