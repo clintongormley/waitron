@@ -1,3 +1,15 @@
+import type {
+  AllergyCommand,
+  AllergyPatch,
+  AllergySendTarget,
+  PartyAllergyRead,
+} from "@waitron/module";
+import { prepareAllergySend, type AllergySendResult } from "./state/party-allergy-flow.js";
+import {
+  TillPartyAllergyDialog,
+  type AllergyConfirmDetail,
+  type AllergyFieldRefusal,
+} from "./widgets/party-allergy-dialog.js";
 import type { BillEditExpected, BillUnsent, Tender } from "./api/client.js";
 import { billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
@@ -441,6 +453,14 @@ function takenFrom(before: DeviceEquipment | null, after: DeviceEquipment): stri
   return null;
 }
 
+interface PreparedTableAllergy {
+  patch?: AllergyPatch;
+  revision: number;
+  key: string;
+  current: () => boolean;
+  api: TillApi;
+}
+
 /**
  * What a draft's submission leaves to do once the draft is open for edits again. `find-tab`, after a
  * submission that got no answer, moves to the tab the floor now shows for the table the draft was
@@ -448,6 +468,7 @@ function takenFrom(before: DeviceEquipment | null, after: DeviceEquipment): stri
  * operator is still on it; `landedOn` names the tab the server added the draft to, when it is not the
  * one it was sent to.
  */
+
 type DraftFollowUp =
   | "read-tab"
   | "find-tab"
@@ -1954,6 +1975,7 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#closeAllergyDialog();
     this.#closeFinishTable();
     this.finishRefunds = null;
     clearTimeout(this.#servedTimer);
@@ -3122,7 +3144,194 @@ export class TillApp extends LitElement {
     void this.#boot();
   }
 
+  #allergyGeneration = 0;
+  @state() private allergyDialog: {
+    key: string;
+    view: PartyAllergyRead;
+    busy: boolean;
+    refusal?: string;
+    fieldRefusal?: AllergyFieldRefusal;
+    current: () => boolean;
+    resolve: (result: AllergySendResult) => void;
+  } | null = null;
+
+  #closeAllergyDialog(confirmed = false, key?: string): void {
+    const open = this.allergyDialog;
+    if (open === null || (key !== undefined && key !== open.key)) return;
+    if (confirmed)
+      this.renderRoot
+        .querySelector<TillPartyAllergyDialog>("till-party-allergy-dialog")
+        ?.commitConfirmed(open.key);
+    open.resolve({ kind: "cancelled" });
+    this.allergyDialog = null;
+  }
+
+  async #prepareTableAllergy(
+    partyId: string,
+    target: AllergySendTarget,
+    live: () => boolean,
+  ): Promise<PreparedTableAllergy | null> {
+    if (this.allergyDialog !== null) return null;
+    const generation = ++this.#allergyGeneration;
+    const api = this.api;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    const billId = this.activeTabId;
+    const current = () =>
+      this.isConnected &&
+      generation === this.#allergyGeneration &&
+      live() &&
+      api === this.api &&
+      session === this.#operatorSession &&
+      visit === this.#orderVisit &&
+      billId === this.activeTabId &&
+      this.orderParty?.id === partyId;
+    let preview: PartyAllergyRead | undefined;
+    const previewApi = {
+      previewPartyAllergy: async (id: string, candidate: AllergySendTarget) => {
+        let view = await api.previewPartyAllergy(id, candidate);
+        if (
+          current() &&
+          view.partyId === partyId &&
+          view.snapshot.revision !== this.orderParty?.revision
+        ) {
+          if (view.snapshot.revision < this.orderParty!.revision)
+            throw { code: "party.out_of_date" };
+          const [tables, groups, orders] = await Promise.all([
+            api.getTablesState(),
+            api.listGroups(id),
+            api.readCurrentOrders(id),
+          ]);
+          if (!current()) return view;
+          const party = tables.find((table) => table.id === this.activeTableId)?.party;
+          if (
+            party?.id !== partyId ||
+            party.revision !== view.snapshot.revision ||
+            groups.revision !== party.revision ||
+            orders.revision !== party.revision
+          )
+            throw { code: "party.out_of_date" };
+          this.tables = tables;
+          this.orderParty = party;
+          this.tabGroups = groups.groups;
+          this.currentOrders = orders;
+          view = await api.previewPartyAllergy(id, candidate);
+          if (current() && view.snapshot.revision !== this.orderParty?.revision)
+            throw { code: "party.out_of_date" };
+        }
+        preview = view;
+        return view;
+      },
+    };
+    const key = crypto.randomUUID();
+    const result = await prepareAllergySend(
+      previewApi,
+      partyId,
+      target,
+      { key, isCurrent: current },
+      (view, key) =>
+        new Promise((resolve) => {
+          this.allergyDialog = { key, view, current, resolve, busy: false };
+        }),
+    );
+    if (result.kind === "unread") this.errorKey = "table.error";
+    return result.kind === "ready" && preview !== undefined
+      ? { ...result, revision: preview.snapshot.revision, key, current, api }
+      : null;
+  }
+
+  async #writeTableAllergy<T>(
+    prepared: PreparedTableAllergy,
+    write: (command: AllergyCommand) => Promise<T>,
+  ): Promise<{ value: T } | null> {
+    let command: AllergyCommand = {
+      submissionId: crypto.randomUUID(),
+      expectedPartyRevision: prepared.revision,
+      ...(prepared.patch === undefined ? {} : { allergy: prepared.patch }),
+    };
+    while (prepared.current()) {
+      try {
+        const value = await write(command);
+        if (!prepared.current()) return null;
+        this.#closeAllergyDialog(true, prepared.key);
+        return { value };
+      } catch (error) {
+        if (!prepared.current()) {
+          this.#closeAllergyDialog(false, prepared.key);
+          return null;
+        }
+        const open = this.allergyDialog;
+        const refusal = asRefusal(error);
+        if (open?.key !== prepared.key || !refusal?.refused.startsWith("allergy.")) {
+          this.#closeAllergyDialog(false, prepared.key);
+          throw error;
+        }
+        const params = error as { field?: unknown };
+        const path =
+          typeof params.field === "string"
+            ? /^guests\.(\d+)\.(who|allergens|note)$/.exec(params.field)
+            : null;
+        const field = path?.[2];
+        const guestIndex = path === null ? undefined : Number(path[1]);
+        const result = await new Promise<AllergySendResult>((resolve) => {
+          this.allergyDialog = {
+            ...open,
+            busy: false,
+            refusal: codeMessage(refusal.refused),
+            resolve,
+            ...(typeof guestIndex === "number" &&
+            Number.isSafeInteger(guestIndex) &&
+            (field === "who" || field === "allergens" || field === "note")
+              ? { fieldRefusal: { guestIndex, field, message: codeMessage(refusal.refused) } }
+              : {}),
+          };
+        });
+        if (result.kind !== "ready" || !prepared.current()) return null;
+        command = {
+          submissionId:
+            JSON.stringify(result.patch) === JSON.stringify(command.allergy)
+              ? command.submissionId
+              : crypto.randomUUID(),
+          expectedPartyRevision: prepared.revision,
+          ...(result.patch === undefined ? {} : { allergy: result.patch }),
+        };
+      }
+    }
+    return null;
+  }
+
+  #renderAllergyDialog(): TemplateResult | typeof nothing {
+    const open = this.allergyDialog;
+    if (open === null) return nothing;
+    return html`<till-party-allergy-dialog
+      .view=${open.view}
+      .mode=${"send"}
+      .scopeKey=${open.key}
+      .busy=${open.busy}
+      .refusal=${open.refusal ?? ""}
+      .fieldRefusal=${open.fieldRefusal ?? null}
+      .draftParent=${this.renderRoot.querySelector("till-table-order-screen") ?? this}
+      @allergy-confirm=${(event: CustomEvent<AllergyConfirmDetail>) => {
+        event.stopPropagation();
+        if (
+          this.allergyDialog !== open ||
+          event.detail.scopeKey !== open.key ||
+          !open.current() ||
+          open.busy
+        )
+          return;
+        this.allergyDialog = { ...open, busy: true };
+        open.resolve({ kind: "ready", patch: event.detail.patch });
+      }}
+      @allergy-cancel=${(event: Event) => {
+        event.stopPropagation();
+        if (this.allergyDialog === open) this.#closeAllergyDialog();
+      }}
+    ></till-party-allergy-dialog>`;
+  }
+
   override updated(changed: PropertyValues): void {
+    if (this.allergyDialog !== null && !this.allergyDialog.current()) this.#closeAllergyDialog();
     this.#syncCandidateProtection();
     this.#reconcileSavedDeviceZones();
     if (this.operatorName !== "" && !this.#loginPending) {
@@ -10216,10 +10425,10 @@ export class TillApp extends LitElement {
       this.errorKey = "table.error";
       return;
     }
+    if (store.sending) return;
     const partyId = party.id;
     const session = this.#operatorSession;
     const live = () => session === this.#operatorSession;
-    // The draft is shut to edits until the answer, so what is sent is what the screen shows.
     store.sending = true;
     const visit = this.#orderVisit;
     let followUp: DraftFollowUp;
@@ -10383,11 +10592,10 @@ export class TillApp extends LitElement {
   ): Promise<DraftFollowUp> {
     const { groups, joinGroupId, billId } = submission;
     this.errorKey = undefined;
-    // One limit covers the save before the send and the send with its retries.
-    const send = limited(TABLE_REQUEST_LIMIT_MS);
+    const saving = limited(TABLE_REQUEST_LIMIT_MS);
     let submitted: SubmittedDraft;
     try {
-      const saved = await sync.flush(send.signal);
+      const saved = await sync.flush(saving.signal);
       if (!live()) return;
       if (saved !== "saved") {
         if (
@@ -10407,10 +10615,18 @@ export class TillApp extends LitElement {
         this.errorKey = "table.draft_recount";
         return;
       }
+      saving.done();
+      const allergy = await this.#prepareTableAllergy(
+        party.id,
+        { kind: "draft", draftId: sync.draftId, lineIds: ids },
+        live,
+      );
+      if (allergy === null) return;
       const command: DraftSubmission = {
+        ...(allergy.patch === undefined ? {} : { allergy: allergy.patch }),
         expectedEdit: sync.expectedEdit!,
         submissionId: crypto.randomUUID(),
-        expectedPartyRevision: party.revision,
+        expectedPartyRevision: allergy.revision,
         draftRevision: sync.revision,
         groups: groups.map((group) => ({
           release: group.release,
@@ -10422,11 +10638,21 @@ export class TillApp extends LitElement {
         ...(billId === undefined ? {} : { billId }),
       };
       const draftId = sync.draftId;
-      submitted = await this.#resend(
-        (signal) => this.api.submitDraft(party.id, draftId, command, { signal }),
-        send.signal,
-        live,
-      );
+      const written = await this.#writeTableAllergy(allergy, async (packet) => {
+        const sending = limited(TABLE_REQUEST_LIMIT_MS);
+        try {
+          return await this.#resend(
+            (signal) =>
+              allergy.api.submitDraft(party.id, draftId, { ...command, ...packet }, { signal }),
+            sending.signal,
+            allergy.current,
+          );
+        } finally {
+          sending.done();
+        }
+      });
+      if (written === null) return;
+      submitted = written.value;
     } catch (error) {
       if (!live()) return;
       if (isVersionRefusal(error)) {
@@ -10475,7 +10701,7 @@ export class TillApp extends LitElement {
         ? "mark-unsellable"
         : undefined;
     } finally {
-      send.done();
+      saving.done();
     }
     this.#notePartyRevision(party.id, submitted.revision);
     if (!live()) return;
@@ -10566,14 +10792,36 @@ export class TillApp extends LitElement {
 
   async #onFireGroup(event: Event): Promise<void> {
     const { groupId } = (event as CustomEvent<FireGroupDetail>).detail;
-    await this.#onGroupRequest((party, command) => this.api.fireGroup(party.id, groupId, command));
+    await this.#onGroupCommand(async (party) => {
+      const allergy = await this.#prepareTableAllergy(
+        party.id,
+        { kind: "group", groupId },
+        () => true,
+      );
+      if (allergy === null) return;
+      const written = await this.#writeTableAllergy(allergy, (command) =>
+        allergy.api.fireGroup(party.id, groupId, command),
+      );
+      if (written === null || !allergy.current()) return;
+      this.#notePartyRevision(party.id, written.value.revision);
+    });
   }
 
   async #onFireHeldLine(event: Event): Promise<void> {
     const { lineId } = (event as CustomEvent<{ lineId: string }>).detail;
-    await this.#onGroupRequest((party, command) =>
-      this.api.fireHeldLine(party.id, lineId, command),
-    );
+    await this.#onGroupCommand(async (party) => {
+      const allergy = await this.#prepareTableAllergy(
+        party.id,
+        { kind: "held-line", lineId },
+        () => true,
+      );
+      if (allergy === null) return;
+      const written = await this.#writeTableAllergy(allergy, (command) =>
+        allergy.api.fireHeldLine(party.id, lineId, command),
+      );
+      if (written === null || !allergy.current()) return;
+      this.#notePartyRevision(party.id, written.value.revision);
+    });
   }
 
   async #onReorderGroups(event: Event): Promise<void> {
@@ -10992,7 +11240,18 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       if (!(await this.#flushPartyKitchenNote()) || !live()) return;
-      await composition.api.sendLines(billId, lineNos, expectedEdit);
+      const party = this.orderParty;
+      if (party === null) return;
+      const allergy = await this.#prepareTableAllergy(
+        party.id,
+        { kind: "lines", orderId: billId, lineNos },
+        live,
+      );
+      if (allergy === null) return;
+      const written = await this.#writeTableAllergy(allergy, (command) =>
+        composition.api.sendLines(billId, lineNos, expectedEdit, command),
+      );
+      if (written === null) return;
     } catch (error) {
       if (!live()) return;
       await this.#onReleaseRefusal(error);
@@ -16039,6 +16298,7 @@ export class TillApp extends LitElement {
     return html`
       ${this.leaveConfirmation()} ${this.#renderTransferLocalCopy()}
       ${this.#renderWaitingKitchenNote()} ${this.#renderAttendanceEditors()}
+      ${this.#renderAllergyDialog()}
       <div
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}

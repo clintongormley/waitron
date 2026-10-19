@@ -300,7 +300,25 @@ async function mountApp(
   theme?: "light" | "dark",
 ) {
   api = stubApi(overrides);
-  return mountWidget<TillApp>(
+  if (overrides.previewPartyAllergy === undefined) {
+    api.previewPartyAllergy = vi.fn(async (partyId: string) => {
+      const shown = tableOrder(opened)?.party;
+      if (shown?.id !== partyId) throw new Error("The answered party fixture is not open");
+      return {
+        partyId,
+        snapshot: {
+          answer: "none",
+          guests: [],
+          ticks: [],
+          changedAt: null,
+          changedBy: null,
+          revision: shown.revision,
+        },
+        dishes: [],
+      };
+    });
+  }
+  const mounted = await mountWidget<TillApp>(
     "till-app",
     {
       api: api as unknown as TillApi,
@@ -308,6 +326,8 @@ async function mountApp(
     },
     theme,
   );
+  const opened = mounted.el;
+  return mounted;
 }
 
 async function flush(el: TillApp, rounds = 3): Promise<void> {
@@ -9704,7 +9724,13 @@ describe("direct course and send editing authority", () => {
       const reads = api.getTabLines.mock.calls.length;
       emit(order, type, { ...detail, expectedEdit });
       await flush(el, 6);
-      expect(write).toHaveBeenCalledExactlyOnceWith(...args, expectedEdit);
+      expect(write).toHaveBeenCalledExactlyOnceWith(
+        ...args,
+        expectedEdit,
+        ...(type === "send-lines"
+          ? [{ submissionId: expect.any(String), expectedPartyRevision: 3 }]
+          : []),
+      );
       expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
       expect(api.saveDraft).not.toHaveBeenCalled();
       expect(api.takeOverDraft).not.toHaveBeenCalled();

@@ -1,3 +1,9 @@
+import type {
+  AllergyCommand,
+  AllergyPatch,
+  AllergySendTarget,
+  PartyAllergyRead,
+} from "@waitron/module";
 import type { FinishTableResolution } from "./finish-table-types.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import type { CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
@@ -690,6 +696,7 @@ export interface BillRequestCommand extends GroupCommand {
 /** A group submission: the groups in the order they go in the party's sequence, or one held group
  * added to the existing held group `joinGroupId`. */
 export interface GroupSubmission extends GroupCommand {
+  allergy?: AllergyPatch;
   expectedEdit: BillEditExpected;
   groups: {
     lines: GroupLine[];
@@ -870,6 +877,7 @@ export interface DiscardedDraft {
 /** A submission of lines of the draft at `draftRevision`, each group naming that revision's line
  * ids, in the order the groups go in the party's sequence. */
 export interface DraftSubmission extends GroupCommand {
+  allergy?: AllergyPatch;
   expectedEdit: BillEditExpected;
   draftRevision: number;
   groups: {
@@ -3968,6 +3976,31 @@ export class TillApi {
     );
   }
 
+  readPartyAllergy(partyId: string, options: ReadOptions = {}): Promise<PartyAllergyRead> {
+    return this.#request(`/api/parties/${partyId}/allergy`, "GET", undefined, options.signal);
+  }
+
+  previewPartyAllergy(
+    partyId: string,
+    target: AllergySendTarget,
+    options: ReadOptions = {},
+  ): Promise<PartyAllergyRead> {
+    return this.#request(
+      `/api/parties/${partyId}/allergy/send-preview`,
+      "POST",
+      target,
+      options.signal,
+    );
+  }
+
+  savePartyAllergy(
+    partyId: string,
+    command: AllergyCommand,
+    options: ReadOptions = {},
+  ): Promise<PartyAllergyRead> {
+    return this.#request(`/api/parties/${partyId}/allergy`, "PUT", command, options.signal);
+  }
+
   /**
    * Send lines of the signed-in person's draft as groups →
    * `POST /api/parties/:partyId/drafts/:draftId/submit`. A repeat with the same submission id answers
@@ -3993,7 +4026,7 @@ export class TillApi {
   fireGroup(
     partyId: string,
     groupId: string,
-    command: GroupCommand,
+    command: AllergyCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/parties/${partyId}/groups/${groupId}/fire`, "POST", command);
   }
@@ -4117,7 +4150,7 @@ export class TillApi {
   fireHeldLine(
     partyId: string,
     lineId: string,
-    command: GroupCommand,
+    command: AllergyCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/parties/${partyId}/groups/fire-line`, "POST", {
       ...command,
@@ -4194,10 +4227,12 @@ export class TillApi {
     orderId: string,
     lineNos: number[],
     expectedEdit: BillEditExpected | null,
+    command?: AllergyCommand,
   ): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", {
       lineNos,
       expectedEdit,
+      ...command,
     });
   }
 

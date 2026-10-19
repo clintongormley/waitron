@@ -10,6 +10,8 @@ export const en = {
 
   "allergy.invalid": "Check the allergy details and dish assignments.",
   "allergy.title": "Allergies",
+  "allergy.banner": "Allergy",
+  "allergy.change": "Change",
   "allergy.question": "Any allergies at this table?",
   "allergy.none": "No allergies",
   "allergy.who": "Who",
@@ -1650,6 +1652,8 @@ export const es: Record<StringKey, string> = {
 
   "allergy.invalid": "Revisa los datos de las alergias y los platos asignados.",
   "allergy.title": "Alergias",
+  "allergy.banner": "Alergia",
+  "allergy.change": "Cambiar",
   "allergy.question": "¿Hay alergias en esta mesa?",
   "allergy.none": "Sin alergias",
   "allergy.who": "Quién",

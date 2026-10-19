@@ -1,3 +1,6 @@
+import type { PartyAllergyRead } from "@waitron/module";
+import { allergyMark, allergyMarkStyles } from "../widgets/party-allergy-mark.js";
+import { allergenLabel } from "../i18n/allergen-names.js";
 import { DraftStore, type RetainedDraftCandidate } from "../state/draft-sync.js";
 import { groupNumberText } from "../widgets/group-name.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
@@ -372,9 +375,75 @@ class TabPayStore extends WorkingOrderStore {
 
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
+  @property({ attribute: false }) allergyView: PartyAllergyRead | null = null;
+
+  #allergy(): PartyAllergyRead | null {
+    return this.allergyView?.partyId === this.party?.id ? this.allergyView : null;
+  }
+
+  #allergyHeading(): TemplateResult | typeof nothing {
+    const view = this.#allergy();
+    if (!view || view.snapshot.answer === null) return nothing;
+    const allergic = view.snapshot.answer === "allergies";
+    return html`<section
+      class="allergy-heading"
+      data-allergy-heading
+      ?data-has-allergies=${allergic}
+      aria-label=${t("allergy.title")}
+    >
+      <span class="allergy-summary"
+        >${t(allergic ? "allergy.banner" : "allergy.none")}${
+          allergic
+            ? view.snapshot.guests.map(
+                (guest) =>
+                  html` · ${guest.who}:
+                  ${Object.entries(guest.allergens)
+                    .map(([code, entry]) => allergenLabel(code, entry, currentLocale()))
+                    .join(", ")}${guest.note ? html` — ${guest.note}` : nothing}`,
+              )
+            : nothing
+        }</span
+      >
+      <wt-button
+        data-allergy-change
+        variant="secondary"
+        ?disabled=${this.busy || this.groupCommandBusy}
+        @click=${() => {
+          if (!this.busy && !this.groupCommandBusy) this.#dispatch("edit-party-allergy", {});
+        }}
+        >${t("allergy.change")}</wt-button
+      >
+    </section>`;
+  }
+
+  #draftAllergyMark(line: OrderLine): TemplateResult | typeof nothing {
+    const id = line.source?.line.id ?? line.draftLineId;
+    return id === undefined
+      ? nothing
+      : allergyMark(this.#allergy()?.snapshot ?? null, {
+          kind: line.source ? "working" : "draft",
+          id,
+        });
+  }
+
   static override styles = [
     priceWasStyles,
     css`
+      .allergy-heading {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+        min-width: 0;
+      }
+      .allergy-summary {
+        flex: 1;
+        overflow-wrap: anywhere;
+        color: var(--wt-color-text-muted);
+      }
+      [data-has-allergies] .allergy-summary {
+        color: var(--wt-color-danger);
+      }
       .modifier-answer,
       .line-note {
         display: block;
@@ -384,6 +453,7 @@ export class TillTableOrderScreen extends LitElement {
     `,
     baseStyles,
     nutritionIconStyles,
+    allergyMarkStyles,
     servicePeriodStyles,
     tableTargetStyles,
     css`
@@ -2199,7 +2269,7 @@ export class TillTableOrderScreen extends LitElement {
           </wt-button>
           ${this.#floorBackButton()}
         </div>
-        ${this.#printProblem()}
+        ${this.#printProblem()} ${this.#allergyHeading()}
         <till-order-kitchen-note
           .scopeKey=${this.party === null ? `order:${this.orderId ?? draft?.id ?? ""}` : `party:${this.party.id}`}
           .note=${this.party === null ? (draft?.kitchenNote ?? null) : this.kitchenNote}
@@ -2328,6 +2398,7 @@ export class TillTableOrderScreen extends LitElement {
       }
       ${this.currentOrders === null ? this.#sentFallback() : nothing}
       <till-sent-orders
+        .allergy=${this.#allergy()?.snapshot ?? null}
         .scope=${scope}
         .billId=${billId}
         .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
@@ -2406,7 +2477,8 @@ export class TillTableOrderScreen extends LitElement {
   #sentFallbackLine(line: TabLine): TemplateResult {
     return html`<div class="sent-fallback-row">
       <span class="sent-fallback-name"
-        >${this.#nameForLine(line)}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}
+        >${this.#nameForLine(line)}${this.#nutrition(line)}${this.#isChild(line) ? nothing : allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: line.id })}
+        ×${this.#displayQty(line.quantity)}
         ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}
         ${this.#isChild(line) ? nothing : this.#sentCourse(line.courseId, line.course)}
         ${this.#paidMark(line.lineNo, line.quantity)}
@@ -2696,6 +2768,7 @@ export class TillTableOrderScreen extends LitElement {
               <p class="move-dish">
                 ${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}
                 ${this.#sentDetails(row)}
+                ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
               ${lineNutrition(row.nutrition)}
               ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
@@ -2934,7 +3007,9 @@ export class TillTableOrderScreen extends LitElement {
   #lineSummary(line: OrderLine, nameClass: string): TemplateResult {
     const name = shownName(line.product);
     const quantity = formatDecimalInput(this.#displayQty(line.quantity), currentLocale());
-    return html`<span class=${nameClass}>${name}${this.#nutrition(line)} ×${quantity}</span>
+    return html`<span class=${nameClass}
+        >${name}${this.#nutrition(line)}${this.#draftAllergyMark(line)} ×${quantity}</span
+      >
       ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map(
         (answer) => html`<span class="modifier-answer">${answer}</span>`,
       )}
@@ -3280,7 +3355,7 @@ export class TillTableOrderScreen extends LitElement {
     ];
     if (store.editsLocked)
       return html`<span slot=${`lead-${index}`} class="draft-line-name"
-        >${name}${this.#nutrition(line)} ×${quantity}</span
+        >${name}${this.#nutrition(line)}${this.#draftAllergyMark(line)} ×${quantity}</span
       >`;
     return html`${
         family?.[0] === line
@@ -3316,7 +3391,9 @@ export class TillTableOrderScreen extends LitElement {
         }}
       >
         <span aria-hidden="true">${selected ? "☑" : "☐"}</span>
-        <span class="draft-line-name">${name}${this.#nutrition(line)} ×${quantity}</span>
+        <span class="draft-line-name"
+          >${name}${this.#nutrition(line)}${this.#draftAllergyMark(line)} ×${quantity}</span
+        >
       </button>
       ${
         splits
@@ -4948,6 +5025,14 @@ export class TillTableOrderScreen extends LitElement {
     return html`<section class="actions" data-action-menu>
       <h2>${t("table.actions_title")}</h2>
       <div class="action-options">
+        ${
+          party === null
+            ? nothing
+            : action("allergy", "allergy.title", () => {
+                this.#closeActions();
+                this.#dispatch("edit-party-allergy", {});
+              })
+        }
         ${verb("move", "table.action_move_guests")} ${verb("join", "table.action_join")}
         ${
           party !== null && party.tableIds.length > 1

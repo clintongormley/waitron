@@ -2272,7 +2272,9 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 
 The [combined send/till plan](../superpowers/plans/2026-10-19-a669-2-3-table-allergy-send.md)
 keeps the server refusal and every till prompt in one working PR. The unpublished branch contains
-the server boundary and shared dialog; table/kitchen caller wiring and lifecycle integration remain.
+the server boundary, shared dialog and table submit/release adapters. The heading and line marks
+accept an authoritative allergy view; editor actions, live refresh, kitchen callers and lifecycle
+integration remain.
 Recheck other lanes' reservations before implementation. Kitchen snapshots, paper, screen warnings and acknowledged
 change/removal notices remain A669-4, including edits and guest deletion affecting dishes already
 with the kitchen. New Spanish copy still requires the owner's answer before feature landing.

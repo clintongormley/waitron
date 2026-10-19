@@ -2375,9 +2375,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A669 — an allergy at the table (owner, 2026-10-14; spec approved 2026-10-15).** The send
   routes and till prompts follow one [combined implementation plan](superpowers/plans/2026-10-19-a669-2-3-table-allergy-send.md)
-  and must land together. The unpublished server boundary and shared dialog still need caller wiring
-  and lifecycle integration; kitchen copies/notices remain a separate slice after them. At the first
-  Send, ask "Any allergies at this table?" on every table send path; the counter has no allergy step.
+  and must land together. The unpublished server boundary, shared dialog and table send adapters
+  still need the editor, live updates and kitchen screen callers, plus lifecycle integration;
+  kitchen copies/notices remain a separate slice after them. At the first Send, ask "Any allergies at this table?" on every table send path; the counter has no allergy step.
   [Detail](backlog/till.md#a669-an-allergy-at-the-table),
   [Spec](superpowers/specs/2026-10-14-a669-allergy-at-the-table-design.md),
   [mockups](backlog/mockups/a669-allergy-at-the-table/)
