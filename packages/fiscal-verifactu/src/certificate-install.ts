@@ -13,8 +13,8 @@ import { eq } from "drizzle-orm";
 import { aeatEndpointFor, isCertKind, mtlsFetch, type CertKind } from "./aeat-transport.js";
 import { checkWithAuthority, type CheckTransport } from "./certificate-check.js";
 import { localDate } from "./certificate-dates.js";
+import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 import {
-  CERTIFICATE_MAX_BYTES,
   normaliseTaxId,
   openCertificateFile,
   type CertificateDetails,
@@ -180,7 +180,7 @@ export async function installCertificate(
   // (./certificate-install.concurrency.test.ts records one). One read transaction authorises and
   // reads what the checks need; the checks and the live check run with none; one short write
   // transaction authorises again, since a session may have ended meanwhile, and refuses if the
-  // vault changed after the card was read.
+  // vault changed after the card was read, or if the certificate has expired since the local check.
   const read = await withTransaction(deps.db, async (tx) => {
     await deps.authorize(tx);
     const tenant = await readTenant(tx);

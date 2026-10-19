@@ -1,8 +1,6 @@
 import { X509Certificate } from "node:crypto";
 import { createSecureContext, type PeerCertificate, TLSSocket } from "node:tls";
 
-export { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
-
 export type OpenRefusal = "passphrase_wrong" | "old_encryption" | "no_private_key" | "unreadable";
 
 export interface CertificateDetails {

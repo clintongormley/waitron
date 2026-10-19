@@ -132,7 +132,7 @@ export async function claimReminder(
 
 const STATUS = { sent: "sent", rejected: "failed", unknown: "unknown" } as const;
 
-/** Records how a claimed send ended. A row no longer `claimed` is left as it is. */
+/** Records how a claimed send ended. A row no longer `claimed`, or another node's, is left as it is. */
 export async function reportReminder(
   tx: Transaction,
   deps: { nodeId: string },

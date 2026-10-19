@@ -431,10 +431,9 @@ describe("installCertificate's write", () => {
     expect(await state()).toEqual(before);
   });
 
-  it("stamps the install and its check with the time AEAT answered, after a filing accepted meanwhile", async () => {
+  it("stamps the install and its check with the time AEAT answered, not when the request began", async () => {
     const v = await venue();
     const server = await serve();
-    const acceptedDuringCheck = new Date(NOW.getTime() + 10_000);
     const answered = new Date(NOW.getTime() + 20_000);
     const clock = () => (server.requests() > 0 ? answered : NOW);
 
@@ -455,7 +454,6 @@ describe("installCertificate's write", () => {
       installedAt: answered,
       checkedAt: answered,
     });
-    expect(latest!.installedAt.getTime()).toBeGreaterThan(acceptedDuringCheck.getTime());
   });
 
   it("refuses fiscal.certificate_changed when the vault changed after the card was read", async () => {
