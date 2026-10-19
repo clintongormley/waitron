@@ -34,6 +34,12 @@ describe("adjustment settings", () => {
     });
   });
 
+  it("answers each read of the unsaved settings with its own list", async () => {
+    const first = await inTx(readAdjustmentSettings);
+    first.billApproverRoles.push("staff");
+    expect((await inTx(readAdjustmentSettings)).billApproverRoles).toEqual(["manager", "admin"]);
+  });
+
   it("saves €40.00 with Supervisor and Manager, replaces it and clears it, keeping one row", async () => {
     expect(
       await inTx((tx) =>

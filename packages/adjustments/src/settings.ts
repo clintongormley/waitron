@@ -8,7 +8,7 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { isRoleList } from "./policy.js";
-import { adjustmentSettings } from "./schema/settings.js";
+import { DEFAULT_BILL_APPROVER_ROLES, adjustmentSettings } from "./schema/settings.js";
 
 export interface AdjustmentSettings {
   /** What comps may take off one bill before someone on `billApproverRoles` must approve; null is
@@ -16,8 +16,6 @@ export interface AdjustmentSettings {
   maxBillComp: Decimal | null;
   billApproverRoles: PersonRoleValue[];
 }
-
-const DEFAULT_BILL_APPROVERS: PersonRoleValue[] = ["manager", "admin"];
 
 /** The venue's settings; no row reads as no limit, approved past by managers and admins. */
 export async function readAdjustmentSettings(tx: Transaction): Promise<AdjustmentSettings> {
@@ -27,7 +25,9 @@ export async function readAdjustmentSettings(tx: Transaction): Promise<Adjustmen
       billApproverRoles: adjustmentSettings.billApproverRoles,
     })
     .from(adjustmentSettings);
-  if (row === undefined) return { maxBillComp: null, billApproverRoles: DEFAULT_BILL_APPROVERS };
+  if (row === undefined) {
+    return { maxBillComp: null, billApproverRoles: [...DEFAULT_BILL_APPROVER_ROLES] };
+  }
   return {
     maxBillComp: row.maxBillComp === null ? null : centsToDecimal(row.maxBillComp),
     billApproverRoles: row.billApproverRoles,

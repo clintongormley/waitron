@@ -3,6 +3,8 @@ import { check } from "drizzle-orm/sqlite-core";
 import { count, json, money, nowIso, table, tsString } from "@waitron/db";
 import type { PersonRoleValue } from "@waitron/identity";
 
+export const DEFAULT_BILL_APPROVER_ROLES: readonly PersonRoleValue[] = ["manager", "admin"];
+
 /**
  * The venue's adjustment settings, at most one row. `max_bill_comp` is, in cents, what comps may take
  * off one bill before someone on `bill_approver_roles` must approve; null, or no row, is no limit.
@@ -14,7 +16,7 @@ export const adjustmentSettings = table(
     maxBillComp: money("max_bill_comp"),
     billApproverRoles: json<PersonRoleValue[]>("bill_approver_roles")
       .notNull()
-      .default(["manager", "admin"]),
+      .default([...DEFAULT_BILL_APPROVER_ROLES]),
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
