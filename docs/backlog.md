@@ -5118,11 +5118,15 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **a local maintenance account on each box** — belongs with B3; a discussion record, not an approved spec. Its remote-support half is tracked in Cloud and not approved. [Detail](backlog/box.md#a-local-maintenance-account-on-each-box)
 
 - **A799. Upgrade testing with rows an older product wrote — blocking before go-live.**
-  [Design proposal](superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md)
-  and [review boards](backlog/mockups/a799-real-database-upgrade-testing/README.md) await owner
-  agreement. The build remains open: a supported post-A760 captured venue, a later image applying
-  pending migrations, exact preservation and a separate new sale. Issued-F1 coverage must be
-  resolved explicitly; an unpaid recipient-bearing order does not cover an issued invoice.
+  The owner approved an invented venue written through a frozen older image's normal product
+  paths, without private venue data (2026-10-19). [Design and next question B](superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md):
+  require checks from the oldest supported and previous retained release (recommended), or every
+  retained release? Both keep every frozen bundle; endpoint results give no passing evidence for
+  intermediate releases. [Revised review boards](backlog/mockups/a799-real-database-upgrade-testing/revision-a-and-release-checks/README.md).
+  Support/retirement, artifact store/access, issued-F1 coverage, capture determinism/time and full
+  design/plan/build remain open. The build needs a supported post-A760 capture, a later image
+  applying pending migrations, exact preservation and a separate new sale. An unpaid order with
+  recipient details does not cover an issued full invoice. No fixture or runtime success is claimed.
   [Detail](backlog/box.md#upgrade-testing--blocking-before-go-live-owner-2026-09-26)
 
 - **Automatic upgrades that can be undone until the first order** — owner, 2026-10-02. It takes no backup first, and once the new image has migrated the database there is no way back — an older image then refuses to start with `provisioning.database_ahead` (`deploy/README.md`, "It can migrate the box's database one way"). The point of no return is the first order taken on the new version, not the restart: rolling back after that would lose the order. [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)

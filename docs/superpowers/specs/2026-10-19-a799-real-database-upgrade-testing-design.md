@@ -1,3 +1,71 @@
+## 2026-10-19 precedence addendum: source answered; release checks proposed
+
+**Only the fixture-source decision is approved.** The owner answered the first A799 question on
+2026-10-19 at approximately 05:15, through the watcher: use an **invented venue, created and written
+by a frozen older image through its normal product paths**. No private venue snapshot or private
+data. This decision overrides the old first-question alternative below and on board A. The
+original proposal remains verbatim below as a historical record.
+
+The full design, implementation plan and build remain unapproved. Supported baseline capture
+starts only after A760's separately authorised squash/reset, within the resulting migration
+history. This answer gives no authority to execute A760, reset a venue, run migrations, add
+compatibility or use an unsupported old image. No qualifying release or captured fixture is
+established by this text. All original current-source observations remain historical reads at
+`87f19d4bc98d2fb7925e886228430cabfc490a9b`, **UNVERIFIED at runtime**. No capture, boot,
+migration, preservation or continued-sale experiment was run for this addendum.
+
+### Next owner question B: which source releases must pass before publication?
+
+**Before publishing candidate R5, should mandatory upgrade checks use the oldest supported
+post-squash frozen release R1 plus the immediately previous retained release R4 (recommended),
+or every retained post-squash release R1/R2/R3/R4?** This is proposed, not approved.
+
+Imagine four qualified frozen releases R1 through R4 and a candidate R5, all within the **same
+post-A760 migration history**. These are imagined labels, not releases or bundles claimed to exist.
+Each source release supplies its own old-product-written venue and independently frozen facts.
+For example, its transcript and stopped capture must establish Ana's 0.350 kg cheese line at
+€22.00/kg as €7.70 before R5 is tested. Every selected disposable copy must preserve its own
+original facts, raw fiscal bytes and identity; a separate new sale at €24.00/kg is €8.40.
+These remain proposed checks, not observed results.
+
+| Proposed mandatory sources for R5 | Tradeoff                                                                                                             |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **R1 and R4, recommended**        | Fewer matrix cells. Passing R1/R4 gives **no passing evidence for R2/R3**.                                           |
+| **R1, R2, R3 and R4**             | More matrix cells; includes checks that could catch a defect specific to R2 or R3 that the endpoint runs might miss. |
+
+Both alternatives **keep all original frozen bundles and expectations**, including R2/R3 under
+the smaller matrix. This choice concerns required checks only. It does not select an artifact
+store, retention/access policy, unsupported-image handling or fiscal behaviour. Choosing endpoints
+does not retire intermediate releases or create a blanket compatibility promise. Exact support and
+retirement rules remain open. This wording takes precedence over the historical “Baseline lifetime
+and matrix” choice and matrix wording wherever they could conflate required checks with support
+or artifact retention.
+
+For either alternative, retain the already proposed optional-module-off cases for each selected
+source: retained rows after supported disabling, or the separate never-enabled fixture when that
+release lacks a safe toggle, with retained-data coverage explicitly missing. Deduplicate the
+endpoints while they name the same source, before two distinct qualified releases exist.
+A same-image, no-migration cell is restart-only. A later cell without pending migrations supplies
+restart/preservation evidence only. Neither satisfies the requirement for a distinct later candidate
+whose normal boot actually applies pending migration work; that requirement remains open until run.
+
+### Unchanged boundaries and remaining decisions
+
+Keep the historical and candidate product paths, source identities, exact requests/responses and
+returned-ID transcripts proposed below. Freeze expectations before candidate access, preserve raw
+fiscal bytes and node/SIF/series identity, and keep preservation separate from a new sale. No new
+fiscal writer, direct domain SQL, fabricated invoice or replacement hash/allocation path is approved.
+The **issued-F1 completion dependency remains open**: an unpaid recipient-bearing order is not an
+issued full invoice, and the source answer does not approve narrower coverage or an F1 workaround.
+Artifact store/access, issued-F1 coverage, capture determinism/time, exact support/retirement policy
+and the complete design/plan/build remain open. Ask only B next; no later recommendation is approved.
+
+[Eight revised static review boards](../../backlog/mockups/a799-real-database-upgrade-testing/revision-a-and-release-checks/README.md)
+are available in English/Spanish, light/dark, at 390/1280 px, as PNGs with SVG sources. These are
+illustrative drawings, not evidence of an upgrade run. The original boards remain historical.
+
+---
+
 # A799: upgrade a venue an older release actually used
 
 **Proposal for owner review, 19 October 2026. Full design and build await agreement.**

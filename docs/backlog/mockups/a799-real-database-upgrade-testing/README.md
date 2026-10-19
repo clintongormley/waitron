@@ -1,3 +1,36 @@
+## 2026-10-19 precedence addendum: invented source approved; B remains open
+
+The owner's A799 answer at approximately 05:15 on 2026-10-19 approves **only an invented venue
+created and written by a frozen older image through normal product paths**. No private venue
+snapshot or private data. This overrides the old first-question alternative and board A below;
+The original README remains verbatim as a historical record.
+
+Read the [current design addendum](../../../superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md#2026-10-19-precedence-addendum-source-answered-release-checks-proposed).
+**Next question B is proposed, not approved:** before publishing imagined candidate R5, require
+checks from oldest supported post-squash R1 plus immediately previous retained R4 (recommended),
+or every retained release R1/R2/R3/R4? All are imagined qualified releases in the same post-A760
+history; none is established by these boards. R1/R4 means fewer cells and gives no passing evidence
+for R2/R3. Every-release checks could catch a defect specific to R2/R3 that endpoints might miss.
+Both choices keep all original frozen bundles and expectations. Neither chooses support/retirement
+rules, artifact store/access, unsupported-image handling or fiscal behaviour. Intermediate releases
+are not silently retired, and there is no blanket compatibility promise.
+
+[Eight revised static boards](revision-a-and-release-checks/README.md),
+are available in English/Spanish in light/dark at 390/1280 px, with PNG and SVG versions. These
+are review drawings, not product screenshots or results of an upgrade run. “B” here names the next owner question; the old
+board B below remains the historical frozen-facts example.
+
+Optional-module-off cases and endpoint deduplication remain proposed as in the design. Same-image,
+no-migration cells are restart-only; a distinct later candidate must actually apply pending
+migrations before the upgrade requirement is met. Baseline capture waits for A760's separately
+authorised squash/reset; this grants no execution, reset, migration or compatibility authority.
+Old/current product paths and transcripts, frozen fiscal bytes/identity and the prohibition on new
+fiscal writers remain. Issued-F1 coverage, artifact store/access, capture determinism/time and the
+full design/plan/build remain open. No fixture existence or runtime success is claimed; original
+source observations remain historical and **UNVERIFIED at runtime**.
+
+---
+
 # A799: older-database upgrade review boards
 
 These static boards accompany the [design proposal](../../../superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md). They illustrate proposed checks and worked examples. They are not product screenshots, a proposed dashboard or evidence that an upgrade test passed. The design and build still await owner agreement.
