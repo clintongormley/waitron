@@ -247,12 +247,18 @@ it("shows the VAT class for new products in the Defaults card to venue.configure
     .toBe(vatClassLabel("reduced"));
 });
 
-it("shows no Defaults card to a supervisor", async () => {
+it("shows a supervisor the Defaults card's values with nothing to edit", async () => {
   const el = await mount("/manage/venue-settings/view/venue-details", "supervisor", ["venue.view"]);
+  const defaults = () =>
+    page(el).shadowRoot!.querySelector("dashboard-venue-defaults-panel")?.shadowRoot ?? null;
   await expect
-    .poll(() => page(el).shadowRoot!.querySelector("dashboard-venue-details-panel"))
-    .not.toBeNull();
-  expect(page(el).shadowRoot!.querySelector("dashboard-venue-defaults-panel")).toBeNull();
+    .poll(
+      () => defaults()?.querySelector('[data-test="saved-defaultProductVatClass"]')?.textContent,
+    )
+    .toBe(vatClassLabel("reduced"));
+  expect(defaults()!.querySelector('[data-test="saved-receiptLanguage"]')).not.toBeNull();
+  expect(defaults()!.querySelector('[data-test="edit"]')).toBeNull();
+  expect(defaults()!.querySelector("wt-combobox")).toBeNull();
 });
 
 it("orders the Venue details cards Business, Venue, Business day, Defaults", async () => {

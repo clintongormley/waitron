@@ -94,28 +94,42 @@ async function storedVatClass(): Promise<string | null> {
   );
   return rows[0]?.default_product_vat_class ?? null;
 }
-const refusal = {
-  error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
-};
+const refusal = (permission: string) => ({
+  error: { code: "authorization.not_permitted", params: { permission } },
+});
 
-describe("venue.configure gates the venue defaults", () => {
-  it("refuses a read and a write to a session without venue.configure", async () => {
+describe("venue.view gates reading the venue defaults and venue.configure gates writing them", () => {
+  it("serves a read and refuses a write to a session without venue.configure", async () => {
     gate.withheld = "venue.configure";
-    const answers = [await read(managerCookie), await write(managerCookie)];
-    for (const response of answers) {
-      expect(response.status).toBe(403);
-      expect(await response.json()).toEqual(refusal);
-    }
+    const answer = await read(managerCookie);
+    expect(answer.status).toBe(200);
+    expect(Object.keys(await answer.json()).sort()).toEqual([
+      "defaultProductVatClass",
+      "fixedReceiptLanguage",
+      "receiptLanguage",
+      "receiptLanguageChoices",
+    ]);
+    const refused = await write(managerCookie);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual(refusal("venue.configure"));
     expect(await storedVatClass()).toBeNull();
   });
 
-  it("refuses a read and a write to a real supervisor session", async () => {
-    const answers = [await read(supervisorCookie), await write(supervisorCookie)];
-    for (const response of answers) {
-      expect(response.status).toBe(403);
-      expect(await response.json()).toEqual(refusal);
-    }
+  it("serves a read and refuses a write to a real supervisor session", async () => {
+    const answer = await read(supervisorCookie);
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toEqual(await (await read(managerCookie)).json());
+    const refused = await write(supervisorCookie);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual(refusal("venue.configure"));
     expect(await storedVatClass()).toBeNull();
+  });
+
+  it("refuses a read to a session without venue.view", async () => {
+    gate.withheld = "venue.view";
+    const answer = await read(managerCookie);
+    expect(answer.status).toBe(403);
+    expect(await answer.json()).toEqual(refusal("venue.view"));
   });
 
   it("serves a read and a write to a session without catalogue.manage", async () => {

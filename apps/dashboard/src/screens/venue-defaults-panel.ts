@@ -75,6 +75,7 @@ export class VenueDefaultsPanel extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) readOnly = false;
   @state() private model?: VenueDefaults;
   @state() private content?: ContentLanguages;
   @state() private readError = "";
@@ -128,7 +129,7 @@ export class VenueDefaultsPanel extends LitElement {
   }
   #begin(): void {
     const model = this.model;
-    if (!model) return;
+    if (!model || this.readOnly) return;
     this.#expected = {
       receiptLanguage: model.receiptLanguage,
       defaultProductVatClass: model.defaultProductVatClass,
@@ -208,7 +209,7 @@ export class VenueDefaultsPanel extends LitElement {
   }
   #change(field: Field, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    if (!this.draft || this.submitting) return;
+    if (!this.draft || this.readOnly || this.submitting) return;
     this.draft = { ...this.draft, [field]: event.detail.value };
     const errors = { ...this.errors };
     delete errors[field];
@@ -217,7 +218,7 @@ export class VenueDefaultsPanel extends LitElement {
     this.#scope?.changed();
   }
   async #save(): Promise<void> {
-    if (this.submitting || !this.draft || !this.#expected) return;
+    if (this.submitting || this.readOnly || !this.draft || !this.#expected) return;
     if (saveActionState(this.#scope).unchanged) return;
     const generation = this.#generation;
     const scope = this.#scope;
@@ -335,16 +336,19 @@ export class VenueDefaultsPanel extends LitElement {
           },
         )
         .catch(() => {}),
-      this.#contentQueries
-        .watch("getContentLanguages", [], (value) => {
-          if (generation === this.#generation) this.content = value;
-        })
-        .catch(() => {}),
+      this.readOnly
+        ? undefined
+        : this.#contentQueries
+            .watch("getContentLanguages", [], (value) => {
+              if (generation === this.#generation) this.content = value;
+            })
+            .catch(() => {}),
     ]);
   }
   override render() {
     const model = this.model;
     const fixed = model?.fixedReceiptLanguage;
+    const editing = Boolean(this.draft && !this.readOnly);
     return html`${
       this.readError
         ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>
@@ -358,13 +362,14 @@ export class VenueDefaultsPanel extends LitElement {
         ? settingsCard({
             id: "defaults-card",
             heading: t("venue_settings.card.defaults"),
-            editing: Boolean(this.draft),
-            action: this.draft
-              ? nothing
-              : html`<wt-button data-test="edit" @click=${() => this.#begin()}
-                  >${t("action.edit")}</wt-button
-                >`,
-            body: this.draft
+            editing,
+            action:
+              editing || this.readOnly
+                ? nothing
+                : html`<wt-button data-test="edit" @click=${() => this.#begin()}
+                    >${t("action.edit")}</wt-button
+                  >`,
+            body: editing
               ? this.#form(model)
               : html`${settingsRows([
                   {

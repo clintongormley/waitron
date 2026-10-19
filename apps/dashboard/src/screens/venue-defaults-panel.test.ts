@@ -55,8 +55,8 @@ function rig(
   };
   return { api: api as typeof api & DashboardApi, liveData, state };
 }
-async function mount(api: DashboardApi) {
-  const { el } = await mountWidget<Panel>("dashboard-venue-defaults-panel", { api });
+async function mount(api: DashboardApi, readOnly = false) {
+  const { el } = await mountWidget<Panel>("dashboard-venue-defaults-panel", { api, readOnly });
   await expect.poll(() => q(el, "section.settings-card dl")).toBeTruthy();
   await flush(el);
   return el;
@@ -175,6 +175,39 @@ it("says nothing about a fixed language where none is fixed, or where the stored
   expect(q(madrid, "[data-test=stored-differs]")).toBeNull();
   const matching = await mount(rig({ ...BARCELONA, receiptLanguage: "ca-ES" }).api);
   expect(q(matching, "[data-test=stored-differs]")).toBeNull();
+});
+
+it("a read-only card shows the stored defaults and the stored-differs note, offers no Edit and reads no content languages", async () => {
+  setLocale("en-GB");
+  const { api } = rig(BARCELONA);
+  const el = await mount(api, true);
+  expect(rows(el)).toEqual([
+    "Default receipt language: Spanish",
+    "VAT class for new products: Reduced (10%)",
+  ]);
+  expect(q(el, "[data-test=stored-differs]")).not.toBeNull();
+  expect(q(el, "[data-test=edit]")).toBeNull();
+  expect(q(el, "form")).toBeNull();
+  expect(api.getContentLanguages).not.toHaveBeenCalled();
+});
+
+it("a draft open when the card turns read-only shows the stored defaults, with no form to save", async () => {
+  setLocale("en-GB");
+  const { api } = rig();
+  const el = await mount(api);
+  await edit(el);
+  expect(q(el, "form")).not.toBeNull();
+  el.readOnly = true;
+  await flush(el);
+  expect(q(el, "form")).toBeNull();
+  expect(q(el, "wt-combobox")).toBeNull();
+  expect(q(el, "[data-test=edit]")).toBeNull();
+  expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+  expect(rows(el)).toEqual([
+    "Default receipt language: Spanish",
+    "VAT class for new products: Reduced (10%)",
+  ]);
+  expect(api.putVenueDefaults).not.toHaveBeenCalled();
 });
 
 it("shows a read failure with Retry, and Retry recovers", async () => {

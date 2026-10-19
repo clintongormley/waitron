@@ -321,9 +321,12 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
   {
     key: "defaults",
     tab: "venue-details",
-    requiresPermission: "venue.configure",
-    render: (api) =>
-      html`<dashboard-venue-defaults-panel .api=${api}></dashboard-venue-defaults-panel>`,
+    requiresPermission: "venue.view",
+    render: (api, canConfigure) =>
+      html`<dashboard-venue-defaults-panel
+        .api=${api}
+        .readOnly=${!canConfigure}
+      ></dashboard-venue-defaults-panel>`,
   },
   {
     key: "statuses",

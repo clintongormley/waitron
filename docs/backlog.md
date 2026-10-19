@@ -1450,15 +1450,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   - The Venue card says nothing about a time zone locked by a past business-day change. The server
     gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
     `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
-  - A824. Show Venue settings' Defaults card read-only to supervisors (owner, 2026-10-17). As
-    built, only a session holding `venue.configure` sees it (the `defaults` entry of
-    `CORE_SETTINGS_PANELS`, `apps/dashboard/src/dashboard-app.ts`), and the server's
-    `GET /management-api/venue-defaults` (`apps/server/src/location-settings-api.ts`) also needs
-    `venue.configure`; a supervisor, who holds `venue.view` alone, sees the other three cards
-    read-only and no Defaults card. Done when a server test reads
-    `GET /management-api/venue-defaults` with `venue.view` alone and is answered, a test finds the
-    `PUT` still refused, and a dashboard test signed in with `venue.view` alone finds the Defaults
-    card's values shown and nothing editable.
 
   [Mockups](backlog/mockups/a755-venue-settings/)
 
