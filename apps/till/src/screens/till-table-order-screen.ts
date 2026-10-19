@@ -2961,7 +2961,9 @@ export class TillTableOrderScreen extends LitElement {
     this.reviewing = false;
     await this.updateComplete;
     if (saved !== undefined) saved.scroller.scrollTop = saved.top;
-    this.renderRoot.querySelector<HTMLElement>("[data-review-open]")?.focus();
+    this.renderRoot
+      .querySelector<HTMLElement>("[data-review-open]")
+      ?.focus({ preventScroll: true });
   }
 
   /** The nearest ancestor that scrolls, across shadow roots, else the page. */

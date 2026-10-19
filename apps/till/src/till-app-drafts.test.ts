@@ -1357,6 +1357,9 @@ describe("till-app: a table's draft is kept on the server", () => {
     await tap(el, "Beer");
     const store = draft(el);
     const picker = await openDraftLine(order, 0);
+    picker.shadowRoot!.querySelector<HTMLElement>(".add-note")!.click();
+    await picker.updateComplete;
+    await picker.shadowRoot!.querySelector("wt-textarea")!.updateComplete;
     const note = picker
       .shadowRoot!.querySelector("wt-textarea")!
       .shadowRoot!.querySelector("textarea")!;
