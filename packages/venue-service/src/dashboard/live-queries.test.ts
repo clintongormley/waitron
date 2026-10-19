@@ -78,6 +78,8 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "zone_day_ranges",
     "special_days",
     "special_day_dates",
+    "service_steps",
+    "kitchen_courses",
   ]);
 });
 
@@ -144,6 +146,7 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "zone_sale_policies",
       "zone_extensions",
       "department_sale_policies",
+      "service_steps",
       "menu_periods",
       "menu_period_staff_menus",
       "department_days",

@@ -7,6 +7,7 @@ import {
   validateMenuTimetables,
   validateRoutingConfiguration,
 } from "./configuration-transfer.js";
+import { MAX_SERVICE_STEPS } from "./service-step-limits.js";
 
 type Row = Record<string, unknown>;
 type Tables = Record<string, Row[]>;
@@ -1928,4 +1929,137 @@ it("leaves per-device zone choices outside the configuration transfer descriptor
   expect(names).toContain("device_profile_zones");
   expect(names).not.toContain("device_zone_selections");
   expect(names).not.toContain("device_zone_selection_zones");
+});
+
+describe("validateServiceSteps", () => {
+  const COURSE = "c-mains";
+  const validate = VENUE_SERVICE_CONFIGURATION_TRANSFER.validate;
+
+  function stepRow(overrides: Row): Row {
+    return {
+      id: randomUUID(),
+      department_id: RESTAURANT,
+      position: 0,
+      name: "Set up",
+      start: "seated",
+      course_id: null,
+      minutes: 0,
+      ...overrides,
+    };
+  }
+
+  function bundle(steps: Row[]): Tables {
+    return {
+      departments: [{ id: RESTAURANT }, { id: DELI }],
+      kitchen_courses: [{ id: COURSE }],
+      service_steps: steps,
+    };
+  }
+
+  const starters = (): Row[] => [
+    stepRow({ position: 0, name: "Set up", start: "seated", minutes: 0 }),
+    stepRow({ position: 1, name: "Take order", start: "after_previous", minutes: 2 }),
+    stepRow({ position: 2, name: "Anything else?", start: "all_served", minutes: 10 }),
+  ];
+
+  it("accepts the three starter rows and a course row", () => {
+    const steps = [
+      ...starters(),
+      stepRow({
+        position: 3,
+        name: "Dessert?",
+        start: "course_served",
+        course_id: COURSE,
+        minutes: 10,
+      }),
+      stepRow({ position: 4, name: "Check in", start: "since_last_order", minutes: 1 }),
+    ];
+    expect(() => validate(bundle(steps))).not.toThrow();
+  });
+
+  it("refuses a step of a department the bundle does not hold", () => {
+    expect(() => validate(bundle([stepRow({ department_id: "d-gone" })]))).toThrowError(
+      refusal("service_steps.department_id"),
+    );
+  });
+
+  it.each<[string, Row]>([
+    ["a course on a non-course start", { start: "seated", course_id: COURSE }],
+    ["no course on a course start", { start: "course_served", course_id: null, minutes: 10 }],
+    ["a course the bundle does not hold", { start: "course_served", course_id: "c-gone" }],
+  ])("refuses %s", (_label, overrides) => {
+    expect(() => validate(bundle([stepRow(overrides)]))).toThrowError(
+      refusal("service_steps.course_id"),
+    );
+  });
+
+  it("refuses a start that is not one of the five", () => {
+    expect(() => validate(bundle([stepRow({ start: "later" })]))).toThrowError(
+      refusal("service_steps.start"),
+    );
+  });
+
+  it("refuses after the step before at a department's lowest position", () => {
+    const steps = [
+      stepRow({ department_id: DELI, position: 0, start: "seated" }),
+      stepRow({ position: 3, start: "after_previous", minutes: 2 }),
+      stepRow({ position: 5, start: "seated" }),
+    ];
+    expect(() => validate(bundle(steps))).toThrowError(refusal("service_steps.start"));
+  });
+
+  it.each<[string, Row]>([
+    ["past 120", { minutes: 121 }],
+    ["a fraction", { minutes: 2.5 }],
+    ["below 0", { minutes: -1 }],
+    ["not a number", { minutes: "5" }],
+    ["0 on the repeating start", { start: "since_last_order", minutes: 0 }],
+  ])("refuses minutes %s", (_label, overrides) => {
+    expect(() => validate(bundle([stepRow(overrides)]))).toThrowError(
+      refusal("service_steps.minutes"),
+    );
+  });
+
+  it.each<[string, Row]>([
+    ["not text", { name: 7 }],
+    ["blank once trimmed", { name: "   " }],
+    ["empty", { name: "" }],
+    ["with spaces around it", { name: " Set up " }],
+  ])("refuses a name %s", (_label, overrides) => {
+    expect(() => validate(bundle([stepRow(overrides)]))).toThrowError(
+      refusal("service_steps.name"),
+    );
+  });
+
+  it.each<[string, Row]>([
+    ["below 0", { position: -1 }],
+    ["a fraction", { position: 0.5 }],
+    ["not a number", { position: "0" }],
+  ])("refuses a position %s", (_label, overrides) => {
+    expect(() => validate(bundle([stepRow(overrides)]))).toThrowError(
+      refusal("service_steps.position"),
+    );
+  });
+
+  const many = (count: number, department: string): Row[] =>
+    Array.from({ length: count }, (_, position) =>
+      stepRow({ department_id: department, position, name: `Step ${position}` }),
+    );
+
+  it("accepts as many steps for one department as its save does, beside another's", () => {
+    expect(() =>
+      validate(bundle([...many(MAX_SERVICE_STEPS, RESTAURANT), ...many(1, DELI)])),
+    ).not.toThrow();
+  });
+
+  it("refuses more steps for one department than its save accepts", () => {
+    expect(() => validate(bundle(many(MAX_SERVICE_STEPS + 1, RESTAURANT)))).toThrowError(
+      refusal("service_steps"),
+    );
+  });
+
+  it("lists service_steps right after departments", () => {
+    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    expect(names.indexOf("service_steps")).toBe(names.indexOf("departments") + 1);
+  });
 });

@@ -205,6 +205,8 @@ describe("VenueServiceApi", () => {
       printMovedSlips: false,
       releaseReminderMinutes: null,
       needsClearingDepartmentIds: ["d1"],
+      serviceSteps: [],
+      courses: [],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(model));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
@@ -444,6 +446,26 @@ describe("combined settings requests", () => {
         },
       ],
     ]);
+  });
+
+  it("saveDepartmentSettings sends the steps when given", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    const serviceSteps = [
+      { id: "s1", name: "Set up", start: "seated" as const, courseId: null, minutes: 0 },
+      { name: "Dessert?", start: "course_served" as const, courseId: "c1", minutes: 10 },
+    ];
+    await api.saveDepartmentSettings("d1", {
+      name: "Dining",
+      tradingName: "Receipt",
+      orderStart: "table",
+      paidWhen: "ticket_then_pay",
+      collectionNumber: "numbered",
+      needsClearing: false,
+      serviceSteps,
+    });
+    const [[, init]] = fetchImpl.mock.calls as unknown as [string, RequestInit][];
+    expect(JSON.parse(init!.body as string).serviceSteps).toEqual(serviceSteps);
   });
 
   it("sends four inherited zone settings in one PUT and preserves a refusal", async () => {

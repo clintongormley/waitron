@@ -1,6 +1,6 @@
 # A757 — Table states: the lifecycle, how each state is shown, and retiring the Tables tab
 
-Status: **answered (Q29–Q34 all A, 2026-10-17); slice 1 built 2026-10-19; slices 2–8 left (§11).**
+Status: **answered (Q29–Q34 all A, 2026-10-17); slices 1 and 7 built 2026-10-19; slices 2–6 and 8 left (§11).**
 Backlog entry: `docs/backlog.md` "A757" and
 [its detail](../../backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab).
 
@@ -491,6 +491,15 @@ tables (a `state` table, `docs/developers/conventions-data.md`), and each party'
 time and who tapped Done. The server sends the active step with the floor read as a new signal, with
 its start time, so the till redraws when a step's minutes run out, as it does for a reminder today
 (`till-floor-screen.ts:717-728`).
+
+**2026-10-19:** slice 7 stores the steps in `service_steps` (plan
+`docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`): five starts, minutes 0–120
+(at least 1 for the repeating start), a course start names a `kitchen_courses` row and goes when
+that course is deleted (a step left first that started after the step before then starts when
+seated); a department created in the dashboard, or the one provisioning inserts,
+starts with the three starter steps, named in English when the venue's first receipt language is
+English and in Spanish otherwise (a configuration import brings the bundle's steps instead). Each
+party's done steps are slice 8's.
 
 ## 9. Nothing needed: its own look
 

@@ -2030,7 +2030,7 @@ unpaid or uncollected deliveries, booked or seated bookings, open or placed orde
 transfers and affected ordering profiles can refuse the whole change. No live work is ended to make
 Delete succeed. A successful hierarchy Delete clears its saved, today, reset and join floor state,
 including tables with no today row and reset targets with no live table. Shared menus, venue dates
-and holidays remain; owned routing, periods, opening overrides and transfer settings are removed.
+and holidays remain; owned routing, periods, opening overrides, transfer settings and service steps are removed.
 
 Ordering profiles keep one department. A nonretired ordering profile bound to the department
 refuses its deletion, even without an active device. Removing its only usable zone also refuses.

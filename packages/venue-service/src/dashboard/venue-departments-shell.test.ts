@@ -33,6 +33,8 @@ function model(count = 2): VenueServiceView {
     printMovedSlips: true,
     releaseReminderMinutes: null,
     needsClearingDepartmentIds: [],
+    serviceSteps: [],
+    courses: [],
   };
 }
 beforeEach(() => setLocale("en"));

@@ -14,6 +14,8 @@ import {
 import { layerPaint, type PaintRange } from "./day-paint.js";
 import { civilDateOf } from "@waitron/reporting";
 import { ZONE_PAINT_KINDS } from "./schema/seasons.js";
+import { SERVICE_STEP_STARTS } from "./schema/service-steps.js";
+import { MAX_SERVICE_STEP_MINUTES, MAX_SERVICE_STEPS } from "./service-step-limits.js";
 import { parseSeasonStart, seasonOn } from "./season-rules.js";
 import {
   firstSkippedEnd,
@@ -708,6 +710,45 @@ function validateOrderStarts(tables: Tables): void {
   }
 }
 
+function validateServiceSteps(tables: Tables): void {
+  const departments = ids(tables.departments);
+  const courses = ids(tables.kitchen_courses);
+  const starts: readonly unknown[] = SERVICE_STEP_STARTS;
+  const lowest = new Map<unknown, number>();
+  const counts = new Map<unknown, number>();
+  for (const row of tables.service_steps ?? []) {
+    if (!departments.has(row.department_id)) refuse("service_steps.department_id");
+    const count = (counts.get(row.department_id) ?? 0) + 1;
+    if (count > MAX_SERVICE_STEPS) refuse("service_steps");
+    counts.set(row.department_id, count);
+    if (typeof row.name !== "string" || row.name === "" || row.name.trim() !== row.name)
+      refuse("service_steps.name");
+    const position = row.position;
+    if (typeof position !== "number" || !Number.isInteger(position) || position < 0)
+      refuse("service_steps.position");
+    if (!starts.includes(row.start)) refuse("service_steps.start");
+    const course = row.course_id ?? null;
+    if (
+      (row.start === "course_served") !== (course !== null) ||
+      (course !== null && !courses.has(course))
+    )
+      refuse("service_steps.course_id");
+    const minutes = row.minutes;
+    if (
+      typeof minutes !== "number" ||
+      !Number.isInteger(minutes) ||
+      minutes < 0 ||
+      minutes > MAX_SERVICE_STEP_MINUTES ||
+      (row.start === "since_last_order" && minutes < 1)
+    )
+      refuse("service_steps.minutes");
+    lowest.set(row.department_id, Math.min(lowest.get(row.department_id) ?? position, position));
+  }
+  for (const row of tables.service_steps ?? [])
+    if (row.start === "after_previous" && row.position === lowest.get(row.department_id))
+      refuse("service_steps.start");
+}
+
 function validateVenueServiceConfiguration(
   tables: Tables,
   bundle?: { readonly createdAt: Date; readonly timeZone: string; readonly dayCutover: string },
@@ -715,6 +756,7 @@ function validateVenueServiceConfiguration(
   validateReceiptModes(tables);
   validateOrderStarts(tables);
   validateServiceHierarchy(tables);
+  validateServiceSteps(tables);
   validateReceiptFields(tables);
   validateHolidayConfiguration(tables);
   validateMenuTimetables(tables);
@@ -728,6 +770,7 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
     { name: "departments", locationColumns: ["location_id"], leaveBehindWhenFalse: "active" },
+    { name: "service_steps" },
     { name: "department_receipts" },
     { name: "department_sale_policies" },
     { name: "zone_service_policies", locationColumns: ["location_id"] },

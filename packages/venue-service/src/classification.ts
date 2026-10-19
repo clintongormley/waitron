@@ -6,6 +6,7 @@ const STATE =
 
 export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("departments", "state", STATE),
+  classify("service_steps", "state", STATE),
   classify("department_receipts", "state", STATE),
   classify("department_transfer_desks", "state", STATE),
   classify("department_transfer_destinations", "state", STATE),

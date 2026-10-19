@@ -19,6 +19,9 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "./service-settings-fields.js";
+import "./department-service-steps.js";
+import type { ServiceStepErrors, ServiceStepField } from "./department-service-steps.js";
+import { MAX_SERVICE_STEP_MINUTES } from "../service-step-limits.js";
 import type { ServiceSettingsValue } from "./service-settings-fields.js";
 import type {
   DepartmentSettingsInput,
@@ -27,6 +30,13 @@ import type {
   VenueServiceView,
 } from "./client.js";
 import { t } from "./strings.js";
+import {
+  stepsEqual,
+  toStepDrafts,
+  toStepInputs,
+  withSavedIds,
+  type ServiceStepDraft,
+} from "./service-step-draft.js";
 
 export type DepartmentTab = "details" | "service" | "receipt" | "transfers";
 export function offeredDepartmentTabs(model?: VenueServiceView, receipts = false): DepartmentTab[] {
@@ -46,7 +56,10 @@ interface ReceiptEditor {
   saving?: boolean;
   invalid?: boolean;
 }
-type Field = keyof DepartmentSettingsInput | "receivingProfileId" | "destinationDepartmentIds";
+type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & {
+  serviceSteps: ServiceStepDraft[];
+};
+type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
   tradingName: "details",
@@ -54,12 +67,14 @@ const fieldTab: Record<Field, DepartmentTab> = {
   paidWhen: "service",
   collectionNumber: "service",
   needsClearing: "service",
+  serviceSteps: "service",
   transfers: "transfers",
   receivingProfileId: "transfers",
   destinationDepartmentIds: "transfers",
 };
-const copy = (value: DepartmentSettingsInput): DepartmentSettingsInput => ({
+const copy = (value: DepartmentDraft): DepartmentDraft => ({
   ...value,
+  serviceSteps: value.serviceSteps.map((step) => ({ ...step })),
   ...(value.transfers
     ? {
         transfers: {
@@ -69,13 +84,14 @@ const copy = (value: DepartmentSettingsInput): DepartmentSettingsInput => ({
       }
     : {}),
 });
-const equal = (a: DepartmentSettingsInput, b: DepartmentSettingsInput) =>
+const equal = (a: DepartmentDraft, b: DepartmentDraft) =>
   a.name.trim() === b.name.trim() &&
   a.tradingName.trim() === b.tradingName.trim() &&
   a.orderStart === b.orderStart &&
   a.paidWhen === b.paidWhen &&
   a.collectionNumber === b.collectionNumber &&
   a.needsClearing === b.needsClearing &&
+  stepsEqual(a.serviceSteps, b.serviceSteps) &&
   a.transfers?.receivingProfileId === b.transfers?.receivingProfileId &&
   (a.transfers?.destinationDepartmentIds.length ?? 0) ===
     (b.transfers?.destinationDepartmentIds.length ?? 0) &&
@@ -165,20 +181,21 @@ export class DepartmentSettings extends LitElement {
   @property({ type: Boolean }) refreshing = false;
   @property() tab: DepartmentTab = "details";
   @property({ attribute: false }) receiptEditor: ReceiptEditorPanel;
-  @state() private draft?: DepartmentSettingsInput;
+  @state() private draft?: DepartmentDraft;
   @state() private busy = false;
   @state() private attempted = false;
   @state() private refused: Partial<Record<Field, string>> = {};
+  @state() private refusedSteps: ServiceStepErrors = {};
   @state() private failure = "";
   @state() private transferFailure = "";
   @state() private profiles: DepartmentTransfersView["profiles"] = [];
   private opened = "";
-  private baseline?: DepartmentSettingsInput;
-  private scope?: DraftScope<DepartmentSettingsInput>;
+  private baseline?: DepartmentDraft;
+  private scope?: DraftScope<DepartmentDraft>;
   private leave?: LeaveCoordinator;
   private generation = {};
   private transferGeneration = {};
-  private source?: DepartmentSettingsInput;
+  private source?: DepartmentDraft;
   private transferLoading = false;
   private transfersLoaded = false;
   private transfersShown = false;
@@ -258,13 +275,14 @@ export class DepartmentSettings extends LitElement {
       return;
     }
     const policy = this.model!.salePolicies.departments.find((p) => p.departmentId === row.id);
-    const source: DepartmentSettingsInput = {
+    const source: DepartmentDraft = {
       name: row.name,
       tradingName: row.tradingName,
       orderStart: policy?.orderStart ?? "counter",
       paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
       needsClearing: this.model!.needsClearingDepartmentIds.includes(row.id),
+      serviceSteps: this.modelSteps(row.id),
     };
     if (this.opened !== row.id) {
       this.scope?.dispose();
@@ -276,6 +294,7 @@ export class DepartmentSettings extends LitElement {
       this.busy = false;
       this.attempted = false;
       this.refused = {};
+      this.refusedSteps = {};
       this.failure = "";
       this.transferFailure = "";
       this.profiles = [];
@@ -327,6 +346,7 @@ export class DepartmentSettings extends LitElement {
           this.draft = copy(value);
           this.attempted = false;
           this.refused = {};
+          this.refusedSteps = {};
           this.failure = "";
         },
       });
@@ -334,14 +354,21 @@ export class DepartmentSettings extends LitElement {
       this.leave = coordinator;
       scope.commit(this.baseline!);
     }
-    if (this.scope && !this.scope.isDirty() && !this.busy && !equal(this.source!, source)) {
-      this.source = copy(source);
-      this.draft = {
-        ...source,
-        ...(this.draft!.transfers ? { transfers: this.draft!.transfers } : {}),
-      };
-      this.baseline = copy(this.draft);
-      this.scope.commit(this.baseline);
+    if (this.scope && !this.busy) {
+      if (this.scope.isDirty()) this.followSteps(source.serviceSteps);
+      else if (!equal(this.source!, source)) {
+        const steps = stepsEqual(source.serviceSteps, this.source!.serviceSteps)
+          ? this.draft!.serviceSteps
+          : source.serviceSteps;
+        this.source = copy(source);
+        this.draft = {
+          ...source,
+          serviceSteps: steps,
+          ...(this.draft!.transfers ? { transfers: this.draft!.transfers } : {}),
+        };
+        this.baseline = copy(this.draft);
+        this.scope.commit(this.baseline);
+      }
     }
     if (
       this.isConnected &&
@@ -351,6 +378,37 @@ export class DepartmentSettings extends LitElement {
       this.api
     )
       void this.loadTransfers(row.id, this.transferGeneration);
+  }
+  private modelSteps(id: string) {
+    return toStepDrafts(this.model!.serviceSteps.filter((step) => step.departmentId === id));
+  }
+  /** A dirty draft follows a model whose steps differ from the last steps the form recorded as
+   * seen, where no edit of the user's is at stake: an unchanged list takes the model's, and rows a
+   * save added take the ids the model gave them. */
+  private followSteps(steps: ServiceStepDraft[]) {
+    const draft = this.draft!,
+      baseline = this.baseline!;
+    if (stepsEqual(steps, this.source!.serviceSteps)) return;
+    if (!stepsEqual(steps, baseline.serviceSteps)) {
+      if (stepsEqual(draft.serviceSteps, baseline.serviceSteps)) {
+        this.draft = { ...draft, serviceSteps: steps.map((step) => ({ ...step })) };
+        this.baseline = { ...baseline, serviceSteps: steps.map((step) => ({ ...step })) };
+      } else {
+        const saved = withSavedIds(baseline.serviceSteps, steps);
+        if (!saved) return;
+        const ids = new Map(saved.map((step) => [step.key, step.id]));
+        this.draft = {
+          ...draft,
+          serviceSteps: draft.serviceSteps.map((step) => ({
+            ...step,
+            id: ids.get(step.key) ?? step.id,
+          })),
+        };
+        this.baseline = { ...baseline, serviceSteps: saved };
+      }
+      this.scope!.commit(this.baseline);
+    }
+    this.source = { ...this.source!, serviceSteps: steps.map((step) => ({ ...step })) };
   }
   private current(id: string, generation: object) {
     return (
@@ -428,13 +486,90 @@ export class DepartmentSettings extends LitElement {
     this.scope?.changed();
     if (saveActionState(this.scope).unchanged) this.failure = "";
   }
+  private stepsChanged(steps: ServiceStepDraft[]) {
+    const before = new Map(this.draft!.serviceSteps.map((step) => [step.key, step]));
+    const kept: ServiceStepErrors = {};
+    for (const step of steps) {
+      const was = before.get(step.key),
+        row = { ...this.refusedSteps[step.key] };
+      if (!was) continue;
+      if (was.name !== step.name) delete row.name;
+      if (was.start !== step.start || was.courseId !== step.courseId) delete row.start;
+      if (was.minutes !== step.minutes) delete row.minutes;
+      if (Object.keys(row).length) kept[step.key] = row;
+    }
+    this.refusedSteps = kept;
+    this.changed("serviceSteps", steps);
+    if (Object.keys(kept).length) this.refused = { ...this.refused, serviceSteps: "" };
+  }
+  /** A list equal to the baseline is not sent, so it is not judged: it may be a copy the form could
+   * not follow, such as one a save left that another manager has since changed back. */
+  private get stepErrors(): ServiceStepErrors {
+    const found: ServiceStepErrors = {};
+    if (!this.draft || stepsEqual(this.draft.serviceSteps, this.baseline!.serviceSteps))
+      return found;
+    const courses = new Set(this.model?.courses.map((course) => course.id));
+    this.draft.serviceSteps.forEach((step, index) => {
+      const row: Partial<Record<ServiceStepField, string>> = {};
+      if (!step.name.trim()) row.name = t("venue.field_required");
+      if (index === 0 && step.start === "after_previous")
+        row.start = t("venue.service_step_first_after_previous");
+      else if (step.start === "course_served" && !courses.has(step.courseId!))
+        row.start = t("venue.service_step_course_gone");
+      const minutes = step.minutes.trim();
+      if (!/^\d+$/.test(minutes) || Number(minutes) > MAX_SERVICE_STEP_MINUTES)
+        row.minutes = t("venue.service_step_minutes_invalid");
+      else if (step.start === "since_last_order" && Number(minutes) === 0)
+        row.minutes = t("venue.service_step_minutes_repeat");
+      if (Object.keys(row).length) found[step.key] = row;
+    });
+    return found;
+  }
+  private get shownStepErrors(): ServiceStepErrors {
+    const shown: ServiceStepErrors = this.attempted ? { ...this.stepErrors } : {};
+    for (const [key, row] of Object.entries(this.refusedSteps))
+      shown[key] = { ...shown[key], ...row };
+    return shown;
+  }
   private get errors(): Partial<Record<Field, string>> {
     return {
       ...(this.draft?.name.trim() ? {} : { name: t("venue.field_required") }),
       ...(this.draft?.tradingName.trim() ? {} : { tradingName: t("venue.field_required") }),
+      ...(Object.keys(this.stepErrors).length ? { serviceSteps: "" } : {}),
     };
   }
-  private fieldRefusal(error: unknown, submitted: DepartmentSettingsInput) {
+  /** Marks the steps a refusal names: a field by the draft key of the submitted row it points at,
+   * a deleted course on each row that still starts from it now the answer has come. */
+  private stepRefusal(error: unknown, steps: ServiceStepDraft[]) {
+    const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
+    const named = typeof params?.field === "string" ? params.field : "";
+    const rows: ServiceStepErrors = {};
+    let list = "";
+    if (code === "management.request_invalid") {
+      const match = /^serviceSteps\.(\d+)\.(name|start|courseId|minutes)$/.exec(named);
+      const key = match ? steps[Number(match[1])]?.key : undefined;
+      if (key) {
+        const field = match![2] === "courseId" ? "start" : (match![2] as ServiceStepField);
+        rows[key] = { [field]: t("venue.field_refused") };
+      } else if (named === "serviceSteps" || named.startsWith("serviceSteps."))
+        list = t("venue.field_refused");
+    } else if (code === "service_step.not_found") list = t("venue.service_step_changed_elsewhere");
+    else if (code === "course.not_found")
+      for (const step of this.draft!.serviceSteps)
+        if (step.start === "course_served" && step.courseId === params?.courseId)
+          rows[step.key] = { start: t("venue.service_step_course_gone") };
+    if (!list && !Object.keys(rows).length) return false;
+    this.refused = { serviceSteps: list };
+    this.refusedSteps = rows;
+    this.showFirstInvalid();
+    return true;
+  }
+  private fieldRefusal(
+    error: unknown,
+    submitted: DepartmentSettingsInput,
+    steps: ServiceStepDraft[],
+  ) {
+    if (submitted.serviceSteps && this.stepRefusal(error, steps)) return;
     const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
     let field: Field | undefined;
     let message = t("venue.field_refused");
@@ -486,30 +621,40 @@ export class DepartmentSettings extends LitElement {
       return;
     this.attempted = true;
     this.refused = {};
+    this.refusedSteps = {};
     this.failure = "";
     if (Object.keys(this.errors).length) {
       this.showFirstInvalid();
       return;
     }
     if (!this.api) return;
-    const submitted = copy(this.draft!);
-    submitted.name = submitted.name.trim();
-    submitted.tradingName = submitted.tradingName.trim();
-    if (!this.showsTransfers) delete submitted.transfers;
+    const kept = copy(this.draft!);
+    kept.name = kept.name.trim();
+    kept.tradingName = kept.tradingName.trim();
+    if (!this.showsTransfers) delete kept.transfers;
+    const { serviceSteps, ...unchanged } = kept;
+    const submitted: DepartmentSettingsInput = stepsEqual(serviceSteps, this.baseline!.serviceSteps)
+      ? unchanged
+      : { ...unchanged, serviceSteps: toStepInputs(serviceSteps) };
     this.busy = true;
     try {
       await this.api.saveDepartmentSettings(id, submitted);
       if (this.current(id, generation)) {
-        const committed = copy(submitted);
-        if (!submitted.transfers && this.showsTransfers)
+        const committed = copy(kept);
+        if (!kept.transfers && this.showsTransfers)
           committed.transfers = copy(this.baseline!).transfers;
         if (!this.showsTransfers) delete committed.transfers;
         this.baseline = committed;
+        // After a save that sent steps, the copy held now, unless it is the saved list with ids
+        // filled in, is recorded as seen and not taken back; a copy arriving later is still followed.
+        const steps = this.modelSteps(id);
+        if (submitted.serviceSteps && !withSavedIds(committed.serviceSteps, steps))
+          this.source = { ...this.source!, serviceSteps: steps };
         this.scope?.commit(committed);
         this.emit("saved", { departmentId: id });
       }
     } catch (error) {
-      if (this.current(id, generation)) this.fieldRefusal(error, submitted);
+      if (this.current(id, generation)) this.fieldRefusal(error, submitted, serviceSteps);
     } finally {
       if (this.current(id, generation)) this.busy = false;
     }
@@ -523,6 +668,7 @@ export class DepartmentSettings extends LitElement {
         this.draft = copy(this.baseline!);
         this.attempted = false;
         this.refused = {};
+        this.refusedSteps = {};
         this.failure = "";
         this.emit("cancelled", { departmentId: id });
       }
@@ -598,7 +744,10 @@ export class DepartmentSettings extends LitElement {
     if (!row || !row.active || !draft) return nothing;
     const errors = this.shownErrors,
       disabled = !row.active,
-      state = saveActionState(this.scope);
+      state = saveActionState(this.scope),
+      highlighted =
+        Object.keys(errors).some((field) => field !== "serviceSteps") ||
+        Object.keys(this.shownStepErrors).length > 0;
     const serviceErrors: Partial<Record<keyof ServiceSettingsValue, string>> = {};
     for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
       if (errors[field]) serviceErrors[field] = errors[field];
@@ -709,6 +858,17 @@ export class DepartmentSettings extends LitElement {
               <p class="hint">${t("venue.needs_clearing_hint")}</p>
               ${errors.needsClearing ? html`<p class="error" data-field-error="needsClearing">${errors.needsClearing}</p>` : nothing}
             </div>
+            <department-service-steps
+              .steps=${draft.serviceSteps}
+              .courses=${this.model!.courses}
+              .errors=${this.shownStepErrors}
+              .listError=${errors.serviceSteps ?? ""}
+              ?disabled=${disabled}
+              @steps-change=${(e: CustomEvent<{ steps: ServiceStepDraft[] }>) => {
+                e.stopPropagation();
+                this.stepsChanged(e.detail.steps);
+              }}
+            ></department-service-steps>
           </section>
         </div>
         ${
@@ -780,7 +940,7 @@ export class DepartmentSettings extends LitElement {
             : nothing
         }
       </wt-tabs>
-      ${row.active && this.tab !== "receipt" ? html`<wt-form-actions .error=${[this.failure, Object.keys(errors).length ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
+      ${row.active && this.tab !== "receipt" ? html`<wt-form-actions .error=${[this.failure, highlighted ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
     </div>`;
   }
 }

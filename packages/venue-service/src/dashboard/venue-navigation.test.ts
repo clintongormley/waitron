@@ -19,6 +19,8 @@ const model: VenueServiceView = {
   printMovedSlips: true,
   releaseReminderMinutes: 10,
   needsClearingDepartmentIds: [],
+  serviceSteps: [],
+  courses: [],
 };
 
 beforeEach(() => setLocale("en"));

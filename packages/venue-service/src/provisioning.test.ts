@@ -24,6 +24,7 @@ import { createServiceZone } from "./operations.js";
 import { readProfileKitchenScreens } from "./kitchen-screens.js";
 import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
+import { departments } from "./schema/service.js";
 import {
   deviceProfileKitchenScreenStations,
   deviceProfileKitchenScreens,
@@ -103,6 +104,70 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const rows = await db.execute<{ name: string; trading_name: string }>(sql`
       select name, trading_name from departments where location_id = ${locationId}`);
     expect(rows.rows).toEqual([{ name: "La Plaza", trading_name: "La Plaza" }]);
+  });
+
+  describe("the starter service steps", () => {
+    async function venue(name: string) {
+      await seedTenant(db);
+      const [location] = await db
+        .insert(locations)
+        .values({ name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+        .returning({ id: locations.id });
+      const locationId = brandLocationId(location!.id);
+      const node = { locationId, nodeId: await seedNode(db, locationId) };
+      return {
+        locationId,
+        seed: () => withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node)),
+        steps: async () =>
+          (
+            await db.execute<{
+              name: string;
+              start: string;
+              minutes: number;
+              position: number;
+            }>(sql`
+              select s.name, s.start, s.minutes, s.position from service_steps s
+              join departments d on d.id = s.department_id
+              where d.location_id = ${locationId} order by s.position`)
+          ).rows,
+      };
+    }
+
+    it("the seed gives the department it creates the starter steps", async () => {
+      const { seed, steps } = await venue("Starter seed");
+      await seed();
+      expect(await steps()).toEqual([
+        { name: "Set up", start: "seated", minutes: 0, position: 0 },
+        { name: "Take order", start: "after_previous", minutes: 2, position: 1 },
+        { name: "Anything else?", start: "all_served", minutes: 10, position: 2 },
+      ]);
+    });
+
+    it("a second run of the seed puts back no step the venue deleted", async () => {
+      const { locationId, seed, steps } = await venue("Starter re-run");
+      await seed();
+      expect(await steps()).toHaveLength(3);
+      await db.execute(
+        sql`delete from service_steps where department_id in (select id from departments where location_id = ${locationId})`,
+      );
+      await seed();
+      expect(await steps()).toEqual([]);
+    });
+
+    it("the seed adds no steps to the department it promotes to default", async () => {
+      const { locationId, seed, steps } = await venue("Starter promote");
+      const [department] = await db
+        .insert(departments)
+        .values({ locationId, name: "Bar", tradingName: "Bar", active: true })
+        .returning({ id: departments.id });
+      await seed();
+      const [promoted] = await db
+        .select({ id: departments.id, isDefault: departments.isDefault })
+        .from(departments)
+        .where(eq(departments.locationId, locationId));
+      expect(promoted).toEqual({ id: department!.id, isDefault: true });
+      expect(await steps()).toEqual([]);
+    });
   });
 
   it("gives the venue the four default seasons", async () => {

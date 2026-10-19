@@ -77,6 +77,7 @@ it.each([
     "Removes {count} department service settings.",
     "Quita {count} ajustes de servicio del departamento.",
   ],
+  ["service_steps", "Removes {count} service steps.", "Quita {count} pasos de servicio."],
   [
     "transfer_desks",
     "Removes transfer desks for these profiles: {names}.",

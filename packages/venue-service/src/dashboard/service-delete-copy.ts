@@ -22,6 +22,7 @@ const itemKeys = {
   seasons: "venue.delete_item_seasons",
   period_extensions: "venue.delete_item_period_extensions",
   department_policy: "venue.delete_item_department_policy",
+  service_steps: "venue.delete_item_service_steps",
   transfer_desks: "venue.delete_item_transfer_desks",
   transfer_routes: "venue.delete_item_transfer_routes",
   default_department: "venue.delete_item_default_department",

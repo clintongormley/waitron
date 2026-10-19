@@ -121,6 +121,8 @@ const model: VenueServiceView = {
   printMovedSlips: true,
   releaseReminderMinutes: null,
   needsClearingDepartmentIds: [],
+  serviceSteps: [],
+  courses: [],
 };
 
 class App extends LitElement {
@@ -806,4 +808,87 @@ it("toggling Needs clearing dirties the form, toggling it back cleans it, and le
   expect(await leaving).toBe(false);
   expect(control.checked).toBe(true);
   expect(el.hasUnsavedChanges).toBe(true);
+});
+it("adding, renaming, moving or deleting a step dirties the form, undoing it cleans it, and leaving asks only while dirty", async () => {
+  const el = await mount();
+  const view = structuredClone(model);
+  view.serviceSteps = [
+    { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
+    {
+      id: "s2",
+      departmentId: "d1",
+      name: "Take order",
+      start: "after_previous",
+      courseId: null,
+      minutes: 2,
+    },
+  ];
+  el.model = view;
+  await el.updateComplete;
+  await selectDepartmentTab(el, "service");
+  const list = el.shadowRoot!.querySelector("department-service-steps")!;
+  expect(list).not.toBeNull();
+  const settle = async () => {
+    await el.updateComplete;
+    await list.updateComplete;
+  };
+  await settle();
+  const original = list.steps.map((step) => ({ ...step }));
+  expect(original.map((step) => step.name)).toEqual(["Set up", "Take order"]);
+  const saveButton = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  const clean = async () => {
+    expect(el.hasUnsavedChanges).toBe(false);
+    expect(saveButton().disabled).toBe(true);
+    expect(unload()).toBe(false);
+    expect(await el.requestLeave("navigation")).toBe(true);
+  };
+  const dirty = () => {
+    expect(el.hasUnsavedChanges).toBe(true);
+    expect(saveButton().disabled).toBe(false);
+    expect(unload()).toBe(true);
+  };
+  const send = async (steps: typeof original) => {
+    list.dispatchEvent(
+      new CustomEvent("steps-change", { detail: { steps }, bubbles: true, composed: true }),
+    );
+    await settle();
+  };
+  await clean();
+
+  list.shadowRoot!.querySelector<HTMLElement>("[data-test=add-service-step]")!.click();
+  await settle();
+  dirty();
+  const added = list.steps[2]!.key;
+  list.shadowRoot!.querySelector<HTMLElement>(`[data-test="remove-${added}"]`)!.click();
+  await settle();
+  await clean();
+
+  const name = list.shadowRoot!.querySelector("tbody tr wt-input[name=serviceStepName]")!;
+  name.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Lay" }, bubbles: true, composed: true }),
+  );
+  await settle();
+  dirty();
+  name.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Set up" }, bubbles: true, composed: true }),
+  );
+  await settle();
+  await clean();
+
+  await send([original[1]!, original[0]!]);
+  dirty();
+  await send(original);
+  await clean();
+
+  list.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-s2"]')!.click();
+  await settle();
+  dirty();
+  expect(list.steps.map((step) => step.name)).toEqual(["Set up"]);
+  const leaving = el.requestLeave("navigation");
+  await choice("keep");
+  expect(await leaving).toBe(false);
+  expect(el.hasUnsavedChanges).toBe(true);
+  await send(original);
+  await clean();
 });

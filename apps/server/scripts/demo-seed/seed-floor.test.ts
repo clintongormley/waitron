@@ -142,6 +142,37 @@ describe("seedFloor", () => {
     ]);
   });
 
+  it("each demo department starts with the three starter steps", async () => {
+    const { locationId } = await provisionVenue();
+
+    const steps = await withTransaction(suite.db, async (tx) => {
+      await seedFloor(tx, {
+        locationId,
+        locale: LOCALE,
+        departmentTradingNames: TRADING_NAMES,
+        dataSet: CASA_DELGADO_ES,
+      });
+      const { rows } = await tx.execute<{
+        department: string;
+        name: string;
+        start: string;
+        minutes: number;
+      }>(sql`
+        select d.trading_name as department, s.name, s.start, s.minutes
+        from service_steps s join departments d on d.id = s.department_id
+        where d.location_id = ${locationId} order by d.trading_name, s.position`);
+      return rows;
+    });
+
+    expect(steps).toEqual(
+      [TRADING_NAMES.deli, TRADING_NAMES.restaurant].flatMap((department) => [
+        { department, name: "Set up", start: "seated", minutes: 0 },
+        { department, name: "Take order", start: "after_previous", minutes: 2 },
+        { department, name: "Anything else?", start: "all_served", minutes: 10 },
+      ]),
+    );
+  });
+
   it("creates restaurant and deli service zones, the placed restaurant floor, and statuses", async () => {
     const { locationId } = await provisionVenue();
 

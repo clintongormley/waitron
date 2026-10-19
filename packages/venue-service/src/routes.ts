@@ -4,6 +4,7 @@ import { departments } from "./schema/service.js";
 import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
+import { MAX_SERVICE_STEP_MINUTES, MAX_SERVICE_STEPS } from "./service-step-limits.js";
 import { floorZones, withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
@@ -91,6 +92,8 @@ import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete
 import { mountFloorPlanSetRoutes } from "./floor-plan-set-routes.js";
 import { onlyKeys } from "./request-keys.js";
 import { listNeedsClearingDepartmentIds } from "./table-clearing.js";
+import { listServiceSteps, listStepCourses, type ServiceStepInput } from "./service-steps.js";
+import { SERVICE_STEP_STARTS, type ServiceStepStart } from "./schema/service-steps.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -101,6 +104,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shared.invalid_id": 400,
   "department.name_taken": 409,
   "department.not_found": 404,
+  "service_step.not_found": 404,
+  "course.not_found": 404,
   "department_transfer.settings_invalid": 400,
   "department.last_active": 409,
   "zone.table_in_use": 409,
@@ -212,6 +217,43 @@ function requireTransferSettings(value: unknown) {
     requireBodyUuid(id, "destinationDepartmentIds"),
   );
   return { receivingProfileId, destinationDepartmentIds };
+}
+
+const SERVICE_STEP_KEYS = ["id", "name", "start", "courseId", "minutes"];
+
+function requireServiceSteps(value: unknown): ServiceStepInput[] {
+  if (!Array.isArray(value) || value.length > MAX_SERVICE_STEPS)
+    throw new AppError("management.request_invalid", { field: "serviceSteps" });
+  const seen = new Set<string>();
+  return value.map((entry: unknown, index) => {
+    const field = `serviceSteps.${index}`;
+    if (!isRecord(entry) || Object.keys(entry).some((key) => !SERVICE_STEP_KEYS.includes(key)))
+      throw new AppError("management.request_invalid", { field });
+    const id = entry.id === undefined ? undefined : requireBodyUuid(entry.id, `${field}.id`);
+    if (id !== undefined) {
+      if (seen.has(id)) throw new AppError("management.request_invalid", { field: `${field}.id` });
+      seen.add(id);
+    }
+    const name = requireName(entry.name, `${field}.name`);
+    const starts: readonly unknown[] = SERVICE_STEP_STARTS;
+    if (!starts.includes(entry.start) || (index === 0 && entry.start === "after_previous"))
+      throw new AppError("management.request_invalid", { field: `${field}.start` });
+    const start = entry.start as ServiceStepStart;
+    if (start !== "course_served" && entry.courseId !== undefined && entry.courseId !== null)
+      throw new AppError("management.request_invalid", { field: `${field}.courseId` });
+    const courseId =
+      start === "course_served" ? requireBodyUuid(entry.courseId, `${field}.courseId`) : null;
+    const minutes = entry.minutes;
+    if (
+      typeof minutes !== "number" ||
+      !Number.isInteger(minutes) ||
+      minutes < 0 ||
+      minutes > MAX_SERVICE_STEP_MINUTES ||
+      (start === "since_last_order" && minutes < 1)
+    )
+      throw new AppError("management.request_invalid", { field: `${field}.minutes` });
+    return { ...(id === undefined ? {} : { id }), name, start, courseId, minutes };
+  });
 }
 
 function requireDisplayOrder(value: unknown): number {
@@ -725,6 +767,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           printMovedSlips: await readPrintMovedSlips(tx),
           releaseReminderMinutes: await readReleaseReminderMinutes(tx),
           needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx, ctx.cfg),
+          serviceSteps: await listServiceSteps(tx, ctx.cfg),
+          courses: await listStepCourses(tx, ctx.cfg),
         }));
         return c.json(result);
       }),
@@ -824,6 +868,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "collectionNumber",
           "transfers",
           "needsClearing",
+          "serviceSteps",
         ]);
         if (body.needsClearing !== undefined && typeof body.needsClearing !== "boolean")
           throw new AppError("management.request_invalid", { field: "needsClearing" });
@@ -849,6 +894,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             ? {}
             : { transfers: requireTransferSettings(body.transfers) }),
           ...(body.needsClearing === undefined ? {} : { needsClearing: body.needsClearing }),
+          ...(body.serviceSteps === undefined
+            ? {}
+            : { serviceSteps: requireServiceSteps(body.serviceSteps) }),
         };
         await gated(sessionId, (tx) =>
           saveDepartmentEditSettings(tx, ctx.cfg, departmentId, input),

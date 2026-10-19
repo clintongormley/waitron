@@ -66,6 +66,8 @@ export async function mountReceiptApp(
     printMovedSlips: true,
     releaseReminderMinutes: null,
     needsClearingDepartmentIds: [],
+    serviceSteps: [],
+    courses: [],
   };
   const fetchImpl = vi.fn(async (path: string, init: RequestInit) => {
     const answer = options.respond?.(path, init);

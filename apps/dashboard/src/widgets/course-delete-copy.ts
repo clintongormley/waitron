@@ -14,7 +14,15 @@ export function courseDeleteCopy(): DeleteDialogCopy {
     confirm: t("action.delete"),
     retry: t("printers.delete_retry"),
     loading: t("printers.delete_loading"),
-    item: (item) => countOf("kitchen.delete_course_products", item.count),
+    item: (item) =>
+      countOf(
+        item.key === "course_service_steps"
+          ? "kitchen.delete_course_service_steps"
+          : item.key === "course_seated_steps"
+            ? "kitchen.delete_course_seated_steps"
+            : "kitchen.delete_course_products",
+        item.count,
+      ),
     refusal: (item) => codeMessage(item.code),
   };
 }

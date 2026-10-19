@@ -4723,7 +4723,8 @@ words.
 
 Courses and kitchen stations offer **Delete** on every active row, with no Status column or
 Status filter. The shared dialog reads the current impact before enabling Delete. A course
-clears product defaults and retains any row needed by recorded work. A station refuses deletion
+clears product defaults, deletes the service steps that start from it (a step left first that
+started after the step before then starts When seated), and retains any row needed by recorded work. A station refuses deletion
 while it is the default, an explicit effective KDS screen binding names it, or unfinished food
 remains. An off device still binds; an Every-stations scope alone does not. Once deletion is
 allowed, the dialog lists the settings and unsent choices that will be removed. Deleted rows
@@ -5028,7 +5029,8 @@ closing the editor returns focus to its originating row menu, or Add when that r
 
 Edit department is tabbed. Details holds name and trading name. Service holds two sections, each
 under its own heading: “Orders and payment”, with the service settings and the zones that differ,
-and “Table states”, with the Needs clearing switch. Receipts, between Service and Transfers, holds
+and “Table states”, with the Needs clearing switch and the department's service steps (a list with
+drag handles, a row menu with Delete, and Add step). Receipts, between Service and Transfers, holds
 the department's receipt editor, and is offered only to someone with `layout.configure`. Transfers
 holds the allowed destinations and the receiving desk profile, and is offered only while two or more
 departments are active. The dialog is wide whenever it offers Receipts, and standard otherwise, so

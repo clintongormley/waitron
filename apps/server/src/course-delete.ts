@@ -9,6 +9,13 @@ import {
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
+import {
+  clearCourseDeleteSettings,
+  courseDeleteSettingsRemoves,
+  readCourseDeleteSettings,
+  type CourseDeleteSettings,
+  serviceSteps,
+} from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -18,6 +25,7 @@ export const COURSE_REFERENCES: readonly Reference[] = [
   { table: orderDraftLines, column: orderDraftLines.courseId },
   { table: workingOrderLines, column: workingOrderLines.courseId },
   { table: ticketItems, column: ticketItems.courseId },
+  { table: serviceSteps, column: serviceSteps.courseId },
 ];
 
 export function coursesInUse(tx: Transaction, ids: readonly string[]): Promise<Set<string>> {
@@ -28,7 +36,7 @@ async function courseDeleteRules(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-): Promise<{ impact: DeleteImpact; retained: boolean }> {
+): Promise<{ impact: DeleteImpact; retained: boolean; settings: CourseDeleteSettings }> {
   const [target] = await tx
     .select({ id: kitchenCourses.id, name: kitchenCourses.name })
     .from(kitchenCourses)
@@ -40,22 +48,26 @@ async function courseDeleteRules(
       ),
     );
   if (!target) throw new AppError("course.not_found", { courseId: id });
-  // Product-only references retain the row too, even though deletion clears those settings.
+  // A product default or a service step alone retains the row too, though deletion clears both.
   const retained = (await coursesInUse(tx, [id])).has(id);
   const [defaults] = await tx
     .select({ count: count() })
     .from(products)
     .where(eq(products.courseId, id));
+  const settings = await readCourseDeleteSettings(tx, cfg, id);
   return {
     retained,
+    settings,
     impact: {
       target,
       refusals: [],
       ends: [],
-      removes:
-        defaults!.count > 0
+      removes: [
+        ...(defaults!.count > 0
           ? [{ key: "course_products", count: defaults!.count, targets: [] }]
-          : [],
+          : []),
+        ...courseDeleteSettingsRemoves(settings),
+      ],
     },
   };
 }
@@ -73,8 +85,9 @@ export async function deleteCourse(
   cfg: TillConfig,
   id: string,
 ): Promise<DeleteImpact> {
-  const { impact, retained } = await courseDeleteRules(tx, cfg, id);
+  const { impact, retained, settings } = await courseDeleteRules(tx, cfg, id);
   await tx.update(products).set({ courseId: null }).where(eq(products.courseId, id));
+  await clearCourseDeleteSettings(tx, settings);
   if (retained) {
     await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id));
   } else {

@@ -11,6 +11,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import {
+  addStarterServiceSteps,
   createServiceZone,
   departmentSalePolicies,
   departments,
@@ -89,6 +90,7 @@ export async function seedFloor(
   await tx
     .insert(departmentSalePolicies)
     .values({ departmentId: deliDepartmentId, orderStart: "counter" });
+  await addStarterServiceSteps(tx, cfg, deliDepartmentId);
 
   const zoneIds = new Map<string, string>();
   for (const zone of floor.zones) {

@@ -69,6 +69,22 @@ export {
 export * from "./department-receipts.js";
 
 export {
+  addStarterServiceSteps,
+  listServiceSteps,
+  listStepCourses,
+  saveServiceSteps,
+  type ServiceStep,
+  type ServiceStepInput,
+} from "./service-steps.js";
+
+export {
+  readCourseDeleteSettings,
+  courseDeleteSettingsRemoves,
+  clearCourseDeleteSettings,
+  type CourseDeleteSettings,
+} from "./course-delete-settings.js";
+
+export {
   readStationDeleteSettings,
   clearStationDeleteSettings,
   type StationDeleteSettings,
