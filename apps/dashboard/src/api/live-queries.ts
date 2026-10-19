@@ -525,7 +525,6 @@ export const QUERY_DEPENDENCIES = {
   getVenueDefaults: ["locations", "catalogue_settings"],
   getProductRecipe: ["recipe_lines", "ingredients", "products"],
   listIngredients: ["ingredients"],
-  listStatuses: ["table_service_statuses"],
   getProfile: ["persons", "webauthn_credentials"],
   // The venue's name; the language list itself is fixed.
   getLocales: ["tenants"],

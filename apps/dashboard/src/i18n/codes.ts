@@ -515,18 +515,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Some orders at this location are still in progress in the current receipt language, so it cannot be changed yet.",
     es: "Algunos pedidos de este local siguen en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
   },
-  "status.label_taken": {
-    en: "A status with that name already exists",
-    es: "Ya existe un estado con ese nombre",
-  },
-  "status.not_found": {
-    en: "That status no longer exists",
-    es: "Ese estado ya no existe",
-  },
-  "status.inactive": {
-    en: "That status is disabled",
-    es: "Ese estado está deshabilitado",
-  },
   "department.name_taken": {
     en: "A department with that name already exists",
     es: "Ya existe un departamento con ese nombre",

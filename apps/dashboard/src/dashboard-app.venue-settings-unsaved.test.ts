@@ -45,17 +45,6 @@ async function mount(
       api: {
         liveData: new LiveData(),
         getVenueDetails: async () => venueDetailsFixture(),
-        listStatuses: async () => [
-          {
-            id: "s1",
-            label: "Bill requested",
-            color: "#ef4444",
-            displayOrder: 0,
-            active: true,
-            createdAt: "2026-08-17T00:00:00Z",
-          },
-        ],
-        updateStatus: async () => {},
         listStations: async () => [],
         listCourses: async () => [],
         getKitchenTimingDefaults: async () => ({

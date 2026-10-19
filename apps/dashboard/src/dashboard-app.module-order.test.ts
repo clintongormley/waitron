@@ -65,7 +65,6 @@ function stubApi(modules: string[] = ["second", "unordered", "first"]): Dashboar
     getFireControl: vi.fn().mockResolvedValue({ enabled: false }),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
     listCourses: vi.fn().mockResolvedValue([]),
-    listStatuses: vi.fn().mockResolvedValue([]),
   } as unknown as DashboardApi;
 }
 

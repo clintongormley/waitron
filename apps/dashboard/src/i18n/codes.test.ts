@@ -535,8 +535,6 @@ it("says disabled, never deactivated, for a record that is switched off and kept
   expect(codeMessage("person.suspended", "es")).toBe(
     "Esta cuenta está deshabilitada. Avisa a un responsable",
   );
-  expect(codeMessage("status.inactive", "en")).toBe("That status is disabled");
-  expect(codeMessage("status.inactive", "es")).toBe("Ese estado está deshabilitado");
   expect(codeMessage("payment.provider_in_use", "es")).toBe(
     "Deshabilita los lectores de tarjetas de este proveedor antes de desconectarlo",
   );
