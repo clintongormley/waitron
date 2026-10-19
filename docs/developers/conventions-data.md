@@ -86,10 +86,11 @@ is silently missed until it is added to that list.
 
 ## General code is English only
 
-**The rule, in the owner's words.** On 2026-09-07: core code is English only; Spanish belongs only
-in the Veri\*Factu packages (`packages/verifactu`, `packages/fiscal-verifactu`, and the fiscal and
-AEAT files) and in translations, with AEAT's wire-protocol field names (`ObligadoEmision`,
-`NIFObligado`) as the one exception, because they are AEAT's API. That came from #258, which renamed
+**The owner's decisions.** On 2026-09-07, recorded at the time rather than quoted: core code is
+English only; Spanish belongs only in the Veri\*Factu code (`packages/fiscal-verifactu`, and
+`packages/verifactu`, which became the registry library `@waitron/verifactu` in #486) and in
+translations, with AEAT's wire-protocol field names (`ObligadoEmision`, `NIFObligado`) as the one
+exception, because they are AEAT's API. That came from #258, which renamed
 a generic guard ONTO the fiscal word `obligado` (`assertNoForeignObligado`,
 `provisioning.foreign_obligado`) through `packages/provisioning` and `apps/server`; #260 reverted it
 to the English `tenant` names. On 2026-10-19, answering lane C's A758-1 question: "These default
@@ -99,11 +100,11 @@ general code."
 
 **What it covers.** Literals, template text, comments, identifiers, file names, hand-written SQL,
 seed and starter content, and tests, in every package and app outside the homes the rule names. A
-module's screen keeps its translations in its `dashboard/strings.ts`, and an app's in
-`apps/<app>/src/i18n/`; a test that checks the Spanish screen reads the expected text from that
-file rather than spelling it. Starter content a module writes into a new venue (A758-1's void and
-comp reasons) is seeded in English; how setup produces its Spanish and Catalan is the design question
-A758-1 is to put to the owner.
+module's screen keeps its translations in its `dashboard/strings.ts`, an app's in
+`apps/<app>/src/i18n/`, and the user guides' Spanish twins live under `apps/server/src/guide/es/`;
+a test that checks the Spanish screen reads the expected text from that file rather than spelling
+it. Starter content a module writes into a new venue (A758-1's void and comp reasons) is seeded in
+English.
 
 **What it cost.** A758-1 (branch `feat/a758-1-reason-rules`) seeded the starter reasons «Cambio del
 cliente» and «Queja del cliente» from `packages/adjustments/src/provisioning.ts`. The push hook's
@@ -114,7 +115,7 @@ English-only check refused them only because «cliente» is on `FISCAL_VOCABULAR
 reported nothing; `export const obligado = 1;` reported `obligado`. So a Spanish word nobody listed
 passes, and only review stops it.
 
-**Not settled.** The Spain-only packages — `workforce-es` (labour terms, declared vocabulary),
+**Not settled.** Three packages written for Spain — `workforce-es` (labour terms, declared vocabulary),
 `country-es` and `reporting`'s modelo-303 form (both outside the scan) — carry Spanish today. Whether
 each is a home, or its text moves to a translation file, is the owner's call after the A913 audit.
 
@@ -131,7 +132,11 @@ literals, comments — is caught only by review. Designed and built in #240.
 
 **What the guard does not see.** `scripts/english-only.test.ts` is weaker than its name — it finds
 comments without a parser, guessing from the code before a `/` whether it opens a regular
-expression, and a wrong guess can hide a Spanish word in code on a later line.
+expression, and a wrong guess can hide a Spanish word in code on a later line. It also never scans
+a package that `GENERIC_PACKAGES` leaves out (among them `bookings`,
+`venue-service`, `ui-core`, `server-kit` and `country-gb`), `provisioning`'s test files, any
+`dashboard/strings.ts`, a `«…»` quote anywhere in the source (code included), or a backtick
+citation in a comment.
 
 **Module and package boundaries**
 
@@ -2901,10 +2906,11 @@ them. Regression: `apps/server/src/location-settings-api.test.ts`, "refuses a ma
 belonging to another tenant". Printer routes enforce the same check; their regression is
 `apps/server/src/print-api.printer-wiring.test.ts`, "refuses another tenant's manager…".
 
-## Two more packages are Spanish by design, and one guard runs on a different axis
+## `packages/fiscal` guards a different axis from the English-only rule
 
-`packages/reporting` (the modelo-303 form, Spain's VAT return) is Spanish by design, alongside
-`packages/fiscal-verifactu` and `packages/workforce-es`. Since 2026-09-07 the
+`packages/fiscal-verifactu` is Spanish by design; `packages/reporting` (the modelo-303 form, Spain's
+VAT return) and `packages/workforce-es` carry Spanish today, and whether they keep it is open
+([General code is English only](#general-code-is-english-only)). Since 2026-09-07 the
 English-only guard (`scripts/english-only.test.ts`) scans comment prose as well as identifiers in
 the generic packages, leaving only `«…»` quotes and backtick citations exempt.
 `packages/fiscal/src/no-regime-vocabulary.test.ts` enforces a different axis — a domain's vocabulary
@@ -2915,8 +2921,7 @@ it refuses inside `packages/fiscal` is naming a regime mechanism at all, however
 strips comments first, so a comment citing AEAT is fine while `export const aeatEndpoint` fails.
 Measured 2026-09-12 on a copy of
 `packages/fiscal/src`: planting `export const huellaValue = 1;` and `export const cadenaValue = 1;`
-each turned the suite red. A PR introducing a Spanish
-identifier into a generic package, a regime term in any language into `packages/fiscal`, one that adds a
+each turned the suite red. A PR introducing a regime term in any language into `packages/fiscal`, one that adds a
 module's word to the base list instead of the module's own declaration, or one that drops a generic
 package from `GENERIC_PACKAGES` (and its pin) to make a scan pass, is a design question to raise,
 not a nit to wave through.

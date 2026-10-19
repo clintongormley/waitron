@@ -494,6 +494,22 @@ after it; `releaseDeliveries` (`apps/server/src/delivery-release.ts`); `follower
 unscoped on purpose so a stray booking under another location cannot block a table's final delete
 (`25ecf900b`) — scoping it needs that case answered first.
 
+## A913. Find the non-English text in general code, then propose fixes
+
+**A913. Find the non-English text in general code, then propose fixes (owner, 2026-10-19).**
+General code is English only (CLAUDE.md §3; the owner's decisions are in
+[conventions-data.md](../developers/conventions-data.md#general-code-is-english-only)). A docs-only
+audit of `packages/*` and `apps/*` lists every Spanish, Catalan or other non-English text outside
+the allowed homes, sorted into: what is allowed; the packages written for Spain (`workforce-es`,
+`country-es`, `reporting`'s modelo 303); user-visible text outside a translation file; starter and
+demo content; identifiers or comments; and the three exemptions the comments in
+`packages/db/src/english-only.ts` argue for (`dashboard-kit`'s `{ en, es }` values, `provisioning`'s
+tests, and all of `apps/*`, argued from `apps/server` being where general code is wired to
+Veri\*Factu). It says what `scripts/english-only.test.ts` misses, and asks the owner which to fix and where the packages written for Spain stand. Examples
+already seen: `packages/dashboard-kit/src/table-strings.ts` holds a Spanish `{ en, es }` value
+outside the translation files the rule names, and `packages/venue-service/src/service-steps.ts`
+seeds Spanish starter steps (A900).
+
 ## Decisions and deliberate limits
 
 **What slice 1 left (#490 and the preparation tasks):**

@@ -2146,9 +2146,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   starter names ("Montar mesa", "Tomar nota", "¿Algo más?"), the Spanish labels, the minutes
   field's screen-reader label ("Minutes" / "Minutos") and the required stars on the "Step" and
   "Starts" column heads. The owner sees at land that deleting a course deletes the steps that start
-  from it, and that a step left first that started after the step before then starts When seated. Not put to the owner (plan's questions 2 and 3): the starter names are English when the
-  venue's first receipt language is English and Spanish otherwise, and a department created later
-  in the dashboard gets the starter steps. Also for the owner, from #1891's look and review: the
+  from it, and that a step left first that started after the step before then starts When seated. The starter names are English when the venue's first receipt language is English and
+  Spanish otherwise (`packages/venue-service/src/service-steps.ts`), which the English-only rule
+  (owner, 2026-10-19) does not allow; A913 lists it. Not put to the owner (plan's question 3): a department created
+  later in the dashboard gets the starter steps. Also for the owner, from #1891's look and review: the
   start box cuts labels short — "Repeats after the last order" at every width (Chromium on macOS:
   the text needs 176 px and the box gives 150 on a desktop), and several more at phone width once
   the minutes box grew to 120 px — so either a shorter fifth-start wording or the start on its own
@@ -6019,16 +6020,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   dev-stack slots and Santet venue through the plan; leave the owner's physical `waitron.local`
   off/quarantined, image pinned, for the owner to reset on return after 2 November.
 
-- **A913. Find the non-English text in general code, then propose fixes (queued, lane A).** General
-  code is English only (CLAUDE.md §3; the owner's words are in
+- **A913. Find the non-English text in general code, then propose fixes (owner, 2026-10-19).**
+  General code is English only (CLAUDE.md §3; the owner's decisions are in
   [conventions-data.md](developers/conventions-data.md#general-code-is-english-only)). A docs-only
-  audit of `packages/*` and `apps/*` lists every Spanish, Catalan or other non-English text outside
-  the allowed homes, sorted into what is allowed, Spain-only packages (`workforce-es`, `country-es`,
-  `reporting`'s modelo 303), user-visible text outside a translation file, starter and demo content,
-  and identifiers or comments; says what `scripts/english-only.test.ts` misses; and asks the owner
-  which to fix and where the Spain-only packages stand. One example already seen:
-  `packages/dashboard-kit/src/table-strings.ts` holds a Spanish `{ en, es }` value outside the
-  translation files the rule names.
+  audit lists every non-English text in `packages/*` and `apps/*` outside the allowed homes and asks
+  the owner which to fix. [Detail](backlog/architecture.md#a913-find-the-non-english-text-in-general-code-then-propose-fixes)
 
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; revised design awaits agreement).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md) and [mockups](backlog/mockups/a646-modules-page/README.md).
