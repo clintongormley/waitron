@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { newId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, decimalToCents } from "@waitron/shared";
@@ -58,6 +58,20 @@ export async function holdExists(tx: Transaction, paymentId: string): Promise<bo
     .from(paymentHolds)
     .where(eq(paymentHolds.paymentId, paymentId));
   return row !== undefined;
+}
+
+/** Which of these payments have a hold with a recorded outcome. */
+export async function resolvedHoldsAmong(
+  tx: Transaction,
+  paymentIds: string[],
+): Promise<Set<string>> {
+  if (paymentIds.length === 0) return new Set();
+  const rows = await tx
+    .select({ paymentId: paymentHolds.paymentId })
+    .from(paymentHolds)
+    .innerJoin(paymentHoldOutcomes, eq(paymentHoldOutcomes.holdId, paymentHolds.id))
+    .where(inArray(paymentHolds.paymentId, paymentIds));
+  return new Set(rows.map((row) => row.paymentId));
 }
 
 /** Every hold with no recorded outcome, oldest first. */

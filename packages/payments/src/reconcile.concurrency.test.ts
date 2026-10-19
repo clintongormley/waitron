@@ -10,6 +10,8 @@ import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
 import type { ReconcileDeps, SettlementRecord, SettlementReportSource } from "./reconcile.js";
 import { insertCapturedPayment } from "./store.js";
+import { listOpenHolds, recordHoldOutcome } from "./holds.js";
+import { refreshHeldAlert } from "./held-alert.js";
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
 import { seedWorkingOrder } from "../test/seed.js";
 
@@ -263,5 +265,101 @@ describe("a sweep overtaken between its read and its writes", () => {
     expect(end).toMatchObject({ held: false, claimed: true, reversed: [ref] });
     expect(end.named("payment.reconcile_held")).toEqual([]);
     expect(end.named("payment.reconcile_orphan")).toEqual([ref]);
+  });
+});
+
+/** A manager records a held payment's outcome while a sweep that read it as unresolved is waiting
+ * on its report; the sweep's writes must not bring the payment back. */
+describe("an outcome recorded while a sweep fetches its report", () => {
+  const ref = "race-outcome";
+  const drifted = { references: [`ext-${ref}`], amount: decimal("12.50"), settledAt: OLD_SETTLED };
+  const heldAlerts = {
+    raise: recordIncidentOnce,
+    current: currentIncidentsOf,
+    handle: markIncidentHandled,
+  };
+  const reversed: string[] = [];
+  const make = (report: SettlementReportSource): ReconcileDeps => ({
+    db: suite.db,
+    provider: "fake",
+    report,
+    reverse: async (paymentRef) => {
+      reversed.push(paymentRef);
+    },
+    incidents: recordIncidentOnce,
+    heldAlerts,
+    settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
+  });
+
+  async function sweepRacingAnOutcome(nif: string, records: SettlementRecord[]) {
+    await suite.db.execute(sql`delete from incidents`);
+    reversed.length = 0;
+    const seeded = await seedWorkingOrder(suite.db, nif);
+    await withTransaction(suite.db, (tx) =>
+      insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: ref,
+        externalRef: `ext-${ref}`,
+        amount: decimal("10.00"),
+        settledAt: OLD_SETTLED,
+      }),
+    );
+    await suite.db
+      .update(workingOrders)
+      .set({ status: "abandoned" })
+      .where(eq(workingOrders.id, seeded.workingOrderId));
+    await reconcilePayments(make(new FakeSettlementReport([drifted])), PERIOD, NOW);
+    const [hold] = await withTransaction(suite.db, (tx) => listOpenHolds(tx));
+
+    const x = gatedReport(records);
+    const sweep = reconcilePayments(make(x.source), PERIOD, NOW);
+    await x.fetching;
+    const personId = "22222222-2222-4222-8222-222222222222";
+    await withTransaction(suite.db, async (tx) => {
+      await recordHoldOutcome(tx, {
+        holdId: hold!.holdId,
+        outcome: "kept",
+        note: null,
+        personId,
+        at: NOW,
+      });
+      await refreshHeldAlert(tx, heldAlerts, { now: NOW, by: personId });
+    });
+    x.release();
+    const result = await sweep;
+    const open = await suite.db.execute<{ code: string }>(
+      sql`select code from incidents where acknowledged_at is null`,
+    );
+    const claim = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
+      sql`select reconcile_remediated_at from payments where payment_ref = ${ref}`,
+    );
+    return {
+      result,
+      openCodes: open.rows.map((row) => row.code),
+      claimed: claim.rows[0]!.reconcile_remediated_at !== null,
+    };
+  }
+
+  it("raises nothing for it when the report omits its settlement", async () => {
+    const end = await sweepRacingAnOutcome("B12121212", []);
+    expect(end.openCodes).toEqual([]);
+    expect(end.result.unsettled).toEqual([]);
+    expect(end.result.orphan).toEqual([]);
+    expect(end.result.drift).toEqual([]);
+    expect(end.claimed).toBe(false);
+    expect(reversed).toEqual([]);
+  });
+
+  it("leaves it out of every finding when the report includes its settlement", async () => {
+    const end = await sweepRacingAnOutcome("B13131313", [drifted]);
+    expect(end.openCodes).toEqual([]);
+    expect(end.result.unsettled).toEqual([]);
+    expect(end.result.orphan).toEqual([]);
+    expect(end.result.drift).toEqual([]);
+    expect(end.result.missingLocal).toEqual([]);
+    expect(end.claimed).toBe(false);
+    expect(reversed).toEqual([]);
   });
 });

@@ -146,4 +146,55 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
     const resolved = await duty.run(PERIOD, later);
     expect(resolved.resweepAfter).toBeUndefined();
   });
+
+  it("asks for no re-check when the outcome is recorded while the report is being fetched", async () => {
+    const seeded = await seedWorkingOrder(suite.db, "B89898989");
+    await withTransaction(suite.db, (tx) =>
+      insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: "held-2",
+        externalRef: "ext-held-2",
+        amount: decimal("10.00"),
+        settledAt: new Date("2026-07-24T12:00:00Z"),
+      }),
+    );
+    await suite.db
+      .update(workingOrders)
+      .set({ status: "abandoned" })
+      .where(eq(workingOrders.id, seeded.workingOrderId));
+    const drifted = [
+      {
+        references: ["ext-held-2"],
+        amount: decimal("12.50"),
+        settledAt: new Date("2026-07-24T12:00:00Z"),
+      },
+    ];
+    await reconcilerAsDuty(new FakeReconciler(suite.db, new FakeSettlementReport(drifted))).run(
+      PERIOD,
+      NOW,
+    );
+    const [hold] = await withTransaction(suite.db, (tx) => listOpenHolds(tx));
+
+    const racing = {
+      async fetch() {
+        await withTransaction(suite.db, (tx) =>
+          recordHoldOutcome(tx, {
+            holdId: hold!.holdId,
+            outcome: "kept",
+            note: null,
+            personId: "22222222-2222-4222-8222-222222222222",
+            at: NOW,
+          }),
+        );
+        return drifted;
+      },
+    };
+    const outcome = await reconcilerAsDuty(new FakeReconciler(suite.db, racing)).run(
+      PERIOD,
+      new Date("2026-07-26T04:00:00Z"),
+    );
+    expect(outcome.resweepAfter).toBeUndefined();
+  });
 });

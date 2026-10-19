@@ -13,7 +13,7 @@ import type { PaymentState } from "./provider.js";
 import type { OrphanRemediation } from "./errors.js";
 import type { ReconcilableRow } from "./store.js";
 import { existingReferences, listReconcilable, markReconcileRemediated } from "./store.js";
-import { holdExists, recordHold } from "./holds.js";
+import { holdExists, recordHold, resolvedHoldsAmong } from "./holds.js";
 import { refreshHeldAlert } from "./held-alert.js";
 import type { HeldAlertSink } from "./held-alert.js";
 
@@ -258,17 +258,23 @@ export async function reconcilePayments(
     remediated: 0,
     remediationFailures: [],
   };
-  for (const entry of classified.rows) result[entry.klass].push(mismatchOf(entry));
-
-  // A drifting orphan is two independent entries over one row; this set joins them.
-  const driftedRefs = new Set(
-    classified.rows.filter((e) => e.klass === "drift").map((e) => e.row.paymentRef),
-  );
 
   // T2 — resolve the missingLocal candidates, raise every incident, and claim the orphans this
   // sweep will reverse.
   const remediable: ReconcilableRow[] = [];
   await withTransaction(deps.db, async (tx) => {
+    // An outcome recorded since T1 read these rows ends their checks just as one T1 saw would.
+    const resolved = await resolvedHoldsAmong(tx, [
+      ...new Set(classified.rows.map((entry) => entry.row.paymentId)),
+    ]);
+    const findings = classified.rows.filter((entry) => !resolved.has(entry.row.paymentId));
+    for (const entry of findings) result[entry.klass].push(mismatchOf(entry));
+
+    // A drifting orphan is two independent entries over one row; this set joins them.
+    const driftedRefs = new Set(
+      findings.filter((e) => e.klass === "drift").map((e) => e.row.paymentRef),
+    );
+
     const allReferences = new Set<string>();
     for (const record of classified.unmatched) {
       for (const reference of record.references) allReferences.add(reference);
@@ -297,7 +303,7 @@ export async function reconcilePayments(
     //     smaller, the refund is refused after the permanent marker is stamped.
     const remediation = new Map<string, OrphanRemediation>();
     const held = new Set<string>();
-    for (const entry of classified.rows) {
+    for (const entry of findings) {
       if (entry.klass !== "orphan") continue;
       const ref = entry.row.paymentRef;
       if (entry.row.workingOrderStatus !== "abandoned") {
@@ -350,7 +356,7 @@ export async function reconcilePayments(
       if (claimed) remediable.push(entry.row);
     }
 
-    result.incidentsRaised += await raiseRowIncidents(tx, deps, classified, remediation, held, now);
+    result.incidentsRaised += await raiseRowIncidents(tx, deps, findings, remediation, held, now);
     result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
     if (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null })) result.incidentsRaised += 1;
   });
@@ -383,13 +389,13 @@ const PAYMENT_CHECK = jobOrigin("payment_check");
 async function raiseRowIncidents(
   tx: Transaction,
   deps: ReconcileDeps,
-  classified: Classification,
+  findings: ClassifiedRow[],
   remediation: Map<string, OrphanRemediation>,
   held: Set<string>,
   now: Date,
 ): Promise<number> {
   const groups = new Map<MismatchClass, ClassifiedRow[]>();
-  for (const entry of classified.rows) {
+  for (const entry of findings) {
     if ((entry.klass === "orphan" || entry.klass === "drift") && held.has(entry.row.paymentRef)) {
       continue;
     }
