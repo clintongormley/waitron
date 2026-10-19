@@ -475,7 +475,7 @@ export const QUERY_DEPENDENCIES = {
     "floor_today_join_tables",
     "floor_today_joins",
   ],
-  getCourseDeleteImpact: ["kitchen_courses", "products"],
+  getCourseDeleteImpact: ["kitchen_courses", "products", "service_steps"],
   listStations: ["kitchen_stations"],
   listCourses: ["kitchen_courses"],
   listZones: ["floor_zones"],

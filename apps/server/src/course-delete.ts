@@ -9,7 +9,11 @@ import {
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
-import { serviceSteps } from "@waitron/venue-service";
+import {
+  clearCourseDeleteSettings,
+  readCourseDeleteSettings,
+  serviceSteps,
+} from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -54,10 +58,12 @@ async function courseDeleteRules(
       target,
       refusals: [],
       ends: [],
-      removes:
-        defaults!.count > 0
+      removes: [
+        ...(defaults!.count > 0
           ? [{ key: "course_products", count: defaults!.count, targets: [] }]
-          : [],
+          : []),
+        ...(await readCourseDeleteSettings(tx, cfg, id)),
+      ],
     },
   };
 }
@@ -77,6 +83,7 @@ export async function deleteCourse(
 ): Promise<DeleteImpact> {
   const { impact, retained } = await courseDeleteRules(tx, cfg, id);
   await tx.update(products).set({ courseId: null }).where(eq(products.courseId, id));
+  await clearCourseDeleteSettings(tx, cfg, id);
   if (retained) {
     await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id));
   } else {

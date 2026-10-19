@@ -77,6 +77,8 @@ export {
   type ServiceStepInput,
 } from "./service-steps.js";
 
+export { readCourseDeleteSettings, clearCourseDeleteSettings } from "./course-delete-settings.js";
+
 export {
   readStationDeleteSettings,
   clearStationDeleteSettings,
