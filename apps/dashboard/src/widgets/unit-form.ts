@@ -15,6 +15,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import type { DashboardApi, Unit, UnitInput } from "../api/client.js";
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -71,6 +72,7 @@ export class UnitForm extends LitElement {
   @state() private names: Record<string, string> = {};
   @state() private abbreviations: Record<string, string> = {};
   @state() private precision = "0";
+  @state() private measure = false;
   @state() private attempted = false;
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
@@ -118,6 +120,7 @@ export class UnitForm extends LitElement {
         ),
       };
       this.precision = String(this.value?.precision ?? 0);
+      this.measure = this.value?.measure === true;
       this.attempted = false;
       this.#scope?.dispose();
       this.#scope = undefined;
@@ -140,6 +143,7 @@ export class UnitForm extends LitElement {
           this.names = { ...value.name };
           this.abbreviations = { ...value.abbreviation };
           this.precision = String(value.precision);
+          this.measure = value.measure;
         },
       });
       this.#leave = coordinator;
@@ -220,6 +224,12 @@ export class UnitForm extends LitElement {
     void this.#readPrecisionUsage();
   }
 
+  #changeMeasure(event: CustomEvent<{ checked: boolean }>): void {
+    event.stopPropagation();
+    this.measure = event.detail.checked;
+    this.#scope?.changed();
+  }
+
   async #readPrecisionUsage(): Promise<void> {
     const generation = ++this.#usageGeneration;
     this.precisionUsage = [];
@@ -265,7 +275,7 @@ export class UnitForm extends LitElement {
       if (translation === "") delete abbreviation[locale];
       else abbreviation[locale] = translation;
     }
-    return { name, abbreviation, precision: Number(this.precision) };
+    return { name, abbreviation, precision: Number(this.precision), measure: this.measure };
   }
 
   #comparisonValue(): UnitDraft {
@@ -400,6 +410,15 @@ export class UnitForm extends LitElement {
               </p>`
             : nothing
         }
+        <wt-switch
+          class="field"
+          name="measure"
+          data-test="measure"
+          label=${t("units.measure")}
+          .checked=${this.measure}
+          ?disabled=${this.busy}
+          @wt-change=${this.#changeMeasure}
+        ></wt-switch>
         <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
             slot="cancel"

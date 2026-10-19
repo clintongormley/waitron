@@ -109,6 +109,18 @@ it("another precision makes Save primary, and choosing the stored one again make
   expect(await saveState(el)).toEqual(quiet);
 });
 
+it("turning the measure switch on makes Save primary, and turning it off again makes it quiet", async () => {
+  const el = await mount(KILOGRAM);
+  const toggle = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    'wt-switch[name="measure"]',
+  )!;
+  await toggle.updateComplete;
+  await userEvent.click(page.elementLocator(toggle.shadowRoot!.querySelector("label")!));
+  expect(await saveState(el)).toEqual(ready);
+  await userEvent.click(page.elementLocator(toggle.shadowRoot!.querySelector("label")!));
+  expect(await saveState(el)).toEqual(quiet);
+});
+
 // A host `.click()` reaches Save's listener even while its inner button is disabled, so this
 // presses the host: what it proves is that the handler itself sends nothing for an unchanged form.
 it("a press that reaches Save's handler on an untouched unit saves nothing and shows no errors", async () => {
@@ -131,6 +143,7 @@ it("a changed unit's press sends what the form holds", async () => {
       name: { es: "kilogramo", en: "kilo", ca: "quilogram" },
       abbreviation: { es: "kg", en: "kg" },
       precision: 3,
+      measure: false,
     },
   });
 });

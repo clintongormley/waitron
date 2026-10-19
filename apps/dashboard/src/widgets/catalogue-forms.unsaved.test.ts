@@ -118,6 +118,30 @@ for (const route of ["cancel", "escape"] as const) {
     expect(app.leave.coordinator.isDirty()).toBe(false);
   });
 }
+it("Unit measure switch retains its toggle through Keep and reports Discard once", async () => {
+  const { app, form } = await mount();
+  const toggle = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    'wt-switch[name="measure"]',
+  )!;
+  await toggle.updateComplete;
+  await userEvent.click(page.elementLocator(toggle.shadowRoot!.querySelector("label")!));
+  await (form as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  cancel(form);
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  expect(app.cancelled).toBe(0);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
+  await expect.poll(() => q.open).toBe(false);
+  await closeReportsDelivered();
+  expect(toggle.checked).toBe(true);
+  cancel(form);
+  await question(app);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+  await expect.poll(() => app.cancelled).toBe(1);
+  await closeReportsDelivered();
+  expect(app.cancelled).toBe(1);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
 it("Unit change/revert uses trimmed translations and updates unload protection immediately", async () => {
   const { app, form } = await mount();
   await edit(form, "abbreviation-es", "kilo");
@@ -140,7 +164,7 @@ it("an Add Unit starts clean, protects the first name and retains refused submis
   await edit(form, "abbreviation-en", " ea ");
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
   expect(app.submitted).toEqual([
-    { name: { en: "Each" }, abbreviation: { en: "ea" }, precision: 0 },
+    { name: { en: "Each" }, abbreviation: { en: "ea" }, precision: 0, measure: false },
   ]);
   form.fieldErrors = { name: "Refused by server" };
   await form.updateComplete;
@@ -188,6 +212,7 @@ it("Unit success commits submitted translations without clearing edits made duri
     name: { en: "Saved name", es: "Kilogramo", fr: "Kilogramme" },
     abbreviation: { en: "kg", es: "kg", fr: "kg" },
     precision: 3,
+    measure: false,
   });
   await edit(form, "name-en", "Newer name");
   form.commitSaved(submitted);
@@ -249,6 +274,7 @@ const unitInput: UnitInput = {
   name: unit.name,
   abbreviation: unit.abbreviation,
   precision: unit.precision,
+  measure: false,
 };
 const quietUnitSave = { variant: "secondary", disabled: true, innerDisabled: true };
 function unitNameEn(form: HTMLElement) {

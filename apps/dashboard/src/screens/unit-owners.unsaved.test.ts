@@ -80,7 +80,12 @@ for (const succeeds of [true, false]) {
         if (!succeeds)
           throw { code: "unit.translation_required", params: { language: "en", field: "name" } };
         written = true;
-        return { id: "box", ...input };
+        return {
+          id: "box",
+          name: input.name,
+          abbreviation: input.abbreviation,
+          precision: input.precision,
+        };
       }),
     });
     const { el: app } = await mountWidget<UnitOwnersApp>("unit-owners-leave-test-app", {
@@ -104,6 +109,7 @@ for (const succeeds of [true, false]) {
         name: { en: "Box" },
         abbreviation: { en: "bx" },
         precision: 0,
+        measure: false,
       }),
     );
     if (succeeds) {
