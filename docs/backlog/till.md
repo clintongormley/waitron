@@ -1507,7 +1507,8 @@ Removing a table uses the table-removal contributions of modules whose schemas h
 including a module switched off later. A module never installed contributes no table-removal step.
 The boot cases in `apps/server/src/boot.table-removal.test.ts` cover enabled bookings, retained
 cancelled bookings with bookings switched off, and a venue with no bookings table.
-
+A future booking still keeps its table when bookings is switched off; the management deletion
+preview names that booking as a refusal.
 
 ### Device equipment defaults (W100, #1332; owner kept every default, 2026-10-07)
 
