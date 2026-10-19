@@ -886,20 +886,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   layout. Left open by W93 (#1287).
   [Detail](backlog/catalogue.md#each-menu-has-one-device-home-page-w93-1287-left-open)
 
-- **A815 — a Home page shortcut is removed by a trash-can button on its tile, not a ⋮** (owner,
-  2026-10-17). The tile's ⋮ holds only "Remove shortcut" and still opens while a save is out
-  (`apps/dashboard/src/widgets/device-home-preview.ts`). Replace it with a trash-can button (the
-  dashboard's icon set has `bin`, `apps/dashboard/src/icons.ts`), greyed while a save is out, with
-  the accessible name "Remove shortcut: <name>"; `wt-row-actions` does not get its `disabled`
-  option back for this. Done when a test finds the button disabled during a save and that it
-  removes the shortcut otherwise. Left open by A336 (#1458).
-
-- **A816 — a Missing shortcut and a not-shown one stop looking alike on the Home page tab** (owner,
-  2026-10-17). Today both tiles are dashed and muted and differ only in "Missing: <name>" against
-  "Not shown on devices". Each not-shown tile says why in plain words ("Not shown: no dishes in this
-  section", "Not shown: no price"), and a Missing tile gets a warning icon — the dashboard's icon set
-  (`apps/dashboard/src/icons.ts`) has none yet, so add one. Done when tests find each reason's words
-  on its tile and the icon on a Missing one. Left open by A336 (#1458).
+- **A Home page tab product shortcut reached only through a disabled included menu reads "Not
+  shown: not on sale on this menu"**, where a section shortcut in that place reads "Not shown: in a
+  disabled included menu" (`#hiddenReason`, `apps/dashboard/src/widgets/device-home-preview.ts`).
+  Left open by A816 (#1880).
 
 - **Configuration export/import still leaves publications behind.** Reset the venue instead of
   republishing old menus. Left open by A291 (2026-10-06, removed format-2 preview/republication).

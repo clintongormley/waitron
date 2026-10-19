@@ -26,7 +26,6 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-row-actions.js";
 import { foldForSearch, formatMoney, searchFor } from "@waitron/shared";
 import {
   HOME_GRID_COLUMNS,
@@ -57,6 +56,25 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
 type PreviewIndex = HomeIndex<FrozenOffer>;
+
+interface Placed {
+  sections: Set<string>;
+  products: Set<string>;
+}
+
+/** Every section and product the document places, whether or not a device would draw it. */
+function placedIn(
+  members: readonly DocumentMember[],
+  into: Placed = { sections: new Set(), products: new Set() },
+): Placed {
+  for (const member of members)
+    if (member.kind === "product") into.products.add(member.productId);
+    else {
+      into.sections.add(member.sectionId);
+      placedIn(member.members, into);
+    }
+  return into;
+}
 
 type ShortcutKind = "product" | "section";
 
@@ -94,7 +112,7 @@ function tilePaint(color: string): string {
  * Search finds this document's products only, where a device may also find other menus' products.
  *
  * Given `shortcuts`, the home view's shortcut block is drawn from that list instead, each tile with
- * a grip and a menu to remove it, followed by two tiles to add more; it then sends
+ * a grip and a button to remove it, followed by two tiles to add more; it then sends
  * `wt-shortcut-move`, `wt-shortcut-remove` and `wt-shortcut-add` and saves nothing itself; a move
  * shows at once until the host hands it a new list.
  */
@@ -330,6 +348,10 @@ export class DeviceHomePreview extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
+      div.tile[data-state="missing"] wt-icon {
+        color: var(--wt-color-warning);
+      }
+
       /* The margin stands in for a shortcut's grip strip, so an add tile is as tall as the
          shortcut tiles beside it rather than the tile and its strip together. */
       wt-button.add {
@@ -406,13 +428,22 @@ export class DeviceHomePreview extends LitElement {
 
   @state() private query = "";
 
-  #indexed?: { document: MenuDocument; index: PreviewIndex; names: [FrozenOffer, string][] };
+  #indexed?: {
+    document: MenuDocument;
+    index: PreviewIndex;
+    names: [FrozenOffer, string][];
+    placed: Placed;
+  };
 
   #trailShown: SectionNode[] = [];
 
   /** Products not sold separately are left out, as the till leaves them out: they are ordered
    * only as an extra on another dish. */
-  #index(document: MenuDocument): { index: PreviewIndex; names: [FrozenOffer, string][] } {
+  #index(document: MenuDocument): {
+    index: PreviewIndex;
+    names: [FrozenOffer, string][];
+    placed: Placed;
+  } {
     if (this.#indexed?.document === document) return this.#indexed;
     const index = indexDocument(document.root.members, (id) => {
       const offer = document.offers[id];
@@ -422,7 +453,7 @@ export class DeviceHomePreview extends LitElement {
       offer,
       foldForSearch(offer.name),
     ]);
-    this.#indexed = { document, index, names };
+    this.#indexed = { document, index, names, placed: placedIn(document.root.members) };
     return this.#indexed;
   }
 
@@ -453,12 +484,12 @@ export class DeviceHomePreview extends LitElement {
     return this.shadowRoot?.querySelector<T>(`[data-test="${part}-${CSS.escape(id)}"]`) ?? null;
   }
 
-  /** Focuses the shortcut's ⋮ once drawn; false when it is not drawn. */
+  /** Focuses the shortcut's Remove button once drawn; false when it is not drawn. */
   async focusShortcut(memberId: string): Promise<boolean> {
     await this.updateComplete;
-    const menu = this.#control("actions", memberId);
-    menu?.focus();
-    return menu !== null;
+    const remove = this.#control("remove", memberId);
+    remove?.focus();
+    return remove !== null;
   }
 
   /** Focuses the tile that adds shortcuts of `kind` once drawn; false when it is not drawn. */
@@ -602,11 +633,29 @@ export class DeviceHomePreview extends LitElement {
     return ids.indexOf(memberId) < ids.indexOf(press.memberId) ? "before" : "after";
   }
 
+  /** Why a reachable shortcut draws nothing. The document places a product only with an offer on
+   * this menu, and leaves a reachable section out only behind a disabled included menu (`listOf`,
+   * packages/catalogue/src/menu-document.ts). */
+  #hiddenReason(ref: DocumentTile, placed: Placed): string {
+    if (ref.kind === "section")
+      return t(
+        placed.sections.has(ref.sectionId)
+          ? "home.not_shown_nothing_to_order"
+          : "home.not_shown_disabled_menu",
+      );
+    return t(
+      ref.kind === "product" && placed.products.has(ref.productId)
+        ? "home.not_shown_extra_only"
+        : "home.not_shown_not_on_sale",
+    );
+  }
+
   /** A shortcut's face and the name it is known by: the device's tile, or a dashed, muted
    * one when the menu no longer reaches its target or a device would draw nothing. */
   #shortcutFace(
     tile: HomeTile,
     index: PreviewIndex,
+    placed: Placed,
     mode: HomeTileMode,
   ): { face: TemplateResult; name: string } {
     const { ref } = tile;
@@ -615,7 +664,9 @@ export class DeviceHomePreview extends LitElement {
       return {
         name,
         face: html`<div class="tile" data-state="missing">
-          <span class="label"><span class="name">${name}</span></span>
+          <span class="label"
+            ><wt-icon name="warning"></wt-icon><span class="name">${name}</span></span
+          >
         </div>`,
       };
     }
@@ -627,7 +678,7 @@ export class DeviceHomePreview extends LitElement {
         face: html`<div class="tile" data-state="hidden">
           <span class="label">
             <span class="name">${tile.name}</span>
-            <span class="kind">${t("home.not_shown")}</span>
+            <span class="kind">${this.#hiddenReason(ref, placed)}</span>
           </span>
         </div>`,
       };
@@ -638,9 +689,14 @@ export class DeviceHomePreview extends LitElement {
     return { name, face };
   }
 
-  #editCell(tile: HomeTile, index: PreviewIndex, mode: HomeTileMode): TemplateResult {
+  #editCell(
+    tile: HomeTile,
+    index: PreviewIndex,
+    placed: Placed,
+    mode: HomeTileMode,
+  ): TemplateResult {
     const { memberId } = tile;
-    const { face, name } = this.#shortcutFace(tile, index, mode);
+    const { face, name } = this.#shortcutFace(tile, index, placed, mode);
     return html`<div
       class="shortcut"
       data-member-id=${memberId}
@@ -660,30 +716,30 @@ export class DeviceHomePreview extends LitElement {
         >
           <wt-icon name="grip"></wt-icon>
         </button>
-        <wt-row-actions
-          align="end"
-          data-test=${`actions-${memberId}`}
-          label=${`${t("members.actions")}: ${name}`}
-          ><wt-button
-            align="start"
-            variant="secondary"
-            data-test=${`remove-${memberId}`}
-            .disabled=${this.busy}
-            @click=${() => {
-              if (!this.busy) this.#send("wt-shortcut-remove", { memberId });
-            }}
-            >${t("home.remove")}</wt-button
-          ></wt-row-actions
-        >
+        <wt-button
+          variant="ghost"
+          data-test=${`remove-${memberId}`}
+          aria-label=${`${t("home.remove")}: ${name}`}
+          .disabled=${this.busy}
+          @click=${() => {
+            if (!this.busy) this.#send("wt-shortcut-remove", { memberId });
+          }}
+          ><wt-icon name="bin"></wt-icon
+        ></wt-button>
       </div>
     </div>`;
   }
 
-  #editCells(list: HomeTile[], index: PreviewIndex, mode: HomeTileMode): TemplateResult {
+  #editCells(
+    list: HomeTile[],
+    index: PreviewIndex,
+    placed: Placed,
+    mode: HomeTileMode,
+  ): TemplateResult {
     return html`${repeat(
       this.#editable(list),
       (tile) => tile.memberId,
-      (tile) => this.#editCell(tile, index, mode),
+      (tile) => this.#editCell(tile, index, placed, mode),
     )}${ADD_TILES.map(
       ({ kind, label }) =>
         html`<wt-button
@@ -782,7 +838,12 @@ export class DeviceHomePreview extends LitElement {
     return list.map((member, place) => this.#tile(member, opens[place]!, index, mode));
   }
 
-  #home(document: MenuDocument, index: PreviewIndex, display: HomeDisplay): TemplateResult {
+  #home(
+    document: MenuDocument,
+    index: PreviewIndex,
+    placed: Placed,
+    display: HomeDisplay,
+  ): TemplateResult {
     const shortcuts = document.home.shortcuts.map((tile) =>
       this.#tile(
         tile,
@@ -804,7 +865,7 @@ export class DeviceHomePreview extends LitElement {
       const cells = !shortcutBlock
         ? members
         : editing !== null
-          ? this.#editCells(editing, index, display.tiles)
+          ? this.#editCells(editing, index, placed, display.tiles)
           : shortcuts.map((cell) =>
               cell === nothing ? html`<span class="slot" aria-hidden="true"></span>` : cell,
             );
@@ -876,13 +937,13 @@ export class DeviceHomePreview extends LitElement {
   override render() {
     const document = this.document;
     if (document === null) return nothing;
-    const { index, names } = this.#index(document);
+    const { index, names, placed } = this.#index(document);
     const display = document.home[this.device];
     const trail = this.#trailShown;
     let view: TemplateResult;
     if (this.query.trim() !== "") view = this.#results(names, display);
     else if (trail.length > 0) view = this.#sectionView(trail, index, display);
-    else view = this.#home(document, index, display);
+    else view = this.#home(document, index, placed, display);
     return html`<div class="frame" data-device=${this.device}>
       <div data-region="search">
         <p class="note" data-test="search-note">${t("home.search_note")}</p>

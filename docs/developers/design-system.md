@@ -417,18 +417,20 @@ on the till "Nothing matches the filter" for one a diet filter emptied — so a 
 differ without colour; its image, when shown, takes the folder icon's place.
 
 **A menu's shortcuts are edited in its Home page tab's preview** (owner decision 2026-10-07, A336).
-The tab is one column, the preview first, until its box is 800px wide, then two: the preview on
-the left, the device choice and display settings on the right. In the preview's home view each
-shortcut tile keeps its look and gains a grip ("Reorder: <name>") and a ⋮ holding Remove shortcut.
-On the grip, the arrow keys move the shortcut one position, Up and Down included, and a drag moves
-it among the shortcuts with a drop marker; Escape cancels a drag. A shortcut whose target the menu
-no longer reaches and one the menu reaches but a device would not show (an empty section, a product
-with no price) are both dashed, muted tiles; the first reads "Missing: <name>", the second "Not
-shown on devices". After the last shortcut come two dashed add tiles, Add products and Add
-sections, drawn even when there are none, so an empty shortcut block shows in the dashboard but
-never on a device. Each opens a window whose one multi-select list offers the active products, or
-the sections, the menu reaches that are not already shortcuts, and one Add adds every choice in the
-order chosen. The Structure tab shows no shortcuts.
+The tab is one column, the preview first, until its box is 800px wide, then two: the preview on the
+left, the device choice and display settings on the right. In the preview's home view each shortcut
+tile keeps its look and gains a grip ("Reorder: <name>") and a bin button ("Remove shortcut:
+<name>", greyed while a shortcut is being added or removed) (owner, 2026-10-17, A815). On the grip,
+the arrow keys move the shortcut one position, Up and Down included, and a drag moves it among the
+shortcuts with a drop marker; Escape cancels a drag. A shortcut whose target the menu no longer
+reaches and one the menu reaches but a device would not show are both dashed, muted tiles; the first
+reads "Missing: <name>" beside a warning icon in the warning colour, the second says why it is not
+shown — nothing to order in the section, in a disabled included menu, only sold as an extra, or not
+on sale on this menu (owner, 2026-10-17, A816). After the last shortcut come two dashed add tiles,
+Add products and Add sections, drawn even when there are none, so an empty shortcut block shows in
+the dashboard but never on a device. Each opens a window whose one multi-select list offers the
+active products, or the sections, the menu reaches that are not already shortcuts, and one Add adds
+every choice in the order chosen. The Structure tab shows no shortcuts.
 
 **Menu wording.** Spanish restaurant menus are "cartas"; an account menu remains "menú".
 The Structure tree and shortcut picker label an included menu "Menu: <name>" / "Carta: <name>",

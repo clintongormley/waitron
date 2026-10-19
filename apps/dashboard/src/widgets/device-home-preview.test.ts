@@ -872,8 +872,6 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
   ];
   const grip = (el: DeviceHomePreview, memberId: string) =>
     root(el).querySelector<HTMLButtonElement>(`[data-test="grip-${memberId}"]`)!;
-  const menu = (el: DeviceHomePreview, memberId: string) =>
-    root(el).querySelector<HTMLElement>(`[data-test="actions-${memberId}"]`)!;
   const remove = (el: DeviceHomePreview, memberId: string) =>
     root(el).querySelector<HTMLElement & { disabled: boolean }>(
       `[data-test="remove-${memberId}"]`,
@@ -922,7 +920,9 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(names(tiles(el, "shortcuts"))).toEqual(["Ham", "Drinks para clientes", "Lemonade"]);
     expect(root(el).querySelector('[data-region="shortcuts"] .slot')).toBeNull();
     expect(grip(el, "sc-ham").getAttribute("aria-label")).toBe("Reorder: Ham");
-    expect(menu(el, "sc-drinks").getAttribute("label")).toBe("Actions: Drinks para clientes");
+    expect(remove(el, "sc-drinks").getAttribute("aria-label")).toBe(
+      "Remove shortcut: Drinks para clientes",
+    );
     expect(names(tiles(el, "structure"))).toEqual([
       "Drinks para clientes",
       "Lemonade",
@@ -946,22 +946,93 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(second!.querySelector(".name")!.textContent!.trim()).toBe("Missing: Desserts");
     expect(getComputedStyle(first!).borderTopStyle).toBe("dashed");
     expect(grip(el, "sc-gone")).not.toBeNull();
-    expect(remove(el, "sc-gone").textContent!.trim()).toBe("Remove shortcut");
+    expect(remove(el, "sc-gone").getAttribute("aria-label")).toBe(
+      "Remove shortcut: Missing: Old soup",
+    );
   });
 
-  it("draws a reachable shortcut the device cannot show muted, saying it is not shown on devices", async () => {
+  it("marks a missing shortcut with a warning icon, and a not-shown one with none", async () => {
+    const gone = shortcut("sc-gone", { kind: "missing", name: "Soup" }, "Soup", {
+      reachable: false,
+    });
     const chips = shortcut("sc-chips", { kind: "product", productId: "p-chips" }, "Chips");
-    const { el } = await mount({ shortcuts: [chips] });
+    const { el } = await mount({ shortcuts: [gone, chips] });
+    const [missing, hidden] = tiles(el, "shortcuts");
+    expect(missing!.dataset.state).toBe("missing");
+    const icon = missing!.querySelector<HTMLElement>('wt-icon[name="warning"]');
+    expect(icon).not.toBeNull();
+    const warning = document.createElement("span");
+    warning.style.color = "var(--wt-color-warning)";
+    missing!.append(warning);
+    expect(getComputedStyle(icon!).color).toBe(getComputedStyle(warning).color);
+    warning.remove();
+    expect(hidden!.dataset.state).toBe("hidden");
+    expect(hidden!.querySelector("wt-icon")).toBeNull();
+  });
+
+  it.each([
+    {
+      cause: "a section with nothing to order beneath it",
+      ref: { kind: "section", sectionId: "s-empty" } as const,
+      members: [documentSection("s-empty", "Empty", [documentProduct("mi-chips", "p-chips")])],
+      en: "Not shown: nothing to order in this section",
+      es: "No se muestra: no hay nada que pedir en esta sección",
+    },
+    {
+      cause: "a section the menu reaches only through a disabled included menu",
+      ref: { kind: "section", sectionId: "s-off" } as const,
+      members: [documentProduct("mi-water", "p-water")],
+      en: "Not shown: in a disabled included menu",
+      es: "No se muestra: en una carta incluida deshabilitada",
+    },
+    {
+      cause: "a product sold only as an extra",
+      ref: { kind: "product", productId: "p-chips" } as const,
+      members: [documentProduct("mi-chips", "p-chips")],
+      en: "Not shown: only sold as an extra",
+      es: "No se muestra: solo se vende como extra",
+    },
+    {
+      cause: "a product the menu does not offer",
+      ref: { kind: "product", productId: "p-gone" } as const,
+      members: [documentProduct("mi-water", "p-water")],
+      en: "Not shown: not on sale on this menu",
+      es: "No se muestra: no está a la venta en esta carta",
+    },
+  ])("says why it does not show $cause", async ({ ref, members, en, es }) => {
+    const { el } = await mount({
+      document: lunch([], members),
+      shortcuts: [shortcut("sc-hidden", ref, "Hidden")],
+    });
     const [cell] = tiles(el, "shortcuts");
     expect(cell!.dataset.state).toBe("hidden");
-    expect(cell!.querySelector(".name")!.textContent!.trim()).toBe("Chips");
-    expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe("Not shown on devices");
-    expect(remove(el, "sc-chips")).not.toBeNull();
+    expect(cell!.querySelector(".name")!.textContent!.trim()).toBe("Hidden");
+    expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe(en);
     setLocale("es-ES");
     await el.updateComplete;
-    expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe(
-      "No se muestra en los dispositivos",
-    );
+    expect(cell!.querySelector(".kind")!.textContent!.trim()).toBe(es);
+  });
+
+  it("removes a shortcut with a bin button named for it, never a ⋮", async () => {
+    const { el, host } = await mount({ shortcuts: LIST });
+    const events = heard(host);
+    const button = remove(el, "sc-lemonade");
+    expect(button.localName).toBe("wt-button");
+    expect(button.querySelector('wt-icon[name="bin"]')).not.toBeNull();
+    expect(button.getAttribute("aria-label")).toBe("Remove shortcut: Lemonade");
+    expect(root(el).querySelector("wt-row-actions")).toBeNull();
+    await click(el, button);
+    expect(events).toEqual([{ type: "wt-shortcut-remove", detail: { memberId: "sc-lemonade" } }]);
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(button.getAttribute("aria-label")).toBe("Quitar el acceso directo: Lemonade");
+  });
+
+  it("greys a shortcut's bin button while a save is out", async () => {
+    const { el } = await mount({ shortcuts: LIST, busy: true });
+    const button = remove(el, "sc-lemonade");
+    expect(button.disabled).toBe(true);
+    expect(button.shadowRoot!.querySelector("button")!.disabled).toBe(true);
   });
 
   it("sends a remove for the tile's member, a missing one included", async () => {
@@ -1097,7 +1168,7 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
   });
 
-  it("while busy, disables grips, menus' Remove and the add tiles, and sends nothing", async () => {
+  it("while busy, disables grips, Remove buttons and the add tiles, and sends nothing", async () => {
     const { el, host } = await mount({ shortcuts: LIST, busy: true });
     const events = heard(host);
     for (const { memberId } of LIST) {
@@ -1142,7 +1213,9 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     ]);
     for (const cell of cells(el)) {
       const box = cell.getBoundingClientRect();
-      for (const control of cell.querySelectorAll<HTMLElement>("button.grip, wt-row-actions")) {
+      for (const control of cell.querySelectorAll<HTMLElement>(
+        'button.grip, [data-test^="remove-"]',
+      )) {
         const inner = control.getBoundingClientRect();
         expect(inner.left).toBeGreaterThanOrEqual(box.left);
         expect(inner.right).toBeLessThanOrEqual(box.right + 0.5);
@@ -1150,10 +1223,10 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     }
   });
 
-  it("focuses a shortcut's menu, or an add tile, when asked", async () => {
+  it("focuses a shortcut's Remove button, or an add tile, when asked", async () => {
     const { el } = await mount({ shortcuts: LIST });
     expect(await el.focusShortcut("sc-drinks")).toBe(true);
-    expect(root(el).activeElement).toBe(menu(el, "sc-drinks"));
+    expect(root(el).activeElement).toBe(remove(el, "sc-drinks"));
     expect(await el.focusShortcut("sc-nowhere")).toBe(false);
     expect(await el.focusAdd("section")).toBe(true);
     expect(root(el).activeElement).toBe(add(el, "section"));
