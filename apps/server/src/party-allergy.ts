@@ -336,6 +336,43 @@ function refKey(value: unknown, field: string): string {
   return invalid(field);
 }
 
+export function normaliseAllergyPatch(patch: AllergyPatch): AllergyPatch {
+  if (!record(patch)) invalid("allergy");
+  if (!Array.isArray(patch.ticks)) invalid("ticks");
+  if (patch.party !== undefined && (!record(patch.party) || !Array.isArray(patch.party.guests)))
+    invalid("party");
+  return {
+    ...patch,
+    ...(patch.party === undefined
+      ? {}
+      : {
+          party: {
+            ...patch.party,
+            guests: patch.party.guests.map((guest, index) => {
+              if (!record(guest)) invalid(`guests.${index}`);
+              if (guest.id !== undefined && (typeof guest.id !== "string" || !isUuid(guest.id)))
+                invalid(`guests.${index}.id`);
+              return {
+                ...guest,
+                ...(guest.id === undefined ? {} : { id: guest.id.toLowerCase() }),
+              };
+            }),
+          },
+        }),
+    ticks: patch.ticks.map((tick, index) => {
+      if (!record(tick)) invalid(`ticks.${index}.line`);
+      refKey(tick.line, `ticks.${index}.line`);
+      return {
+        ...tick,
+        line:
+          tick.line.kind === "submitted"
+            ? tick.line
+            : { ...tick.line, id: tick.line.id.toLowerCase() },
+      };
+    }),
+  };
+}
+
 export function allergyTargets(view: PartyAllergyRead): ResolvedAllergyTarget[] {
   return view.dishes.flatMap((dish) =>
     dish.line.kind === "submitted"
@@ -433,4 +470,9 @@ export async function applyPartyAllergyPatch(
     .filter((id) => oldAssignments.get(id) !== newAssignments.get(id))
     .sort();
   return { partyId, before, after, workingLineIds };
+}
+
+export async function assertPartyAllergyAnswered(tx: Transaction, partyId: string): Promise<void> {
+  const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+  if (snapshot.answer === null) throw new AppError("allergy.unanswered", { partyId });
 }

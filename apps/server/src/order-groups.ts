@@ -89,6 +89,12 @@ import {
   requireBillEditors,
 } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
+import type { AllergyPatch, AllergyLineRef } from "@waitron/module";
+import {
+  applyPartyAllergyPatch,
+  assertPartyAllergyAnswered,
+  normaliseAllergyPatch,
+} from "./party-allergy.js";
 
 export type GroupRelease = "fire" | "hold";
 
@@ -96,6 +102,7 @@ export type GroupRelease = "fire" | "hold";
 export type GroupLine = Omit<TabRoundLine, "hold" | "release">;
 
 export interface SubmitGroupsInput {
+  allergy?: AllergyPatch;
   expectedEdit: BillEditExpected;
   submissionId: string;
   expectedPartyRevision: number;
@@ -173,12 +180,13 @@ export async function submitGroups(
     ...body
   } = input;
   const expectedEdit = parseBillEditExpected(observed);
+  const allergy = input.allergy === undefined ? undefined : normaliseAllergyPatch(input.allergy);
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
     submissionId,
     "group.submit",
-    { partyId, operatorId, ...body, expectedEdit },
+    { partyId, operatorId, ...body, allergy, expectedEdit },
     async () => {
       await checkAndBumpParty(tx, partyId, expectedPartyRevision, "open");
       return placeGroups(
@@ -189,6 +197,19 @@ export async function submitGroups(
         attendance === undefined
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
+        async (parentIds) => {
+          let parent = 0;
+          const targets = input.groups.flatMap((group, groupIndex) =>
+            group.lines.map((_, lineIndex) => ({
+              ref: { kind: "submitted", groupIndex, lineIndex } as AllergyLineRef,
+              draftLineId: null,
+              workingLineId: parentIds[parent++]!,
+            })),
+          );
+          if (allergy !== undefined)
+            await applyPartyAllergyPatch(tx, partyId, allergy, operatorId, targets);
+          await assertPartyAllergyAnswered(tx, partyId);
+        },
       );
     },
     cfg.madeHereSink,
@@ -214,6 +235,7 @@ export async function placeGroups(
   partyId: string,
   input: PlaceGroupsInput,
   attendance?: { recorder: AttendanceRecorder; at: string },
+  beforeOutput?: (parentIds: readonly string[]) => Promise<void>,
 ): Promise<SubmittedGroups> {
   const { operatorId } = input;
   const expectedEdit = parseBillEditExpected(input.expectedEdit);
@@ -333,6 +355,7 @@ export async function placeGroups(
         })),
     );
   }
+  await beforeOutput?.(rows.filter((row) => row.parentLineId == null).map((row) => row.id!));
   const routing = routingOnce(tx, cfg, new Date());
   for (const [i, group] of groups.entries()) {
     const groupId = groupIds[i]!;

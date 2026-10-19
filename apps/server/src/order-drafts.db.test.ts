@@ -253,6 +253,7 @@ async function seated(v: Venue, label = "Mesa 4"): Promise<Seated> {
       guestCount: 4,
       operatorId: ALEX,
     });
+    await VENUE_SERVICE.writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, ALEX);
     return { partyId, tabId, tableId };
   });
 }

@@ -36,6 +36,12 @@ async function fixture() {
       operatorId: venue.operatorId,
       guestCount: 2,
     });
+    await VENUE_SERVICE.writePartyAllergy(
+      tx,
+      p.partyId,
+      { answer: "none", guests: [] },
+      venue.operatorId,
+    );
     const [other] = await tx
       .insert(workingOrders)
       .values({
