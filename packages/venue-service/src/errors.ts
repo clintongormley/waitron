@@ -49,6 +49,8 @@ declare module "@waitron/shared" {
     "order.payment_in_flight": { workingOrderId: string };
     "bill.refund_in_progress": { workingOrderId: string };
     "department.not_found": { departmentId: string };
+    "service_step.not_found": { stepId: string };
+    "course.not_found": { courseId: string };
     "department.last_active": { departmentId: string };
     "zone.order_in_progress": { zoneId: string; workingOrderId: string };
     "zone.transfer_pending": { zoneId: string; requestId: string };

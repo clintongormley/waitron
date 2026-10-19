@@ -14,6 +14,7 @@ import {
   CORE_MIGRATIONS,
   diningTables,
   floorZones,
+  kitchenCourses,
   kitchenStations,
   locations,
   withTransaction,
@@ -38,6 +39,7 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "./schema/service.js";
+import { serviceSteps } from "./schema/service-steps.js";
 import { configureZone, createDepartment, listServiceZones } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { setRoutingCell } from "./routing-store.js";
@@ -639,6 +641,183 @@ describe("whole service settings saves", () => {
       });
       expect(await rawSettingsSnapshot()).toEqual(before);
     }
+  });
+
+  async function seedCourse(fx: { locationId: LocationId }, name: string, active = true) {
+    const [row] = await db
+      .insert(kitchenCourses)
+      .values({ locationId: fx.locationId, name, displayOrder: 1, active })
+      .returning({ id: kitchenCourses.id });
+    return row!.id;
+  }
+
+  async function modelSteps(fx: Awaited<ReturnType<typeof settingsFixture>>) {
+    const model = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+    expect(model.status).toBe(200);
+    return (await model.json()) as { serviceSteps: unknown[]; courses: unknown[] };
+  }
+
+  it("saves a department's service steps and lists them in the model", async () => {
+    const fx = await settingsFixture();
+    const mains = await seedCourse(fx, "Mains");
+    const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      serviceSteps: [
+        { name: "Set up", start: "seated", courseId: null, minutes: 0 },
+        { name: " Take order ", start: "after_previous", minutes: 2 },
+        { name: "Dessert?", start: "course_served", courseId: mains, minutes: 10 },
+      ],
+    });
+    expect(saved.status).toBe(204);
+    const model = await modelSteps(fx);
+    expect(model.serviceSteps).toEqual([
+      {
+        id: expect.any(String),
+        departmentId: fx.departmentId,
+        name: "Set up",
+        start: "seated",
+        courseId: null,
+        minutes: 0,
+      },
+      {
+        id: expect.any(String),
+        departmentId: fx.departmentId,
+        name: "Take order",
+        start: "after_previous",
+        courseId: null,
+        minutes: 2,
+      },
+      {
+        id: expect.any(String),
+        departmentId: fx.departmentId,
+        name: "Dessert?",
+        start: "course_served",
+        courseId: mains,
+        minutes: 10,
+      },
+    ]);
+    expect(model.courses).toEqual([{ id: mains, name: "Mains" }]);
+  });
+
+  it("leaves the steps as they were when the save does not name them", async () => {
+    const fx = await settingsFixture();
+    await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      serviceSteps: [{ name: "Set up", start: "seated", minutes: 0 }],
+    });
+    const before = (await modelSteps(fx)).serviceSteps;
+    expect(before).toHaveLength(1);
+    const saved = await send(
+      fx.app,
+      "PUT",
+      fx.departmentPath,
+      fx.managerCookie,
+      departmentSettings,
+    );
+    expect(saved.status).toBe(204);
+    expect((await modelSteps(fx)).serviceSteps).toEqual(before);
+  });
+
+  const setUp = { name: "Set up", start: "seated", minutes: 0 };
+  const takeOrder = { name: "Take order", start: "after_previous", minutes: 2 };
+  const sameId = randomUUID();
+  it.each<[string, unknown, string]>([
+    ["not a list", "x", "serviceSteps"],
+    ["more than 20 rows", Array.from({ length: 21 }, () => setUp), "serviceSteps"],
+    ["an entry that is not an object", [1], "serviceSteps.0"],
+    ["an entry with an unknown key", [{ ...setUp, colour: "red" }], "serviceSteps.0"],
+    ["an id that is not one", [{ ...setUp, id: "nope" }], "serviceSteps.0.id"],
+    ["a blank name", [{ ...setUp, name: "  " }], "serviceSteps.0.name"],
+    ["an unknown start", [{ ...setUp, start: "later" }], "serviceSteps.0.start"],
+    ["a first step after the step before", [takeOrder], "serviceSteps.0.start"],
+    [
+      "a course on a seated row",
+      [setUp, { ...setUp, courseId: randomUUID() }],
+      "serviceSteps.1.courseId",
+    ],
+    [
+      "no course on a course_served row",
+      [setUp, { name: "Dessert?", start: "course_served", minutes: 10 }],
+      "serviceSteps.1.courseId",
+    ],
+    ["121 minutes", [setUp, { ...takeOrder, minutes: 121 }], "serviceSteps.1.minutes"],
+    ["-1 minutes", [setUp, { ...takeOrder, minutes: -1 }], "serviceSteps.1.minutes"],
+    ["2.5 minutes", [setUp, { ...takeOrder, minutes: 2.5 }], "serviceSteps.1.minutes"],
+    ["minutes as text", [setUp, { ...takeOrder, minutes: "2" }], "serviceSteps.1.minutes"],
+    [
+      "0 minutes on a repeating step",
+      [setUp, { name: "Anything else?", start: "since_last_order", minutes: 0 }],
+      "serviceSteps.1.minutes",
+    ],
+    [
+      "the same id twice",
+      [
+        { ...setUp, id: sameId },
+        { ...takeOrder, id: sameId },
+      ],
+      "serviceSteps.1.id",
+    ],
+  ])(
+    "refuses a malformed list (%s), naming the field, and writes nothing",
+    async (_, serviceStepsBody, field) => {
+      const fx = await settingsFixture();
+      await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        serviceSteps: [setUp],
+      });
+      const stepsBefore = await db
+        .select()
+        .from(serviceSteps)
+        .where(eq(serviceSteps.departmentId, fx.departmentId));
+      expect(stepsBefore).toHaveLength(1);
+      const before = await rawSettingsSnapshot();
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        name: "Renamed",
+        serviceSteps: serviceStepsBody,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+      expect(
+        await db.select().from(serviceSteps).where(eq(serviceSteps.departmentId, fx.departmentId)),
+      ).toEqual(stepsBefore);
+    },
+  );
+
+  it("answers 404 naming a step another manager deleted, and a course deleted meanwhile", async () => {
+    const fx = await settingsFixture();
+    await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      serviceSteps: [setUp],
+    });
+    const [step] = await db
+      .select()
+      .from(serviceSteps)
+      .where(eq(serviceSteps.departmentId, fx.departmentId));
+    await db.delete(serviceSteps).where(eq(serviceSteps.id, step!.id));
+    const stale = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      serviceSteps: [{ ...setUp, id: step!.id }],
+    });
+    expect(stale.status).toBe(404);
+    expect(await stale.json()).toMatchObject({
+      error: { code: "service_step.not_found", params: { stepId: step!.id } },
+    });
+    const retired = await seedCourse(fx, "Retired", false);
+    const gone = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      serviceSteps: [
+        setUp,
+        { name: "Dessert?", start: "course_served", courseId: retired, minutes: 10 },
+      ],
+    });
+    expect(gone.status).toBe(404);
+    expect(await gone.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId: retired } },
+    });
   });
 
   it.each(["departmentPath", "zonePath"] as const)("requires a manager for %s", async (path) => {

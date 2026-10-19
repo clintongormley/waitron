@@ -10,6 +10,7 @@ import {
   type ZoneClosureDays,
 } from "./zone-closed-times.js";
 import { setDepartmentTransferSettings } from "./department-transfers.js";
+import { saveServiceSteps, type ServiceStepInput } from "./service-steps.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import {
@@ -751,6 +752,7 @@ export interface DepartmentEditInput extends Pick<
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
   needsClearing?: boolean;
+  serviceSteps?: readonly ServiceStepInput[];
 }
 
 export async function saveDepartmentEditSettings(
@@ -780,6 +782,8 @@ export async function saveDepartmentEditSettings(
     .onConflictDoUpdate({ target: departmentSalePolicies.departmentId, set: settings });
   if (input.transfers !== undefined)
     await setDepartmentTransferSettings(tx, cfg, departmentId, input.transfers);
+  if (input.serviceSteps !== undefined)
+    await saveServiceSteps(tx, cfg, departmentId, input.serviceSteps);
 }
 
 export type ZoneServiceSettingsInput = ZonePolicyField;
