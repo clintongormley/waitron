@@ -10,8 +10,9 @@
 // asks for its alerts again every minute, and the drain puts such a record back to waiting
 // (`awaitReadableAnswer`, `@waitron/fiscal-verifactu`); a sentence that asks for a retry or a
 // restart asks the owner to do it. `payment.reconcile_held` comes back on its own, without saying
-// so: once it is marked handled, the first payments check of a later UTC day raises it again while
-// a held payment has no recorded outcome (`refreshHeldAlert`, `@waitron/payments`).
+// so: once it is marked handled, a payments check on a later UTC day that gets past the Stripe
+// account raises it again while a held payment has no recorded outcome (`refreshHeldAlert`,
+// `@waitron/payments`; `resolveAccount` in `@waitron/payments-stripe`'s reconciler).
 
 // An open payment incident swallows later detections for the same till and code, so its figures
 // are from when it was raised, and a bill payment's alert may stand for more than one payment.

@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi } from "../api/client.js";
+import type { AlertView, DashboardApi } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
   areaLabel,
@@ -46,12 +46,14 @@ it("names a device alert by its device and a job alert by its source, in the cho
 
 it("offers an alert's screen only when the session may open it", () => {
   const canOpen = (screen: string) => screen === "backup";
-  expect(screenTargetOf({ kind: "ongoing", screen: "backup" }, canOpen)).toBe("backup");
-  expect(screenTargetOf({ kind: "ongoing", screen: "printers" }, canOpen)).toBeNull();
-  expect(screenTargetOf({ kind: "ongoing" }, canOpen)).toBeNull();
-  expect(screenTargetOf({ kind: "event", screen: "backup" }, canOpen)).toBe("backup");
-  expect(screenTargetOf({ kind: "event", screen: "printers" }, canOpen)).toBeNull();
-  expect(screenTargetOf({ kind: "event" }, canOpen)).toBeNull();
+  const alert = (kind: AlertView["kind"], screen?: string): Pick<AlertView, "kind" | "screen"> =>
+    screen === undefined ? { kind } : { kind, screen };
+  expect(screenTargetOf(alert("ongoing", "backup"), canOpen)).toBe("backup");
+  expect(screenTargetOf(alert("ongoing", "printers"), canOpen)).toBeNull();
+  expect(screenTargetOf(alert("ongoing"), canOpen)).toBeNull();
+  expect(screenTargetOf(alert("event", "backup"), canOpen)).toBe("backup");
+  expect(screenTargetOf(alert("event", "printers"), canOpen)).toBeNull();
+  expect(screenTargetOf(alert("event"), canOpen)).toBeNull();
 });
 
 function handleApi(mark: () => Promise<void>) {

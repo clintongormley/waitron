@@ -13,7 +13,7 @@ export function incidentIdOf(alert: Pick<AlertView, "key" | "kind">): string | n
 
 /** The screen a "Go to" action opens. */
 export function screenTargetOf(
-  alert: Pick<AlertView, "kind" | "screen">,
+  alert: Pick<AlertView, "screen">,
   canOpen: (screen: string) => boolean,
 ): string | null {
   return alert.screen !== undefined && canOpen(alert.screen) ? alert.screen : null;
