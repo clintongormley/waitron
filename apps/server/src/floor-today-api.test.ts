@@ -33,7 +33,7 @@ import {
 import { readLayout, saveLayout } from "./floor-plan.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { resetZone } from "./floor-today-store.js";
-import { placeGroups } from "./order-groups.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 

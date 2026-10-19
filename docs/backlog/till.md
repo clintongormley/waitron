@@ -2109,10 +2109,11 @@ build after A757's board if it has been decided, else name the table alone.
 [plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md), preserving earlier behavioral checks.
 The remaining work includes:
 
-- Verify the full till suite after integration, retaining the application adjustment-event and
-  native Sent → Void consent checks, along with recorded names, notes, prices, extras, paid
-  markers, allergy information, refusals and leave protection. The menu timetable and device-zone
-  fixtures must describe each empty bill in their editing-state read too.
+- Finish the ownership amendment's approved Pay-refusal wording. `billUnsentText` and its
+  browser checks still display the earlier owner/count list; the detailed refusal and code
+  fallback must use the same approved simple sentence. Preserve the payment, identity and
+  retry checks while replacing these withdrawn display expectations. The existing owner
+  approval applies; this needs no new wording decision.
 - Integrate the owner's Q43 cancellation changes after lane C publishes A758's revised design,
   as the watcher's 2026-10-18 instruction requires. Finish the held-dish resolution before Finish
   table (plan T20/T22); the earlier picture-03 implementation is not that revised design.

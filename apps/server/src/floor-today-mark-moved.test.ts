@@ -35,6 +35,7 @@ import {
   zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
+import { observedClosingBody } from "./testing/party-close-fixture.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -85,7 +86,13 @@ async function send(method: string, path: string, body?: unknown): Promise<Respo
   return app.request(path, {
     method,
     headers: { "content-type": "application/json", cookie },
-    ...(body === undefined ? {} : { body: JSON.stringify(await withFloorRevision(v, path, body)) }),
+    ...(body === undefined
+      ? {}
+      : {
+          body: JSON.stringify(
+            await observedClosingBody(v.db, path, await withFloorRevision(v, path, body)),
+          ),
+        }),
   });
 }
 
