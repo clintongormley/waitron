@@ -2218,9 +2218,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   A773-1 remains unlanded: integrate A758's revised cancellation and Finish-table design,
   and complete the remaining prose audit, whole-path, ownership, native-screen, physical-till and
   delivery checks. Preserve the completed behavioral checks and their receipts; the detail's
-  Decisions section records their scope and limits. The product guide now separates stored-line
-  availability from the saved New order payment refusal. Recheck subsequent main changes before the
-  final whole-branch review, push and CI.
+  Decisions section records their scope and limits. The product guide separates stored-line
+  availability from the saved New order payment refusal; the till README distinguishes fresh-dish
+  availability from recalled bill rows and points to the modifier-save rules. Recheck subsequent
+  main changes before the final whole-branch review, push and CI.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,

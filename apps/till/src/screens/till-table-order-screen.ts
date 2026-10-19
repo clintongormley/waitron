@@ -197,8 +197,6 @@ function shownName(product: TillProduct): string {
   return lineProductName(product) || t("basket.not_offered");
 }
 
-/** A draft line no action sends: the till's own check, the server's last answer, or a dish the
- * table's offers no longer hold says it cannot be sold now. */
 function flagged(line: OrderLine): boolean {
   return (
     line.blocked !== undefined || line.unavailableOnServer === true || line.notOffered === true

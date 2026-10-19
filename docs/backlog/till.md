@@ -2274,9 +2274,12 @@ offer. Their parked-counter guidance is scoped separately. This closes that guid
 the remaining whole-branch audit and cancellation/Finish work above stay open.
 
 The till README now separates the table's bill-specific Sent/New order workflow from its historical
-counter slice. The design-system button examples name the direct New order actions rather than
-the removed send-preview confirmation. These prose updates do not complete cancellation/Finish,
-the physical trial or final delivery.
+counter slice. It distinguishes fresh-dish availability from recalled bill rows, which can be resent
+after their offer is removed, and links to the modifier contract for changes saved before Send.
+The schema and availability-helper comments no longer describe every draft line as unpriced or
+unsendable when it has an availability flag. The design-system button examples name the direct
+New order actions rather than the removed send-preview confirmation. These prose updates do not
+complete cancellation/Finish, the physical trial or final delivery.
 
 The product guide scopes fresh-dish availability checks separately from recalled bill rows and
 links to their modifier contract. It also distinguishes stored-line pricing from the bill's saved

@@ -55,18 +55,13 @@ export const orderDrafts = table(
   ],
 );
 
-/**
- * One line of a draft, as the till last saved it: what a basket line names, before pricing. No
- * author column: the whole draft is credited to its owner when it is submitted.
- */
 export const orderDraftLines = table(
   "order_draft_lines",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     draftId: id("draft_id").notNull(),
     position: count("position").notNull(),
-    // No key: `menu_items` is in the catalogue module's migration set; pricing at submission
-    // refuses a menu item the zone does not offer.
+    // No key: `menu_items` is in the catalogue module's migration set.
     menuItemId: id("menu_item_id").notNull(),
     variantId: id("variant_id"),
     menuVersionId: id("menu_version_id"),
