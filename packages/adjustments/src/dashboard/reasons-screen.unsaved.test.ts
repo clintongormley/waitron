@@ -192,6 +192,28 @@ it("clean and normalized reverted reason values close directly", async () => {
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect((await question()).open).toBe(false);
 });
+it("a comma-mark reverted item limit is clean", async () => {
+  const employee: AdjustmentReason = {
+    ...reason,
+    id: "reason-employee",
+    name: "Employee discount",
+    names: {},
+    actions: ["discount_percent"],
+    maxPercentBp: 1250,
+    maxAmount: null,
+    noteRequired: false,
+    position: 2,
+  };
+  const api = fakeApi();
+  api.listReasons.mockResolvedValue([reason, employee]);
+  const { screen } = await mount(api);
+  await press(screen, "edit-reason-employee");
+  expect(value(screen, "maxPercent")).toBe("12.5");
+  await field(screen, "maxPercent", "20");
+  expect(unload()).toBe(true);
+  await field(screen, "maxPercent", "12,50");
+  expect(unload()).toBe(false);
+});
 for (const name of ["names-es", "maxPercent", "maxAmount"]) {
   it(`protects the distinct ${name} payload`, async () => {
     const { screen } = await mount();
