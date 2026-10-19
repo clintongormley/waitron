@@ -2,18 +2,29 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { readRawJsonBody } from "@waitron/server-kit";
+import { readRawJsonBody, readJsonBody } from "@waitron/server-kit";
 import { withTransaction, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { ProfileAction } from "@waitron/layouts";
-import { assertProfileAction, requireDevice, type DeviceBinding } from "./device-session.js";
+import type { AllergyCommand } from "@waitron/module";
+import {
+  assertDeviceStillProven,
+  assertProfileAction,
+  requireDevice,
+  type DeviceBinding,
+} from "./device-session.js";
 import { requestCfg } from "./request-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { asObject } from "./bill-payments-api.js";
-import { groupCommand, requirePartyParam } from "./till-api.js";
+import { allergyCommand, groupCommand, requirePartyParam } from "./till-api.js";
 import { isUuid } from "./till-session.js";
 import { orderWatchZones, partyWatchZones } from "./watch-zones.js";
-import { bumpCourseReady, fireCourse, markCourseAway } from "./working-order.js";
+import {
+  bumpCourseReady,
+  fireCourse,
+  markCourseAway,
+  type OrderAttendance,
+} from "./working-order.js";
 import {
   bumpGroupReady,
   fireGroup,
@@ -35,6 +46,8 @@ interface Lever {
     orderId: string,
     courseId: string,
     firer: Firer,
+    attendance?: OrderAttendance,
+    command?: AllergyCommand,
   ) => Promise<void>;
   group: (
     tx: Transaction,
@@ -48,7 +61,12 @@ interface Lever {
 
 /** Only Fire records who acted; Ready and Away take the firer and ignore it. */
 const LEVERS: readonly Lever[] = [
-  { verb: "fire", action: "take-orders", course: fireCourse, group: fireGroup },
+  {
+    verb: "fire",
+    action: "take-orders",
+    course: fireCourse,
+    group: fireGroup,
+  },
   { verb: "ready", action: "prepare-orders", course: bumpCourseReady, group: bumpGroupReady },
   { verb: "away", action: "hand-over-orders", course: markCourseAway, group: markGroupAway },
 ];
@@ -63,6 +81,18 @@ export async function requireKitchenDisplay(
   if (device.formFactor !== "kds") throw new AppError("device.unauthorized", {});
   assertProfileAction(device, action);
   return device;
+}
+
+async function recheckKitchenFire(
+  tx: Transaction,
+  cfg: TillConfig,
+  device: DeviceBinding,
+): Promise<DeviceBinding> {
+  const current = await assertDeviceStillProven(tx, { device, tokenHash: null });
+  if (current.formFactor !== "kds" || current.locationId !== cfg.locationId)
+    throw new AppError("device.unauthorized", {});
+  assertProfileAction(current, "take-orders");
+  return current;
 }
 
 async function orderZone(
@@ -102,10 +132,27 @@ export function mountDeviceLevers(
         }
         const courseId = c.req.param("courseId");
         if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
+        let command: AllergyCommand | undefined;
+        if (lever.verb === "fire") {
+          const body = asObject(await readJsonBody<unknown>(c));
+          if (body.allergy !== undefined)
+            throw new AppError("allergy.invalid", { field: "allergy" });
+          command = allergyCommand(body);
+        }
         await withTransaction(deps.db, async (tx) => {
+          const current =
+            lever.verb === "fire" ? await recheckKitchenFire(tx, deps.cfg, device) : device;
           const zoneId = await orderZone(tx, deps.cfg, orderId);
-          await VENUE_SERVICE.assertPassScreenZone(tx, deps.cfg, device.deviceId, zoneId);
-          await lever.course(tx, cfg, orderId, courseId, { deviceId: device.deviceId });
+          await VENUE_SERVICE.assertPassScreenZone(tx, deps.cfg, current.deviceId, zoneId);
+          await lever.course(
+            tx,
+            lever.verb === "fire" ? requestCfg(deps.cfg, current) : cfg,
+            orderId,
+            courseId,
+            { deviceId: current.deviceId },
+            undefined,
+            command,
+          );
         });
         return c.body(null, 200);
       }),
@@ -121,11 +168,22 @@ export function mountDeviceLevers(
         const body = asObject(await readRawJsonBody<unknown>(c));
         // The device's id stands where a person's would: a retry from it replays, and its
         // submission id from anyone else is refused as reused.
+        if (lever.verb === "fire" && body.allergy !== undefined)
+          throw new AppError("allergy.invalid", { field: "allergy" });
         const args = groupCommand(device.deviceId, body);
         const answer = await withTransaction(deps.db, async (tx) => {
+          const current =
+            lever.verb === "fire" ? await recheckKitchenFire(tx, deps.cfg, device) : device;
           const zoneId = (await partyWatchZones(tx, deps.cfg, [partyId])).get(partyId) ?? null;
-          await VENUE_SERVICE.assertPassScreenZone(tx, deps.cfg, device.deviceId, zoneId);
-          return lever.group(tx, cfg, partyId, groupId, args, { deviceId: device.deviceId });
+          await VENUE_SERVICE.assertPassScreenZone(tx, deps.cfg, current.deviceId, zoneId);
+          return lever.group(
+            tx,
+            lever.verb === "fire" ? requestCfg(deps.cfg, current) : cfg,
+            partyId,
+            groupId,
+            args,
+            { deviceId: current.deviceId },
+          );
         });
         return c.json(answer);
       }),

@@ -20,6 +20,7 @@ import type {
   AllergyLineRef,
   AllergyPatch,
   AllergyChangeSet,
+  AllergyCommand,
   PartyAllergySnapshot,
 } from "@waitron/module";
 import {
@@ -475,4 +476,21 @@ export async function applyPartyAllergyPatch(
 export async function assertPartyAllergyAnswered(tx: Transaction, partyId: string): Promise<void> {
   const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
   if (snapshot.answer === null) throw new AppError("allergy.unanswered", { partyId });
+}
+
+export async function prepareAllergyRelease(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  target: AllergySendTarget,
+  allergy: AllergyCommand["allergy"],
+  personId: string | null,
+): Promise<void> {
+  const view = await readAllergySendView(tx, cfg, partyId, target);
+  if (view.dishes.length === 0) return;
+  if (allergy !== undefined) {
+    if (personId === null) invalid("allergy");
+    await applyPartyAllergyPatch(tx, view.partyId, allergy, personId, allergyTargets(view));
+  }
+  await assertPartyAllergyAnswered(tx, view.partyId);
 }

@@ -230,6 +230,7 @@ import { mountFloorTodayApi, requireTargetTable, whole } from "./floor-today-api
 import { mountKeepOpenApi } from "./keep-open-api.js";
 import { mountStationTodayApi } from "./station-today-api.js";
 import { mountPartyAllergyApi } from "./party-allergy-api.js";
+import type { AllergyCommand } from "@waitron/module";
 import { mountOrderKitchenNoteApi } from "./order-kitchen-note-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
@@ -988,6 +989,35 @@ export function groupCommand(operatorId: string, body: Record<string, unknown>):
   };
 }
 
+export function allergyCommand(body: Record<string, unknown>): AllergyCommand | undefined {
+  if (
+    body.submissionId === undefined &&
+    body.expectedPartyRevision === undefined &&
+    body.allergy === undefined
+  )
+    return undefined;
+  const { submissionId, expectedPartyRevision } = groupCommand("", body);
+  return {
+    submissionId,
+    expectedPartyRevision,
+    ...(body.allergy === undefined ? {} : { allergy: body.allergy as AllergyCommand["allergy"] }),
+  };
+}
+
+async function recheckFireSession(
+  tx: Transaction,
+  deps: TillApiDeps,
+  session: Awaited<ReturnType<typeof requireSession>>,
+) {
+  await assertStillSignedIn(tx, session);
+  const device = await assertDeviceStillProven(tx, { device: session.device, tokenHash: null });
+  if (device.locationId !== deps.cfg.locationId) throw new AppError("device.unauthorized", {});
+  assertProfileAction(device, "take-orders");
+  if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
+    throw new AppError("device_profile.not_admitted", {});
+  return { ...session, device };
+}
+
 /** A submission's held group to add to, when it names one. */
 function joinGroupOf(body: Record<string, unknown>): { joinGroupId?: string } {
   const { joinGroupId } = body;
@@ -1134,6 +1164,7 @@ function mountCourseVerb(
     courseId: string,
     firer: Firer,
     attendance?: OrderAttendance,
+    command?: AllergyCommand,
   ) => Promise<void>,
 ): void {
   app.post(`/api/orders/:id/courses/:courseId/${suffix}`, (c) =>
@@ -1144,17 +1175,21 @@ function mountCourseVerb(
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
+      const command =
+        suffix === "fire" ? allergyCommand(asObject(await readJsonBody<unknown>(c))) : undefined;
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId }]);
+        const current = suffix === "fire" ? await recheckFireSession(tx, deps, session) : session;
+        await checkZones(tx, deps.cfg, current, [{ orderId }]);
         await verb(
           tx,
-          cfg,
+          suffix === "fire" ? requestCfg(deps.cfg, current) : cfg,
           orderId,
           courseId,
           { personId },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock },
+          command,
         );
       });
       return c.body(null, 200);
@@ -3131,16 +3166,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const { personId } = session;
-      const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
-      const command = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const command = { ...groupCommand(personId, body), ...allergyCommand(body) };
       const fired = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        const current = await recheckFireSession(tx, deps, session);
+        await checkZones(tx, deps.cfg, current, [{ partyId }]);
         return fireGroup(
           tx,
-          cfg,
+          requestCfg(deps.cfg, current),
           partyId,
           groupId,
           command,
@@ -3313,7 +3349,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
-      const command = groupCommand(session.personId, body);
+      const command = { ...groupCommand(session.personId, body), ...allergyCommand(body) };
       if (typeof body.lineId !== "string" || !isUuid(body.lineId)) throw invalid("lineId");
       const lineId = body.lineId.toLowerCase();
       const answer = await withTransaction(deps.db, async (tx) => {
@@ -3915,23 +3951,27 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders/:id/lines/send", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
-      const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{
         lineNos?: number[];
         expectedEdit: BillEditExpected | null;
+        submissionId?: string;
+        expectedPartyRevision?: number;
+        allergy?: AllergyCommand["allergy"];
       }>(c);
       await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        const current = await recheckFireSession(tx, deps, session);
+        await checkZones(tx, deps.cfg, current, [{ orderId: id }]);
         await sendLines(
           tx,
-          cfg,
+          requestCfg(deps.cfg, current),
           id,
           body.lineNos ?? [],
           { operatorId: session.personId, expectedEdit: body.expectedEdit },
           deps.attendance === undefined
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
+          allergyCommand(body),
         );
       });
       return c.body(null, 200);
