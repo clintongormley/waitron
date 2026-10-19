@@ -715,8 +715,10 @@ is that plan's PR 2:
   now it is free for connected venues, capped per venue. The owner's approval covers the proposed
   $5 per venue per month cap and Cloud's submit allowance (4 jobs in flight, 1 per address).
   Cloud's spec still says "proposed" until its first implementation change updates it.
-- **When the check passes**, delete this entry (Task 21, Step 7); otherwise each failure becomes
-  its own entry.
+- **When the check passes**, delete this entry (Step 8 of part 2a in
+  [the collect-pages plan](../superpowers/plans/2026-10-19-translate-all-collect-pages.md));
+  otherwise each failure becomes its own entry. Part 2b, lane D's script, is not done by that run:
+  if it is still open then, it gets an entry of its own before this one is deleted.
 
 ## Translate all: shared collect-page test vectors
 
@@ -732,14 +734,15 @@ is that plan's PR 2:
   `docs/superpowers/plans/2026-10-19-translate-all-collect-pages.md`, "2b and what can be
   automated").
 
-## Translate all: a job that ends before any page is stored does not count its items as lost
+## Translate all: a job that ends before any item is accounted for does not count its items as lost
 
-- **Translate all: a job that ends before any page is stored does not count its items as lost.**
-  When a job ends after at least one page is stored, `recordSuggestionJobEnded`
-  (`packages/catalogue/src/content-suggestion-jobs.ts`) counts every item not yet received as one
-  that could not be done, so the notice says so. A job that ends before any page is stored (Cloud
-  expired it, the box's 24-hour clock ran out, or the service went off) keeps the counts of its
-  last progress reading, usually no failures. Such a job has stored no suggestions, so the notice
+- **Translate all: a job that ends before any item is accounted for does not count its items as lost.**
+  When a job ends after at least one of its items has been accounted for (`collected_refs` is not
+  empty), `recordSuggestionJobEnded` (`packages/catalogue/src/content-suggestion-jobs.ts`) counts
+  every item not yet accounted for as one that could not be done, so the notice, raised while any
+  suggestion is waiting, says so. A job that ends before any item is accounted for (Cloud expired
+  it, the box's 24-hour clock ran out, or the service went off) keeps the counts of its last
+  progress reading, usually no failures. Such a job has stored no suggestions, so the notice
   appears only for an earlier job's waiting ones, and it does not mention this job's lost items.
   Left out of A689-21 as wider than its plan's Decision 8.
 

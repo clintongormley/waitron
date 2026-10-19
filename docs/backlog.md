@@ -1008,11 +1008,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   both sides check would catch drift in CI. A contract change for Cloud's side.
   [Detail](backlog/catalogue.md#translate-all-shared-collect-page-test-vectors)
 
-- **Translate all: a job that ends before any page is stored does not count its items as lost.**
+- **Translate all: a job that ends before any item is accounted for does not count its items as lost.**
   It keeps the counts of its last progress reading, usually no failures, so the notice for an
   earlier job's waiting suggestions does not say these items could not be done (A689-21, plan
   Decision 8's limit).
-  [Detail](backlog/catalogue.md#translate-all-a-job-that-ends-before-any-page-is-stored-does-not-count-its-items-as-lost)
+  [Detail](backlog/catalogue.md#translate-all-a-job-that-ends-before-any-item-is-accounted-for-does-not-count-its-items-as-lost)
 
 - **Loose ends left by A689's fifth PR.**
   - Translate all: a "Use fix" button for a spelling fix to a name someone entered; it waits for
