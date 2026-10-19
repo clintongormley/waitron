@@ -405,6 +405,7 @@ export class TillBasket extends LitElement {
    * is known, a dish the kitchen has shows no × and no `−`, and the adjustments are offered only
    * while the basket is exactly what the listing lists. */
   @property({ attribute: false }) storedLines: StoredLines | null = null;
+  @property({ attribute: false }) stationMoveLines: StoredLines | null = null;
 
   /** A pay, place or hold of the basket's order is out, so no adjustment is offered. */
   @property({ type: Boolean }) orderInFlight = false;
@@ -454,6 +455,44 @@ export class TillBasket extends LitElement {
       this.store.editsLocked ||
       (listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null))
     );
+  }
+
+  #lineStationMove(line: OrderLine) {
+    if (!this.lineDetails || !this.store.lines.includes(line)) return null;
+    const listing = adjustableListing(this.store, this.stationMoveLines, this.orderInFlight);
+    const listed = listing?.lines.find((row) => row.id === line.workingOrderLineId);
+    return listing !== null &&
+      listed !== undefined &&
+      (listed.parentLineNo ?? null) === null &&
+      listed.movable &&
+      (listed.sentAt !== null || listed.firedAt !== null)
+      ? {
+          workingOrderId: listing.orderId,
+          lineId: listed.id,
+          name: this.#lineName(line),
+          stationId: listed.stationId,
+          counter: true as const,
+        }
+      : null;
+  }
+
+  #lineStationAction(line: OrderLine) {
+    const move = this.#lineStationMove(line);
+    if (move === null) return nothing;
+    return html`<wt-button
+      variant="secondary"
+      data-move-station=${this.store.lines.indexOf(line)}
+      aria-label=${`${t("table.move_station")} · ${move.name}`}
+      @click=${() => {
+        const current = this.#lineStationMove(line);
+        if (current === null) return;
+        this.#closeModifierPicker();
+        this.dispatchEvent(
+          new CustomEvent("move-station", { detail: current, bubbles: true, composed: true }),
+        );
+      }}
+      >${t("table.move_station")}</wt-button
+    >`;
   }
 
   #openModifierPicker(line: OrderLine): void {
@@ -986,11 +1025,12 @@ export class TillBasket extends LitElement {
                 event.stopPropagation();
                 this.#closeModifierPicker();
               }}
-              ><slot
-                slot="line-details"
-                name=${`detail-${this.store.lines.indexOf(this.modifierLine)}`}
-              ></slot
-            ></till-modifier-picker>`
+              ><div slot="line-details">
+                <slot name=${`detail-${this.store.lines.indexOf(this.modifierLine)}`}></slot>
+                ${this.#lineStationAction(this.modifierLine)}
+              </div>
+              ></till-modifier-picker
+            >`
           : nothing
       }
     `;
@@ -1140,7 +1180,7 @@ export class TillBasket extends LitElement {
       name,
       () => lineAdjustTarget(listed, listing.lines, name),
       sent,
-      sent && listed.movable
+      !this.lineDetails && sent && listed.movable
         ? { workingOrderId: listing.orderId, lineId: listed.id, name, stationId: listed.stationId }
         : null,
     );

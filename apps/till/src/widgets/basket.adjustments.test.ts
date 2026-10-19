@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
+import type { TillModifierPicker } from "./modifier-picker.js";
 import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -120,6 +122,105 @@ function adjustments(el: TillBasket): AdjustDetail[] {
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
+
+it.each(["info", "hold", "double click"])(
+  "A738 sent unpaid line window offers Move to station for exactly its movable dish via %s",
+  async (entry) => {
+    const store = new WorkingOrderStore();
+    store.loadFrom(
+      "placed-order",
+      [
+        {
+          workingOrderLineId: "queued-dish",
+          product: product("soup", "Staff soup", "5.00"),
+          quantity: "2",
+          note: "No salt",
+          extras: [
+            { listId: "sides", productId: "bread", name: "Bread", price: "1.00", quantity: 1 },
+          ],
+        },
+      ],
+      undefined,
+      7,
+    );
+    const { el } = await mountWidget<TillBasket>("till-basket", {
+      store,
+      lineDetails: true,
+      readOnly: true,
+      storedLines: null,
+    });
+    Object.assign(el, {
+      stationMoveLines: {
+        orderId: "placed-order",
+        revision: 7,
+        lines: [
+          tabLine({
+            id: "queued-dish",
+            lineNo: 1,
+            productId: "soup",
+            movable: true,
+            stationId: "kitchen",
+            sentAt: "2026-10-19T10:00:00Z",
+            state: "queued",
+          }),
+        ],
+      },
+    });
+    await el.updateComplete;
+    const heard: unknown[] = [];
+    el.addEventListener("move-station", (event) => heard.push((event as CustomEvent).detail));
+    const row = rows(el)[0]!;
+    if (entry === "info")
+      await userEvent.click(row.querySelector<HTMLElement>("[data-line-detail]")!);
+    if (entry === "hold")
+      await userEvent.click(row.querySelector<HTMLElement>(".name")!, { delay: 650 });
+    if (entry === "double click")
+      await userEvent.dblClick(row.querySelector<HTMLElement>(".name")!);
+    await el.updateComplete;
+    const picker = el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+    expect(picker).not.toBeNull();
+    await picker.updateComplete;
+    expect(picker.readOnly).toBe(true);
+    expect(picker.initialSelections?.note).toBe("No salt");
+    expect(picker.initialSelections?.extras?.[0]?.name).toBe("Bread");
+    expect(picker.shadowRoot!.querySelector(".confirm")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-bill-discount]")).toBeNull();
+    const action = picker.querySelector<HTMLElement>("[data-move-station]");
+    expect(action, "the line window must offer its own dish's station action").not.toBeNull();
+    expect(action!.textContent).toContain(t("table.move_station"));
+    await userEvent.click(action!);
+    expect(heard).toEqual([
+      {
+        workingOrderId: "placed-order",
+        lineId: "queued-dish",
+        name: "Staff soup",
+        stationId: "kitchen",
+        counter: true,
+      },
+    ]);
+    expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+    expect(store.lines[0]!.quantity).toBe("2");
+    expect(store.lines[0]!.note).toBe("No salt");
+    expect(store.lines[0]!.extras?.[0]?.name).toBe("Bread");
+    expect(store.dirty).toBe(false);
+  },
+);
+
+it("A738 accepts a movable dish whose optional parent field is absent", async () => {
+  const store = storedOrder();
+  const dish = { ...listed[0]!, movable: true, state: "queued" as const };
+  delete dish.parentLineNo;
+  const { el } = await mountWidget<TillBasket>("till-basket", {
+    store,
+    lineDetails: true,
+    storedLines: stored,
+    stationMoveLines: { ...stored, lines: [dish] },
+  });
+  el.openLineDetails(store.lines[0]!);
+  await el.updateComplete;
+  const picker = el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+  expect(picker.querySelector("[data-move-station]")).not.toBeNull();
+});
 
 describe("till-basket: a stored counter order", () => {
   it("offers Make at on unsent dishes only with a station choice, and names the chosen station", async () => {

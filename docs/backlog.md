@@ -2289,7 +2289,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   progress: shared filtering, the fixed top bar, selected Parked/Waiting views and stored-item
   previews are implemented. Line-window work now includes shared entry points, read-only collection
   inspection, staged quantity/extras/note edits, explicit empty-note entry and aligned amount
-  columns. Sent-unpaid line movement, the last-added/status layout and the Park dialog remain open;
+  columns. Sent-unpaid line movement now uses that read-only window and refreshes its placed-order
+  facts separately from amount adjustments. The last-added/status layout and the Park dialog remain open;
   custom-item permission and reporting identity remain undecided.
 
 - **A739 — paying: Hold · Pay and one payment window (owner, 2026-10-15; open).** Pay opens one

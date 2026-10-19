@@ -1105,6 +1105,7 @@ interface DishMove {
   counter?: boolean;
   basketRevision?: number;
   basketGeneration?: number;
+  counterContext?: { api: TillApi; session: number; visit: number };
   bill?: {
     expectedEdit: BillEditExpected;
     api: TillApi;
@@ -7229,11 +7230,8 @@ export class TillApp extends LitElement {
     limit.signal.addEventListener("abort", unlock, { once: true });
     this.errorKey = undefined;
     try {
-      const order = await this.api.retrievePlacedOrder(id, { signal: limit.signal });
-      if (movedOn()) return;
-      this.#loadIntoBasket(order, null);
-      this.stage = "collect";
-      this.collectFlow = "ticket_then_pay";
+      const loaded = await this.#loadPlacedCounterOrder(id, movedOn, limit.signal);
+      if (loaded === undefined) return;
     } catch (error) {
       if (movedOn()) return;
       const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";
@@ -7540,8 +7538,6 @@ export class TillApp extends LitElement {
     this.collectFlow = undefined;
   }
 
-  /** Null when the lines cannot be read: the basket then offers no adjustment, and keeps its own
-   * controls on every line. */
   async #readStoredLines(orderId: string, signal?: AbortSignal): Promise<StoredLines | null> {
     try {
       const { lines, revision } = await this.api.getTabLines(orderId, { signal });
@@ -7549,6 +7545,24 @@ export class TillApp extends LitElement {
     } catch {
       return null;
     }
+  }
+
+  async #loadPlacedCounterOrder(
+    id: string,
+    left: () => boolean,
+    signal: AbortSignal,
+    stationChoiceOwner: object | null = null,
+  ): Promise<boolean | undefined> {
+    const api = this.api;
+    const [order, listed] = await Promise.all([
+      api.retrievePlacedOrder(id, { signal }),
+      this.#readStoredLines(id, signal),
+    ]);
+    if (api !== this.api || left() || signal.aborted) return undefined;
+    this.#loadIntoBasket(order, listed, stationChoiceOwner);
+    this.stage = "collect";
+    this.collectFlow = "ticket_then_pay";
+    return listed !== null;
   }
 
   /** The stored order `orderId` is no longer the basket's (clearing the basket gives it a new id),
@@ -7574,12 +7588,11 @@ export class TillApp extends LitElement {
     const movedOn = () => load !== this.#store.loadGeneration || session !== this.#operatorSession;
     let failure: StringKey | undefined;
     try {
-      const read = await this.#loadHeldOrder(
-        orderId,
-        () => limit.signal.aborted || movedOn(),
-        limit.signal,
-        stationChoiceOwner,
-      );
+      const read = await (
+        this.stage === "collect"
+          ? this.#loadPlacedCounterOrder.bind(this)
+          : this.#loadHeldOrder.bind(this)
+      )(orderId, () => limit.signal.aborted || movedOn(), limit.signal, stationChoiceOwner);
       if (read !== undefined) load = this.#store.loadGeneration;
       if (read !== true) failure = "held.reread_failed";
     } catch (error) {
@@ -11070,6 +11083,7 @@ export class TillApp extends LitElement {
     const opening = {};
     this.#moveStationOpening = opening;
     const session = this.#operatorSession;
+    const api = this.api;
     const visit = this.#orderVisit;
     const orderId = detail.counter === true ? this.#store.id : this.activeTabId;
     const revision = this.#store.revision;
@@ -11093,15 +11107,20 @@ export class TillApp extends LitElement {
           };
     const counterEligible = () =>
       detail.counter !== true ||
-      (detail.workingOrderId === orderId &&
-        generation === this.#store.loadGeneration &&
-        this.#counterStillAdjustable({ orderId: detail.workingOrderId, revision }) &&
-        this.counterLines?.lines.some((line) => line.id === detail.lineId && line.movable) ===
-          true);
+      this.#counterStationMoveCurrent({
+        orderId: detail.workingOrderId,
+        revision,
+        generation,
+        lineId: detail.lineId,
+      });
+    const limit = detail.counter === true ? limited(TABLE_REQUEST_LIMIT_MS) : null;
     try {
       if (!counterEligible()) return;
-      await this.#loadStations();
+      if (limit === null) await this.#loadStations();
+      else await this.#loadStations(true, { signal: limit.signal });
       if (
+        limit?.signal.aborted === true ||
+        api !== this.api ||
         this.#moveStationOpening !== opening ||
         session !== this.#operatorSession ||
         visit !== this.#orderVisit ||
@@ -11117,12 +11136,45 @@ export class TillApp extends LitElement {
         busy: false,
         ...(bill === undefined ? {} : { bill }),
         ...(detail.counter === true
-          ? { basketRevision: revision, basketGeneration: generation }
+          ? {
+              basketRevision: revision,
+              basketGeneration: generation,
+              counterContext: { api, session, visit },
+            }
           : {}),
       };
+    } catch {
+      if (api === this.api && session === this.#operatorSession && visit === this.#orderVisit)
+        this.errorKey = "table.error";
     } finally {
+      limit?.done();
       if (this.#moveStationOpening === opening) this.#moveStationOpening = null;
     }
+  }
+
+  #counterStationMoveCurrent(open: {
+    orderId: string;
+    revision: number;
+    generation: number;
+    lineId: string;
+  }): boolean {
+    const listing = adjustableListing(this.#store, this.counterLines, this.#counterOrderInFlight());
+    return (
+      this.isConnected &&
+      this.operatorName !== "" &&
+      this.capabilities.includes("take-orders") &&
+      open.generation === this.#store.loadGeneration &&
+      listing !== null &&
+      listing.orderId === open.orderId &&
+      listing.revision === open.revision &&
+      listing.lines.some(
+        (line) =>
+          line.id === open.lineId &&
+          (line.parentLineNo ?? null) === null &&
+          line.movable &&
+          (line.sentAt !== null || line.firedAt !== null),
+      )
+    );
   }
 
   async #onOpenMakeAt(event: Event): Promise<void> {
@@ -11198,12 +11250,15 @@ export class TillApp extends LitElement {
     }
     if (
       open.counter === true &&
-      (open.basketGeneration !== this.#store.loadGeneration ||
-        !this.#counterStillAdjustable({
+      (open.counterContext?.api !== this.api ||
+        open.counterContext.session !== this.#operatorSession ||
+        open.counterContext.visit !== this.#orderVisit ||
+        !this.#counterStationMoveCurrent({
           orderId: open.workingOrderId,
           revision: open.basketRevision!,
-        }) ||
-        this.counterLines?.lines.some((line) => line.id === open.lineId && line.movable) !== true)
+          generation: open.basketGeneration!,
+          lineId: open.lineId,
+        }))
     ) {
       this.movingStation = null;
       return;
@@ -11223,7 +11278,7 @@ export class TillApp extends LitElement {
     if (counterSubmission !== null) this.#counterMoveSubmitting = counterSubmission;
     const unlock = counterSubmission === null ? () => {} : this.#store.lockEdits();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    const api = open.bill?.api ?? this.api;
+    const api = open.bill?.api ?? open.counterContext?.api ?? this.api;
     const live = () =>
       session === this.#operatorSession &&
       api === this.api &&
@@ -15578,6 +15633,7 @@ export class TillApp extends LitElement {
         .receiptGuests=${null}
         .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
+        .stationMoveLines=${this.capabilities.includes("take-orders") ? this.counterLines : null}
         .makeAtStations=${this.stations}
         .orderInFlight=${this.#counterOrderInFlight()}
       ></till-counter-screen>`;

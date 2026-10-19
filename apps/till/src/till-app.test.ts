@@ -226,6 +226,7 @@ const saleResult: TillSaleResult = {
 };
 
 const till = {
+  onboardingIntent: "prepare" as const,
   locale: "es-ES",
   invoiceLocale: "es-ES",
   venueName: "Bar Pepe",
@@ -611,6 +612,26 @@ function emit(source: Element, type: string, detail?: unknown): void {
   )
     detail = { ...detail, expectedEdit: (source as TillTableOrderScreen).billEdit };
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+}
+
+async function showCounterList(el: TillApp, kind: "parked" | "waiting") {
+  emit(shell(el)!, "show-counter-orders", { kind });
+  await flush(el);
+}
+
+async function openMore(el: TillApp) {
+  const menu = shell(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    'wt-row-actions[data-test="more-menu"]',
+  )!;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  await menu.updateComplete;
+}
+
+async function openEquipmentFromSettings(el: TillApp) {
+  await openMore(el);
+  await userEvent.click(shell(el)!.shadowRoot!.querySelector<HTMLElement>(".settings")!);
+  await flush(el);
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-settings-equipment]")!);
 }
 
 /** A fake {@link SessionActivity} the app can be mounted with, so a till-app test asserts how the app
@@ -2203,6 +2224,7 @@ describe("till-app", () => {
         expect(currentApi.listWorkingOrders).toHaveBeenCalled();
         expect(currentApi.getStationQueue).toHaveBeenCalledWith("st-default");
         expect(currentApi.listCounterWaiting).toHaveBeenCalled();
+        if (type === "held-orders") await showCounterList(el, "parked");
         const grid = activeTabGrid(el)!.shadowRoot!;
         if (type === "prep-queue") {
           expect(counter(el)!.stationQueue).toEqual([stationGroup]);
@@ -13835,12 +13857,12 @@ describe("till-app", () => {
     });
 
     it("applies a late browser match after logout when it was unavailable during login", async () => {
-      let answerLocales!: (value: Awaited<ReturnType<TillApi["getLocales"]>>) => void;
+      const answers: Array<(value: Awaited<ReturnType<TillApi["getLocales"]>>) => void> = [];
       const { el } = await mountApp({
         getLocales: vi.fn(
           () =>
             new Promise<Awaited<ReturnType<TillApi["getLocales"]>>>((r) => {
-              answerLocales = r;
+              answers.push(r);
             }),
         ),
       });
@@ -13848,7 +13870,9 @@ describe("till-app", () => {
       emit(c, "logout");
       await flush(el);
       expect(currentLocale()).toBe("es-ES");
-      answerLocales({ locales: [], venueDefault: "es-ES", loginDefault: "en-GB" });
+      expect(answers.length).toBeGreaterThan(0);
+      for (const answer of answers)
+        answer({ locales: [], venueDefault: "es-ES", loginDefault: "en-GB" });
       await flush(el);
       expect(currentLocale()).toBe("en-GB");
     });
@@ -13976,7 +14000,8 @@ describe("till-app", () => {
 
     /** Opens a chooser by its trigger and picks `code` from the list, as a person does. */
     async function pickLanguage(chooser: Element, code: string): Promise<void> {
-      chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
+      if (chooser.getAttribute("layout") !== "group")
+        chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!.click();
       await vi.waitFor(() => {
         expect(chooser.shadowRoot!.querySelector(`[data-test="lang-${code}"]`)).not.toBeNull();
       });
@@ -13988,6 +14013,7 @@ describe("till-app", () => {
       const { el } = await mountApp({ putLocale });
       await toCounterAs(el, null);
       expect(currentLocale()).toBe("es-ES");
+      await openMore(el);
       await pickLanguage(shell(el)!.shadowRoot!.querySelector("wt-language-chooser")!, "en-GB");
       await flush(el);
       expect(putLocale).toHaveBeenCalledWith("en-GB");
@@ -14504,7 +14530,7 @@ describe("till-app", () => {
   });
 });
 
-it("keeps the shell's language chooser in its bar, above the counter as it scrolls", async () => {
+it("keeps More reachable above the scrolling counter and its language group inside", async () => {
   const width = window.innerWidth;
   const height = window.innerHeight;
   await page.viewport(390, 900);
@@ -14513,8 +14539,8 @@ it("keeps the shell's language chooser in its bar, above the counter as it scrol
     await toCounter(el);
     selectTab(el, "counter");
     await flush(el);
-    const chooser = shell(el)!.shadowRoot!.querySelector("wt-language-chooser")!;
-    const trigger = chooser.shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
+    const menu = shell(el)!.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+    const trigger = menu.shadowRoot!.querySelector<HTMLElement>("button")!;
     const head = shell(el)!.shadowRoot!.querySelector<HTMLElement>("header")!;
     const body = shell(el)!.shadowRoot!.querySelector<HTMLElement>(".body")!;
     body.scrollTop = body.scrollHeight;
@@ -14525,6 +14551,10 @@ it("keeps the shell's language chooser in its bar, above the counter as it scrol
     expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       body.getBoundingClientRect().top,
     );
+    await openMore(el);
+    const language = shell(el)!.shadowRoot!.querySelector("wt-language-chooser")!;
+    expect(language.getAttribute("layout")).toBe("group");
+    expect(language.shadowRoot!.querySelectorAll("button")).toHaveLength(2);
     const hold = tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".hold")!;
     expect(hold.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       body.getBoundingClientRect().bottom,
@@ -16562,6 +16592,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       ...overrides,
     });
     const c = await toCounter(mounted.el);
+    await showCounterList(mounted.el, "parked");
     return { ...mounted, c };
   }
 
@@ -16967,6 +16998,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await toCounter(el);
     late([{ ...floorZone, serviceMode: "prepay" }]);
     await flush(el);
+    await showCounterList(el, "parked");
     const held = heldList(el);
     await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>(".move")!);
     await flush(el);
@@ -17384,6 +17416,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
   async function counterWaiting(overrides: Record<string, unknown> = {}) {
     const mounted = await mountApp(overrides);
     const c = await toCounter(mounted.el);
+    await showCounterList(mounted.el, "waiting");
     return { ...mounted, c };
   }
 
@@ -18204,8 +18237,6 @@ describe("the device's equipment, chosen from the header", () => {
     el.shadowRoot!.querySelector<TillEquipmentDialog>("till-equipment-dialog");
   const chosenIn = (el: TillApp, role: "receipt" | "payment_slip") =>
     equipmentDialog(el)!.equipment!.roles.find((each) => each.role === role)!.chosenId;
-  const openButton = (el: TillApp) =>
-    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".equipment")!;
 
   async function openEquipment(overrides: Record<string, unknown> = {}) {
     const { el } = await mountApp({
@@ -18214,7 +18245,7 @@ describe("the device's equipment, chosen from the header", () => {
     });
     await toCounter(el);
     expect(equipmentDialog(el)).toBeNull();
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
     return el;
   }
@@ -18615,7 +18646,7 @@ describe("the device's equipment, chosen from the header", () => {
   async function reopen(el: TillApp): Promise<void> {
     emit(equipmentDialog(el)!, "close");
     await flush(el);
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
   }
 
@@ -18925,7 +18956,7 @@ describe("the device's equipment, chosen from the header", () => {
       .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     const { el } = await mountApp({ getDeviceEquipment });
     await toCounter(el);
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
     expect(getDeviceEquipment).toHaveBeenCalledTimes(2);
 
@@ -19091,8 +19122,6 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
   });
   const equipmentDialog = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillEquipmentDialog>("till-equipment-dialog");
-  const openButton = (el: TillApp) =>
-    shell(el)!.shadowRoot!.querySelector<HTMLElement>(".equipment")!;
   const toast = (el: TillApp) =>
     el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string }>(
       "wt-toast[data-equipment-toast]",
@@ -19126,7 +19155,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
       setDeviceEquipment,
     });
     await toCounter(el);
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
     const dialog = equipmentDialog(el)!;
 
@@ -19386,7 +19415,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     await flush(el);
     expect(readerName(el)).toBe(R1.name);
 
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
     emit(equipmentDialog(el)!, "equipment-change", {
       role: "card_terminal",
@@ -19464,7 +19493,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
       setDeviceEquipment: vi.fn().mockResolvedValue(equipmentOn("held", R2)),
     });
     await toCounter(el);
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
     emit(equipmentDialog(el)!, "equipment-change", {
       role: "card_terminal",
@@ -19585,7 +19614,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     await flush(el);
     emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Sam", permissions: [] });
     await flush(el);
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
 
     expect(setDeviceEquipment).not.toHaveBeenCalled();
@@ -19627,7 +19656,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     expect(tenderPay(el).activeReaders).toEqual([]);
 
     getDeviceEquipment.mockRejectedValue(new TypeError("Failed to fetch"));
-    openButton(el).click();
+    await openEquipmentFromSettings(el);
     await flush(el);
 
     const shown = equipmentDialog(el)!.equipment!;
@@ -20931,6 +20960,7 @@ describe("W69 held move basket protection", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await expect.poll(() => c.store.id).toBe("wo-1");
+    await showCounterList(el, "parked");
     return { el, c };
   }
   function move(c: TillCounterScreen, orderId = "wo-1") {
@@ -21449,6 +21479,7 @@ describe("basket native replacement warning", () => {
               theme,
             );
             const c = await toCounter(el);
+            await showCounterList(el, "parked");
             c.store.addProduct(jamon, "1");
             c.store.label = "Lunch";
             const id = c.store.id;
@@ -23231,6 +23262,7 @@ describe("A767 sign-in and held-order recovery", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
+    await showCounterList(el, "parked");
     const held = () =>
       c.shadowRoot!.querySelector<HTMLElement & { orders: HeldOrderSummary[] }>("till-held-orders");
     expect(held()!.orders.map((order) => order.id)).toEqual(["wo-2"]);
