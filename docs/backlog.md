@@ -1063,12 +1063,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   `primaryCategoryId` always hold the same value.
   [Detail](backlog/catalogue.md#sales-classification-and-the-menus-plan--what-they-left-open)
 
-- **A817 — the Structure tab's Select mode deletes sections in bulk** (owner, 2026-10-17: a bulk
-  Delete for sections is wanted). Today Remove from menu stays disabled while a section the menu
-  owns is selected, because such a section is deleted, not removed; each is deleted from its own
-  row's ⋮. Done when a test selects two of the menu's own sections, deletes them in one action and
-  finds both gone. Left open by A337.
-
 - **A682. Translations: every missing name reported, all languages side by side
   (owner, 2026-10-14; design decisions closed, 2026-10-17).** The translations dialog shows one
   field per enabled language on each row. Translate all and its "Use fix" action use the same editor.

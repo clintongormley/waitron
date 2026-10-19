@@ -1403,14 +1403,14 @@ rows show and lists their own matches with inline paths, and the Available colum
 section or an included menu answers neither, so it stays only on the way to a match. There is no
 filter on Type: its three values are already told apart by the folder frame and the arrow.
 Dragging remains available during search and carries only visible ticks; hidden ticks remain
-selected. Move and Remove use all ticks. A changed query cancels a held drag. While search or
+selected. Move, Remove and Delete use all ticks. A changed query cancels a held drag. While search or
 the Available filter hides rows, ArrowUp and ArrowDown move past the next drawn sibling.
 The search clears when another menu opens or the menu empties.
 
 The toolbar has one Select icon button (the Products tree's, "Select" / "Seleccionar"). In Select
 mode every row the menu owns has a box and a drag handle named "<name>, in <list>" (rows inside an included menu have
-none), and a bar under the toolbar shows how many rows are ticked with three buttons: **Move to
-section…**, **Remove from menu** and Done, which leaves the mode and puts focus back on Select.
+none), and a bar under the toolbar shows how many rows are ticked with four buttons: **Move to
+section…**, **Remove from menu**, **Delete** and Done, which leaves the mode and puts focus back on Select.
 Select and Done cannot be pressed while a change is being saved. While a search or filter is on, a section
 shown only because something inside it matches has no box, so Select all never ticks a section whose
 hidden rows would go with it; a section whose own name matches keeps its box, and none has one under
@@ -1420,17 +1420,30 @@ mode turns off, another menu opens, or a bulk change succeeds. A re-read drops r
 no longer owned by this menu from the selection and open operation; a rename or availability change
 keeps them. The operation closes once nothing is left. Only the outermost selected rows are acted on: a row inside a selected section
 travels with it, wherever that section is shown, and a member ticked in two places is sent once, so
-the confirm and the dialog count what is sent. Remove from menu asks first ("Remove 2 items?", "¿Quitar 2 elementos?")
-and lists each item with the list it leaves; it stays quiet and disabled while a section the menu owns is selected, with a line saying a
-section is deleted from its own row's ⋮, because a section the menu owns is deleted, never removed.
+the confirms and the dialog count what is sent. Remove from menu and Delete are judged on the rows sent, so a row inside a selected section does
+not count. Delete is enabled when every sent row is a section the menu owns, and Remove from menu
+when none is, because a section the menu owns is deleted, never removed; each is quiet while its
+rule rules it out. A selection that mixes a section the menu owns with anything else disables both,
+with the line "Delete sections and remove other items separately." under the bar. Remove from menu
+asks first ("Remove 2 items?", "¿Quitar 2 elementos?") and lists each item with the list it leaves.
+Delete asks first too ("Delete 2 sections?", "¿Eliminar 2 secciones?") and lists each section once,
+leaving out one that another listed section holds; a section with sections the menu owns below it
+reads "Wines and the 2 sections below it", and the list ends "Its products stay." for one section
+or "Their products stay." for more.
 Move to section… opens a dialog with one required destination: "Top level" first, then every section
 the menu owns, by its path joined with " › ", leaving out each selected section and every section
 below it; never a list inside an included menu. Its Move action is quiet until a destination is
 chosen, and again if a live update takes the chosen one away; closing it with one chosen asks
-first (`draftScopeFor`, `menus-screen.structure-move.unsaved.test.ts`). Both send one request: `POST
-/management-api/section-members/remove` and `POST /management-api/sections/:id/members/move-in`,
+first (`draftScopeFor`, `menus-screen.structure-move.unsaved.test.ts`). Each sends one request: `POST
+/management-api/section-members/remove`, `POST /management-api/sections/delete` (`deleteSections`,
+`packages/catalogue/src/sections.ts`) and `POST /management-api/sections/:id/members/move-in`,
 which moves the member rows themselves, so a moved product keeps the menu's price for it and an
 included menu keeps its folder setting (`moveMembersInto`, `packages/catalogue/src/sections.ts`).
+A Move to section…, Remove from menu or Delete answered after another menu has been opened moves no
+focus there. A refusal that arrives once its confirm has closed — opening another menu closes it, and
+so does a live update that takes away every row it named — shows as "Your change to <menu> was not
+saved." and the reason, naming the menu it was sent from (`#sendSelected`,
+`apps/dashboard/src/screens/menus-screen.ts`).
 Copying products into another section is not built.
 
 The grips show only in Select mode, alongside the checkboxes. Done leaves both selection and
