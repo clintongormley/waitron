@@ -226,6 +226,7 @@ describe("zones and their tables", () => {
     expect(mapped[0]).toMatchObject({ allergy: true, dot: "ready" });
     expect(mapped[1]).toMatchObject({ allergy: true, dot: "ready" });
     expect(mapped[2]).not.toHaveProperty("allergy");
+    expect(mapTables([joined, marked]).map((row) => row.allergy)).toEqual([true, true]);
     expect(mapTables([{ ...marked, hasAllergy: undefined }, joined])[0]).not.toHaveProperty(
       "allergy",
     );

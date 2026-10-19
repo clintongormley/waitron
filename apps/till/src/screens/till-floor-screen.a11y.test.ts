@@ -253,6 +253,7 @@ for (const locale of ["en", "es"]) {
     for (const width of [390, 1280]) {
       it(`A669 floor allergy mark ${locale}/${theme}/${width}`, async () => {
         const previous = currentLocale();
+        const viewport = { width: window.innerWidth, height: window.innerHeight };
         try {
           setLocale(locale);
           await page.viewport(width, 900);
@@ -293,7 +294,7 @@ for (const locale of ["en", "es"]) {
           });
         } finally {
           setLocale(previous);
-          await page.viewport(1280, 768);
+          await page.viewport(viewport.width, viewport.height);
         }
       });
     }

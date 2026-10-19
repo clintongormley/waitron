@@ -5481,6 +5481,11 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **Check the older capture suites' viewport cleanup (A669-5 review).**
+  `apps/till/src/screens/zone-keep-open-screens.a11y.test.ts` restores 1280×768 instead of its
+  incoming dimensions. Effects on later cases are unverified. Probe those cases before changing
+  their cleanup; preserve their current behavioral assertions.
+
 For database fixtures filtered by business day, make the boundary explicit and exercise the
 changeover. See the [testing guide](developers/testing-guide.md#a-recent-timestamp-can-belong-to-the-previous-business-day).
 

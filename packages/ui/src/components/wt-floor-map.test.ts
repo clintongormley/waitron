@@ -77,6 +77,17 @@ it("A669 paints the allergy mark with the danger tokens", async () => {
   expect(getComputedStyle(mark).animationName).toBe("none");
 });
 
+it("A669 marks a merge when only the later member has an allergy", async () => {
+  const el = await map([
+    t("a", "A", {}, { joinId: "j" }),
+    t("b", "B", { x: 8 }, { joinId: "j", allergy: true }),
+    t("c", "C", { x: 20 }),
+  ]);
+  expect(within(el, "allergy", "a")?.textContent).toBe("!");
+  expect(button(el, "a").getAttribute("aria-label")).toBe("A+B, Free, Allergy");
+  expect(within(el, "allergy", "c")).toBeNull();
+});
+
 function boxOf(el: WtFloorMap, id: string) {
   const outer = el.getBoundingClientRect();
   const box = button(el, id).getBoundingClientRect();
