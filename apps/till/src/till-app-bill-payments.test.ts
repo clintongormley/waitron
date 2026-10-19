@@ -2398,6 +2398,196 @@ describe("till-app: a bill payment's refusals and retries", () => {
   });
 });
 
+describe("till-app: a bill payment still out holds the bill (A796 default 7)", () => {
+  async function contribute(el: TillApp): Promise<void> {
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+  }
+
+  async function reopen(el: TillApp): Promise<void> {
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    await openDialog(el, "contribution");
+  }
+
+  it("a dialog reopened while a payment is out shows that payment, held, and sends nothing", async () => {
+    const takeBillPayment = vi.fn(() => new Promise<BillPaymentResult>(() => {}));
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await contribute(el);
+    expect(takeBillPayment).toHaveBeenCalledOnce();
+
+    await reopen(el);
+
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(dialog(el)!.busy).toBe(true);
+    expect(inDialog(el, "[data-pay-continue]")).toBeNull();
+    expect(text(inDialog(el, "[data-pay-applied] dd"))).toBe(money("40.00"));
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.sending"));
+    await press(el, "[data-pay-confirm]");
+    expect(takeBillPayment).toHaveBeenCalledOnce();
+  });
+
+  it("when the out payment is answered, the reopened dialog shows the form and reads the balance", async () => {
+    let answer: (value: BillPaymentResult) => void = () => {};
+    const takeBillPayment = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<BillPaymentResult>((resolve) => (answer = resolve)))
+      .mockResolvedValue(
+        takenOf({ applied: "40.00", change: "10.00" }, { received: "80.00", outstanding: "40.00" }),
+      );
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await contribute(el);
+    const first = sent()[0]!.submissionId;
+    await reopen(el);
+    const reads = vi.mocked(api.getBillBalance).mock.calls.length;
+
+    answer(
+      takenOf({ applied: "40.00", change: "10.00" }, { received: "40.00", outstanding: "80.00" }),
+    );
+    await flush(el);
+
+    expect(dialog(el)!.busy).toBe(false);
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    expect(inDialog(el, "wt-form-actions")!.error ?? "").toBe("");
+    expect(vi.mocked(api.getBillBalance).mock.calls.length).toBeGreaterThan(reads);
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(takeBillPayment).toHaveBeenCalledTimes(2);
+    expect(sent()[1]!.submissionId).not.toBe(first);
+  });
+
+  it("when the out payment gets no answer, the reopened dialog becomes the locked confirmation and resends it", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    await contribute(el);
+    const original = structuredClone(sent()[0]!);
+    await reopen(el);
+    expect(dialog(el)!.busy).toBe(true);
+
+    await expect.poll(() => dialog(el)!.busy, { timeout: 10_000 }).toBe(false);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    const confirm = inDialog(el, "[data-pay-confirm]")!;
+    expect(confirm.disabled).toBe(false);
+    expect(text(confirm)).toBe(t("bill_pay.recheck"));
+    const before = sent().length;
+    takeBillPayment.mockResolvedValueOnce(
+      takenOf({ applied: "40.00", change: "10.00" }, { received: "40.00", outstanding: "80.00" }),
+    );
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent().length).toBe(before + 1);
+    expect(sent().at(-1)).toEqual(original);
+  });
+
+  it.each(["pay-tab", "find-bill-pay"])(
+    "a whole payment through %s is refused while a part payment is out",
+    async (event) => {
+      const takeBillPayment = vi.fn(() => new Promise<BillPaymentResult>(() => {}));
+      const { el } = await mountApp({ takeBillPayment });
+      await openTable(el);
+      await contribute(el);
+      emit(dialog(el)!, "bill-pay-close");
+      await flush(el);
+
+      emit(
+        tableOrder(el),
+        event,
+        event === "pay-tab"
+          ? { method: "cash", amount: "120.00", guests: 4 }
+          : {
+              workingOrderId: "wo-4",
+              tender: { method: "cash", amount: "120.00" },
+              invoiced: true,
+            },
+      );
+      await flush(el);
+
+      expect(api.recordSale).not.toHaveBeenCalled();
+      expect(api.collectOrder).not.toHaveBeenCalled();
+      expect(takeBillPayment).toHaveBeenCalledOnce();
+      if (event === "pay-tab") expect(el.shadowRoot!.textContent).toContain(t("bill_pay.sending"));
+      else
+        expect((el as unknown as { findBillError?: unknown }).findBillError).toBe(
+          "bill_pay.sending",
+        );
+    },
+  );
+
+  it("a payment started while the one before it is still reading the bill keeps the bill held", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValueOnce(
+        takenOf({ applied: "40.00", change: "10.00" }, { received: "40.00", outstanding: "80.00" }),
+      )
+      .mockImplementation(() => new Promise<BillPaymentResult>(() => {}));
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    vi.mocked(api.getTablesState).mockImplementation(async () => {
+      await held;
+      return [mesa()];
+    });
+    await contribute(el);
+    expect(dialog(el)!.busy).toBe(false);
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(takeBillPayment).toHaveBeenCalledTimes(2);
+
+    release();
+    await flush(el);
+    await reopen(el);
+
+    expect(dialog(el)!.busy).toBe(true);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.sending"));
+  });
+
+  it("a payment out on one bill holds no other bill", async () => {
+    const takeBillPayment = vi.fn(async (billId: string) => {
+      if (billId === "wo-4") return new Promise<BillPaymentResult>(() => {});
+      return takenOf({}, { workingOrderId: billId });
+    });
+    const { el } = await mountApp({
+      takeBillPayment,
+      getPartyBills: vi.fn().mockResolvedValue([billOf(), billOf({ workingOrderId: "wo-check" })]),
+    });
+    await openTable(el);
+    await contribute(el);
+    emit(dialog(el)!, "bill-pay-close");
+    emit(tableOrder(el), "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    await openDialog(el, "contribution");
+    expect(dialog(el)!.busy).toBe(false);
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(takeBillPayment).toHaveBeenCalledTimes(2);
+    expect(sent()[1]).toMatchObject({ expectedEdit: { billId: "wo-check" } });
+    expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
+  });
+});
+
 describe("till-app: the bill's balance is read once for each answer", () => {
   const partly = billOf({ outstanding: "70.00", hasPayments: true });
   const heldMoney = balanceOf({ received: "50.00", outstanding: "70.00", payments: [paymentOf()] });
@@ -3299,7 +3489,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(api.listWorkingOrders).toHaveBeenCalledTimes(listReads);
   });
 
-  it("keeps the next operator's payment that got no answer when an earlier operator's payment is answered late", async () => {
+  it("holds the next operator's payment until an earlier operator's payment is answered late", async () => {
     let answer: (value: BillPaymentResult) => void = () => {};
     const takeBillPayment = vi
       .fn()
@@ -3307,6 +3497,7 @@ describe("till-app: a partly paid order at the counter", () => {
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await retrieved({ takeBillPayment });
     await payTheRest(el);
+    const earlier = sent()[0]!.submissionId;
     emit(counter(el), "logout");
     await discardUnsavedLeave(el);
     await flush(el);
@@ -3315,10 +3506,9 @@ describe("till-app: a partly paid order at the counter", () => {
     emit(counter(el), "retrieve-order", { id: "wo-1" });
     await flush(el);
     await payTheRest(el);
-    await expect
-      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
-      .toBe(t("bill_pay.unconfirmed"));
-    const unanswered = sent().at(-1)!.submissionId;
+    expect(dialog(el)!.busy).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.sending"));
+    expect(takeBillPayment).toHaveBeenCalledOnce();
 
     answer(
       takenOf(
@@ -3327,31 +3517,31 @@ describe("till-app: a partly paid order at the counter", () => {
       ),
     );
     await flush(el);
+    expect(dialog(el)!.busy).toBe(false);
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
     takeBillPayment.mockResolvedValueOnce(
       takenOf(
         { applied: "70.00", tendered: "70.00" },
         { workingOrderId: "wo-1", received: "100.00", outstanding: "20.00" },
       ),
     );
-    await press(el, "[data-pay-confirm]");
+    await payTheRest(el);
 
-    expect(sent().at(-1)!.submissionId).toBe(unanswered);
+    expect(takeBillPayment).toHaveBeenCalledTimes(2);
+    expect(sent().at(-1)!.submissionId).not.toBe(earlier);
   });
 
-  it("resends the next operator's unanswered payment under its own id when an earlier operator's payment is refused while it is out", async () => {
+  it("holds the next operator's payment until an earlier operator's payment is refused", async () => {
     let refuseEarlier: (error: unknown) => void = () => {};
-    let failNext: (error: unknown) => void = () => {};
     const takeBillPayment = vi
       .fn()
       .mockImplementationOnce(
         () => new Promise<BillPaymentResult>((_resolve, reject) => (refuseEarlier = reject)),
       )
-      .mockImplementationOnce(
-        () => new Promise<BillPaymentResult>((_resolve, reject) => (failNext = reject)),
-      )
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await retrieved({ takeBillPayment });
     await payTheRest(el);
+    const earlier = sent()[0]!.submissionId;
     emit(counter(el), "logout");
     await discardUnsavedLeave(el);
     await flush(el);
@@ -3360,24 +3550,24 @@ describe("till-app: a partly paid order at the counter", () => {
     emit(counter(el), "retrieve-order", { id: "wo-1" });
     await flush(el);
     await payTheRest(el);
-    const [earlier, next] = sent().map((request) => request.submissionId);
-    expect(next).not.toBe(earlier);
+    expect(dialog(el)!.busy).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.sending"));
+    expect(takeBillPayment).toHaveBeenCalledOnce();
 
     refuseEarlier({ code: "session.expired", status: 401 });
     await flush(el);
-    failNext(new TypeError("Failed to fetch"));
-    await expect
-      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
-      .toBe(t("bill_pay.unconfirmed"));
+    expect(dialog(el)!.busy).toBe(false);
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
     takeBillPayment.mockResolvedValueOnce(
       takenOf(
         { applied: "70.00", tendered: "70.00" },
         { workingOrderId: "wo-1", received: "100.00", outstanding: "20.00" },
       ),
     );
-    await press(el, "[data-pay-confirm]");
+    await payTheRest(el);
 
-    expect(sent().at(-1)!.submissionId).toBe(next);
+    expect(takeBillPayment).toHaveBeenCalledTimes(2);
+    expect(sent().at(-1)!.submissionId).toBe(earlier);
   });
 
   it("sends the next operator's same payment under the id of one that got no answer after its operator logged out", async () => {

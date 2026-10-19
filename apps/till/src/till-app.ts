@@ -218,6 +218,7 @@ import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import type { CancelCreditDone, TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import {
   confirmationOf,
+  isLatestSend,
   isPaymentInFlight,
   isTakePaymentRefusal,
   moneyPlus,
@@ -2950,6 +2951,21 @@ export class TillApp extends LitElement {
   #billPays = 0;
   #unansweredPayments = new Map<string, PendingBillPayment>();
   #paymentSends = new Map<string, number>();
+  /** The bill payment being sent on each bill, and the dialog that sent it. */
+  #paymentsOut = new Map<string, { dialogId: number; shown: PendingBillPayment["shown"] }>();
+
+  /** No payment may start on a bill while one is out on it, or one A773-1 holds has no answer. */
+  #billPaymentHeld(billId: string): boolean {
+    return (
+      this.#unansweredPayments.get(billId)?.unconfirmed === true || this.#paymentsOut.has(billId)
+    );
+  }
+
+  /** Out on the bill from a dialog other than `dialogId`. */
+  #paymentOutElsewhere(billId: string, dialogId: number): boolean {
+    const out = this.#paymentsOut.get(billId);
+    return out !== undefined && out.dialogId !== dialogId;
+  }
   @state() private departing: Departing | null = null;
   #departings = 0;
   /** The people who can approve the departure being recorded; set, their PIN prompt is open. */
@@ -7523,8 +7539,10 @@ export class TillApp extends LitElement {
   async #onFindBillPay(event: Event): Promise<void> {
     if (this.submitting) return;
     const { workingOrderId, tender, invoiced } = (event as CustomEvent<FindBillPayDetail>).detail;
-    if (this.#unansweredPayments.get(workingOrderId)?.unconfirmed === true) {
-      this.findBillError = "bill_pay.unconfirmed";
+    if (this.#billPaymentHeld(workingOrderId)) {
+      this.findBillError = this.#paymentsOut.has(workingOrderId)
+        ? "bill_pay.sending"
+        : "bill_pay.unconfirmed";
       return;
     }
     const observation = this.#collectionObservation;
@@ -9364,7 +9382,7 @@ export class TillApp extends LitElement {
         .taken=${open.taken}
         .refunded=${open.refunded}
         .busy=${open.busy}
-        .confirmationLocked=${pending?.unconfirmed === true}
+        .confirmationLocked=${pending?.unconfirmed === true || this.#paymentOutElsewhere(open.billId, open.id)}
         .tipsEnabled=${this.tipsEnabled}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
@@ -15494,8 +15512,8 @@ export class TillApp extends LitElement {
   async #onPayTab(event: Event): Promise<void> {
     if (this.submitting || this.activeTabId === undefined) return;
     const id = this.activeTabId;
-    if (this.#unansweredPayments.get(id)?.unconfirmed === true) {
-      this.errorKey = "bill_pay.unconfirmed";
+    if (this.#billPaymentHeld(id)) {
+      this.errorKey = this.#paymentsOut.has(id) ? "bill_pay.sending" : "bill_pay.unconfirmed";
       return;
     }
     const bill = this.partyBills.find((row) => row.workingOrderId === id);
@@ -15596,7 +15614,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const api = this.api;
     const id = this.activeTabId;
-    const unconfirmed = id !== undefined && this.#unansweredPayments.get(id)?.unconfirmed === true;
+    const unconfirmed = id !== undefined && this.#billPaymentHeld(id);
     if (
       (!unconfirmed && !(await this.#flushDraft())) ||
       visit !== this.#orderVisit ||
@@ -15706,6 +15724,7 @@ export class TillApp extends LitElement {
       return null;
     }
     const pending = this.#unansweredPayments.get(billId);
+    const out = this.#paymentsOut.get(billId);
     const open: BillPaying = {
       id: ++this.#billPays,
       ...order,
@@ -15721,6 +15740,7 @@ export class TillApp extends LitElement {
       taken: null,
       refunded: null,
       busy: false,
+      ...(out === undefined ? {} : { ...out.shown, busy: true, refusal: { code: "sending" } }),
     };
     this.billPaying = open;
     await this.#rereadBillPaying(open.id, billId);
@@ -15826,11 +15846,12 @@ export class TillApp extends LitElement {
     const api = this.api;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     const settle = (error?: unknown) => {
-      if (this.#paymentSends.get(key) !== turn) return;
+      if (!isLatestSend(this.#paymentSends, key, turn)) return;
       const unanswered = unansweredAfter(submission, error);
       if (unanswered === null) this.#unansweredPayments.delete(key);
       else this.#unansweredPayments.set(key, unanswered);
     };
+    this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown });
     await this.#holdingReload(async () => {
       try {
         const result = await this.#withReaderPayment(asked.card?.entry === "reader", () =>
@@ -15847,8 +15868,26 @@ export class TillApp extends LitElement {
         await this.#onBillPayRefused(open.id, error, asked, "take");
       } finally {
         limit.done();
+        if (isLatestSend(this.#paymentSends, key, turn)) {
+          this.#paymentsOut.delete(key);
+          await this.#afterPaymentOut(open.id, key);
+        }
       }
     });
+  }
+
+  /** A dialog another one's send held on the bill follows that send's end: still unanswered, it is
+   * the locked confirmation of that payment; otherwise the form, on the balance read again. */
+  async #afterPaymentOut(senderId: number, billId: string): Promise<void> {
+    const that = this.billPaying;
+    if (that === null || that.id === senderId || that.billId !== billId) return;
+    const entry = this.#unansweredPayments.get(billId);
+    if (entry?.unconfirmed === true) {
+      this.billPaying = { ...that, ...entry.shown, busy: false, refusal: { code: "network" } };
+      return;
+    }
+    this.billPaying = { ...that, busy: false, asked: null, preview: null, refusal: null };
+    await this.#rereadBillPaying(that.id, billId);
   }
 
   /**

@@ -193,6 +193,16 @@ export function unansweredAfter<S extends { unconfirmed?: boolean }>(
   return isNetworkFailure(error) ? { ...sent, unconfirmed: true } : sent;
 }
 
+/** Whether `turn` is still the latest send on the bill: an answer to a send a newer one replaced
+ * changes nothing. */
+export function isLatestSend(
+  turns: ReadonlyMap<string, number>,
+  billId: string,
+  turn: number,
+): boolean {
+  return turns.get(billId) === turn;
+}
+
 /** A refusal's code and the request field it names, as the refund and unpaid departure dialogs
  * show it. The app's own codes: `network`, a request that got no answer; `approvers`, a list of who
  * can approve that could not be read. */
