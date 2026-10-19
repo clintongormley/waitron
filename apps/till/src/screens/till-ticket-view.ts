@@ -150,7 +150,10 @@ function issueDate(iso: string, locale: string, offsetMinutes?: number): string 
     dateStyle: "medium",
     timeStyle: "short",
     ...(offsetMinutes === undefined ? {} : { timeZone: "UTC" }),
-  }).format(date);
+  })
+    .formatToParts(date)
+    .map((part) => (part.type === "hour" ? part.value.padStart(2, "0") : part.value))
+    .join("");
 }
 
 function tenderRow(label: string, amount: string, locale: string) {

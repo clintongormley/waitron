@@ -293,6 +293,17 @@ describe("receipt labels", () => {
   });
 });
 
+describe("the short simplified-invoice heading", () => {
+  it.each([
+    ["es-ES", "Fra. simplificada"],
+    ["ca-ES", "Fra. simplificada"],
+    ["gl-ES", "Fra. simplificada"],
+    ["eu-ES", "Faktura erraztua"],
+  ])("labels it in %s", (locale, want) => {
+    expect(SPAIN.receiptLabels?.[locale]?.simplifiedInvoiceShort).toBe(want);
+  });
+});
+
 describe("validateSpanishPhone", () => {
   it.each([
     ["612 345 678", "+34612345678", "mobile"],

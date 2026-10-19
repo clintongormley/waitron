@@ -23,6 +23,7 @@ import {
   type FiledLine,
   type GroupDiscount,
 } from "./receipt-figures.js";
+import { receiptDateTime, receiptDay } from "./receipt-dates.js";
 import { groupByParent, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
@@ -101,17 +102,6 @@ function adjustmentLabel(
     percentFormatters.set(locale, formatter);
   }
   return `${label.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
-}
-
-function issueDate(iso: string, locale: string, offsetMinutes?: number): string {
-  const instant = new Date(iso);
-  const date =
-    offsetMinutes === undefined ? instant : new Date(instant.getTime() + offsetMinutes * 60_000);
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeStyle: "short",
-    ...(offsetMinutes === undefined ? {} : { timeZone: "UTC" }),
-  }).format(date);
 }
 
 // Accents are not folded: a near-match prints twice rather than dropping the filed address.
@@ -219,19 +209,20 @@ export function buildReceiptDocument({
     .join(" · ");
   if (simplified) {
     // Two spaces at least, or an order number running into the date reads as one figure.
-    row(orderText, issueDate(result.issuedAt, locale), 0, undefined, 2);
+    row(orderText, receiptDateTime(result.issuedAt, locale), 0, undefined, 2);
     row(label.simplifiedInvoice, result.invoiceNumber);
   } else {
     row(label.invoiceHeading, result.invoiceNumber, 0, { bold: true });
-    row(orderText, issueDate(result.issuedAt, locale, result.issuedOffsetMinutes), 0, undefined, 2);
+    row(
+      orderText,
+      receiptDateTime(result.issuedAt, locale, result.issuedOffsetMinutes),
+      0,
+      undefined,
+      2,
+    );
   }
   if (!simplified && result.operationDate !== undefined) {
-    row(
-      label.operationDate,
-      new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
-        new Date(`${result.operationDate}T00:00:00Z`),
-      ),
-    );
+    row(label.operationDate, receiptDay(result.operationDate, locale));
   }
   rule();
   if (!simplified && result.recipient) {

@@ -61,7 +61,7 @@ describe("format-neutral invoice content", () => {
     expect(text).not.toContain("Current mutable location address");
     expect(rows).toEqual([
       ["FACTURA", "FF/1"],
-      ["Mesa 6 · Pedido 41", "18 ago 2026, 0:34"],
+      ["Mesa 6 · Pedido 41", "18 ago 2026, 00:34"],
       ["Fecha de operación", "17 ago 2026"],
       ["Base imponible 21%", "9,00 €"],
       ["IVA 21%", "1,89 €"],

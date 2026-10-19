@@ -7,6 +7,7 @@ import { AppError, addDecimal, decimal, saleId as brandSaleId } from "@waitron/s
 import { esc, labelAmountLines, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
+import { receiptDateTime } from "./receipt-dates.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { formatMoney } from "./receipt-money.js";
 import { toTenderRefundView } from "./tender-refunds.js";
@@ -117,13 +118,7 @@ export function formatTenderRefundAcknowledgment(
   row(labels.reference, acknowledgment.invoiceNumber);
   text(acknowledgment.refund.id);
   if (acknowledgment.customerName !== null) row(labels.customer, acknowledgment.customerName);
-  text(
-    new Intl.DateTimeFormat(language, {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: "UTC",
-    }).format(new Date(acknowledgment.refund.completedAt!)) + " UTC",
-  );
+  text(`${receiptDateTime(acknowledgment.refund.completedAt!, language, 0)} UTC`);
   text(
     acknowledgment.method === "cash"
       ? labels.cash

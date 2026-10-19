@@ -226,6 +226,11 @@ it("prints one audited payment document without invoice delivery, fiscal QR or d
   const detail = await inTx(venue, (tx) => readOrderDetail(tx, row.saleId, "all", false));
   expect(detail.reprints).toEqual([]);
 });
+it("prints the refund time in UTC with a two-digit hour", async () => {
+  const row = await target({ completedAt: "2026-10-16T09:05:00.000Z" });
+  expect((await print(row.id)).status).toBe(200);
+  expect(decodeTicket((await printed()).jobs.at(-1)!.payload)).toContain("16 oct 2026, 09:05 UTC");
+});
 it("prints the stored English language and offered Spanish without changing the invoice", async () => {
   venue.cfg.locale = "en-GB";
   venue.cfg.invoiceLocales = ["en-GB"];

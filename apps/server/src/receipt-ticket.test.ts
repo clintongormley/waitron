@@ -117,7 +117,7 @@ describe("saved F1 issue offset", () => {
     [PRINTER_58, PRINTER_80].flatMap((printer) =>
       [false, true].flatMap((duplicate) =>
         [
-          { offset: 60, want: "1 mar 2026, 0:05" },
+          { offset: 60, want: "1 mar 2026, 00:05" },
           { offset: 0, want: "28 feb 2026, 23:05" },
           { offset: -480, want: "28 feb 2026, 15:05" },
         ].map((clock) => ({ printer, duplicate, ...clock })),

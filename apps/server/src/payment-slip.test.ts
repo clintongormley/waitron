@@ -50,6 +50,10 @@ describe("payment slip (pure renderer, no database)", () => {
     expect(text).not.toMatch(/^\s*(?:Factura|Serie|Número de factura)\s*[:#]?\s*\S+/im);
     expect(commandNames(bytes)).not.toContain("GS ( k");
   });
+  it("prints the payment time with a two-digit hour", () => {
+    const paidAt = new Date(2026, 8, 12, 9, 5).toISOString();
+    expect(decodeTicket(formatPaymentSlip({ ...input, paidAt }))).toContain("12 sept 2026, 09:05");
+  });
   it("omits missing card facts, tip and label while keeping the amount", () => {
     const text = decodeTicket(
       formatPaymentSlip({ ...input, card: null, orderLabel: null, tip: "0.00", charged: "1.00" }),
