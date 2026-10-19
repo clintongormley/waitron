@@ -32,6 +32,7 @@ const HIERARCHY_DELETE_READS = [
   "zone_sale_policies",
   "zone_extensions",
   "department_sale_policies",
+  "service_steps",
   "menu_periods",
   "menu_period_staff_menus",
   "department_days",
