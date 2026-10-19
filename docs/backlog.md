@@ -1014,12 +1014,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   Decision 8's limit).
   [Detail](backlog/catalogue.md#translate-all-a-job-that-ends-before-any-page-is-stored-does-not-count-its-items-as-lost)
 
-- **Translate all: collect's 120-second deadline per page awaits the owner.** A689-21 built the
-  plan's default for its open question 1 (120 s, `LIMITS` in `apps/server/src/cloud-translation.ts`;
-  was 30 s), and its other three open questions on their defaults too; the owner is away until
-  2 November. If the owner chooses otherwise, change the limit and its test.
-  [Detail](backlog/catalogue.md#translate-all-collects-120-second-deadline-per-page-awaits-the-owner)
-
 - **Loose ends left by A689's fifth PR.**
   - Translate all: a "Use fix" button for a spelling fix to a name someone entered; it waits for
     the side-by-side translations dialog (plan Decision 6). Today the dialog shows such a fix only

@@ -1,7 +1,8 @@
 # Translate all: collect results page by page (A689-21) Implementation Plan
 
-> **2026-10-19:** PR 1 (Tasks 1 to 8) was built on branch `feat/a689-21-collect-pages`. The owner's
-> four open questions, at the end of this plan, were built on their defaults.
+> **2026-10-19:** PR 1 (Tasks 1 to 8) was built on branch `feat/a689-21-collect-pages`, using the
+> defaults of the four open questions at the end of this plan; the owner chose all four defaults
+> on 2026-10-19.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -691,12 +691,13 @@ A689-21 made the box fetch and store those pages
 is that plan's PR 2:
 
 - **2a, the Santet run**, Task 21 adapted to paging, with Cloud's fake provider making the result
-  larger than one page. Its record is a docs-only commit.
+  larger than one page (the owner chose the fake provider on 2026-10-19, open question 3). Its
+  record is a docs-only commit.
 - **2b, the joint fault proof** Cloud's release gate asks for. Its contract's words: "Do not go
   live until pinned Cloud and Waitron candidates jointly prove multi-page collection, crash/reply-loss
   retry, deduplication, bounded decoded reads and release only after durable completion." The plan
-  recommends a Cloud script beside Cloud's `scripts/test-waitron-pairing.mjs`, built on Cloud's
-  side (open question 4).
+  recommends a Cloud script beside Cloud's `scripts/test-waitron-pairing.mjs`, built by lane D on
+  Cloud's side; the owner chose that on 2026-10-19 (open question 4).
 
 - **Cloud must support version 2 before any box built from `main` talks to it.** The box asks for
   the service with `servicesVersion` 2, which a Cloud without version 2 refuses as an invalid
@@ -741,17 +742,6 @@ is that plan's PR 2:
   last progress reading, usually no failures. Such a job has stored no suggestions, so the notice
   appears only for an earlier job's waiting ones, and it does not mention this job's lost items.
   Left out of A689-21 as wider than its plan's Decision 8.
-
-## Translate all: collect's 120-second deadline per page awaits the owner
-
-- **Translate all: collect's 120-second deadline per page awaits the owner.** A689-21 raised
-  collect's read deadline from 30 s to 120 s a page (`LIMITS`, `apps/server/src/cloud-translation.ts`),
-  the default of its plan's open question 1: enough for a 16 MiB page at about 1.1 Mbit/s. The
-  other choices were keeping 30 s, which a 12 MiB page over a 2 Mbit/s link (about 50 s) misses
-  every time, or no fixed deadline, only a stalled-stream timeout. Its other three open questions were built on
-  their defaults too: an interrupted walk's suggestions are kept; the Santet run uses Cloud's fake
-  provider; the joint fault proof is a Cloud script. The owner is away until 2 November; delete
-  this entry when the owner confirms, or change what the owner overrides.
 
 ## A655 — fewer and slimmer columns on Products
 
