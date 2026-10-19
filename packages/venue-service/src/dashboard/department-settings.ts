@@ -34,6 +34,7 @@ import {
   stepsEqual,
   toStepDrafts,
   toStepInputs,
+  withSavedIds,
   type ServiceStepDraft,
 } from "./service-step-draft.js";
 
@@ -355,14 +356,17 @@ export class DepartmentSettings extends LitElement {
       this.leave = coordinator;
       scope.commit(this.baseline!);
     }
-    if (this.scope && !this.scope.isDirty() && !this.busy && !equal(this.source!, source)) {
-      this.source = copy(source);
-      this.draft = {
-        ...source,
-        ...(this.draft!.transfers ? { transfers: this.draft!.transfers } : {}),
-      };
-      this.baseline = copy(this.draft);
-      this.scope.commit(this.baseline);
+    if (this.scope && !this.busy) {
+      if (this.scope.isDirty()) this.followSteps(source.serviceSteps);
+      else if (!equal(this.source!, source)) {
+        this.source = copy(source);
+        this.draft = {
+          ...source,
+          ...(this.draft!.transfers ? { transfers: this.draft!.transfers } : {}),
+        };
+        this.baseline = copy(this.draft);
+        this.scope.commit(this.baseline);
+      }
     }
     if (
       this.isConnected &&
@@ -372,6 +376,32 @@ export class DepartmentSettings extends LitElement {
       this.api
     )
       void this.loadTransfers(row.id, this.transferGeneration);
+  }
+  /** A dirty draft still follows the model's steps where no edit of the user's is at stake: an
+   * unchanged list takes the model's, and rows a save added take the ids the model gave them, so
+   * the next save keeps those rows rather than replacing them. */
+  private followSteps(steps: ServiceStepDraft[]) {
+    const draft = this.draft!,
+      baseline = this.baseline!;
+    if (stepsEqual(steps, baseline.serviceSteps)) return;
+    if (stepsEqual(draft.serviceSteps, baseline.serviceSteps)) {
+      this.draft = { ...draft, serviceSteps: steps.map((step) => ({ ...step })) };
+      this.baseline = { ...baseline, serviceSteps: steps.map((step) => ({ ...step })) };
+    } else {
+      const saved = withSavedIds(baseline.serviceSteps, steps);
+      if (!saved) return;
+      const ids = new Map(saved.map((step) => [step.key, step.id]));
+      this.draft = {
+        ...draft,
+        serviceSteps: draft.serviceSteps.map((step) => ({
+          ...step,
+          id: ids.get(step.key) ?? step.id,
+        })),
+      };
+      this.baseline = { ...baseline, serviceSteps: saved };
+    }
+    this.source = { ...this.source!, serviceSteps: steps.map((step) => ({ ...step })) };
+    this.scope!.commit(this.baseline);
   }
   private current(id: string, generation: object) {
     return (

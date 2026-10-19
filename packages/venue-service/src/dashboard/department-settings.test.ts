@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -1677,6 +1678,136 @@ it("after a save, the model's copy with the new step's id replaces the clean dra
     ...SENT_STEPS,
     { id: "s4", name: "Coffee", start: "after_previous", courseId: null, minutes: 5 },
   ]);
+});
+const withCoffee = () => {
+  const view = stepsView();
+  view.serviceSteps.splice(3, 0, {
+    id: "s4",
+    departmentId: "d1",
+    name: "Coffee",
+    start: "after_previous",
+    courseId: null,
+    minutes: 0,
+  });
+  return view;
+};
+it("a step edited while the saved list's refresh is pending keeps the new step's id when the refresh lands", async () => {
+  await import("./department-edit-dialog.js");
+  const { el: original, writes } = await mount(stepsView());
+  const dialog = document.createElement("department-edit-dialog");
+  dialog.api = original.api!;
+  dialog.model = stepsView();
+  dialog.departmentId = "d1";
+  dialog.receiptEditor = html`${Object.assign(document.createElement("div"), {
+    hasUnsavedChanges: true,
+  })}`;
+  const host = document.createElement("div");
+  applyTokens(host);
+  document.body.append(host);
+  hosts.push(host);
+  host.append(dialog);
+  await dialog.updateComplete;
+  const el = dialog.shadowRoot!.querySelector("department-settings")!;
+  await settled(el);
+  const written: unknown[] = [];
+  dialog.addEventListener("written", (event) => written.push(event));
+  await selectDepartmentTab(el, "service");
+  await addStep(el);
+  await editStep(el, 3, "Name", "Coffee");
+  save(el).click();
+  await expect.poll(() => written.length).toBe(1);
+  expect(el.receiptHasUnsavedChanges).toBe(true);
+  expect(dialog.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+  dialog.refreshing = true;
+  await dialog.updateComplete;
+  await settled(el);
+  await editStep(el, 3, "Minutes", "5");
+  dialog.model = withCoffee();
+  dialog.refreshing = false;
+  await dialog.updateComplete;
+  await settled(el);
+  expect(stepControl(el, 3, "Minutes").value).toBe("5");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect((writes[1]!.body as { serviceSteps: unknown[] }).serviceSteps).toEqual([
+    ...SENT_STEPS,
+    { id: "s4", name: "Coffee", start: "after_previous", courseId: null, minutes: 5 },
+  ]);
+});
+it("a rename made before the saved list's refresh lands keeps the rename and takes the new step's id", async () => {
+  const { el, writes } = await mount(stepsView());
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  await addStep(el);
+  await editStep(el, 3, "Name", "Coffee");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await expect.poll(() => save(el).disabled).toBe(true);
+  await change(el, "name", "Restaurant revised");
+  el.model = withCoffee();
+  await settled(el);
+  expect(field(el, "name").value).toBe("Restaurant revised");
+  expect(stepList(el).steps.map((step) => step.id)).toEqual(["s1", "s2", "s3", "s4"]);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1]!.body).toMatchObject({ name: "Restaurant revised" });
+  expect(writes[1]!.body).not.toHaveProperty("serviceSteps");
+  await expect.poll(() => save(el).disabled).toBe(true);
+  await editStep(el, 3, "Minutes", "5");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(3);
+  expect((writes[2]!.body as { serviceSteps: unknown }).serviceSteps).toEqual([
+    ...SENT_STEPS,
+    { id: "s4", name: "Coffee", start: "after_previous", courseId: null, minutes: 5 },
+  ]);
+});
+it("a step added before the saved list's refresh lands is still sent as new, beside the saved step's id", async () => {
+  const { el, writes } = await mount(stepsView());
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  await addStep(el);
+  await editStep(el, 3, "Name", "Coffee");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await expect.poll(() => save(el).disabled).toBe(true);
+  await addStep(el);
+  await editStep(el, 4, "Name", "Tea");
+  el.model = withCoffee();
+  await settled(el);
+  expect(stepList(el).steps.map((step) => [step.id, step.name])).toEqual([
+    ["s1", "Set up"],
+    ["s2", "Take order"],
+    ["s3", "Dessert?"],
+    ["s4", "Coffee"],
+    [null, "Tea"],
+  ]);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect((writes[1]!.body as { serviceSteps: unknown }).serviceSteps).toEqual([
+    ...SENT_STEPS,
+    { id: "s4", name: "Coffee", start: "after_previous", courseId: null, minutes: 0 },
+    { name: "Tea", start: "after_previous", courseId: null, minutes: 0 },
+  ]);
+});
+it("a step list another manager changed while a rename is in progress shows their list, and the rename saves", async () => {
+  const { el, writes } = await mount(stepsView());
+  await selectDepartmentTab(el, "service");
+  await settled(el);
+  await change(el, "name", "Restaurant revised");
+  const gone = stepsView();
+  gone.courses = [{ id: "c2", name: "Desserts" }];
+  gone.serviceSteps = gone.serviceSteps.filter((step) => step.id !== "s3");
+  el.model = gone;
+  await settled(el);
+  expect(field(el, "name").value).toBe("Restaurant revised");
+  expect(stepList(el).steps.map((step) => step.id)).toEqual(["s1", "s2"]);
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.body).toMatchObject({ name: "Restaurant revised" });
+  expect(writes[0]!.body).not.toHaveProperty("serviceSteps");
+  await expect.poll(() => save(el).disabled).toBe(true);
+  expect(el.hasUnsavedChanges).toBe(false);
 });
 it("changing a step and changing it back sends no steps", async () => {
   const { el, writes } = await mount(stepsView());

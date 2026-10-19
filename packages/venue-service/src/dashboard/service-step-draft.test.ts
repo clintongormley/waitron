@@ -4,6 +4,7 @@ import {
   stepsEqual,
   toStepDrafts,
   toStepInputs,
+  withSavedIds,
   type ServiceStepDraft,
 } from "./service-step-draft.js";
 
@@ -99,6 +100,28 @@ describe("stepsEqual", () => {
     a[0]!.minutes = "";
     b[0]!.minutes = "0";
     expect(stepsEqual(a, b)).toBe(false);
+  });
+});
+
+describe("withSavedIds", () => {
+  const saved = () => {
+    const list = drafts();
+    list[1] = { ...list[1]!, key: "new", id: null };
+    return list;
+  };
+  it("gives each id-less row the id the model holds at its place, keeping its key", () => {
+    expect(withSavedIds(saved(), drafts())).toEqual([drafts()[0], { ...drafts()[1], key: "new" }]);
+  });
+  it("gives none when the model differs in anything but those ids", () => {
+    const moved = drafts().reverse();
+    expect(withSavedIds(saved(), moved)).toBeUndefined();
+    const other = drafts();
+    other[0]!.id = "s9";
+    expect(withSavedIds(saved(), other)).toBeUndefined();
+    const renamed = drafts();
+    renamed[1]!.name = "Pudding?";
+    expect(withSavedIds(saved(), renamed)).toBeUndefined();
+    expect(withSavedIds(saved(), drafts().slice(0, 1))).toBeUndefined();
   });
 });
 

@@ -40,6 +40,17 @@ export const stepsEqual = (a: readonly ServiceStepDraft[], b: readonly ServiceSt
       sameMinutes(step.minutes, b[index]!.minutes),
   );
 
+/** `saved` with each id-less row given the id `model` holds at its place, when that makes the two
+ * lists equal: the model is then the list `saved` was, after the save that gave those rows ids. */
+export function withSavedIds(
+  saved: readonly ServiceStepDraft[],
+  model: readonly ServiceStepDraft[],
+): ServiceStepDraft[] | undefined {
+  if (saved.length !== model.length) return undefined;
+  const filled = saved.map((step, index) => ({ ...step, id: step.id ?? model[index]!.id }));
+  return stepsEqual(filled, model) ? filled : undefined;
+}
+
 export const toStepInputs = (drafts: readonly ServiceStepDraft[]): ServiceStepInput[] =>
   drafts.map((draft) => ({
     ...(draft.id === null ? {} : { id: draft.id }),
