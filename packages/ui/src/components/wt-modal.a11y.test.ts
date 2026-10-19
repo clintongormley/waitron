@@ -110,6 +110,33 @@ describe.each(["light", "dark"] as const)("wt-modal a11y (%s theme)", (theme) =>
     expect(modal.shadowRoot!.querySelector(".footer > [data-error]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+  test("with a message too long for the footer, scrolling above the buttons", async () => {
+    await page.viewport(390, 500);
+    try {
+      const modal = (await mountThemed(
+        `<wt-modal heading="Add printer" size="standard">
+          <wt-input name="printer-name" label="Printer name"></wt-input>
+          <wt-form-actions slot="footer">
+            <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+            <wt-button>Save</wt-button>
+          </wt-form-actions>
+        </wt-modal>`,
+        theme,
+      )) as WtModal;
+      modal.open = true;
+      await modal.updateComplete;
+      const actions = modal.querySelector("wt-form-actions")!;
+      actions.error = "The printer at the bar did not answer, so nothing was saved. ".repeat(30);
+      await actions.updateComplete;
+      await modal.updateComplete;
+      const message = modal.shadowRoot!.querySelector(".footer > [data-error]")!;
+      expect(message.scrollHeight).toBeGreaterThan(message.clientHeight);
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
   test.each(["danger", "primary"] as const)(
     "a %s footer button under the pointer",
     async (variant) => {

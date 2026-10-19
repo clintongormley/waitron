@@ -1625,3 +1625,54 @@ test.each(closings)(
     expect(deepActiveElement()).toBe(nearby);
   },
 );
+
+/** A refusal far taller than the room a short window leaves the footer. */
+const LONG_REFUSAL = "The printer at the bar did not answer, so nothing was saved. "
+  .repeat(30)
+  .trim();
+
+test.each([
+  [500, "Printer settings", LONG_REFUSAL],
+  [500, '<div style="height: 2000px">Long settings</div>', LONG_REFUSAL],
+  [200, "Printer settings", LONG_REFUSAL],
+  [500, '<div style="height: 2000px">Long settings</div>', "Enter a name."],
+])(
+  "keeps its buttons in view below its footer actions' message, %ipx tall (%s)",
+  async (height, body, refusal) => {
+    await page.viewport(390, height);
+    try {
+      const el = (await mount(`<wt-dialog heading="Add printer">
+        ${body}
+        ${SAVE_OR_CANCEL}
+      </wt-dialog>`)) as Openable;
+      el.open = true;
+      await el.updateComplete;
+      const actions = el.querySelector("wt-form-actions")!;
+      actions.error = refusal;
+      const message = (await formMessageOf(actions))!;
+      expect(message.textContent).toBe(refusal);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(el.shadowRoot!.querySelector(".footer")!.firstElementChild).toBe(message);
+      const frame = el.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+      const box = message.getBoundingClientRect();
+      expect(box.height).toBeGreaterThan(0);
+      for (const button of el.querySelectorAll("wt-button")) {
+        const name = button.textContent!.trim();
+        const at = button.getBoundingClientRect();
+        expect(at.top, name).toBeGreaterThanOrEqual(box.bottom);
+        expect(at.bottom, name).toBeLessThanOrEqual(Math.min(frame.bottom, window.innerHeight));
+        expect(at.left, name).toBeGreaterThanOrEqual(Math.max(frame.left, 0));
+        expect(at.right, name).toBeLessThanOrEqual(Math.min(frame.right, window.innerWidth));
+      }
+      if (refusal === LONG_REFUSAL) {
+        expect(message.scrollHeight).toBeGreaterThan(message.clientHeight);
+      } else {
+        expect(message.scrollHeight, "a one-line message is shown whole").toBe(
+          message.clientHeight,
+        );
+      }
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);

@@ -72,11 +72,15 @@ export class WtDialog extends LitElement {
         background: var(--wt-color-scrim);
       }
 
+      /* Flex shrinking is shared out by factor times height, so only a factor this far above the
+         footer's 1 makes a long body give up its height, down to its padding, before the footer's
+         message gives up any. */
       .body {
         padding: var(--wt-space-5);
         min-height: 0;
         overflow: auto;
         overscroll-behavior: contain;
+        flex-shrink: 1000000;
       }
 
       /* The space below the heading is the row's, not the h2's: a margin inside a flex row does not
@@ -100,14 +104,19 @@ export class WtDialog extends LitElement {
       }
 
       .footer {
-        flex-shrink: 0;
+        min-height: 0;
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
       }
 
+      /* A message taller than the room the body leaves scrolls, so the buttons below it stay in
+         view. */
       .footer > .form-message {
         margin: 0;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
 
       .footer-row {
@@ -187,11 +196,14 @@ export class WtDialog extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     if (this.hasUpdated) this.observeBody();
+    if (this.hasUpdated) this.syncMessageTabStop();
     if (this.hasUpdated && this.open) this.watchContent();
   }
 
   override disconnectedCallback(): void {
     this.bodyResize.disconnect();
+    this.messageResize.disconnect();
+    this.observedMessage = null;
     this.unwatchContent();
     this.openingGeneration++;
     this.pendingClose = undefined;
@@ -292,6 +304,7 @@ export class WtDialog extends LitElement {
       }
     }
     this.syncBodyTabStop();
+    this.syncMessageTabStop();
   }
 
   private onClose(): void {
@@ -386,6 +399,22 @@ export class WtDialog extends LitElement {
       for (const name of ["tabindex", "role", "aria-labelledby", "aria-label"])
         body.removeAttribute(name);
     }
+  }
+
+  private readonly messageResize = new ResizeObserver(() => this.syncMessageTabStop());
+  private observedMessage: HTMLElement | null = null;
+
+  /** The footer's message scrolls once it is taller than the room left to it, and is then a tab
+   * stop, so it can be scrolled from the keyboard where the browser does not make it one itself. */
+  private syncMessageTabStop(): void {
+    const message = this.renderRoot.querySelector<HTMLElement>(".footer > .form-message");
+    if (message !== this.observedMessage) {
+      this.messageResize.disconnect();
+      if (message) this.messageResize.observe(message);
+      this.observedMessage = message;
+    }
+    if (message && message.scrollHeight > message.clientHeight) message.tabIndex = 0;
+    else message?.removeAttribute("tabindex");
   }
 
   private focusFirstContent(): void {

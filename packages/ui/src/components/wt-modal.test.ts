@@ -961,33 +961,36 @@ test.each([
     '<select name="unit" aria-label="Unit"><option>kg</option><option>g</option></select>',
     "select",
   ],
-])("does not scroll away from %s in focus when the message reappears", async (_, field, how) => {
-  await page.viewport(390, 500);
-  try {
-    const modal = (await mount(`<wt-modal heading="Add unit">
+])(
+  "does not scroll away from %s in focus when the message of actions in the body reappears",
+  async (_, field, how) => {
+    await page.viewport(390, 500);
+    try {
+      const modal = (await mount(`<wt-modal heading="Add unit">
       ${field}
       ${LONG_BODY}
-      <wt-form-actions slot="footer"><wt-button>Save</wt-button></wt-form-actions>
+      <wt-form-actions><wt-button>Save</wt-button></wt-form-actions>
     </wt-modal>`)) as WtModal;
-    modal.open = true;
-    await modal.updateComplete;
-    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
-    const actions = modal.querySelector("wt-form-actions")!;
-    const control = modal.querySelector<HTMLTextAreaElement | HTMLSelectElement>(
-      "textarea, select",
-    )!;
-    control.addEventListener("input", () => (actions.error = REFUSAL));
-    control.focus();
-    body.scrollTop = 0;
-    if (how === "keyboard") await userEvent.keyboard("k");
-    else await userEvent.selectOptions(control as HTMLSelectElement, "g");
-    expect((await formMessageOf(actions))?.textContent).toBe(REFUSAL);
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    expect(body.scrollTop).toBe(0);
-  } finally {
-    await page.viewport(1280, 900);
-  }
-});
+      modal.open = true;
+      await modal.updateComplete;
+      const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+      const actions = modal.querySelector("wt-form-actions")!;
+      const control = modal.querySelector<HTMLTextAreaElement | HTMLSelectElement>(
+        "textarea, select",
+      )!;
+      control.addEventListener("input", () => (actions.error = REFUSAL));
+      control.focus();
+      body.scrollTop = 0;
+      if (how === "keyboard") await userEvent.keyboard("k");
+      else await userEvent.selectOptions(control as HTMLSelectElement, "g");
+      expect((await formMessageOf(actions))?.textContent).toBe(REFUSAL);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(body.scrollTop).toBe(0);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
 
 /** Types in the unit form's name field and presses Enter; the save is refused a task later. */
 async function submitRefusedFromField(slot: string) {
@@ -1138,3 +1141,160 @@ test.each([
     }
   },
 );
+
+/** A refusal far taller than the room a short window leaves the footer. */
+const LONG_REFUSAL = "The printer at the bar did not answer, so nothing was saved. "
+  .repeat(30)
+  .trim();
+
+/** Every button lies wholly inside the dialog's box and the window. */
+function expectButtonsInView(dialogHost: Element): void {
+  const frame = dialogHost.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+  for (const button of dialogHost.querySelectorAll("wt-button, button")) {
+    const box = button.getBoundingClientRect();
+    const name = button.textContent!.trim();
+    expect(box.height, name).toBeGreaterThan(0);
+    expect(box.top, name).toBeGreaterThanOrEqual(Math.max(frame.top, 0));
+    expect(box.bottom, name).toBeLessThanOrEqual(Math.min(frame.bottom, window.innerHeight));
+    expect(box.left, name).toBeGreaterThanOrEqual(Math.max(frame.left, 0));
+    expect(box.right, name).toBeLessThanOrEqual(Math.min(frame.right, window.innerWidth));
+  }
+}
+
+test.each([
+  ["standard", 500, "Printer settings"],
+  ["wide", 500, "Printer settings"],
+  ["compact", 500, "Printer settings"],
+  ["full", 500, "Printer settings"],
+  ["standard", 500, LONG_BODY],
+  ["standard", 200, "Printer settings"],
+  ["compact", 200, LONG_BODY],
+])(
+  "keeps its buttons in view when a long message fills the footer of a %s modal %ipx tall (%s)",
+  async (size, height, body) => {
+    await page.viewport(390, height);
+    try {
+      const modal = (await mount(`<wt-modal heading="Add printer" size="${size}">
+        ${body}
+        <wt-form-actions slot="footer">
+          <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+          <wt-button>Save</wt-button>
+        </wt-form-actions>
+      </wt-modal>`)) as WtModal;
+      modal.open = true;
+      await modal.updateComplete;
+      const actions = modal.querySelector("wt-form-actions")!;
+      actions.error = LONG_REFUSAL;
+      const message = (await formMessageOf(actions))!;
+      expect(message.textContent).toBe(LONG_REFUSAL);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const footer = modal.shadowRoot!.querySelector(".footer")!;
+      expect(footer.firstElementChild).toBe(message);
+      expectButtonsInView(modal);
+      const box = message.getBoundingClientRect();
+      expect(box.height).toBeGreaterThan(0);
+      expect(box.top).toBeGreaterThanOrEqual(footer.getBoundingClientRect().top);
+      for (const button of modal.querySelectorAll("wt-button")) {
+        expect(box.bottom).toBeLessThanOrEqual(button.getBoundingClientRect().top);
+      }
+      expect(message.scrollHeight, "the rest of the message scrolls").toBeGreaterThan(
+        message.clientHeight,
+      );
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
+
+test.each(["compact", "standard"])(
+  "shows a one-line message whole below a long body in a %s modal, the body giving up the height",
+  async (size) => {
+    await page.viewport(390, 500);
+    try {
+      const modal = (await mount(`<wt-modal heading="Add printer" size="${size}">
+        ${LONG_BODY}
+        <wt-form-actions slot="footer"><wt-button>Save</wt-button></wt-form-actions>
+      </wt-modal>`)) as WtModal;
+      modal.open = true;
+      await modal.updateComplete;
+      const actions = modal.querySelector("wt-form-actions")!;
+      actions.error = "Enter a name.";
+      const message = (await formMessageOf(actions))!;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(message.clientHeight).toBeGreaterThan(0);
+      expect(message.scrollHeight).toBe(message.clientHeight);
+      expectButtonsInView(modal);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
+
+async function openWithRefusal(refusal: string) {
+  const modal = (await mount(`<wt-modal heading="Add printer" size="standard">
+    <wt-input name="name" label="Name"></wt-input>
+    <wt-form-actions slot="footer">
+      <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+      <wt-button>Save</wt-button>
+    </wt-form-actions>
+  </wt-modal>`)) as WtModal;
+  modal.open = true;
+  await modal.updateComplete;
+  const actions = modal.querySelector("wt-form-actions")!;
+  actions.error = refusal;
+  const message = (await formMessageOf(actions)) as HTMLElement;
+  await modal.updateComplete;
+  return { modal, message };
+}
+
+test("makes a message too long for the footer a tab stop that scrolls from the keyboard", async () => {
+  await page.viewport(390, 500);
+  try {
+    const { modal, message } = await openWithRefusal(LONG_REFUSAL);
+    expect(message.tabIndex).toBe(0);
+    message.focus();
+    expect(modal.shadowRoot!.activeElement).toBe(message);
+    await userEvent.keyboard("{PageDown}");
+    // The browser lands the scroll several frames after the key press, not on the next one.
+    await vi.waitFor(() => expect(message.scrollTop).toBeGreaterThan(0));
+    await userEvent.tab();
+    expect(document.activeElement).toBe(modal.querySelector('wt-button[slot="cancel"]'));
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test("leaves a message that fits out of the tab order, and adds it once the window shrinks", async () => {
+  await page.viewport(390, 900);
+  try {
+    const { message } = await openWithRefusal(LONG_REFUSAL.slice(0, 400));
+    expect(message.scrollHeight).toBe(message.clientHeight);
+    expect(message.hasAttribute("tabindex")).toBe(false);
+    await page.viewport(390, 250);
+    await vi.waitFor(() => expect(message.tabIndex).toBe(0));
+    await page.viewport(390, 900);
+    await vi.waitFor(() => expect(message.hasAttribute("tabindex")).toBe(false));
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test("still follows its message's height after it is moved in the page", async () => {
+  await page.viewport(390, 900);
+  try {
+    const { modal, message } = await openWithRefusal(LONG_REFUSAL.slice(0, 400));
+    const other = document.createElement("div");
+    host.append(other);
+    other.append(modal);
+    await modal.updateComplete;
+    modal.open = true;
+    await modal.updateComplete;
+    const moved = modal.shadowRoot!.querySelector<HTMLElement>(".footer > .form-message")!;
+    expect(moved).toBe(message);
+    expect(moved.hasAttribute("tabindex")).toBe(false);
+    await page.viewport(390, 250);
+    await vi.waitFor(() => expect(moved.tabIndex).toBe(0));
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});

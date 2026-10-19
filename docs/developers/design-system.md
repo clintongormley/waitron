@@ -2261,7 +2261,7 @@ form's own checks disable the action; an error that comes back from a request ne
   changed — below). If that
   submission is invalid, pass a plain-language sentence to each invalid field's `error` property,
   pass ONE localized sentence to `wt-form-actions`'s `error` property (it shows on its own line at
-  the bottom of the form, above the buttons — in a dialog, in its footer directly above them — and is
+  the bottom of the form, above the buttons — in a dialog whose footer holds the row, in the footer directly above them — and is
   announced), move focus to the first invalid field with `focusFirstInvalid(form)`, passing the
   shadow root when it holds only the form, and the form or dialog element when the shadow root
   holds more (a table, other panels), so focus cannot land on a marked control elsewhere on the
