@@ -223,16 +223,22 @@ export async function updateDepartment(
     name?: string;
     tradingName?: string;
     orderStart?: OrderStart;
+    needsClearing?: boolean;
   },
 ): Promise<void> {
   await assertDepartment(tx, cfg, departmentId);
   if (input.name !== undefined) await requireDepartmentName(tx, cfg, input.name, departmentId);
-  if (input.name !== undefined || input.tradingName !== undefined)
+  if (
+    input.name !== undefined ||
+    input.tradingName !== undefined ||
+    input.needsClearing !== undefined
+  )
     await tx
       .update(departments)
       .set({
         ...(input.name === undefined ? {} : { name: input.name }),
         ...(input.tradingName === undefined ? {} : { tradingName: input.tradingName }),
+        ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
       })
       .where(eq(departments.id, departmentId));
   if (input.orderStart === undefined) return;
@@ -756,6 +762,7 @@ export async function saveDepartmentEditSettings(
   await updateDepartment(tx, cfg, departmentId, {
     name: input.name,
     tradingName: input.tradingName,
+    ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
   });
   const settings = {
     orderStart: input.orderStart,
@@ -773,11 +780,6 @@ export async function saveDepartmentEditSettings(
     .onConflictDoUpdate({ target: departmentSalePolicies.departmentId, set: settings });
   if (input.transfers !== undefined)
     await setDepartmentTransferSettings(tx, cfg, departmentId, input.transfers);
-  if (input.needsClearing !== undefined)
-    await tx
-      .update(departments)
-      .set({ needsClearing: input.needsClearing })
-      .where(eq(departments.id, departmentId));
 }
 
 export type ZoneServiceSettingsInput = ZonePolicyField;

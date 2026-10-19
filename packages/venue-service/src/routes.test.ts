@@ -2490,7 +2490,7 @@ describe("the print-moved-slips setting", () => {
 });
 
 describe("the venue-wide clearing switch", () => {
-  it("no longer serves the venue-wide clearing switch", async () => {
+  it("is no longer served", async () => {
     const fx = await fixture();
     expect(
       await (await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)).json(),

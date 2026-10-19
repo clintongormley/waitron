@@ -90,8 +90,13 @@ describe("readTablesNeedingClearing", () => {
     expect(found.has(a.tableId)).toBe(true);
   });
 
-  it("answers an empty list with an empty set", async () => {
-    expect((await scoped((tx) => readTablesNeedingClearing(tx, []))).size).toBe(0);
+  it("answers an empty list with an empty set, without a query", async () => {
+    const untouchable = new Proxy({} as Transaction, {
+      get(_target, key) {
+        throw new Error(`the transaction was used: ${String(key)}`);
+      },
+    });
+    expect((await readTablesNeedingClearing(untouchable, [])).size).toBe(0);
   });
 
   it("leaves out an id that is no table", async () => {

@@ -1350,9 +1350,9 @@ seated, joined, paid and taken off. Three additions the owner asked for:
 
 ## A893. Owner review of every table state and its look, after A757 lands
 
-**A893 (owner, 2026-10-18).** Waits for the whole of A757 (the owner: “after A757 is built”);
-Waiter called (design §4 row 5) cannot be shown until A508. Once A757 lands, show the owner, on the
-running till:
+**A893 (owner, 2026-10-18).** Waits for the whole of A757 (owner, relayed by the watcher,
+2026-10-18); Waiter called (design §4 row 5) cannot be shown until A508. Once A757 lands, show the
+owner, on the running till:
 
 - every row of [A757 §4](../superpowers/specs/2026-10-17-a757-table-states-design.md#4-one-order-of-precedence),
   Forgotten through Free, on the floor map and on the list card, in light and dark, at 390 and
@@ -1369,8 +1369,8 @@ Two owner suggestions are open; settle them here:
   Free, Reserved and Needs clearing all dashed, told apart by colour and cue. To weigh in the A797
   revision with a picture, beside A757's rule of dashes for Needs clearing only, in both themes.
 - "It feels like we need a key of the different states when we click the ?" (owner, 2026-10-18) —
-  assigned to A582 slice 4: with help on, the floor opens a key of every table state. It follows
-  whatever look this review settles.
+  assigned to A582 slice 4: with help on, the floor shows a badge, “What the colours mean”, that
+  opens a key of every table state. It follows whatever look this review settles.
 
 ## A758. Adjustment reasons: review the rules, then a page of their own
 
