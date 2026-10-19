@@ -283,11 +283,6 @@ async function validateEntryMetadata(
 async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
   if (deps.resumeOperation !== undefined) {
-    if (
-      deps.skipSecrets ||
-      !lstatSync(join(deps.venueDir, VENUE_FILE), { throwIfNoEntry: false })?.isFile()
-    )
-      throw new AppError("module.operation_invalid", { module: deps.resumeOperation.module });
     const existing = await (deps.openDb ?? openVenue)(deps.venueDir);
     try {
       await assertNotAhead(existing.db, orderedMigrationSets(deps.modules), deps.migrationsRoot);
@@ -348,6 +343,12 @@ export async function writeValidated(
   let admitted = validated;
   try {
     await assertVenueFirstSetupAllowed(deps.venueDir);
+    if (
+      deps.resumeOperation !== undefined &&
+      (deps.skipSecrets ||
+        !lstatSync(join(deps.venueDir, VENUE_FILE), { throwIfNoEntry: false })?.isFile())
+    )
+      throw new AppError("module.operation_invalid", { module: deps.resumeOperation.module });
     const check = deps.withModuleOperations?.checkBeforePlacement;
     if (!deps.skipSecrets && check !== undefined) {
       let directory = deps.venueDir;
