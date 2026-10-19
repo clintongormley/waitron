@@ -19,7 +19,7 @@ import {
   openCertificateFile,
   type CertificateDetails,
 } from "./certificate-file.js";
-import { latestInstall, recordInstall } from "./certificate-record.js";
+import { latestInstall, nextInstalledAt, recordInstall } from "./certificate-record.js";
 import { isBase64 } from "./provisioning-secret.js";
 import "./errors.js";
 
@@ -224,13 +224,10 @@ export async function installCertificate(
       purpose: "fiscal.aeat",
       value: { pfxBase64: body.pfxBase64, passphrase: body.passphrase, certKind: body.certKind },
     });
-    // `latestInstall` orders by `installed_at` alone, so a clock stepped back must not sort this
-    // install below the one it replaces.
     const latest = await latestInstall(tx, deps.nodeId);
-    const floor = latest === null ? now.getTime() : latest.installedAt.getTime() + 1;
     await recordInstall(tx, {
       nodeId: deps.nodeId,
-      installedAt: new Date(Math.max(now.getTime(), floor)),
+      installedAt: nextInstalledAt(latest, now),
       source: "dashboard",
       personId,
       kind: body.certKind,

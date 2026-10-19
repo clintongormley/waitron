@@ -14,6 +14,16 @@ export async function latestInstall(tx: Transaction, nodeId: string): Promise<In
   return row ?? null;
 }
 
+/**
+ * When a new install is stamped: `now`, but never at or below `latest`, because `latestInstall`
+ * orders by `installed_at` alone and a clock stepped back must not sort the new install below the
+ * one it replaces.
+ */
+export function nextInstalledAt(latest: InstallRow | null, now: Date): Date {
+  if (latest === null) return now;
+  return new Date(Math.max(now.getTime(), latest.installedAt.getTime() + 1));
+}
+
 export async function recordInstall(
   tx: Transaction,
   row: typeof fiscalCertificateInstalls.$inferInsert,

@@ -3,7 +3,7 @@ import { withTransaction, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { isCertKind, type CertKind } from "./aeat-transport.js";
 import { openCertificateFile } from "./certificate-file.js";
-import { latestInstall, recordInstall } from "./certificate-record.js";
+import { latestInstall, nextInstalledAt, recordInstall } from "./certificate-record.js";
 import "./errors.js";
 
 export interface AeatCert {
@@ -98,7 +98,7 @@ export async function sealAeatSecret(
     if (latest?.fingerprint === details.fingerprint) return;
     await recordInstall(tx, {
       nodeId: deps.nodeId,
-      installedAt: (deps.now ?? (() => new Date()))(),
+      installedAt: nextInstalledAt(latest, (deps.now ?? (() => new Date()))()),
       source: "setup",
       personId: null,
       kind: cert.certKind,

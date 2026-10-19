@@ -111,6 +111,23 @@ describe("sealAeatSecret's install record", () => {
     expect(latest?.fingerprint).toBe(other.fingerprint);
   });
 
+  it("a different file sealed under a clock stepped back is still the latest install", async () => {
+    await seedTenantTillSif(suite.db);
+    const ring = testRing();
+    const deps = { db: suite.db, ring, nodeId: TENANT_A.nodeId };
+
+    await sealAeatSecret({ ...deps, now: at("2026-10-18T10:00:00.000Z") }, certOf(candidate));
+    await sealAeatSecret({ ...deps, now: at("2026-10-18T09:59:00.000Z") }, certOf(other));
+
+    const vault = await withTransaction(suite.db, (tx) =>
+      tryGetCredential(tx, ring, { purpose: "fiscal.aeat" }),
+    );
+    expect(vault).toEqual(certOf(other));
+    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TENANT_A.nodeId));
+    expect(latest?.fingerprint).toBe(other.fingerprint);
+    expect(latest?.installedAt).toEqual(new Date("2026-10-18T10:00:00.001Z"));
+  });
+
   it("a file that does not open is sealed with no install row", async () => {
     await seedTenantTillSif(suite.db);
     const ring = testRing();
