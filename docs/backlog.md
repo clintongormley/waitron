@@ -1287,14 +1287,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
     on a scale or with the measure switch on, and the till then offers no extras for it, with no
     word to the manager. Refuse it, or say so, in the product editor (`writeProductModifiers`,
     `packages/catalogue/src/product-modifiers.ts`, checks no unit).
-  - A reopened held order now marks a pick on a dish that no longer takes extras as not offered
-    (A821f). Three other till paths still read a line's extras lists straight from the offer
-    rather than through `offeredListsOf`: `lineBlock` (`apps/till/src/state/menu-refresh.ts:111`)
-    for a basket line after a menu refresh, `adoptLine` (same file, `:149`), and `extraOf`
-    (`apps/till/src/state/draft-lines.ts:171`). So a saved table draft brings a pick on a dish
-    now sold in a measure back as an ordinary pick; the server refuses
-    it with `extras.unsupported_product` when the order is sent, and the Edit button is hidden, so
-    staff can only delete the line. Read, not run.
 
 - **A dish in a measure unit is still rung up one unit per tap** (A821f). A 250 ml line is 1 ml per
   tap, splits into 250 lines and counts as 250 items. Whether a measure should ask its quantity as
