@@ -1871,6 +1871,20 @@ export interface StuckBillPaymentRow {
   providerState: string | null;
 }
 
+/** A card payment the provider paid out at a different amount, held until a manager records what
+ * was done with it. */
+export interface HeldPaymentRow {
+  holdId: string;
+  paymentRef: string;
+  provider: string;
+  orderNumber: number;
+  settledAt: string | null;
+  amount: string;
+  providerAmount: string;
+}
+
+export type HeldOutcome = "refunded_at_provider" | "kept";
+
 export interface StuckBillRefundRow {
   refundId: string;
   billPaymentId: string;
@@ -4286,6 +4300,22 @@ export class DashboardApi {
 
   listStuckBillPayments(): Promise<StuckBillPaymentRow[]> {
     return this.#request<StuckBillPaymentRow[]>("/management-api/payments/bill-payments", "GET");
+  }
+
+  listHeldPayments(): Promise<HeldPaymentRow[]> {
+    return this.#request<HeldPaymentRow[]>("/management-api/payments/held", "GET");
+  }
+
+  /** `note` is left out when there is none: the server refuses an explicit null. */
+  recordHeldOutcome(
+    id: string,
+    body: { outcome: HeldOutcome; note?: string; pin: string },
+  ): Promise<{ outcome: HeldOutcome }> {
+    return this.#request<{ outcome: HeldOutcome }>(
+      `/management-api/payments/held/${encodeURIComponent(id)}/outcome`,
+      "POST",
+      body,
+    );
   }
 
   listStuckBillRefunds(): Promise<StuckBillRefundRow[]> {

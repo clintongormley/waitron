@@ -47,6 +47,7 @@ import type {
   StuckPaymentRow,
   StuckBillPaymentRow,
   StuckBillRefundRow,
+  HeldPaymentRow,
 } from "../api/client.js";
 import { dashboardPath } from "../navigation.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -311,6 +312,10 @@ export class PaymentsScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         margin: 0 0 var(--wt-space-2);
       }
+      .held-amounts {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+      }
       .stuck-details {
         display: grid;
         grid-template-columns: auto 1fr;
@@ -409,6 +414,8 @@ export class PaymentsScreen extends LitElement {
   #tenderRefundRead = 0;
   @state() private billPaymentLoadError: string | null = null;
   @state() private billRefundLoadError: string | null = null;
+  @state() private heldPayments: HeldPaymentRow[] = [];
+  @state() private heldLoadError: string | null = null;
   @state() private billResult: { text: string; refused: boolean } | null = null;
   @state() private billAction: { target: BillTarget; mode: "check" | "attest" } | null = null;
   @state() private billBusy = false;
@@ -463,6 +470,14 @@ export class PaymentsScreen extends LitElement {
     () => this.api,
     (error) => {
       this.billRefundLoadError = codeOf(error);
+    },
+  );
+
+  readonly #heldQuery = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.heldLoadError = codeOf(error);
     },
   );
 
@@ -558,6 +573,12 @@ export class PaymentsScreen extends LitElement {
       .watch("listStuckBillRefunds", [], (rows) => {
         this.billRefunds = rows;
         this.billRefundLoadError = null;
+      })
+      .catch(() => undefined);
+    void this.#heldQuery
+      .watch("listHeldPayments", [], (rows) => {
+        this.heldPayments = rows;
+        this.heldLoadError = null;
       })
       .catch(() => undefined);
   }
@@ -1087,10 +1108,11 @@ export class PaymentsScreen extends LitElement {
   async #loadBillRecovery(background: boolean): Promise<void> {
     const tenderRead = ++this.#tenderRefundRead;
     const client = background ? (this.api.background ?? this.api) : this.api;
-    const [payments, refunds, tenders] = await Promise.allSettled([
+    const [payments, refunds, tenders, held] = await Promise.allSettled([
       client.listStuckBillPayments(),
       client.listStuckBillRefunds(),
       client.listStuckTenderRefunds(),
+      client.listHeldPayments(),
     ]);
     if (payments.status === "fulfilled") {
       this.billPayments = payments.value;
@@ -1100,6 +1122,10 @@ export class PaymentsScreen extends LitElement {
       this.billRefunds = refunds.value;
       this.billRefundLoadError = null;
     } else this.billRefundLoadError = codeOf(refunds.reason);
+    if (held.status === "fulfilled") {
+      this.heldPayments = held.value;
+      this.heldLoadError = null;
+    } else this.heldLoadError = codeOf(held.reason);
     if (tenderRead === this.#tenderRefundRead && this.isConnected) {
       if (tenders.status === "fulfilled") {
         this.tenderRefunds = tenders.value;
@@ -1421,21 +1447,24 @@ export class PaymentsScreen extends LitElement {
   #renderBillRecovery(): TemplateResult | typeof nothing {
     const errors = [
       ...new Set(
-        [this.billPaymentLoadError, this.billRefundLoadError, this.tenderRefundLoadError]
+        [
+          this.billPaymentLoadError,
+          this.billRefundLoadError,
+          this.tenderRefundLoadError,
+          this.heldLoadError,
+        ]
           .filter((code): code is string => code !== null)
           .map((code) => codeMessage(code)),
       ),
     ];
-    if (
-      !this.billPayments.length &&
-      !this.billRefunds.length &&
-      !this.tenderRefunds.length &&
-      !this.billResult &&
-      !errors.length
-    )
-      return nothing;
+    const pending =
+      this.billPayments.length ||
+      this.billRefunds.length ||
+      this.tenderRefunds.length ||
+      this.heldPayments.length;
+    if (!pending && !this.billResult && !errors.length) return nothing;
     return html`<section
-      class="stuck-section ${this.billPayments.length || this.billRefunds.length || this.tenderRefunds.length ? "pending" : ""}"
+      class="stuck-section ${pending ? "pending" : ""}"
       data-test="bill-recovery"
       aria-labelledby="bill-recovery-heading"
     >
@@ -1474,7 +1503,45 @@ export class PaymentsScreen extends LitElement {
               </ul>`
           : nothing
       }
+      ${
+        this.heldPayments.length
+          ? html`<div data-test="held-payments">
+              <h3>${t("payments.held.heading")}</h3>
+              <ul class="stuck-list">
+                ${this.heldPayments.map((row) => this.#renderHeldRow(row))}
+              </ul>
+            </div>`
+          : nothing
+      }
     </section>`;
+  }
+
+  #heldOrder(row: HeldPaymentRow): string {
+    const order = fill("payments.stuck.order", { number: String(row.orderNumber) });
+    return row.settledAt ? `${order} · ${formatAlertTime(row.settledAt)}` : order;
+  }
+
+  #renderHeldRow(row: HeldPaymentRow): TemplateResult {
+    const order = this.#heldOrder(row);
+    return html`<li class="stuck" data-test=${`held-payment-${row.holdId}`}>
+      <div class="stuck-body">
+        <p class="stuck-order">${order}</p>
+        <p class="held-amounts">
+          ${fill("payments.held.amounts", {
+            amount: formatMoney(row.amount, currentLocale()),
+            provider: this.#providerName(row.provider),
+            providerAmount: formatMoney(row.providerAmount, currentLocale()),
+          })}
+        </p>
+      </div>
+      <wt-button
+        variant="secondary"
+        data-test=${`record-held-${row.holdId}`}
+        aria-label=${`${t("payments.held.record")}: ${order}`}
+        ?disabled=${this.billBusy}
+        >${t("payments.held.record")}</wt-button
+      >
+    </li>`;
   }
 
   #renderBillDialog(): TemplateResult | typeof nothing {

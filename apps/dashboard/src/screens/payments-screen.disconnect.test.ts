@@ -28,6 +28,7 @@ function client(readers: ReaderRow[], overrides: Partial<DashboardApi> = {}) {
     listStuckBillPayments: vi.fn().mockResolvedValue([]),
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
+    listHeldPayments: vi.fn().mockResolvedValue([]),
     disconnectPaymentProvider: vi.fn().mockResolvedValue(undefined),
     liveData: new LiveData(),
     ...overrides,
