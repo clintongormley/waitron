@@ -19,6 +19,7 @@ import { addOversizedFamily } from "@waitron/catalogue/test/suggestion-fixture.j
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { translationCloudFixture, type FakeJobBody } from "../test/translation-cloud-fixture.js";
+import { contentSuggestionsAlertSource } from "./alert-sources.js";
 import { createCloudConnection } from "./cloud-client.js";
 import { refusalOf, type CollectedPage } from "./cloud-translation.js";
 import {
@@ -360,6 +361,169 @@ it("a refused page (429) resumes at the saved position after back-off", async ()
     await f.close();
   }
 });
+
+/** Stores page 0 of three, then stops the step on a failed collect at cursor 1. */
+async function stopBetweenPages(f: Fake) {
+  await venue(THREE);
+  f.pageItems(1);
+  await inTx((tx) => startSuggestionRun(tx, context));
+  let failedOnce = false;
+  const runner = createContentSuggestionRunner(
+    lossy(f, (cursor, call) => {
+      if (cursor === 1 && !failedOnce) {
+        failedOnce = true;
+        return Promise.reject(new AppError("cloud.unavailable", {}));
+      }
+      return call();
+    }),
+  );
+  expect(await runner.step()).toBe("again");
+  expect(await runner.step()).toBe("wait");
+  await expect(runner.step()).rejects.toMatchObject({ code: "cloud.unavailable" });
+  expect(await job()).toMatchObject({ state: "running", collectCursor: 1 });
+  return runner;
+}
+
+const notices = () => inTx((tx) => contentSuggestionsAlertSource().read({ tx, now: new Date() }));
+
+const endedByCloud: [string, (f: Fake, jobId: string) => void][] = [
+  [
+    "expired, so collect answers 410",
+    (f, jobId) => {
+      f.expire(jobId);
+      f.statusOverride({ state: "done" });
+    },
+  ],
+  ["deleted, so Cloud answers 404", (f, jobId) => void f.jobs.delete(jobId)],
+];
+it.each(endedByCloud)(
+  "a walk Cloud ends between pages (%s) keeps the stored page, sends no release and says what could not be done",
+  async (_name, arrange) => {
+    const f = await connected();
+    try {
+      const runner = await stopBetweenPages(f);
+      arrange(f, [...f.jobs.values()][0]!.jobId);
+
+      await runToIdle(runner);
+      expect(actions(f)).not.toContain(RELEASE);
+      const read = await notices();
+      expect(read).toHaveLength(1);
+      expect(read[0]).toMatchObject({
+        code: "content.suggestions_ready_partly",
+        params: { count: 1, failed: 2 },
+      });
+      expect(await runView()).toMatchObject({
+        state: "expired",
+        code: "content.suggestion_expired",
+        waiting: 1,
+        failed: 2,
+      });
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+it("a cursor Cloud refuses as invalid ends the job rejected without a release", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    await inTx((tx) => startSuggestionRun(tx, context));
+    const runner = createContentSuggestionRunner(deps(f));
+    expect(await runner.step()).toBe("again");
+    await inTx((tx) => tx.update(contentSuggestionJobs).set({ collectCursor: 99 }));
+
+    await runToIdle(runner);
+    expect(actions(f).slice(-2)).toEqual([STATUS, COLLECT]);
+    expect(cursors(f)).toEqual([99]);
+    expect(await runView()).toMatchObject({ state: "failed", code: "cloud.request_invalid" });
+  } finally {
+    await f.close();
+  }
+});
+
+it("a walk the box ends itself between pages keeps the stored page and sends no release", async () => {
+  const f = await connected();
+  try {
+    const runner = await stopBetweenPages(f);
+    f.service("unconfigured");
+    await f.client.refresh();
+    const before = f.calls.length;
+
+    await runToIdle(runner);
+    expect(f.calls).toHaveLength(before);
+    expect(actions(f)).not.toContain(RELEASE);
+    expect(await runView()).toMatchObject({
+      state: "failed",
+      code: "cloud.not_configured",
+      waiting: 1,
+      failed: 2,
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+it("refuses a page over 16 MiB, stores nothing of it, and resumes at the same position", async () => {
+  const f = await connected();
+  try {
+    await venue(THREE);
+    f.pageItems(1);
+    let padded = false;
+    f.collectReply((page, cursor) => {
+      if (cursor !== 1 || padded) return page;
+      padded = true;
+      const body = JSON.stringify(page);
+      return body + " ".repeat(16_777_217 - Buffer.byteLength(body));
+    });
+    await inTx((tx) => startSuggestionRun(tx, context));
+    const runner = createContentSuggestionRunner(deps(f));
+    expect(await runner.step()).toBe("again");
+    expect(await runner.step()).toBe("wait");
+    await expect(runner.step()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(f.calls.filter((c) => c.action === COLLECT).at(-1)!.replyBytes).toBe(16_777_217);
+    expect(await job()).toMatchObject({ state: "running", collectCursor: 1 });
+    expect(await suggestions()).toHaveLength(1);
+
+    await runToIdle(runner);
+    expect(cursors(f)).toEqual([0, 1, 1, 2]);
+    expect(await suggestions()).toHaveLength(3);
+    expect(actions(f).filter((a) => a === RELEASE)).toHaveLength(1);
+    expect(actions(f).at(-1)).toBe(RELEASE);
+  } finally {
+    await f.close();
+  }
+});
+
+it("walks a result over 16 MiB in pages within 16 MiB", async () => {
+  const f = await connected();
+  try {
+    await venue(Array.from({ length: 300 }, (_, i) => `STAFF Dish ${String(i).padStart(3, "0")}`));
+    f.translator((item) => ({
+      names: { en: `EN ${item.staffName}` },
+      placeholder: false,
+      corrections: Array.from({ length: 10 }, () => ({
+        field: "internal",
+        wrong: "\u0001".repeat(500),
+        right: "\u0002".repeat(500),
+      })),
+    }));
+    await inTx((tx) => startSuggestionRun(tx, context));
+
+    await runToIdle(createContentSuggestionRunner(deps(f)));
+    const collects = f.calls.filter((c) => c.action === COLLECT);
+    expect(collects.length).toBeGreaterThanOrEqual(2);
+    for (const c of collects) expect(c.replyBytes).toBeLessThanOrEqual(16_777_216);
+    expect((await suggestions()).filter((s) => s.language === "en")).toHaveLength(300);
+    expect(actions(f).slice(actions(f).indexOf(COLLECT))).toEqual([
+      ...collects.map(() => COLLECT),
+      RELEASE,
+    ]);
+    expect(new Set(cursors(f)).size).toBe(collects.length);
+  } finally {
+    await f.close();
+  }
+}, 120_000);
 
 const partly: [string, (f: Fake, refs: string[]) => void, string | null, number | null][] = [
   ["some items failed", (f, refs) => f.failRefs([refs[0]!]), null, null],
