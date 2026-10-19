@@ -1,15 +1,24 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { MONEY_SCALE, compareDecimal, decimal, formatMoney, toScale } from "@waitron/shared";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  leaveCoordinatorFor,
+  submitOnEnter,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+  type WtDialog,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "./pay-equipment.js";
 import type { PayEquipmentRole } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
+import { refusalText, type PayRefusal } from "./pay-refusal.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
 import type { DeviceEquipment } from "../api/client.js";
 import { typedAmount } from "../state/bill-payment.js";
 import {
@@ -28,9 +37,16 @@ export type PresentedPayDetail =
   | { method: "cash"; tendered: string; guests?: number | null }
   | { method: "manual"; externalRef?: string; guests?: number | null };
 
-export interface PresentedPayRefusal {
-  code: string;
-  field?: string;
+/** What the waiter has typed: the cash handed over and the operation number. */
+interface EntryDraft {
+  tendered: string;
+  externalRef: string;
+}
+
+/** Two cash entries that are the same amount however spelled; anything else as typed. */
+function cashKey(value: string): string {
+  const amount = typedAmount(value);
+  return amount === null ? `typed:${value.trim()}` : toScale(decimal(amount), MONEY_SCALE);
 }
 
 /**
@@ -138,7 +154,7 @@ export class TillPresentedPayDialog extends LitElement {
   @property({ type: Boolean }) equipmentBusy = false;
   @property({ attribute: false }) fixedReader: FixedReader | null = null;
   @property({ type: Boolean }) busy = false;
-  @property({ attribute: false }) refusal: PresentedPayRefusal | null = null;
+  @property({ attribute: false }) refusal: PayRefusal | null = null;
 
   @state() private method: Method = "card";
   @state() private tendered = "";
@@ -147,12 +163,59 @@ export class TillPresentedPayDialog extends LitElement {
   /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
   @state() private guestsEntry?: string;
   /** The refusal still shown: it goes when the field it names changes, or at the next request. */
-  @state() private shownRefusal: PresentedPayRefusal | null = null;
+  @state() private shownRefusal: PayRefusal | null = null;
   @state() private rowOpen = false;
   #rowWanted = false;
+  #leave?: LeaveCoordinator;
+  #entry?: DraftScope<EntryDraft>;
+  readonly #baseline: EntryDraft = { tendered: "", externalRef: "" };
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.isConnected &&
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#dropDraft();
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #dropDraft(): void {
+    this.#entry?.dispose();
+    this.#entry = undefined;
+  }
+
+  #syncDraft(): void {
+    if (!this.open) {
+      this.#dropDraft();
+      return;
+    }
+    if (this.#entry || !this.isConnected) return;
+    this.#leave ??= leaveCoordinatorFor(this);
+    this.#entry = this.#leave?.register<EntryDraft>({
+      id: this,
+      current: () => ({ tendered: this.tendered, externalRef: this.externalRef }),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) =>
+        cashKey(a.tendered) === cashKey(b.tendered) &&
+        a.externalRef.trim() === b.externalRef.trim(),
+      restore: (value) => {
+        this.tendered = value.tendered;
+        this.externalRef = value.externalRef;
+        this.attempted = false;
+      },
+    });
+    this.#entry?.commit(this.#baseline);
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("open") && this.open) {
+      this.#dropDraft();
       this.method = this.#methods()[0] ?? "card";
       this.tendered = "";
       this.externalRef = "";
@@ -167,6 +230,9 @@ export class TillPresentedPayDialog extends LitElement {
     const wanted = this.open && payRowWantsOpen(this.equipment, this.fixedReader);
     if (wanted && !this.#rowWanted) this.rowOpen = true;
     this.#rowWanted = wanted;
+    // A send under way drops any question already asked about leaving.
+    if (changed.has("busy") && this.busy) this.#entry?.commit(this.#baseline);
+    this.#syncDraft();
   }
 
   #methods(): Method[] {
@@ -199,7 +265,10 @@ export class TillPresentedPayDialog extends LitElement {
       const tendered = typedAmount(this.tendered);
       if (tendered === null || compareDecimal(decimal(tendered), decimal("0")) <= 0)
         errors.set("tendered", t("bill_pay.tendered_invalid"));
-      else if (compareDecimal(decimal(tendered), decimal(this.amount)) < 0)
+      else if (
+        typedAmount(this.amount) !== null &&
+        compareDecimal(decimal(tendered), decimal(this.amount)) < 0
+      )
         errors.set("tendered", t("bill_pay.tendered_short"));
     }
     if (this.asksGuests && parseGuestCount(this.#guestsText()) === undefined)
@@ -219,7 +288,7 @@ export class TillPresentedPayDialog extends LitElement {
   #fieldErrors(own: ReadonlyMap<Field, string>): Map<Field, string> {
     const errors = new Map(own);
     const field = this.#refusalField();
-    if (field !== null) errors.set(field, codeMessage(this.shownRefusal!.code));
+    if (field !== null) errors.set(field, refusalText(this.shownRefusal!));
     return errors;
   }
 
@@ -227,7 +296,7 @@ export class TillPresentedPayDialog extends LitElement {
     const parts: string[] = [];
     if (fieldErrors.size > 0) parts.push(t("form.fix_fields"));
     if (this.shownRefusal !== null && this.#refusalField() === null)
-      parts.push(codeMessage(this.shownRefusal.code));
+      parts.push(refusalText(this.shownRefusal));
     return parts.join(" ");
   }
 
@@ -242,14 +311,12 @@ export class TillPresentedPayDialog extends LitElement {
   #close(event: Event): void {
     event.stopPropagation();
     if (event.target !== event.currentTarget || this.busy) return;
+    this.#dropDraft();
     this.#emit("presented-pay-close");
   }
 
   #requestClose(): void {
-    if (this.busy) return;
-    void this.shadowRoot!.querySelector<HTMLElement & { requestClose(reason: "cancel"): unknown }>(
-      "wt-dialog",
-    )!.requestClose("cancel");
+    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
   }
 
   async #take(): Promise<void> {
@@ -288,6 +355,7 @@ export class TillPresentedPayDialog extends LitElement {
           : t("bill_pay.title_table").replace("{table}", () => this.tableName)
       }
       .dismissible=${!this.busy}
+      .beforeClose=${this.#entry ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#close(event)}
     >
       <div class="body">${this.#form()}</div>
@@ -402,6 +470,7 @@ export class TillPresentedPayDialog extends LitElement {
         event.stopPropagation();
         if (name === "tendered") this.tendered = event.detail.value;
         else this.externalRef = event.detail.value;
+        this.#entry?.changed();
         this.#changed(name);
       }}
       @keydown=${(event: KeyboardEvent) =>

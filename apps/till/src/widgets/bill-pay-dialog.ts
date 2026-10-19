@@ -1,5 +1,3 @@
-import type { BillUnsent } from "../api/client.js";
-import { billUnsentText } from "../state/bill-unsent.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -44,7 +42,6 @@ import type {
 import {
   HANDHELD_PAY_WAYS,
   PAY_WAYS,
-  isTakePaymentRefusal,
   moneyPlus,
   paidQuantities,
   refundOffered,
@@ -59,6 +56,9 @@ import {
   type FixedReader,
 } from "../state/pay-equipment.js";
 import type { CardProvider, ReceiptGuestsDetail } from "./tender-pay.js";
+import { refusalText, type PayRefusal } from "./pay-refusal.js";
+
+export type { PayRefusal } from "./pay-refusal.js";
 
 /** `whole` is the till's own: it asks for a contribution of what is left. */
 export type PayWay = PayChoice["kind"] | "whole";
@@ -88,21 +88,6 @@ export interface PayRequest {
 
 /** `bill-pay-confirm`'s detail: on a handheld, a reader card names the reader to charge. */
 export type BillPayConfirmDetail = ReceiptGuestsDetail & { readerId?: string };
-
-/** A refusal's code, the request field it names when it names one, for a tip the venue does not
- * take the most the card can be charged, and the permission an `authorization.not_permitted`
- * names. The app's own codes: `network`, a payment that got no answer; `unread`, a balance that
- * could not be read again; `declined` and `card_network`, a card the reader did not charge. */
-export interface PayRefusal {
-  code: string;
-  unsent?: BillUnsent;
-  billLabel?: string;
-  field?: string;
-  chargeable?: string;
-  permission?: string;
-  /** A `device.forbidden_action`'s action: `pay` is the reader's. */
-  action?: string;
-}
 
 /** The payment just taken: the change it handed back, null for a card; for a card still at the
  * reader, the amount it holds on the bill. */
@@ -178,33 +163,6 @@ function refusalField(refusal: PayRefusal, method: Method, way: PayWay): Field |
     default:
       return null;
   }
-}
-
-function chargeableText(amount: string): string {
-  return t("bill_pay.chargeable").replace("{amount}", () => formatMoney(amount, currentLocale()));
-}
-
-/** What the dialog says of a refusal: one of the app's own, the most a card can be charged when
- * the venue takes no tips, the till's own sentence for a device not set up for the card reader or
- * for a person who may not take payments, or the server's code in its own words. */
-function refusalText(refusal: PayRefusal): string {
-  if (refusal.unsent !== undefined) return billUnsentText(refusal.billLabel);
-  if (isTakePaymentRefusal(refusal)) return t("take_payment.not_permitted");
-  switch (refusal.code) {
-    case "network":
-      return t("bill_pay.unconfirmed");
-    case "unread":
-      return t("bill_pay.read_failed");
-    case "declined":
-      return t("bill_pay.card_declined");
-    case "card_network":
-      return t("bill_pay.card_unreachable");
-  }
-  if (refusal.code === "device.forbidden_action" && refusal.action === "pay")
-    return t("card_reader.not_set_up");
-  if (refusal.code === "bill.tip_not_allowed" && refusal.chargeable !== undefined)
-    return chargeableText(refusal.chargeable);
-  return codeMessage(refusal.code);
 }
 
 const PEOPLE = /^[1-9]\d{0,2}$/;
@@ -856,8 +814,6 @@ export class TillBillPayDialog extends LitElement {
     );
   }
 
-  /** The reader a card would be charged on now: the practice venue's demo reader, else the
-   * equipment's ready one; null before the equipment has been read. */
   #readyReader(): FixedReader | null {
     return readyPayReader(this.equipment, this.fixedReader);
   }

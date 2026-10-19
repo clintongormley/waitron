@@ -335,6 +335,14 @@ describe("till-presented-pay-dialog: in cash and on another machine", () => {
     expect(paid).toEqual([{ method: "cash", tendered: "70" }]);
   });
 
+  it("with no amount yet, cash checks only the cash handed over", async () => {
+    const el = await mount({ amount: "", takesReaderCard: false });
+    const paid = capture<PresentedPayDetail>(el, "presented-pay");
+    await type(el, "tendered", "70");
+    await take(el);
+    expect(paid).toEqual([{ method: "cash", tendered: "70" }]);
+  });
+
   it("takes exactly the bill in cash", async () => {
     const el = await mount({ takesReaderCard: false });
     const paid = capture<PresentedPayDetail>(el, "presented-pay");
@@ -461,6 +469,30 @@ describe("till-presented-pay-dialog: refusals, busy and closing", () => {
   it("a refusal naming a field not shown goes above the action", async () => {
     const el = await mount({ refusal: { code: "management.request_invalid", field: "guests" } });
     expect(actions(el).error).toBe(codeMessage("management.request_invalid"));
+  });
+
+  it.each([
+    ["sale.unconfirmed", "sale.unconfirmed"],
+    ["sale.refused", "sale.refused"],
+    ["bill.pay_with_bill_payments", "bill.pay_with_bill_payments"],
+    ["declined", "bill_pay.card_declined"],
+    ["network", "bill_pay.unconfirmed"],
+  ] as const)("words the till's own refusal %s in its own sentence", async (code, key) => {
+    const el = await mount({ refusal: { code } });
+    expect(actions(el).error).toBe(t(key));
+    expect(actions(el).error).not.toBe(codeMessage("no.such.code"));
+  });
+
+  it("words a person who may not take payments as the till does", async () => {
+    const el = await mount({
+      refusal: { code: "authorization.not_permitted", permission: "sale.take_payment" },
+    });
+    expect(actions(el).error).toBe(t("take_payment.not_permitted"));
+  });
+
+  it("words a device not set up for the card reader as the till does", async () => {
+    const el = await mount({ refusal: { code: "device.forbidden_action", action: "pay" } });
+    expect(actions(el).error).toBe(t("card_reader.not_set_up"));
   });
 
   it("a new request clears the refusal shown", async () => {
