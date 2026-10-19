@@ -744,6 +744,7 @@ export interface DepartmentEditInput extends Pick<
   name: string;
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
+  needsClearing?: boolean;
 }
 
 export async function saveDepartmentEditSettings(
@@ -772,6 +773,11 @@ export async function saveDepartmentEditSettings(
     .onConflictDoUpdate({ target: departmentSalePolicies.departmentId, set: settings });
   if (input.transfers !== undefined)
     await setDepartmentTransferSettings(tx, cfg, departmentId, input.transfers);
+  if (input.needsClearing !== undefined)
+    await tx
+      .update(departments)
+      .set({ needsClearing: input.needsClearing })
+      .where(eq(departments.id, departmentId));
 }
 
 export type ZoneServiceSettingsInput = ZonePolicyField;

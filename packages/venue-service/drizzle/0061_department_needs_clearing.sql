@@ -1,0 +1,1 @@
+ALTER TABLE `departments` ADD `needs_clearing` integer DEFAULT false NOT NULL;

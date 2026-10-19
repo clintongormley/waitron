@@ -1339,6 +1339,14 @@ export interface VenueServiceContribution {
   readEditSentLines(tx: Transaction): Promise<boolean>;
   /** Whether Finish table leaves the party's tables needing clearing. */
   readClearingWorkflow(tx: Transaction): Promise<boolean>;
+  /**
+   * Which of these dining tables need clearing once their party leaves: those whose zone's
+   * department has Needs clearing on. A table whose zone has no department is not among them.
+   */
+  readTablesNeedingClearing(
+    tx: Transaction,
+    tableIds: readonly string[],
+  ): Promise<ReadonlySet<string>>;
   /** How identical dishes print on a kitchen ticket: one `N x` entry, or N entries of one. */
   readKitchenTicketGrouping(tx: Transaction): Promise<"combined" | "separate">;
   readPartyAllergy(tx: Transaction, partyId: string): Promise<PartyAllergySnapshot>;

@@ -91,6 +91,7 @@ describe("VENUE_SERVICE", () => {
       "readSaleReceiptHeader",
       "readServiceDay",
       "readStationScreens",
+      "readTablesNeedingClearing",
       "readZoneClosingStates",
       "readZoneKeepOpenState",
       "receiptDefaultDepartment",

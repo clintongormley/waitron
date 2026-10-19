@@ -92,6 +92,7 @@ import {
 import { deletePeriod, periodDeleteImpact, readPaintedIn } from "./period-delete.js";
 import { mountFloorPlanSetRoutes } from "./floor-plan-set-routes.js";
 import { onlyKeys } from "./request-keys.js";
+import { listNeedsClearingDepartmentIds } from "./table-clearing.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -726,6 +727,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           printMovedSlips: await readPrintMovedSlips(tx),
           releaseReminderMinutes: await readReleaseReminderMinutes(tx),
           clearingWorkflow: await readClearingWorkflow(tx),
+          needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx, ctx.cfg),
         }));
         return c.json(result);
       }),
@@ -838,7 +840,10 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           "paidWhen",
           "collectionNumber",
           "transfers",
+          "needsClearing",
         ]);
+        if (body.needsClearing !== undefined && typeof body.needsClearing !== "boolean")
+          throw new AppError("management.request_invalid", { field: "needsClearing" });
         const input: DepartmentEditInput = {
           name: requireName(body.name, "name"),
           tradingName: requireName(body.tradingName, "tradingName"),
@@ -860,6 +865,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ...(body.transfers === undefined
             ? {}
             : { transfers: requireTransferSettings(body.transfers) }),
+          ...(body.needsClearing === undefined ? {} : { needsClearing: body.needsClearing }),
         };
         await gated(sessionId, (tx) =>
           saveDepartmentEditSettings(tx, ctx.cfg, departmentId, input),

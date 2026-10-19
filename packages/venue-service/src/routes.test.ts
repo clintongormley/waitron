@@ -585,6 +585,62 @@ describe("whole service settings saves", () => {
     expect(await settingsSnapshot(fx)).toEqual(before);
   });
 
+  async function needsClearingIds(fx: Awaited<ReturnType<typeof settingsFixture>>) {
+    const model = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+    expect(model.status).toBe(200);
+    return ((await model.json()) as { needsClearingDepartmentIds: string[] })
+      .needsClearingDepartmentIds;
+  }
+
+  it("saves a department's Needs clearing switch and lists it in the model", async () => {
+    const fx = await settingsFixture();
+    const on = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      needsClearing: true,
+    });
+    expect(on.status).toBe(204);
+    expect(await needsClearingIds(fx)).toEqual([fx.departmentId]);
+    const off = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      needsClearing: false,
+    });
+    expect(off.status).toBe(204);
+    expect(await needsClearingIds(fx)).toEqual([]);
+  });
+
+  it("leaves the switch as it was when the save does not name it", async () => {
+    const fx = await settingsFixture();
+    await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      needsClearing: true,
+    });
+    const saved = await send(
+      fx.app,
+      "PUT",
+      fx.departmentPath,
+      fx.managerCookie,
+      departmentSettings,
+    );
+    expect(saved.status).toBe(204);
+    expect(await needsClearingIds(fx)).toEqual([fx.departmentId]);
+  });
+
+  it("refuses a switch that is not true or false, naming it, and writes nothing", async () => {
+    const fx = await settingsFixture();
+    for (const needsClearing of ["true", 1, null, [true]]) {
+      const before = await rawSettingsSnapshot();
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        needsClearing,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "needsClearing" } },
+      });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+    }
+  });
+
   it.each(["departmentPath", "zonePath"] as const)("requires a manager for %s", async (path) => {
     const fx = await settingsFixture();
     const body = path === "departmentPath" ? departmentSettings : zoneSettings;
