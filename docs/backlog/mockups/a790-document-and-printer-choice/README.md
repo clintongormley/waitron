@@ -1,3 +1,57 @@
+# A790: latest dashboard and Equipment decisions, 2026-10-19
+
+**A and B are approved; C is the sole next owner question. The complete design is not
+approved for planning or build.** The [latest design addendum](../../../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+and this brief take precedence over conflicting text and boards below. The entire earlier
+README remains verbatim as dated history, including its earlier same-day revision.
+
+- **A:** Receipt and Invoice deliver the same recorded full invoice; Receipt keeps its
+  compact customer details. Neither issues a second invoice.
+- **B:** without a device profile, dashboard Orders offers **every active printer at the
+  sale's venue**, bypassing profile lists. Harbour's `F/1042` offers Harbour equipment even
+  with Hillside selected in the dashboard; disabled, deleted and Hillside printers stay
+  excluded. No Change profile or dedicated dashboard profile. Include active portable
+  printers; receipt-holder enforcement is unresolved, not permission to exclude or reassign
+  them. Preselect last use **on this browser**, collapsible; never borrow a till identity
+  or read/change its Equipment. Browser storage and fallback details remain proposals.
+- **A796 applied:** the phone's receipt dropdown at and after payment is its **one existing
+  Equipment receipt-printer setting**, with no separate receipt memory or new storage.
+  Ana chooses Terraza for Mesa 4's first share; Mesa 9 offers Terraza and Equipment shows
+  Terraza even before a ticket prints. Save/rollback/concurrency handling needs a builder
+  proposal and agreement; atomic Equipment/payment changes are not approved.
+
+**C, one decision to ask next:** should Invoice use an inline, collapsible printer selector
+in the same form as its named final confirmation, matching Receipt (recommended), or a
+separate printer step? Show `F/1042`: Invoice, Office · A4 folded; expand, choose Terrace
+belt · Receipt paper, then **Print a copy on Terrace belt** if the server designates a copy.
+No invoice-memory storage is approved.
+
+The [new dashboard/Equipment/C boards are available](revision-dashboard-equipment/README.md).
+They show three comparisons: Harbour's every-active local list;
+Mesa 4/Mesa 9 and Equipment all showing Terraza; and C's inline versus separate invoice
+step. Proposed labels are **name · A4** / **name · Receipt paper**, ordered by name then id.
+Proposed C details: choose the document first after payment, but keep the already chosen
+full invoice in the payment draft; one printer retains its visible name and final press,
+zero disables print with an explanation. These details and first-use preselection are
+proposals, not extra owner questions. The design explains payment-time confirmation.
+
+Do not silently replace an invalid selected/submitted destination. Request facts stay
+fixed under the request key; preserve uncertainty, reconciliation and explicit confirmation.
+Authorization, sale location, original/copy and fiscal/public-F1 gates remain required;
+selection, loading, folding and Equipment changes never print. D, specific fallback,
+storage/persistence and full-design/build agreement remain open.
+
+All original and earlier revision boards are historical where they conflict, including
+profile selection, portable-printer exclusion, accepted-print-only receipt memory and a
+mandatory extra receipt step. Eight revised PNGs were rendered in headless Chromium and
+visually inspected in EN/ES, light/dark, at 390/1280 px. The native SVG text boxes were
+measured within the drawings. These static checks supply **no runtime, test or hardware
+evidence**. The source map remains historical and unverified.
+
+---
+
+## Historical README retained verbatim from before the dashboard/Equipment revision
+
 # A790: document and printer choice
 
 ## Current revision, 2026-10-19

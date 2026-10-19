@@ -3401,24 +3401,24 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
     sends the same request.
 
 - **A790. Choose a document and its permitted printer.** The owner's A661 Q1–Q6 answers
-  and 2026-10-19 revision are recorded in the [design proposal](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
+  and latest 2026-10-19 decisions are recorded in the [design addendum](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
   with [mock-ups](backlog/mockups/a790-document-and-printer-choice/README.md).
-  **A is approved:** Receipt prints the same recorded full invoice compact with customer
-  details through the receipt list; Invoice uses the invoice list, A4 or receipt paper.
-  Neither issues another invoice. Apply A796's inline, collapsible receipt-printer selector
-  at/after payment, with the last eligible choice preselected and no extra printer step;
-  keep the named confirmation in that same form/action. Ask **B only** next: Harbour's
-  device-free dashboard suggests Counter 1's current profile with an eligible-profile change
-  (recommended), all sale-location printers, or a dedicated dashboard profile. No till
-  memory is implied there. Remaining C/D choices, exact memory scope, persistence and the
-  complete build are unapproved. The owner settled device scope for the handheld form;
-  first-use/unavailable-equipment fallback and finer storage keys remain proposals. A796's
-  revision (its §9 Q5) recommends that the form's printer be the device's own receipt printer, the
-  one Equipment sets, where A790's design proposes a separate receipt memory that moves only when a
-  print is accepted; the two designs must agree before either is planned.
-  [Revised receipt-flow boards](backlog/mockups/a790-document-and-printer-choice/revision-2026-10-19/README.md)
-  accompany the addendum; original boards remain historical where superseded.
-  This revision changes docs only; source-map readings are historical and runtime-unverified.
+  **A+B approved:** Receipt and Invoice retain the same recorded full invoice. A dashboard
+  without a device profile offers every active printer at the sale's venue, bypassing
+  profile lists, with browser-last-use preselected and collapsible; no Change profile,
+  dedicated profile, borrowed till identity or Equipment update. Harbour's sale excludes
+  Hillside and disabled printers. Active portable printers stay listed; receipt-holder
+  enforcement remains unresolved. The phone's inline receipt selector at/after payment
+  is its one Equipment setting: Mesa 4 chooses Terraza, Mesa 9 and Equipment show Terraza;
+  no accepted-print-only memory or new receipt-preference storage. Ask **C only** next:
+  inline collapsible Invoice selector with named final confirmation (recommended), or a
+  separate printer step. Step/one-option/zero-option details, D, first-use and further
+  fallback, exact browser storage/persistence, Equipment save/rollback/concurrency and
+  full-design/build agreement remain open. Preserve authorization, sale-location rechecks,
+  request facts, uncertain-outcome reconciliation, original/copy and fiscal/public-F1 gates;
+  no silent destination replacement or implicit print. [Revised boards](backlog/mockups/a790-document-and-printer-choice/revision-dashboard-equipment/README.md);
+  existing design/README bodies and conflicting boards remain history. Docs only, with no
+  runtime/test/hardware evidence; the source map stays historical and runtime-unverified.
 
 - **Loose ends left by A661 (#1745).**
   - The till's payment-time options and a staged A4 choice resolve the device's invoice printer

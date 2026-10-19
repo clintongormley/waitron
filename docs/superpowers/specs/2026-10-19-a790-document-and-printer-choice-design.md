@@ -1,3 +1,126 @@
+# A790: latest decisions, 2026-10-19, after the dashboard and Equipment answers
+
+**A and B are approved; C is the sole next owner question. The complete design is not
+approved for planning or build.** This addendum takes precedence over every conflicting
+passage and board below, including the earlier same-day addendum. Both existing bodies
+remain verbatim as dated history. In particular, B's profile suggestion, Change profile,
+dedicated dashboard profile and portable-printer exclusion are superseded. The separate
+receipt memory updated only after an accepted print is withdrawn from the current proposal.
+
+Authority: lane F's `questions.md`, owner answers to A at about 05:10, B at 12:05 and
+A796 Equipment at 12:25 on 2026-10-19; lane B's same-day A796 answers provide context.
+B says **“EVERY PRINTER AT THAT VENUE”** and specifies active printers, the sale's venue,
+and last use **on this browser**, collapsible. A796 says **“ONE setting”** for the phone's
+Equipment receipt printer, with no separate receipt memory or new storage.
+
+## Approved document meaning and dashboard scope
+
+A retains the recorded full invoice. Receipt prints `F/1042` compact with Mar Azul SL's
+recorded customer details; Invoice prints that same invoice on its chosen destination's
+paper. Neither issues another invoice, number, sale or fiscal record. Device-profile
+receipt and invoice lists still govern the device paths; B is the explicit exception for
+a dashboard without a device profile.
+
+For Harbour's `F/1042`, a device-free dashboard offers **every active Harbour printer**,
+bypassing profile printer lists, even while its dashboard filter says Hillside. Disabled,
+deleted and other-venue printers are excluded. There is no profile choice or dedicated
+dashboard profile. Keep active portable printers in this list too. How device-free receipt
+delivery respects portable-printer holding is an **unresolved enforcement detail** for the
+builder to bring back before build; do not resolve it by silently excluding a belt printer,
+borrowing a till identity or reassigning its holder.
+
+**Proposed builder call, not an owner decision:** label each row by name and paper, such
+as **Office · A4**, **Bar · Receipt paper**, **Terrace belt · Receipt paper**; sort by
+printer name, with id as a stable tie-breaker. Show the sale's venue above the list. Paper
+labels explain the destination; they do not narrow B's every-active-printer list.
+
+Preselect the last printer used **on this browser** when it remains valid for this sale;
+the selector is collapsible. This is browser scope, not a till's Equipment or history.
+Exact storage, keys, lifetime, update trigger, role handling and first-use/unavailable
+fallback are **proposals requiring agreement**. B supersedes the earlier proposal of no
+dashboard memory, but approves no particular persistence mechanism or invoice-memory
+record. The device-free dashboard must not read or change any till's Equipment setting.
+
+## Approved receipt interaction and the phone's single Equipment setting
+
+At payment, the receipt selector sits in the payment form; after payment, it sits in the
+receipt print/reprint form with the final action. It may be collapsed, with the destination
+named in its summary and confirmation. There is no extra receipt-printer step. On the
+phone this selector **is the existing Equipment receipt-printer setting**, at and after
+payment. Selecting a printer updates that same setting, rather than waiting for an accepted
+print. No separate receipt memory or new receipt-preference storage is proposed.
+
+Ana changes Mesa 4's first share from Barra to Terraza. Even though that share produces no
+ticket yet, Mesa 9 then offers Terraza and Equipment shows Terraza. A QR or permitted NFC Equipment
+change must be reflected in the same setting and form. The QR button stays visible beside
+Change even with Equipment folded. A796 owns those interactions, the reader labels and
+NFC permission; its background NFC requirement does not authorize assuming permission.
+Save timing, pending/refused saves, rollback and concurrent Equipment changes need a
+builder proposal and agreement. This revision does not claim the product already performs
+these updates, or approve an atomic Equipment-and-payment change.
+
+Lane B's unavailable-printer answer opens the row with a warning while allowing payment;
+its deleted/de-listed fallback is shown labelled. That answer does not authorize replacing
+an already selected or submitted destination. A790's first-use behavior and further fallback
+details remain unapproved. Invoice-role memory is also unapproved: do not add storage or
+reuse receipt history for it. Device invoice choice/default ordering remains Q2; dashboard
+browser preselection remains B, with its exact role/storage details still to agree.
+
+## C: the sole next owner question
+
+**For Invoice, should the printer selector stay inline and collapsible in the same form
+as the named final confirmation, matching Receipt (recommended), or occupy a separate
+printer step?**
+
+Worked example: you open Harbour's `F/1042`, choose Invoice and see **Office · A4** in the
+folded printer row. Expand it to choose **Terrace belt · Receipt paper**, then press
+**Print a copy on Terrace belt** when the server designates a copy. The separate-step
+alternative moves the printer choice to its own page before the same named confirmation.
+Recommend inline to let you see and change the destination without an extra printer step.
+No invoice last-use memory is implied by this example.
+
+**Supporting C proposals, not additional owner questions:** after-payment Print/reprint
+first shows Receipt versus Invoice for an existing full invoice, then shows that document's
+form with its inline printer selector; Back returns without printing. At payment, Full
+invoice is already chosen, so recipient and print/email choices stay in the payment draft,
+with an inline invoice selector for Print. The final payment confirmation names the staged
+destination and authorizes delivery; there is no separate print press at payment. With one
+eligible printer, show its name in the same form and retain final confirmation; proposing
+preselection of that sole printer does not settle first-use fallback. With zero, explain
+why and disable print; loading and read failure remain distinct. General document skips,
+D's simplified-sale behavior and these step/one-option/zero-option details remain proposals.
+
+## Boundaries and evidence
+
+Retain management authorization, restricted Orders visibility and any accompanying device
+identity's restrictions. B changes printer-list scope, not those checks. The server derives
+the sale/order location for offers, layout and queued work, and rechecks authorization,
+active equipment and applicable restrictions in the reservation transaction. The historical
+builder contract applies subject to the explicit B and Equipment overrides above.
+
+If a selected destination becomes invalid, reveal the problem and require a deliberate
+new choice and confirmation; never substitute a default or remembered printer. A submitted
+request key freezes sale, document, printer, language and context. Later Equipment changes
+must not reroute that request. Preserve unknown outcomes, accepted-write/failed-refresh
+states and late successes; reconcile before a fresh request. Unavailable printing does not
+roll back a payment already under way. Retain server-derived original/copy and the shared
+F1 delivery guard, public-F1 gate, fiscal invariants and separate queue Resend policy.
+Selection, loading, collapse, Equipment updates and saving recipient details never print.
+Print/reprint adds no payment, fiscal or drawer side effect.
+
+The [dashboard/Equipment/C boards](../../backlog/mockups/a790-document-and-printer-choice/revision-dashboard-equipment/README.md)
+show the approved decisions and proposed C. Eight PNGs were rendered in headless Chromium
+and visually inspected in English/Spanish, both themes, at 390/1280 px. Their native SVG
+text boxes were measured within the drawings. These checks concern static drawings only. Original and earlier
+revision boards are historical wherever they conflict with this addendum. The source map
+below remains historical and runtime-unverified. **This docs-only revision supplies no
+runtime, test or hardware evidence.** C, D, specific fallback/storage/persistence choices,
+the full design and build remain unapproved; no plan, implementation or migration follows.
+
+---
+
+## Historical text retained verbatim from before the dashboard/Equipment revision
+
 # A790: current document and printer decisions
 
 ## Revision, 2026-10-19: A approved; B is the sole current owner question
