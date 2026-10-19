@@ -1786,3 +1786,167 @@ describe("till-bill-pay-dialog: a payment that got no answer", () => {
     expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
   });
 });
+
+describe("till-bill-pay-dialog: on a handheld", () => {
+  const handheld = (over: Partial<TillBillPayDialog> = {}) =>
+    mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "stripe_terminal",
+      takesCash: true,
+      takesManualCard: true,
+      ...over,
+    });
+  const radios = (el: TillBillPayDialog, name: string) =>
+    [...root(el).querySelectorAll<HTMLInputElement>(`input[name="${name}"]`)].map((radio) => ({
+      value: radio.value,
+      label: text(radio.closest("label")),
+      checked: radio.checked,
+      disabled: radio.disabled,
+    }));
+
+  it("offers Whole bill first and chosen, then today's three ways, in Spanish as drawn", async () => {
+    setLocale("es");
+    const el = await handheld();
+
+    expect(radios(el, "way").map(({ value, label, checked }) => [value, label, checked])).toEqual([
+      ["whole", "Toda la cuenta", true],
+      ["items", "Pagar artículos", false],
+      ["contribution", "Aportar una cantidad", false],
+      ["share", "Dividir a partes iguales", false],
+    ]);
+    expect(radios(el, "method").map(({ value, label }) => [value, label])).toEqual([
+      ["card", "Tarjeta"],
+      ["cash", "Efectivo"],
+      ["manual", "Otro datáfono"],
+    ]);
+  });
+
+  it("titles itself with the table", async () => {
+    setLocale("es");
+    const el = await handheld({ tableName: "Mesa 4" });
+    expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
+      "Cobrar · Mesa 4",
+    );
+  });
+
+  it("keeps Whole bill, and Continue, disabled until the balance has been read", async () => {
+    const el = await handheld({ balance: null });
+    const whole = radios(el, "way")[0]!;
+    expect(whole).toMatchObject({ value: "whole", checked: true, disabled: true });
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+
+    el.balance = balanceOf({ outstanding: "62.40" });
+    await el.updateComplete;
+    expect(radios(el, "way")[0]!.disabled).toBe(false);
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+  });
+
+  it("asks for what is left, read when Continue is pressed, on the card reader", async () => {
+    const el = await handheld({ balance: balanceOf({ outstanding: "80.00" }) });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    el.balance = balanceOf({ outstanding: "62.40" });
+    await el.updateComplete;
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "62.40" },
+        pay: { method: "card" },
+        card: { entry: "reader" },
+      },
+    ]);
+  });
+
+  it("starts on the way it was opened with", async () => {
+    const el = await handheld({ way: "share" });
+    expect(radios(el, "way").find((radio) => radio.checked)!.value).toBe("share");
+  });
+
+  it.each([
+    [true, true, true, ["card", "cash", "manual"], "card"],
+    [true, true, false, ["card", "cash"], "card"],
+    [true, false, true, ["card", "manual"], "card"],
+    [true, false, false, ["card"], "card"],
+    [false, true, true, ["cash", "manual"], "cash"],
+    [false, true, false, ["cash"], "cash"],
+    [false, false, true, ["manual"], "manual"],
+    [false, false, false, [], null],
+  ] as const)(
+    "with reader card %s, cash %s and another card machine %s offers %j, chosen %s",
+    async (card, cash, manual, offeredMethods, chosen) => {
+      const el = await handheld({
+        cardReader: card ? "stripe_terminal" : "none",
+        takesCash: cash,
+        takesManualCard: manual,
+      });
+      const methods = radios(el, "method");
+      expect(methods.map((radio) => radio.value)).toEqual(offeredMethods);
+      expect(methods.find((radio) => radio.checked)?.value ?? null).toBe(chosen);
+      const none = root(el).querySelector("[data-pay-no-method]");
+      if (chosen === null) {
+        expect(text(none)).toBe(t("bill_pay.no_method"));
+        expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+        const asked = capture<PayRequest>(el, "bill-pay-preview");
+        await click(el, "[data-pay-continue]");
+        expect(asked).toEqual([]);
+      } else {
+        expect(none).toBeNull();
+        expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+      }
+    },
+  );
+
+  it("takes another card machine with its operation number, as a hand-keyed card", async () => {
+    const el = await handheld();
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    expect(field(el, "externalRef")).toBeNull();
+    await pick(el, "method", "manual");
+    expect(field(el, "externalRef")).not.toBeNull();
+    await type(el, "externalRef", " 000123 ");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "120.00" },
+        pay: { method: "card" },
+        card: { entry: "manual", externalRef: "000123" },
+      },
+    ]);
+  });
+
+  it("asks before another card machine while a card is in progress on the bill", async () => {
+    const el = await handheld({ balance: balanceOf({ payments: [pendingCard] }) });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await pick(el, "method", "manual");
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toEqual([]);
+    expect(text(root(el).querySelector("[data-pay-card-ask]"))).toContain(
+      t("bill_pay.card_in_progress_ask"),
+    );
+    await click(el, "[data-pay-card-ask-take]");
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "120.00" },
+        pay: { method: "card" },
+        card: { entry: "manual" },
+      },
+    ]);
+  });
+
+  it("on a counter till offers today's three ways and two methods, with no table title", async () => {
+    // The two methods are also pinned by "offers cash by default, with no line about taking it at
+    // a till" above.
+    const el = await mount({ takesManualCard: true, tableName: "Mesa 4" });
+    expect(radios(el, "way").map((radio) => radio.value)).toEqual([
+      "items",
+      "contribution",
+      "share",
+    ]);
+    expect(radios(el, "method").map((radio) => radio.value)).toEqual(["cash", "card"]);
+    expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
+      t("bill_pay.title"),
+    );
+  });
+});

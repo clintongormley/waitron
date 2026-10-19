@@ -39,6 +39,7 @@ import type {
   TillActiveReader,
 } from "../api/client.js";
 import {
+  HANDHELD_PAY_WAYS,
   PAY_WAYS,
   isTakePaymentRefusal,
   moneyPlus,
@@ -50,7 +51,10 @@ import {
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { CardProvider, ReceiptGuestsDetail } from "./tender-pay.js";
 
-export type PayWay = PayChoice["kind"];
+/** `whole` is the till's own: it asks for a contribution of what is left. */
+export type PayWay = PayChoice["kind"] | "whole";
+/** `manual` is a card keyed on a terminal the till does not drive; it is sent as a card. */
+type Method = "cash" | "card" | "manual";
 
 /** A dish of the bill as the dialog offers it. */
 export interface PayLine {
@@ -120,7 +124,7 @@ interface PaymentDraft {
   picks: [number, number][];
   amount: string;
   people: string;
-  method: "cash" | "card";
+  method: Method;
   tendered: string;
   cardTip: string;
   externalRef: string;
@@ -143,9 +147,9 @@ function amountKey(value: string): string | { invalid: string } {
 
 /** The field a refusal is about, or null when it names none the dialog shows. A tip the venue does
  * not take can only come from a card contribution larger than is left, so it is the amount's. */
-function refusalField(refusal: PayRefusal, method: PayMethod["method"], way: PayWay): Field | null {
+function refusalField(refusal: PayRefusal, method: Method, way: PayWay): Field | null {
   if (refusal.code === "bill.tip_not_allowed")
-    return refusal.chargeable !== undefined && method === "card" && way === "contribution"
+    return refusal.chargeable !== undefined && method !== "cash" && way === "contribution"
       ? "amount"
       : null;
   if (refusal.code !== "management.request_invalid") return null;
@@ -158,7 +162,7 @@ function refusalField(refusal: PayRefusal, method: PayMethod["method"], way: Pay
       return method === "cash" ? "tendered" : null;
     // A refused cash tip comes back to the form, which does not show the tip it was left from.
     case "addedTip":
-      return method === "card" ? "cardTip" : null;
+      return method !== "cash" ? "cardTip" : null;
     default:
       return null;
   }
@@ -454,8 +458,8 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) balance: BillBalance | null = null;
   /** The bill's dishes; those already paid for in full are not offered. */
   @property({ attribute: false }) lines: PayLine[] = [];
-  /** The way the dialog opens on. */
-  @property() way: PayWay = "items";
+  /** The way the dialog opens on; unset, Whole bill on a handheld and Pay items on a till. */
+  @property() way?: PayWay;
   /** A contribution's starting amount. */
   @property() amount = "";
   /** What the last `bill-pay-preview` asked; with {@link preview}, the dialog asks for
@@ -486,12 +490,18 @@ export class TillBillPayDialog extends LitElement {
   /** The count the guests field starts on; null starts it empty. */
   @property({ attribute: false }) receiptGuests: number | null = null;
   @property({ attribute: false }) unanswered: UnansweredPayment | null = null;
+  /** A handheld offers Whole bill, and a card on a separate terminal as a method of its own. */
+  @property({ type: Boolean }) handheld = false;
+  /** On a handheld, whether the profile takes a card keyed on a separate terminal. */
+  @property({ type: Boolean }) takesManualCard = false;
+  /** On a handheld, the table the title names. */
+  @property() tableName = "";
 
   @state() private chosenWay: PayWay = "items";
   @state() private picks = new Map<number, number>();
   @state() private typedAmountValue = "";
   @state() private people = "";
-  @state() private method: PayMethod["method"] = "cash";
+  @state() private method: Method = "cash";
   @state() private tendered = "";
   @state() private cardTip = "";
   @state() private externalRef = "";
@@ -553,28 +563,29 @@ export class TillBillPayDialog extends LitElement {
 
   #comparable(value: PaymentDraft): string {
     const choice =
-      value.way === "items"
-        ? [...value.picks].sort((a, b) => a[0] - b[0])
-        : value.way === "contribution"
-          ? amountKey(value.amount)
-          : PEOPLE.test(value.people.trim())
-            ? Number(value.people.trim())
-            : { invalid: value.people };
+      value.way === "whole"
+        ? null
+        : value.way === "items"
+          ? [...value.picks].sort((a, b) => a[0] - b[0])
+          : value.way === "contribution"
+            ? amountKey(value.amount)
+            : PEOPLE.test(value.people.trim())
+              ? Number(value.people.trim())
+              : { invalid: value.people };
     const pay =
       value.method === "cash"
         ? { tendered: amountKey(value.tendered) }
         : {
             tip: this.tipsEnabled ? amountKey(value.cardTip) : null,
-            card:
-              this.cardReader === "none"
-                ? value.externalRef.trim()
-                : {
-                    readerId: value.readerId,
-                    simulation:
-                      this.cardReader === "simulator" && value.readerId === undefined
-                        ? value.simulationOutcome
-                        : null,
-                  },
+            card: this.#keyed(value.method)
+              ? value.externalRef.trim()
+              : {
+                  readerId: value.readerId,
+                  simulation:
+                    this.cardReader === "simulator" && value.readerId === undefined
+                      ? value.simulationOutcome
+                      : null,
+                },
           };
     return JSON.stringify({ way: value.way, choice, method: value.method, pay });
   }
@@ -675,8 +686,13 @@ export class TillBillPayDialog extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("way")) this.chosenWay = this.way;
-    if (changed.has("takesCash")) this.method = this.takesCash ? "cash" : "card";
+    if (changed.has("way") || changed.has("handheld"))
+      this.chosenWay = this.way ?? (this.handheld ? "whole" : "items");
+    if (this.handheld) {
+      const offered = this.#methods();
+      if (changed.has("handheld") || !offered.includes(this.method))
+        this.method = offered[0] ?? "card";
+    } else if (changed.has("takesCash")) this.method = this.takesCash ? "cash" : "card";
     if (changed.has("amount")) this.typedAmountValue = this.amount;
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
     if (changed.has("taken") && this.taken !== null) this.paymentAccepted();
@@ -748,6 +764,8 @@ export class TillBillPayDialog extends LitElement {
 
   #choice(): PayChoice {
     switch (this.chosenWay) {
+      case "whole":
+        return { kind: "contribution", amount: this.balance!.outstanding };
       case "items":
         return {
           kind: "items",
@@ -772,13 +790,34 @@ export class TillBillPayDialog extends LitElement {
       return { choice, pay: { method: "cash", tendered: typedAmount(this.tendered)! } };
     const tip = this.tipsEnabled ? typedAmount(this.cardTip) : null;
     const pay: PayMethod = tip === null ? { method: "card" } : { method: "card", addedTip: tip };
-    if (this.cardReader !== "none") return { choice, pay, card: this.#readerEntry() };
+    if (!this.#keyed(this.method)) return { choice, pay, card: this.#readerEntry() };
     const ref = this.externalRef.trim();
     return {
       choice,
       pay,
       card: ref === "" ? { entry: "manual" } : { entry: "manual", externalRef: ref },
     };
+  }
+
+  /** Whether a card method is keyed on a separate terminal: Other card machine on a handheld, and
+   * a till's card when the till has no reader. */
+  #keyed(method: Method): boolean {
+    return method === "manual" || (!this.handheld && this.cardReader === "none");
+  }
+
+  /** The methods a handheld offers, in the order shown. */
+  #methods(): Method[] {
+    return [
+      ...(this.cardReader === "none" ? [] : (["card"] as const)),
+      ...(this.takesCash ? (["cash"] as const) : []),
+      ...(this.takesManualCard ? (["manual"] as const) : []),
+    ];
+  }
+
+  /** Whether Continue can ask: a handheld offers a method, and Whole bill has a balance to pay. */
+  #canAsk(): boolean {
+    if (!this.handheld) return true;
+    return this.#methods().length > 0 && (this.chosenWay !== "whole" || this.balance !== null);
   }
 
   #readerEntry(): CardEntry {
@@ -851,7 +890,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   async #continue(): Promise<void> {
-    if (!this.isConnected || !this.#active || this.busy) return;
+    if (!this.isConnected || !this.#active || this.busy || !this.#canAsk()) return;
     this.attempted = true;
     this.shownRefusal = null;
     if (this.#ownErrors().size > 0) {
@@ -924,7 +963,11 @@ export class TillBillPayDialog extends LitElement {
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.#active}
-      .heading=${t("bill_pay.title")}
+      .heading=${
+        this.handheld && this.tableName !== ""
+          ? t("bill_pay.title_table").replace("{table}", () => this.tableName)
+          : t("bill_pay.title")
+      }
       .dismissible=${!this.busy}
       .beforeClose=${this.#entry ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#close(event)}
@@ -1158,6 +1201,12 @@ export class TillBillPayDialog extends LitElement {
   /** What the way covers, as far as the dialog knows before the server allocates it. */
   #scope(): string {
     switch (this.chosenWay) {
+      case "whole":
+        return this.balance === null
+          ? ""
+          : t("table.bill_to_pay").replace("{amount}", () =>
+              this.#money(this.balance!.outstanding),
+            );
       case "items": {
         const picked = this.#picked();
         if (picked.length === 0) return t("bill_pay.scope_items_none");
@@ -1195,6 +1244,7 @@ export class TillBillPayDialog extends LitElement {
     label: string,
     checked: boolean,
     pick: () => void,
+    disabled = false,
   ): TemplateResult {
     return html`<label class="option">
       <input
@@ -1202,6 +1252,7 @@ export class TillBillPayDialog extends LitElement {
         name=${name}
         .value=${value}
         .checked=${checked}
+        ?disabled=${disabled}
         @change=${(event: Event) => {
           event.stopPropagation();
           if (!this.isConnected || !this.#active || this.busy) return;
@@ -1251,10 +1302,17 @@ export class TillBillPayDialog extends LitElement {
     return html`<fieldset class="choice" data-pay-way ?disabled=${this.busy}>
         <legend>${t("bill_pay.way")}</legend>
         <div class="options">
-          ${PAY_WAYS.map(({ way, label }) =>
-            this.#radio("way", way, t(label), this.chosenWay === way, () => {
-              this.chosenWay = way;
-            }),
+          ${(this.handheld ? HANDHELD_PAY_WAYS : PAY_WAYS).map(({ way, label }) =>
+            this.#radio(
+              "way",
+              way,
+              t(label),
+              this.chosenWay === way,
+              () => {
+                this.chosenWay = way;
+              },
+              way === "whole" && this.balance === null,
+            ),
           )}
         </div>
       </fieldset>
@@ -1275,7 +1333,7 @@ export class TillBillPayDialog extends LitElement {
           variant="primary"
           data-pay-continue
           .loading=${this.busy}
-          .disabled=${this.busy || own.size > 0 || this.askingSecondCard}
+          .disabled=${this.busy || own.size > 0 || this.askingSecondCard || !this.#canAsk()}
           @click=${() => void this.#continue()}
         >
           ${t("bill_pay.continue")}
@@ -1283,8 +1341,10 @@ export class TillBillPayDialog extends LitElement {
       </wt-form-actions>`;
   }
 
-  #wayFields(errors: ReadonlyMap<Field, string>): TemplateResult {
+  #wayFields(errors: ReadonlyMap<Field, string>): TemplateResult | typeof nothing {
     switch (this.chosenWay) {
+      case "whole":
+        return nothing;
       case "items":
         return this.#itemsField(errors.get("lines"));
       case "contribution":
@@ -1393,44 +1453,59 @@ export class TillBillPayDialog extends LitElement {
     </span>`;
   }
 
+  #methodRadio(method: Method): TemplateResult {
+    const label = {
+      cash: "tender.cash",
+      card: "tender.card",
+      manual: "bill_pay.method_other_terminal",
+    } as const;
+    return this.#radio("method", method, t(label[method]), this.method === method, () => {
+      this.method = method;
+    });
+  }
+
+  #methodChoices(): TemplateResult {
+    if (this.handheld) {
+      const methods = this.#methods();
+      return methods.length === 0
+        ? html`<p class="muted" data-pay-no-method>${t("bill_pay.no_method")}</p>`
+        : html`<div class="options">${methods.map((method) => this.#methodRadio(method))}</div>`;
+    }
+    return html`<div class="options">
+        ${this.takesCash ? this.#methodRadio("cash") : nothing} ${this.#methodRadio("card")}
+      </div>
+      ${this.takesCash ? nothing : html`<p class="muted cash-at-till">${t("tender.cash_at_till")}</p>`}`;
+  }
+
   #methodFields(errors: ReadonlyMap<Field, string>): TemplateResult {
+    const offered = !this.handheld || this.#methods().length > 0;
     return html`<fieldset class="choice" data-pay-method ?disabled=${this.busy}>
         <legend>${t("bill_pay.method")}</legend>
-        <div class="options">
-          ${
-            this.takesCash
-              ? this.#radio("method", "cash", t("tender.cash"), this.method === "cash", () => {
-                  this.method = "cash";
-                })
-              : nothing
-          }
-          ${this.#radio("method", "card", t("tender.card"), this.method === "card", () => {
-            this.method = "card";
-          })}
-        </div>
-        ${this.takesCash ? nothing : html`<p class="muted cash-at-till">${t("tender.cash_at_till")}</p>`}
+        ${this.#methodChoices()}
       </fieldset>
       ${
-        this.method === "cash"
-          ? this.#input(
-              "tendered",
-              t("bill_pay.tendered"),
-              this.tendered,
-              (value) => (this.tendered = value),
-              { required: true, error: errors.get("tendered"), submit: "[data-pay-continue]" },
-            )
-          : html`${
-              this.tipsEnabled
-                ? this.#input(
-                    "cardTip",
-                    t("bill_pay.card_tip"),
-                    this.cardTip,
-                    (value) => (this.cardTip = value),
-                    { error: errors.get("cardTip"), submit: "[data-pay-continue]" },
-                  )
-                : nothing
-            }
-            ${this.cardReader === "none" ? this.#manualCardFields() : this.#readerFields()}`
+        !offered
+          ? nothing
+          : this.method === "cash"
+            ? this.#input(
+                "tendered",
+                t("bill_pay.tendered"),
+                this.tendered,
+                (value) => (this.tendered = value),
+                { required: true, error: errors.get("tendered"), submit: "[data-pay-continue]" },
+              )
+            : html`${
+                this.tipsEnabled
+                  ? this.#input(
+                      "cardTip",
+                      t("bill_pay.card_tip"),
+                      this.cardTip,
+                      (value) => (this.cardTip = value),
+                      { error: errors.get("cardTip"), submit: "[data-pay-continue]" },
+                    )
+                  : nothing
+              }
+              ${this.#keyed(this.method) ? this.#manualCardFields() : this.#readerFields()}`
       }`;
   }
 

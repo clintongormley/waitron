@@ -42,6 +42,12 @@ export const PAY_WAYS = [
   { way: "share", label: "bill_pay.way_share" },
 ] as const satisfies readonly { way: PayChoice["kind"]; label: StringKey }[];
 
+/** The ways a handheld offers: the whole of what is left in one go, then the three above. */
+export const HANDHELD_PAY_WAYS = [
+  { way: "whole", label: "bill_pay.way_whole" },
+  ...PAY_WAYS,
+] as const satisfies readonly { way: PayChoice["kind"] | "whole"; label: StringKey }[];
+
 const TYPED_AMOUNT = /^\d{1,9}(\.\d{1,2})?$/;
 
 export function typedAmount(value: string): string | null {

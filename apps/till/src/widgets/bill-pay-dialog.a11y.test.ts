@@ -56,6 +56,7 @@ async function previewed(el: TillBillPayDialog, preview: AllocationPreview): Pro
 
 const lockBackgrounds = new Map<string, string>();
 const askBackgrounds = new Map<string, string>();
+const handheldBackgrounds = new Map<string, string>();
 
 describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)", (theme) => {
   const mount = (over: Partial<TillBillPayDialog> = {}) =>
@@ -373,6 +374,70 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
           panelWidth: box.width,
           questionLeft: asked.left - box.left,
           questionRight: box.right - asked.right,
+          background,
+        }),
+      );
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
+  const handheld = () =>
+    mount({
+      handheld: true,
+      way: undefined,
+      tableName: "Mesa 4",
+      cardReader: "stripe_terminal",
+      takesCash: true,
+      takesManualCard: true,
+    });
+
+  it("has no violations on a handheld, the form", async () => {
+    const { host } = await handheld();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on a handheld whose profile takes no payments", async () => {
+    const { host } = await mount({
+      handheld: true,
+      way: undefined,
+      cardReader: "none",
+      takesCash: false,
+    });
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([390, 1280])("looks right on a handheld, the form, at %i px", async (width) => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    try {
+      expect(window.innerWidth).toBe(width);
+      const { el } = await handheld();
+      const panel = el
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
+      const background = getComputedStyle(panel).backgroundColor;
+      handheldBackgrounds.set(`${theme}-${width}`, background);
+      if (theme === "dark") {
+        const light = handheldBackgrounds.get(`light-${width}`);
+        expect(light, "run the light case first").toBeDefined();
+        expect(background).not.toBe(light);
+      }
+      const shot = `__screenshots__/look/a796-handheld-form-${theme}-${width}`;
+      await page.screenshot({
+        element: panel,
+        path: `__screenshots__/look/a796-handheld-form-${theme}-${width}.png`,
+      });
+      const box = panel.getBoundingClientRect();
+      const methods = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-method]")!;
+      const shown = methods.getBoundingClientRect();
+      await commands.writeFile(
+        `src/widgets/${shot}.json`,
+        JSON.stringify({
+          innerWidth: window.innerWidth,
+          panelWidth: box.width,
+          methodsLeft: shown.left - box.left,
+          methodsRight: box.right - shown.right,
           background,
         }),
       );
