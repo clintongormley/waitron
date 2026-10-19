@@ -265,11 +265,19 @@ actual killed subprocesses, rollback, wrong-key/source refusals and replay with 
 Removing committed-result verification in the installed candidate makes both marker-without-commit
 cases resolve incorrectly; restoring it passes both.
 
-The separate Cloud suite still reports six failures and one pass because its signed Cloud/paper
-restore inputs reach the retired dispatcher. Give those cases their own current-flow treatment
-without restoring that dispatcher. The live replacement and exact before/after assertion inventory
-remain outside the feature checkout until approved. Its signed fixtures must pass their real
-protocol readers before their rejection counts as evidence about retirement.
+The separate Cloud source suite still reports six failures and one pass because its signed
+Cloud/paper restore inputs reach the retired dispatcher. Its seven-case live replacement is
+qualified outside the feature checkout and awaits one exact approval in Lane E's questions.
+The retained Cloud client/reconciliation suites separately pass 62 source cases. The proposal's
+real readers check its signed fixtures, including the module's actual software ID, before the
+production entry refuses them with the former trust and confirmation files present.
+
+The proposal replaces the older-backup outside-registry claim with surviving local hour evidence.
+It explicitly removes the combined signed-report HTTP roundtrip and once-only checks because that
+production reporting path is retired; the owner may instead retain those assertions in a separate
+historical test. Its literal one-file patch, complete before/after inventory and omission controls
+are retained locally. Do not apply or push it before the exact answer, and do not restore the old
+production dispatcher. Package coverage and current-head CI remain required after integration.
 
 Retained historical checks do not qualify a current production success. Existing source and
 built-command hour qualifications, the 150-case recovery run and completed reviews have separate
