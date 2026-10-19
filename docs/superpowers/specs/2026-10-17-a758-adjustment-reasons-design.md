@@ -1,11 +1,12 @@
 # A758 — Voids and comps: the rules, the owner's answers, and a page of their own
 
 Status: **design, revised 2026-10-19 a second time, for the owner's four answers to A758r3's
-question (D23–D26).** Settled and buildable: all of it — the Spanish words (§3.9), no confirmation
-switch on a cash refund (§3.8.2), a fired dish answered No not listed (§3.3, §3.6) and the refund
-screen's Reason drop-down (§3.8 item 3). **One question is open (§11): whether a handheld that does
-not take cash may record a cash refund.** Nothing waits on it except that case of the refund
-screen; today's rule stands until it is answered. Earlier revisions: 2026-10-17, 2026-10-18 and
+question (D23–D26).** Settled and buildable: all of it except §11's one question — the Spanish
+words (§3.9), no confirmation switch on a cash refund (§3.8.2), a fired dish answered No not listed
+(§3.3, §3.6) and the refund screen's Reason drop-down (§3.8 item 3). **The open question (§11):
+whether a handheld that does not take cash may record a cash refund.** The build need not wait:
+today's rule stands until it is answered, and only a cash refund on a device that takes no cash
+would change if the owner chooses the other way. Earlier revisions: 2026-10-17, 2026-10-18 and
 2026-10-19 (the owner's answers to Q21–Q28, Q40 and Q43). Backlog entry: `docs/backlog.md` "A758" and
 [its detail](../../backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own).
 Pictures: `docs/backlog/mockups/a758-adjustment-reasons/`, all drawn in HTML with the dashboard's
@@ -67,7 +68,7 @@ revision of 2026-10-19 (§3.8.2, §3.9, §9.1's cash checks, §10 item 5, §11) 
 | D17 | **Finish table on a paid table with dishes not served** cancels every one of them; the only questions are per dish: has preparation started (known for held — No — and for being prepared or ready — Yes; asked Yes / No for fired and not started), and a Refund tick, starting ticked when not started and unticked when started, changeable. The main button reads **"Cancel"** while nothing is ticked and **"Cancel and refund {amount}"** once any is. A third choice, **"They'll collect it at the counter"**, moves the order to the counter to wait (§3.8). "They were served" goes. | Q43 notes, ~23:10 and ~23:40, in place of Q43 (a). "They were served" going is our reading of the ~23:10 flows; say if wrong |
 | D18 | **A refund of a served dish after paying is a separate, intentional action** — Refund a payment on the receipt — not a cancel. The table's Cancel item… on a paid bill is for dishes not yet served; the paid receipt's "Cancel items…" is dropped. | Q43 notes, ~23:10. Dropping the receipt's "Cancel items…", and offering the table's Cancel item… on a paid bill only for dishes not yet served, are our reading of the ~23:10 flows; say if wrong |
 | D19 | **The report** lists every cancelled dish with its reason, who did it, who gave the PIN (if anyone), whether preparation had started, and the amount off the bill (unpaid "Cancel, don't charge": the dish's value; "Cancel, still charge" and any cancel on a paid bill: €0.00, because a filed bill never changes); money given back shows with refunds, linked to the cancel (§3.6). A dish not sent or held, removed from an unpaid bill, is not a cancel (D12), nor is a fired dish answered No (D25). | Q43 (d), approved ~23:25 |
-| D20 | **The refund screen opens filled in** with the ticked dishes' total and the cancel's reason (its shape is D26); card as today, cash without its switch (D24). **Once A802 lands, a refund of cancelled dishes files the corrective invoice in the same step**; until then nothing is filed and the invoice is unchanged. | Q43 (e), approved ~23:35 |
+| D20 | **The refund screen opens filled in** with the ticked dishes' total and the cancel's reason (its shape is D26); each payment goes back by its own method, only on a device whose profile takes that method (§3.8.2), and cash without its switch (D24). **Once A802 lands, a refund of cancelled dishes files the corrective invoice in the same step**; until then nothing is filed and the invoice is unchanged. | Q43 (e), approved ~23:35 |
 | D21 | **A cash refund when the guest has left is not tracked**: no "Is the customer here?", no "cash owed" record. | Q43 notes, ~23:45 |
 | D22 | **One word per meaning.** Unpaid bill: "Cancel, don't charge" (comes off the bill; no money moves). Paid bill: "Cancel and refund" (money goes back). "Refund" only where money is returned. "Station" and "preparation started", never "the kitchen", in every question, label and report column. | Q43 notes, ~23:00 and ~23:30 |
 | D23 | **The Spanish words** are the table in §3.9. The question "Has preparation started?" is **«En preparación»**, answered «Sí» / «No», and the report's column "Preparation started" is also «En preparación». Every other word as A758r3 recommended. The English does not change. | owner, 2026-10-19 ~12:30, A758r3 (a) |
@@ -532,9 +533,11 @@ worktree, not pushed) unless marked **(run)**. "Paid" here means the bill is `se
    Other is: our reading, since the till knows Other only as a reason that asks for a note. The
    change is the till's field, a typed `wt-input` today
    (`apps/till/src/widgets/tender-refund-dialog.ts:301-317`, used at `:411`), and the reasons it
-   reads. The waiter picks the payment as today: a card goes back to that card, or on its own
-   terminal if it was keyed by hand (confirmed with a PIN, `tender-refund-authorization.ts:132-147`);
-   cash has no switch any more, and the drawer opens as §3.8.2 says. When the chosen payment cannot return
+   reads. The waiter picks the payment as today, and it goes back by its own method — a card taken on
+   a connected reader to that card, a card keyed by hand on its own terminal (confirmed with a PIN,
+   `tender-refund-authorization.ts:132-147`), cash from the drawer with no switch — and only on a
+   device whose profile takes that method (§3.8.2, which also says what a device that can give back
+   none of them shows). When the chosen payment cannot return
    it all, the screen fills in what it can and says what is left: "€2.00 left to refund from another
    payment" ("Quedan 2,00 € por devolver de otro pago"). A PIN given for "Cancel and refund" covers
    the refund too, so the screen does not ask again; the refund route already takes an approver's
@@ -651,7 +654,8 @@ off, in the same step as the refund (D20).
 
 Worked example. Table 4, four guests, €62.00 paid by card at 22:10, all at 10% VAT: 2 × Croquetas
 (€7.50 each, €15.00) being prepared, 1 × Flan (€5.50) held and never fired, and €41.50 of other food
-and drink, all served. At 22:12 Ana presses Finish table: "3 dishes not served". The Flan is ticked,
+and drink, all served. At 22:12 Ana presses Finish table on Caja 1, a till whose profile takes card
+payments on its reader: "3 dishes not served". The Flan is ticked,
 the Croquetas are not; the reason starts on "Not served".
 
 | | Cancel (she unticks the Flan) | Cancel and refund €5.50 (the ticks as they come) |
@@ -702,7 +706,8 @@ carries only `manualConfirmed`, `apps/server/src/bill-refunds.ts:52-62`).
 - **The till** draws "I have handed this money back to the customer" («He entregado este dinero al
   cliente», `tender_refund.cash_confirm`, `apps/till/src/i18n/strings.ts:49`, `:1634`) as a
   `wt-switch` for a cash payment (`apps/till/src/widgets/tender-refund-dialog.ts:318-336`) and will
-  not send while it is off (`:228-232`); the draft carries it (`:34`, `:43`, `:160`) and the saved
+  not send while it is off (`:228-232`); a refusal naming it is shown beside it and cleared when it
+  changes (`:197`, `:240`); the draft carries it (`:34`, `:43`, `:160`) and the saved
   attempt too (`apps/till/src/state/tender-refund.ts:45-46`, `:60`;
   `apps/till/src/api/tender-refund-types.ts:10`).
 - **The server also requires it:** a cash refund whose `cashConfirmed` is not true is refused
@@ -714,16 +719,21 @@ carries only `manualConfirmed`, `apps/server/src/bill-refunds.ts:52-62`).
   v26.11.1, `tender-refunds.test.ts:372` ("does not return cash without confirmation") passed.
 - **The build removes all of it on both sides**: the switch, its string in both languages, the
   draft and saved field, the till's check, the server's check, the request field and its parsing.
-  Taking the field out of the fingerprint changes what a stored fingerprint means; the plan says
-  what a card refund left pending across that upgrade does when retried. **Unchanged:** the
+  One case for the plan: a refund recorded before the upgrade whose answer the till never got, sent
+  again by the till with the same request after it, would be refused `submission.id_reused`
+  instead of being answered with the refund already recorded, because the stored request was
+  checked with the switch in it (`tender-refund-reservation.ts:63-69`). This holds for cash and card
+  alike; a retry by the refund's own id checks no such thing (`tender-refund-api.ts:240-294`).
+  **Unchanged:** the
   hand-keyed card's switch, "I have returned this money on the original card terminal"
   (`strings.ts:50`), which the server still requires (`tender-refund-reservation.ts:92`,
   `apps/server/src/tender-refund-authorization.ts:133`).
 
-**What a cash refund does to the drawer today.** Both refund paths complete a cash refund in its own
-transaction and then ask for the drawer:
+**What a cash refund does to the drawer today.** Both refund paths complete a cash refund and queue
+its drawer job in the same transaction (the job is queued with the refund's `tx`,
+`apps/server/src/tender-refunds.ts:117`, `apps/server/src/bill-refunds.ts:676`):
 
-- **Refund a payment** (A758's refund): `tender-refunds.ts:106-118` completes it and calls
+- **Refund a payment** (A758's refund): `apps/server/src/tender-refunds.ts:106-118` completes it and calls
   `enqueueTenderRefundDrawer` (`apps/server/src/receipt-print.ts:618-657`), which queues an audited
   `drawer` job only for a completed cash refund made on this device (`:625-639`), once (`:640-644`),
   and only when `drawerPrinter` finds one (`:645-646`).
@@ -733,15 +743,30 @@ transaction and then ask for the drawer:
 - **`drawerPrinter`** (`receipt-print.ts:66-74`) takes the device's drawer printer — its own drawer
   choice, else its profile's default (`resolveDrawerPrinter`, `:88-97`) — and opens nothing unless
   the profile allows `open-cash-drawer` and that printer has a drawer.
-- **Before either, the device must take cash:** `assertTakesTender` → `assertTakesCash`
-  (`apps/server/src/device-session.ts:380-384`, `:395-404`) refuses `device.cash_not_allowed` when
-  the profile lacks `take-cash` — for Refund a payment at `tender-refund-authorization.ts:122-125`,
-  for Give back a payment at `apps/server/src/bill-payments-api.ts:285-286`. The refund screen lists
-  a cash payment on any device (`tender-refund-dialog.ts:46-50`), so the refusal comes on Refund,
-  in the till's words "This device does not take cash. Take cash at a till."
-  (`apps/till/src/i18n/codes.ts:729-732`).
 
-So, by device:
+**Which device may give back which payment.** A refund goes back by the payment's own method, and
+the device's profile must take that method, the same check as taking the payment
+(`assertTakesTender`, `apps/server/src/device-session.ts:395-402`): cash needs `take-cash`
+(`assertTakesCash`, `:380-384`, refusing `device.cash_not_allowed`); a card taken on a connected
+reader needs `integrated-card-payment` (`:401`, refusing `device.forbidden_action`); a card keyed on
+a separate terminal needs `hand-keyed-card-payment` (`:400`). Refund a payment checks it at
+`tender-refund-authorization.ts:122-125`, with the method from `refundTenderKind` (`:37-69`); Give
+back a payment at `apps/server/src/bill-payments-api.ts:285-286`. The refund screen lists every
+payment on any device (`tender-refund-dialog.ts:46-50`), so today the refusal comes on Refund; for
+cash the till says "This device does not take cash. Take cash at a till." (`apps/till/src/i18n/codes.ts:729-732`).
+
+| The payment | The profile needs | Seeded Counter till | Seeded Handheld |
+|---|---|---|---|
+| Cash | `take-cash`; the drawer opens only with `open-cash-drawer` and a drawer | gives it back; the drawer opens | refused `device.cash_not_allowed` |
+| Card on a connected reader | `integrated-card-payment` | gives it back | refused `device.forbidden_action` |
+| Card keyed on a separate terminal | `hand-keyed-card-payment` | gives it back, with the terminal switch and a PIN | the same |
+
+The seeded profiles are at `packages/layouts/src/device-profile.ts:95-109` (Counter) and `:110-116`
+(Handheld, seeded at `:144-149`); a venue may change either. **(run)** On `ad57a6bb9`, Node
+v26.11.1, `tender-refund-authorization.test.ts:394-414` ("requires the current device's %s tender
+capability") passed for cash, a hand-keyed card and a connected card.
+
+For cash, by device:
 
 | The device's profile | A cash refund today |
 |---|---|
@@ -749,27 +774,47 @@ So, by device:
 | takes cash, no drawer it may open | completes; nothing opens. **(run)** `tender-refunds.test.ts:408` ("completes cash without a drawer job when the profile has no drawer permission") passed on `ad57a6bb9` |
 | does not take cash | refused `device.cash_not_allowed`; nothing is written. **(run)** `tender-refunds.test.ts:380` (its `cash-policy` case) and `tender-refund-api.test.ts:409` (its `cash` case) passed on `ad57a6bb9` |
 
-The seeded Handheld profile takes no cash and opens no drawer
-(`packages/layouts/src/device-profile.ts:110-116`, seeded at `:144-149`); the seeded Counter
-profile does both (`:95-109`). A venue may change either. **So on a handheld as seeded, a cash
-refund is refused today.** The design keeps that rule — CLAUDE.md §5: `take-cash` decides whether a
-device takes cash at all. It fits the owner's words: the cash comes from the drawer, at a till; on
-a handheld the waiter cancels (the cancel stands without the refund, §3.8 item 3), and the cash is
-given back later at a till through the receipt's Refund a payment, which opens the drawer and
-records it — or not at all. That refund is not linked to the cancel, so the Voids and comps entry
-shows no "Refunded". The summary relayed with the answer read the owner the other way ("on a device
-that cannot (a handheld), nothing opens and the refund still goes through"), which is today's
-behaviour only on a device whose profile takes cash and opens no drawer; §11 asks which is meant.
-How the refund screen shows that a device does not give back cash, before Refund is pressed, is the
-plan's.
+**So on a handheld as seeded, a cash refund and a connected-card refund are both refused today;
+only a card keyed on a separate terminal can be given back there.** The design keeps that rule —
+for cash it is CLAUDE.md §5's: `take-cash` decides whether a device takes cash at all. §11's
+question is about cash only, because the owner's answer was. A connected card is not in it: its
+money goes back through the card provider, sent by the server (`apps/server/src/tender-refund-sends.ts:332`),
+not through the device's reader, so the profile check on it is the code's choice — "as a payment
+of it would need" (`bill-payments-api.ts:284`) — rather than something the hardware needs; a venue
+whose handhelds should give card payments back turns on `integrated-card-payment` in their profile,
+which also lets them take card payments on a reader (`apps/till/src/till-app.ts:8449-8452`).
+
+**What a device shows when it cannot give the money back** (our reading, under §11's recommended
+answer). The till knows both sides: its profile's actions (`till-app.ts:8445-8452`) and each
+payment's method and whether it was keyed by hand (`apps/till/src/api/tender-refund-types.ts:15-23`).
+
+- On a device that can give back **none** of the bill's payments, Finish table and the table's
+  Cancel item… on a paid bill show no Refund ticks, the main button reads "Cancel", and one line
+  says **"Give the money back at a till: Refund a payment on the receipt."** («Devuelve el dinero en
+  una caja: Devolver un pago, en el recibo.» — "Devolver un pago" is the receipt's button,
+  `tender_refund.title`, `apps/till/src/i18n/strings.ts:35`, `:1619`, drawn at
+  `apps/till/src/screens/till-ticket-view.ts:909-913`; "recibo" as in «Abrir recibo», `strings.ts:2125`;
+  "caja" as in `codes.ts:731`). No PIN is asked: "Cancel" with nothing ticked needs none (D13), so
+  nobody approves a refund the device would refuse.
+- Where **some** payments can be given back on this device and others not, the ticks work and the
+  refund screen offers only the payments this device can give back. What it cannot cover shows as
+  "€x left to refund from another payment" (§3.8 item 3), followed by the line above. That line's
+  meaning fits — the rest does come from another payment — but alone it would send the waiter to
+  pick that payment here, where it is refused, so the till line follows it.
+- A refund given back later at a till from the receipt is not linked to the cancel, so the Voids
+  and comps entry shows no "Refunded" for it.
+
+The summary relayed with the owner's answer read it the other way ("on a device that cannot (a
+handheld), nothing opens and the refund still goes through"), which today happens only on a device
+whose profile takes cash and opens no drawer; §11 asks.
 
 **Taking the money out later without a refund.** The manual open (`POST /api/drawer/open`,
 `apps/server/src/till-api.ts:2489-2523`) needs the profile's `open-cash-drawer` (`:2495`),
 `cash.drawer` or the PIN of someone who holds it (`:2499-2509`; held from supervisor up,
 `packages/identity/src/permissions.ts:46-55`), and a drawer on the device's drawer printer
 (`:2511-2517`); it records a `drawer_opens` row with the reason `manual` (`receipt-print.ts:398-415`)
-and no amount. It is the way to take out money for a refund already recorded on a device with no
-drawer it may open.
+and no amount. Ana, staff, does not hold `cash.drawer` (staff hold only `sale.take_payment`, `permissions.ts:45`), so she opens it with Luis's PIN. It is the
+way to take out money for a refund already recorded on a device with no drawer it may open.
 
 **The drawer count at cash-up.** Waitron has the day's cash figure, and the arithmetic of a count,
 but no screen that takes a count.
@@ -784,17 +829,22 @@ but no screen that takes a count.
   figure − payouts) as the difference (`:202-209`). **(run)** `git grep -n recordDailyClose -- apps
   ':!*.test.ts'` on `ad57a6bb9` finds only the demo script `apps/server/scripts/daily-close-z-demo.ts`:
   no route or screen takes a count today.
-- **A recorded refund is money out.** **(run)** On `ad57a6bb9`, Node v26.11.1, a throwaway test of
+- **A recorded refund is money out, of the device that recorded it.** **(run)** On `ad57a6bb9`, Node v26.11.1, a throwaway test of
   `recordDailyClose` in `packages/reporting` (kept outside the repository at
   `~/waitron-campaign/a758r4-design/probe.test.ts`): a €62.00 cash sale and a completed €5.50 cash
   refund on one device, float €100.00. Counted €162.00 (the refund never taken out): figure €56.50,
   difference +€5.50. Counted €156.50: difference €0.00. Control, no refund, counted €162.00:
-  figure €62.00, difference €0.00.
+  figure €62.00, difference €0.00. A second throwaway test (`probe2.test.ts`, same place) recorded
+  the refund on a second device instead and counted that device at €0.00: with Caja 1 counted at
+  €156.50 (the money taken out of it), Caja 1's difference was −€5.50 and the second device's
+  +€5.50, the venue's total €0.00; with Caja 1 counted at €162.00, Caja 1 €0.00 and the second
+  device +€5.50. Control, the refund recorded on Caja 1 and counted at €156.50: €0.00.
 
 Worked example. Caja 1 starts the day with a €100.00 float. Table 4 pays €62.00 in cash at Caja 1;
-at Finish table Luis refunds the Flan, €5.50, at Caja 1, and the drawer opens. If he hands the
-€5.50 to the guest, the drawer holds €156.50, as the figure expects. If the guest has gone and the
-€5.50 stays in the drawer, it holds €162.00: **over by €5.50**, the refund's amount.
+at Finish table Luis refunds the Flan, €5.50, at Caja 1, and the drawer opens. Caja 1 should hold
+the float plus the cash taken less the cash refunds: €100.00 + €62.00 − €5.50 = €156.50. If he
+hands the €5.50 to the guest, it holds €156.50. If the guest has gone and the €5.50 stays in the
+drawer, it holds €162.00: **over by €5.50**, the refund's amount.
 
 **Should anything show an untaken refund? Recommended: nothing new.** The owner chose not to track
 whether the cash reaches the guest (D21), and "or not at all" accepts the money staying. A count
@@ -829,6 +879,7 @@ English does not change. Lines are on `main` at `ad57a6bb9`.
 | Choose a reason (the drop-down, empty) | Elige un motivo | the till's (`adjust.reason_required`, `strings.ts:1030`, `:2579`) |
 | €2.00 left to refund from another payment | Quedan 2,00 € por devolver de otro pago | new |
 | Refunded €5.50 (a Voids and comps entry) | Devuelto 5,50 € | new in the report; the till shows «Devuelto: {amount}» for a refunded bill payment (`bill_pay.refunded`, `strings.ts:2975`) |
+| Give the money back at a till: Refund a payment on the receipt. | Devuelve el dinero en una caja: Devolver un pago, en el recibo. | new; our reading (§3.8.2), not yet seen by the owner |
 | Table finished (the pass card) | Mesa cerrada | new; matches «Cerrar mesa» for Finish table (`table.finish`, `strings.ts:2875`) |
 
 The till already says «En preparación» for a dish being prepared (`table.row_preparing`, English
@@ -1045,8 +1096,9 @@ Pins of the cash refund's switch, which go with D24, found with `git grep -n
   `apps/server/src/tender-refund-management.test.ts:167`, `tender-refund-reservation.test.ts:171`,
   `tender-refunds.test.ts:240`, `apps/till/src/state/tender-refund.test.ts:12`,
   `apps/till/src/api/tender-refund-client.test.ts:57`, `tender-refund-dialog.test.ts:72`, `:116`,
-  `:125`, `:166`, `:189`, and the A737 refund helper in `apps/till/src/till-app.test.ts:21875`,
-  which switches it on before submitting.
+  `:125`, `:166`, `:189`; and in `apps/till/src/till-app.test.ts` the A737 refund test's expected
+  request (`:21816`, checked with `toMatchObject` at `:21933`) and its helper, which switches the
+  switch on before submitting (`:21875`).
 
 ---
 
@@ -1151,31 +1203,39 @@ also gave D15, D21 and D22. §3.8.1 answers "if we don't refund, they stay on th
 
 **The one open question: a cash refund on a handheld.**
 
-**Recommended: keep today's rule — cash is given back only on a device that takes cash, such as a
-till, where the drawer opens for it. "Recommended" is a complete answer.** Everything else in A758 is
-settled and buildable; only this case of the refund screen waits.
+**Recommended: keep today's rule — cash is given back only on a device whose profile takes cash,
+such as a till. "Recommended" is a complete answer.** Everything else in A758 is settled and
+buildable; only a cash refund on a device that takes no cash would change if you choose the other
+way.
 
-Today a handheld, as Waitron sets it up, takes no cash, so a cash refund on it is refused with "This
-device does not take cash. Take cash at a till." Your answer said the drawer "can only happen from
-the till, although they could cancel then take the money out later, or not at all". Recommended
-reading: from a handheld the waiter cancels; the cash is given back later at a till, from the
-receipt's Refund a payment, which opens the drawer and records the refund — or not at all. The other
-way: a handheld records the cash refund and nothing opens; the money is taken out later at a till
-with Open drawer, or never. (A handheld whose profile a venue has set to take cash already works
-that other way today.)
+Today a handheld, as Waitron sets it up, takes no cash, so a cash refund on it is refused ("This
+device does not take cash. Take cash at a till."). Your words — "they could cancel then take the
+money out later, or not at all" — fit the other way: the handheld records the refund now, and the
+money comes out of a till's drawer later, or never. We recommend keeping today's rule because the
+day's cash is counted per device, and a refund counts against the device that recorded it. With the
+other way, the till whose drawer actually pays the money out ends the day short by the refund
+against what it should hold, and the handheld, which has no drawer, has to be counted as holding
+minus the refund. It would also have a device that takes no cash giving cash back, against the
+rule that a device's profile decides whether it takes cash.
 
-Worked example. Table 4 paid €62.00 in cash at Caja 1, whose drawer started the day with €100.00.
-Ana, on her handheld, presses Finish table; the Flan (€5.50) is ticked; Luis enters his PIN.
+What the handheld shows under the recommendation: when none of the bill's payments can be given
+back on it, Finish table shows no Refund ticks, its button reads "Cancel", and one line says "Give
+the money back at a till: Refund a payment on the receipt." («Devuelve el dinero en una caja:
+Devolver un pago, en el recibo.»). Nobody is asked for a PIN.
 
-- **Recommended:** the dishes are cancelled and the table finishes; the refund screen refuses cash
-  on the handheld. Ana goes to Caja 1, opens the receipt (Find bill → Transactions) and refunds
-  €5.50 with the reason "Not served"; the drawer opens and she hands the money over. Caja 1's cash
-  figure for the day is €156.50 and its drawer holds €156.50. If she never does it, no refund is
-  recorded, the venue keeps €62.00, and Caja 1 holds €162.00, as its figure says. Either way the
-  Flan's entry in Voids and comps shows no "Refunded", because a refund made later from the receipt
-  is not linked to the cancel.
-- **The other way:** Ana's handheld records the €5.50 refund, linked to the cancel, and nothing
-  opens. The day's cash figure says Caja 1 should hold €162.00 and puts −€5.50 against the handheld.
-  If Ana later takes €5.50 out of Caja 1 with Open drawer, Caja 1 holds €156.50: short by €5.50
-  against its own figure, though the venue's total agrees. If nobody takes it out, the venue is over
-  by €5.50. It also changes the rule that a device's profile decides whether it takes cash.
+Worked example. Caja 1 starts the day with €100.00. Table 4 paid €62.00 in cash at Caja 1. Ana
+(staff), on her handheld, presses Finish table; the Flan (€5.50) was never started.
+
+- **Recommended:** there is no Refund tick; she presses "Cancel", the dishes are cancelled and the
+  table finishes, and the line tells her to give the money back at a till. At Caja 1 she opens the
+  receipt (Find bill → Transactions), presses "Refund a payment", picks "Not served", and Luis
+  enters his PIN; the drawer opens and she hands €5.50 over. Caja 1 should hold €100.00 + €62.00 −
+  €5.50 = €156.50, and it does. If she never does it, no refund is recorded, and Caja 1 should hold
+  and does hold €162.00. Either way the Flan's entry in Voids and comps shows no "Refunded",
+  because a refund made later from the receipt is not linked to the cancel.
+- **The other way:** the Flan is ticked; she presses "Cancel and refund €5.50" and Luis enters his
+  PIN on the handheld; the refund is recorded against the handheld, linked to the cancel, and
+  nothing opens. Caja 1 should hold €162.00, and the handheld −€5.50. If Ana later takes €5.50 out
+  of Caja 1 with Open drawer (Luis's PIN again), Caja 1 holds €156.50: short by €5.50, while the
+  handheld, counted at €0.00, is over by €5.50 — the venue's total agrees, but neither device does.
+  If nobody takes it out, Caja 1 is right and the venue is over by €5.50.
