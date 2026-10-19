@@ -4,7 +4,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, decimalToCents } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import "./errors.js";
-import { paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
+import { paymentHoldOutcome, paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
 import { payments } from "./schema/payments.js";
 
 export interface OpenHold {
@@ -21,7 +21,7 @@ export interface OpenHold {
   foundAt: string;
 }
 
-export type HoldOutcome = "refunded_at_provider" | "kept";
+export type HoldOutcome = (typeof paymentHoldOutcome.enumValues)[number];
 
 /** `written` by this call, `existing` from an earlier one, or `refused`: a payment claimed for a
  * refund is never held, so the two cannot both happen to one payment. */

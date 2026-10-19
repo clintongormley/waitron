@@ -17,6 +17,7 @@ import {
   listReconcilable,
   MANUAL_PROVIDER,
   markReconcileRemediated,
+  paymentHoldOutcome,
   PAYMENTS_MIGRATIONS,
   reconcilePayments,
   recordManualCardPayment,
@@ -190,6 +191,10 @@ describe("the reconcile surface", () => {
     };
     expect(outcome).toBe("refunded_at_provider");
     expect(hold.providerAmount).toBe("11.95");
+  });
+
+  it("re-exports the hold outcomes a request is checked against", () => {
+    expect(paymentHoldOutcome.enumValues).toEqual(["refunded_at_provider", "kept"]);
   });
 
   it("types a PaymentReconciler an adapter can implement against the root barrel", () => {

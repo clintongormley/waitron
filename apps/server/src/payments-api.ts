@@ -29,6 +29,7 @@ import {
   deviceProfileCardReaders,
   findPaymentByBillPayment,
   IN_PROGRESS_PAYMENT_STATES,
+  paymentHoldOutcome,
   paymentHoldOutcomes,
   paymentHolds,
   payments,
@@ -240,8 +241,6 @@ function parseAttestation<O extends string>(
   return { outcome: outcome as O, note, pin: body.pin };
 }
 
-const HOLD_OUTCOMES: readonly HoldOutcome[] = ["refunded_at_provider", "kept"];
-
 const heldAlerts: HeldAlertSink = {
   raise: recordIncidentOnce,
   current: currentIncidentsOf,
@@ -256,7 +255,7 @@ function parseHoldOutcome(body: Record<string, unknown>): {
   pin: unknown;
 } {
   const outcome = body.outcome;
-  if (!HOLD_OUTCOMES.includes(outcome as HoldOutcome)) {
+  if (!paymentHoldOutcome.enumValues.includes(outcome as HoldOutcome)) {
     throw new AppError("management.request_invalid", { field: "outcome" });
   }
   if (body.note !== undefined && typeof body.note !== "string") {

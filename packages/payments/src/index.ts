@@ -142,4 +142,4 @@ export { cardReaderHolders } from "./schema/card-reader-holders.js";
 
 export { payments } from "./schema/payments.js";
 export { paymentResolutions } from "./schema/payment-resolutions.js";
-export { paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
+export { paymentHoldOutcome, paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
