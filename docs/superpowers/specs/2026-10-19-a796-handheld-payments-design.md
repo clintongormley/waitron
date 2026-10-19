@@ -12,8 +12,8 @@ watcher, about 12:10–12:22):
 3. The last reader can no longer be charged: "(a)" — the row opens, reader empty, Continuar greyed
    out, with a reason line where the phone knows one (default 19).
 4. The last receipt printer can no longer print: "(a)" — the row opens with the printer empty and a
-   warning, the payment still goes ahead and the paid screen says no ticket printed; a deleted or
-   printer taken off the profile's list falls back to the profile's default, shown labelled
+   warning, the payment still goes ahead and the paid screen says no ticket printed; a printer
+   deleted or taken off the profile's list falls back to the profile's default, shown labelled
    (default 19).
 5. The form's printer: "(a) ONE setting" — it is the phone's Equipment receipt printer, which an NFC
    tap or a QR scan also changes; no separate receipt memory and no new storage. A790 follows this
@@ -52,8 +52,8 @@ point at are unchanged since `d175118ed` (`git diff --stat d175118ed d63b2e448 -
 `apps/server/src/device-equipment.ts`, `apps/server/src/device-api.ts` and
 `packages/db/src/schema/printers.ts` prints nothing). **(read)** marks
 a conclusion from reading code, not from running it. Every statement about today's code is (read)
-except where §2.1 states a run: one server test, run for this revision, and three browser checks
-the campaign's claim check ran on 2026-10-19. Part of the reading was done by search helpers; the citations this design leans on were
+except where §2.1 or §3 states a run: one server test, run for this revision, and two browser
+checks and one database check that the campaign's claim check ran on 2026-10-19. Part of the reading was done by search helpers; the citations this design leans on were
 re-read line by line before being written here.
 
 **Words.**
@@ -133,9 +133,11 @@ the reader empty; a printer that has gone never holds up a payment.
   and rolls back both devices on a later role refusal" (`apps/server/src/device-equipment.test.ts:885`),
   run 2026-10-19 with `pnpm exec vitest run src/device-equipment.test.ts -t "takes both roles from
   the prior holder"` in `apps/server`: 1 passed. The till's own check above passes in that case,
-  so the refusal comes from the server. A printer whose pick-up set is empty changes nothing
-  (`:369-385`; test "an empty pick-up set leaves choices alone but still refuses a disabled
-  printer", `device-equipment.test.ts:926`).
+  so the refusal comes from the server. A printer whose pick-up set is empty changes nothing, but
+  only if it is switched on, at the device's location and on the profile's receipt or payment-slip
+  list; otherwise it too is refused with `device.binding_invalid` (`:365-381`; test "an empty
+  pick-up set leaves choices alone but still refuses a disabled printer",
+  `device-equipment.test.ts:926`).
 - **How an open payment dialog learns of a tap.** The answer replaces the till's `deviceEquipment`
   (`till-app.ts:8194-8199`) unless an equipment read came back while the choice was out, in which
   case the till reads the equipment again (`#rereadIfStale`); the 15-second read replaces it too
@@ -384,8 +386,10 @@ phone last chose Lector 2 and the Barra receipt printer.
    is listed and asked for the same way, "Impresora 2, lo lleva Móvil 2" then "¿Quitar …?", because
    a portable printer is held like a reader under the same takeover rule (§2.4). Neither list offers
    Equipment's "Usar el predeterminado: {name}" (`apps/till/src/i18n/strings.ts:2286`), and neither
-   offers "Ninguno": Equipment's own drop-down has no such entry either, only Use default and the
-   choices (`equipment-dialog.ts:393-396`). Use default stays in Equipment. For a receipt printer it
+   offers a "Ninguno" entry. Equipment has no separate one either: its list is Use default — which
+   reads "Usar el predeterminado: Ninguno" when the profile has no default
+   (`equipment-dialog.ts:390-392`, `strings.ts:2285-2286`) — the offered choices, and a current
+   choice no longer offered (`:393-404`). Use default stays in Equipment. For a receipt printer it
    means "whatever the profile's default is", which is worked out afresh at every read
    (`packages/layouts/src/device-equipment.ts:279-285`). For a reader it is narrower: the phone
    takes the default only when it joins, comes back, moves profile or picks Use default, and a
@@ -458,11 +462,15 @@ default 20).
   reader the button names. Once the card has been asked for, the sheet's controls are disabled (§4),
   but a tap is still picked up, as on any screen, and the next payment uses the new reader. The
   server checks that the phone holds the reader only when a payment starts (`assertReaderStartable`,
-  `packages/payments/src/store.ts:134-136`, called at `apps/server/src/till-api.ts:346`), and
-  picking another reader lets go of the old one without looking for this phone's own payment on it
+  `packages/payments/src/store.ts:134-136`, called from `resolvePayReader` at
+  `apps/server/src/till-api.ts:346` and from `insertAttempting` at `store.ts:163`), and picking
+  another reader lets go of the old one without looking for this phone's own payment on it
   (`settleDeviceReader`, `packages/payments/src/device-readers.ts:376-382`). While that payment
   runs, no other phone can take the old reader, because the busy check counts it
-  (`readerPaymentInProgress`, `:97-112`). What a running card does if its phone lets go of its
+  (`readerPaymentInProgress`, `:97-112`). The claim check ran this as a database test in
+  `packages/payments` on 2026-10-19: phone A held r1 with a payment started on it and scanned r2,
+  which succeeded, released r1 and left A holding r2; phone B then scanned r1 and was refused as
+  busy. What a running card does if its phone lets go of its
   reader was not checked; the waiting view keeps naming the reader the payment was sent to
   (picture 6).
 - **Asking for NFC permission** (default 21). Where the browser has Web NFC and the permission is
@@ -512,10 +520,11 @@ default 20).
   roles but not all, which the server refuses whole with `device.binding_invalid` (§2.1): today's
   words ("Esa no es una etiqueta de equipo de Waitron", "Ese equipo no está disponible para este
   dispositivo…", or the refusal's own message) show in the sheet's line, and nothing changes. A
-  printer whose pick-up set is empty also changes nothing; the sheet's line then shows today's
-  `equipment.no_printer_role` message, unless that printer already was the phone's receipt or
-  payment-slip printer, in which case today's code says "Has recogido {item}"
-  (`till-app.ts:8200-8216`).
+  printer whose pick-up set is empty changes nothing where the server accepts it (switched on, at
+  the device's location, on the profile's receipt or payment-slip list; §2.1) and is refused
+  otherwise. When accepted, the sheet's line shows today's `equipment.no_printer_role` message,
+  unless the answer shows that printer as the phone's chosen or by-default receipt or payment-slip
+  printer, in which case today's code says "Has recogido {item}" (`till-app.ts:8200-8216`).
 - **A printer picked up for payment slips only** (a manager changed its pick-up roles): its sticker
   sets the payment-slip printer, not the receipt printer, so the sheet's printer does not change. The
   sheet's line says "Has recogido {item} solo para justificantes de pago." (a new string) instead of
@@ -554,8 +563,9 @@ The server forgets the old reader when another phone takes it or it is deleted o
 list, and the old printer when it is deleted, taken off the list or marked portable (default 19);
 it keeps both when they are only switched off. The "taken" line in picture 5 comes from the comparison the till already
 makes between two equipment reads in memory (`takenFrom`, §2.1), so after a reload it is not shown
-and the form looks like a first use. The one new thing the phone keeps is in memory only, for as
-long as the page is open: whether it has had a reader this session (default 18).
+and the form looks like a first use. The one new thing the phone keeps is a single in-memory flag,
+held only while the page is open and never stored: whether it has had a reader this session
+(default 18).
 
 **Routes, all existing.** Changing either drop-down: `PUT /api/device/equipment` with role
 `card_terminal` or `receipt` (§2.1); the exactly-one-reader pick sends the same, as a list pick. A
@@ -566,10 +576,12 @@ today's NFC pick-up sends (§2.1). Then `GET /api/device/equipment` to redraw. O
 bills: `POST /api/pay` for the reader, which accepts a `placed` order (`till-sale.ts:1127`), and
 `collectOrder` for cash and typed cards. Cerrar mesa: `POST /api/parties/:id/finish`
 (`till-api.ts:2719-2738`, which needs the `take-orders` action). The paid screen's ticket line:
-`GET /api/sales/:id/receipt` (`till-api.ts:2205-2224`), which today's ticket view already reads
-(`#readReceiptPrint`, `till-app.ts:7463-7472`) and which says whether the original receipt was
-queued and how it went, but not on which printer (`OriginalReceiptPrint`,
-`apps/till/src/api/client.ts:2166-2172`). **No payment route gains a printer field**: the receipt prints when the invoice is issued, under the device that took the payment
+`GET /api/sales/:id/receipt`, whose `:id` is the bill's working-order id, not a sale id
+(`till-api.ts:2205-2224`, which looks the sale up by `workingOrderId`); today's ticket view already
+reads it (`#readReceiptPrint`, `till-app.ts:7463-7472`). It answers a status — `not_queued`,
+`queued`, `printing`, `failed` or `done` — with `jobId`, `canRetry` and sometimes `failureCode`,
+`handover` or `printerWithdrawn`, but no printer (`till-api.ts:2274-2287`; `OriginalReceiptPrint`,
+`apps/server/src/receipt-print.ts:417-426`). **No payment route gains a printer field**: the receipt prints when the invoice is issued, under the device that took the payment
 (`bill-payments.ts:1259-1260`) and possibly minutes later, when the bill payment loop settles a
 pending card through the same code (`completeBillPayment`, `bill-payments-loop.ts:143-149`). That
 path passes no printer, so `enqueueSaleReceipt` looks up the device's receipt printer at that moment
@@ -733,12 +745,15 @@ are given.
     prints on Terraza. Changing the printer in the form changes that phone's receipt printer for what
     follows too — reprints included — as choosing it in Equipment does; no payment route gains a
     printer field (§5). New: the paid screen's ticket line (picture 8), by default and with no
-    server change. Whether a ticket was sent comes from today's `GET /api/sales/:id/receipt`, which
-    names no printer (§5). The printer named is the receipt printer the phone had when it sent the
-    completing payment: "Ticket enviado a Barra". Where the phone's receipt printer has changed
-    since — a card that settled late prints on whatever the phone had by then — the line names no
-    printer: "Ticket enviado". Where nothing was queued: "No se ha impreso ticket", and that a
-    device whose profile may print receipts can reprint it. No digital receipt. **Settled (owner,
+    server change. It comes from today's `GET /api/sales/:id/receipt` (§5) and names no printer,
+    because the route returns none and the server picks the printer when the invoice is issued, so
+    the phone's own memory could name a printer that did not print. `queued`, `printing` or `done`:
+    "Ticket enviado". `failed`: "No se ha podido imprimir", with today's retry where `canRetry`.
+    `not_queued`: "No se ha impreso ticket", and that a device whose profile may print receipts can
+    reprint it. Naming the printer would need the route to return the print job's printer, which
+    the read behind it already joins (`readOriginalReceiptPrints`,
+    `apps/server/src/receipt-print.ts:437-453`); that is a possible later addition, not part of this
+    build. No digital receipt. **Settled (owner,
     2026-10-19): "ONE setting"** — the form's printer is the phone's Equipment receipt printer,
     which an NFC tap or a QR scan also changes; no separate receipt memory and no new storage.
     A790's design already follows this on `main` at `d63b2e448`: "The separate receipt memory
@@ -765,13 +780,17 @@ are given.
     takes reader payments, never as its default; a manager can take it off.
 17. **Settled: Tap-to-Pay waits for the one-time native-app decision** (§6; native-app capabilities,
     N1/N2): "should be made **once, against the whole set** … not piecemeal".
-18. **Settled (owner, 2026-10-19, answer "(b)"): a phone with no reader.** The row opens by
-    itself, the reader field is empty with the placeholder "Elige el lector que tienes en la mano"
-    (a new string; a field's hint is its placeholder), and, while Tarjeta is the method, the field
-    is marked required and Continuar is greyed out until a reader is picked from the list, scanned or
-    tapped (picture 4, left). Cash and Otro datáfono work meanwhile. The printer field shows the
-    printer the phone would use now — its profile's default receipt printer, where the venue set
-    one — marked "Predeterminado del perfil" (`strings.ts:2287`). The exception the owner chose:
+18. **Settled (owner, 2026-10-19, answer "(b)"): a phone with no reader.** The owner's answer: the
+    row opens by itself, the reader empty and Continuar greyed out until a reader is picked or
+    scanned; cash still works. By default (owner may overrule): the reader field's placeholder is
+    "Elige el lector que tienes en la mano" (a new string; a field's hint is its placeholder); the
+    field is marked required, and Continuar greyed out for it, only while Tarjeta is the method, so
+    Otro datáfono works too; a tapped sticker counts as a pick (picture 4, left). The printer field
+    shows the printer the phone would use now — its profile's default receipt printer, where the
+    venue set one — marked "Predeterminado del perfil" (`strings.ts:2287`). A portable default
+    printer this phone does not hold gives it no printer at all: a portable printer serves only the
+    device holding it, chosen or default (`packages/layouts/src/device-equipment.ts:274-276`, used
+    at `:285`). The exception the owner chose:
     when the profile offers exactly one reader, it is picked automatically (picture 4, right). By
     default, for the owner to overrule, the design reads that as all of these:
     - the phone has had no reader as far as it can know. Within a session it does know: the till
@@ -799,8 +818,14 @@ are given.
     a device on Use default", `packages/payments/src/device-readers.test.ts:378`). When the phone has
     it, the form shows it marked "Predeterminado del perfil".
 19. **Settled (owner, 2026-10-19, answers "(a)" and "(a)"): a reader or printer that has gone.**
-    *The reader* (picture 5, left): the row opens by itself with the reader field empty and, while
-    Tarjeta is the method, Continuar greyed out until a reader is picked. One line says why where the
+    The owner's answers: for the reader, the row opens, reader empty, Continuar greyed out, with a
+    reason line where the phone knows one; for the printer, the row opens with the printer empty
+    and a warning, the payment still goes ahead and with no change no ticket prints and the paid
+    screen says so, and a printer deleted or taken off the profile's list falls back to the
+    profile's default, shown labelled. The rest of this item is how the design carries that out, from today's code, and
+    where marked, by default.
+    *The reader* (picture 5, left): the row opens by itself with the reader field empty and, by
+    default only while Tarjeta is the method, Continuar greyed out until a reader is picked. One line says why where the
     phone knows: "Móvil 2 (Marc) se ha llevado Lector 2" when the phone saw the takeover this session;
     "Lector 2 está desactivado" (`strings.ts:2291`) for a switched-off or unpaired reader, whose
     choice the server keeps (§2.1, §4). For a reader deleted or taken off the profile's list during
@@ -819,15 +844,20 @@ are given.
     (`packages/layouts/src/device-printers.ts:151`, `packages/layouts/src/device-equipment.ts:588-626`),
     a profile move through `clearUnlistedPrinterChoices` (`apps/server/src/device-equipment.ts:77`),
     marking portable through `setPrinterPortable` (`packages/layouts/src/device-equipment.ts:633-651`)
-    — and the phone falls back to the profile's default receipt printer. The row stays closed and
-    shows "ticket en Terraza (predeterminada)" (picture 5, right). By default (owner may overrule),
+    — and the phone falls back to the profile's default receipt printer. Marking a printer portable
+    is not in the owner's answer; it is today's code clearing choices the same way, so the form
+    treats it the same. The row stays closed and shows "ticket en Terraza (predeterminada)"
+    (picture 5, right). By default (owner may overrule),
     where nothing is left to print on, two cases differ. If the profile lists no receipt printer at
     all, the venue has chosen no tickets on this kind of device: the row stays closed and reads
     "sin ticket". If the profile lists receipt printers but the phone has no choice and the profile
     no default, the row opens with the printer field empty and the warning "Sin impresora de
     tickets: si no eliges una, no se imprimirá el ticket" (a new string); the payment is not held
-    up. This matches A790's rule for its own receipt forms: "If none qualifies, leave the inline
-    field empty and ask for a choice there" (A790 design, lines 234-235).
+    up. This matches A790's earlier, still unapproved proposal for its own receipt forms: "If none
+    qualifies, leave the inline field empty and ask for a choice there" (A790 design, lines
+    234-235, under "Historical text retained verbatim", line 122, in a section headed as a proposed
+    builder call with persistence not agreed, line 212; A790's addendum says "A790's first-use
+    behavior and further fallback details remain unapproved", lines 64-65).
 20. **Settled (owner, 2026-10-19): a QR button on the folded row, and NFC working while the form is
     open** — "we're missing the button to scan a qr code to associate a card reader or printer, and
     we should have a function running in the background to update the appropriate device when an
@@ -852,19 +882,24 @@ are given.
     as a touch gesture or mouse click" (Provenance), as Equipment's Permitir NFC already does. It is
     not shown on a browser without Web NFC, once granted, or once refused.
 22. **A drop-down or automatic pick that is being saved, or is refused** (by default, owner may
-    overrule; A790's design leaves these to A796: "A796 owns those interactions … Save timing,
-    pending/refused saves, rollback and concurrent Equipment changes", A790 design lines 56-58).
+    overrule). A790's design leaves these to A796: "A796 owns those interactions, the reader labels
+    and NFC permission; its background NFC requirement does not authorize assuming permission.
+    Save timing, pending/refused saves, rollback and concurrent Equipment changes need a builder
+    proposal and agreement." (A790 design lines 56-59.)
     While a pick is being sent, the field shows the new choice as sending, and Continuar (and Cobrar
     on the confirmation step) is greyed out until it is answered, so a charge never goes out against
     a reader the server has not given the phone. On a refusal the field goes back to what it showed
     before, and the refusal's message appears under that field, as the form rules ask of a refusal
     that names a shown field. A pick that gets no answer may still have been stored, so the till
     reads the equipment again, as `#switchEquipment` does today for an error with no status
-    (`till-app.ts:8228-8239`, re-read at `:8255`), and the field shows what that read says, with the refusal line
-    "No se ha podido guardar" (a new string) under it. An automatic pick (default 18) that is
-    refused or gets no answer as the form opens leaves the form as answer 2's empty reader field, with
-    the message under it. Picks, scans and taps keep going through today's one-at-a-time queue
-    (§2.1), so a later one is answered after an earlier one.
+    (`till-app.ts:8228-8239`, re-read at `:8255`), and the field shows what that read says, with the
+    line "No se ha podido guardar" (a new string) under it. Today that re-read happens only once no
+    other choice is waiting, and is tried once (`#rereadIfStale`, `:7936-7940`). An automatic pick
+    (default 18) that is refused or gets no answer as the form opens leaves the form as answer 2's
+    empty reader field, with the message under it. Picks, scans and taps keep going through today's
+    one-at-a-time queue (§2.1), but the order the server stores them in is not guaranteed once one
+    goes unanswered: a cut-off request "may still reach the server after later ones"
+    (`till-app.ts:2559-2563`).
 
 ## 9. Questions for the owner
 
