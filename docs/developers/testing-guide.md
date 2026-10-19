@@ -1381,6 +1381,37 @@ the page's own callbacks that still holds its lock. That wait moves to the next 
 from #1342's review: it counts only this page's own lock holders, so a lock another page held and
 never gave back would keep `flush` waiting until the test's timeout.
 
+## A held press can reach pointer-up before its hold timer runs
+
+A891's main CI failure (`39180066136`, c55a1a6ad) occurred before Escape: the held press
+left no `till-product-info`, and attaching its close listener threw. That run retained no
+pointer or timer trace, so the mechanism below is a reproduction, not a measurement of that run.
+
+Measured 2026-10-19 in real Chromium through Vitest 4.1.11 on macOS: a 650 ms native press,
+with 500 ms of synchronous renderer work starting 400 ms after pointer-down, reproduced that
+missing window in three of three diagnostic cases. Pointer-up's event timestamps were 652–667 ms
+after pointer-down, but its handler ran before the overdue hold callback; the dish was added once.
+`Gestures` now checks the input event timestamps at release when the hold timer has not run.
+The gesture boundary tests cover 499, 500 and 650 ms without running the timer. The nutrition
+suite keeps every Escape assertion with and without busy rendering, and checks a queued short
+press still adds once. Run `pnpm --filter @waitron/ui exec vitest run src/gestures.test.ts` and
+`pnpm --filter @waitron/till exec vitest run src/widgets/menu-browser.nutrition.test.ts`.
+
+The separate shuffled-shard run (`--shard=2/2 --sequence.shuffle --sequence.seed=891`)
+passed nutrition but failed `basket.test.ts`'s custom fractional-unit label check. In the
+installed disposable checkout at unchanged base `d5230d32d3a111206e29238f0cc029cdfbddb872`,
+`pnpm --filter @waitron/till exec vitest run src/widgets/basket.test.ts --sequence.shuffle
+--sequence.seed=891` failed the same check (1 failed, 66 passed); without the shuffle options,
+all 67 passed. That finding remains separate in the backlog; A891 changes no basket assertion.
+
+The A891 review also found a separate move/pinch gap. Four disposable gesture probes ran
+unchanged at base `d5230d32d3a111206e29238f0cc029cdfbddb872` and the A891 candidate:
+with the hold timer withheld, a move 20 px at +700 ms pans instead of holding and dragging;
+a second pointer at +700 ms enters pinch without reporting hold cancellation. Controls that
+ran the timer first reported the hold/drag/drop and hold/cancel respectively. Both trees
+returned all four expected observations. Native-device reproduction remains unverified;
+this is recorded separately rather than widening A891's stationary-release fix.
+
 ## A browser test waits for a dialog's close event, not a timer
 
 `wt-dialog` (`packages/ui/src/components/wt-dialog.ts`) sends `wt-close` only from the browser's own

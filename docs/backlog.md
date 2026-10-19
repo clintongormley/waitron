@@ -5365,6 +5365,24 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **A late move or second finger can overtake the gesture hold timer.** A delayed move is
+  treated as a pan, and a delayed second finger misses hold cancellation. Disposable probes
+  reproduce both on unchanged main `d5230d32d` and A891's candidate. Extend hold recognition
+  to those paths with their own tests; native-device reproduction remains unverified.
+  [Detail](developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
+
+- **The basket's custom fractional-unit test fails under shuffled test order.** On unchanged
+  main `d5230d32d`, `basket.test.ts` passes all 67 cases normally, but seed 891 loses the
+  expected `0.25 tray` label (1 failed, 66 passed). Check its language state and isolate the
+  cause without weakening the assertion. Found while checking A891; basket code is outside that item.
+
+- **A891: retain input and timer timing if the missing product-information window recurs.**
+  A busy-renderer probe reproduces the original CI symptom, and the gesture now recognizes a
+  held release before its overdue timer. Main run `39180066136` retained no such trace, so its
+  exact cause remains unverified. On recurrence, keep pointer timestamps, hold-callback timing,
+  selection count and the screenshot before retrying.
+  [Reproduction](developers/testing-guide.md#a-held-press-can-reach-pointer-up-before-its-hold-timer-runs).
+
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**, the slowest server file by
   far (run 39068745456; the next was 99 s), so it sets a floor under whichever shard holds it.
   Profile it and split it or find its cost, as A528 did for `boot.test.ts`. Left open by A801.
