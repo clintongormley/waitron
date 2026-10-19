@@ -3865,6 +3865,17 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   524dbadd5 (2026-09-16) and 5b725d672 (2026-10-01), so I believe it predates A757 slice 7. Fix with
   a single-pass formatter like `format()` in `packages/venue-service/src/dashboard/hours-view.ts:5`.
 
+- **A905. A department save can put another manager's older name back in the form (found in A757
+  slice 7's review, 2026-10-19).** While a department save is being sent the dialog ignores incoming
+  copies of the venue; once it answers, the form has no unsaved edits, so the copy it holds is taken
+  whole (`willUpdate`, `packages/venue-service/src/dashboard/department-settings.ts`). If another
+  manager's change arrived during the send, the form then shows the name, trading name and service
+  fields from before this save, and the next save sends them back. Seen in a temporary browser test
+  on A757 slice 7's branch (a rename saved while another manager's step change arrived: the name
+  field showed "Restaurant" again); `git blame` puts the replacement path in 06772ee25 (2026-10-10),
+  so I believe it predates slice 7, not run on `main`. Slice 7 keeps the service steps from it
+  (f3523a42f); the other fields need a decision on how last-writer-wins applies to them.
+
 - **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
   2026-10-19).** The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:71`)
   and a dialog's background is `--wt-color-surface-raised` (`packages/ui/src/components/wt-dialog.ts:57`).
