@@ -2243,8 +2243,7 @@ export class MenusScreen extends LitElement {
       | { save?: never; saveLabel?: never; saveVariant?: never; submit?: never }
     ),
   ) {
-    // A shut dialog holds no message: a form's errors clear only when it next opens, and the dialog
-    // scrolls to its footer row's message as it opens, before the row has taken the cleared one.
+    // A shut dialog holds no message: a form's errors clear only when it next opens.
     const message = options.open ? (options.errors?.bottom ?? "") : "";
     return html`<wt-modal
       size="compact"
@@ -2259,8 +2258,7 @@ export class MenusScreen extends LitElement {
       }}
     >
       ${options.open ? options.body : nothing}
-      <p class="field-error" role="alert" data-test="form-error">${message || nothing}</p>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${message}
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -3373,8 +3371,7 @@ export class MenusScreen extends LitElement {
             ></wt-combobox>`
           : nothing
       }
-      <p class="field-error" role="alert" data-test="form-error">${message || nothing}</p>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${message}
         ><wt-button
           slot="cancel"
           variant="secondary"

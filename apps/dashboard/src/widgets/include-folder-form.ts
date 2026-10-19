@@ -364,10 +364,7 @@ export class IncludeFolderForm extends LitElement {
         </div>
         ${this.showAsFolder ? this.#folderFields(errors) : nothing}
       </div>
-      <p class="field-error" role="alert" data-test="form-error">
-        ${this.open ? bottom || nothing : nothing}
-      </p>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${this.open ? bottom : ""}
         ><wt-button
           slot="cancel"
           data-test="cancel"

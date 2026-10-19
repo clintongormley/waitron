@@ -4,7 +4,7 @@ import { tableNoMatches } from "@waitron/dashboard-kit";
 import { registerIcons } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, dialogClosed, dialogMessageOf, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
@@ -1368,7 +1368,7 @@ it("sends a null colour when No colour is chosen from a row's square", async () 
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([["d", { color: null }]]);
 });
-it("keeps a refused colour in the chooser, under it, with the form's message at the end", async () => {
+it("keeps a refused colour in the chooser, under it, with the form's message above the buttons", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.updateCategory).mockRejectedValueOnce({
     code: "category.invalid",
@@ -1382,7 +1382,7 @@ it("keeps a refused colour in the chooser, under it, with the form's message at 
       en["editor.field_rejected"],
     ),
   );
-  expect(form.shadowRoot!.querySelector('[data-test="form-error"]')!.textContent!.trim()).toBe(
+  expect(await dialogMessageOf(form.shadowRoot!.querySelector("wt-modal")!)).toBe(
     en["form.fix_fields"],
   );
   expect(form.busy).toBe(false);
@@ -1460,7 +1460,7 @@ it("sends a null default when No colour is chosen from All products' square", as
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   expect(vi.mocked(el.api.saveCatalogueDefaultColor).mock.calls).toStrictEqual([[null]]);
 });
-it("keeps a refused default colour in the chooser, under it, with the form's message at the end", async () => {
+it("keeps a refused default colour in the chooser, under it, with the form's message above the buttons", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.saveCatalogueDefaultColor).mockRejectedValueOnce({
     code: "category.invalid",
@@ -1474,7 +1474,7 @@ it("keeps a refused default colour in the chooser, under it, with the form's mes
       en["editor.field_rejected"],
     ),
   );
-  expect(form.shadowRoot!.querySelector('[data-test="form-error"]')!.textContent!.trim()).toBe(
+  expect(await dialogMessageOf(form.shadowRoot!.querySelector("wt-modal")!)).toBe(
     en["form.fix_fields"],
   );
   expect(form.busy).toBe(false);
