@@ -1187,13 +1187,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   - At 390px the extras table's Price column runs past its scroll area's right edge until
     scrolled. (2026-10-04: W75 added a Portion column and widened the table; not re-measured.)
 
-- **A819 — the options LIST form shows its names as the single option's form does** (owner,
-  2026-10-17: apply A199 to the list form too, so both forms match). A199, done by A170 (#1040),
-  stopped the single option's window (`option-label-form.ts`) folding its names away: Name, Kitchen
-  name, a plain "Customer-facing names" heading with each language's field under it. The list form
-  (`apps/dashboard/src/widgets/option-list-form.ts`) was left as it was. Done when a test opens the
-  list form and finds every language's customer-facing field shown without opening a section.
-
 - **In the product editor's Descriptors fold at 390 a long English description fills both of its
   lines** — looked at 2026-10-03, after A200 (#1076): so the Spanish one does not show at all on
   the closed line.

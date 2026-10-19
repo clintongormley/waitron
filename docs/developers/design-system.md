@@ -3162,13 +3162,14 @@ where the parent has none either, “None” for nutritional values and “None 
 other fields, or “Not yet reviewed” for allergens the parent has not had reviewed. A variant's blank kitchen and customer-facing names fall back to its own
 Name, not the parent's, so they read "None specified" as on a product. The Pricing fold still
 leaves a blank base price, and a VAT class the form does not offer, off its line. A names section
-(the Options and Extras editors' "Customer-facing names") puts each language's customer-facing
+(the Extras editor's "Customer-facing names") puts each language's customer-facing
 name after its upper-case code in bold — "**ES:** ¿Cómo la quiere hecha? · **EN:** How would you
 like it cooked?" — and a blank one, in italic, as the open field hints it while empty: the default
 language's name, then the list's staff name. A language with nothing to fall back to is left out.
 It is built by `effectiveNamesLine` (`apps/dashboard/src/widgets/form-fields.ts`) and passed as
-`summaryFields`. Those two editors keep the kitchen name out of the section, as a field of its own
-directly under Name.
+`summaryFields`. The Extras editor keeps the kitchen name out of the section, as a field of its own
+directly under Name. The options list and single option editors show Name, Kitchen name, then a
+plain Customer-facing names heading with every language's field visible. They have no names fold.
 
 **A section holding a validation error opens itself and cannot be closed again while the error
 stands.** That is `has-error`: setting it forces `open` true and makes the header inert, so the
