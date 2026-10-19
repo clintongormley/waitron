@@ -604,6 +604,10 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
 
 ## Task 7 (#789, each person's draft kept on the server)
 
+**2026-10-19, A773-1:** the [per-bill ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
+supersedes the per-person draft model in this historical list. Reassess the history and validation
+observations against that design; the original observations below are not fresh verification.
+
 - **Task 7 (#789, each person's draft kept on the server).** Left open:
   - A draft that moves to the other party in a merge, because its owner had none there, records
     no history event: the event kinds have no "moved".
@@ -966,6 +970,11 @@ original finding; its four-surface count and five-entry list no longer describe 
     crossed a border. Looked at, not measured: close once someone measures it.
 
 ## Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was being re-read is still hidden when the till follows the party onto its next tab
+
+**2026-10-19, A773-1:** the explanation below predates the
+[per-bill ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md).
+Keep the floor-read race as an unchecked observation; its old explanation does not establish how
+the bill-specific draft handles that race.
 
 - **Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was
   being re-read is still hidden when the till follows the party onto its next tab** (the second
@@ -2251,6 +2260,8 @@ The remaining work includes:
   bill-selection and table Recall contracts, preserving their historical bodies.
   Superseded source comments describing personal drafts, lost local edits, owner-only floor labels
   and Recall-to-held have been removed without changing executable code.
+  The older Task 7 draft and Task 8 floor-read notes now point to the per-bill ownership design;
+  their original unresolved observations remain for reassessment.
   The whole-branch prose audit remains open. Complete the remaining
   ownership/copy/native-screen acceptance, the physical till trial and final whole-branch validation
   and review before publication. Read the campaign's

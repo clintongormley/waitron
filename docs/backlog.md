@@ -2230,6 +2230,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Checks before closing replace the old draft-discard note; held-dish resolution still waits for A758.
   Historical table-actions and kitchen plans point to the replacement bill and Recall contracts;
   superseded source descriptions of personal drafts, lost local edits and Recall-to-held are removed.
+  The historical Task 7 draft and Task 8 floor-read notes point to the per-bill ownership design,
+  preserving their unresolved observations for reassessment.
   The current checkpoint includes main's department-specific clearing and installed-module table
   removal; cancellation and Finish-table integration still wait for the revised design.
   The remaining prose audit stays open.
