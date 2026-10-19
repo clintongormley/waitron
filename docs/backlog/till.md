@@ -2279,7 +2279,9 @@ the removed send-preview confirmation. These prose updates do not complete cance
 the physical trial or final delivery.
 
 The product guide scopes fresh-dish availability checks separately from recalled bill rows and
-links to their modifier contract. The original six-choice mock-up page now points to the owner's
+links to their modifier contract. It also distinguishes stored-line pricing from the bill's saved
+New order payment refusal, including the other-bill and payment-replay boundaries.
+The original six-choice mock-up page now points to the owner's
 2026-10-17 answers while preserving the proposal and drawings. These changes close those prose
 findings; they do not complete the whole-branch audit or the remaining work above.
 

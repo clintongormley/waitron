@@ -868,9 +868,25 @@ what it marks) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or
 an extra has since become archived or Unavailable (a raise is checked in `updateHeldOrder`, and a
 change to the note, options or extras of a line the kitchen already has is refused
-`product.unavailable` too, because the changed line is sent to the kitchen again — `applyLineEdits`),
-and paying bills such a line only once it has been sent; unsent, it is refused `product.unavailable`
-(`priceStoredOrderForIssuance`).
+`product.unavailable` too, because the changed line is sent to the kitchen again in `applyLineEdits`).
+Stored-order pricing accepts such a line once it has been sent. A stored line never sent whose
+product cannot currently be sold is refused `product.unavailable`
+(`priceStoredOrderForIssuance`, `apps/server/src/working-order.ts`).
+
+That stored-line check is separate from a table bill's **New order**. Before starting a new
+payment, the payment paths check the bill's editor observation, then refuse `bill.unsent_dishes`
+if its saved outbox holds fresh dishes or recalled bill rows (`assertBillHasNoUnsent`,
+`apps/server/src/bill-unsent.ts`). Send or remove those dishes before paying. Another bill's outbox
+does not block this bill. Completed payment replays and reconciliation of an already captured card
+payment keep their existing result or reservation; they do not start another payment. Run the
+refusal, other-bill and replay checks alongside the separate stored-pricing checks with:
+
+```bash
+pnpm --filter @waitron/server exec vitest run src/bill-unsent.test.ts \
+  src/bill-editing.payments.test.ts src/bill-editing.whole-payments.test.ts \
+  src/working-order.test.ts
+```
+
 When you edit a recalled dish, the dish and any extra you keep retain their recorded prices and
 names. An added extra uses the current offered list and price; an unavailable dish or variant does
 not block that choice (`prepareRecalledModifiers`, `apps/server/src/working-order.ts`). A dish
