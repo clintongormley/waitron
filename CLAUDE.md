@@ -403,10 +403,18 @@ called weaker than its name, the topic file lists what it does not see.
   `server.*` is reserved for facts about the process itself. Every file that throws a code imports its registry.
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
-- **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per
-  word; a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`, weaker
-  than its name — it finds comments without a parser. `apps/*` is out of scope by a recorded
-  decision, so Spanish identifiers in app UI code are caught only by review.
+- **General code is English only** (owner, 2026-09-07 and 2026-10-19): no Spanish, Catalan or other
+  non-English text in any general package or app — not in a literal, comment, identifier, file
+  name, seed or starter content, or test. It lives only in `packages/verifactu`,
+  `packages/fiscal-verifactu`, AEAT's wire-protocol names, and translation files (`apps/*/src/i18n/`,
+  a module's `dashboard/strings.ts`, the guides under `apps/server/src/guide/<language>/`). Starter
+  content a module writes into a new venue is English, translated when the box is set up; a test
+  of a non-English screen reads its expected text from the strings file. A Spanish domain term has
+  one declaring home, its module's vocabulary; a fiscal term never goes in the base list. Cost:
+  A758-1's starter reasons «Cambio del cliente» were refused only because «cliente» is a declared
+  fiscal word. Guard: `scripts/english-only.test.ts`, weaker than its name — it refuses only listed
+  words and never scans `apps/*`, so review greps the diff. Where the Spain-only packages stand is
+  open (backlog A913). Detail: [conventions-data.md](docs/developers/conventions-data.md).
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`,

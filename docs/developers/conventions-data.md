@@ -84,6 +84,40 @@ to the same English-and-Spanish wording bar; it too reads source TEXT and hand-l
 `packages/fiscal-verifactu/src/certificate-alerts.ts`), so an ongoing source added in any other file
 is silently missed until it is added to that list.
 
+## General code is English only
+
+**The rule, in the owner's words.** On 2026-09-07: core code is English only; Spanish belongs only
+in the Veri\*Factu packages (`packages/verifactu`, `packages/fiscal-verifactu`, and the fiscal and
+AEAT files) and in translations, with AEAT's wire-protocol field names (`ObligadoEmision`,
+`NIFObligado`) as the one exception, because they are AEAT's API. That came from #258, which renamed
+a generic guard ONTO the fiscal word `obligado` (`assertNoForeignObligado`,
+`provisioning.foreign_obligado`) through `packages/provisioning` and `apps/server`; #260 reverted it
+to the English `tenant` names. On 2026-10-19, answering lane C's A758-1 question: "These default
+starter names in the general module should be in English only, and should be translated into
+Spanish and catalán etc when the box is set up only. There should be no text in Spanish in the
+general code."
+
+**What it covers.** Literals, template text, comments, identifiers, file names, hand-written SQL,
+seed and starter content, and tests, in every package and app outside the homes the rule names. A
+module's screen keeps its translations in its `dashboard/strings.ts`, and an app's in
+`apps/<app>/src/i18n/`; a test that checks the Spanish screen reads the expected text from that
+file rather than spelling it. Starter content a module writes into a new venue (A758-1's void and
+comp reasons) is seeded in English; how setup produces its Spanish and Catalan is the design question
+A758-1 is to put to the owner.
+
+**What it cost.** A758-1 (branch `feat/a758-1-reason-rules`) seeded the starter reasons «Cambio del
+cliente» and «Queja del cliente» from `packages/adjustments/src/provisioning.ts`. The push hook's
+English-only check refused them only because «cliente» is on `FISCAL_VOCABULARY`
+(`packages/fiscal-verifactu/src/vocabulary.ts`). Measured 2026-10-19 on main b6db40ce1, with
+`findSpanish` over the assembled forbidden set in a throwaway root test: `"Cambio del cliente",
+"Queja del cliente"` reported `cliente` twice; `"Cambio de idea", "Queja", "Plato frío", "Propina"`
+reported nothing; `export const obligado = 1;` reported `obligado`. So a Spanish word nobody listed
+passes, and only review stops it.
+
+**Not settled.** The Spain-only packages — `workforce-es` (labour terms, declared vocabulary),
+`country-es` and `reporting`'s modelo-303 form (both outside the scan) — carry Spanish today. Whether
+each is a home, or its text moves to a translation file, is the owner's call after the A913 audit.
+
 ## Spanish domain terms are deliberate, and a module declares its own
 
 The guard (`packages/db/src/english-only.ts`; suite `scripts/english-only.test.ts`, root project)
@@ -92,8 +126,8 @@ forbids, in every generic package, a base list of generic Spanish plus every mod
 declaring home per word: a fiscal term goes in `FISCAL_VOCABULARY` (`packages/fiscal-verifactu`), a
 labour term in `WORKFORCE_ES_VOCABULARY` (`packages/workforce-es`), never the base list — the suite
 fails on a clash. `apps/*`
-is out of scope by a recorded decision, so Spanish IDENTIFIERS in app UI code are caught only by
-review. Designed and built in #240.
+is out of scope by a recorded decision, so non-English text anywhere under `apps/` — identifiers,
+literals, comments — is caught only by review. Designed and built in #240.
 
 **What the guard does not see.** `scripts/english-only.test.ts` is weaker than its name — it finds
 comments without a parser, guessing from the code before a `/` whether it opens a regular

@@ -6019,6 +6019,17 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   dev-stack slots and Santet venue through the plan; leave the owner's physical `waitron.local`
   off/quarantined, image pinned, for the owner to reset on return after 2 November.
 
+- **A913. Find the non-English text in general code, then propose fixes (queued, lane A).** General
+  code is English only (CLAUDE.md §3; the owner's words are in
+  [conventions-data.md](developers/conventions-data.md#general-code-is-english-only)). A docs-only
+  audit of `packages/*` and `apps/*` lists every Spanish, Catalan or other non-English text outside
+  the allowed homes, sorted into what is allowed, Spain-only packages (`workforce-es`, `country-es`,
+  `reporting`'s modelo 303), user-visible text outside a translation file, starter and demo content,
+  and identifiers or comments; says what `scripts/english-only.test.ts` misses; and asks the owner
+  which to fix and where the Spain-only packages stand. One example already seen:
+  `packages/dashboard-kit/src/table-strings.ts` holds a Spanish `{ en, es }` value outside the
+  translation files the rule names.
+
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; revised design awaits agreement).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md) and [mockups](backlog/mockups/a646-modules-page/README.md).
   Build waits for owner agreement and A739; retained protection comes first. Google's access-check scope remains undecided.
