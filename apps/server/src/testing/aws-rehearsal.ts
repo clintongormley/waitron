@@ -64,6 +64,7 @@ import {
   writeReceipt,
 } from "./aws-rehearsal-receipt.js";
 import { fixtureBudget } from "./fixture-budget.js";
+import { listingDenialPolicy } from "./aws-listing-denial.js";
 import { listPages, listUploads, type Outcome, type TrackedUpload } from "./s3-listing.js";
 import { settleWithin } from "./settle-within.js";
 import { AwsRehearsalRefused } from "./aws-rehearsal-refused.js";
@@ -299,9 +300,9 @@ export interface AwsRehearsal {
   /** The unfinished multipart uploads in `bucket` under `prefix`, an issued prefix or a path below one. */
   ownedUploads(prefix: string): Promise<TrackedUpload[]>;
   record(event: unknown): void;
-  /** Acts on `bucket` alone; `put` takes only a listing-denial document (`assertListingDenial`). */
+  /** Acts on `bucket` alone; listing denial stays strictly below an issued label prefix. */
   bucketPolicy: {
-    put(document: string): Promise<void>;
+    denyListing(prefix: string): Promise<void>;
     remove(): Promise<void>;
   };
 }
@@ -613,68 +614,17 @@ async function deleteObjects(send: Send, bucket: string): Promise<TeardownEntry>
     : failedEntry("delete-objects", failure, deleted);
 }
 
-const POLICY_SID = /^[A-Za-z0-9]{1,64}$/;
 const PREFIX_WILDCARDS = /[*?$]/;
 
-function hasExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const own = Object.keys(value);
-  return own.length === keys.length && keys.every((key) => own.includes(key));
-}
-
-/**
- * Refuses every document but one Deny of `s3:ListBucket` on `bucket` for a `s3:prefix` strictly
- * below a label prefix this run issued. The document must also be exactly what its parsed form
- * serialises to, so no duplicated key can show the check one value and AWS another.
- */
-function assertListingDenial(document: string, bucket: string, issued: ReadonlySet<string>): void {
-  const refuse = (detail: string): AwsRehearsalRefused =>
-    new AwsRehearsalRefused("policy-refused", detail);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(document);
-  } catch {
-    throw refuse("a bucket policy must be JSON");
-  }
-  if (
-    !hasExactKeys(parsed, ["Version", "Statement"]) ||
-    parsed.Version !== "2012-10-17" ||
-    !Array.isArray(parsed.Statement) ||
-    parsed.Statement.length !== 1
-  ) {
-    throw refuse("a bucket policy holds Version 2012-10-17 and one statement, nothing else");
-  }
-  const statement: unknown = parsed.Statement[0];
-  if (
-    !hasExactKeys(statement, ["Sid", "Effect", "Principal", "Action", "Resource", "Condition"]) ||
-    typeof statement.Sid !== "string" ||
-    !POLICY_SID.test(statement.Sid) ||
-    statement.Effect !== "Deny" ||
-    statement.Principal !== "*" ||
-    statement.Action !== "s3:ListBucket" ||
-    statement.Resource !== `arn:aws:s3:::${bucket}`
-  ) {
-    throw refuse("the statement denies s3:ListBucket on this run's bucket, nothing else");
-  }
-  const condition = statement.Condition;
-  if (
-    !hasExactKeys(condition, ["StringLike"]) ||
-    !hasExactKeys(condition.StringLike, ["s3:prefix"])
-  ) {
-    throw refuse("the statement's one condition is StringLike on s3:prefix");
-  }
-  const pattern = condition.StringLike["s3:prefix"];
-  const prefix = typeof pattern === "string" && pattern.endsWith("*") ? pattern.slice(0, -1) : "";
-  const below = [...issued].some(
-    (label) => prefix.startsWith(label) && prefix.length > label.length,
-  );
+function assertListingDenialPrefix(prefix: string, issued: ReadonlySet<string>): void {
+  const below =
+    typeof prefix === "string" &&
+    [...issued].some((label) => prefix.startsWith(label) && prefix.length > label.length);
   if (!below || PREFIX_WILDCARDS.test(prefix)) {
-    throw refuse(
-      "the s3:prefix is a literal prefix below one of this run's labels, followed by one *",
+    throw new AwsRehearsalRefused(
+      "policy-refused",
+      "the listing prefix must be literal and strictly below one of this run's labels",
     );
-  }
-  if (JSON.stringify(parsed) !== document) {
-    throw refuse("the policy must be exactly its own parsed form");
   }
 }
 
@@ -1429,9 +1379,10 @@ async function runOwned<T>(
     // The scenario's own entries stay strict, so a refused one fails the scenario where it is made.
     record: (event) => log.record(event),
     bucketPolicy: {
-      async put(document) {
+      async denyListing(prefix) {
         refuseOnceTearingDown();
-        assertListingDenial(document, bucket, issued);
+        assertListingDenialPrefix(prefix, issued);
+        const document = listingDenialPolicy(bucket, prefix);
         const result = await call(
           client,
           new PutBucketPolicyCommand({ Bucket: bucket, Policy: document }),

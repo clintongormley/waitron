@@ -4,7 +4,7 @@
 //   values do not match and the condition is false." Whether S3 leaves `s3:prefix` out of a listing
 //   with no prefix or sends it empty is not established; neither is denied. Absent, the condition is
 //   false by that sentence; empty, `""` cannot match `<P>*` because `<P>` is never empty:
-//   `ctx.bucketPolicy.put` refuses (`policy-refused`) any `<P>` not longer than an issued label
+//   `ctx.bucketPolicy.denyListing` refuses (`policy-refused`) any `<P>` not longer than an issued label
 //   prefix, before a listing or the work runs.
 // - https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html
 //   "An explicit deny in either of these policies overrides the allow." So the rehearsal key's own
@@ -134,7 +134,7 @@ export async function withListingDenied(
   work: () => Promise<void>,
   deps: ListingDenialDeps = storeDeps(ctx, exactPrefix),
 ): Promise<void> {
-  await ctx.bucketPolicy.put(listingDenialPolicy(ctx.bucket, exactPrefix));
+  await ctx.bucketPolicy.denyListing(exactPrefix);
   let failure: { error: unknown } | undefined;
   let lastDenied: ListAnswer | undefined;
   try {
