@@ -2576,7 +2576,8 @@ and nothing guards it across screens:
   Move and Delete dialog and the image picker act on what is selected rather than save a draft, so
   they keep their own rules; the reason for each is in
   [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
-- batch 3a (the service-status rows were retired by A757 slice 2, 2026-10-19): the
+- batch 3a (the service-status rows and the new status's Save were retired by A757 slice 2,
+  2026-10-19): the
   kitchen's late flags; the venue details editor (now the Venue card, A755 below); My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
@@ -4726,7 +4727,7 @@ which may delete that row (Remove from this list, Remove image, a passkey). "Res
 "Inactive" are not used for a record that is kept.
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
-screen uses: **Activo** or **Deshabilitado** for an estado, motivo, usuario,
+screen uses: **Activo** or **Deshabilitado** for a motivo, usuario,
 lector, agente or dispositivo; **Activa** or **Deshabilitada** for a lista or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.

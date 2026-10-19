@@ -692,7 +692,7 @@ found no branch on these routes. Where a client branches on the error CODE inste
 | POST `/api/parties/:id/groups` `:2436`, `…/drafts/:did/submit` `:2715` | `group.not_found` | body `joinGroupId` (`:832,2446,2727`) | `till-api.groups.test.ts:328-329` |
 | POST `/api/dead-ends/order` `:2741` | `working_order.not_found` (404 `:420`) | `body.workingOrderId` `:2746` → `:2765` | none found |
 
-**2026-10-19:** A757 slice 2 removed this route and `status.not_found`.
+**2026-10-19:** A757 slice 2 removed `POST /api/tables/:id/status` and `status.not_found`.
 
 **Not established.** `reader.not_found` when the device has no reader (`:309`): the request
 carries no id at all. Pinned at 404 by `till-api.fiscal-sale-paths.test.ts:1106-1107`.

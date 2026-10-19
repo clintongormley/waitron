@@ -269,8 +269,9 @@ change; check that against the code when PR 8 is picked up.
 - The Edit switch reads "Also list the order's dishes from other stations", with "On this station's
   tickets and kitchen screen" beneath it. "Print a slip when sent dishes move table" offers
   "Venue setting: Print" or "Venue setting: Don't print", "Print", and "Don't print". Spanish matches.
-- Configuration bundles use version 5. Older exports must be exported again from a compatible
-  source; there is no conversion of station-order settings.
+- Configuration bundles use version 4. Older exports must be exported again from a compatible
+  source; there is no conversion of station-order settings. **2026-10-19:** A757 slice 2 moved the
+  export to version 5.
 
 The populated predecessor test carries ticket, printer, timing and staffing references through the
 native column drop and compares every recorded table value except the retired column. Run

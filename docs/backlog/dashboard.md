@@ -998,7 +998,7 @@ registered as `venue-service:week`, and the others register theirs when they exi
   native `<form>`, and showing chosen options as chips (it shows a count instead).
 - **Venue settings' Tables and Kitchen tabs (A261 step 1, #1166; owner amendment, 2026-10-04).**
   Supervisors can read Tables and Kitchen, while writes remain manager-only. (2026-10-19: the Tables
-  tab was retired by A757 slice 2; Kitchen stays)
+  tab was retired by A757 slice 2; Kitchen stays.)
 
 - **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177,
   #1037).** Kept as they were, because they answer a question rather than say nothing was made: the
