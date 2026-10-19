@@ -99,7 +99,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "hour-promotion-"));
   await mkdir(join(root, "state"));
   await mkdir(join(root, "venue"));
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
   external.internet.mockImplementation(async () => ({
     source: "internet",

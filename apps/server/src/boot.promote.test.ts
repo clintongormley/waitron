@@ -228,7 +228,7 @@ const TICK_ENV = {
   WAITRON_SKIP_RETRY_MS: "250",
 };
 
-describe("promote: local secondary → primary, live", () => {
+describe("historical promote: local secondary → primary, live", () => {
   it("does not file as a secondary, then files on the next tick after a live promote — tills answer throughout", async () => {
     // A prior test may have flipped the shared directory's singleton_role to 'primary'.
     await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "secondary");
@@ -390,7 +390,7 @@ async function seedMirrorIdentity(
   return { nodeId: standby.nodeId, fixture };
 }
 
-describe("promote: mirror → primary, in-process, restart-into-primary", () => {
+describe("historical promote: mirror → primary, in-process, restart-into-primary", () => {
   it("exposes promoteMirrorToPrimary, promotes, and persists identity without a series cache", async () => {
     const seed = await seedMirrorIdentity(mirrorDb);
     const secret = await mintBreakGlassSecret(mirrorDb, seed.nodeId);
@@ -479,4 +479,18 @@ describe("promote: mirror → primary, in-process, restart-into-primary", () => 
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+vi.mock("./modules.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./modules.js")>();
+  const { FISCAL_OPERATIONS: historicalFiscalOperations } =
+    await import("@waitron/fiscal-verifactu/src/allocation-configuration.js");
+  return {
+    ...actual,
+    ALL_MODULES: actual.ALL_MODULES.map((module) =>
+      module.name === "fiscal-verifactu"
+        ? { ...module, operations: historicalFiscalOperations }
+        : module,
+    ),
+  };
 });

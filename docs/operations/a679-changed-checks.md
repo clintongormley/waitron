@@ -3545,3 +3545,32 @@ applied. In particular, the current restore runner checks admission before place
 retained one-use protocols can spend their evidence at that check. Remaining source failures
 are open; none of these focused runs replaces package coverage or current-head CI. No production
 source, SQL, fiscal writer, migration, guard, threshold or exclusion changes here.
+
+
+## Exact test approvals applied, 2026-10-19
+
+The owner's 21:10–21:18 answers approve the seven previously proposed patches, and the 22:07
+answer approves the separate promotion clock fixture. Each patch was checked against its recorded
+SHA-256 and applied without further edits. The three rejected placement-only proposals remain
+unapplied. Lane E retains the literal patches, original assertion inventories and approval records.
+
+| Check | Before | Applied scope or expectation | Exact authority |
+| --- | --- | --- | --- |
+| `packages/composition/src/allocation-configuration.test.ts` | Six signed-file cases use the production dispatcher. | Name the historical dispatcher for those six cases, preserving their eleven expressions; add three production hour/retirement cases. | Owner 21:10; patch `334a88a58aea3cf545166734dc94cacc976889e4cd58deaeb6d7e5d6337cd57a`. |
+| `apps/server/src/setup-first-fiscal.route.test.ts` | Serial proposals, register consultation and an older initial-operation shape. | Exercise clock comparison, current-hour input and a freshly kept recovery document; seven existing assertion expressions change as listed in the approved inventory. | Owner 21:12; patch `30a43481cd9927cb62bc73685cb21acfa7d95fcae2f3914296ca2efc38ad5608`. |
+| `apps/server/src/provision-allocation-input.test.ts` and `apps/server/scripts/register-till-allocation.test.ts` | Signed inputs reach production's retired parser. | Explicit historical dispatcher; retain all assertions across 25 cases. | Owner 21:14; patch `d7c456dba72deee70782241c4185dec7376ccc7c1d73c9b60ecc35e35dd8408e`. |
+| `apps/server/src/first-fiscal-cloud.route.test.ts` | Five old Cloud document cases use the production document selector. | Name their historical selector and retain all 22 assertion expressions. | Owner 21:16; patch `bd703fac32ff2f01d6655f4379cfbcd9db86559a5dca5d2c70ccf30702939c18`. |
+| `apps/server/scripts/register-till.test.ts`, `apps/server/src/boot.promote.test.ts` and `apps/server/src/promote-endpoint-e2e.test.ts` | Signed command/promotion inputs use current module composition. | Explicit historical adapter at the module boundary; retain all 79 expressions across twelve cases. | Owner 21:18; patches `93a9231ad6f9a064a13c84f0003e30b223d09c60cc5f669c645d29210e962bd5`, `d32bc3c34faca0b34c931d7c46fa7758617ce7c6867f7a93e8e2bcb996a91892`, `fbe281c5cd4a26b86404be704e7e45ec9bc9fc2192dfe38004df4bb31c52fc6b`. |
+| `apps/server/src/hour-promotion.test.ts` | Only `Date` is frozen. | Freeze `Date` and `performance`; retain all 56 cases and 104 existing expressions. | Owner 22:07; patch `2e2093985df25b8b193a351a57804c83dd82e37b7fd1b317be4df01010485b5d`. |
+
+The focused source runs report composition 9 passes, retained hosts/current retirement 32 passes,
+and six other server suites 103 passes with one failure. The failure is
+`setup-first-fiscal.route.test.ts`'s frozen-hour/kept-document case, reporting `clock_corrected`.
+It retains a `Date`-only fixture in the exact approved patch. In the installed disposable candidate,
+a 1,200 ms delay reproduces that failure; freezing both clocks with the same delay passes. The
+separate one-line fixture proposal passes the full 31-case route suite and remains unapplied
+pending its own exact approval. No production clock comparison or expected result changes.
+
+The unchanged golden/immutability command passes 20 cases. These focused results do not establish
+whole-package coverage or current-head CI. The 18 live-restore rewrites requested at 22:05 stay
+outside the feature checkout until their exact before/after assertion bundle is approved.

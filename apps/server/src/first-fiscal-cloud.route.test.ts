@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
+import { historicalFirstFiscalDocuments } from "../test/historical-first-fiscal.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
 import { cloudReceiptFixture } from "@waitron/fiscal-verifactu/test/cloud-fixture.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
@@ -28,7 +29,7 @@ function canonical(v: unknown): string {
       .join(",")}}`;
   return JSON.stringify(v);
 }
-async function fixture(configured = true) {
+async function historicalCloudFixture(configured = true) {
   const root = await mkdtemp(join(tmpdir(), "cloud-first-route-"));
   dirs.push(root);
   const keys = generateKeyPairSync("ed25519"),
@@ -44,7 +45,7 @@ async function fixture(configured = true) {
     }),
   );
   const host = createFirstSetupModuleHost({
-    modules: ALL_MODULES,
+    modules: historicalFirstFiscalDocuments(ALL_MODULES),
     environment: configured
       ? {
           WAITRON_FISCAL_CLOUD_TRUST_FILE: path,
@@ -143,12 +144,12 @@ async function fixture(configured = true) {
     },
   };
 }
-it("imports the exact consumed C packet and grants only an owner-confirmed kept document, with zero paper transport", async () => {
+it("the historical Cloud document adapter imports the exact consumed C packet and grants only an owner-confirmed kept document, with zero paper transport", async () => {
   const fetch = vi.fn(() => {
     throw new Error("no outside call belongs in receipt import");
   });
   vi.stubGlobal("fetch", fetch);
-  const f = await fixture();
+  const f = await historicalCloudFixture();
   const imported = await f.post("input", { module: "fiscal-verifactu", input: f.input });
   expect(imported.status).toBe(200);
   await f.refresh();
@@ -204,7 +205,7 @@ it("imports the exact consumed C packet and grants only an owner-confirmed kept 
   expect(fetch).not.toHaveBeenCalled();
 });
 it("does not let uploaded Cloud trust enable an unconfigured issuer", async () => {
-  const f = await fixture(false);
+  const f = await historicalCloudFixture(false);
   const response = await f.post("input", { module: "fiscal-verifactu", input: f.input });
   expect(response.status).toBe(400);
   expect((await response.json()).error.code).toBe("sif.allocation_invalid");
@@ -213,7 +214,7 @@ it("does not let uploaded Cloud trust enable an unconfigured issuer", async () =
 it.each(["stranger", "foreign-origin"])(
   "refuses a %s before importing the consumed packet",
   async (kind) => {
-    const f = await fixture();
+    const f = await historicalCloudFixture();
     const before = await f.host.store.read();
     const response = await f.post(
       "input",
@@ -230,7 +231,7 @@ it.each(["stranger", "foreign-origin"])(
 );
 
 it("retains the original Cloud reserve operation across repeated request exports and owner rebind", async () => {
-  const f = await fixture();
+  const f = await historicalCloudFixture();
   const first = await f.getRequest();
   expect(first.status).toBe(200);
   const exported = await first.json();

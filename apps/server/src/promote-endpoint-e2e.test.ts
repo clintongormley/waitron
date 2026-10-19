@@ -345,7 +345,7 @@ async function readEnvios(
   return rows.rows.map((row) => ({ ...row, incidencia: row.incidencia === 1 }));
 }
 
-describe("promote endpoint e2e — the whole arc over HTTP", () => {
+describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
   it("admin login → 200 restarting; restart into primary; sells + chains on its own reserved SIF; does NOT file", async () => {
     const seed = await seedMirror(db.main);
     const waterOffer = await seedSaleVenue(db.main, seed.nodeId);
@@ -623,4 +623,18 @@ describe("read-only-gate exemption for the promote POST — proven by deletion",
     expect(promote.status).toBe(403);
     expect(await promote.json()).toEqual({ error: { code: "node.read_only", params: {} } });
   });
+});
+
+vi.mock("./modules.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./modules.js")>();
+  const { FISCAL_OPERATIONS: historicalFiscalOperations } =
+    await import("@waitron/fiscal-verifactu/src/allocation-configuration.js");
+  return {
+    ...actual,
+    ALL_MODULES: actual.ALL_MODULES.map((module) =>
+      module.name === "fiscal-verifactu"
+        ? { ...module, operations: historicalFiscalOperations }
+        : module,
+    ),
+  };
 });

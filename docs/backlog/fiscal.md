@@ -241,82 +241,30 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## Finish first Live setup integration
 
-PR #1752's first complete CI run, [39267628062](https://github.com/clintongormley/waitron/actions/runs/39267628062),
-tests head `9e8cb90e7c1a4e0b74e419b66719b54ca06b95cc` and fails. The normal push
-hook and fiscal package pass; the overall branch is not ready to land.
+PR #1752 remains a draft at published head `9e8cb90e7c1a4e0b74e419b66719b54ca06b95cc`.
+Its [first complete CI run](https://github.com/clintongormley/waitron/actions/runs/39267628062)
+failed. Complete the remaining restore, crash and protocol integration, then run the normal
+hook and CI on the final head, including the six provisioning shards and their coverage merge.
+Their CI timing still needs qualification; local results do not establish the four-minute target.
 
-Complete the remaining test integration before claiming package-wide acceptance. Composition
-and server cases still submit signed allocations or serial candidate proposals to the new hour
-interfaces. Other recovery cases still expect the earlier installation names.
-Trace each failing path and preserve its behavioral checks when adapting the inputs. Do not
-restore the retired production dispatcher, bypass a gate, or label every failure as a stale test
-without running it. Existing fiscal expectations need the queue's exact-line approval.
+The owner approved eight exact test patches on 19 October. They are applied in the feature
+checkout and recorded in [Changed test checks](../operations/a679-changed-checks.md).
+One setup-route case still fails locally with `clock_corrected`: its fixture freezes wall time
+while elapsed time advances. A separately tested one-line clock proposal needs exact approval;
+keep its production comparison and refusal unchanged.
 
-The recovery-form helpers and source PDF check now use the approved single field with its two
-check characters. Their complete suites pass locally, as does setup's full coverage run. These
-corrections do not qualify the remaining server or composition cases.
+The owner rejected retaining the 18 emergency-attempt and paper-export cases against the old
+placement-only runner. Rewrite them through the live hour flow with its pre-placement gate.
+Keep real selected-copy key authentication, durable intent, rollback, publication order and
+unchanged registrations, series and counters on refusal. Submit every changed or removed fiscal
+assertion as one exact before/after bundle before applying it. The existing 18-case source
+selection remains red pending that work and its approval. Other Cloud and crash failures still
+need diagnosis; neither these proposals nor focused passes qualify the whole branch.
 
-The internal signed-evidence and historical document-reader checks now use their original
-parser explicitly. They retain their behavioral assertions without changing production dispatch.
-The real HTTPS interruption cases use clock comparison, hour selection and kept recovery-document
-requests; their fiscal-row and counter assertions remain unchanged. The built wizard check now
-requires the retired offline-tool URL to return 404. Other setup, retirement, restore and promotion
-cases remain open. A separately tested composition-check patch awaits exact scope approval in
-Lane E's questions; it has not been applied to the feature branch.
-
-New production-entry checks refuse a valid retired signed request through `provisionNode`,
-`register-till` and the restore runner while retaining the existing registrations, series and
-counters. These are refusal checks, not qualification of current-hour recovery through every
-entry point. A separate proposal keeps the signed provisioning and registration checks against
-their historical dispatcher; its scope change also awaits exact approval. The other restore,
-Cloud, retirement and promotion failures still need diagnosis and qualification.
-
-Authenticated first-setup HTTP checks also refuse the retired Cloud-reservation and serial-candidate
-proposals with Cloud issuer settings present. Both keep the attempt state unchanged and make no
-outside request. Substituting the historical document selector in an independently installed copy
-makes both return 200 and fail their 400 assertions. A separate proposal scopes the five older
-Cloud-document route cases to that historical selector, retaining all 22 assertion expressions;
-its scope approval remains pending. These checks do not qualify current-hour re-registration
-through the command or complete the other restore and promotion integration.
-
-The production promotion adapter now also refuses signed paper input with either a matching
-recovery key or an administrator login before its activation callback. The two checks retain
-registrations, series and counters; a historical-dispatch substitution fails both refusal assertions.
-Three more exact test-scope proposals retain the older command, live promotion and HTTP restart
-checks with their historical adapter explicitly named. All existing expected expressions remain,
-but the proposals are unapplied pending bundled owner approval. Current-hour success through
-`register-till` was still unqualified at that checkpoint; the following command qualification supersedes that limit. The remaining restore integration stays open.
-
-Current-hour re-registration now passes through the command and its built executable. Both
-require a previously selected operation, the matching node key and explicit old-box/sole-recovery
-confirmations. The command refreshes its clocks through the authenticated host; unavailable
-internet time refuses this non-interactive entry. The new series start at one, the old counters
-remain, and an exact replay keeps counters advanced to 37. The focused cases cover both venue
-path forms and command argument refusals. Synthetic clock responses and a pinned release fixture
-are used for the built-command test; no real external clock or hardware acceptance is claimed.
-The seven exact historical/protocol test-scope proposals remain unapplied.
-
-Staged archive and bucket entry checks now also refuse retired emergency input with the selected
-copy's actual node key and matching outside files. Two attempts retain the destination database,
-trading identity, staged marker and key, original fiscal rows and outside evidence. In an installed
-copy, removing pre-placement admission replaces the destination and fails both checks; restoring
-the historical dispatcher consumes the old evidence and fails their refusal reasons.
-
-Three further proposals retain the 18 emergency-attempt and paper-export cases with their named
-historical dispatcher and original placement-phase runner. All 82 assertion expressions remain.
-They intentionally omit the later pre-placement admission in those historical suites, so their
-exact scope needs separate approval; none is applied. The production gate stays in place and is
-qualified separately. The source 18-case selection still fails until that scope is settled.
-The complete current recovery host/preview selection passes 150 cases. A separate promotion
-fixture freezes wall time while its elapsed clock advances; an inserted 1,200 ms delay reproduces
-its `clock_corrected` refusal. A one-line proposal freezing both clocks passes that delayed case
-without changing assertions, and remains unapplied pending its own exact approval.
-
-Provisioning's new layout of six shards still needs CI timing qualification. `test-light-a`
-reaches its ten-minute job limit while still reporting advancing provisioning files:70 completed
-files total520.5seconds, with the largest taking160.9seconds. The dedicated shards retain the
-one-worker setting and enforce the unchanged full coverage thresholds in their separate merge.
-Do not infer a four-minute CI result from local timing. No package test or assertion was cut.
+Keep the retired production dispatcher disabled. Retained historical checks do not qualify a
+current production success. Existing source and built-command hour qualifications, the 150-case
+recovery run, unchanged fiscal gates and completed reviews have separate receipts; reuse them
+where the tested code is unchanged. Preserve the independent fiscal follow-ups below.
 
 ## Pin the clock's future-finished sample refusal
 
