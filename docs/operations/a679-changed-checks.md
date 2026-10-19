@@ -3299,3 +3299,18 @@ The two separate demo/development installation checks remain unchanged in the fe
 A tested exact patch pins 16 October 2026 11:40 UTC and replaces `S000001` with `06RB` and its
 three corresponding series. It passes all fourteen cases in the disposable copy and is awaiting
 the queue's explicit fiscal-check approval. It is not part of this committed change.
+
+## Approved development/demo naming checks, 2026-10-19
+
+The owner approves exact patch SHA-256
+`c2cd8948f6b4b1099742f5fee8204c4c47477f17946b398c1563429c3c3a283a`
+through the watcher. It applies byte-for-byte to
+`apps/server/scripts/demo-seed/allocation.test.ts` and
+`apps/server/scripts/throwaway-venue.test.ts`. Both pin only the Date clock at
+16 October 2026 11:40 UTC and restore it after each case. `S000001` becomes exact `06RB`;
+the three standard/full/rectificative series keep their A/FA/FF/R bases and gain that hour
+suffix. Taxpayer, environment, purpose, node, production-refusal, before/after and every other
+assertion remain. No production code changes. The two suites originally report five failures
+in the installed candidate, then all fourteen cases pass there and in the feature checkout.
+This approval is bounded to those lines and does not authorize other fiscal expectation changes.
+The earlier paragraph's pending status is superseded by this approval and application.
