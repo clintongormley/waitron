@@ -375,6 +375,18 @@ cancelled. The design records the missing Waitron Cloud setup integration and se
 Cloud enablement work; no Cloud service is enabled by this publication. Earlier dated directions
 below are historical where superseded, including the now-withdrawn short N proposal.
 
+**Restored trading boot acceptance, 2026-10-19:** two new cases in
+`apps/server/src/hour-recovery-host.test.ts` place an archive or stream copy, then start the
+actual source host twice at later simulated UTC hours. Each start answers the public node probe
+over verified HTTPS with `acceptingSales: true`. Rebuild completion removes its pending marker;
+the selected-hour journal, both allocation rows, old counters 125/123/123, fresh counters 1/1/1,
+and the two recorded invoices with their accepted/pending filing rows remain unchanged. The
+fixture uses real membership credentials and the existing sale/filing helper with a synthetic
+AEAT client. These are in-process source-host starts, not a built executable, separate-process
+restart, native promotion page or a sale submitted through the booted listener. The original
+127 cases and shared fixtures remain unchanged; the new cases narrow the outstanding restored-boot
+qualification, while the remaining entry journeys and whole-branch gates stay open.
+
 **Committed download acceptance, 2026-10-19:** the candidate now includes
 `apps/server/src/first-fiscal-document-download.e2e.test.ts`. It builds the actual setup app into
 an isolated temporary directory, uses the booted HTTPS server and bundled Chromium, and checks

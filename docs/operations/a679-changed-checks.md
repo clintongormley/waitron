@@ -2654,3 +2654,28 @@ measuring checkout and are restored there. No existing assertion, fiscal writer,
 root guard or production implementation changes in this checkpoint. Full package coverage, CI,
 remaining journeys, protocol retirement, integration, both final installed reviews and the two
 existing owner approvals remain open.
+
+
+## Restored trading boot acceptance, 2026-10-19
+
+`apps/server/src/hour-recovery-host.test.ts` gains two cases, for archive and stream placement.
+No earlier test body, fixture or expected value changes. Removing the new block and its imports
+reconstructs the previous file byte for byte. Within each new case, the two-location shared seed
+is reduced to one operational location before creating the backup, matching boot's existing
+single-venue admission rule. The source fixture receives a real sealed membership key.
+
+The existing sale/filing helper writes invoices `A-06RB/123` and `A-06RB/124`, with one accepted
+synthetic AEAT receipt and one pending row. Recovery selects `06RC`. Two later simulated-clock
+source-host starts must serve the public node probe over verified HTTPS, finish the rebuild,
+retain both allocations and the complete recorded invoice/filing snapshots, preserve retired
+counters 125/123/123 and fresh counters 1/1/1, and leave the selected-hour journal byte-identical.
+This covers the hour plan's Tasks 7 and 10 restart boundary. It does not exercise a sale through
+the listener, a separate process or a native adoption/promotion page.
+
+In an independent frozen-installed candidate, omitting rebuild completion leaves its marker and
+fails both new cases; forcing the public node probe to refuse sales fails both cases. Restoring
+each omission passes both cases. These controls change no protected fiscal writer or assertion.
+The first new-test run had fixture/order errors and a logger passed as an environment value;
+those failures are harness errors, not product regressions. The first control wrapper also
+expected the assertion's words in the wrong order; its retained log contains the intended two
+assertion failures. The corrected wrapper verifies the failures and restored controls.

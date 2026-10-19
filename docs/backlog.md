@@ -329,8 +329,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [the qualification record](operations/a679-changed-checks.md).
   Obtain viewing approval for the revised real EN/ES A4 PDFs through Drive; the owner's combined
   key/check, single current installation-code and short time-zone decisions are implemented in the candidate.
-  Complete native adoption/promotion and the remaining entry/recovery journeys, including restored
-  trading boot. The committed Chromium suite covers wizard PDF download/re-upload, annotated and
+  Complete native adoption/promotion and the remaining entry/recovery journeys. Archive and stream
+  recovery now have source-host checks for two trading starts in later hours, with unchanged
+  allocations, counters and recorded invoices. The committed Chromium suite covers wizard PDF download/re-upload, annotated and
   printed copies, typed entry and a matching archived database; other local browser probes remain
   separate evidence.
   Obtain exact approval for the retained CLI test's migration from JSON input to owned hour/PDF setup;

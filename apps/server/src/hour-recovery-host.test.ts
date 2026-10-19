@@ -1,4 +1,8 @@
 import { Agent } from "undici";
+import { loadKeyRing } from "@waitron/credentials";
+import { establishNodeIdentity } from "./node-identity.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
+import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { freePorts } from "./testing/free-ports.js";
 import { Socket } from "node:net";
@@ -19,6 +23,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
+  nodes,
+  locations,
   openVenueDatabase,
   readBreakGlassVerifier,
   setBreakGlassVerifierTx,
@@ -36,7 +42,7 @@ import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { seedTenants, TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
+import { seedTenants, TENANT_A, TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { AppError, locationId, seriesId } from "@waitron/shared";
 import { mintBreakGlassKey } from "./break-glass.js";
@@ -1696,6 +1702,122 @@ describe("selected-hour admission before archive placement", () => {
       await placed.close();
     }
   });
+
+  it.each(["archive", "stream"] as const)(
+    "%s recovery boots for trading twice without changing its selected hour or recovered counters",
+    async (source) => {
+      await suite.db.delete(nodes).where(eq(nodes.locationId, TENANT_B.locationId));
+      await suite.db.delete(locations).where(eq(locations.id, TENANT_B.locationId));
+      const history = await recoveryInvoices();
+      const credentialKey = Buffer.alloc(32, 7).toString("base64");
+      await establishNodeIdentity(
+        {
+          ownerDb: suite.db,
+          ring: loadKeyRing({
+            WAITRON_CREDENTIALS_KEY: credentialKey,
+            WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          }),
+        },
+        node.nodeId,
+      );
+      const f = await archiveHost(source);
+      const restore = {
+        ...f.restore,
+        modules: f.service.modules,
+        withModuleOperations: f.service.runner(f.outcome.input),
+      };
+      if (source === "stream")
+        await writeStreamRestore({ ...restore, databasePath: f.database, entries: f.entries });
+      else await restoreFromArtifact(restore);
+      expect(await readdir(f.roots.stateDir)).toContain(REBUILD_MARKER);
+      const snapshot = async () => {
+        const placed = await openVenueDatabase(f.roots.venueDir);
+        try {
+          return {
+            series: await placed.venue.select().from(invoiceSeries).orderBy(invoiceSeries.code),
+            allocations: await placed.venue.select().from(fiscalAllocations),
+            recorded: await recordedRecoveryRows(placed.venue),
+          };
+        } finally {
+          await placed.close();
+        }
+      };
+      const before = await snapshot();
+      expect(before.allocations).toHaveLength(2);
+      expect(before.recorded).toEqual(history);
+      expect(
+        before.series
+          .filter((row) => row.retiredAt === null)
+          .map(({ code, nextNumber }) => ({ code, nextNumber })),
+      ).toEqual([
+        { code: "A-06RC", nextNumber: 1 },
+        { code: "FF-06RC", nextNumber: 1 },
+        { code: "R-06RC", nextNumber: 1 },
+      ]);
+      expect(
+        before.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),
+      ).toEqual([125, 123, 123]);
+      const journal = await readFile(
+        join(f.roots.stateDir, "module-preparation-state.json"),
+        "utf8",
+      );
+      for (const [index, set] of manifestSets().entries())
+        await cp(
+          TEST_MIGRATIONS[index]!.migrationsFolder,
+          join(root, "boot-migrations", set.name),
+          { recursive: true },
+        );
+      await ensureBoxSecrets({
+        stateDir: f.roots.stateDir,
+        hostnames: ["localhost"],
+        now: () => new Date(),
+      });
+      const [port] = await freePorts(1);
+      const env = {
+        WAITRON_ENV: "dev",
+        WAITRON_STATE_DIR: f.roots.stateDir,
+        WAITRON_VENUE_DIR: f.roots.venueDir,
+        WAITRON_MIGRATIONS_DIR: join(root, "boot-migrations"),
+        WAITRON_TILL_NODE_ID: node.nodeId,
+        WAITRON_TILL_LOCATION_ID: node.locationId,
+        WAITRON_CREDENTIALS_KEY: credentialKey,
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        WAITRON_HTTP_HOST: "127.0.0.1",
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_LANDING_PORT: "0",
+        WAITRON_MANAGEMENT_RP_ID: "localhost",
+        WAITRON_MANAGEMENT_ORIGIN: `https://localhost:${port}`,
+      };
+      for (const instant of ["2026-10-16T13:40:00Z", "2026-10-17T14:40:00Z"]) {
+        vi.setSystemTime(new Date(instant));
+        let server: StartedServer | undefined;
+        let agent: Agent | undefined;
+        try {
+          server = await startServer(env);
+          agent = new Agent({
+            connect: { ca: await readFile(join(f.roots.stateDir, "tls/ca.crt")) },
+          });
+          const response = await fetch(`https://127.0.0.1:${port}/api/node`, {
+            dispatcher: agent,
+          } as RequestInit);
+          expect(response.status).toBe(200);
+          expect(await response.json()).toMatchObject({
+            nodeId: node.nodeId,
+            acceptingSales: true,
+            environment: "preproduction",
+          });
+        } finally {
+          await agent?.close();
+          await server?.close();
+        }
+        expect(await readdir(f.roots.stateDir)).not.toContain(REBUILD_MARKER);
+        expect(await snapshot()).toEqual(before);
+        expect(
+          await readFile(join(f.roots.stateDir, "module-preparation-state.json"), "utf8"),
+        ).toBe(journal);
+      }
+    },
+  );
 
   it.each(["archive", "file", "stream", "managed"] as const)(
     "%s recovery retains issued invoices and filing receipts before selling on the fresh hour",
