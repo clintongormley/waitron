@@ -248,7 +248,8 @@ function defaultTranslator(item: FakeItem): Omit<FakeResult, "ref"> {
  * - `expire()` expires a job in any state, a `collected` one included;
  * - `pageItems(n)` caps a collect page at `n` entries, which Cloud does not; the byte budget
  *   (`pageBytes`) is Cloud's rule;
- * - a signed body's keys must come in the order the box sends them, where Cloud sorts them.
+ * - a signed body must be spelled exactly as `JSON.stringify` writes it, keys in the box's order;
+ *   Cloud parses it and sorts the keys.
  * A `translator` answer is returned as written, not limited to `missing`: the contract says `names`
  * holds only the item's `missing` languages, and the fake lets a test break that so the box's
  * dropping of extra names can be tested.

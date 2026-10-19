@@ -920,7 +920,7 @@ it("answers the same page for a repeated cursor and any in-range cursor", () =>
     });
   }));
 
-it("collectReply rewrites a page and gzipReplies compresses every reply", () =>
+it("collectReply rewrites a page, and gzipReplies compresses collect and status replies", () =>
   withCloud(async (f) => {
     const id = await finished(f);
     const seen: [number, number][] = [];
@@ -945,4 +945,54 @@ it("collectReply rewrites a page and gzipReplies compresses every reply", () =>
     expect(sent.replyBytes).toBe(Buffer.byteLength(JSON.stringify(answer.json)));
     f.collectReply(null);
     expect((await collectAt(f, id, 0)).json).toMatchObject({ nextCursor: null });
+    encoding = null;
+    const status = await f.signedRequest("translation-status", {
+      signedBody: JSON.stringify({ version: 1, jobId: id }),
+      onResponse: (r) => {
+        encoding = r.headers.get("content-encoding");
+      },
+    });
+    expect(encoding).toBe("gzip");
+    expect(status).toMatchObject({ status: 200, json: { jobId: id, state: "done" } });
   }));
+
+it.each([
+  { name: "a result and a failed item", failing: ["variant:3"], state: "partly_done" },
+  { name: "two results", failing: [], state: "done" },
+])("a two-entry page holding $name fits its exact size and not one byte less", (c) =>
+  withCloud(async (f) => {
+    f.failRefs(c.failing);
+    const id = jobIdOf(await submit(f, three));
+    await ask(f, "translation-status", id);
+    await ask(f, "translation-status", id);
+    expect(f.jobs.get(id)!.state).toBe(c.state);
+    const result = (ref: string) => ({
+      ref,
+      names: { ca: `CA ${ref === "variant:2" ? "PINTA GRAN" : "PINTA PETITA"}` },
+      placeholder: false,
+      corrections: [],
+    });
+    const both = {
+      version: 1,
+      jobId: id,
+      state: c.state,
+      results: c.failing.length
+        ? [result("variant:2")]
+        : [result("variant:2"), result("variant:3")],
+      failed: c.failing,
+      nextCursor: 2,
+    };
+    const size = Buffer.byteLength(JSON.stringify(both));
+    f.pageBytes(size);
+    expect(await collectAt(f, id, 0)).toEqual({ status: 200, json: both });
+    expect(f.calls.at(-1)!.replyBytes).toBe(size);
+    f.pageBytes(size - 1);
+    expect((await collectAt(f, id, 0)).json).toEqual({
+      ...both,
+      results: [result("variant:2")],
+      failed: [],
+      nextCursor: 1,
+    });
+    expect(f.calls.at(-1)!.replyBytes).toBeLessThanOrEqual(size - 1);
+  }),
+);
