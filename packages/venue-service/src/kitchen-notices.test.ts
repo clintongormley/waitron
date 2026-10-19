@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   EACH_UNIT,
@@ -1110,7 +1110,20 @@ describe("listStationNotices", () => {
   });
 });
 
-describe("listStationsNotices", () => {
+describe.each([
+  "2026-10-19T00:00:00.000Z",
+  "2026-10-19T05:59:59.000Z",
+  "2026-10-19T06:00:00.000Z",
+  "2026-10-19T06:00:30.000Z",
+  "2026-10-19T12:00:00.000Z",
+  "2026-10-19T23:59:59.000Z",
+])("listStationsNotices at %s", (now) => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+  });
+  afterEach(() => vi.useRealTimers());
+
   const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
   it("keeps each station's own newest fifty, oldest first, whatever another station holds", async () => {
@@ -1138,6 +1151,7 @@ describe("listStationsNotices", () => {
   it("orders notices recorded in the same instant by insertion, and keeps the newest fifty of them", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 1, null);
+    await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
     const at = minutesAgo(1);
     for (let index = 0; index < 51; index += 1) {
       await noticeAt(v.grill, order.orderId, at, `N${index}`);
@@ -1154,6 +1168,7 @@ describe("listStationsNotices", () => {
   it("answers a notice with every field the single-station read gives", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 1, null);
+    await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
     const [row] = await db
       .insert(kitchenNotices)
       .values({

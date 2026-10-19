@@ -5404,6 +5404,9 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+For database fixtures filtered by business day, make the boundary explicit and exercise the
+changeover. See the [testing guide](developers/testing-guide.md#a-recent-timestamp-can-belong-to-the-previous-business-day).
+
 - **A902. Say in the testing guide that Vite also prints browser console output under an AI
   agent.** Its section "Vitest hides a passing test's console output under an AI agent" names only
   Vitest's reporter. A811 (#1888) found that Vite 8.3.4, when an agent variable such as `AI_AGENT`,

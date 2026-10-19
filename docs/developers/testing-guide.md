@@ -18,6 +18,23 @@ choose.
 Contention is a separate question and has its own section further down, "A contention test proves
 the write queue serialises writers, not that a lock blocked".
 
+## A recent timestamp can belong to the previous business day
+
+When a database read filters by the current business day, make your fixture's day boundary
+explicit. A notice from one minute ago belongs to yesterday during the first minute after
+changeover. For a test about ordering or returned fields, place the changeover safely away from
+both the notice and the read. Keep the separate tests that check the boundary itself.
+
+On 2026-10-19, main CI run `39207241987`, venue-service shard 2, ran
+`kitchen-notices.test.ts` at 06:00 UTC. The two batch-read cases inserted notices one minute ago
+but left the UTC location's changeover at its 06:00 default. Both reads returned `[]`.
+Running `pnpm --filter @waitron/venue-service exec vitest run src/kitchen-notices.test.ts`
+with the batch-read group parameterised at midnight, 05:59:59, 06:00, 06:00:30, noon and 23:59:59
+reproduced four failures: those same two cases at 06:00 and 06:00:30. The other 90 cases passed.
+Setting those two fixtures' changeover to 90 minutes after the controlled clock produced
+94 passing cases with every original assertion unchanged. The group fakes only `Date` and
+restores it after each case.
+
 **Owning and cleaning up a database in a suite**
 
 ## Don't own a database in a suite — let a helper own it.
