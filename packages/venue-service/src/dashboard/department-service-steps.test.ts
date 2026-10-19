@@ -319,8 +319,12 @@ it("shows a start's error under the start", async () => {
   expect(startBox(el, 2).error).toBe("That course was deleted. Choose another start.");
 });
 
-const clipped = (box: Element | null | undefined) =>
-  box ? box.scrollWidth > box.clientWidth : true;
+function expectInFull(box: Element | null | undefined, what: string): void {
+  const widths = box
+    ? `scrollWidth ${box.scrollWidth} > clientWidth ${box.clientWidth}`
+    : "not drawn";
+  expect.soft(box ? box.scrollWidth <= box.clientWidth : false, `${what}: ${widths}`).toBe(true);
+}
 
 it.each([
   { width: 576, startsInFull: true },
@@ -334,13 +338,12 @@ it.each([
     el.style.width = `${width}px`;
     await settle(el);
     rows(el).forEach((_, index) => {
-      const minutes = minutesInput(el, index).shadowRoot!.querySelector("input");
-      expect(clipped(minutes), `minutes in row ${index + 1}`).toBe(false);
-      const name = nameInput(el, index).shadowRoot!.querySelector("input");
-      expect(clipped(name), `name in row ${index + 1}`).toBe(false);
+      const row = `row ${index + 1}`;
+      expectInFull(minutesInput(el, index).shadowRoot!.querySelector("input"), `minutes in ${row}`);
+      expectInFull(nameInput(el, index).shadowRoot!.querySelector("input"), `name in ${row}`);
       if (startsInFull) {
         const start = startBox(el, index).shadowRoot!.querySelector(".value");
-        expect(clipped(start), `start in row ${index + 1}`).toBe(false);
+        expectInFull(start, `start in ${row}`);
       }
     });
     const wrap = q(el, ".table-wrap")!;

@@ -70,12 +70,11 @@ export class DepartmentServiceSteps extends LitElement {
         min-width: 0;
       }
       .start {
-        flex: 2 1 calc(var(--wt-tap-min) * 3);
+        flex: 4 1 calc(var(--wt-tap-min) * 3);
         min-width: 0;
       }
-      /* Room for 120 beside the end slot's "min". */
       .minutes {
-        flex: 0 0 calc(var(--wt-tap-min) * 2 + var(--wt-space-4));
+        flex: 0 0 calc(var(--wt-tap-min) * 2 + var(--wt-space-6));
         min-width: 0;
       }
       .empty {
