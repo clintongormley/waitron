@@ -2150,6 +2150,97 @@ describe("till-app: sending the draft", () => {
       },
     );
 
+    it.each(["missing-party", "older-party", "older-groups", "older-orders"] as const)(
+      "keeps the saved candidate and waits when recovery returns %s",
+      async (snapshot) => {
+        const { el, store, before, detail } = await raced("submit");
+        api.submitDraft!.mockReset().mockImplementationOnce(() => {
+          api.getTablesState!.mockResolvedValue([
+            {
+              ...mesa4,
+              party:
+                snapshot === "missing-party"
+                  ? null
+                  : {
+                      ...mesa4.party!,
+                      revision: snapshot === "older-party" ? 2 : 4,
+                    },
+            },
+            mesa7,
+          ]);
+          api.listGroups!.mockResolvedValue({
+            revision: snapshot === "older-groups" ? 2 : 4,
+            groups: [desserts],
+          });
+          api.readCurrentOrders!.mockResolvedValue({
+            ...current,
+            revision: snapshot === "older-orders" ? 2 : 4,
+          });
+          throw { code: "group.not_held", status: 409, groupId: mains.id };
+        });
+        emit(tableOrder(el)!, "submit-draft", detail);
+        await vi.waitFor(() => expect(store.sending).toBe(false));
+        await flush(el, 6);
+        expect(store.lines.map((line) => line.place)).toEqual([
+          { kind: "join", groupId: "held-mains" },
+          { kind: "new", slot: 4, afterGroupId: "held-mains" },
+          { kind: "new", slot: 8, afterGroupId: "held-desserts" },
+        ]);
+        expect(store.lines.every((line, index) => line === before[index])).toBe(true);
+        expect(rows(el)).toEqual(["Steak ×1", "Beer ×1", "Flan ×1"]);
+        expect(api.saveDraft).toHaveBeenCalledOnce();
+        expect(api.submitDraft).toHaveBeenCalledOnce();
+        expect(banner(el)?.textContent).toContain(codeMessage("party.out_of_date"));
+      },
+    );
+
+    it("keeps restored held targets after a delayed group refusal", async () => {
+      const { el, store, before, detail } = await raced("submit");
+      api.submitDraft!.mockReset().mockImplementationOnce(() => {
+        api.listGroups!.mockResolvedValue({ revision: 4, groups: [mains, desserts] });
+        api.getTablesState!.mockResolvedValue([
+          { ...mesa4, party: { ...mesa4.party!, revision: 4 } },
+          mesa7,
+        ]);
+        throw { code: "group.not_held", status: 409, groupId: mains.id };
+      });
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      await flush(el, 6);
+      expect(store.lines.map((line) => line.place)).toEqual([
+        { kind: "join", groupId: "held-mains" },
+        { kind: "new", slot: 4, afterGroupId: "held-mains" },
+        { kind: "new", slot: 8, afterGroupId: "held-desserts" },
+      ]);
+      expect(store.lines.every((line, index) => line === before[index])).toBe(true);
+      expect(rows(el)).toEqual(["Steak ×1", "Beer ×1", "Flan ×1"]);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+      expect(banner(el)).not.toBeNull();
+    });
+
+    it("keeps corrected dishes locally when their recovery save goes offline", async () => {
+      const { el, store, detail } = await raced("submit");
+      api
+        .saveDraft!.mockImplementationOnce(async (partyId, save) =>
+          server.snapshot(server.save(partyId, save)),
+        )
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      emit(tableOrder(el)!, "submit-draft", detail);
+      await vi.waitFor(() => expect(store.sending).toBe(false));
+      await flush(el, 6);
+      expect(retainedCandidate(el)?.lines.map((line) => line.place)).toEqual([
+        { kind: "fire" },
+        { kind: "fire" },
+        { kind: "new", slot: 8, afterGroupId: "held-desserts" },
+      ]);
+      expect(rows(el)).toEqual(["Steak ×1", "Beer ×1", "Flan ×1"]);
+      expect(draft(el).editsLocked).toBe(true);
+      expect(server.drafts[0]!.lines[0]!.joinGroupId).toBe("held-mains");
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+      expect(banner(el)?.textContent).toContain(t("table.draft_recovery_failed"));
+    });
+
     it("retains corrected local lines separately when their save loses a revision race", async () => {
       const { el, store, before, detail } = await raced("submit");
       api
@@ -6972,6 +7063,56 @@ describe("recalled draft source splitting", () => {
     expect(banner(el)?.textContent).toBe(nextMessage);
   });
 
+  it.each(["offline", "refused"] as const)(
+    "fresh Discard retains its saved dishes after an %s command and can retry",
+    async (failure) => {
+      const discardDraft = vi
+        .fn()
+        .mockRejectedValueOnce(
+          failure === "offline"
+            ? new TypeError("Failed to fetch")
+            : { code: "order.payment_in_flight" },
+        )
+        .mockImplementationOnce(async () => {
+          const saved = server.drafts[0]!;
+          server.drafts.splice(0);
+          return {
+            draftId: saved.id,
+            billId: "wo-4",
+            revision: 2,
+            adjustmentIds: [],
+            party: { id: "v1", revision: 4 },
+          };
+        });
+      const { el } = await mountApp({ discardDraft });
+      const order = await openMesa(el);
+      await tap(el, "Beer");
+      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      if (review?.checkVisibility()) await userEvent.click(review);
+      await order.updateComplete;
+      const press = async () => {
+        await userEvent.click(
+          order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]")!,
+        );
+        await flush(el, 6);
+      };
+      await press();
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(server.drafts[0]!.lines).toHaveLength(1);
+      expect(draft(el).sending).toBe(false);
+      expect(draft(el).editsLocked).toBe(false);
+      expect(order.groupCommandBusy).toBe(false);
+      expect(banner(el)?.textContent).toContain(
+        failure === "offline" ? t("table.error") : codeMessage("order.payment_in_flight"),
+      );
+      await press();
+      expect(rows(el)).toEqual([]);
+      expect(server.drafts).toEqual([]);
+      expect(discardDraft).toHaveBeenCalledTimes(2);
+      expect(order.party?.revision).toBe(4);
+    },
+  );
+
   it("Discard of fresh dishes retains unsaved edits when its save is refused", async () => {
     const discardDraft = vi.fn();
     let refuse!: (error: Error) => void;
@@ -7393,6 +7534,47 @@ describe("recalled draft source splitting", () => {
     expect(floor(el)).not.toBeNull();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });
+
+  it.each(["remove", "discard"] as const)(
+    "source %s preserves recorded charges after a reasons read fails and can reopen",
+    async (action) => {
+      const { el, order } = await cancellationOpening({ discardDraft: vi.fn() });
+      const reasons = api.listAdjustmentReasons!.getMockImplementation()!;
+      api.listAdjustmentReasons!.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      const open = async () => {
+        if (action === "remove") draft(el).removeLine(0);
+        else
+          await userEvent.click(
+            order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]")!,
+          );
+        await flush(el, 6);
+      };
+      await open();
+      expect(adjustment(el)).toBeNull();
+      expect(rows(el)).toEqual(["Recorded steak ×2"]);
+      expect(server.drafts[0]!.lines[0]!).toMatchObject({
+        source: { line: { id: "source-7", quantity: "2" } },
+      });
+      expect(draft(el).sending).toBe(false);
+      expect(draft(el).editsLocked).toBe(false);
+      expect(order.groupCommandBusy).toBe(false);
+      expect(banner(el)?.textContent).toContain(t("adjust.reasons_error"));
+      expect(api.applyAdjustment).not.toHaveBeenCalled();
+      expect(api.discardDraft).not.toHaveBeenCalled();
+      api.listAdjustmentReasons!.mockImplementation(reasons);
+      await open();
+      expect(adjustment(el)?.target).toMatchObject({
+        lineId: action === "remove" ? "source-7" : null,
+        total: "17.25",
+      });
+      expect(rows(el)).toEqual(["Recorded steak ×2"]);
+      expect(draft(el).editsLocked).toBe(true);
+      emit(adjustment(el)!, "adjust-close");
+      await flush(el);
+      expect(draft(el).editsLocked).toBe(false);
+      expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    },
+  );
 
   it("source cancellation keeps prior edits when their save fails and sends no money command", async () => {
     const { el } = await cancellationOpening();
