@@ -3359,13 +3359,22 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
     shapes only so older tests that pin the exact argument count keep passing; one call per path
     sends the same request.
 
-- **A790. Choose a document, then its permitted printer.** The owner's A661 Q1–Q6 answers
-  are recorded in the [design proposal](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
+- **A790. Choose a document and its permitted printer.** The owner's A661 Q1–Q6 answers
+  and 2026-10-19 revision are recorded in the [design proposal](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
   with [mock-ups](backlog/mockups/a790-document-and-printer-choice/README.md).
-  The proposal awaits agreement on receipt versus invoice for an existing full invoice,
-  dashboard profile context, phone steps and single-choice skips, simplified-sale copies,
-  and the persistence choice. Ask the document-meaning question first. No product behavior
-  has changed; payment-time printing on a receipt-paper invoice printer remains part of the build.
+  **A is approved:** Receipt prints the same recorded full invoice compact with customer
+  details through the receipt list; Invoice uses the invoice list, A4 or receipt paper.
+  Neither issues another invoice. Apply A796's inline, collapsible receipt-printer selector
+  at/after payment, with the last eligible choice preselected and no extra printer step;
+  keep the named confirmation in that same form/action. Ask **B only** next: Harbour's
+  device-free dashboard suggests Counter 1's current profile with an eligible-profile change
+  (recommended), all sale-location printers, or a dedicated dashboard profile. No till
+  memory is implied there. Remaining C/D choices, exact memory scope, persistence and the
+  complete build are unapproved. The owner settled device scope for the handheld form;
+  first-use/unavailable-equipment fallback and finer storage keys remain proposals.
+  [Revised receipt-flow boards](backlog/mockups/a790-document-and-printer-choice/revision-2026-10-19/README.md)
+  accompany the addendum; original boards remain historical where superseded.
+  This revision changes docs only; source-map readings are historical and runtime-unverified.
 
 - **Loose ends left by A661 (#1745).**
   - The till's payment-time options and a staged A4 choice resolve the device's invoice printer

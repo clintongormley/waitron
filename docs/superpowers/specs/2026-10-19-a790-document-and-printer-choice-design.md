@@ -1,3 +1,176 @@
+# A790: current document and printer decisions
+
+## Revision, 2026-10-19: A approved; B is the sole current owner question
+
+**Docs-only revision. The complete design is NOT approved for build.** This addendum
+controls the exact points listed below. The original proposal follows unchanged as a
+historical body from commit `87f19d4bc98d2fb7925e886228430cabfc490a9b`; its questions,
+recommendations and source map record that earlier reading, not fresh runtime evidence.
+No product execution, tests or physical-printer checks were performed for this revision.
+
+Authority: the owner's YES to A and the watcher's A796 instruction in
+`/Users/clintongormley/waitron-campaign-f/questions.md`, 2026-10-19 around 05:10.
+The owner answered A: keep the same recorded full invoice and route Receipt and Invoice
+through their different profile lists. The recorded A796 owner wording is:
+
+> Don't ask. Include the card reader drop-down and the receipt printers drop down in the
+> payment form, with the last used one selected. In fact it could even be collapsed so you
+> can't see it. The waiter will change the selection when they need to.
+
+The watcher explicitly extends that receipt choice to printing **at or after payment**.
+Lane B's recorded answer, 2026-10-19 around 05:00, specifies last use **on this device**.
+That device scope is settled for the handheld form. First use and a remembered reader or
+printer that is no longer eligible still need proposals and agreement, coordinated with
+A796. This settles the receipt interaction, not B/C/D, the storage design or the build.
+
+### What now controls the original proposal
+
+| Original passage                                                              | Current decision or remaining proposal                                                                                                                                                                                            |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Opening and “The one owner question to send first”                            | A has been answered. Ask only B below; do not resend A.                                                                                                                                                                           |
+| Q1–Q6 and A                                                                   | Q1–Q6 remain settled. A's recommended document meaning is now approved; its alternatives and conditional closing sentences are historical only. Q3's F1 meaning is settled, while dashboard context and remaining skips are open. |
+| B                                                                             | Its profile-context recommendation remains unapproved. The current B below is the next question, with no inherited till memory for a device-free dashboard.                                                                       |
+| C's separate receipt-printer step and device-choice/default-only preselection | Superseded by the inline, collapsible, last-eligible receipt selection below, at and after payment. This is independent of how many printers are offered.                                                                         |
+| C's F1 document step, invoice flow and one-option skips; D                    | Still unapproved, except that a receipt destination cannot require a second picker step. No general document or invoice-picker skip is approved.                                                                                  |
+| Builder contract and persistence                                              | Remain conditional requirements/proposals, with the memory and intent clarifications below. All fiscal, authorization, location, request and outcome boundaries remain required.                                                  |
+| Source map and acceptance evidence                                            | Historical source reading and future evidence owed. No line reference or runtime claim has been refreshed. Original boards are historical where superseded; the revised receipt-flow boards accompany this addendum.              |
+
+### A: approved document meaning
+
+For table 12's recorded full invoice `F/1042`, €86.40 to Mar Azul SL, **Receipt** prints
+that same invoice in its compact layout, including its recorded customer details, through
+the eligible receipt-printer list. **Invoice** prints that same `F/1042` through the
+eligible invoice-printer list, which can include Office · A4 and Terrace belt on receipt
+paper. Neither choice issues a second invoice, number, sale or fiscal record. A printer
+on both lists may produce the same compact layout through either choice.
+
+Original versus copy remains server-derived across both routes and email, with the shared
+full-invoice delivery guard. A does not enable public full-invoice issuance or approve a
+new document. Email and its address validation remain; PDF export and email retain their
+authorization checks. The public full-invoice gate stays closed.
+
+### Receipt at and after payment: apply A796 without an extra printer step
+
+At payment, put the receipt-printer dropdown in the payment form. After payment, put it
+in the same receipt print/reprint form as the final action. Preselect the last-used
+printer only while it is eligible for this receipt context. The selector may be collapsed;
+its summary and the confirmation still name the destination. You expand it only to change
+the choice. No mandatory printer dialog, Next press or second picker page is added, even
+with several eligible printers. This also applies to Receipt for an existing F1 under A.
+
+For example, with Bar receipt remembered and still eligible, payment shows **Receipt ·
+Print on Bar receipt** beside its explicit payment confirmation. That confirmation
+authorizes the staged delivery without an extra printer confirmation. After payment,
+the receipt form offers **Print a copy on Bar receipt** when the server designates a copy.
+Selecting a row, loading offers, opening or collapsing the selector, and saving recipient
+details never print. A later print/reprint needs its own named final press in that form.
+Use the shared field/disclosure primitives, visible collapsed summaries and footer slots;
+reveal an invalid folded field and follow the existing form-error and draft-leave rules.
+
+After-payment Receipt versus Invoice for F1 can still use C's proposed document choice;
+that arrangement is unapproved. Once Receipt is chosen, the receipt selector is inline
+with its final print action, not a mandatory second printer step. D's simplified-sale
+document behavior and C's general one-option skips remain unapproved.
+
+For dashboard Orders, apply the same inline receipt interaction to the eventual form,
+**conditional on B's context decision**. A device-free dashboard cannot inherit a till's
+last-use record, assume the original device's identity or claim its portable receipt
+printer. B's eligibility and proposed exclusion of device-held portable receipt printers
+remain unresolved. The inline pattern does not answer those questions.
+
+A796 names **receipt** printers, not printers in the **invoice role**, even when those
+print on receipt paper. It does not override Q2's invoice-list and eligible device-choice/
+profile-default ordering. For invoice delivery, recommend an inline, collapsible selector
+with a named final confirmation for consistency, but keep that as **unapproved C**; do
+not treat invoice last-use memory as owner-approved. Keep the payment's full-invoice
+recipient/delivery staging and email choice, without a silent switch to the receipt role.
+The card-reader dropdown and its memory belong to A796, outside the A790 build.
+
+### Eligibility, fallback and memory: proposed builder call, persistence not agreed
+
+Recommend receipt last-use shared across payment and later receipt actions **per venue/
+node, authenticated device, current profile, sale/order location and receipt role**.
+Propose durable device-scoped memory across tabs and sign-ins on that device: it is neither
+tab-scoped nor person-scoped; different people on that same device share it. Another
+device or profile has a separate record. This exact scope, storage, lifetime and reset
+behavior need the persistence agreement before build. The owner settled device scope for
+the handheld form; the additional node/profile/location keys, cross-action sharing and
+durable storage above are proposals, not that owner answer. No existing field or migration-free implementation is assumed.
+
+Define proposed “last used” as a destination whose print request the server accepted,
+not one merely selected, staged, loaded or reported as paper delivered. A refused or
+uncertain request does not update memory; reconciliation of that same accepted request
+may do so. Memory updates change no profile default, saved device equipment choice or
+portable-printer holding. If invoice memory is later agreed, give the invoice role a
+separate record; never reuse receipt history. For a device-free dashboard, propose **no
+last-use persistence yet**: B and the persistence agreement must establish any separate
+dashboard scope before one is added. Do not copy or write any till's memory there.
+
+On opening a new receipt intent, use the last-use id only if the server's current offers
+admit it for that scope. Otherwise preselect the eligible explicit device receipt choice,
+then the eligible profile receipt default. If none qualifies, leave the inline field empty
+and ask for a choice there; do not silently promote the first list entry, even a sole
+entry. Loading, failed reads and zero eligible printers keep distinct explanations.
+Eligibility still requires the sale/order's location, active equipment, permitted profile
+list, device/person authorization and receipt-role holding where applicable. Neither
+memory nor an offered id grants permission. Invoice fallback remains Q2's rule until agreed.
+
+Fallback applies only before an intent has a selected destination. Retain a valid selection
+by id across reads. If a selected printer is withdrawn or its context changes, invalidate
+that choice visibly, reveal the field and require an explicit new selection/confirmation;
+do not replace it with remembered equipment or a new default. Freeze the submitted sale,
+document, printer, language and context under its request key. Replays return that accepted
+history after authorization checks, without new work or rerouting. A different destination
+requires a new deliberate confirmation, governed by delivery state. A payment already
+under way is not rolled back for unavailable printing. Preserve uncertain and late-success
+outcomes and reconcile before another request; acceptance is not proof of paper output.
+
+All remaining builder boundaries in the historical body still apply: server-side offers
+and transactional rechecks; restricted Orders visibility and accompanying device checks;
+sale/order-derived location for eligibility, layout and queued work; separate portable
+receipt versus invoice holding; original/copy races and explicit replacement; request
+deduplication; no print-induced drawer/payment/fiscal effect; separate queue Resend policy;
+and the unapproved staging/request-state storage, classification and retention proposals.
+
+### B: the sole current owner question
+
+**When you open Harbour's `F/1042` in dashboard Orders on a laptop with no device profile,
+should the form suggest Counter 1's current Counter profile, visibly labelled “Harbour ·
+Counter (current profile of Counter 1)”, and let you change to another eligible profile
+(recommended), or should it use all eligible sale-location printers or a dedicated
+dashboard print profile?**
+
+Recommend the visible current profile only while Counter 1 is active, its current profile
+is non-retired and the device is still at Harbour; otherwise require an eligible profile
+choice in the same form. Label it current, never “profile at sale”. Filter every list by the sale's
+Harbour location even if the dashboard filter says Hillside. This retains Q3's profile
+lists and offers a deliberate recovery path when Counter 1 is moved or deleted. The tradeoff
+is a visible profile context and an occasional inline choice. Selecting it grants no device
+identity or extra authority. B also includes the original proposal to exclude device-held
+portable printers from device-free Receipt, while leaving invoice-role holding ignored.
+
+All eligible Harbour printers would avoid profile selection but bypass Q3's lists, requiring
+an explicit dashboard exception. A dedicated dashboard profile would be independent of
+Counter 1 but add a setting and setup work. None permits Hillside equipment, more sale
+visibility, a device impersonation or reuse of till last-use memory. B remains unapproved.
+
+Ask B only. C, D and persistence are later unapproved topics, not additional owner questions
+in this revision. Complete design/board agreement is still required before planning/build.
+
+The [eight revised static boards](../../backlog/mockups/a790-document-and-printer-choice/revision-2026-10-19/README.md)
+show collapsed and expanded equipment in the payment form, and after-payment Receipt in
+the same print form. They cover English/Spanish, light/dark and 390/1280 px. All eight
+PNGs were inspected; they exercise no product behavior, accessibility or physical paper.
+For B, use the existing [English phone board](../../backlog/mockups/a790-document-and-printer-choice/b-dashboard-printer-context-en-light-390.png)
+and [Spanish dark phone board](../../backlog/mockups/a790-document-and-printer-choice/b-dashboard-printer-context-es-dark-390.png).
+The original boards remain historical alternatives wherever superseded. Neither old nor
+revised boards approve C/D or the complete build.
+
+## Historical body: original proposal before the 2026-10-19 revision
+
+The following body is preserved verbatim. Apply the addendum above at the exact points
+listed in its precedence table; unanswered recommendations remain unapproved.
+
 # A790: choose a document, then its printer
 
 **DESIGN PROPOSAL, 2026-10-19. Not approved for build.** You should be able to print an
