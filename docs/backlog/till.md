@@ -2241,6 +2241,13 @@ The remaining work includes:
   local checkpoint ledger for exact remaining checks and receipts; do not treat earlier focused
   checks as whole-item acceptance.
 
+The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
+uses the authenticated routes and a real venue database. A fresh route instance reads the saved
+arrangement before another person takes it over. Sending only the fresh beer leaves the measured
+dish, recalled source and recorded discount in the outbox; replay leaves the checked financial
+and kitchen rows unchanged. These cases complement the native app's controlled API checks.
+They do not join a browser to a running server or replace the physical till trial.
+
 The approved [courses/groups spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md)
 and [one-editor-per-bill amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
 remain the design authority. Their owner-approved wording and the six answers in spec §14 remain

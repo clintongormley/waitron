@@ -42,6 +42,8 @@ import { VENUE_SERVICE } from "./modules.js";
 import { readStoredOrder } from "./working-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { groupByParent } from "./receipt-lines.js";
+import { loginWithPin } from "@waitron/identity";
+import { SESSION_COOKIE } from "./till-session.js";
 
 let venue: BillVenue;
 useVenueDb({
@@ -693,3 +695,144 @@ describe("recalled modifier edits", () => {
 });
 
 const send = observedGroupSender(() => venue.db, rawGroupSend);
+
+describe("mixed New order persistence through authenticated requests", () => {
+  it.each([false, true])(
+    "keeps fresh placement and a discounted recalled family through reread, takeover and partial send, variant=%s",
+    async (variant) => {
+      const p = await setup(variant);
+      const before = await frozen(p);
+      const path = `/api/parties/${p.partyId}/drafts`;
+      const firstRead = await call("GET", path);
+      expect(firstRead.status).toBe(200);
+      const edit = (firstRead.json.billEdits as BillDraftSnapshot["edit"][]).find(
+        (entry) => entry.billId === p.tabId,
+      )!;
+      const places = [
+        { slot: 0, joinGroupId: null, afterGroupId: null },
+        { slot: 2, joinGroupId: null, afterGroupId: p.parent.groupId },
+        { slot: 0, joinGroupId: p.parent.groupId, afterGroupId: null },
+      ];
+      const saved = await call("PUT", path, {
+        billId: p.tabId,
+        draftId: p.draft.id,
+        revision: p.draft.revision,
+        expectedEdit: edit,
+        lines: [
+          { menuItemId: venue.offerFor("Caña"), quantity: "2", ...places[0] },
+          {
+            menuItemId: venue.offerFor("Pulpo"),
+            quantity: "0.375",
+            note: "Fresh measured dish",
+            ...places[1],
+          },
+          { ...p.draft.lines[0]!, ...places[2] },
+        ],
+      });
+      expect(saved.status, JSON.stringify(saved.json)).toBe(200);
+      const snapshot = saved.json as unknown as BillDraftSnapshot;
+      const draft = snapshot.draft!;
+      expect(draft.lines).toHaveLength(3);
+      expect(draft.lines).toMatchObject(places);
+      expect(draft.lines.map((line) => line.quantity)).toEqual(["2.000", "0.375", "2.000"]);
+      expect(draft.lines[2]).toMatchObject({
+        id: p.draft.lines[0]!.id,
+        sourceLineId: p.parent.id,
+        source: {
+          netAmount: "28.50",
+          line: { id: p.parent.id, unitPriceGross: "13.50", quantity: "2.000" },
+          extras: [{ quantity: "2.000", unitPriceGross: "0.75" }],
+        },
+      });
+      expect(draft.lines[2]!.source).toEqual(p.draft.lines[0]!.source);
+      const afterSave = await frozen(p);
+      expect(afterSave).toEqual({
+        ...before,
+        sources: before.sources.map((row) =>
+          row.id === p.draft.lines[0]!.id ? { ...row, position: 3 } : row,
+        ),
+      });
+
+      const login = await inTx(venue, (tx) =>
+        loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
+      );
+      const cookie = `${SESSION_COOKIE}=${login.token}`;
+      const freshApp = venue.appAt(venue.clock);
+      const readAgain = await rawGroupSend(freshApp, cookie, "GET", path);
+      expect(readAgain.status).toBe(200);
+      expect(readAgain.json).toEqual({ drafts: [draft], billEdits: [snapshot.edit] });
+      expect(await frozen(p)).toEqual(afterSave);
+
+      const taken = await rawGroupSend(freshApp, cookie, "POST", `${path}/${draft.id}/take-over`, {
+        submissionId: randomUUID(),
+        revision: draft.revision,
+        expectedEdit: snapshot.edit,
+      });
+      expect(taken.status, JSON.stringify(taken.json)).toBe(200);
+      const transferred = taken.json as unknown as BillDraftSnapshot;
+      expect(transferred.draft).toMatchObject({
+        id: draft.id,
+        billId: p.tabId,
+        ownerId: venue.adminId,
+        revision: draft.revision + 1,
+        lines: draft.lines,
+      });
+      expect(transferred.edit).toMatchObject({
+        billId: p.tabId,
+        editorId: venue.adminId,
+        editorVersion: snapshot.edit.editorVersion + 1,
+        draftId: draft.id,
+        draftRevision: draft.revision + 1,
+      });
+      expect(await frozen(p)).toEqual(afterSave);
+
+      const selectedRequest = {
+        ...(await command(p.partyId)),
+        draftRevision: transferred.draft!.revision,
+        expectedEdit: transferred.edit,
+        groups: [{ release: "fire", lineIds: [draft.lines[0]!.id] }],
+      };
+      const sent = await rawGroupSend(
+        freshApp,
+        cookie,
+        "POST",
+        `${path}/${draft.id}/submit`,
+        selectedRequest,
+      );
+      expect(sent.status, JSON.stringify(sent.json)).toBe(200);
+      const partial = sent.json as unknown as BillDraftSnapshot;
+      expect(partial.draft).toMatchObject({
+        id: draft.id,
+        ownerId: venue.adminId,
+        revision: transferred.draft!.revision + 1,
+        lines: draft.lines.slice(1),
+      });
+      expect(partial.draft!.lines).toHaveLength(2);
+      expect(partial.edit).toMatchObject({
+        editorId: venue.adminId,
+        editorVersion: transferred.edit.editorVersion,
+        draftId: draft.id,
+        draftRevision: partial.draft!.revision,
+      });
+      const stored = await family(p);
+      expect(
+        stored.filter((line) => line.id === p.parent.id || line.parentLineId === p.parent.id),
+      ).toEqual(before.lines);
+      expect(
+        stored.filter((line) => line.id !== p.parent.id && line.parentLineId !== p.parent.id),
+      ).toMatchObject([{ name: "Caña", quantity: 2000, lineTotal: 600 }]);
+      expect(stored).toHaveLength(3);
+      const afterSend = await frozen(p);
+      expect(afterSend.adjustments).toEqual(before.adjustments);
+      expect(afterSend.sources).toEqual(afterSave.sources);
+
+      const rereadPartial = await rawGroupSend(venue.app, venue.cookie, "GET", path);
+      expect(rereadPartial.status).toBe(200);
+      expect(rereadPartial.json).toEqual({ drafts: [partial.draft], billEdits: [partial.edit] });
+      expect(
+        await rawGroupSend(freshApp, cookie, "POST", `${path}/${draft.id}/submit`, selectedRequest),
+      ).toEqual(sent);
+      expect(await frozen(p)).toEqual(afterSend);
+    },
+  );
+});
