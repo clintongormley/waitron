@@ -630,11 +630,11 @@ describe("the Home page tab's shortcuts", () => {
         : null;
 
     it.each([
-      { removed: "t-drinks", left: ["t-burger", "t-chips"], to: "actions-t-chips" },
-      { removed: "t-chips", left: ["t-burger", "t-drinks"], to: "actions-t-drinks" },
+      { removed: "t-drinks", left: ["t-burger", "t-chips"], to: "remove-t-chips" },
+      { removed: "t-chips", left: ["t-burger", "t-drinks"], to: "remove-t-drinks" },
       { removed: "t-burger", left: [], to: "add-product" },
     ])(
-      "goes to the next shortcut's ⋮, else the previous one's, else the add products tile (removing $removed)",
+      "goes to the next shortcut's Remove button, else the previous one's, else the add products tile (removing $removed)",
       async ({ removed, left, to }) => {
         const reread = deferred<MenuHome>();
         const start = removed === "t-burger" ? homeWith("t-burger") : menuHome();
@@ -649,13 +649,13 @@ describe("the Home page tab's shortcuts", () => {
       },
     );
 
-    it("stays on the shortcut's own ⋮ when its remove is refused", async () => {
+    it("stays on the shortcut's own Remove button when its remove is refused", async () => {
       const client = api({
         removeHomeShortcut: vi.fn().mockRejectedValue({ code: "menu_section.not_found" }),
       });
       const el = await mountHome(client);
       emit(preview(el)!, "wt-shortcut-remove", { memberId: "t-drinks" });
-      await vi.waitFor(() => expect(focused(el)).toBe("actions-t-drinks"));
+      await vi.waitFor(() => expect(focused(el)).toBe("remove-t-drinks"));
     });
   });
 
