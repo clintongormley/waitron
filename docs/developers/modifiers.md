@@ -216,8 +216,8 @@ Reading them back, four wire types carry `optionSnapshots`: `TabLine`, `HeldOrde
 `StationQueueItem` and `ExpoItem`, all declared in `apps/server/src/working-order.ts`. A held order's lines also carry an
 `extras` array holding what each CHILD line froze, with the list each pick was taken from
 (`listId`). The till rebuilds a selection from them against the dish's live offer: a pick goes back
-to its own list while that list still offers the product, and another list offering the same product
-is not used in its place (`deriveExtraSelections` and `deriveOptionSelections`,
+to its own list while that list still offers the product and the dish still takes extras
+(`offeredListsOf`), and another list offering the same product is not used in its place (`deriveExtraSelections` and `deriveOptionSelections`,
 `apps/till/src/state/`) — see the end of this section.
 
 An edit of a saved order sends each line's answers again, and prices only what the edit adds (menus

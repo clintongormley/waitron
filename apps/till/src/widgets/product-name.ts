@@ -78,7 +78,6 @@ export function productUnit(
   );
 }
 
-/** Counted in whole units, never weighed or measured. */
 export function soldByTheUnit(product: Pick<TillProduct, "unit" | "pricingUnit">): boolean {
   const unit = productUnit(product);
   return unit.hardwareUnit === null && unit.precision === 0;

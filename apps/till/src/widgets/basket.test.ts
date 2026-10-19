@@ -1033,7 +1033,7 @@ it("offers no Edit on a line whose only question was its variant", async () => {
 });
 
 it("offers no Edit on a weighed line whose dish offers only extras", async () => {
-  // The server refuses extras on a dish not sold by the unit (`extras.unsupported_product`).
+  // The server refuses extras on a dish not sold in whole portions (`extras.unsupported_product`).
   const store = new WorkingOrderStore();
   const product: TillProduct = {
     ...jamon,

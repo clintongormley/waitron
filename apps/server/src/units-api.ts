@@ -59,7 +59,6 @@ function screenTranslatable(
   if (!isPlainObject(value)) throw new AppError("management.request_invalid", { field });
 }
 
-/** Absent stays absent; an explicit null is refused like any other non-boolean. */
 function screenMeasure(value: unknown): boolean | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") {

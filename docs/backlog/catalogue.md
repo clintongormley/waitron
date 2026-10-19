@@ -892,6 +892,17 @@ keeps the class it was added with, and only a line added after the publish takes
 `apps/server/src/vat-class-at-line-add.test.ts`). Add that to the help text and the guide, in both
 languages. Done when both say it.
 
+## A dish in a measure unit is still rung up one unit per tap
+
+Left open by A821f. A 250 ml line is 1 ml per tap with ±1 steps, the split control turns it into
+250 lines, a course group counts it as 250 items (`itemCount`, `apps/till/src/state/draft-groups.ts`),
+and the basket-refresh dialog prices it "each". Whether a measure should ask its quantity as a
+decimal unit does — which would change the other readers of the till's `soldByTheUnit`
+(`apps/till/src/widgets/product-name.ts`) — is the owner's call. Its readers: `splitLine`
+(`apps/till/src/state/working-order.ts`), `countsWholeUnits` and the last-added steps and split
+control (`apps/till/src/screens/till-table-order-screen.ts`), and the price label
+(`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
+
 ## Decisions and deliberate limits
 
 ### A651 — drop photos to upload them, and tidy the image library and its picker
@@ -1096,7 +1107,7 @@ From "Extras and Options — deliberate limits, and what is left open"
   `packages/catalogue/src/migrations.test.ts` checks they stay gone.
 - **Extras only on a dish sold by the unit (owner, 2026-10-15; A663 Part 2d).** A dish whose unit
   has a scale or allows decimal places takes no extras, so 1 l of sangría cannot carry one; to sell
-  it with extras, sell it in a unit with no decimals (a jug).
+  it with extras, sell it in a unit with no decimals and the measure switch off (a jug).
   Owner, 2026-10-19 (A821): a unit can be marked a measure ("Mide una cantidad (ml, g…) — sin
   extras"), and a dish in a measure takes no extras either. On a newly set-up venue the seeded ml,
   l, g, kg and mg start with it on; a new unit starts with it off. The switch is frozen into the

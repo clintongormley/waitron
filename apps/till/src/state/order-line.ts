@@ -66,8 +66,6 @@ export function takesExtras(product: Pick<TillProduct, "unit" | "pricingUnit">):
   return soldByTheUnit(product) && productUnit(product).measure !== true;
 }
 
-/** The lists the till offers on this dish: no extras list unless it is sold in whole portions — not
- * weighed, not in decimals, not a measure. */
 export function offeredListsOf(
   product: Pick<TillProduct, "offeredModifiers" | "unit" | "pricingUnit">,
 ): NonNullable<TillProduct["offeredModifiers"]> {

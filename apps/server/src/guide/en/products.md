@@ -38,8 +38,8 @@ kilograms or milligrams), or by a unit whose **Precision** allows decimal places
 time, to no more decimal places than the unit allows. Any other product sells one per tap. The
 receipt prints the quantity with the unit's abbreviation, such as 0.35 kg. A product the till asks
 the quantity of cannot take extras. Nor can a product in a unit switched to **Measures a quantity
-(ml, g…) — no extras**: the millilitres, litres, grams, kilograms and milligrams Waitron provides
-start with it on, a unit you add starts with it off, and a change to it reaches the till when you
+(ml, g…) — no extras**: when Waitron sets up a venue, the millilitres, litres, grams, kilograms and
+milligrams it provides start with it on, a unit you add starts with it off, and a change to it reaches the till when you
 next publish the menus that sell the unit's products.
 
 ## Give a product up to three names {#names}

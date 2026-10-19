@@ -1297,14 +1297,9 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
     staff can only delete the line. Read, not run.
 
 - **A dish in a measure unit is still rung up one unit per tap** (A821f). A 250 ml line is 1 ml per
-  tap with ±1 steps, the split control turns it into 250 lines, a course group counts it as 250
-  items (`itemCount`, `apps/till/src/state/draft-groups.ts`), and the basket-refresh dialog prices
-  it "each". Whether a measure should ask its quantity as a decimal unit does — which would change
-  the other readers of the till's `soldByTheUnit` (`apps/till/src/widgets/product-name.ts`) — is
-  the owner's call. Its readers: `splitLine` (`apps/till/src/state/working-order.ts`),
-  `countsWholeUnits` and the last-added steps and split control
-  (`apps/till/src/screens/till-table-order-screen.ts`), and the price label
-  (`apps/till/src/widgets/basket-refresh-dialog.ts`). Read, not run.
+  tap, splits into 250 lines and counts as 250 items. Whether a measure should ask its quantity as
+  a decimal unit does is the owner's call.
+  [Detail](backlog/catalogue.md#a-dish-in-a-measure-unit-is-still-rung-up-one-unit-per-tap)
 
 - **The Units list does not show which units are measures** (A821f), and switching one on gives no
   warning that the dishes in that unit lose their extras lists at the next publish.

@@ -15627,7 +15627,7 @@ describe("a failed list refresh after a successful write", () => {
 
 describe("a counter pay, place or hold refused for a reason the operator can act on", () => {
   // Each of these refusals names what to do (wait for the card, remove the sold-out item, the one
-  // sold only as an extra, or the extras on a dish not sold by the unit); the generic "try again"
+  // sold only as an extra, or the extras on a dish not sold in whole portions); the generic "try again"
   // would send the operator round the same refusal.
   const actions = [
     ["confirm-payment", { method: "cash", amount: "5" }, "recordSale", undefined, "sale.error"],

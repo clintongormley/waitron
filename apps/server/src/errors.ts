@@ -292,7 +292,7 @@ declare module "@waitron/shared" {
      */
     "sale.unsupported_tender": { method: string };
     /** An extras pick on a dish not sold in whole portions: its unit has a scale (`soldBy:
-     *  "weight"`), allows decimal places (`"fraction"`), or is marked a measure such as ml
+     *  "weight"`), else allows decimal places (`"fraction"`), else is marked a measure such as ml
      *  (`"measure"`). A child line is priced at the dish's quantity times the pick count, so on such
      *  a dish an extra's quantity would not be a number of extras. */
     "extras.unsupported_product": {
