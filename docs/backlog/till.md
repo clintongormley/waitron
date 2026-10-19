@@ -1386,8 +1386,13 @@ a table has paid (§3.8, pictures 06–09), then rewritten the same day for the 
 Revised again on 2026-10-19 for the owner's Q43 notes, and settled: Cancel item… follows where the
 dish is (§3.3, picture 03), the refund permission decides "Cancel, don't charge" on an unpaid bill
 and every refund, a Void reason is a label, and Finish table on a paid table cancels every dish not
-served with a Refund tick each (§3.8, pictures 06–08). What A773-1 builds is in the design's §10;
-one question, in four parts, is open (§11). The notes below are the review as written before the
+served with a Refund tick each (§3.8, pictures 06–08). Revised a second time on 2026-10-19 for the
+owner's four answers to A758r3's question: the Spanish words (§3.9; the question and the report
+column are «En preparación»), no confirmation switch on a cash refund (§3.8.2, with what the drawer
+and its count do), a fired dish removed before preparation started not listed, and the refund
+screen's Reason as the same drop-down (§3.8 item 3). What A773-1 builds is in the design's §10. One
+question is open (§11): whether a handheld that takes no cash may record a cash refund; recommended
+no, as today. The notes below are the review as written before the
 answers: where they differ from the design's decisions (§1 there) — three kinds, give-away against
 100% discount, "Invitación", role lists "with or after" editable roles, approval for a Void by
 reason or by stage — the design wins.

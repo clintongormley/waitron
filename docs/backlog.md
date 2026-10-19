@@ -2141,9 +2141,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   "Ask for approval" button; the reason is a drop-down; nine starter reasons (with Not served and
   Other). Finish table on a paid table cancels every dish not served, with a Refund tick each, or
   sends the order to the counter to be collected (its own slice). A773-1 builds the till dialogs
-  (design §10); A758's slices follow it. **One question, in four parts, is open (§11): the Spanish
-  for the new till words, the cash refund's switch, whether a fired dish removed before preparation
-  started is listed in the report, and the refund screen's Reason.**
+  (design §10); A758's slices follow it. **Revised again 2026-10-19 for the owner's four answers:**
+  the Spanish words (the question and the report column are «En preparación»); no confirmation
+  switch on a cash refund; a fired dish removed before preparation started is not listed; the refund
+  screen's Reason is the same drop-down. **One question is open (§11): whether a handheld that takes
+  no cash may record a cash refund** (recommended: no, as today); nothing else waits on it.
   [Detail](backlog/till.md#a758-adjustment-reasons-review-the-rules-then-a-page-of-their-own),
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)
