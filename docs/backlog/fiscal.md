@@ -271,6 +271,14 @@ entry point. A separate proposal keeps the signed provisioning and registration 
 their historical dispatcher; its scope change also awaits exact approval. The other restore,
 Cloud, retirement and promotion failures still need diagnosis and qualification.
 
+Authenticated first-setup HTTP checks also refuse the retired Cloud-reservation and serial-candidate
+proposals with Cloud issuer settings present. Both keep the attempt state unchanged and make no
+outside request. Substituting the historical document selector in an independently installed copy
+makes both return 200 and fail their 400 assertions. A separate proposal scopes the five older
+Cloud-document route cases to that historical selector, retaining all 22 assertion expressions;
+its scope approval remains pending. These checks do not qualify current-hour re-registration
+through the command or complete the other restore and promotion integration.
+
 Provisioning's new layout of six shards still needs CI timing qualification. `test-light-a`
 reaches its ten-minute job limit while still reporting advancing provisioning files:70 completed
 files total520.5seconds, with the largest taking160.9seconds. The dedicated shards retain the

@@ -3,6 +3,21 @@
 Use this inventory to review changes to checks that existed before the replacement setup flow.
 It records changes on the candidate branch, not acceptance of the finished product.
 
+## Retired first-setup HTTP routes, 2026-10-19
+
+`apps/server/src/retired-first-setup-routes.test.ts` adds two current-production cases. They send
+the old Cloud-reservation and serial-candidate proposals through the authenticated setup route,
+with configured issuer files, and require HTTP 400 with `sif.allocation_invalid`, unchanged setup
+state and no outside request. In an independently installed copy, substituting the historical
+document selector makes both return 200; restoring the production selector passes both. No
+existing assertion or fixture changes in this addition. The hour plan's Task 11 retires those
+selection protocols.
+
+The separately tested proposal for `first-fiscal-cloud.route.test.ts` remains unapplied pending
+exact scope approval. It selects the retained historical document adapter explicitly and preserves
+all five existing cases and all 22 assertion expressions. It would qualify that adapter's imports,
+owner checks and retained grants, rather than production support for Cloud allocation selection.
+
 | Check | Before | After | Authority |
 | --- | --- | --- | --- |
 | `apps/server/src/first-fiscal-boot.test.ts:262` | Wait for `server.listening` in the interrupted child. | Wait for `recovery.listening`. | Owner approval, 2026-10-16 09:44, for these exact two lines. The replacement plan's Task 8 serves resolution before ordinary boot. |
