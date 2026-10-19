@@ -58,7 +58,7 @@ to return. It is a well-formed reply to a well-formed query, not a fault.
    >
    > **Pointer, 2026-10-19:** A795 adds expiry warnings: a dashboard alert as the AEAT certificate
    > nears expiry and once it has expired, and an email to each active manager and administrator
-   > with an email address, at most once each when the warning starts, when it turns urgent and when
+   > with an email address, on a box that files records and has outgoing mail set up, at most once each when the warning starts, when it turns urgent and when
    > the certificate expires. How AEAT itself answers an expired certificate is still one of the owner's
    > checks before A795 lands (A888 in [the backlog](../backlog/fiscal.md)).
 2. **The obligado's NIF is not the certificate holder's ID.** The certificate identifies a natural

@@ -40,6 +40,7 @@ export default defineConfig({
             provider: playwright({ contextOptions: { timezoneId: "America/New_York" } }),
             headless: true,
             instances: [{ browser: "chromium" }],
+            // The a11y suites import @waitron/ui's a11y-helpers.ts, whose beforeEach runs this command.
             commands: { ...parkPointerCommands },
           },
         },

@@ -7,10 +7,11 @@ import { WORKFORCE_DASHBOARD } from "@waitron/workforce/dashboard";
 import { VERIFACTU_DASHBOARD } from "@waitron/fiscal-verifactu/src/dashboard/index.js";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
 
-// The dashboard's module registry: every module that contributes a dashboard screen names itself here,
-// and the app iterates this list to mount them generically. This is the ONE place that names each
-// UI-bearing module (the browser twin of @waitron/composition's server descriptor list); the app under
-// apps/dashboard imports neither a module nor @waitron/composition, only this registry.
+// The dashboard's module registry: every module that contributes to the dashboard (a screen, a
+// settings panel or a Calendar view) names itself here, and the app iterates this list to mount
+// them generically. This is the ONE place that names each UI-bearing module (the browser twin of
+// @waitron/composition's server descriptor list); the app under apps/dashboard imports neither a
+// module nor @waitron/composition, only this registry.
 export const DASHBOARD_MODULES: readonly DashboardContribution[] = [
   MEDIA_DASHBOARD,
   BOOKINGS_DASHBOARD,

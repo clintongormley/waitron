@@ -449,6 +449,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   certificate has no install record, so the card shows no details and the expiry alert and emails
   cannot see its date until it is installed again on the card, or the box is reset. No migration
   code, by the pre-production rule.
+  [Detail](backlog/fiscal.md#a889-a-box-set-up-before-a795-shows-installed-not-recorded)
 
 - **A853. The box makes a company seal's private key itself** (decided out of A795, 2026-10-18).
   FNMT issues a seal only for a key pair and certificate request made on the subscriber's machine,

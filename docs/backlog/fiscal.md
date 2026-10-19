@@ -967,6 +967,13 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
+- **A795, owner decisions 2026-10-18 (design §9, Q1–Q3).** Replacing the AEAT certificate needs the
+  existing `system.manage` (managers and admins); no new permission. Warnings go by type, in
+  calendar days left: a company seal turns amber at 90 and red at 30, a representative certificate
+  at 60 and 14 (`CERTIFICATE_THRESHOLDS`, `packages/fiscal-verifactu/src/certificate-dates.ts`). The
+  box emails every active person holding `system.manage` who has an email address, at most once per
+  person and stage. Receipt: [plan §1](../superpowers/plans/2026-10-18-a795-aeat-certificate-after-setup.md).
+
 - **Owner decision 2026-10-17: cancelling an invoiced bill checks the permission first**, as the
   drawer, refund and unpaid-departure routes do: "not permitted" (with the PIN checked and counted)
   comes before any payment refusal. The build is A845.

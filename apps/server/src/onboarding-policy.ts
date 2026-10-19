@@ -15,7 +15,10 @@ export function fiscalDrainEnabled(policy: FiscalDrainPolicy): boolean {
   return policy.fiscalTestSubmissions;
 }
 
-/** The certificate's expiry alert and emails run only where its records are filed. */
+/**
+ * The certificate's expiry alert and emails run only on a box whose policy files records
+ * (`fiscalDrainEnabled`); the email loop also checks on each pass that this node is the primary.
+ */
 export function certificateDutiesEnabled<
   F extends { readonly certificate?: FiscalCertificateSeat },
 >(

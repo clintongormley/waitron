@@ -79,9 +79,10 @@ The guard also requires wording for `alert.source_unavailable`, the alert the se
 of an ongoing check that failed.
 
 A sibling guard, `scripts/ongoing-alert-codes.test.ts`, holds the ongoing (non-incident) source codes
-to the same English-and-Spanish wording bar; it too reads source TEXT and hand-lists its two source
-files (`apps/server/src/alert-sources.ts`, `packages/fiscal-verifactu/src/submission-alerts.ts`), so an
-ongoing source added in a third file is silently missed until it is added to that list.
+to the same English-and-Spanish wording bar; it too reads source TEXT and hand-lists its source files
+(`apps/server/src/alert-sources.ts`, `packages/fiscal-verifactu/src/submission-alerts.ts`,
+`packages/fiscal-verifactu/src/certificate-alerts.ts`), so an ongoing source added in any other file
+is silently missed until it is added to that list.
 
 ## Spanish domain terms are deliberate, and a module declares its own
 

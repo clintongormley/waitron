@@ -316,6 +316,13 @@ declare module "@waitron/shared" {
     "fiscal.filing_cases_open": { count: number };
 
     /**
+     * The same ongoing check, one per chain: AEAT refused `count` records of the chain in a row
+     * with the code `codigo`, and the chain's next records are held (./drain.ts,
+     * `SAME_CODE_REFUSAL_LIMIT`). Never thrown.
+     */
+    "fiscal.refusals_repeated": { codigo: string; count: number };
+
+    /**
      * An ongoing-alert code from ./certificate-alerts.ts, never thrown: the node's AEAT certificate
      * ends on the venue-local day `date`, `days` calendar days away.
      */
@@ -326,13 +333,6 @@ declare module "@waitron/shared" {
      * Never thrown.
      */
     "fiscal.certificate_expired": { date: string };
-
-    /**
-     * The same ongoing check, one per chain: AEAT refused `count` records of the chain in a row
-     * with the code `codigo`, and the chain's next records are held (./drain.ts,
-     * `SAME_CODE_REFUSAL_LIMIT`). Never thrown.
-     */
-    "fiscal.refusals_repeated": { codigo: string; count: number };
 
     /**
      * An ongoing-alert code raised by `apps/server/src/alert-sources.ts`, not by this package; it
