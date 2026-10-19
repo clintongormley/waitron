@@ -3873,7 +3873,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   branch, the name field showed "Restaurant" again after "Restaurant revised" was saved, until the
   screen's next refresh put it right; and an older copy arriving after the save answered took a
   just-saved step "Coffee" out of the list, so a later step save would delete that row. The name
-  stays wrong only if that refresh fails or is thrown away; the step stays gone until a copy with
+  stays wrong if that refresh fails or is thrown away, or if another field is edited before it lands; the step stays gone until a copy with
   different steps arrives. `git blame` on the branch's base puts the whole-copy replacement in
   06772ee25 (2026-10-10), so I believe the name case predates slice 7; not run on `main`. A fix
   needs the save to return what it stored (the steps' ids) or a version on the venue copy.

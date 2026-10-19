@@ -1999,66 +1999,6 @@ it("a step list another manager changed while a rename's save is sent is shown a
   expect(sentSteps(sent[1])).toEqual([...SENT_STEPS.slice(0, 2), TEA]);
   finish();
 });
-const stepLocks = (el: DepartmentSettings) => ({
-  list: stepList(el).disabled,
-  controls: stepRows(el).map((_, index) =>
-    (["Name", "Start", "Minutes"] as const).map(
-      (name) => (stepControl(el, index, name) as StepControl & { disabled: boolean }).disabled,
-    ),
-  ),
-  add: !!stepList(el).shadowRoot!.querySelector("[data-test=add-service-step]"),
-});
-const LOCKED = { list: true, controls: Array(3).fill([true, true, true]), add: false };
-it("a department reopened before the refresh after its new step's save lands keeps its step list read-only until the refreshed list, with the new step's id, arrives", async () => {
-  const { el: closed, writes } = await mount(stepsView());
-  await selectDepartmentTab(closed, "service");
-  await settled(closed);
-  await addStep(closed);
-  await editStep(closed, 3, "Name", "Coffee");
-  save(closed).click();
-  await expect.poll(() => writes.length).toBe(1);
-  closed.remove();
-  const el = document.createElement("department-settings");
-  el.api = closed.api!;
-  el.model = stepsView();
-  el.departmentId = "d1";
-  el.refreshing = true;
-  hosts[0]!.append(el);
-  await selectDepartmentTab(el, "service");
-  await settled(el);
-  expect(stepNames(el)).toEqual(["Set up", "Take order", "Dessert?"]);
-  expect(stepLocks(el)).toEqual(LOCKED);
-  el.model = withCoffee();
-  el.refreshing = false;
-  await settled(el);
-  expect(stepList(el).steps.map((step) => [step.id, step.name])).toEqual([
-    ["s1", "Set up"],
-    ["s2", "Take order"],
-    ["s3", "Dessert?"],
-    ["s4", "Coffee"],
-  ]);
-  await addStep(el);
-  await editStep(el, 4, "Name", "Tea");
-  save(el).click();
-  await expect.poll(() => writes.length).toBe(2);
-  expect(sentSteps(writes[1]!.body)).toEqual([...SENT_STEPS, { id: "s4", ...COFFEE }, TEA]);
-});
-it("the step list can be edited again once the form stops refreshing", async () => {
-  const { el } = await mount(stepsView());
-  await selectDepartmentTab(el, "service");
-  el.refreshing = true;
-  await settled(el);
-  expect(stepLocks(el)).toEqual(LOCKED);
-  el.refreshing = false;
-  await settled(el);
-  expect(stepLocks(el)).toEqual({
-    list: false,
-    controls: Array(3).fill([false, false, false]),
-    add: true,
-  });
-  await addStep(el);
-  expect(stepRows(el)).toHaveLength(4);
-});
 it("changing a step and changing it back sends no steps", async () => {
   const { el, writes } = await mount(stepsView());
   await selectDepartmentTab(el, "service");

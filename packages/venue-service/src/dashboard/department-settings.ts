@@ -645,8 +645,8 @@ export class DepartmentSettings extends LitElement {
           committed.transfers = copy(this.baseline!).transfers;
         if (!this.showsTransfers) delete committed.transfers;
         this.baseline = committed;
-        // The copy held now, unless it is the saved list with ids filled in, is recorded as seen
-        // and not taken back; an older copy arriving after this answer is still followed.
+        // After a save that sent steps, the copy held now, unless it is the saved list with ids
+        // filled in, is recorded as seen and not taken back; a copy arriving later is still followed.
         const steps = this.modelSteps(id);
         if (submitted.serviceSteps && !withSavedIds(committed.serviceSteps, steps))
           this.source = { ...this.source!, serviceSteps: steps };
@@ -863,7 +863,7 @@ export class DepartmentSettings extends LitElement {
               .courses=${this.model!.courses}
               .errors=${this.shownStepErrors}
               .listError=${errors.serviceSteps ?? ""}
-              ?disabled=${disabled || this.refreshing}
+              ?disabled=${disabled}
               @steps-change=${(e: CustomEvent<{ steps: ServiceStepDraft[] }>) => {
                 e.stopPropagation();
                 this.stepsChanged(e.detail.steps);
