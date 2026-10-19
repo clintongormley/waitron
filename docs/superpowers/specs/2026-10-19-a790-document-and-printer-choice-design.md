@@ -1,3 +1,87 @@
+# A790: K agreed; L proposed, 2026-10-19, after the 16:55 answer
+
+**A–K are approved only in their precise answered scopes. L alone is proposed next.**
+This addendum takes precedence over conflicting text/boards below. Every old byte remains
+an exact historical suffix, including former questions and inspection statements.
+
+K authority: the owner's **“STAY OPEN + REFRESH”** answer in
+`/Users/clintongormley/waitron-campaign-f/questions.md`, 2026-10-19 about 16:55.
+After a **successful offers read yields no eligible printer**, keep the dashboard document
+form open with **No printers available for this document**, quiet disabled Print,
+**Refresh printers** and **Cancel**. Refresh explicitly reads offers only; it never prints
+or polls. Reveal no inaccessible printer names/details. Loading, read failure and an
+unanswered submitted print remain separate. Empty offers leave printer memory alone.
+If a refresh offers one printer, explicitly choose and confirm; G does not select mid-form.
+
+## L alone: proposed targeted forgetting
+
+**Should the device-free dashboard print form offer Forget saved printer for this document
+at this venue in this browser (recommended), or leave clearing site data as the only manual
+way to forget it?** Recommend targeted forgetting so you can clear one old preference without
+forgetting other document/venue choices or other site data. This is a browser preference,
+shared across everyone who signs in here under H. It is not printer deletion, deactivation,
+reconfiguration, device Equipment or an administrator permission. Both alternatives retain
+current offers/permissions and never print by themselves. Neither implementation is claimed.
+
+Worked example, **same normal shared browser; all submissions have known outcomes**:
+Ana's Harbour `F/1042` Receipt request on **Patio receipt** was accepted and completed.
+Harbour Invoice separately remembers **Office · A4**; Hillside Receipt remembers **Hillside
+bar**. **Bar receipt** and **Patio receipt** are active and eligible to Luis.
+
+- **Targeted Forget, proposed/recommended:** explicitly clear only Harbour/Receipt memory
+  for this browser, across logins. Harbour Invoice and Hillside remain unchanged. In the open
+  form, this requested action also explicitly clears the printer selection: choose again,
+  then give named confirmation. G cannot auto-select mid-form. The next **newly opened**
+  Harbour Receipt form with these same two offers follows J: **Choose a printer**, quiet
+  disabled Print. Luis explicitly chooses Bar, then still presses **Print a copy on Bar
+  receipt** when the server designates a copy. Only server acceptance remembers Bar.
+- **No targeted control, proposed alternative:** Patio remains remembered until a normal
+  accepted replacement or clearing site data (I). Clearing site data is not a simple form
+  button in these boards; no claim is made about what unrelated site data contains.
+
+L applies **only with no unanswered submitted request**. Forget is explicit local preference
+clearing, not print/request cancellation. It must not discard pending request identity or
+imply cancelled paper. Technical storage, expiry, errors, private/unusual lifecycles and
+concurrent/late accepted intents/account transitions remain open; L settles none of them.
+
+## Earlier decisions stay within their precise scopes
+
+A retains identical recorded full-invoice/customer facts for both formats. B offers all active
+sale-venue printers for the device-free dashboard, including A4/portable, subject to current
+authorization, offers, Orders visibility and accompanying-device restrictions; memory grants
+no access. No profile step, till identity or Equipment change. C keeps Invoice's printer row
+inline/foldable; D opens simplified Receipt directly, preserving recorded facts/offered language,
+without F1 conversion or email. E/H/I keep browser memory shared across logins, separate by
+venue/document, through ordinary reopening; clearing site data forgets it. F remembers a chosen printer
+only on server acceptance; refusal, cancel-before-submit and empty offers leave it alone.
+Acceptance is not paper output; later paper failure does not undo acceptance. G preselects a
+sole eligible printer only on a newly opened form without usable memory, explaining an
+unavailable remembered choice but inventing no first-use warning. J requires explicit choice
+on a newly opened form with several eligible printers and no usable memory. Neither rule
+replaces a selection mid-form or reroutes a submitted request.
+
+Device role lists and the phone's one Equipment receipt setting remain unchanged, without
+separate receipt memory/storage. A796 Revision 4 still owns phone save/concurrency and
+overridable defaults. Q1–Q6 otherwise remain subject to explicit A–K overrides; Q4 introduces
+no exclusive invoice-role holder check. Do not reopen A–K/A796.
+
+Freeze sale/document/printer/language/context under request identity; check authorization and
+sale location at reservation. Reconcile unknown/late outcomes under the same identity before
+fresh work. Keep successful-write versus failed-refresh, server original/copy, shared F1
+delivery guard and closed public F1. No automatic reroute or extra fiscal/payment/drawer effects.
+Device Invoice memory, portable receipt holding, wider steps, integration and the full
+build remain open, alongside L and the technical uncertainties above. **The full design,
+plan and build remain unapproved.** These drawings claim no existing product behavior.
+
+[Eight static K/L boards](../../backlog/mockups/a790-document-and-printer-choice/revision-k-and-forget-printer/README.md)
+cover EN/ES, light/dark, 390/1280 px. All eight final PNGs were rendered from the native
+SVGs inside a plain HTML wrapper in headless Chromium and individually inspected. Native
+SVG text bounds were checked within each drawing. These static checks supply no runtime,
+accessibility or physical-paper evidence. Older receipts apply only to their own artifacts;
+the old source map remains historical and runtime-unverified.
+
+---
+
 # A790: J approved; K proposed, 2026-10-19, after the 16:18 answer
 
 **A–J are approved only in their precise answered scope. K alone is proposed next;
