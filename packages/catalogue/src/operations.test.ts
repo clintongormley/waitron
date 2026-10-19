@@ -408,6 +408,37 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("refuses an empty unit id on create and on update, leaving the stored unit as it was", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      await expect(
+        createProduct(tx, {
+          catalogueId: cat.id,
+          categoryId: null,
+          name: "Stray",
+          unitId: "",
+          unitPrice: "1.00",
+          vatClass: "general",
+        }),
+      ).rejects.toMatchObject({ code: "unit.not_found", params: { unitId: "" } });
+      expect(await listProducts(tx, cat.id)).toEqual([]);
+
+      const created = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        name: "ham",
+        unitId: kgUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await expect(updateProduct(tx, created.id, { unitId: "" })).rejects.toMatchObject({
+        code: "unit.not_found",
+        params: { unitId: "" },
+      });
+      expect(await storedUnitId(tx, created.id)).toBe(kgUnitId);
+    });
+  });
+
   it("refuses a create naming an unknown category before writing the product", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });
