@@ -143,6 +143,12 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
+- **The outage flag `Incidencia="S"` is never sent to AEAT.** The house reading of Orden art. 16.4
+  (`docs/compliance/verifactu-findings.md`) lists it among the duties during an outage; the drain sets
+  only a local `incidencia` column (`packages/fiscal-verifactu/src/drain.ts`), and the batch header names
+  the taxpayer alone, though `@waitron/verifactu` can send the flag. Found by A798 (read, and confirmed
+  by its claim check). [Design §11](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design)
+
 - **A696. Invoice issue dates and record offsets follow the process zone.**
   [Owner decision, 2026-10-15](superpowers/specs/2026-10-15-a696-invoice-time-zone-design.md#owner-decision-recorded-2026-10-15-the-venues-saved-time-zone):
   every new invoice date and record offset, ordinary receipt and till use the saved venue zone,
@@ -3228,6 +3234,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
+- **A drawer kick for a USB printer that is not connected waits with no expiry**, and is claimed when
+  the printer reappears, so the drawer can open long after the sale (`packages/printing/src/runtime.ts`).
+  Found by A798; its claim check ran `claimPrintJobs` on a 30-day-old queued drawer job for a USB printer:
+  not claimed while the printer was not visible, claimed once it was. (A Bluetooth printer's jobs end when
+  it is unpaired or the agent reports no Bluetooth printing; the design's §11 says "USB or Bluetooth".) [Design §11](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design)
+
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
   reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
   is in the server log. Decide how the till should show that outcome and offer another copy.
@@ -3672,6 +3684,12 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 ### Payments and card readers
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
+
+- **With the box's clock before 28-10-2024, a connected card is charged before the sale is refused.**
+  Neither pre-reader check looks at the date (`apps/server/src/till-sale.ts`, `bill-payments.ts`'s
+  `beginBillPayment`); the card is collected, then `recordSale` refuses `fiscal.record_invalid` — on a bill,
+  when the payment completes it. Read, not run. A798's build slice 3 closes it.
+  [Design §11](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design)
 
 - **A742 — the guest types what they pay, and a tip (owner, 2026-10-15; on the backlog, NOT to be
   queued yet).** A flow where staff hand the device to the customer, who enters how much they want
@@ -4936,6 +4954,16 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 ### The box: backups, upgrades and recovery
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
+
+- **A backup run that is cut off leaves a plaintext copy of the whole venue database** (owner-only file)
+  and its encrypted copy in `<state>/backup-staging`: only the run's own `finally` deletes them
+  (`apps/server/src/backup-sweep.ts`), and nothing sweeps the folder at start. Read, not run. Found by
+  A798, whose "Liberar espacio" deletes them. [Design §11](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#11-found-while-reading-outside-this-design)
+
+- **CLAUDE.md §3's rule "a statement this engine refuses backs out ITSELF" does not hold for a full
+  disk**: A798's experiments on `node:sqlite` (macOS) ended the whole transaction, and the store's
+  rollback then hid the real error. A798's build slice 1 corrects the rule with the store fix.
+  [Design §2.6](superpowers/specs/2026-10-19-a798-degraded-trading-design.md#26-the-disk)
 
 - **Migrating a box drops the change-feed triggers one statement at a time, outside a
   transaction.** `removeChangeFeed` (`packages/db/src/change-feed.ts`, called first by
