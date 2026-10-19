@@ -775,6 +775,11 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
       the approvers fetch). The unpaid-departure and refund dialogs fetch theirs the same way and
       predate B32; a time limit belongs on all three together. Raised by B32's review by reading
       only; nobody reproduced a stalled answer.
+    - **No till test covers a payment refusal that arrives after the approver's PIN.** Since A845
+      (#1895) a person without `sale.rectify` meets the PIN prompt before the server's
+      `bill.payments_received` or `order.payment_in_flight`; by reading only (#1895's review), the
+      till then closes the PIN prompt and the cancel dialog shows the payment message. Add a till
+      case that answers the PIN with each refusal and checks what the dialog shows.
   - **Done by B34 (#1077, 2026-10-03; owner, 2026-10-02): a counter order invoiced when it was placed and still
     unpaid can be cancelled with a credit note at the till.** The waiting list "is drawn only
     inside the held-orders card" (Task 16, in [till.md](till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)), so a till layout without that card offers no Cancel and
@@ -968,7 +973,7 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   box emails every active person holding `system.manage` who has an email address, at most once per
   person and stage. Receipt: [plan §1](../superpowers/plans/2026-10-18-a795-aeat-certificate-after-setup.md).
 
-- **A845, owner decision 2026-10-17: cancelling an invoiced bill checks the permission first**, as
+- **A845 (#1895), owner decision 2026-10-17: cancelling an invoiced bill checks the permission first**, as
   the drawer, refund and unpaid-departure routes do: "not permitted" (with the PIN checked and
   counted) comes before any payment refusal.
 

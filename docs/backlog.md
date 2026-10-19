@@ -2876,6 +2876,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
   - **The approver list is fetched with no time limit.** The unpaid-departure and refund dialogs
     fetch theirs the same way and predate B32; a time limit belongs on all three together.
+  - **No till test covers a payment refusal that arrives after the approver's PIN** (since A845,
+    #1895, the PIN prompt comes first).
 
 - **A840. Can anything still reach the counter's Cancel and credit? Check, then clean up (owner,
   2026-10-17).** B34 (#1077) built it for a counter order invoiced when it was placed, and
