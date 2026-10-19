@@ -60,7 +60,7 @@ export interface DataTableColumn<Row> {
    * sideways under it. */
   pinned?: "end";
   /** Keep the whole cell outside row activation, including blank space beside its action. Tree mode
-   * still draws the row's activator in its first column whatever that column sets. */
+   * still draws the row's activator in its first column whatever that column sets (A890). */
   activatesRow?: false;
   /** A help-mode badge over the heading's label; `label` is the badge's whole accessible name. */
   help?: { text: string; label: string };
@@ -332,10 +332,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         position: relative;
       }
 
-      /* The stretched activator covers the whole row (drawn in a pinned cell, that cell only) so a
-         mouse user can click anywhere; it is a real focusable button so keyboard/AT users tab to it
-         and Enter/Space activate the row. It
-         sits at the base layer… */
+      /* The stretched activator covers the row, or only the pinned cell when it is drawn there, so
+         a click on blank space outside an opted-out cell opens the row; it is a real focusable
+         button so keyboard/AT users tab to it and Enter/Space activate the row. It sits at the base
+         layer… */
       .row-activate {
         position: absolute;
         inset: 0;
@@ -867,10 +867,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ attribute: false }) rowKeepsChildOrder: (row: Row) => boolean = () => false;
   /** When set, each row becomes activatable, except on a flat table a row `rowClickable` refuses: a
    * stretched, focusable button covers the row and calls this on click; on a flat table it is drawn
-   * in the first shown column that does not set `activatesRow: false`, and drawn in the pinned
-   * column it covers that cell only. Per-row controls (the
-   * selection checkbox, the Edit/Delete menu) sit above the activator, so they are never swallowed.
-   * In a tree, `rowActivation` can give a row a toggle instead. */
+   * in the first shown column that does not set `activatesRow: false`, and none when every column
+   * sets it; drawn in the pinned column, it covers that cell only. Per-row controls (the selection
+   * checkbox, the Edit/Delete menu) sit above the activator, so they are never swallowed. In a
+   * tree, `rowActivation` can give a row a toggle instead. */
   @property({ attribute: false }) rowClick?: (row: Row) => void;
   @property({ attribute: false }) rowClickLabel: (row: Row) => string = () => "Open row";
   /** On a flat table, a row this returns false for draws no activator and does not open from a
@@ -1257,17 +1257,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
     );
   }
 
-  // A render can move a row's activator to another cell, which drops the focus it held. Focusing
-  // the activator that kept its focus does nothing.
+  // A render can move a row's activator to another cell, which drops the focus it held.
   #focusedActivatorRow: string | undefined;
 
   #refocusActivator(): void {
     const key = this.#focusedActivatorRow;
     if (key === undefined) return;
-    [...this.renderRoot.querySelectorAll<HTMLElement>("tr[data-row-key]")]
-      .find((row) => row.dataset.rowKey === key)
-      ?.querySelector<HTMLButtonElement>(".row-activate")
-      ?.focus();
+    const activator = this.renderRoot.querySelector<HTMLButtonElement>(
+      `tr[data-row-key="${CSS.escape(key)}"] .row-activate`,
+    );
+    if (activator !== this.shadowRoot!.activeElement) activator?.focus();
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {

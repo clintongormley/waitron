@@ -6081,6 +6081,48 @@ test("a focused row activator whose row leaves the table takes the focus nowhere
   expect(el.shadowRoot!.activeElement).toBeNull();
 });
 
+test.each([
+  { box: "the table's own sticky-header box", sticky: true },
+  { box: "a fixed-height container around the table", sticky: false },
+])(
+  "a focused row activator scrolled out of view inside $box stays out of view when a render keeps it in place",
+  async ({ sticky }) => {
+    const many: Row[] = Array.from({ length: 40 }, (_, i) => ({
+      id: `r${i}`,
+      name: `Row ${i}`,
+      count: i,
+    }));
+    const el = await table({ rows: many, rowClick: () => undefined, stickyHeader: sticky });
+    let box = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    if (sticky) {
+      el.style.height = "300px";
+    } else {
+      const outer = document.createElement("div");
+      outer.style.cssText = "height: 300px; overflow-y: auto";
+      el.before(outer);
+      outer.append(el);
+      box = outer;
+    }
+    await settle();
+    expect(box.scrollHeight).toBeGreaterThan(box.clientHeight + 600);
+    const activator = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      'tr[data-row-key="r0"] .row-activate',
+    )!;
+    activator.focus();
+    box.scrollTop = box.scrollHeight;
+    await settle();
+    const scrolled = box.scrollTop;
+    expect(scrolled).toBeGreaterThan(600);
+    expect(activator.getBoundingClientRect().bottom).toBeLessThan(box.getBoundingClientRect().top);
+    el.rows = [...many];
+    await el.updateComplete;
+    await settle();
+    expect(box.scrollTop).toBe(scrolled);
+    expect(el.shadowRoot!.querySelector('tr[data-row-key="r0"] .row-activate')).toBe(activator);
+    expect(el.shadowRoot!.activeElement).toBe(activator);
+  },
+);
+
 test("a row whose every column keeps its blank space outside row activation draws no activator", async () => {
   const clicked: string[] = [];
   const el = await table({
