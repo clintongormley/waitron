@@ -38,6 +38,11 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
     expect(outcome.resweepAfter).toBeUndefined();
   });
 
+  it("asks for a parked day to be tried again one day later", () => {
+    const duty = reconcilerAsDuty(reconcilerReturning(emptyResult(PERIOD)));
+    expect(duty.retryParkedAfterMs).toBe(24 * 60 * 60 * 1000);
+  });
+
   it("asks for a re-sweep when an orphan's amount also drifted", async () => {
     const mismatch = {
       paymentRef: "pi_1",

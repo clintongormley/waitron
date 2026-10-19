@@ -144,6 +144,120 @@ describe("runDue", () => {
     expect(after.ran).toEqual([]);
   });
 
+  describe("a duty that asks for a parked day to be tried again", () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+    const PERIOD_FROM = "2026-07-24T00:00:00.000Z";
+
+    function retrying<D extends SchedulerDeps["duties"][number]>(duty: D): D {
+      return Object.assign(duty, { retryParkedAfterMs: DAY_MS });
+    }
+
+    async function rowsOfPeriod(): Promise<
+      { generation: number; state: string; attempts: number; nextAttemptAt: string | null }[]
+    > {
+      return withTransaction(db, (tx) =>
+        tx
+          .select({
+            generation: scheduledRuns.generation,
+            state: scheduledRuns.state,
+            attempts: scheduledRuns.attempts,
+            nextAttemptAt: scheduledRuns.nextAttemptAt,
+          })
+          .from(scheduledRuns)
+          .where(eq(scheduledRuns.periodFrom, PERIOD_FROM))
+          .orderBy(scheduledRuns.generation),
+      );
+    }
+
+    // Three failing ticks two hours apart, from `start`; returns the time of the third (the park).
+    async function failThreeTimes(duty: SchedulerDeps["duties"][number], start: Date) {
+      let at = start;
+      const results = [];
+      for (let i = 0; i < 3; i += 1) {
+        results.push(await runDue(deps([duty]), at));
+        if (i < 2) at = new Date(at.getTime() + TWO_HOURS_MS);
+      }
+      return { parkedAt: at, results };
+    }
+
+    it("queues the parked day again after the duty's retry delay", async () => {
+      const duty = retrying(throwingDuty("test.duty", new Error("boom")));
+      const { parkedAt } = await failThreeTimes(duty, NOW);
+
+      expect(await rowsOfPeriod()).toEqual([
+        { generation: 0, state: "parked", attempts: 3, nextAttemptAt: null },
+        {
+          generation: 1,
+          state: "pending",
+          attempts: 0,
+          nextAttemptAt: new Date(parkedAt.getTime() + DAY_MS).toISOString(),
+        },
+      ]);
+    });
+
+    it("runs the requeued day when it is due and stops on success", async () => {
+      const duty = retrying(
+        new FakeDuty("test.duty", (_call, index) =>
+          index < 3
+            ? Promise.reject(new Error("boom"))
+            : Promise.resolve({ summary: { ok: true } }),
+        ),
+      );
+      const { parkedAt } = await failThreeTimes(duty, NOW);
+      const dueAt = new Date(parkedAt.getTime() + DAY_MS);
+
+      const early = await runDue(deps([duty]), new Date(dueAt.getTime() - 1));
+      expect(early.ran.filter((r) => r.period.from.toISOString() === PERIOD_FROM)).toEqual([]);
+
+      const due = await runDue(deps([duty]), dueAt);
+      expect(due.ran.filter((r) => r.period.from.toISOString() === PERIOD_FROM)).toEqual([
+        expect.objectContaining({ generation: 1, outcome: "succeeded" }),
+      ]);
+
+      const later = await runDue(deps([duty]), new Date(dueAt.getTime() + 2 * DAY_MS));
+      expect(later.ran.filter((r) => r.period.from.toISOString() === PERIOD_FROM)).toEqual([]);
+      expect((await rowsOfPeriod()).map((r) => [r.generation, r.state])).toEqual([
+        [0, "parked"],
+        [1, "succeeded"],
+      ]);
+    });
+
+    it("parks a first check too, and requeues it", async () => {
+      const duty = retrying(throwingDuty("test.duty", new Error("boom")));
+      const { results } = await failThreeTimes(duty, NOW);
+
+      expect(results[2]!.ran).toEqual([
+        expect.objectContaining({ generation: 0, outcome: "parked" }),
+      ]);
+      expect((await rowsOfPeriod()).map((r) => [r.generation, r.state])).toEqual([
+        [0, "parked"],
+        [1, "pending"],
+      ]);
+    });
+
+    it("keeps one chain: a parked requeue that fails again queues one more, not two", async () => {
+      const duty = retrying(throwingDuty("test.duty", new Error("boom")));
+      const { parkedAt } = await failThreeTimes(duty, NOW);
+      const { parkedAt: parkedAgainAt } = await failThreeTimes(
+        duty,
+        new Date(parkedAt.getTime() + DAY_MS),
+      );
+      await runDue(deps([duty]), new Date(parkedAgainAt.getTime() + TWO_HOURS_MS));
+
+      expect(await rowsOfPeriod()).toEqual([
+        { generation: 0, state: "parked", attempts: 3, nextAttemptAt: null },
+        { generation: 1, state: "parked", attempts: 3, nextAttemptAt: null },
+        {
+          generation: 2,
+          state: "pending",
+          attempts: 0,
+          nextAttemptAt: new Date(parkedAgainAt.getTime() + DAY_MS).toISOString(),
+        },
+      ]);
+    });
+  });
+
   it("keeps periods independent — a parked day does not block the next one", async () => {
     const duty = throwingDuty("test.duty", new Error("boom"));
     let at = NOW;

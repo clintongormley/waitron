@@ -123,9 +123,9 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
 
 /**
  * What one claimed unit of work produced: the record for `TickResult.ran`, plus the time THIS run
- * made the ledger next carry work — the backoff a failure wrote, or the re-sweep a success
- * enqueued. Null there when the run left nothing further due (a success with no re-sweep, or a
- * park, both of which write a null `next_attempt_at`).
+ * made the ledger next carry work — the backoff a failure wrote, or the successor a success's
+ * re-sweep or a park's `retryParkedAfterMs` enqueued. Null there when the run left nothing further
+ * due.
  */
 interface CompletedRun {
   record: RunRecord;
@@ -171,6 +171,12 @@ async function runOne(
 
   const outcome = errorCode === null ? "succeeded" : parkOrRetry(deps, claimed);
   const nextAttemptAt = outcome === "failed" ? backoff(deps, claimed, now) : null;
+  const successorDueAt =
+    outcome === "succeeded"
+      ? resweepAfter
+      : outcome === "parked" && duty.retryParkedAfterMs !== undefined
+        ? new Date(now.getTime() + duty.retryParkedAfterMs)
+        : undefined;
   // `enqueuedAt` is non-null only when a successor row was actually INSERTED. A REFUSED enqueue
   // means some other non-terminal row already carries this period — the enqueue guard's whole
   // point — and that row's due time is not this run's to report: either the snapshot already
@@ -190,14 +196,14 @@ async function runOne(
       // Same transaction as the completion, so the guard sees this run as already terminal. Gated
       // on the completion having actually WON its own fence: a `false` here means another runner
       // reclaimed this row as stale mid-flight and now owns it, so enqueueing would attach a
-      // re-sweep to a row this attempt does not own.
-      if (!completed || resweepAfter === undefined) return [completed, null];
+      // successor to a row this attempt does not own.
+      if (!completed || successorDueAt === undefined) return [completed, null];
       const inserted = await enqueueSuccessor(tx, {
         duty: duty.name,
         period,
-        dueAt: resweepAfter,
+        dueAt: successorDueAt,
       });
-      return [true, inserted ? resweepAfter : null];
+      return [true, inserted ? successorDueAt : null];
     },
   );
   if (!won) return null;
@@ -210,8 +216,8 @@ async function runOne(
       outcome,
       ...(errorCode === null ? {} : { errorCode }),
     },
-    // Mutually exclusive by construction: `resweepAfter` is read only from a SUCCESSFUL outcome,
-    // and `nextAttemptAt` is written only for a failed one.
+    // Mutually exclusive by construction: a successor is enqueued only for a success or a park,
+    // and `nextAttemptAt` is written only for a failure.
     nextDueAt: enqueuedAt ?? nextAttemptAt,
   };
 }
