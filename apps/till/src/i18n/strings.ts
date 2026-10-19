@@ -39,7 +39,7 @@ export const en = {
   "device_zones.settings": "Settings",
   "device_zones.read_failed": "The zones could not be read. Try again.",
   "device_zones.write_failed": "The zones could not be saved. Try again.",
-  "device_zones.order_in_zone": "Hold, send or cancel this order before hiding its zone.",
+  "device_zones.order_in_zone": "Park, send or cancel this order before hiding its zone.",
 
   "refund_ack.title": "Payment refund acknowledgment",
   "refund_ack.reference": "Refund reference",
@@ -314,7 +314,7 @@ export const en = {
   "form.fix_fields": "Correct the highlighted fields to continue.",
   "form.combobox_search": "Search",
   "form.combobox_no_results": "No results",
-  "action.hold": "Hold",
+  "action.hold": "Park",
   "action.authorize": "Authorize",
   // Tenders
   "tender.cash": "Cash",
@@ -465,8 +465,8 @@ export const en = {
   "weigh.prompt": "Enter quantity",
   // Held (parked) orders
   "held.label_prompt": "Name this order (optional)",
-  "held.title": "Held orders",
-  "held.empty": "No held orders",
+  "held.title": "Parked orders",
+  "held.empty": "No parked orders",
   "held.retrieve": "Retrieve",
   "held.discard": "Discard",
   // Counter orders sent and not paid, or paid and not handed over
@@ -578,7 +578,7 @@ export const en = {
   "find_page.remove_filter": "Remove {filter} filter",
   "find_page.retry": "Retry",
   // Placing and prep
-  "action.place": "Place order",
+  "action.place": "Send",
   "action.send_to_prep": "Send to prep",
   // Station display. The view toggles name the view they switch TO. `station.min` is a suffix word,
   // rendered as `${n} ${t(key)}`.
@@ -731,7 +731,7 @@ export const en = {
   "profile.title": "This device's profile",
   "profile.label": "Device profile",
   "profile.switch": "Switch",
-  "profile.order_open": "Hold or clear the order in progress before switching profile.",
+  "profile.order_open": "Park or clear the order in progress before switching profile.",
   "profile.draft_unsaved":
     "The order's last change could not be saved. Try again, or remove it, before switching profile.",
   "profile.draft_replaced":
@@ -1099,7 +1099,7 @@ export const en = {
   "adjust.unconfirmed":
     "No answer from the server. The bill has been read again: check whether the change was made before trying again.",
   "adjust.unconfirmed_unread":
-    "No answer from the server: the change may already have been made. Hold the order, then retrieve it, and check whether the change was made before trying again.",
+    "No answer from the server: the change may already have been made. Park the order, then retrieve it, and check whether the change was made before trying again.",
   "adjust.basket_changed": "The order changed while this was open, so nothing was sent.",
   "adjust.changed_bill":
     "This bill was changed on another device. It has been read again: check it and try again.",
@@ -1285,14 +1285,14 @@ export const en = {
   "receipt_language.title": "Receipt language",
   "receipt_language.button": "Receipt: {language}",
   "receipt_language.save_error": "Could not save the receipt language, try again",
-  "receipt_language.held_unsaved": "Held without its receipt language: open it and choose again",
+  "receipt_language.held_unsaved": "Parked without its receipt language: open it and choose again",
   "action.choose": "Choose",
   "receipt.error": "Could not print the receipt, try again",
   "receipt.guests_none": "No line",
   "payment_slip.error": "Could not print the payment slip, try again",
   "drawer.error": "Could not open the cash drawer, try again",
   "drawer.not_attached": "No cash drawer is attached to this printer",
-  "held.park_error": "Could not hold the order, try again",
+  "held.park_error": "Could not park the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
   "held.extra_not_offered":
     "An extra on this order is no longer offered. It stays on the order as saved, and changing the order removes it. If it can no longer be sold and has not gone to the kitchen, paying is refused until it is removed.",
@@ -1302,23 +1302,24 @@ export const en = {
   "held.discard_holds_money":
     "This order still holds money from a payment. Give it back before discarding the order",
   "held.reread_failed":
-    "The order could not be read again. Hold it, then retrieve it, to check it.",
+    "The order could not be read again. Park it, then retrieve it, to check it.",
   "held.changed_elsewhere":
     "This order was changed on another device. It has been reloaded: check it and make your change again",
-  "place.error": "Could not place the order, try again",
+  "place.error": "Could not send the order, try again",
   // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
     "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up.",
   "station.advance_error": "Could not update the ticket, try again",
   // Shown when a list's refresh failed: the plain key when no write came before it, an `_after_*`
   // key after a write that SUCCEEDED, when only the list refresh behind it failed.
-  "refresh.held": "The list of held orders could not refresh.",
-  "refresh.held_after_park": "The order was held, but the list of held orders could not refresh.",
+  "refresh.held": "The list of parked orders could not refresh.",
+  "refresh.held_after_park":
+    "The order was parked, but the list of parked orders could not refresh.",
   "refresh.held_after_sale":
-    "The sale was recorded, but the list of held orders could not refresh.",
-  "refresh.held_after_move": "The bill was moved, but the list of held orders could not refresh.",
+    "The sale was recorded, but the list of parked orders could not refresh.",
+  "refresh.held_after_move": "The bill was moved, but the list of parked orders could not refresh.",
   "refresh.station": "The kitchen queue could not refresh.",
-  "refresh.station_after_place": "The order was placed, but the kitchen queue could not refresh.",
+  "refresh.station_after_place": "The order was sent, but the kitchen queue could not refresh.",
   "refresh.station_after_hand_over":
     "The order was handed over, but the kitchen queue could not refresh.",
   "refresh.station_after_move": "The dishes were moved, but the kitchen queue could not refresh.",
@@ -2176,7 +2177,7 @@ export const es: Record<StringKey, string> = {
   "find_page.remove_dates": "Quitar filtro de fechas",
   "find_page.remove_filter": "Quitar filtro de {filter}",
   "find_page.retry": "Reintentar",
-  "action.place": "Enviar pedido",
+  "action.place": "Enviar",
   "action.send_to_prep": "Enviar a cocina",
   "kitchen_screen.station": "Pantalla de estación",
   "kitchen_screen.pass": "Pantalla de pase",
