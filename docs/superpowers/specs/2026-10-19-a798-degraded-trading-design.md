@@ -1,7 +1,12 @@
 # A798 — Degraded but trading: what the box does, and tells staff, when a part fails
 
-Status: **design proposal, revision 2; three owner questions open (§9). Nothing is built; the build
-is planned as its own item once the questions are answered.**
+Status: **design proposal, revision 3; question 1 answered, two owner questions open (§9). Nothing
+is built; the build is planned as its own item once the questions are answered.**
+
+Revision 3, 2026-10-19: the owner's answer to question 1 applied — no reserved space; a warning at
+2 GB. The box keeps no spare on its disk; at 2 GB free every till and handheld shows the amber strip,
+the Box status page and the bell show the warning, and the managers get an email (§4.2, §4.3, §4.6).
+A disk that does fill is refused at once, with nothing to soften it.
 
 Revision 2, 2026-10-19: a fresh review and a claim check came back, and the runner made four calls
 (`~/waitron-campaign-b/a798-review/round2-decisions.md`). The box no longer corrects its own clock:
@@ -68,9 +73,12 @@ The proposal (§4):
 2. A **Box status page** in the dashboard, under Ajustes beside Diagnóstico, showing every part at
    once with the actions an operator can take without a terminal (picture 4), and the new alerts in
    the bell (picture 3).
-3. **Disk:** a free-space watch, a reserve the box releases by itself (question 1), a refusal before
-   any card is charged, a store fix so a full disk is reported as itself and can never commit half a
-   transaction, and a start that frees space before it does anything else (pictures 1 and 5).
+3. **Disk:** a free-space watch that warns at 2 GB left — the amber strip on every device that
+   sells, the bell, the Box status page and an email to the managers (the owner's answer to question
+   1; picture 2) — a refusal before any card is charged, a store fix so a full disk is reported as
+   itself and can never commit half a transaction, and a start that frees space before it does
+   anything else (pictures 1 and 5). The box keeps no spare space: once the disk is full, every save
+   is refused at once until someone frees space.
 4. **Clock:** a named refusal for a clock the fiscal rules cannot accept (picture 6), and checks that
    notice a clock behind the chain with no internet. What the box does then is question 3.
 5. Everything for a box that is still trading lives in the dashboard. The recovery page keeps its one
@@ -412,7 +420,7 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
 | --- | --- | --- | --- |
 | Red | A write fails because the disk is full | No se puede guardar nada: el equipo no tiene espacio · Avisa al encargado | Nothing can be saved: the box is out of space · Tell a manager |
 | Red | The clock is before 28-10-2024 | No se pueden registrar ventas: la hora del equipo es incorrecta · Avisa al encargado | Sales can't be recorded: the box's clock is wrong · Tell a manager |
-| Amber | The disk reserve is in use (§4.6) | Queda poco espacio en el equipo · Avisa al encargado | The box is nearly out of space · Tell a manager |
+| Amber | Less than 2 GB free on the box's disk (§4.6) | Queda poco espacio en el equipo · Avisa al encargado | The box is nearly out of space · Tell a manager |
 | Amber | A printer is down (question 2) | Impresora Cocina no imprime · desde 21:16 | Kitchen printer not printing · since 21:16 |
 | Blue | A record is waiting after a failed send | 12 ventas sin enviar a Hacienda · Se reintenta solo | 12 sales not yet sent to the tax agency · Retried automatically |
 
@@ -429,12 +437,10 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
 - **New alerts in the bell** (picture 3), in a new area "Equipo" (EN "Box"), with the same shape as
   today's: sentence, severity · area · time, Go-to. New codes, each with English and Spanish wording
   as the house rule requires (CLAUDE.md §3):
-  - `storage.space_low` (warning): "Al equipo le quedan {free} de espacio en disco. Todo sigue
-    funcionando. Mira qué ocupa espacio en Estado del equipo." / "The box has {free} of disk space
-    left. Everything still works. See what is using it on the Box status page."
-  - `storage.reserve_in_use` (error): "El equipo se ha quedado sin espacio en disco y está usando su
-    reserva. Todo sigue funcionando, pero libera espacio ya." / "The box ran out of disk space and is
-    using its reserve. Everything still works, but free space now."
+  - `storage.space_low` (warning, emailed): "Al equipo le quedan {free} de espacio en disco. Todo
+    sigue funcionando, pero si se llena no se podrá guardar nada. Mira qué ocupa espacio en Estado
+    del equipo." / "The box has {free} of disk space left. Everything still works, but if it fills
+    up nothing can be saved. See what is using it on the Box status page."
   - `storage.disk_full` (error): "El equipo no tiene espacio en disco: no se puede guardar nada." /
     "The box is out of disk space: nothing can be saved."
   - `clock.unusable` (error: the date is before 28-10-2024), `clock.behind_chain` (warning, emailed:
@@ -456,9 +462,9 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
     refusals (§2.2). It is the Veri*Factu module's own route.
   - **Liberar** deletes only what the box can make again (§4.6) and says how much it can free before
     it does. Below the rows the page names what really fills the disk and who can clear it.
-- **Email.** The red conditions (disk full, clock before 28-10-2024), the reserve in use, and a clock
-  behind the chain email everyone with `system.manage` and an email address, once per episode (§6,
-  default 7). "Once per episode" is held in memory: a restart during an episode may send one more,
+- **Email.** The red conditions (disk full, clock before 28-10-2024), the 2 GB disk warning, and a
+  clock behind the chain email everyone with `system.manage` and an email address, once per episode
+  (§6, default 7). "Once per episode" is held in memory: a restart during an episode may send one more,
   which keeps the build free of a new table (§7).
 
 ### 4.4 Part by part: the bucket stream, the outbox, printers, card readers
@@ -520,14 +526,16 @@ What the box does instead:
    payment on a bill — so no connected card is charged (§3). The same applies to a clock before
    28-10-2024.
 4. **A free-space watch** every minute on the venue folder's disk (`apps/server/src/free-bytes.ts`
-   already reads it): `storage.space_low` below 2 GiB free. Because sales can carry on past "0 free"
-   on room the side file already holds (§2.6), this watch, not the first failed write, is what warns
-   in time.
-5. **A reserve** — question 1. A 1 GiB file in the state folder, **really written** (a file with
-   holes in it reserves nothing). It is released when the watch sees less than 256 MiB free, or at
-   once when a write fails with a full disk; then `storage.reserve_in_use` and the amber strip. The
-   freed space is not kept for Waitron: anything else writing to the same disk, Docker's images and
-   logs included, can take it. The box writes the reserve again once free space is back above 3 GiB.
+   already reads it): below 2 GiB free it raises `storage.space_low`, puts the amber strip on every
+   device that sells, shows the Box status row amber and emails the managers (the owner's answer to
+   question 1). Because sales can carry on past "0 free" on room the side file already holds (§2.6),
+   this watch, not the first failed write, is what warns in time. The build picks how far above
+   2 GiB free space must climb before the warning clears, so a disk hovering at the line does not
+   email again and again.
+5. **No reserve** (the owner's answer to question 1). The box keeps no spare space on its disk, so
+   nothing softens a disk that does fill: the first save that fails turns every device red, every
+   sale, order, kitchen send and clock-in is refused with the honest message of item 2, and a start
+   on that disk goes as §4.7. Trading comes back only when someone frees space.
 6. **Liberar** deletes only what can be made again: crash reports older than a week, rotated log
    files except the newest (at most about 40 MB), and backup staging leftovers from a run that was cut
    off (none after a normal run). That is usually a few MB to about 45 MB; more after a backup run
@@ -547,18 +555,18 @@ Today a full disk stops the start before it can count itself, so the box restart
 page never appears (§2.6). The redesign:
 
 1. **The very first step of every start checks free space**, before the failure count is written and
-   before anything opens the database. Below 256 MiB free, it releases the reserve if it is still
-   there, then deletes the leftovers of §4.6 item 6 that need no database (crash reports older than a
-   week, rotated logs, backup staging). If the start then works,
-   there is no page and nothing for the operator to do.
+   before anything opens the database. Below 256 MiB free, it deletes the leftovers of §4.6 item 6
+   that need no database (crash reports older than a week, rotated logs, backup staging). There is
+   no reserve to release (§4.6 item 5). If the start then works, there is no page and nothing for the
+   operator to do.
 2. **If the count still cannot be written**, the start serves the recovery page at once, with the code
    `storage.disk_full`, instead of exiting and restarting forever. The page reads the free space as a
    new fact (with `freeBytes`; nothing on the page reads it today).
 3. **The page's text**, fixed and chosen by the code as the house rule requires (CLAUDE.md §3): "El
-   disco del equipo está lleno, así que Waitron no puede guardar nada." and "El equipo ya ha usado el
-   espacio que guarda de reserva y ha borrado lo que podía volver a crear, y no ha bastado. Pide a
-   quien instaló este equipo que libere espacio (copias antiguas, versiones anteriores de Waitron) o
-   ponga un disco mayor. Tus ventas no se tocan." Its one button stays "Reintentar un arranque normal".
+   disco del equipo está lleno, así que Waitron no puede guardar nada." and "El equipo ha borrado lo
+   que podía volver a crear, y no ha bastado. Pide a quien instaló este equipo que libere espacio
+   (copias antiguas, versiones anteriores de Waitron) o ponga un disco mayor. Tus ventas no se
+   tocan." Its one button stays "Reintentar un arranque normal".
    It never suggests wiping (`recovery-surface.ts:230-232`, owner 2026-09-10).
 4. **A database that cannot be opened because the disk is full** is classified `storage.disk_full`
    rather than `provisioning.database_unreachable`, by checking free space when the open fails.
@@ -639,7 +647,8 @@ Each is a default, not a question; the owner may overrule any.
 6. **Every device that sells gets the strip**, tills and handhelds alike: "any paired device can do
    everything" (owner 2026-10-03, memory `any-device-does-everything`).
 7. **Email the managers for the red conditions**, as for the AEAT certificate (owner 2026-10-18,
-   A795 Q3 "A", recorded in `~/waitron-campaign-shared/watcher-handoff.md`, 13:06 entry).
+   A795 Q3 "A", recorded in `~/waitron-campaign-shared/watcher-handoff.md`, 13:06 entry). The 2 GB
+   disk warning is emailed too, by the owner's answer to question 1.
 8. **The unsent count on screen**, from the house's reading of Orden HAC/1177/2024 art. 16.4
    (`docs/compliance/verifactu-findings.md:345-360`).
 9. **The typed card is "Otro datáfono"**, an explicit choice (owner, A796 Revision 4, §8 default 3).
@@ -655,9 +664,9 @@ Each is a default, not a question; the owner may overrule any.
 13. **The box never corrects its own time** (§4.5).
 14. **Devices are witnesses, never a source of time** — the precedent of D7 (owner, 2026-10-03).
 15. **The Box status page sits under Ajustes beside Diagnóstico**, its own page (§4.3).
-16. **The disk thresholds**: warn below 2 GiB free, release the reserve below 256 MiB or on a failed
-    write, re-create it above 3 GiB. They are guesses for a box with a disk of tens of gigabytes;
-    the build may change them with a measurement.
+16. **The start's clean-up threshold**: the start deletes its leftovers below 256 MiB free (§4.7). A
+    guess for a box with a disk of tens of gigabytes; the build may change it with a measurement.
+    The 2 GB warning is the owner's (question 1), not a default.
 
 ---
 
@@ -667,7 +676,6 @@ Each is a default, not a question; the owner may overrule any.
 
 - Notices, the Box status rows and the new alerts are computed on each read, like today's ongoing
   alerts (`packages/module/src/alerts.ts:6-7`).
-- The reserve is a file in the state folder, not a row.
 - "Once per episode" for emails is held in memory (§4.3). Making it survive a restart would need a
   table like the certificate reminders' (`packages/fiscal-verifactu/src/schema/certificate-reminders.ts`),
   and so a migration; this design does not ask for that.
@@ -697,39 +705,31 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
    `till-sale.ts:1225-1226` and `beginBillPayment`, `bill-payments.ts:1068-1069`). _Risk: fiscal
    invariants (the settle handlers), cross-package contract (a refusal's parameters)._
 4. **The module seat** of §5. _Risk: cross-package contract._
-5. **Free-space watch, reserve and the `storage.*` alerts.** _Risk: concurrency (a duty that deletes
-   files)._
+5. **Free-space watch and the `storage.*` alerts.** _Risk: none listed._
 6. **The strip**: notices on the equipment read and the strip in the till. _Risk: cross-package
    contract (till ↔ box), fiscal invariants (reads the outbox through the seat)._
 7. **Box status page**, **Reintentar ahora** and **Liberar**. _Risk: auth (`system.manage`), fiscal
    invariants (nudging the drain)._
 8. **Clock checks** (minimum date, chain, devices, `clock.*` alerts), then question 3's answer.
    _Risk: fiscal invariants; if question 3 is (a), fiscal core, which the owner lands._
-9. **Emails for the red conditions**, `reader.offline`, the printer notice (question 2), and deleting
-   old Docker images after an upgrade in `deploy/waitron.sh`. _Risk: none listed._
+9. **Emails for the red conditions and the 2 GB disk warning**, `reader.offline`, the printer notice
+   (question 2), and deleting old Docker images after an upgrade in `deploy/waitron.sh`. _Risk: none listed._
 
 ---
 
 ## 9. Questions for the owner
 
-Three, one at a time. Each has a recommendation; the pictures are in the mock-ups folder.
+Three, one at a time. Each has a recommendation; the pictures are in the mock-ups folder. Question 1
+is answered; question 2 is the open one.
 
 ### Question 1 of 3 — When the disk fills, should the box free its reserve by itself?
 
-_Example._ Friday 22:10, Bar Santet. The box's disk has been filling for weeks with photos and
-backups nobody cleared, and it runs out mid-service. The box keeps 1 GB spare for exactly this.
-
-- **(a) Recommended: yes, by itself.** When free space runs low, the box deletes its spare 1 GB at
-  once. Sales, orders and kitchen sends carry on; every till shows "Queda poco espacio en el equipo ·
-  Avisa al encargado"; the managers get an email. That space is not kept for Waitron alone: if
-  something else on the box is filling the disk, it can use it up too, so someone still has to free
-  space soon.
-- (b) Keep the spare, but release it only when a manager presses a button in the dashboard. Until
-  someone does, nothing can be saved and every till shows red (picture 1).
-- (c) No spare: only the warning at 2 GB left, and the email.
-
-Why (a): the owner's rule is that being unable to trade is not accepted; (a) is the option most
-likely to carry a busy night through to closing.
+Owner's answer (2026-10-19): (c) no spare, just warn. The box keeps no reserved 1 GB on its disk.
+When 2 GB are left, every till and handheld shows the amber strip "Queda poco espacio en el equipo ·
+Avisa al encargado", the Box status page and the bell show the warning, and the managers get an
+email (§4.2, §4.3, §4.6; pictures 2, 3 and 4). A disk that fills anyway stops every save at once,
+with the red strip and the honest refusal (picture 1), and a start on a full disk goes as §4.7
+(picture 5).
 
 ### Question 2 of 3 — When a printer stops printing, who is told, and how soon?
 

@@ -5060,9 +5060,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **A798. Degraded but trading: what the box does, and tells staff, when a part fails but it can still sell.**
   [Design](superpowers/specs/2026-10-19-a798-degraded-trading-design.md) and
-  [mock-ups](backlog/mockups/a798-degraded-trading/README.md) await the owner's answers to three
-  questions (the disk reserve, who is told when a printer stops printing, what to do when the clock is
-  behind the last sale). It adds a module seat for staff notices; no migration. The build is planned
+  [mock-ups](backlog/mockups/a798-degraded-trading/README.md) await the owner's answers to two
+  questions (who is told when a printer stops printing, what to do when the clock is behind the last
+  sale). The first question was answered on 2026-10-19: no reserved space on the disk; a warning and
+  an email at 2 GB free. It adds a module seat for staff notices; no migration. The build is planned
   separately.
 
 - **Recovery actions the 2026-09-08 node-containers design handed on** (§9.3, §12) — starting without
