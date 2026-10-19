@@ -3375,11 +3375,15 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
     shapes only so older tests that pin the exact argument count keep passing; one call per path
     sends the same request.
 
+- **A790. Choose a document, then its permitted printer.** The owner's A661 Q1–Q6 answers
+  are recorded in the [design proposal](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
+  with [mock-ups](backlog/mockups/a790-document-and-printer-choice/README.md).
+  The proposal awaits agreement on receipt versus invoice for an existing full invoice,
+  dashboard profile context, phone steps and single-choice skips, simplified-sale copies,
+  and the persistence choice. Ask the document-meaning question first. No product behavior
+  has changed; payment-time printing on a receipt-paper invoice printer remains part of the build.
+
 - **Loose ends left by A661 (#1745).**
-  - The payment-time choice could offer a receipt invoice printer. At payment only an A4 invoice
-    printer is offered, as "A4 on {printer}" (`/api/invoice-delivery-options`,
-    `apps/server/src/till-api.ts`); a receipt one is reached from the sale's print button. Offering
-    it as its own choice needs the payment path changed.
   - The till's payment-time options and a staged A4 choice resolve the device's invoice printer
     without the sale's location. Both call `resolveInvoicePrinter` with no `at`
     (`apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`). From reading, a printer at
