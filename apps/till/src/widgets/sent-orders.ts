@@ -439,6 +439,7 @@ export class TillSentOrders extends LitElement {
   }
   #pressLine(slice: SentSlice, event: PointerEvent): void {
     this.#releaseHeading();
+    if (this.busy || (slice.kind === "fired" && !slice.row.released)) return;
     const target = event.composedPath()[0];
     if (target === undefined) return;
     this.#pressed = { slice, scope: this.scope, billId: this.billId, target };

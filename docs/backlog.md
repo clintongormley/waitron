@@ -2216,9 +2216,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
   A773-1 remains unlanded: integrate A758's revised cancellation and Finish-table design,
-  and complete the remaining native-screen acceptance and delivery checks. The consumed-draft
-  bill-merge save check is covered at the command and HTTP boundaries. A773-2's firing/pass plan
-  follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+  and complete the remaining native-screen acceptance and delivery checks. Native repeated Sent
+  service checks now cover held replies and accepted successor actions on till and phone; a
+  disabled-row press no longer freezes the accepted display. A773-2's firing/pass plan follows
+  A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,
   2026-10-16).** For example, the bar pours the dessert wine when the kitchen marks the tarta ready,
@@ -2712,10 +2713,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Loose ends left by service Task 4 (#748, the table screen works with order groups).**
   - Recheck a Spanish fractional quantity in the Group Fire confirmation, which still uses the
     server's summary. The retired Current orders fallback is no longer the place to check it.
-  - Check native repeated presses on Sent service actions while their replies are pending.
-    New order's native Send all/selected Fire checks and the replacement controls' size checks
-    are recorded in the [detail](backlog/till.md#replacement-order-controls-a773); they do not
-    establish this remaining Sent interaction or a physical-till trial.
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.

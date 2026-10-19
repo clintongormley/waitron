@@ -302,6 +302,40 @@ it("keeps ready updates from moving a pressed row and then restores ready-first 
   ).toEqual(["second", "first"]);
 });
 
+it.each(["busy", "unreleased"] as const)(
+  "a native press on a %s disabled row does not freeze the next accepted snapshot",
+  async (reason) => {
+    const el = await mount(
+      current([
+        row("first", { readyAt: at(59), released: reason !== "unreleased" }),
+        row("second"),
+      ]),
+      { busy: reason === "busy" },
+    );
+    const calls = collect(el, "serve-lines");
+    const button = find(el, '[data-serve-line="first"]') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    await userEvent.click(button, { force: true });
+    expect(calls).toEqual([]);
+    el.busy = false;
+    el.snapshot = {
+      ...el.snapshot!,
+      current: current([row("first", { quantity: "2.000" }), row("second", { readyAt: at(58) })]),
+    };
+    await el.updateComplete;
+    expect(
+      [...root(el).querySelectorAll<HTMLElement>("[data-fired-line]")].map(
+        (line) => line.dataset.firedLine,
+      ),
+    ).toEqual(["second", "first"]);
+    expect(find(el, '[data-fired-line="first"]').textContent!.replace(/\s+/g, " ")).toContain(
+      "first ×2",
+    );
+    await click(el, '[data-serve-line="first"]');
+    expect(calls).toEqual([{ items: [{ lineId: "first", quantity: "2" }] }]);
+  },
+);
+
 it("refuses an old row or All served control after the displayed quantities change", async () => {
   const el = await mount(current([row("Bravas", { readyAt: at(59) })]));
   const oldRow = find(el, "[data-serve-line=Bravas]");

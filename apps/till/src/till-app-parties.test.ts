@@ -7520,6 +7520,154 @@ describe("till-app: Current orders", () => {
   });
 
   describe("native Sent panel integration", () => {
+    for (const formFactor of ["till", "phone-portrait"] as const) {
+      it.each(["row", "all", "fire"] as const)(
+        `native ${formFactor} repeated Sent %s presses wait for the accepted reply`,
+        async (action) => {
+          const state = structuredClone(orders);
+          state.reminder = null;
+          state.groups[0]!.rows[0]!.quantity = "2.000";
+          state.groups[0]!.rows[0]!.servedQuantity = "1.000";
+          state.groups.push({
+            ...state.groups[0]!,
+            id: "g2",
+            position: 2,
+            displayNumber: 2,
+            state: action === "fire" ? "held" : "fired",
+            firedAt: action === "fire" ? null : state.groups[0]!.firedAt,
+            rows: [
+              {
+                ...state.groups[0]!.rows[0]!,
+                lineId: "line-2",
+                lineNo: 2,
+                name: "Steak",
+                quantity: action === "fire" ? "2.000" : "3.000",
+                servedQuantity: action === "fire" ? "0.000" : "1.000",
+                firedAt: action === "fire" ? null : state.groups[0]!.firedAt,
+                released: action !== "fire",
+              },
+            ],
+          });
+          let accept!: () => void;
+          const pending = new Promise<{ revision: number }>((resolve) => {
+            accept = () => {
+              state.revision = 4;
+              if (action === "fire") {
+                state.groups[1]!.state = "fired";
+                state.groups[1]!.rows[0]!.released = true;
+              } else {
+                state.groups[0]!.rows[0]!.servedQuantity = "2.000";
+                if (action === "all") state.groups[1]!.rows[0]!.servedQuantity = "3.000";
+              }
+              resolve({ revision: 4 });
+            };
+          });
+          const send = vi.fn(() => pending);
+          const { el } = await mountApp({
+            getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+            readCurrentOrders: vi.fn(async () => structuredClone(state)),
+            listGroups: vi.fn(async () => ({
+              revision: state.revision,
+              groups: state.groups.map((group) => ({
+                ...group,
+                courseIds: [],
+                lineIds: group.rows.map((row) => row.lineId),
+                summary: group.rows[0]!.name,
+              })),
+            })),
+            [action === "fire" ? "fireGroup" : "markServed"]: send,
+          });
+          const order = await openMesa(el);
+          const panel = await visiblePanel(order);
+          const before = structuredClone(order.currentOrders);
+          const control = (selector: string) =>
+            panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
+          const native = (element: HTMLElement) =>
+            element instanceof HTMLButtonElement
+              ? element
+              : element.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+          try {
+            let target: HTMLButtonElement;
+            if (action === "fire") {
+              await userEvent.click(control("[data-held-toggle]"));
+              await panel.updateComplete;
+              await userEvent.click(control('[data-group-fire="g2"]'));
+              await flush(el);
+              expect(send).not.toHaveBeenCalled();
+              target = native(order.shadowRoot!.querySelector<HTMLElement>("[data-fire-confirm]")!);
+            } else {
+              target = native(
+                control(action === "row" ? '[data-serve-line="line-1"]' : "[data-serve-all]"),
+              );
+            }
+            await userEvent.dblClick(target);
+            await flush(el);
+            expect(send).toHaveBeenCalledExactlyOnceWith(
+              "v1",
+              action === "fire"
+                ? "g2"
+                : action === "row"
+                  ? [{ lineId: "line-1", quantity: "1" }]
+                  : [
+                      { lineId: "line-1", quantity: "1" },
+                      { lineId: "line-2", quantity: "2" },
+                    ],
+              { submissionId: expect.any(String), expectedPartyRevision: 3 },
+            );
+            expect(order.currentOrders).toEqual(before);
+            expect(
+              el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")?.open ?? false,
+            ).toBe(false);
+            for (const button of panel.shadowRoot!.querySelectorAll<HTMLElement>(
+              "[data-serve-line],[data-serve-all],[data-group-fire]",
+            )) {
+              expect(native(button).disabled).toBe(true);
+            }
+            await userEvent.click(native(control('[data-serve-line="line-1"]')), { force: true });
+            await flush(el);
+            expect(send).toHaveBeenCalledOnce();
+            expect(api.fireGroup).toHaveBeenCalledTimes(action === "fire" ? 1 : 0);
+            expect(api.markServed).toHaveBeenCalledTimes(action === "fire" ? 0 : 1);
+
+            accept();
+            await flush(el, 6);
+            expect(order.currentOrders!.revision).toBe(4);
+            expect(order.currentOrders!.groups).toEqual(state.groups);
+            if (action === "all") {
+              const toast = el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+              expect(toast.open).toBe(true);
+              await userEvent.click(toast.querySelector<HTMLElement>("[data-undo-served]")!);
+              await flush(el);
+              expect(api.unmarkServed).toHaveBeenCalledExactlyOnceWith(
+                "v1",
+                [
+                  { lineId: "line-1", quantity: "1" },
+                  { lineId: "line-2", quantity: "2" },
+                ],
+                { submissionId: expect.any(String), expectedPartyRevision: 4 },
+              );
+            } else {
+              const mark = vi.mocked(api.markServed);
+              mark.mockResolvedValue({ revision: 5 });
+              await userEvent.click(native(control('[data-serve-line="line-2"]')));
+              await flush(el);
+              expect(mark).toHaveBeenCalledTimes(action === "row" ? 2 : 1);
+              expect(mark).toHaveBeenLastCalledWith("v1", [{ lineId: "line-2", quantity: "2" }], {
+                submissionId: expect.any(String),
+                expectedPartyRevision: 4,
+              });
+            }
+            expect(banner(el)).toBeNull();
+            expect(drafts.saveDraft).not.toHaveBeenCalled();
+            expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+          } finally {
+            accept();
+            await flush(el);
+          }
+        },
+      );
+    }
+
     async function visiblePanel(order: TillTableOrderScreen): Promise<TillSentOrders> {
       await order.updateComplete;
       const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");

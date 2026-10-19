@@ -1567,8 +1567,20 @@ checks exercise the app with a controlled API reply, not the server's transactio
 Send all, Fire and Move buttons at 390 and 1280 px in both languages and themes: each is at least
 44 px on each axis and stays within the viewport. The main screen suite's "tap target of 44 px"
 case measures the replacement held-group controls, Fire confirmation and Move earlier/later.
-Its twice-pressed Fire/Move cases use scripted clicks; native repeated Sent service presses
-remain an acceptance check. None of these checks replaces the physical-till trial.
+Its twice-pressed Fire/Move cases use scripted clicks.
+
+The native Sent integration cases in `apps/till/src/till-app-parties.test.ts` double-click a
+dish, All served and group Fire on till and phone while the API reply waits. They check one
+request, disabled service controls and no premature display change, then the accepted snapshot.
+A subsequent dish press or Undo uses the accepted party revision. These are application checks
+with controlled API replies, not server transaction or physical-till tests.
+
+A press on a disabled row must not freeze that display while it waits: the button receives
+pointer events without a click to release the frozen view.
+`apps/till/src/widgets/sent-orders.test.ts` checks both busy and unreleased rows, then checks
+updated ready-first ordering, the new quantity and a permitted serve. Its existing enabled-row
+case still checks that a real press holds the row's position until released. None of these
+checks replaces the physical-till trial.
 
 ### Device equipment defaults (W100, #1332; owner kept every default, 2026-10-07)
 
