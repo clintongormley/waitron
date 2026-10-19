@@ -12,8 +12,19 @@ type Dialog = LitElement & {
   unitPrecision: number;
   consent: CancellationRead | null;
   refundAvailable: boolean;
+  reasons: (typeof cancelReason)[];
   busy: boolean;
   refusal: string;
+};
+const cancelReason = {
+  id: "house",
+  name: "House",
+  actions: ["cancel"] as ["cancel"],
+  noteRequired: false,
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRole: "manager" as const,
+  approverRole: "manager" as const,
 };
 const read = (
   status: CancellationRead["context"]["billStatus"] = "open",
@@ -51,6 +62,7 @@ async function mount(over: Partial<Dialog> = {}) {
     unitPrecision: 0,
     consent: read(),
     refundAvailable: false,
+    reasons: [cancelReason],
     busy: false,
     refusal: "",
     ...over,
@@ -71,6 +83,13 @@ async function fill(el: Dialog, value: string) {
   const stepper = root(el).querySelector("wt-number-stepper")!;
   await stepper.updateComplete;
   await userEvent.fill(page.elementLocator(stepper.shadowRoot!.querySelector("input")!), value);
+  await el.updateComplete;
+}
+async function pickReason(el: Dialog) {
+  const field = root(el).querySelector("wt-combobox")!;
+  field.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "house" }, bubbles: true, composed: true }),
+  );
   await el.updateComplete;
 }
 function collect(el: Dialog) {
@@ -100,11 +119,18 @@ it("requires an explicit money choice for started work", async () => {
   expect(button(el).disabled).toBe(true);
   expect(button(el).variant).toBe("secondary");
   await click(el, "input[value=keep_charge]");
+  await pickReason(el);
   expect(button(el).disabled).toBe(false);
   expect(button(el).variant).toBe("danger");
   await click(el);
   expect(calls).toEqual([
-    { lineId: "dish-1", quantity: "3", outcome: "keep_charge", consent: read("open", "started") },
+    {
+      lineId: "dish-1",
+      quantity: "3",
+      outcome: "keep_charge",
+      reasonId: "house",
+      consent: read("open", "started"),
+    },
   ]);
 });
 it.each(["not_started", "started"] as const)(
@@ -118,9 +144,16 @@ it.each(["not_started", "started"] as const)(
     expect(button(el).disabled).toBe(true);
     const calls = collect(el);
     await click(el, "input[value=refund]");
+    await pickReason(el);
     await click(el);
     expect(calls).toEqual([
-      { lineId: "dish-1", quantity: "3", outcome: "refund", consent: read("settled", stage) },
+      {
+        lineId: "dish-1",
+        quantity: "3",
+        outcome: "refund",
+        reasonId: "house",
+        consent: read("settled", stage),
+      },
     ]);
     expect(Object.keys(calls[0] as object)).not.toContain("amount");
   },
@@ -130,6 +163,7 @@ it("requires paid keep-payment consent even when refund is unavailable", async (
   expect(button(el).disabled).toBe(true);
   expect(root(el).textContent).toContain("Cancel, keep the payment");
   await click(el, "input[value=keep_charge]");
+  await pickReason(el);
   expect(button(el).disabled).toBe(false);
 });
 it.each(["", "0", "-1", "1.5", "4", "abc", "1e0"])(
@@ -198,6 +232,7 @@ it("clears pre-start consent when a refresh reports kitchen advancement", async 
 it("forgets a chosen refund when it becomes unavailable", async () => {
   const el = await mount({ consent: read("settled"), refundAvailable: true });
   await click(el, "input[value=refund]");
+  await pickReason(el);
   el.refundAvailable = false;
   await el.updateComplete;
   expect(button(el).disabled).toBe(true);
@@ -254,6 +289,7 @@ it("retains a choice across an equivalent passive refresh with different object 
   const calls = collect(el);
   await fill(el, "2");
   await click(el, "input[value=keep_charge]");
+  await pickReason(el);
   el.consent = {
     ...consent,
     context: {
@@ -267,7 +303,13 @@ it("retains a choice across an equivalent passive refresh with different object 
   expect(button(el).disabled).toBe(false);
   await click(el);
   expect(calls).toEqual([
-    { lineId: "dish-1", quantity: "2", outcome: "keep_charge", consent: el.consent },
+    {
+      lineId: "dish-1",
+      quantity: "2",
+      outcome: "keep_charge",
+      reasonId: "house",
+      consent: el.consent,
+    },
   ]);
 });
 it.each([
@@ -285,6 +327,7 @@ it.each([
   const consent = read("open", "started");
   const el = await mount({ consent });
   await click(el, "input[value=keep_charge]");
+  await pickReason(el);
   const next = structuredClone(consent);
   if (change === "paid") next.context.billStatus = "settled";
   else if (change === "extra")

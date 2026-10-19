@@ -2270,8 +2270,14 @@ The remaining work includes:
   input, resets it after changed kitchen facts and sends it with the original context. No on an
   unpaid bill bypasses the reason read; Yes can use the existing off-bill reason and approval flow.
   Held food uses Remove without a stage claim, and an unpaid selected action names its outcome.
-  The integrated charged-cancellation reason field, revised paid choices and refund-PIN handoff,
-  and paid-table unserved-dish resolution remain open. The new record uses today's adjustment schema; A758 still owns its later report
+  Charged choices now load cancel-capable reasons into the dialog's shared dropdown and collect
+  the selected reason's required note. The reason and note reach the keep-charge command and
+  the kitchen cancellation before the separate paid refund flow. Failed reason reads can retry;
+  an old reply cannot replace a reopened dialog's reasons. A server note-required refusal reveals
+  the required field, retaining the selected reason. Changed kitchen facts clear the reason and
+  note; equivalent reads retain them. The off-bill choice still uses the existing adjustment
+  window. Its integration, revised paid choices and refund-PIN handoff, and paid-table
+  unserved-dish resolution remain open. The new record uses today's adjustment schema; A758 still owns its later report
   changes, including crediting zero-reduction cancels, and the preparation flag migration.
   The earlier picture-03 implementation is not the completed revised design. A758's later slices
   own the changed reason rules, starter list, reports and filled refund screen.

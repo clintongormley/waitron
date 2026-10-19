@@ -1467,10 +1467,189 @@ describe("till-app: service cancellation consent", () => {
     );
     await flush(el);
   }
+  async function chooseChargedReason(el: TillApp) {
+    const widget = cancelDialog(el)!;
+    const field = widget.shadowRoot!.querySelector("wt-combobox");
+    expect(field).not.toBeNull();
+    emit(field!, "wt-change", { value: "r-mistake" });
+    await flush(el);
+    const note = widget.shadowRoot!.querySelector('wt-input[name="note"]');
+    expect(note).not.toBeNull();
+    emit(note!, "wt-change", { value: "Wrong dish" });
+    await flush(el);
+  }
   const apiFor = (read: CancellationRead = consent(), more: Record<string, unknown> = {}) => ({
     getCancellation: vi.fn().mockResolvedValue(read),
     cancelItem: vi.fn().mockResolvedValue({ revision: 4 }),
     ...more,
+  });
+
+  it("carries a charged cancellation's chosen reason and note without asking for approval", async () => {
+    const read = consent();
+    const methods = apiFor(read);
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    emit(cancelDialog(el)!, "cancel-item-choice", {
+      lineId: "line-1",
+      quantity: "1",
+      outcome: "keep_charge",
+      consent: read,
+      reasonId: "r-mistake",
+      note: "Dropped before serving",
+    });
+    await flush(el);
+    expect(methods.cancelItem.mock.calls[0]?.[2]).toMatchObject({
+      outcome: "keep_charge",
+      reasonId: "r-mistake",
+      note: "Dropped before serving",
+      expectedContext: read.context,
+      expectedEdit: billEdit,
+    });
+    expect(api.previewAdjustment).not.toHaveBeenCalled();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(approval(el)).toBeNull();
+    expect(cancelDialog(el)).toBeNull();
+  });
+
+  it("loads the inline cancel reasons after the charged choice and sends only after the reason is selected", async () => {
+    const methods = apiFor();
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+    await clickChoice(el, 'input[value="keep_charge"]');
+    expect(api.listAdjustmentReasons).toHaveBeenCalledOnce();
+    const field = cancelDialog(el)!.shadowRoot!.querySelector("wt-combobox");
+    expect(field).not.toBeNull();
+    expect(field!.options.map((row) => row.value)).toEqual(["r-mistake"]);
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+    emit(field!, "wt-change", { value: "r-mistake" });
+    await flush(el);
+    const note = cancelDialog(el)!.shadowRoot!.querySelector('wt-input[name="note"]')!;
+    emit(note, "wt-change", { value: "Wrong dish" });
+    await clickChoice(el, "[data-confirm]");
+    expect(methods.cancelItem.mock.calls[0]?.[2]).toMatchObject({
+      outcome: "keep_charge",
+      reasonId: "r-mistake",
+      note: "Wrong dish",
+    });
+    expect(cancelDialog(el)).toBeNull();
+  });
+
+  it("retries a failed inline reason read without sending a cancellation or losing its choice", async () => {
+    const methods = apiFor();
+    const reasons = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue([mistake]);
+    const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    expect(cancelDialog(el)!.refusal).toBe(t("adjust.reasons_error"));
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+    expect(
+      cancelDialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[value="keep_charge"]')!
+        .checked,
+    ).toBe(true);
+    await clickChoice(el, "[data-retry-reasons]");
+    expect(reasons).toHaveBeenCalledTimes(2);
+    await chooseChargedReason(el);
+    await clickChoice(el, "[data-confirm]");
+    expect(methods.cancelItem.mock.calls[0]?.[2]).toMatchObject({
+      reasonId: "r-mistake",
+      note: "Wrong dish",
+    });
+    expect(cancelDialog(el)).toBeNull();
+  });
+
+  it("does not publish an old reason answer into a reopened cancellation", async () => {
+    let resolveOld!: (value: AdjustmentReason[]) => void;
+    const oldReply = new Promise<AdjustmentReason[]>((resolve) => {
+      resolveOld = resolve;
+    });
+    const methods = apiFor();
+    const reasons = vi.fn().mockReturnValueOnce(oldReply).mockResolvedValue([mistake]);
+    const { el } = await mountApp({ ...methods, listAdjustmentReasons: reasons });
+    await openMesa4(el);
+    await openCancel(el);
+    const original = cancelDialog(el)!;
+    await clickChoice(el, 'input[value="keep_charge"]');
+    expect(original.reasonsLoading).toBe(true);
+    emit(original, "cancel-item-close");
+    await flush(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    const current = cancelDialog(el)!;
+    expect(current).not.toBe(original);
+    expect(current.reasons).toEqual([mistake]);
+    resolveOld([{ ...mistake, id: "old", name: "Old read" }]);
+    await flush(el);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await flush(el);
+    expect(cancelDialog(el)).toBe(current);
+    expect(current.reasons).toEqual([mistake]);
+    expect(methods.cancelItem).not.toHaveBeenCalled();
+  });
+
+  it("places a charged cancellation's server reason refusal on the inline reason field", async () => {
+    const methods = apiFor(consent(), {
+      cancelItem: vi.fn().mockRejectedValue({ code: "adjustment.reason_inactive" }),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
+    await clickChoice(el, "[data-confirm]");
+    const widget = cancelDialog(el)!;
+    expect(widget.shadowRoot!.querySelector("wt-combobox")!.error).toBe(
+      codeMessage("adjustment.reason_inactive"),
+    );
+    expect(widget.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+    expect(
+      widget.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-confirm]")!
+        .disabled,
+    ).toBe(false);
+  });
+
+  it("reveals a newly required cancel note after the server refuses the stale reason definition", async () => {
+    const methods = apiFor(consent(), {
+      cancelItem: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "adjustment.note_required" })
+        .mockResolvedValue({ revision: 4 }),
+      listAdjustmentReasons: vi.fn().mockResolvedValue([{ ...mistake, noteRequired: false }]),
+    });
+    const { el } = await mountApp(methods);
+    await openMesa4(el);
+    await openCancel(el);
+    await clickChoice(el, 'input[value="keep_charge"]');
+    emit(cancelDialog(el)!.shadowRoot!.querySelector("wt-combobox")!, "wt-change", {
+      value: "r-mistake",
+    });
+    await flush(el);
+    expect(cancelDialog(el)!.shadowRoot!.querySelector('wt-input[name="note"]')).toBeNull();
+    await clickChoice(el, "[data-confirm]");
+    const widget = cancelDialog(el)!;
+    const field =
+      widget.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="note"]');
+    expect(field).not.toBeNull();
+    expect(field!.required).toBe(true);
+    expect(field!.error).not.toBe("");
+    expect(
+      widget.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-confirm]")!
+        .disabled,
+    ).toBe(true);
+    emit(field!, "wt-change", { value: "Dropped before serving" });
+    await clickChoice(el, "[data-confirm]");
+    expect(methods.cancelItem).toHaveBeenCalledTimes(2);
+    expect(methods.cancelItem.mock.calls[1]![2]).toMatchObject({
+      reasonId: "r-mistake",
+      note: "Dropped before serving",
+    });
+    expect(cancelDialog(el)).toBeNull();
   });
 
   it("No removes fired food directly without asking for a reason and preserves the original kitchen read", async () => {
@@ -1636,6 +1815,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({ expectedEdit: billEdit });
     expect(cancelDialog(el)).toBeNull();
@@ -1697,6 +1877,7 @@ describe("till-app: service cancellation consent", () => {
       await openMesa4(el);
       await openCancel(el);
       await clickChoice(el, 'input[value="keep_charge"]');
+      await chooseChargedReason(el);
       const before = listDrafts.mock.calls.length;
       version = 1;
       window.dispatchEvent(new Event("focus"));
@@ -1723,6 +1904,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     drafts.listDrafts.mockClear();
     await clickChoice(el, "[data-confirm]");
     expect(cancelDialog(el)?.refusal).toBe(codeMessage("draft.taken_over"));
@@ -1827,6 +2009,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     const calls = listDrafts.mock.calls.length;
     version = 1;
@@ -1853,6 +2036,7 @@ describe("till-app: service cancellation consent", () => {
     expect(cancelDialog(el)?.consent).toEqual(read);
     expect(methods.cancelItem).not.toHaveBeenCalled();
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     expect(methods.cancelItem).toHaveBeenCalledWith(
       "v1",
@@ -1860,6 +2044,8 @@ describe("till-app: service cancellation consent", () => {
       {
         quantity: "1",
         outcome: "keep_charge",
+        reasonId: "r-mistake",
+        note: "Wrong dish",
         expectedPartyRevision: 3,
         expectedBillRevision: 6,
         expectedEdit: billEdit,
@@ -1869,7 +2055,7 @@ describe("till-app: service cancellation consent", () => {
       expect.any(Object),
     );
     expect(cancelDialog(el)).toBeNull();
-    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+    expect(api.listAdjustmentReasons).toHaveBeenCalledOnce();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
     expect(api.getTabLines).toHaveBeenCalledTimes(2);
     expect(order.lines[0]!.unitPriceGross).toBe("30.00");
@@ -1888,6 +2074,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     expect(cancelDialog(el)?.consent).toEqual(fresh);
     expect(methods.cancelItem).toHaveBeenCalledTimes(1);
@@ -1900,6 +2087,7 @@ describe("till-app: service cancellation consent", () => {
         .disabled,
     ).toBe(true);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     expect(methods.cancelItem).toHaveBeenCalledTimes(2);
     expect(methods.cancelItem.mock.calls[1]![2]).toMatchObject({ expectedContext: fresh.context });
@@ -1944,6 +2132,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     expect(cancelDialog(el)?.refusal).toBe(codeMessage("permission.denied"));
     expect(
@@ -2126,6 +2315,7 @@ describe("till-app: service cancellation consent", () => {
     expect(cancelDialog(el)?.name).toBe("Recorded wine");
     expect(cancelDialog(el)?.consent?.context.billStatus).toBe("settled");
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     expect(cancelDialog(el)).toBeNull();
     expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({
@@ -2142,6 +2332,7 @@ describe("till-app: service cancellation consent", () => {
     await openCancel(el);
     vi.mocked(api.getPartyBills).mockRejectedValue({ code: "server.internal" });
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     expect(cancelDialog(el)).toBeNull();
     expect(banner(el)?.textContent).toContain(t("table.reread_failed"));
@@ -2154,6 +2345,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     const parent = el.parentElement!;
     el.remove();
     parent.append(el);
@@ -2196,6 +2388,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     const widget = cancelDialog(el)!;
     expect(widget.busy).toBe(true);
@@ -2224,6 +2417,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     await expect.poll(() => cancelDialog(el), { timeout: 4000 }).toBeNull();
     expect(methods.cancelItem).toHaveBeenCalledTimes(2);
@@ -2239,6 +2433,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     await expect
       .poll(() => banner(el)?.textContent, { timeout: 4000 })
@@ -2263,6 +2458,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     expect(cancelDialog(el)).toBeNull();
     expect(banner(el)?.textContent).toBe(
@@ -2309,6 +2505,7 @@ describe("till-app: service cancellation consent", () => {
     await openMesa4(el);
     await openCancel(el);
     await clickChoice(el, 'input[value="keep_charge"]');
+    await chooseChargedReason(el);
     await clickChoice(el, "[data-confirm]");
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
@@ -2509,6 +2706,7 @@ describe("till-app: service cancellation consent", () => {
     async function chooseRefund(el: TillApp) {
       await openCancel(el);
       await clickChoice(el, 'input[value="refund"]');
+      await chooseChargedReason(el);
       await clickChoice(el, "[data-confirm]");
     }
     async function submitRefund(el: TillApp) {
@@ -2548,6 +2746,8 @@ describe("till-app: service cancellation consent", () => {
       expect(methods.cancelItem.mock.calls[0]![2]).toEqual({
         quantity: "1",
         outcome: "keep_charge",
+        reasonId: "r-mistake",
+        note: "Wrong dish",
         expectedPartyRevision: 3,
         expectedBillRevision: 6,
         expectedEdit: billEdit,
@@ -2713,6 +2913,7 @@ describe("till-app: service cancellation consent", () => {
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
       expect(api.refundTransaction).not.toHaveBeenCalled();
       await clickChoice(el, 'input[value="refund"]');
+      await chooseChargedReason(el);
       await clickChoice(el, "[data-confirm]");
       await expect.poll(() => refundForm(el)).not.toBeNull();
       expect(methods.cancelItem.mock.calls[1]![2]).toMatchObject({

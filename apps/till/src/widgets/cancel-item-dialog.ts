@@ -14,19 +14,30 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-number-stepper.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-input.js";
+import type { AdjustmentReason } from "../api/client.js";
 import type { CancellationRead } from "../api/line-cancel-types.js";
 import { t } from "../i18n/t.js";
 import { trimQuantity } from "./dish-format.js";
 import { trackDialog } from "./track-dialog.js";
 
 type Outcome = "keep_charge" | "remove_charge" | "refund";
-type Draft = { quantity: string; outcome: Outcome | null; preparationStarted: boolean | null };
+type Draft = {
+  quantity: string;
+  outcome: Outcome | null;
+  preparationStarted: boolean | null;
+  reasonId: string;
+  note: string;
+};
 export interface CancelItemChoice {
   lineId: string;
   quantity: string;
   outcome: Outcome;
   consent: CancellationRead;
   preparationStarted?: boolean;
+  reasonId?: string;
+  note?: string;
 }
 
 function quantityValue(value: string): string {
@@ -104,13 +115,23 @@ export class TillCancelItemDialog extends LitElement {
   @property({ type: Number }) unitPrecision: number | null = 0;
   @property({ attribute: false }) consent: CancellationRead | null = null;
   @property({ type: Boolean }) refundAvailable = false;
+  @property({ attribute: false }) reasons: AdjustmentReason[] | null = null;
+  @property({ type: Boolean }) reasonsLoading = false;
   @property({ type: Boolean }) busy = false;
   @property() refusal = "";
-  @state() private draft: Draft = { quantity: "", outcome: null, preparationStarted: null };
+  @property({ attribute: false }) refusalField: "reason" | "note" | null = null;
+  @state() private draft: Draft = {
+    quantity: "",
+    outcome: null,
+    preparationStarted: null,
+    reasonId: "",
+    note: "",
+  };
   @state() private attempted = false;
   @state() private active = true;
   @state() private sending = false;
   @state() private shownRefusal = "";
+  @state() private shownRefusalField: "reason" | "note" | null = null;
   #key?: string;
   #baseline?: Draft;
   #scope?: DraftScope<Draft>;
@@ -167,8 +188,9 @@ export class TillCancelItemDialog extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("refusal")) {
+    if (changed.has("refusal") || changed.has("refusalField")) {
       this.shownRefusal = this.refusal;
+      this.shownRefusalField = this.refusalField;
       this.sending = false;
     }
     if (changed.has("busy") && !this.busy) this.sending = false;
@@ -179,6 +201,8 @@ export class TillCancelItemDialog extends LitElement {
       const options = this.#options();
       this.draft = {
         preparationStarted: null,
+        reasonId: "",
+        note: "",
         quantity: this.unitPrecision === 0 ? trimQuantity(this.#remaining()) : this.#remaining(),
         // Only the pre-start unpaid case has no money choice to make.
         outcome: options.length === 1 && options[0] === "remove_charge" ? "remove_charge" : null,
@@ -192,6 +216,10 @@ export class TillCancelItemDialog extends LitElement {
       this.draft = { ...this.draft, outcome: null };
       this.#scope?.changed();
     }
+    if (changed.has("reasons") && this.draft.reasonId !== "" && this.#reason() === undefined) {
+      this.draft = { ...this.draft, reasonId: "", note: "" };
+      this.#scope?.changed();
+    }
     if (this.isConnected && this.active && !this.#scope) {
       const { coordinator, scope } = draftScopeFor<Draft>(this, {
         id: this,
@@ -200,6 +228,8 @@ export class TillCancelItemDialog extends LitElement {
         equal: (a, b) =>
           a.outcome === b.outcome &&
           a.preparationStarted === b.preparationStarted &&
+          a.reasonId === b.reasonId &&
+          a.note === b.note &&
           quantityValue(a.quantity) === quantityValue(b.quantity),
         restore: (value) => {
           this.draft = { ...value };
@@ -222,7 +252,40 @@ export class TillCancelItemDialog extends LitElement {
   #set(change: Partial<Draft>): void {
     if (!this.isConnected || !this.active || this.#busy()) return;
     this.draft = { ...this.draft, ...change };
+    if (
+      (change.reasonId !== undefined && this.shownRefusalField === "reason") ||
+      (change.note !== undefined && this.shownRefusalField === "note")
+    ) {
+      this.shownRefusal = "";
+      this.shownRefusalField = null;
+    }
     this.#scope?.changed();
+    if (change.outcome !== undefined && this.#needsReason() && this.reasons === null)
+      this.#requestReasons();
+  }
+  #needsReason(): boolean {
+    return this.draft.outcome === "keep_charge" || this.draft.outcome === "refund";
+  }
+  #offeredReasons(): AdjustmentReason[] {
+    return (this.reasons ?? []).filter((reason) => reason.actions.includes("cancel"));
+  }
+  #reason(): AdjustmentReason | undefined {
+    return this.#offeredReasons().find((reason) => reason.id === this.draft.reasonId);
+  }
+  #noteInvalid(): boolean {
+    return (
+      this.#needsReason() && this.#reason()?.noteRequired === true && this.draft.note.trim() === ""
+    );
+  }
+  #requestReasons(): void {
+    if (!this.isConnected || !this.active || this.#busy() || this.reasonsLoading) return;
+    this.dispatchEvent(
+      new CustomEvent("cancel-item-reasons", {
+        detail: {},
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
   #preparation(started: boolean): void {
     if (!this.isConnected || !this.active || this.#busy()) return;
@@ -240,8 +303,13 @@ export class TillCancelItemDialog extends LitElement {
       return;
     }
     this.attempted = true;
+    this.shownRefusalField = null;
+    this.shownRefusal = "";
     const outcome = this.draft.outcome;
-    if (!this.#quantityValid()) {
+    if (
+      !this.#quantityValid() ||
+      (this.#needsReason() && (this.#reason() === undefined || this.#noteInvalid()))
+    ) {
       await this.updateComplete;
       if (this.isConnected && this.active) await focusFirstInvalid(this.shadowRoot!);
       return;
@@ -258,6 +326,12 @@ export class TillCancelItemDialog extends LitElement {
           consent: structuredClone(this.consent!),
           ...(this.#asksPreparation()
             ? { preparationStarted: this.draft.preparationStarted! }
+            : {}),
+          ...(this.#needsReason()
+            ? {
+                reasonId: this.draft.reasonId,
+                ...(this.#reason()?.noteRequired ? { note: this.draft.note.trim() } : {}),
+              }
             : {}),
         },
         bubbles: true,
@@ -288,10 +362,19 @@ export class TillCancelItemDialog extends LitElement {
   override render() {
     const options = this.#options();
     const invalid = this.attempted && !this.#quantityValid();
+    const reasonInvalid = this.attempted && this.#needsReason() && this.#reason() === undefined;
+    const noteInvalid = this.attempted && this.#noteInvalid();
     const allowed = this.draft.outcome !== null && options.includes(this.draft.outcome);
     const unavailable = options.length === 0;
     const waitingForPreparation = this.#asksPreparation() && this.draft.preparationStarted === null;
-    const disabled = this.#busy() || !allowed || unavailable || invalid;
+    const disabled =
+      this.#busy() ||
+      this.reasonsLoading ||
+      !allowed ||
+      unavailable ||
+      invalid ||
+      (this.#needsReason() && this.#reason() === undefined) ||
+      noteInvalid;
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
@@ -383,8 +466,64 @@ export class TillCancelItemDialog extends LitElement {
                   )}
                 </fieldset>`
         }
+        ${
+          this.#needsReason()
+            ? html`
+                <wt-combobox
+                  name="reason"
+                  required
+                  searchPlaceholder=${t("form.combobox_search")}
+                  noResultsLabel=${t("form.combobox_no_results")}
+                  .label=${t("adjust.reason")}
+                  .placeholder=${t("adjust.reason_required")}
+                  .options=${this.#offeredReasons().map((reason) => ({ value: reason.id, label: reason.name }))}
+                  .value=${this.draft.reasonId}
+                  .disabled=${this.#busy() || this.reasonsLoading}
+                  .error=${reasonInvalid ? t("adjust.reason_required") : this.shownRefusalField === "reason" ? this.shownRefusal : ""}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    this.#set({ reasonId: event.detail.value, note: "" });
+                  }}
+                ></wt-combobox>
+                ${
+                  this.reasons !== null && this.#offeredReasons().length === 0
+                    ? html`<p>${t("adjust.no_reasons")}</p>`
+                    : nothing
+                }
+                ${
+                  this.#reason()?.noteRequired
+                    ? html` <wt-input
+                        name="note"
+                        required
+                        autocomplete="off"
+                        .label=${t("adjust.note")}
+                        .value=${live(this.draft.note)}
+                        .disabled=${this.#busy()}
+                        .error=${noteInvalid ? t("adjust.note_required") : this.shownRefusalField === "note" ? this.shownRefusal : ""}
+                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                          event.stopPropagation();
+                          this.#set({ note: event.detail.value });
+                        }}
+                      ></wt-input>`
+                    : nothing
+                }
+                ${
+                  this.reasons === null
+                    ? html` <wt-button
+                        data-retry-reasons
+                        variant="secondary"
+                        .disabled=${this.#busy() || this.reasonsLoading}
+                        .busy=${this.reasonsLoading}
+                        @click=${() => this.#requestReasons()}
+                        >${t("find_page.retry")}</wt-button
+                      >`
+                    : nothing
+                }
+              `
+            : nothing
+        }
         <wt-form-actions
-          .error=${[invalid ? t("form.fix_fields") : "", this.shownRefusal].filter(Boolean).join(" ")}
+          .error=${[invalid || reasonInvalid || noteInvalid || this.shownRefusalField !== null ? t("form.fix_fields") : "", this.shownRefusalField === null ? this.shownRefusal : ""].filter(Boolean).join(" ")}
         >
           <wt-button
             slot="cancel"

@@ -11,6 +11,16 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en");
 });
+const cancelReason = {
+  id: "house",
+  name: "House",
+  actions: ["cancel"] as ["cancel"],
+  noteRequired: false,
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRole: "manager" as const,
+  approverRole: "manager" as const,
+};
 function consent(): CancellationRead {
   return {
     billId: "bill",
@@ -39,6 +49,7 @@ async function mount(read = consent()) {
     lineId: "dish",
     name: "Croquetas",
     consent: read,
+    reasons: [cancelReason],
   });
   const calls: CancelItemChoice[] = [];
   el.addEventListener("cancel-item-choice", (event) =>
@@ -53,6 +64,14 @@ async function click(el: TillCancelItemDialog, selector: string) {
   const control = root(el).querySelector<HTMLElement>(selector);
   expect(control).not.toBeNull();
   await userEvent.click(page.elementLocator(control!));
+  await el.updateComplete;
+}
+
+async function pickReason(el: TillCancelItemDialog) {
+  const field = root(el).querySelector("wt-combobox")!;
+  field.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "house" }, bubbles: true, composed: true }),
+  );
   await el.updateComplete;
 }
 
@@ -86,12 +105,14 @@ it("Yes requires a fresh started-dish money choice and sends Yes without rewriti
     [...root(el).querySelectorAll<HTMLInputElement>('input[name="outcome"]')].map((x) => x.value),
   ).toEqual(["keep_charge", "remove_charge"]);
   await click(el, 'input[value="keep_charge"]');
+  await pickReason(el);
   await click(el, "[data-confirm]");
   expect(calls).toEqual([
     {
       lineId: "dish",
       quantity: "3",
       outcome: "keep_charge",
+      reasonId: "house",
       preparationStarted: true,
       consent: read,
     },
@@ -103,6 +124,7 @@ it("a changed answer discards the old money choice", async () => {
   const { el, calls } = await mount();
   await click(el, 'input[name="preparation"][value="yes"]');
   await click(el, 'input[value="keep_charge"]');
+  await pickReason(el);
   await click(el, 'input[name="preparation"][value="no"]');
   await click(el, 'input[name="preparation"][value="yes"]');
   expect(confirm(el).disabled).toBe(true);
@@ -121,8 +143,11 @@ it("kitchen advancement clears the manual answer rather than carrying it into ne
   expect(root(el).querySelector('input[name="preparation"]')).toBeNull();
   expect(confirm(el).disabled).toBe(true);
   await click(el, 'input[value="keep_charge"]');
+  await pickReason(el);
   await click(el, "[data-confirm]");
-  expect(calls).toEqual([{ lineId: "dish", quantity: "3", outcome: "keep_charge", consent: next }]);
+  expect(calls).toEqual([
+    { lineId: "dish", quantity: "3", outcome: "keep_charge", reasonId: "house", consent: next },
+  ]);
 });
 
 it("an equivalent refresh retains the answer, and a changed component resets it", async () => {
@@ -182,9 +207,17 @@ it("a paid fired dish retains the answer through the public-refund choice", asyn
   expect(confirm(el).disabled).toBe(true);
   await click(el, 'input[name="preparation"][value="no"]');
   await click(el, 'input[value="refund"]');
+  await pickReason(el);
   await click(el, "[data-confirm]");
   expect(calls).toEqual([
-    { lineId: "dish", quantity: "3", outcome: "refund", preparationStarted: false, consent: read },
+    {
+      lineId: "dish",
+      quantity: "3",
+      outcome: "refund",
+      reasonId: "house",
+      preparationStarted: false,
+      consent: read,
+    },
   ]);
 });
 

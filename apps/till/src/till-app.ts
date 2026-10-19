@@ -860,6 +860,9 @@ interface CancellingItem {
   consent: CancellationRead;
   busy: boolean;
   refusal: string;
+  reasons?: AdjustmentReason[];
+  reasonsLoading?: boolean;
+  refusalField?: "reason" | "note" | null;
 }
 
 interface Adjusting {
@@ -8686,10 +8689,14 @@ export class TillApp extends LitElement {
       .name=${open.name}
       .unitPrecision=${open.unitPrecision}
       .consent=${open.consent}
+      .reasons=${open.reasons ?? null}
+      .reasonsLoading=${open.reasonsLoading === true}
       .refundAvailable=${open.consent.context.billStatus === "settled" && open.consent.saleId !== undefined && this.#tenderRefundSession !== undefined}
       .busy=${open.busy}
       .refusal=${open.refusal}
+      .refusalField=${open.refusalField ?? null}
       @cancel-item-choice=${(event: CustomEvent<CancelItemChoice>) => void this.#onCancelItemChoice(event)}
+      @cancel-item-reasons=${(event: Event) => void this.#loadCancelReasons(event)}
       @cancel-item-close=${() => this.#closeCancelItem()}
     ></till-cancel-item-dialog>`;
   }
@@ -11372,6 +11379,7 @@ export class TillApp extends LitElement {
     if (
       open === null ||
       open.busy ||
+      open.reasonsLoading === true ||
       !this.#cancellationCurrent(open) ||
       event.detail.lineId !== open.lineId
     )
@@ -11386,6 +11394,30 @@ export class TillApp extends LitElement {
     }
     if (choice.outcome === "keep_charge" || choice.outcome === "refund")
       await this.#sendItemCancellation(open, choice);
+  }
+
+  async #loadCancelReasons(event: Event): Promise<void> {
+    event.stopPropagation();
+    const open = this.cancellingItem;
+    if (open === null || open.busy || open.reasonsLoading || !this.#cancellationReady(open)) return;
+    this.cancellingItem = { ...open, reasonsLoading: true, refusal: "" };
+    try {
+      const reasons = await open.api.listAdjustmentReasons();
+      if (this.cancellingItem?.id !== open.id || !this.#cancellationReady(open)) return;
+      this.cancellingItem = {
+        ...this.cancellingItem!,
+        reasons,
+        reasonsLoading: false,
+        refusal: "",
+      };
+    } catch {
+      if (this.cancellingItem?.id === open.id && this.#cancellationCurrent(open))
+        this.cancellingItem = {
+          ...this.cancellingItem,
+          reasonsLoading: false,
+          refusal: t("adjust.reasons_error"),
+        };
+    }
   }
 
   async #openCancelAdjustment(open: CancellingItem, choice: CancelItemChoice): Promise<void> {
@@ -11470,7 +11502,10 @@ export class TillApp extends LitElement {
       expectedContext: structuredClone(choice.consent.context),
       submissionId: crypto.randomUUID(),
       ...(adjustment === undefined
-        ? {}
+        ? {
+            ...(choice.reasonId === undefined ? {} : { reasonId: choice.reasonId }),
+            ...(choice.note === undefined ? {} : { note: choice.note }),
+          }
         : {
             reasonId: adjustment.choice!.reasonId,
             ...(adjustment.choice!.note === null ? {} : { note: adjustment.choice!.note }),
@@ -11543,7 +11578,19 @@ export class TillApp extends LitElement {
         await this.#rereadAmounts(open.billId, open.visit);
         if (this.#cancellationCurrent(open)) this.errorKey ??= "adjust.unconfirmed";
       } else {
-        this.cancellingItem = { ...open, busy: false, refusal: codeMessage(code) };
+        const field = refusalField(code, "cancel", false);
+        this.cancellingItem = {
+          ...open,
+          busy: false,
+          refusal: codeMessage(code),
+          refusalField: field === "reason" || field === "note" ? field : null,
+          reasons:
+            code === "adjustment.note_required"
+              ? open.reasons?.map((reason) =>
+                  reason.id === choice.reasonId ? { ...reason, noteRequired: true } : reason,
+                )
+              : open.reasons,
+        };
         if (DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
       }
     } finally {

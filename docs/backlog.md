@@ -2228,8 +2228,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   requires an active cancel reason and its required note, recording a cancel adjustment with
   zero reduction beside the service cancellation. Paid-bill HTTP tests retain their bill rows,
   sales, tenders and payments while adding that adjustment. Recorded reasons use the operator's
-  language. The revised dialog must still supply charged-cancellation reasons, finish its paid
-  choices and refund-PIN handoff, and resolve every unserved dish before closing a paid table.
+  language. The charged choices now collect a cancel reason and required note in the dialog,
+  including before the paid refund handoff; a failed reason read can retry, and a server-required
+  note is revealed without discarding the choice. Finish the off-bill dialog integration, revised
+  paid choices and refund-PIN handoff, and resolve every unserved dish before closing a paid table.
   Preserve the completed behavioral checks and their receipts; the detail's
   Decisions section records their scope and limits. The product guide separates stored-line
   availability from the saved New order payment refusal; the till README distinguishes fresh-dish

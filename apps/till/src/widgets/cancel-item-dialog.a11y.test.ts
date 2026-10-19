@@ -11,6 +11,16 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en");
 });
+const cancelReason = {
+  id: "house",
+  name: "House",
+  actions: ["cancel"] as ["cancel"],
+  noteRequired: false,
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRole: "manager" as const,
+  approverRole: "manager" as const,
+};
 const consent = (
   status: "open" | "settled",
   stage: "not_started" | "started",
@@ -41,6 +51,7 @@ describe.each(["light", "dark"] as const)("Cancel item accessibility (%s)", (the
       "till-cancel-item-dialog",
       {
         name: "Solomillo con patatas y salsa de pimienta",
+        reasons: [cancelReason],
         lineId: "dish",
         consent: consent("open", "not_started"),
         ...over,
@@ -66,6 +77,10 @@ describe.each(["light", "dark"] as const)("Cancel item accessibility (%s)", (the
     await userEvent.click(
       page.elementLocator(el.shadowRoot!.querySelector<HTMLElement>("input[value=keep_charge]")!),
     );
+    el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "house" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
     expect(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-confirm]")!.disabled,
     ).toBe(false);
