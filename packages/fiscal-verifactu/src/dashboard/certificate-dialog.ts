@@ -21,10 +21,7 @@ import type { AeatCertificateClient, CertificateKind, InstallAnswerView } from "
 import { t, type AeatCertificateKey } from "./strings.js";
 import { calendarDay } from "./dates.js";
 import { exportGuidesStyles, exportGuidesView } from "./export-guides-view.js";
-
-/** The server's own limit (`CERTIFICATE_MAX_BYTES`, ../certificate-file.ts): a larger file is
- * refused there, so it is marked here before anything is sent. */
-const MAX_BYTES = 100 * 1024;
+import { CERTIFICATE_MAX_BYTES } from "../certificate-limits.js";
 
 const KINDS: readonly CertificateKind[] = ["sello", "representante"];
 
@@ -139,7 +136,7 @@ export class AeatCertificateDialog extends LitElement {
 
   #check(field: Field): string {
     if (field === "file") {
-      return this.draft.file !== null && this.draft.file.size > MAX_BYTES
+      return this.draft.file !== null && this.draft.file.size > CERTIFICATE_MAX_BYTES
         ? t("aeat_certificate.refused.too_large")
         : "";
     }

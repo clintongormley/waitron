@@ -1,0 +1,1 @@
+export const CERTIFICATE_MAX_BYTES = 100 * 1024;
