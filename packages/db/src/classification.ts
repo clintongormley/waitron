@@ -120,11 +120,6 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("floor_today_joins", "state", STATE),
   classify("floor_today_join_tables", "state", STATE),
   classify("floor_today_split_parts", "state", STATE),
-  classify(
-    "table_service_statuses",
-    "state",
-    "live table service in flight; copied to a standby, never drained back",
-  ),
   classify("kitchen_stations", "state", STATE),
   classify("kitchen_timing_defaults", "state", STATE),
   classify("kitchen_station_timing", "state", STATE),

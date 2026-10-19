@@ -1,5 +1,5 @@
 /**
- * `seedFloor`: the floor-plan zones, the placed tables, and the service statuses.
+ * `seedFloor`: the floor-plan zones and the placed tables.
  *
  * `floor_zones.active` is read RAW below, and a raw read reaches no column mapper, so a boolean
  * column arrives as 0 or 1.
@@ -173,7 +173,7 @@ describe("seedFloor", () => {
     );
   });
 
-  it("creates restaurant and deli service zones, the placed restaurant floor, and statuses", async () => {
+  it("creates restaurant and deli service zones, the placed restaurant floor", async () => {
     const { locationId } = await provisionVenue();
 
     const res = await withTransaction(suite.db, async (tx) => {
@@ -200,10 +200,7 @@ describe("seedFloor", () => {
             left join floor_plan_placements pl on pl.plan_table_id = p.id
             where d.location_id = ${locationId} order by d.label`,
       );
-      const { rows: statuses } = await tx.execute<{ label: string; color: string }>(
-        sql`select label, color from table_service_statuses order by display_order`,
-      );
-      return { zones, tables, statuses };
+      return { zones, tables };
     });
 
     expect(res.zones.map((z) => z.name)).toEqual([
@@ -223,9 +220,6 @@ describe("seedFloor", () => {
       expect(table.y).not.toBeNull();
       expect(table.shape).not.toBeNull();
     }
-
-    expect(res.statuses.map((s) => s.label)).toEqual(["VIP", "Allergy at this table", "Birthday"]);
-    expect(new Set(res.statuses.map((s) => s.color)).size).toBe(3);
   });
 
   it("gives every zone with tables a default set layout and today's plan, every table placed and none overlapping", async () => {

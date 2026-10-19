@@ -4,7 +4,7 @@ import type { CountryDemoIdentity, CountryPack } from "@waitron/country";
 import { COUNTRY_PACKS, VENUE_SETUP_COUNTRY_PACKS, getCountryPack } from "@waitron/country-packs";
 import { ALL_MODULES } from "../../src/modules.js";
 import { CASA_DELGADO, DELI_TAKEAWAY, MENU_DEL_DIA, PRODUCT_OPTION_LISTS } from "./menu.js";
-import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "./floor.js";
+import { DEMO_TABLES, DEMO_ZONES } from "./floor.js";
 import { DEMO_STAFF } from "./staff.js";
 import { DEMO_ADJUSTMENT_REASONS } from "./seed-adjustments.js";
 import {
@@ -191,7 +191,6 @@ describe("demo data sets", () => {
     expect(set.productOptionLists).toBe(PRODUCT_OPTION_LISTS);
     expect(set.floor.zones).toBe(DEMO_ZONES);
     expect(set.floor.tables).toBe(DEMO_TABLES);
-    expect(set.floor.statuses).toBe(DEMO_STATUSES);
     expect(set.staff).toBe(DEMO_STAFF);
     expect(set.adjustmentReasons).toBe(DEMO_ADJUSTMENT_REASONS);
     expect(set.menus.drinksName).toEqual({ en: "Drinks", es: "Bebidas" });

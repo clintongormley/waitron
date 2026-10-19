@@ -42,7 +42,6 @@ export * from "./device-profile-printers.js";
 export * from "./printer-holders.js";
 export * from "./tenant-themes.js";
 export * from "./tenant-receipts.js";
-export * from "./table-service-statuses.js";
 export * from "./working-order-counters.js";
 export * from "./bill-payments.js";
 export * from "./sales.js";

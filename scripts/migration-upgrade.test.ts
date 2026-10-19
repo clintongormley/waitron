@@ -418,6 +418,10 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0044_drop_table_bill_pointer": {
     refused: ["DROP TABLE `dining_tables`", "FOREIGN KEY constraint failed"],
   },
+  // Rebuilds `dining_tables` without `status_id`; every venue needs a reset (A757 slice 2).
+  "core/0181_retire_table_service_statuses": {
+    refused: ["DROP TABLE `dining_tables`", "FOREIGN KEY constraint failed"],
+  },
   // Rebuilds `printers`; dropping the old one is refused while a non-cascading child holds rows.
   "core/0055_drop_printer_character_set": {
     refused: ["DROP TABLE `printers`", "FOREIGN KEY constraint failed"],

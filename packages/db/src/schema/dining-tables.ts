@@ -3,7 +3,6 @@ import { foreignKey, unique } from "drizzle-orm/sqlite-core";
 import { id, label, newId, nowIso, table, tsString } from "./columns.js";
 import { floorPlanTables } from "./floor-plans.js";
 import { floorZones } from "./floor-zones.js";
-import { tableServiceStatuses } from "./table-service-statuses.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -20,7 +19,6 @@ export const diningTables = table(
     label: label("label").notNull(),
     zoneId: id("zone_id").notNull(),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
-    statusId: id("status_id"),
     needsClearingSince: tsString("needs_clearing_since"),
     // The master table this live table follows.
     planTableId: id("plan_table_id").references((): AnySQLiteColumn => floorPlanTables.id),
@@ -31,11 +29,6 @@ export const diningTables = table(
       columns: [t.locationId],
       foreignColumns: [locations.id],
       name: "dining_tables_location_fk",
-    }),
-    foreignKey({
-      columns: [t.statusId],
-      foreignColumns: [tableServiceStatuses.id],
-      name: "dining_tables_status_fk",
     }),
     foreignKey({
       columns: [t.zoneId],

@@ -89,9 +89,15 @@ describe("dining_tables columns", () => {
       "location_id",
       "needs_clearing_since",
       "plan_table_id",
-      "status_id",
       "zone_id",
     ]);
+  });
+
+  it("keeps no venue-made status table and no trigger that cleared one", () => {
+    const leftovers = suite.db.all<{ name: string }>(
+      sql`select name from sqlite_master where name in ('table_service_statuses', 'parties_clear_table_status')`,
+    );
+    expect(leftovers).toEqual([]);
   });
 
   it("gives a dining table no pointer to a bill", () => {

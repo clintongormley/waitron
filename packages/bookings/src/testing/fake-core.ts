@@ -81,7 +81,6 @@ export function fakeCore(cfg: FakeCoreConfig): CoreServices {
         partyId: party!.id,
       });
       await tx.insert(partyTables).values({ partyId: party!.id, tableId: req.tableId });
-      await tx.update(diningTables).set({ statusId: null }).where(eq(diningTables.id, req.tableId));
       return { tabId, partyId: party!.id };
     },
   };

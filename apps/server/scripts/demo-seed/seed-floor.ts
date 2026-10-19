@@ -1,15 +1,8 @@
 import { readBusinessDayScheduleRevision } from "@waitron/venue-service";
-// Statuses are inserted directly because the management helper requires a session.
 
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import {
-  categories,
-  diningTables,
-  kitchenStations,
-  tableServiceStatuses,
-  type Transaction,
-} from "@waitron/db";
+import { categories, diningTables, kitchenStations, type Transaction } from "@waitron/db";
 import {
   addStarterServiceSteps,
   createServiceZone,
@@ -278,14 +271,6 @@ export async function seedFloor(
         placement: table.placement,
         partKeys: [],
       })),
-    });
-  }
-
-  for (const [index, status] of floor.statuses.entries()) {
-    await tx.insert(tableServiceStatuses).values({
-      label: status.label[locale],
-      color: status.color,
-      displayOrder: index,
     });
   }
 }
