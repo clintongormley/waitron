@@ -634,9 +634,11 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
 
 - **Task 8 (#806, the till works from the server's drafts).** Left open:
   - Saving and sending:
-    - An edit can be lost at sign-out without a message: one made after the session had
-      already ended (an inactivity sign-out), and one made while an earlier save was still
-      waiting for its answer when sign-out began.
+    - Recheck the retained lines in the two older sign-out cases: an edit after the server
+      session expired, and a second edit while an earlier save still awaits its answer. Normal
+      sign-out and failed-save candidate recovery are covered by the
+      [ownership decision](#one-editor-per-bill-owner-2026-10-17-a773); the existing checks that no
+      second save starts do not assert the retained lines in these two cases.
     - If someone else signs in while a sign-out is still waiting for its save, the till skips
       signing the first person out on the server, so that session lasts until it expires.
     - A send cut off by the 150-second limit is not sent again, and after a reply that never
@@ -648,8 +650,6 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     - While the till follows a party onto its next bill, the screen can show no draft for a
       moment; and when a merge or move coincides with a refused save, the save's message can
       replace "another device changed this table".
-    - Drafts are not pushed to other tills: Sam's till sees Alex's latest draft only at its next
-      read. Taking over an older copy is refused and the table read again.
   - Other people's drafts:
     - At phone width nothing on the menu view says other people have drafts on the table; the
       button reads "Review (0)". The floor's mark does say so.
@@ -1519,6 +1519,29 @@ accessible label names those pairs and the expanded detail shows them, as owners
 allows. `till-floor-screen.parties.test.ts` checks the card rows, compact accessible label and
 independent pair updates; `table-details-sheet.test.ts` checks the expanded list. These replace
 Task 8's ownerless-floor follow-up, not its other draft or navigation findings.
+
+Unsent local edits remain separate from the saved order as a candidate belonging to that person
+and bill. `till-app-drafts.test.ts` checks an unsaved sign-out and a failed-save candidate across
+sign-out/sign-in: the other person sees neither, and the original person can review it on return.
+`state/draft-sync.test.ts` checks that closing retains the unsaved dish and starts no save. This is
+memory in the current app instance; the [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
+section 5 gives no recovery guarantee across reload or close. The more specific expiry and
+in-flight-second-edit observations above remain rechecks.
+
+While the table is visible, drafts refresh every 15 seconds and on window focus. The app's draft
+suite checks the interval, an unchanged focus refresh preserving selection and its Move window,
+and a failed periodic read preserving confirmed editing authority. This replaces the earlier
+manual-next-read observation without adding server push. A failed recovery read and a failed
+periodic read have different rules in ownership design section 5.
+
+### Permanent group numbers (A773)
+
+A group's display number is separate from its firing position. Reordering held groups keeps
+their display numbers; removing or moving groups does not make their original numbers available
+again. `apps/server/src/order-group-numbers.test.ts` checks these operations and both group reads.
+`apps/till/src/widgets/sent-orders.test.ts` checks that a group at position 5 with display number 7
+is shown as Group 7. This replaces Task 4's position-derived-number observation; gaps in the
+visible numbers alone do not imply a numbering defect.
 
 ### Device equipment defaults (W100, #1332; owner kept every default, 2026-10-07)
 

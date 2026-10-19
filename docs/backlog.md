@@ -2709,13 +2709,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   detail. [Detail](backlog/till.md#task-3-733-order-groups)
 
 - **Loose ends left by service Task 4 (#748, the table screen works with order groups).**
-  - Group summaries come from the server, so a weighed quantity shows a dot decimal in Spanish (a
-    summary shows only when Current orders cannot be read).
-  - Group numbers are the server's positions, so the list can read "Group 1, Group 3"; the preview
-    gives counts, not contents.
-  - The screen's older small buttons are 32 px tall, under the 44 px tap target.
-  - Per-line Send and Change have no guard against a second press while the first is running
-    (Cancel has one since B11a; the group commands have one).
+  - Recheck a Spanish fractional quantity in the Group Fire confirmation, which still uses the
+    server's summary. The retired Current orders fallback is no longer the place to check it.
+  - Recheck the old small-button and repeated-press observations against the replacement New order
+    and Sent controls. Per-line Send, Change and the send preview are retired; their absence does
+    not verify the replacement actions' tap targets or handling of a second press.
 
 - **Loose ends left by service Task 5 (#750, kitchen, pass and table screen by group).**
   - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
@@ -2728,9 +2726,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the branch are for the owner to confirm.
   [Detail](backlog/till.md#task-7-789-each-persons-draft-kept-on-the-server)
 
-- **Loose ends left by service Task 8 (#806, the till works from the server's drafts).** An edit
-  can be lost at sign-out without a message; a send cut off by the 150-second limit is not sent
-  again; drafts are not pushed to other tills.
+- **Loose ends left by service Task 8 (#806, the till works from the server's drafts).** Recheck
+  retained lines after session expiry and a second edit queued behind an unanswered save; the old
+  send-timeout and remaining screen observations are in the detail. Normal sign-out recovery and
+  visible-table draft refresh now follow the
+  [per-bill ownership decision](backlog/till.md#one-editor-per-bill-owner-2026-10-17-a773).
   [Detail](backlog/till.md#task-8-806-the-till-works-from-the-servers-drafts)
   - Seating a table whose answer arrives while a newer table is still opening shows the seated
     table briefly before the newer one replaces it.
@@ -3073,10 +3073,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   seconds on every till; choose the interval and cost first.
   [Detail](backlog/till.md#refresh-the-floor-without-a-staff-action-in-a-zones-list-view--open-3d-w16)
 
-- **Current orders hides kitchen progress for an extra made at another station** (P6). — left open
-  by the product folders work. The till's Current orders read attaches extras under each dish but
-  reads kitchen state only from the dish's record (`readCurrentOrders`,
-  `apps/server/src/order-groups.ts`). Show the extra's own progress.
+- **Sent does not show an extra's separate kitchen progress** (P6). The service read attaches
+  extras under each dish without their own station or kitchen-state fields (`CurrentOrderExtra`
+  and `readCurrentOrders`, `apps/server/src/order-groups.ts`). The dish's Ready projection
+  already waits for its kitchen components, including a split-off extra, as checked by
+  `apps/server/src/current-orders.test.ts`. The open work is showing each extra's own progress;
+  `apps/till/src/widgets/sent-orders.ts` currently draws its name and quantity.
 
 - **The till's menu reads (Task 7, #719).** — left open by the menus plan. The basket comparison
   does not notice a publish that adds a required options list to a dish in the basket, or lowers a
