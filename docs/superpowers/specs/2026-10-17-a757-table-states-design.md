@@ -495,8 +495,9 @@ its start time, so the till redraws when a step's minutes run out, as it does fo
 **2026-10-19:** slice 7 stores the steps in `service_steps` (plan
 `docs/superpowers/plans/2026-10-19-a757-7-service-step-settings.md`): five starts, minutes 0–120
 (at least 1 for the repeating start), a course start names a `kitchen_courses` row and goes when
-that course is deleted; a new department starts with the three starter steps, named in English when
-the venue's first receipt language is English and in Spanish otherwise. Each party's done steps are
+that course is deleted; a department created in the dashboard, or the one provisioning inserts,
+starts with the three starter steps, named in English when the venue's first receipt language is
+English and in Spanish otherwise (a configuration import brings the bundle's steps instead). Each party's done steps are
 slice 8's.
 
 ## 9. Nothing needed: its own look

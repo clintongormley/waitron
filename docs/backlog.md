@@ -2095,13 +2095,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
 
 - **A900. A757 slice 7's open questions, built with defaults (left open by slice 7, 2026-10-19).**
-  For the owner to confirm or change, each a string or a small behaviour choice: words the pictures
-  do not draw — the fifth start's label ("Repeats after the last order" / "Se repite tras el último
-  pedido"), the Spanish starter names ("Montar mesa", "Tomar nota", "¿Algo más?"), the Spanish
-  labels, the minutes field's screen-reader label ("Minutes" / "Minutos") and the required stars on
-  the "Step" and "Starts" column heads; starter names in the venue's first receipt language; a
-  department added later getting the starter steps; deleting a course deleting the steps that start
-  from it.
+  For the owner, a candidate question to batch: the words the pictures do not draw — the fifth
+  start's label ("Repeats after the last order" / "Se repite tras el último pedido"), the Spanish
+  starter names ("Montar mesa", "Tomar nota", "¿Algo más?"), the Spanish labels, the minutes
+  field's screen-reader label ("Minutes" / "Minutos") and the required stars on the "Step" and
+  "Starts" column heads. The owner sees at land that deleting a course deletes the steps that start
+  from it. Not put to the owner (plan's questions 2 and 3): the starter names are English when the
+  venue's first receipt language is English and Spanish otherwise, and a department added later
+  gets the starter steps.
   [Open questions](superpowers/plans/2026-10-19-a757-7-service-step-settings.md#open-questions-each-with-the-default-this-plan-uses)
 
 - **A758. Voids and comps: the rules, then a page of their own (owner, 2026-10-16).** The owner
@@ -3853,7 +3854,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   `[Cancel] [Delete…] … [Save]` row (design-system.md → Forms) has each dialog space its own group;
   move it into `packages/ui/src/components/wt-form-actions.ts`. Left open by A719 (#1838).
 
-- **A901. The shared reorder announcement misreads an item name holding `$&` or `{index}`.**
+- **A901. The shared reorder announcement misreads an item name holding `$&` or `{index}` (found in
+  A757 slice 7's review, 2026-10-19).**
   `ReorderController.#announce` (`packages/ui/src/reorder-table.ts:307-310`) fills `{item}`,
   `{index}` and `{total}` with chained `String.replace`, so on every list that reorders through it
   a name holding `$&` is read back with the placeholder in its place
