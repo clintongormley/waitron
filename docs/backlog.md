@@ -122,8 +122,8 @@ come after the list above:
   [ui-review.md](ui-review.md), and the first physical print since #327.
 - **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
   enrolled; Logging Slice 2, the one-touch bug report; the first real Bluetooth pairing at the box
-  through the dashboard; paying at the table from a handheld (Slice 2, designed as A796, revised
-  to the owner's answer; six small questions open).
+  through the dashboard; paying at the table from a handheld (Slice 2, designed as A796; every
+  owner question answered, Revision 4; the build is to be planned).
 - Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud
   primary, under _Replication, failover and the cloud_.
 
