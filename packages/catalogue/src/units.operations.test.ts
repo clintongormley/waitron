@@ -271,6 +271,41 @@ describe("unit operations", () => {
       expect.objectContaining({ code: "quantity.invalid", params: { reason: "precision" } }),
     );
   });
+
+  it("starts a new unit as no measure unless the create asks for one", async () => {
+    const plain = await run((tx) =>
+      createUnit(tx, { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+    );
+    expect(plain).not.toHaveProperty("measure");
+    expect(await run((tx) => getUnit(tx, plain.id))).not.toHaveProperty("measure");
+
+    const measured = await run((tx) =>
+      createUnit(
+        tx,
+        { name: { en: "Centilitre" }, precision: 0, abbreviation: { en: "cl" }, measure: true },
+        "en",
+      ),
+    );
+    expect(measured).toMatchObject({ id: measured.id, measure: true });
+    expect(await run((tx) => getUnit(tx, measured.id))).toEqual(measured);
+    expect((await run((tx) => listUnits(tx))).find((u) => u.id === measured.id)).toEqual(measured);
+    expect((await run((tx) => listUnits(tx))).find((u) => u.id === plain.id)).toEqual(plain);
+  });
+
+  it("turns the measure switch on and off by itself", async () => {
+    const unit = await run((tx) =>
+      createUnit(tx, { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } }, "en"),
+    );
+
+    const on = await run((tx) => updateUnit(tx, unit.id, { measure: true }, "en"));
+    expect(on).toEqual({ ...unit, measure: true });
+    expect(await run((tx) => getUnit(tx, unit.id))).toEqual({ ...unit, measure: true });
+
+    const off = await run((tx) => updateUnit(tx, unit.id, { measure: false }, "en"));
+    expect(off).toEqual(unit);
+    expect(off).not.toHaveProperty("measure");
+    expect(await run((tx) => getUnit(tx, unit.id))).toEqual(unit);
+  });
 });
 
 describe("what a unit operation refuses for an id that names nothing", () => {

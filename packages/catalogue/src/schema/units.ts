@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, primaryKey, unique } from "drizzle-orm/sqlite-core";
-import { count, id, json, label, newId, products, table } from "@waitron/db";
+import { count, flag, id, json, label, newId, products, table } from "@waitron/db";
 
 export const units = table(
   "units",
@@ -14,6 +14,8 @@ export const units = table(
     // that pair narrows the column's TypeScript type to the union of its values, which is a
     // caller-facing change. enumText's own note in packages/db/src/schema/columns.ts has the table.
     hardwareUnit: label("hardware_unit"),
+    // A dish sold in a unit that measures an amount takes no extras.
+    measure: flag("measure").notNull().default(false),
   },
   (t) => [
     unique("units_seed_key_key").on(t.seedKey),
