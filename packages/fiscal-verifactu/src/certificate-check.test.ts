@@ -247,4 +247,23 @@ describe("checkWithAuthority", () => {
     };
     await expect(check(transport)).resolves.toEqual({ ok: true, endpoint: server.origin });
   });
+
+  it("keeps its answer when closing the transport throws before returning a promise", async () => {
+    const server = await serve({ status: 200, body: SIN_DATOS_BODY });
+    const inner = transportTo(server.origin);
+    const transport: CheckTransport = {
+      endpointFor: inner.endpointFor,
+      fetchFor: (material) => {
+        const made = inner.fetchFor(material);
+        return {
+          fetch: made.fetch,
+          close: () => {
+            void made.close();
+            throw new Error("close failed");
+          },
+        };
+      },
+    };
+    await expect(check(transport)).resolves.toEqual({ ok: true, endpoint: server.origin });
+  });
 });

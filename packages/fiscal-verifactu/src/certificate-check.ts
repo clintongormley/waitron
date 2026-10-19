@@ -71,6 +71,8 @@ export async function checkWithAuthority(input: {
     return { ok: false, ...classify(error, timedOut) };
   } finally {
     clearTimeout(timer);
-    await transport.close().catch(() => undefined);
+    await Promise.resolve()
+      .then(() => transport.close())
+      .catch(() => undefined);
   }
 }
