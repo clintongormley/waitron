@@ -3085,6 +3085,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const lockedWidth = widths?.reduce((sum, width) => sum + width, 0);
     const sortColumn = this.#sortColumn(shown);
     if (!isTree) {
+      const activatorColumn = shown.findIndex((column) => column.activatesRow !== false);
       const sorted = this.#sortedRows(visible, sortColumn, searchRanks);
       const rowKeys = sorted.map((row, index) => this.rowKey(row, index));
       const visibleKeys = sorted.flatMap((row, index) =>
@@ -3129,7 +3130,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                           }
                         >
                           ${
-                            ci === 0 && clicks
+                            ci === activatorColumn && clicks
                               ? html`<button
                                     class="row-activate"
                                     aria-label=${this.rowClickLabel(row)}

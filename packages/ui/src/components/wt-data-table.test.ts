@@ -5966,6 +5966,45 @@ test.each([
   expect(clicked).toEqual([]);
 });
 
+test("a first column that keeps its blank space outside row activation leaves the activator to the next", async () => {
+  const clicked: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => clicked.push(row.id),
+    columns: [{ ...columns[0]!, activatesRow: false }, columns[1]!, columns[2]!],
+  });
+  const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="b"] td')];
+  expect(cells.map((cell) => cell.querySelectorAll(".row-activate").length)).toEqual([0, 1, 0]);
+  const activator = cells[1]!.querySelector<HTMLButtonElement>(".row-activate")!;
+  const corner = (cell: HTMLElement) => {
+    const box = cell.getBoundingClientRect();
+    return el.shadowRoot!.elementFromPoint(box.x + 2, box.y + 2);
+  };
+  expect(corner(cells[0]!)).toBe(cells[0]);
+  await userEvent.click(cells[0]!, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual([]);
+  expect(corner(cells[1]!)).toBe(activator);
+  await userEvent.click(cells[1]!, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual(["b"]);
+  activator.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(clicked).toEqual(["b", "b"]);
+});
+
+test("a row whose every column keeps its blank space outside row activation draws no activator", async () => {
+  const clicked: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => clicked.push(row.id),
+    columns: columns.map((column) => ({ ...column, activatesRow: false as const })),
+  });
+  expect(el.shadowRoot!.querySelectorAll(".row-activate")).toHaveLength(0);
+  const cell = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="b"] td')!;
+  await userEvent.click(cell, { position: { x: 2, y: 2 } });
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Edit Bea"]')!,
+  );
+  expect(clicked).toEqual([]);
+});
+
 test("a real click on a control inside a pinned cell does not open its clickable row", async () => {
   const clicked: string[] = [];
   const { el } = await narrowTable("end", { rowClick: (row: Row) => clicked.push(row.id) });
