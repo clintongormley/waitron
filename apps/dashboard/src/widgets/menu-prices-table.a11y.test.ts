@@ -40,7 +40,6 @@ const rows: MenuPriceRow[] = [
     placements: [[]],
     override: null,
     effectivePrice: "12.00",
-    active: true,
     available: true,
     variants: [],
   },
@@ -63,11 +62,10 @@ const rows: MenuPriceRow[] = [
     placements: [["s-drinks"], ["s-drinks", "s-beer"]],
     override: "2.50",
     effectivePrice: "2.50",
-    active: true,
     available: true,
     variants: [
-      { variantId: "v-small", price: null, active: true, available: true },
-      { variantId: "v-large", price: "3.75", active: true, available: true },
+      { variantId: "v-small", price: null, available: true },
+      { variantId: "v-large", price: "3.75", available: true },
     ],
   },
 ];
@@ -103,12 +101,9 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible table with a product's variants open, an Inactive row and a clash", async () => {
+  it("accessible table with a product's variants open, a clash", async () => {
     const { el, host } = await mount(theme, {
-      rows: [
-        { ...rows[0]!, combined: { ...rows[0]!.combined, price: clash } },
-        { ...rows[1]!, active: false },
-      ],
+      rows: [{ ...rows[0]!, combined: { ...rows[0]!.combined, price: clash } }, rows[1]!],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = table.shadowRoot!;

@@ -25,7 +25,6 @@ const burger: MenuPriceRow = {
   placements: [[]],
   override: null,
   effectivePrice: "12.00",
-  active: true,
   available: true,
   variants: [],
 };
@@ -57,11 +56,10 @@ const lemonade: MenuPriceRow = {
   placements: [["s-fav"], ["s-drinks"]],
   override: "2.50",
   effectivePrice: "2.50",
-  active: true,
   available: true,
   variants: [
-    { variantId: "v-small", price: null, active: true, available: true },
-    { variantId: "v-large", price: "3.75", active: true, available: true },
+    { variantId: "v-small", price: null, available: true },
+    { variantId: "v-large", price: "3.75", available: true },
   ],
 };
 const wine: MenuPriceRow = {
@@ -84,12 +82,11 @@ const wine: MenuPriceRow = {
   placements: [["s-drinks"]],
   override: "13.00",
   effectivePrice: "13.00",
-  active: true,
   available: true,
   variants: [
-    { variantId: "v-glass", price: "7.00", active: true, available: true },
-    { variantId: "v-bottle", price: null, active: true, available: true },
-    { variantId: "v-carafe", price: "15.00", active: true, available: true },
+    { variantId: "v-glass", price: "7.00", available: true },
+    { variantId: "v-bottle", price: null, available: true },
+    { variantId: "v-carafe", price: "15.00", available: true },
   ],
 };
 const juice: MenuPriceRow = {
@@ -111,11 +108,10 @@ const juice: MenuPriceRow = {
   placements: [["s-fav"]],
   override: null,
   effectivePrice: "4.00",
-  active: true,
   available: true,
   variants: [
-    { variantId: "v-juice-small", price: "3.50", active: true, available: true },
-    { variantId: "v-juice-large", price: null, active: true, available: true },
+    { variantId: "v-juice-small", price: "3.50", available: true },
+    { variantId: "v-juice-large", price: null, available: true },
   ],
 };
 const cider: MenuPriceRow = {
@@ -137,11 +133,10 @@ const cider: MenuPriceRow = {
   placements: [["s-drinks", "s-beer"]],
   override: null,
   effectivePrice: "4.00",
-  active: true,
   available: true,
   variants: [
-    { variantId: "v-pint", price: null, active: true, available: true },
-    { variantId: "v-half", price: null, active: true, available: true },
+    { variantId: "v-pint", price: null, available: true },
+    { variantId: "v-half", price: null, available: true },
   ],
 };
 
@@ -207,15 +202,6 @@ const variantLevelClash = lemonadeOn({ price: "2.50" }, { variants: { "v-large":
 const variantOf = (row: MenuPriceRow, variantId: string) =>
   row.combined.variants.find((v) => v.variantId === variantId)!.price;
 
-function withInactive(row: MenuPriceRow, ...variantIds: string[]): MenuPriceRow {
-  return {
-    ...row,
-    variants: row.variants.map((v) =>
-      variantIds.includes(v.variantId) ? { ...v, active: false } : v,
-    ),
-  };
-}
-
 describe("the clash rows", () => {
   it("have the shapes combineOffer gives", () => {
     expect(lagerClash.combined.price.state).toBe("clash");
@@ -261,20 +247,6 @@ describe("productInherited", () => {
     expect(productInherited(row)).toEqual(expected);
   });
 
-  it("leaves an Inactive variant out of the range", () => {
-    expect(productInherited(withInactive(lemonade, "v-large"))).toEqual(range("3.00"));
-  });
-
-  it("gives the product's own inherited price when it has no Active variant", () => {
-    const allInactive = withInactive(lemonade, "v-small", "v-large");
-    expect(productInherited(allInactive)).toEqual(range("3.00"));
-    const noOwn = {
-      ...allInactive,
-      combined: { ...allInactive.combined, price: withoutOwn(allInactive.combined.price) },
-    };
-    expect(productInherited(noOwn)).toEqual(range("3.00"));
-  });
-
   it("is a clash when a product without variants clashes", () => {
     expect(productInherited(lagerClash)).toEqual(CLASH);
   });
@@ -293,12 +265,6 @@ describe("productInherited", () => {
 
   it("is a clash when an Active variant's own price clashes", () => {
     expect(productInherited(variantLevelClash)).toEqual(CLASH);
-  });
-
-  it("leaves an Inactive variant's clash off the product", () => {
-    const row = withInactive(variantLevelClash, "v-large");
-    expect(productInherited(row)).toEqual(range("3.00"));
-    expect(variantInherited(row, "v-large", undefined)).toEqual(CLASH);
   });
 });
 
@@ -405,25 +371,18 @@ describe("variantInheritedFrom", () => {
 });
 
 describe("variantsInheritedFrom", () => {
-  it("gives each Active variant its own price on this menu, else the setting it inherits with the product left blank", () => {
-    expect(variantsInheritedFrom(withInactive(wine, "v-carafe"))).toEqual([
+  it("gives each variant its own price on this menu, else the setting it inherits with the product left blank", () => {
+    expect(variantsInheritedFrom(wine)).toEqual([
       { variantId: "v-glass", setting: variantOf(wine, "v-glass"), follows: false },
       { variantId: "v-bottle", setting: withoutOwn(wine.combined.price), follows: true },
+      { variantId: "v-carafe", setting: variantOf(wine, "v-carafe"), follows: false },
     ]);
-  });
-
-  it("is empty for a product with no Active variant", () => {
-    expect(variantsInheritedFrom(withInactive(lemonade, "v-small", "v-large"))).toEqual([]);
   });
 });
 
 describe("followsClash", () => {
   it("is true when an Active variant with no price of its own follows the product's clash", () => {
     expect(followsClash(productClash)).toBe(true);
-  });
-
-  it("is false once that variant is Inactive", () => {
-    expect(followsClash(withInactive(productClash, "v-small"))).toBe(false);
   });
 
   it("is false when the variant has this menu's own price", () => {
@@ -450,15 +409,10 @@ describe("variantClash", () => {
     expect(variantClash(productClash)).toBe(false);
   });
 
-  it("beside a variant-level clash, is false while an Active variant follows the product's clash, and true once that variant is Inactive", () => {
+  it("beside a variant-level clash, is false while a variant follows the product's clash", () => {
     const both = lemonadeOn({}, { price: "3.50", variants: { "v-large": "3.90" } });
     expect(both.combined.price.state).toBe("clash");
-    expect(variantClash(withInactive(both, "v-small"))).toBe(true);
     expect(variantClash(both)).toBe(false);
-  });
-
-  it("is false when the clashing variant is Inactive", () => {
-    expect(variantClash(withInactive(variantLevelClash, "v-large"))).toBe(false);
   });
 
   it("is false when no variant clashes", () => {

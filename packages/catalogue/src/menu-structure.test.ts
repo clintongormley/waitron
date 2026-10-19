@@ -729,9 +729,8 @@ describe("a menu's prices", () => {
         placements: [[f.favourites], [f.drinks]],
         override: null,
         effectivePrice: "3.00",
-        active: true,
         available: true,
-        variants: [{ variantId: f.large, price: null, active: true, available: true }],
+        variants: [{ variantId: f.large, price: null, available: true }],
       },
       {
         menuItemId: await itemOf(f.lunch, f.water),
@@ -741,7 +740,6 @@ describe("a menu's prices", () => {
         placements: [[]],
         override: null,
         effectivePrice: "2.00",
-        active: true,
         available: true,
         variants: [],
       },
@@ -797,7 +795,7 @@ describe("a menu's prices", () => {
     ]);
   });
 
-  it("lists a sold-out product with its own Active state, and an inactive product not at all", async () => {
+  it("lists a sold-out product, and an inactive product not at all", async () => {
     const f = await fixture();
     await app(async (tx) => {
       for (const productId of [f.lemonade, f.water, f.burger, f.juice])
@@ -808,11 +806,6 @@ describe("a menu's prices", () => {
       await deactivateProduct(tx, f.burger);
     });
     const rows = await app((tx) => menuPrices(tx, f.lunch));
-    expect(rows.map(({ name, active }) => [name, active])).toEqual([
-      ["Lemonade (staff)", true],
-      ["Water (staff)", true],
-      ["Juice (staff)", true],
-    ]);
     expect(rows.map(({ name, available }) => [name, available])).toEqual([
       ["Lemonade (staff)", true],
       ["Water (staff)", false],
@@ -910,8 +903,8 @@ describe("a menu's prices", () => {
     const [lunchRow] = await app((tx) => menuPrices(tx, f.lunch));
     const [dinnerRow] = await app((tx) => menuPrices(tx, f.dinner));
     expect(lunchRow!.variants).toEqual([
-      { variantId: f.large, price: "3.25", active: true, available: true },
-      { variantId: small, price: null, active: true, available: true },
+      { variantId: f.large, price: "3.25", available: true },
+      { variantId: small, price: null, available: true },
     ]);
     expect(lunchRow!.variants.map(({ variantId, price }) => ({ variantId, price }))).toEqual(
       await app((tx) => listMenuVariants(tx, lunchItem)),
@@ -923,8 +916,8 @@ describe("a menu's prices", () => {
     ]);
     // Dinner sets nothing for any variant, and lists no Inactive Jug either.
     expect(dinnerRow!.variants).toEqual([
-      { variantId: f.large, price: null, active: true, available: true },
-      { variantId: small, price: null, active: true, available: true },
+      { variantId: f.large, price: null, available: true },
+      { variantId: small, price: null, available: true },
     ]);
   });
 

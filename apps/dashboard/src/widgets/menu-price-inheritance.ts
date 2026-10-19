@@ -80,44 +80,42 @@ export function variantInherited(
   return single(variantInheritedFrom(row, variantId, parent).setting);
 }
 
-/** An Active variant with no price of its own here charges the product's price, as its field reads
+/** A variant with no price of its own here charges the product's price, as its field reads
  * now, and that price clashes: a price for the product would settle it. */
 export function followsClash(row: MenuPriceRow, parent: ParentPrice = undefined): boolean {
   return row.variants.some((v) => {
-    if (!v.active || v.price !== null) return false;
+    if (v.price !== null) return false;
     const from = variantInheritedFrom(row, v.variantId, parent);
     return from.follows && from.setting.state === "clash";
   });
 }
 
-/** An Active variant's own price clashes, which a price for the product would not settle, and no
- * Active variant waits on a price for the product. */
+/** A variant's own price clashes, which a price for the product would not settle, and no variant
+ * waits on a price for the product. */
 export function variantClash(row: MenuPriceRow, parent: ParentPrice = undefined): boolean {
   return (
     !followsClash(row, parent) &&
     row.variants.some((v) => {
       const setting = variantSetting(row, v.variantId);
-      return v.active && setting.state === "clash" && setting.level === "variant";
+      return setting.state === "clash" && setting.level === "variant";
     })
   );
 }
 
-/** What each Active variant charges if this menu sets no price for the product: its own price on this
+/** What each variant charges if this menu sets no price for the product: its own price on this
  * menu, else what it inherits. */
 export function variantsInheritedFrom(
   row: MenuPriceRow,
 ): (InheritedFrom & { variantId: string })[] {
-  return row.variants
-    .filter((v) => v.active)
-    .map(({ variantId }) => {
-      const setting = variantSetting(row, variantId);
-      return setting.state === "decided" && setting.source.kind === "own"
-        ? { variantId, setting, follows: false }
-        : { variantId, ...variantInheritedFrom(row, variantId, null) };
-    });
+  return row.variants.map(({ variantId }) => {
+    const setting = variantSetting(row, variantId);
+    return setting.state === "decided" && setting.source.kind === "own"
+      ? { variantId, setting, follows: false }
+      : { variantId, ...variantInheritedFrom(row, variantId, null) };
+  });
 }
 
-/** What the product charges across its Active variants if this menu sets no price for the product. */
+/** What the product charges across its variants if this menu sets no price for the product. */
 export function productInherited(row: MenuPriceRow): Inherited {
   const each = variantsInheritedFrom(row).map(({ setting }) => single(setting));
   if (each.length === 0) return single(withoutOwn(row.combined.price));

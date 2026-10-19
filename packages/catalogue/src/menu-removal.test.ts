@@ -524,7 +524,7 @@ describe("a variant made Inactive loses its price on every menu", () => {
     const variantsPriced = async (menuId: string) =>
       (await app((tx) => menuPrices(tx, menuId)))
         .find((row) => row.productId === r.tortilla)!
-        .variants.map(({ variantId, price, active }) => ({ variantId, price, active }));
+        .variants.map(({ variantId, price }) => ({ variantId, price }));
     const variantsOffered = async (menuId: string) =>
       (await app((tx) => listMenuOffers(tx, [menuId])))
         .find((offer) => offer.productId === r.tortilla)!
@@ -536,9 +536,7 @@ describe("a variant made Inactive loses its price on every menu", () => {
       await setProductVariants(tx, r.tortilla, [whole!], "en");
     });
     for (const menuId of [r.tapas, r.terrace]) {
-      expect(await variantsPriced(menuId)).toEqual([
-        { variantId: r.tortillaWhole, price: "6.00", active: true },
-      ]);
+      expect(await variantsPriced(menuId)).toEqual([{ variantId: r.tortillaWhole, price: "6.00" }]);
       expect(await variantsOffered(menuId)).toEqual([{ id: r.tortillaWhole, menuPrice: "6.00" }]);
     }
 
@@ -555,9 +553,7 @@ describe("a variant made Inactive loses its price on every menu", () => {
     ).rejects.toMatchObject({ code: "product.archived", params: { productId: r.tortillaHalf } });
 
     for (const menuId of [r.tapas, r.terrace]) {
-      expect(await variantsPriced(menuId)).toEqual([
-        { variantId: r.tortillaWhole, price: "6.00", active: true },
-      ]);
+      expect(await variantsPriced(menuId)).toEqual([{ variantId: r.tortillaWhole, price: "6.00" }]);
       expect(await variantsOffered(menuId)).toEqual([{ id: r.tortillaWhole, menuPrice: "6.00" }]);
     }
   });

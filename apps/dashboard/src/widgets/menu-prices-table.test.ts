@@ -74,7 +74,6 @@ const burger: MenuPriceRow = {
   placements: [[]],
   override: null,
   effectivePrice: "12.00",
-  active: true,
   available: true,
   variants: [],
 };
@@ -97,11 +96,10 @@ const lemonade: MenuPriceRow = {
   placements: [["s-fav"], ["s-drinks"]],
   override: "2.50",
   effectivePrice: "2.50",
-  active: true,
   available: true,
   variants: [
-    { variantId: "v-small", price: null, active: true, available: true },
-    { variantId: "v-large", price: "3.75", active: true, available: true },
+    { variantId: "v-small", price: null, available: true },
+    { variantId: "v-large", price: "3.75", available: true },
   ],
 };
 const lager: MenuPriceRow = {
@@ -113,7 +111,6 @@ const lager: MenuPriceRow = {
   placements: [["s-drinks", "s-beer"]],
   override: null,
   effectivePrice: "2.00",
-  active: true,
   available: true,
   variants: [],
 };
@@ -646,14 +643,14 @@ it("counts a product whose only price on this menu is a variant's as overridden,
         ...lemonade,
         override: null,
         variants: [
-          { variantId: "v-small", price: null, active: true, available: true },
-          { variantId: "v-large", price: "4.25", active: true, available: true },
+          { variantId: "v-small", price: null, available: true },
+          { variantId: "v-large", price: "4.25", available: true },
         ],
       },
       {
         ...lager,
         combined: combinedFixture("p-lager", "2.00", [{ variantId: "v-small", price: null }]),
-        variants: [{ variantId: "v-small", price: null, active: true, available: true }],
+        variants: [{ variantId: "v-small", price: null, available: true }],
       },
       burger,
     ],
@@ -898,8 +895,8 @@ it("sends only the field committed, with the price stored when it was sent, what
       ...lemonade,
       override: "2.60",
       variants: [
-        { variantId: "v-small", price: "1.00", active: true, available: true },
-        { variantId: "v-large", price: "3.75", active: true, available: true },
+        { variantId: "v-small", price: "1.00", available: true },
+        { variantId: "v-large", price: "3.75", available: true },
       ],
     },
     lager,
@@ -2007,12 +2004,11 @@ describe("variants", () => {
     placements: [["s-drinks"]],
     override: "13.00",
     effectivePrice: "13.00",
-    active: true,
     available: true,
     variants: [
-      { variantId: "v-glass", price: "7.00", active: true, available: true },
-      { variantId: "v-bottle", price: null, active: true, available: true },
-      { variantId: "v-carafe", price: "15.00", active: true, available: true },
+      { variantId: "v-glass", price: "7.00", available: true },
+      { variantId: "v-bottle", price: null, available: true },
+      { variantId: "v-carafe", price: "15.00", available: true },
     ],
   };
   /** Its only menu price is a variant's. */
@@ -2035,11 +2031,10 @@ describe("variants", () => {
     placements: [["s-fav"]],
     override: null,
     effectivePrice: "4.00",
-    active: true,
     available: true,
     variants: [
-      { variantId: "v-juice-small", price: "3.50", active: true, available: true },
-      { variantId: "v-juice-large", price: null, active: true, available: true },
+      { variantId: "v-juice-small", price: "3.50", available: true },
+      { variantId: "v-juice-large", price: null, available: true },
     ],
   };
   const tea: MenuPriceRow = {
@@ -2058,9 +2053,8 @@ describe("variants", () => {
     placements: [[]],
     override: null,
     effectivePrice: "2.00",
-    active: true,
     available: true,
-    variants: [{ variantId: "v-pot", price: "2.40", active: true, available: true }],
+    variants: [{ variantId: "v-pot", price: "2.40", available: true }],
   };
   /** No menu price anywhere. */
   const cider: MenuPriceRow = {
@@ -2082,11 +2076,10 @@ describe("variants", () => {
     placements: [["s-drinks", "s-beer"]],
     override: null,
     effectivePrice: "4.00",
-    active: true,
     available: true,
     variants: [
-      { variantId: "v-pint", price: null, active: true, available: true },
-      { variantId: "v-half", price: null, active: true, available: true },
+      { variantId: "v-pint", price: null, available: true },
+      { variantId: "v-half", price: null, available: true },
     ],
   };
   const steak: MenuPriceRow = {
@@ -2216,8 +2209,8 @@ describe("variants", () => {
             { "v-juice-small": "3.00", "v-juice-large": "5.00" },
           ),
           variants: [
-            { variantId: "v-juice-small", price: "5.0", active: true, available: true },
-            { variantId: "v-juice-large", price: null, active: true, available: true },
+            { variantId: "v-juice-small", price: "5.0", available: true },
+            { variantId: "v-juice-large", price: null, available: true },
           ],
         },
       ],
@@ -2273,11 +2266,10 @@ describe("variants", () => {
       placements: [[]],
       override: null,
       effectivePrice: "6.00",
-      active: true,
       available: true,
       variants: [
-        { variantId: "v-zeta", price: null, active: true, available: true },
-        { variantId: "v-alpha", price: null, active: true, available: true },
+        { variantId: "v-zeta", price: null, available: true },
+        { variantId: "v-alpha", price: null, available: true },
       ],
     };
     const el = await mount({ rows: [pizza, burger], products: [pizzaProduct] });
@@ -2440,8 +2432,8 @@ describe("variants", () => {
             { "v-juice-small": "3.00", "v-juice-large": "5.00" },
           ),
           variants: [
-            { variantId: "v-juice-small", price: "1000.00", active: true, available: true },
-            { variantId: "v-juice-large", price: "9999.99", active: true, available: true },
+            { variantId: "v-juice-small", price: "1000.00", available: true },
+            { variantId: "v-juice-large", price: "9999.99", available: true },
           ],
         };
         const el = await mount({ rows: [wide], products });
@@ -2788,8 +2780,8 @@ it.each(["en-GB", "es-ES"])(
         { "v-small": "12.50", "v-large": "15.00" },
       ),
       variants: [
-        { variantId: "v-small", price: "12.50", active: true, available: true },
-        { variantId: "v-large", price: "15.00", active: true, available: true },
+        { variantId: "v-small", price: "12.50", available: true },
+        { variantId: "v-large", price: "15.00", available: true },
       ],
     };
     const el = await atPhoneWidth(locale, { rows: [ranged] });
@@ -2824,8 +2816,8 @@ function rangedRow(low: string, high: string): MenuPriceRow {
       { "v-small": low, "v-large": high },
     ),
     variants: [
-      { variantId: "v-small", price: low, active: true, available: true },
-      { variantId: "v-large", price: high, active: true, available: true },
+      { variantId: "v-small", price: low, available: true },
+      { variantId: "v-large", price: high, available: true },
     ],
   };
 }
@@ -3639,42 +3631,6 @@ it("widens a field's end margin when a narrower window wraps the outcome message
   }
 });
 
-it("marks an Inactive variant's clash on neither its own row nor its product's, as publishing leaves the variant out", async () => {
-  const row = variantClashRow();
-  const el = await allPrices(
-    await mount({
-      rows: [
-        {
-          ...row,
-          variants: row.variants.map((v) =>
-            v.variantId === "v-small" ? { ...v, active: false } : v,
-          ),
-        },
-      ],
-    }),
-  );
-  expect(cell(el, "override", "mi-lemonade").querySelector("[part~=clash]")).toBeNull();
-  expect(override(el, "mi-lemonade").placeholder).toBe("3.75");
-  toggleOf(el, "mi-lemonade")!.click();
-  await table(el).updateComplete;
-  expect(cell(el, "override", "mi-lemonade:v-small").querySelector("[part~=clash]")).toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-test="clash-message"]')).toBeNull();
-});
-
-it("keeps a disabled variant under an Active product out of the product's range", async () => {
-  const el = await mount({
-    rows: [
-      {
-        ...lemonade,
-        variants: [lemonade.variants[0]!, { ...lemonade.variants[1]!, active: false }],
-      },
-    ],
-  });
-  toggleOf(el, "mi-lemonade")!.click();
-  await table(el).updateComplete;
-  expect(override(el, "mi-lemonade").placeholder).toBe("3.00");
-});
-
 it("opens the product page in the dashboard on a plain click, and leaves a modified click to the browser", async () => {
   const el = await mount();
   const heard = vi.fn();
@@ -3959,7 +3915,7 @@ it("draws Available when a remembered column choice and order still name the old
 });
 
 it("a sold-out product reads No in Available", async () => {
-  const el = await mount({ rows: [{ ...burger, active: true, available: false }] });
+  const el = await mount({ rows: [{ ...burger, available: false }] });
   expect(text(cell(el, "available", "mi-burger"))).toBe(t("menus.available_no"));
   expect(text(cell(el, "available", "mi-burger"))).not.toContain(t("product.active_badge"));
 });
@@ -4041,8 +3997,8 @@ it.each(["en-GB", "es-ES"])(
         ...lemonade,
         override: "4.00",
         variants: [
-          { variantId: "v-small", price: null, active: true, available: true },
-          { variantId: "v-large", price: "14.00", active: true, available: true },
+          { variantId: "v-small", price: null, available: true },
+          { variantId: "v-large", price: "14.00", available: true },
         ],
         combined: {
           ...lemonade.combined,
@@ -4208,8 +4164,8 @@ describe("the clash message and the Clashes filter", () => {
         ],
       },
       variants: [
-        { variantId: "v-small", price: null, active: true, available: true },
-        { variantId: "v-large", price: null, active: true, available: true },
+        { variantId: "v-small", price: null, available: true },
+        { variantId: "v-large", price: null, available: true },
       ],
     } as MenuPriceRow;
   }
@@ -4591,18 +4547,11 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
     otherwise: null,
     level: "variant",
   });
-  const decidedPrice = {
-    state: "decided",
-    value: "3.00",
-    source: { kind: "product" },
-    otherwise: null,
-  };
   /** A product this menu sets no price for, each variant's combined price as given. */
   function shapeRow(
     id: string,
     price: unknown,
-    variants: { variantId: string; active: boolean; price: unknown }[],
-    active = true,
+    variants: { variantId: string; price: unknown }[],
   ): MenuPriceRow {
     return {
       menuItemId: `mi-${id}`,
@@ -4612,17 +4561,15 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
       placements: [[]],
       override: null,
       effectivePrice: "3.00",
-      active,
       available: true,
       combined: {
         productId: `p-${id}`,
         price,
         variants: variants.map(({ variantId, price }) => ({ variantId, price })),
       },
-      variants: variants.map(({ variantId, active }) => ({
+      variants: variants.map(({ variantId }) => ({
         variantId,
         price: null,
-        active,
         available: true,
       })),
     } as MenuPriceRow;
@@ -4632,21 +4579,10 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
     ii: () => variantClashRow(),
     iii: () =>
       shapeRow("cola", clashPrice, [
-        { variantId: "v-c1", active: true, price: decidedVariant("2.00") },
-        { variantId: "v-c2", active: true, price: decidedVariant("2.40") },
-      ]),
-    iv: () => clashRow({ ...lager, menuItemId: "mi-cider", productId: "p-cider" }, clashPrice),
-    v: () =>
-      shapeRow("tonic", decidedPrice, [
-        { variantId: "v-t1", active: false, price: { ...clashPrice, level: "variant" } },
-        { variantId: "v-t2", active: true, price: decidedVariant("2.00") },
-      ]),
-    vi: () =>
-      shapeRow("juice", clashPrice, [
-        { variantId: "v-j1", active: false, price: decidedVariant("2.00") },
+        { variantId: "v-c1", price: decidedVariant("2.00") },
+        { variantId: "v-c2", price: decidedVariant("2.40") },
       ]),
   };
-  const inactiveCider = () => ({ ...shapes.iv(), active: false });
 
   const message = (el: MenuPricesTable) =>
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="clash-message"]');
@@ -4712,31 +4648,12 @@ describe("the clash count, marks and Clashes filter read what publishing refuses
     await check([burger, shapes.iii()], { count: 0, marked: [], underClashes: [] });
   });
 
-  it("(iv) an Inactive product whose price clashes: nothing", async () => {
-    await check([burger, inactiveCider()], { count: 0, marked: [], underClashes: [] });
-  });
-
-  it("(v) an Inactive variant's clash under an Active product: nothing", async () => {
-    await check([burger, shapes.v()], { count: 0, marked: [], underClashes: [] });
-  });
-
-  it("(vi) a product whose every variant is Inactive and whose own price clashes: counted and marked on its own price", async () => {
-    await check([burger, shapes.vi()], {
-      count: 1,
-      marked: ["mi-juice"],
-      underClashes: ["mi-juice"],
+  it("counts 2 with all three on one table, the number publishing would refuse", async () => {
+    await check([burger, shapes.i(), shapes.ii(), shapes.iii()], {
+      count: 2,
+      marked: ["mi-lager", "mi-lemonade", "mi-lemonade:v-small"],
+      underClashes: ["mi-lager", "mi-lemonade", "mi-lemonade:v-small"],
     });
-  });
-
-  it("counts 3 with all six on one table, the number publishing would refuse", async () => {
-    await check(
-      [burger, shapes.i(), shapes.ii(), shapes.iii(), inactiveCider(), shapes.v(), shapes.vi()],
-      {
-        count: 3,
-        marked: ["mi-lager", "mi-lemonade", "mi-lemonade:v-small", "mi-juice"],
-        underClashes: ["mi-lager", "mi-lemonade", "mi-lemonade:v-small", "mi-juice"],
-      },
-    );
   });
 });
 

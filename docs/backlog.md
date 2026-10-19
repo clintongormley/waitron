@@ -1168,13 +1168,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
     scrolled. Letting long names wrap at narrow widths may free the room; not tried.
     [Detail](backlog/catalogue.md#on-the-structure-tab-at-390px-the-trees-own-box-scrolls-sideways-under-the-pinned-)
 
-- **A818 — retire `MenuPriceRow.active` and `MenuPriceVariant.active`** (owner, 2026-10-17). Both
-  are always true since A347 (#1392) (`packages/catalogue/src/menu-types.ts`), so the dashboard's
-  Inactive branches (`#active` and `activeOffer` in `apps/dashboard/src/widgets/menu-prices-table.ts`,
-  the `active` conditions in `menu-price-inheritance.ts`) cannot be reached. Delete the two fields,
-  those branches and the tests whose subject is an Inactive row. Done when the fields are gone and
-  the package's typecheck and remaining price-table tests pass. Left open by A346 + A348 (#1408).
-
 - **The reveal fix corrects only a row left under the headings.** A row revealed at the bottom edge
   is not corrected, and by the same whole-pixel rounding it can sit up to half a pixel past the
   bottom (left alone; not measured). Left open by A294 (the Products and Structure trees show drag

@@ -516,7 +516,6 @@ async function offerRowsOn(
           customerName: products.customerName,
           kitchenName: products.kitchenName,
           ordering: products.ordering,
-          active: products.active,
           available: products.available,
           ...offerLineColumns,
         })
@@ -718,7 +717,6 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
         override,
         effectivePrice: combinedOffer.unitPrice,
         combined: combinedOffer.combined,
-        active: row.active,
         available: row.available,
         variants: variantsByItem.get(row.id) ?? [],
       };

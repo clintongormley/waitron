@@ -93,19 +93,10 @@ const toggleLabel = ({ item }: Line, expanded: boolean): string =>
   fill(expanded ? "menu_prices.collapse" : "menu_prices.expand", { name: item.name });
 const keepsVariantOrder = ({ variant }: Line): boolean => variant === null;
 
-/** The row as a published menu holds it: Inactive variants left out. */
-const activeOffer = (item: MenuPriceRow): MenuPriceRow["combined"] => {
-  const active = new Set(item.variants.filter((v) => v.active).map((v) => v.variantId));
-  return {
-    ...item.combined,
-    variants: item.combined.variants.filter(({ variantId }) => active.has(variantId)),
-  };
-};
-
 /** Whether a clash in the product's own price, as its field reads now, stops publishing: it has
- * no Active variant, or an Active variant charges that clashing price. */
+ * no variant, or a variant charges that clashing price. */
 const ownPriceSold = (item: MenuPriceRow, parent: ParentPrice = undefined): boolean =>
-  item.variants.every((v) => !v.active) || followsClash(item, parent);
+  item.variants.length === 0 || followsClash(item, parent);
 
 /** Whether this menu stores a price for any of the product's variants. */
 const pricesAVariant = (item: MenuPriceRow): boolean =>
@@ -422,8 +413,7 @@ export class MenuPricesTable extends LitElement {
     const clashing = new Map<string, "variant" | "own">();
     let count = 0;
     for (const item of this.rows) {
-      if (!item.active) continue;
-      count += clashesOf(activeOffer(item)).length;
+      count += clashesOf(item.combined).length;
       const own =
         item.override === null &&
         ownPriceSold(item) &&
@@ -431,8 +421,8 @@ export class MenuPricesTable extends LitElement {
           this.#productInheritance.get(item)!.inherited.state === "clash");
       const product = variantClash(item) ? "variant" : own ? "own" : null;
       if (product !== null) clashing.set(item.menuItemId, product);
-      for (const { variantId, price, active } of item.variants) {
-        if (!active || price !== null) continue;
+      for (const { variantId, price } of item.variants) {
+        if (price !== null) continue;
         if (variantInherited(item, variantId, undefined).state !== "clash") continue;
         clashing.set(`${item.menuItemId}:${variantId}`, "own");
       }
@@ -700,10 +690,6 @@ export class MenuPricesTable extends LitElement {
     this.#lineOf = new Map(this.#lines.map((line) => [keyOf(line), line]));
   }
 
-  #active({ item, variant }: Line): boolean {
-    return item.active && (variant?.active ?? true);
-  }
-
   /** The price this menu stores for the row, or null. */
   #stored({ item, variant }: Line): string | null {
     return variant ? variant.price : item.override;
@@ -746,11 +732,10 @@ export class MenuPricesTable extends LitElement {
     return stored === null ? this.#inherited(line) : { state: "price", low: stored, high: stored };
   }
 
-  /** An Active row's mark, its product's field as it reads now: "variant" on a product row by
+  /** A row's mark, its product's field as it reads now: "variant" on a product row by
    * `variantClash`; "own" on a row whose field holds no price and whose own price, or what it
    * inherits, clashes, on a product row only while `ownPriceSold`. */
   #clash(line: Line): "variant" | "own" | null {
-    if (!this.#active(line)) return null;
     if (line.variant === null && this.#withParent(line).variantClash) return "variant";
     if (this.#holds(line, this.drafts.get(keyOf(line)))) return null;
     if (line.variant === null && !this.#withParent(line).ownSold) return null;
@@ -768,7 +753,6 @@ export class MenuPricesTable extends LitElement {
     const variants =
       clash === "variant"
         ? item.variants
-            .filter(({ active }) => active)
             .map(({ variantId }) => ({ variantId, setting: variantSetting(item, variantId) }))
             .filter(({ setting }) => setting.level === "variant")
         : this.#productInheritance.get(item)!.variants;

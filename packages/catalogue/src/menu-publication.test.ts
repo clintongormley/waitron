@@ -2190,7 +2190,7 @@ describe("the management prices read", () => {
     const offers = await app((tx) => operations.listMenuOffers(tx, [f.dinner]));
     for (const offer of offers) {
       const row = prices.find(({ productId }) => productId === offer.productId)!;
-      const active = new Set(row.variants.filter((v) => v.active).map((v) => v.variantId));
+      const active = new Set(row.variants.map((v) => v.variantId));
       expect({
         ...row.combined,
         variants: row.combined.variants.filter((v) => active.has(v.variantId)),
