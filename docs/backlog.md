@@ -3744,7 +3744,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Detail](backlog/payments.md#the-payments-check-ignores-the-currency-stripe-reports)
 
 - **A846's points for the owner at land: held card payments.** A kept payment has no invoice, the
-  held alert comes back at midnight UTC, and four smaller choices. Each stays open until the owner
+  held alert comes back at midnight UTC, and smaller choices from the plan, the browser look and the review. Each stays open until the owner
   answers it. [Detail](backlog/payments.md#a846s-points-for-the-owner-at-land-held-card-payments)
 
 - **The reconciler's card reversal records only after the provider call, with a fresh key each time.** **Next

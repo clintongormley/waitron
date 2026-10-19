@@ -84,6 +84,42 @@ Each stays open until the owner answers it. "The picture" is
 
 The Stripe tip screen, the plan's sixth point, is its own entry above.
 
+From the look at the screens in a real browser (both themes, 1280 and 390 px wide; no defect
+against the design system was found; report kept outside the repository):
+
+7. **The alert reads "1 card payments … refund them … with each"** for a single payment: the alert
+   wording has no singular form, like the other payment alerts beside it.
+8. **The dialog changes width when an outcome is chosen** (244 px empty, 372 px with the longest
+   choice at 1280); the picture draws it wide throughout.
+9. **At phone width the chosen outcome is cut short**: "Refunded in the card provider's dash…". A
+   shorter label for the closed dropdown would avoid it.
+10. **On opening, focus lands on the dialog box itself** (a ring round the whole dialog), not on the
+    Outcome field.
+11. **At 1280 the alert row's buttons wrap** ("Go to Card payments" on three lines), because the
+    actions column is drawn as narrow as its content.
+12. **No gap under the dialog's order line** before the amounts; the picture leaves one.
+13. **The picture's note under the dialog's buttons** ("Waitron refunds nothing itself…") is not in
+    the dialog.
+
+From the pre-merge review:
+
+14. **The section's introduction does not fit the held list.** It sits under "Bill payments and
+    refunds awaiting a card provider", whose sentence says a manager records only the outcome the
+    provider confirms, with a note. A held payment is not a bill payment, its note is optional, and
+    "Kept" is not something the provider confirms.
+15. **The held alert says "closed orders"**, as the picture does, though a payment is held only when
+    its order was abandoned; the orphan alert beside it says "closed or abandoned".
+16. **A day whose check never succeeds is retried every day, with no cap** (the owner asked for a
+    next-day retry).
+17. **A payment refunded by staff between the check's two transactions could still be held**: the
+    check decides on its first read, as the existing refund-claim path does. Believed rare; not fixed.
+18. **A held payment whose order stops being abandoned** would be named by both the difference and
+    held alerts (`markOrderPlaced`, `apps/server/src/working-order.ts`, updates by id with no status
+    check): reported twice, never hidden. Callers not traced.
+19. **The held list leaves `label` out when an order has none**, where its sibling lists send
+    `label: null` (`GET /management-api/payments/held`). A one-line change plus its test in
+    `apps/server/src/payments-api.held.test.ts`.
+
 ## The SumUp Solo experiments
 
 - **The SumUp Solo experiments** ([runbook](../research/2026-09-10-sumup-solo-experiments.md)). Question
