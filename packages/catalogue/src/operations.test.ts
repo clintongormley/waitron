@@ -881,6 +881,35 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("listAvailableProducts carries a measure unit's switch, and no key for one without it", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Bar" });
+      const ml = await createUnit(
+        tx,
+        { name: { en: "ml" }, precision: 0, abbreviation: { en: "ml" }, measure: true },
+        "en",
+      );
+      for (const [name, unitId] of [
+        ["vermut", ml.id],
+        ["olives", eachUnitId],
+      ] as const) {
+        await createProduct(tx, {
+          catalogueId: cat.id,
+          categoryId: null,
+          name,
+          unitId,
+          unitPrice: "1.00",
+          vatClass: "general",
+        });
+      }
+      await assignCatalogueToLocation(tx, locationId, cat.id);
+      const available = (await listAvailableProducts(tx, locationId)).products;
+
+      expect(available.find((p) => p.name === "vermut")!.unit.measure).toBe(true);
+      expect(available.find((p) => p.name === "olives")!.unit).not.toHaveProperty("measure");
+    });
+  });
+
   it("listAvailableProducts carries the diet profile", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });

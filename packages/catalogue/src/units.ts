@@ -50,8 +50,7 @@ export interface UpdateUnitInput {
   measure?: boolean;
 }
 
-/** The stored switch as every unit shape carries it: the key is present only when on, so a unit
- * with it off freezes into a menu document exactly as it did before the column existed. */
+/** The stored switch as every unit shape carries it: the key is present only when on. */
 export function unitMeasure(measure: boolean): { measure?: true } {
   return measure ? { measure: true } : {};
 }
