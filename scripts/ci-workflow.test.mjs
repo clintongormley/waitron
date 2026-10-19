@@ -703,8 +703,9 @@ const THREE_RUNS_TEST_TIMEOUT_MS = 95_000;
 const FOUR_RUNS_TEST_TIMEOUT_MS = 125_000;
 const FIVE_RUNS_TEST_TIMEOUT_MS = 155_000;
 // The merge-job cases run once, or three times, per merge job, and are bounded for this many.
-const MERGE_JOBS_BOUNDED = 5;
-const FIFTEEN_RUNS_TEST_TIMEOUT_MS = 455_000;
+const MERGE_JOBS_BOUNDED = 6;
+const EIGHTEEN_RUNS_TEST_TIMEOUT_MS = 545_000;
+const SIX_RUNS_TEST_TIMEOUT_MS = 185_000;
 // The leftover-call case waits three times for a step of the killed run and makes one other run.
 const LEFTOVER_STEP_WAIT_MS = 15_000;
 const LEFTOVER_CALL_TEST_TIMEOUT_MS = 3 * LEFTOVER_STEP_WAIT_MS + VERDICT_SPAWN_TIMEOUT_MS + 5_000;
@@ -880,7 +881,7 @@ describe("the `ci` aggregate's verdict", () => {
         );
       }
     },
-    FIVE_RUNS_TEST_TIMEOUT_MS,
+    SIX_RUNS_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -898,7 +899,7 @@ describe("the `ci` aggregate's verdict", () => {
         }
       }
     },
-    FIFTEEN_RUNS_TEST_TIMEOUT_MS,
+    EIGHTEEN_RUNS_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -910,7 +911,7 @@ describe("the `ci` aggregate's verdict", () => {
         );
       }
     },
-    FIVE_RUNS_TEST_TIMEOUT_MS,
+    SIX_RUNS_TEST_TIMEOUT_MS,
   );
 
   it(
@@ -1453,6 +1454,21 @@ describe("the test shards", () => {
     expect(dbAggregate).toContain("pattern: mutation-report-db-shard-*");
   });
 
+  it("isolates Provisioning into six coverage shards and enforces the merged result", () => {
+    const name = "@waitron/provisioning";
+    expect(OWN_SHARD_PACKAGES).toContain(name);
+    expect(LIGHT_A_PACKAGES).not.toContain(name);
+    expect(LIGHT_B_PACKAGES).not.toContain(name);
+    const body = job("test-provisioning").body.join("\n");
+    expect(body).toContain("shard: [1, 2, 3, 4, 5, 6]");
+    expect(body).toContain("fail-fast: false");
+    expect(body).toContain('pnpm --filter "@waitron/provisioning" test:shard');
+    expect(job("test-provisioning-merge").body.join("\n")).toContain(
+      'pnpm --filter "@waitron/provisioning" test:merge',
+    );
+    expect(job("ci").body.join("\n")).toContain("- test-provisioning-merge");
+  });
+
   it("isolates Bookings from the light bins", () => {
     const name = "@waitron/bookings";
     expect(OWN_SHARD_PACKAGES).toContain(name);
@@ -1845,6 +1861,7 @@ describe("the sharded jobs", () => {
     expect(counts).toEqual({
       "@waitron/dashboard": 4,
       "@waitron/db": 3,
+      "@waitron/provisioning": 6,
       "@waitron/server": 11,
       "@waitron/venue-service": 4,
       "@waitron/till": 2,

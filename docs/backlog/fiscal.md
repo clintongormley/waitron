@@ -256,11 +256,11 @@ The recovery-form helpers and source PDF check now use the approved single field
 check characters. Their complete suites pass locally, as does setup's full coverage run. These
 corrections do not qualify the remaining server or composition cases.
 
-Provisioning also needs its own bounded CI scheduling. `test-light-a` reaches its ten-minute
-job limit while still reporting advancing provisioning files. The package's one-worker setting
-addresses coverage merging, so do not raise it or the time limit as a shortcut. Divide the work
-and retain the coverage gate. Its earlier local full run took 431 seconds; that does not establish
-that the shared CI job fits its budget.
+Provisioning's new layout of six shards still needs CI timing qualification. `test-light-a`
+reaches its ten-minute job limit while still reporting advancing provisioning files:70 completed
+files total520.5seconds, with the largest taking160.9seconds. The dedicated shards retain the
+one-worker setting and enforce the unchanged full coverage thresholds in their separate merge.
+Do not infer a four-minute CI result from local timing. No package test or assertion was cut.
 
 ## Pin the clock's future-finished sample refusal
 

@@ -3314,3 +3314,35 @@ assertion remain. No production code changes. The two suites originally report f
 in the installed candidate, then all fourteen cases pass there and in the feature checkout.
 This approval is bounded to those lines and does not authorize other fiscal expectation changes.
 The earlier paragraph's pending status is superseded by this approval and application.
+
+## Provisioning CI budget, 2026-10-19
+
+The retained light-a log completes70 provisioning files, totalling520.5seconds, and starts the
+next before the ten-minute job cancellation. `first-setup-empty-database.test.ts` finishes in
+160.9seconds and `cli-first-setup.test.ts` in52.3. These observations locate accumulating serial
+work; they do not profile the underlying cost of the largest file or establish a socket stall.
+
+The workflow now gives provisioning six separate file shards and one required coverage merge.
+`changed-scope.mjs` moves the package out of light-a and adds a dedicated membership gate;
+both light jobs exclude it. The aggregate refuses a skipped provisioning merge when selected.
+The package gains the same partial-blob and full-merge commands as other node packages.
+Its one-worker setting, all test bodies and coverage thresholds remain unchanged.
+
+Changed checks: `changed-scope.test.mjs` adds the provisioning gate to exact objects and CLI
+strings, preserving every earlier key/value; it adds the package's isolated-scope row.
+`ci-workflow.test.mjs` adds the new isolation/merge case and provisioning6 to the shard-count
+object, preserving all earlier counts. Its existing aggregate refusal/success loops now include
+six merge jobs. Their per-test time budgets grow from five/fifteen possible child runs to
+six/eighteen; every child timeout and behavioral assertion stays. These are CI layout checks,
+not altered fiscal assertions or weaker guards. The new isolation test first fails because the
+package is absent from the dedicated list. An intermediate full run catches the missing count
+entry; the completed two-file run passes319 cases. Four related root files pass241.
+
+All six actual local shards pass, selecting73 files and1,471 cases in total. Their individual
+wall times are134.90/58.54/61.97/63.10/71.13/57.75seconds, with two local processes at a time.
+The real v8 merge reads all six blobs and passes the unchanged gate:
+S3725/3800=98.02, B2789/2884=96.70, F692/701=98.71, L3333/3367=98.99percent, exactly the earlier
+unsharded counts. Each concurrent report directory is outside the package and distinct.
+The first deadline-wrapper invocation omitted its required separator and executed no tests;
+its six immediate usage failures remain unqualified in receipts. The corrected invocation
+supplies the counts and timings above. No current-head CI runtime is claimed for this layout.
