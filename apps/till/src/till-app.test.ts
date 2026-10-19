@@ -118,6 +118,7 @@ const jamon: TillProduct = {
 };
 
 const heldSummary: HeldOrderSummary = {
+  items: [],
   id: "wo-1",
   orderNumber: 5,
   label: "Mesa 4",
@@ -17340,6 +17341,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
 
 describe("the counter's waiting orders (sent and not paid, or paid and not handed over)", () => {
   const sentOrder: CounterWaitingOrder = {
+    items: [],
     id: "wo-sent",
     orderNumber: 12,
     label: null,
@@ -23166,6 +23168,7 @@ describe("A767 card outcome belongs to its order", () => {
 
 describe("A767 sign-in and held-order recovery", () => {
   const heldRow = (id: string): HeldOrderSummary => ({
+    items: [],
     id,
     orderNumber: id === "wo-1" ? 41 : 42,
     label: null,

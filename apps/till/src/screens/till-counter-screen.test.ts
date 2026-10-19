@@ -63,6 +63,7 @@ const waitingList = (el: TillCounterScreen) =>
   el.shadowRoot!.querySelector("till-counter-waiting")!;
 const heldList = (el: TillCounterScreen) => el.shadowRoot!.querySelector("till-held-orders")!;
 const heldOrder = {
+  items: [],
   id: "held",
   orderNumber: 1,
   label: "Ana",
@@ -75,6 +76,7 @@ const heldOrder = {
   signals: [],
 };
 const waitingOrder = {
+  items: [],
   id: "waiting",
   orderNumber: 2,
   label: "Luis",
@@ -259,6 +261,7 @@ describe("till-counter-screen", () => {
   it("passes held orders to the rendered list", async () => {
     const heldOrders = [
       {
+        items: [],
         id: "wo-1",
         orderNumber: 5,
         label: "Mesa 4",

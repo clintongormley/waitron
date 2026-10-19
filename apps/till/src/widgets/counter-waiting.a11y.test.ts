@@ -5,6 +5,7 @@ import type { TillCounterWaiting } from "./counter-waiting.js";
 import type { CounterWaitingOrder } from "../api/client.js";
 
 const sent: CounterWaitingOrder = {
+  items: [],
   id: "wo-sent",
   orderNumber: 12,
   label: "Ana",

@@ -1362,6 +1362,9 @@ describe("listHeldOrders", () => {
     expect(held).toEqual([
       {
         id: idA,
+        items: [
+          { lineId: expect.any(String), name: "Café", quantity: "2.000", note: null, extras: [] },
+        ],
         orderNumber: 1,
         label: "Mesa 4",
         itemCount: 1,
@@ -1374,6 +1377,10 @@ describe("listHeldOrders", () => {
       },
       {
         id: idB,
+        items: [
+          { lineId: expect.any(String), name: "Café", quantity: "1.000", note: null, extras: [] },
+          { lineId: expect.any(String), name: "Agua", quantity: "3.000", note: null, extras: [] },
+        ],
         orderNumber: 2,
         label: null,
         itemCount: 2,

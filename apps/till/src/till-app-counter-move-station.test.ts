@@ -77,6 +77,7 @@ const station = (id: string, name: string, displayOrder: number): Station => ({
 const stations = [station("kitchen", "Kitchen", 0), station("grill", "Grill", 1)];
 
 const paid: CounterWaitingOrder = {
+  items: [],
   id: "wo-paid",
   orderNumber: 11,
   label: "Ana",

@@ -4370,6 +4370,7 @@ describe("department transfers across operator lifetimes", () => {
     const desk = transfers();
     let accepted = false;
     const held = {
+      items: [],
       id: "tab-1",
       orderNumber: 12,
       label: "Lunch",
@@ -4767,6 +4768,7 @@ describe("department transfers across operator lifetimes", () => {
     const desk = transfers();
     let received = false;
     const row = {
+      items: [],
       id: "tab-1",
       orderNumber: 12,
       label: "Lunch",
@@ -4825,6 +4827,7 @@ describe("department transfers across operator lifetimes", () => {
     await flush(el);
     answer([
       {
+        items: [],
         id: "old-tab",
         orderNumber: 12,
         label: "Old client",
@@ -6090,6 +6093,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                 view.name === "counter-waiting"
                   ? [
                       {
+                        items: [],
                         id: "waiting",
                         orderNumber: 11,
                         label: "Ana",
@@ -6377,6 +6381,7 @@ describe("A738 counter order views", () => {
     const lines = store.lines;
     const original = structuredClone(lines);
     const held = (id: string) => ({
+      items: [],
       id,
       orderNumber: 42,
       label: "Lunch",
@@ -6392,6 +6397,7 @@ describe("A738 counter order views", () => {
       heldOrders: [held(store.id), held("another")],
       counterWaiting: [
         {
+          items: [],
           id: "waiting",
           orderNumber: 7,
           label: "Pickup",

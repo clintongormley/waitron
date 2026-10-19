@@ -26,6 +26,7 @@ const dish: TillProduct = {
 };
 
 const waiting: CounterWaitingOrder = {
+  items: [],
   id: "waiting-11",
   orderNumber: 11,
   label: "Ana",

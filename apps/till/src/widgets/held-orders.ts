@@ -1,4 +1,5 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { orderPreview, orderPreviewStyles } from "./order-preview.js";
+import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, inNumberOrder, renderFloorChips } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
@@ -40,6 +41,7 @@ export interface HeldRelocationOpenDetail {
 export class TillHeldOrders extends LitElement {
   static override styles = [
     baseStyles,
+    orderPreviewStyles,
     tableTargetStyles,
     signalChipStyles,
     orderNumberStyles,
@@ -136,6 +138,28 @@ export class TillHeldOrders extends LitElement {
     button?.shadowRoot?.querySelector<HTMLButtonElement>("button")?.focus();
   }
 
+  @state() private expanded = new Set<string>();
+
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("orders")) {
+      const ids = new Set(this.orders.map((order) => order.id));
+      this.expanded = new Set([...this.expanded].filter((id) => ids.has(id)));
+    }
+  }
+
+  #togglePreview(event: Event, id: string): void {
+    if (
+      event
+        .composedPath()
+        .some((target) => target instanceof Element && target.classList.contains("controls"))
+    )
+      return;
+    const next = new Set(this.expanded);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    this.expanded = next;
+  }
+
   #emit(type: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
@@ -217,13 +241,18 @@ export class TillHeldOrders extends LitElement {
   #row(order: HeldOrderSummary): TemplateResult {
     const scope = this.#scope(order);
     return html`
-      <div class="order">
-        <div class="summary">
+      <div class="order" @click=${(event: Event) => this.#togglePreview(event, order.id)}>
+        <button
+          type="button"
+          class="summary"
+          aria-expanded=${String(this.expanded.has(order.id))}
+          aria-controls=${`preview-${order.id}`}
+        >
           <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
           ${order.label ? html`<span class="label">${order.label}</span>` : nothing}
           <span class="meta">${this.#meta(order)}</span>
           ${this.#signals(order)}
-        </div>
+        </button>
         <div class="controls">
           <wt-button
             class="retrieve"
@@ -254,6 +283,13 @@ export class TillHeldOrders extends LitElement {
           >
             ${t("held.discard")}
           </wt-button>
+        </div>
+        <div
+          class="order-preview"
+          id=${`preview-${order.id}`}
+          ?hidden=${!this.expanded.has(order.id)}
+        >
+          ${this.expanded.has(order.id) ? orderPreview(order.items) : nothing}
         </div>
       </div>
     `;

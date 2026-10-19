@@ -3372,6 +3372,7 @@ describe("till-app: moving a bill", () => {
 
   it("after a move to the counter shows the party's remaining bills, and the counter's held orders list the moved bill", async () => {
     const moved = {
+      items: [],
       id: "wo-check",
       orderNumber: 14,
       label: "4",

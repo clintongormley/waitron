@@ -1255,10 +1255,19 @@ export interface BillLookupRow {
   stillOwed: string;
 }
 
+export interface OrderPreviewItem {
+  lineId: string;
+  name: string;
+  quantity: string;
+  note: string | null;
+  extras: { lineId: string; name: string; quantity: string }[];
+}
+
 /** `GET /api/orders/counter-waiting`: a counter order the counter is still waiting on. A `placed`
  * one was sent and not paid, and was handed over when `collectedAt` is set; a `settled` one was paid
  * and not handed over. `canHandOver` says whether {@link TillApi.markCollected} would accept it now. */
 export interface CounterWaitingOrder {
+  items: OrderPreviewItem[];
   id: string;
   orderNumber: number;
   label: string | null;
@@ -1288,6 +1297,7 @@ export interface CounterWaitingOrder {
  * gave one.
  */
 export interface HeldOrderSummary {
+  items: OrderPreviewItem[];
   id: string;
   orderNumber: number;
   label: string | null;

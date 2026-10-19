@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -7,6 +8,7 @@ import { TillHeldOrders } from "./held-orders.js";
 import type { FloorZone, HeldOrderSummary, TableParty, TableState } from "../api/client.js";
 
 const mesa: HeldOrderSummary = {
+  items: [],
   id: "wo-1",
   orderNumber: 5,
   label: "Mesa 4",
@@ -20,6 +22,7 @@ const mesa: HeldOrderSummary = {
 };
 
 const barra: HeldOrderSummary = {
+  items: [],
   id: "wo-2",
   orderNumber: 6,
   label: null,
@@ -716,4 +719,152 @@ describe("till-held-orders: moving a counter order to a table", () => {
     expect(picker(el)).toBeNull();
     expect(moved).toEqual([]);
   });
+});
+
+describe("A738 order item previews", () => {
+  const items = [
+    {
+      lineId: "dish-1",
+      name: "Staff soup (Large)",
+      quantity: "0.375",
+      note: "No salt <please>",
+      extras: [{ lineId: "extra-1", name: "Staff cheese", quantity: "0.75" }],
+    },
+    { lineId: "dish-2", name: "Staff water", quantity: "2", note: null, extras: [] },
+  ];
+  it("A738 toggles an order preview without retrieving it", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [{ ...mesa, items }],
+    });
+    const events: unknown[] = [];
+    el.addEventListener("retrieve-order", (event) => events.push(event));
+    const summary = () => el.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!;
+    expect(summary()).not.toBeNull();
+    expect(summary().getAttribute("aria-expanded")).toBe("false");
+    await userEvent.click(summary());
+    await el.updateComplete;
+    expect(summary().getAttribute("aria-expanded")).toBe("true");
+    const preview = el.shadowRoot!.querySelector<HTMLElement>(".order-preview")!;
+    expect(preview.hidden).toBe(false);
+    expect(preview.querySelectorAll("[data-preview-dish]")).toHaveLength(2);
+    expect(preview.textContent).toContain("Staff soup (Large)");
+    expect(preview.textContent).toContain("0.375");
+    expect(preview.querySelector("[data-preview-extra]")!.textContent).toContain("0.75");
+    expect(preview.querySelector("[data-preview-extra]")!.textContent).toContain("Staff cheese");
+    expect(preview.textContent).toContain("No salt <please>");
+    expect(preview.querySelector("please")).toBeNull();
+    expect(preview.id).toBe(summary().getAttribute("aria-controls"));
+    await userEvent.click(summary());
+    await el.updateComplete;
+    expect(summary().getAttribute("aria-expanded")).toBe("false");
+    summary().focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(summary().getAttribute("aria-expanded")).toBe("true");
+    await userEvent.keyboard(" ");
+    await el.updateComplete;
+    expect(summary().getAttribute("aria-expanded")).toBe("false");
+    expect(events).toEqual([]);
+  });
+
+  it("A738 follows order identity through reordering and refresh and prunes vanished expansions", async () => {
+    const first = { ...mesa, items };
+    const second = { ...mesa, id: "other-order", orderNumber: 99, items: [] };
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [first, second],
+    });
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!);
+    await el.updateComplete;
+    el.orders = [
+      second,
+      { ...first, items: [{ ...items[0]!, name: "Refreshed stored name", note: "New note" }] },
+    ];
+    await el.updateComplete;
+    const summaries = el.shadowRoot!.querySelectorAll("button.summary");
+    expect([...summaries].map((button) => button.getAttribute("aria-expanded"))).toEqual([
+      "false",
+      "true",
+    ]);
+    const previews = el.shadowRoot!.querySelectorAll<HTMLElement>(".order-preview");
+    expect(previews[1]!.textContent).toContain("Refreshed stored name");
+    expect(previews[1]!.textContent).toContain("New note");
+    expect(previews[1]!.textContent).not.toContain("Staff water");
+    el.orders = [second];
+    await el.updateComplete;
+    el.orders = [first, second];
+    await el.updateComplete;
+    expect(
+      [...el.shadowRoot!.querySelectorAll("button.summary")].map((button) =>
+        button.getAttribute("aria-expanded"),
+      ),
+    ).toEqual(["false", "false"]);
+  });
+  it.each([false, true])(
+    "A738 row action retrieve-order does not toggle its preview (expanded %s)",
+    async (expanded) => {
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [{ ...mesa, items }],
+      });
+      const summary = el.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!;
+      expect(summary).not.toBeNull();
+      if (expanded) {
+        await userEvent.click(summary);
+        await el.updateComplete;
+      }
+      const calls: unknown[] = [];
+      el.addEventListener("retrieve-order", (event) => calls.push((event as CustomEvent).detail));
+      await userEvent.click(
+        el.shadowRoot!.querySelector(".retrieve")!.shadowRoot!.querySelector("button")!,
+      );
+      await el.updateComplete;
+      expect(calls).toEqual([{ id: mesa.id }]);
+      expect(summary.getAttribute("aria-expanded")).toBe(String(expanded));
+    },
+  );
+  it.each([false, true])(
+    "A738 row action discard-order does not toggle its preview (expanded %s)",
+    async (expanded) => {
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [{ ...mesa, items }],
+      });
+      const summary = el.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!;
+      expect(summary).not.toBeNull();
+      if (expanded) {
+        await userEvent.click(summary);
+        await el.updateComplete;
+      }
+      const calls: unknown[] = [];
+      el.addEventListener("discard-order", (event) => calls.push((event as CustomEvent).detail));
+      await userEvent.click(
+        el.shadowRoot!.querySelector(".discard")!.shadowRoot!.querySelector("button")!,
+      );
+      await el.updateComplete;
+      expect(calls).toEqual([{ id: mesa.id }]);
+      expect(summary.getAttribute("aria-expanded")).toBe(String(expanded));
+    },
+  );
+  it.each([false, true])(
+    "A738 row action move-held-order-open does not toggle its preview (expanded %s)",
+    async (expanded) => {
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [{ ...mesa, items }],
+      });
+      const summary = el.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!;
+      expect(summary).not.toBeNull();
+      if (expanded) {
+        await userEvent.click(summary);
+        await el.updateComplete;
+      }
+      const calls: unknown[] = [];
+      el.addEventListener("move-held-order-open", (event) =>
+        calls.push((event as CustomEvent).detail),
+      );
+      await userEvent.click(
+        el.shadowRoot!.querySelector(".move")!.shadowRoot!.querySelector("button")!,
+      );
+      await el.updateComplete;
+      expect(calls).toEqual([null]);
+      expect(summary.getAttribute("aria-expanded")).toBe(String(expanded));
+    },
+  );
 });

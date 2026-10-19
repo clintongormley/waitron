@@ -729,6 +729,7 @@ it("does not pay after an order reload between the note wait and payment", async
 });
 
 const waitingOrder = {
+  items: [],
   id: "waiting-7",
   orderNumber: 7,
   label: "Train",

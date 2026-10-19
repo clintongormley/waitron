@@ -1470,6 +1470,7 @@ describe("TillApi", () => {
   it("listCounterWaiting GETs the counter's waiting orders and returns them", async () => {
     const rows = [
       {
+        items: [],
         id: "wo1",
         orderNumber: 3,
         label: null,

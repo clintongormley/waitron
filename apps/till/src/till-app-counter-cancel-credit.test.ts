@@ -59,6 +59,7 @@ const offers: ZoneOfferCatalogue = {
 };
 
 const notInvoiced: CounterWaitingOrder = {
+  items: [],
   id: "wo-sent",
   orderNumber: 12,
   label: null,

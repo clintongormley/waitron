@@ -806,6 +806,9 @@ describe("GET /api/orders/counter-waiting", () => {
 
     expect(row(sent)).toEqual({
       id: sent,
+      items: [
+        { lineId: expect.any(String), name: "Tarta", quantity: "1.000", note: null, extras: [] },
+      ],
       orderNumber: (await orderRow(sent)).orderNumber,
       label: null,
       status: "placed",
