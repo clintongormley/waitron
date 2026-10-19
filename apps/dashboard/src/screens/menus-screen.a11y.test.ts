@@ -577,12 +577,18 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible Structure tab in Select mode, the bar showing with a section selected and its note", async () => {
-    const { el, host } = await mount("populated", theme, LUNCH);
+  it("accessible Structure tab in Select mode, the bar showing with a section and an included menu selected and its note", async () => {
+    const { el, host } = await mount("included", theme, LUNCH);
     q(el, '[data-test="select"]').click();
     await vi.waitFor(() => expect(q(el, '[data-test="selection-bar"]')).not.toBeNull());
     await vi.waitFor(() =>
       treeRows(el).querySelector<HTMLInputElement>('[data-test="select-m-drinks"]')!.click(),
+    );
+    await vi.waitFor(() =>
+      expect(q(el, '[data-test="selected-count"]').textContent!.trim()).toMatch(/^1 /),
+    );
+    await vi.waitFor(() =>
+      treeRows(el).querySelector<HTMLInputElement>('[data-test="select-included-wine"]')!.click(),
     );
     await vi.waitFor(() => expect(q(el, '[data-test="selection-sections-note"]')).not.toBeNull());
     expect(q(el, '[data-test="select"]').getAttribute("aria-pressed")).toBe("true");

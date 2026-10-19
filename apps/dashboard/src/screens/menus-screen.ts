@@ -2570,11 +2570,15 @@ export class MenusScreen extends LitElement {
 
   #renderSelectionBar() {
     const count = this.structureSelected.length;
-    const sectionSelected = this.structureSelected.some((key) => {
+    const sent = this.#sentKeys(this.structureSelected);
+    const ownsSection = (key: string) => {
       const node = nodeAt(this.structure, key.split("/"));
       return node?.ref.kind === "section" && !node.includedMenuId;
-    });
-    const removable = count > 0 && !sectionSelected;
+    };
+    const sections = sent.filter(ownsSection).length;
+    const removable = sent.length > 0 && sections === 0;
+    const deletable = sent.length > 0 && sections === sent.length;
+    const mixed = sections > 0 && sections < sent.length;
     return html`<div
       slot="toolbar-bottom"
       class="selection-bar"
@@ -2604,9 +2608,15 @@ export class MenusScreen extends LitElement {
         @click=${() => {
           if (!removable || this.busy) return;
           this.removeSelectedError = "";
-          this.removingSelected = this.#sentKeys(this.structureSelected);
+          this.removingSelected = sent;
         }}
         >${t("menus.remove_selected")}</wt-button
+      >
+      <wt-button
+        data-test="selection-delete"
+        variant=${deletable ? "danger" : "secondary"}
+        .disabled=${!deletable || this.busy}
+        >${t("action.delete")}</wt-button
       >
       <wt-button
         data-test="selection-done"
@@ -2618,9 +2628,9 @@ export class MenusScreen extends LitElement {
         >${t("action.done")}</wt-button
       >
       ${
-        sectionSelected
+        mixed
           ? html`<p class="selection-note" data-test="selection-sections-note">
-              ${t("menus.selection_sections_note")}
+              ${t("menus.selection_mixed_note")}
             </p>`
           : nothing
       }

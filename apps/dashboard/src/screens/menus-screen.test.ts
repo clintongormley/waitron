@@ -4699,7 +4699,7 @@ describe("the Structure tree", () => {
       expect(text(q(el, '[data-test="selected-count"]'))).toBe("2 seleccionados");
       expect(text(removeButton(el))).toBe("Quitar de la carta");
       expect(text(q(el, '[data-test="selection-sections-note"]'))).toBe(
-        "Las secciones se eliminan desde el ⋮ de su fila.",
+        "Elimina las secciones y quita los demás elementos por separado.",
       );
       expect(text(q(el, '[data-test="selection-done"]'))).toBe("Listo");
     });
@@ -4713,7 +4713,7 @@ describe("the Structure tree", () => {
       expect(removeButton(el).disabled).toBe(true);
       expect(removeButton(el).variant).toBe("secondary");
       expect(text(q(el, '[data-test="selection-sections-note"]'))).toBe(
-        "Sections are deleted from their own row's ⋮.",
+        "Delete sections and remove other items separately.",
       );
       removeButton(el).click();
       await el.updateComplete;
@@ -4721,6 +4721,123 @@ describe("the Structure tree", () => {
       await tick(el, "m-drinks");
       expect(removeButton(el).disabled).toBe(false);
       expect(q(el, '[data-test="selection-sections-note"]')).toBeNull();
+    });
+
+    describe("Delete", () => {
+      const deleteButton = (el: MenusScreen) =>
+        q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-delete"]')!;
+      const note = (el: MenusScreen) => q(el, '[data-test="selection-sections-note"]');
+      const wines: MenuStructureNode = {
+        memberId: "m-wines",
+        ref: { kind: "section", sectionId: "wine-root" },
+        internalName: "Wines",
+        includedMenuId: "menu-wine",
+        ownerMenuId: "menu-wine",
+        folder: { showAsFolder: true, overrides: {} },
+        children: [],
+      };
+      const mountWithWines = () =>
+        mountLunch(
+          api({ getMenuStructure: vi.fn(async () => lunchWith([...lunchNodes(), wines])) }),
+        );
+
+      async function select(el: MenusScreen, selected: string[]): Promise<void> {
+        emit(structure(el), "wt-selection-change", { selected });
+        await settleStructure(el);
+      }
+
+      function expectQuiet(button: HTMLElementTagNameMap["wt-button"]): void {
+        expect(button.disabled).toBe(true);
+        expect(button.variant).toBe("secondary");
+      }
+
+      function expectReady(button: HTMLElementTagNameMap["wt-button"]): void {
+        expect(button.disabled).toBe(false);
+        expect(button.variant).toBe("danger");
+      }
+
+      it("sits between Remove from menu and Done, named Delete", async () => {
+        const el = await mountLunch();
+        await pressSelect(el);
+        expect(
+          [...bar(el)!.querySelectorAll("wt-button")].map((button) => button.dataset.test),
+        ).toEqual(["selection-move", "selection-remove", "selection-delete", "selection-done"]);
+        expect(text(deleteButton(el))).toBe("Delete");
+      });
+
+      it("is enabled and danger with two of the menu's own sections ticked, Remove quiet, no note", async () => {
+        const el = await mountLunch();
+        await pressSelect(el);
+        await tick(el, "m-drinks");
+        await tick(el, "m-fav");
+        expectReady(deleteButton(el));
+        expectQuiet(removeButton(el));
+        expect(note(el)).toBeNull();
+      });
+
+      it("is quiet and disabled with nothing ticked", async () => {
+        const el = await mountLunch();
+        await pressSelect(el);
+        expectQuiet(deleteButton(el));
+        expect(note(el)).toBeNull();
+      });
+
+      it("is quiet and disabled with only products ticked, Remove ready", async () => {
+        const el = await mountLunch();
+        await pressSelect(el);
+        await select(el, ["m-burger", "m-drinks/m-lager"]);
+        expectQuiet(deleteButton(el));
+        expectReady(removeButton(el));
+        expect(note(el)).toBeNull();
+      });
+
+      it("is quiet and disabled with only an included menu ticked, Remove ready", async () => {
+        const el = await mountWithWines();
+        await pressSelect(el);
+        await tick(el, "m-wines");
+        expectQuiet(deleteButton(el));
+        expectReady(removeButton(el));
+        expect(note(el)).toBeNull();
+      });
+
+      it("judges a section and a product inside it on the section alone: Delete ready, Remove quiet, no note", async () => {
+        const el = await mountLunch();
+        await pressSelect(el);
+        await select(el, ["m-drinks", "m-drinks/m-lager"]);
+        expectReady(deleteButton(el));
+        expectQuiet(removeButton(el));
+        expect(note(el)).toBeNull();
+      });
+
+      it("keeps both quiet and shows the note for a section and a product elsewhere", async () => {
+        const el = await mountLunch();
+        await pressSelect(el);
+        await select(el, ["m-drinks", "m-burger"]);
+        expectQuiet(deleteButton(el));
+        expectQuiet(removeButton(el));
+        expect(text(note(el))).toBe("Delete sections and remove other items separately.");
+      });
+
+      it("keeps both quiet and shows the note for a section and an included menu", async () => {
+        const el = await mountWithWines();
+        await pressSelect(el);
+        await tick(el, "m-drinks");
+        await tick(el, "m-wines");
+        expectQuiet(deleteButton(el));
+        expectQuiet(removeButton(el));
+        expect(text(note(el))).toBe("Delete sections and remove other items separately.");
+      });
+
+      it("names Delete and the mixed note in Spanish", async () => {
+        setLocale("es");
+        const el = await mountLunch();
+        await pressSelect(el);
+        await select(el, ["m-drinks", "m-burger"]);
+        expect(text(deleteButton(el))).toBe("Eliminar");
+        expect(text(note(el))).toBe(
+          "Elimina las secciones y quita los demás elementos por separado.",
+        );
+      });
     });
 
     it("removes the selected rows in one request after a confirm naming the count and where each leaves", async () => {
