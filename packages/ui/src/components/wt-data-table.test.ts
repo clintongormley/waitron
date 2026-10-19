@@ -5990,6 +5990,97 @@ test("a first column that keeps its blank space outside row activation leaves th
   expect(clicked).toEqual(["b", "b"]);
 });
 
+test("when only a pinned column leaves its blank space to the row, the activator sits in that pinned cell", async () => {
+  const clicked: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => clicked.push(row.id),
+    columns: [
+      { ...columns[0]!, activatesRow: false },
+      { ...columns[1]!, activatesRow: false },
+      { ...columns[2]!, pinned: "end" },
+    ],
+  });
+  const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="b"] td')];
+  expect(cells.map((cell) => cell.querySelectorAll(".row-activate").length)).toEqual([0, 0, 1]);
+  const activator = cells[2]!.querySelector<HTMLButtonElement>(".row-activate")!;
+  const corner = (cell: HTMLElement) => {
+    const box = cell.getBoundingClientRect();
+    return el.shadowRoot!.elementFromPoint(box.x + 2, box.y + 2);
+  };
+  expect(corner(cells[0]!)).toBe(cells[0]);
+  expect(corner(cells[1]!)).toBe(cells[1]);
+  await userEvent.click(cells[0]!, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual([]);
+  expect(corner(cells[2]!)).toBe(activator);
+  const box = activator.getBoundingClientRect();
+  const pinned = cells[2]!.getBoundingClientRect();
+  expect([box.left, box.right]).toEqual([pinned.left, pinned.right]);
+  await userEvent.click(cells[2]!, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual(["b"]);
+  activator.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(clicked).toEqual(["b", "b"]);
+});
+
+test.each([
+  {
+    change: "its column stops activating the row",
+    next: [{ ...columns[0]!, activatesRow: false as const }, columns[1]!, columns[2]!],
+  },
+  {
+    change: "a new first column that keeps its blank space arrives",
+    next: [
+      { key: "note", label: "Note", cell: () => "", activatesRow: false as const },
+      ...columns,
+    ],
+  },
+])(
+  "a focused row activator keeps the row's focus when $change and moves it to another cell",
+  async ({ next }) => {
+    const clicked: string[] = [];
+    const el = await table({ rowClick: (row: Row) => clicked.push(row.id) });
+    const activatorIn = (key: string) =>
+      el.shadowRoot!.querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] .row-activate`)!;
+    const before = activatorIn("b");
+    const beforeCell = before.closest("td")!.cellIndex;
+    before.focus();
+    el.columns = next;
+    await el.updateComplete;
+    const after = activatorIn("b");
+    expect(after).not.toBe(before);
+    expect(after.closest("td")!.cellIndex).not.toBe(beforeCell);
+    expect(el.shadowRoot!.activeElement).toBe(after);
+    await userEvent.keyboard("{Enter}");
+    expect(clicked).toEqual(["b"]);
+  },
+);
+
+test("a moved row activator leaves focus that is elsewhere where it is", async () => {
+  const el = await table({ rowClick: () => undefined });
+  const outside = document.createElement("button");
+  host.append(outside);
+  outside.focus();
+  el.columns = [{ ...columns[0]!, activatesRow: false }, columns[1]!, columns[2]!];
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="b"] td:nth-child(2) .row-activate'),
+  ).not.toBeNull();
+  expect(document.activeElement).toBe(outside);
+  expect(el.shadowRoot!.activeElement).toBeNull();
+});
+
+test("a focused row activator whose row leaves the table takes the focus nowhere", async () => {
+  const el = await table({ rowClick: () => undefined });
+  el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="b"] .row-activate')!.focus();
+  el.rows = rows.filter((row) => row.id !== "b");
+  el.columns = [{ ...columns[0]!, activatesRow: false }, columns[1]!, columns[2]!];
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="a"] td:nth-child(2) .row-activate'),
+  ).not.toBeNull();
+  expect(el.shadowRoot!.activeElement).toBeNull();
+});
+
 test("a row whose every column keeps its blank space outside row activation draws no activator", async () => {
   const clicked: string[] = [];
   const el = await table({

@@ -1875,6 +1875,28 @@ describe("the menus list's Changes column", () => {
     },
   );
 
+  it("keeps the focus on a row's open button when the list narrows to the phone layout", async () => {
+    await at([700, 900], "en-GB", async () => {
+      const opens = opened();
+      const el = await listed(mixed());
+      await threeColumns(el);
+      const before = row(el, "menu-lunch").querySelector<HTMLButtonElement>(".row-activate")!;
+      expect(before.getAttribute("aria-label")).toContain("Lunch Menu");
+      expect(before.closest("td")).toBe(row(el, "menu-lunch").querySelectorAll("td")[0]);
+      before.focus();
+      await page.viewport(390, 844);
+      await vi.waitFor(() => expect(heads(el)).not.toContain(t("menus.status")));
+      await table(el).updateComplete;
+      const after = row(el, "menu-lunch").querySelector<HTMLButtonElement>(".row-activate")!;
+      expect(after).not.toBe(before);
+      expect(table(el).shadowRoot.activeElement).toBe(after);
+      await userEvent.keyboard("{Enter}");
+      const structure = "/manage/menus/menu/menu-lunch/view/structure";
+      await vi.waitFor(() => expect(location.pathname).toBe(structure));
+      expect(opens()).toEqual([structure]);
+    });
+  });
+
   it.each([
     ["Status hidden", { columns: { status: false } }],
     ["Changes hidden", { columns: { changes: false } }],

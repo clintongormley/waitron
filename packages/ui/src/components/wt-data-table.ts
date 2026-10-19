@@ -1216,6 +1216,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   protected override updated(changed: PropertyValues): void {
     super.updated(changed);
+    this.#refocusActivator();
     this.#observeScroll();
     this.#observeHead();
     if (changed.has("columns") || changed.has("searchable")) this.#observeHost();
@@ -1252,7 +1253,23 @@ export class WtDataTable<Row = unknown> extends LitElement {
     );
   }
 
+  // A render can move a row's activator to another cell, which drops the focus it held. Focusing
+  // the activator that kept its focus does nothing.
+  #focusedActivatorRow: string | undefined;
+
+  #refocusActivator(): void {
+    const key = this.#focusedActivatorRow;
+    if (key === undefined) return;
+    [...this.renderRoot.querySelectorAll<HTMLElement>("tr[data-row-key]")]
+      .find((row) => row.dataset.rowKey === key)
+      ?.querySelector<HTMLButtonElement>(".row-activate")
+      ?.focus();
+  }
+
   protected override willUpdate(changed: PropertyValues<this>): void {
+    this.#focusedActivatorRow = this.shadowRoot?.activeElement?.matches(".row-activate")
+      ? this.shadowRoot.activeElement.closest<HTMLElement>("tr")!.dataset.rowKey
+      : undefined;
     this.#searchMemo = undefined;
     const query = this.#flatSearching()
       ? this.searchable
