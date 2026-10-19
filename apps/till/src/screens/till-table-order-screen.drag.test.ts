@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
 import { DraftStore } from "../state/draft-sync.js";
 import type { TillBasket } from "../widgets/basket.js";
+import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
@@ -281,6 +282,64 @@ it("holding a new heading and dropping after another reorders its entire slot", 
   expect(draft.lines[1]!.place).toEqual({ kind: "new", slot: 2 });
   expect(draft.lines[2]!.place).toEqual({ kind: "new", slot: 1 });
   expect(draft.lines[0]!.place).toEqual({ kind: "fire" });
+});
+
+it.each(["first", "last"] as const)(
+  "a new heading dropped on the %s gap moves its whole group without empty slots",
+  async (destination) => {
+    const { el, draft } = await open();
+    draft.setLinePlaces([0], { kind: "new", slot: destination === "first" ? 2 : 1 });
+    await el.updateComplete;
+    const source = destination === "first" ? "new:2" : "new:1";
+    const gap = destination === "first" ? "new:1" : "end";
+    await drop(el, q(el, `[data-draft-group="${source}"] h3`), q(el, `[data-draft-gap="${gap}"]`));
+    expect(places(draft)).toEqual([
+      { kind: "new", slot: destination === "first" ? 1 : 2 },
+      { kind: "new", slot: 2 },
+      { kind: "new", slot: 1 },
+      { kind: "join", groupId: "g3" },
+    ]);
+    expect(draft.lines.map((line) => line.quantity)).toEqual(["2", "1", "1", "1"]);
+  },
+);
+
+it("a row dropped on the first gap inserts before the first held group when Fire now is empty", async () => {
+  const { el, draft } = await open();
+  draft.setLinePlaces([0], { kind: "new", slot: 2 });
+  await el.updateComplete;
+  await drop(el, lead(el, 3), q(el, '[data-draft-gap="new:1"]'));
+  expect(places(draft)).toEqual([
+    { kind: "new", slot: 3 },
+    { kind: "new", slot: 2 },
+    { kind: "new", slot: 3 },
+    { kind: "new", slot: 1 },
+  ]);
+  expect(draft.lines.map((line) => line.quantity)).toEqual(["2", "1", "1", "1"]);
+});
+
+it("a row dropped directly on a sent held group joins it without sending the draft", async () => {
+  const { el, draft } = await open();
+  const sends = vi.fn();
+  el.addEventListener("submit-draft", sends);
+  const panel = q(el, "till-sent-orders") as TillSentOrders;
+  await panel.updateComplete;
+  const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!;
+  if (toggle.getAttribute("aria-expanded") === "false") {
+    await userEvent.click(toggle);
+    await panel.updateComplete;
+  }
+  await drop(
+    el,
+    lead(el, 0),
+    panel.shadowRoot!.querySelector<HTMLElement>('[data-held-group="g4"] .heading')!,
+  );
+  expect(places(draft)).toEqual([
+    { kind: "join", groupId: "g4" },
+    { kind: "new", slot: 1 },
+    { kind: "new", slot: 2 },
+    { kind: "join", groupId: "g3" },
+  ]);
+  expect(sends).not.toHaveBeenCalled();
 });
 
 it("a stationary hold opens the existing line editor and does not select or move it", async () => {

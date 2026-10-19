@@ -32,6 +32,66 @@ const jamon: TillProduct = {
 };
 
 describe("WorkingOrderStore", () => {
+  it.each(["sending", "locked"] as const)(
+    "does not fold a split family while %s holds the saved outbox",
+    (gate) => {
+      const store = new WorkingOrderStore();
+      store.loadFrom("draft", [{ product: { ...cafe, menuItemId: "offer-cafe" }, quantity: "2" }]);
+      store.splitLine(0);
+      const before = [...store.lines];
+      store.markPersisted();
+      if (gate === "sending") store.sending = true;
+      else store.lockEdits();
+      let changes = 0;
+      store.subscribe(() => changes++);
+      store.foldSplitFamily(before[0]!);
+      expect(store.lines).toHaveLength(2);
+      expect(store.lines.every((line, index) => line === before[index])).toBe(true);
+      expect(store.lines.map((line) => line.quantity)).toEqual(["1", "1"]);
+      expect(store.total).toBe("3.00");
+      expect(store.dirty).toBe(false);
+      expect(changes).toBe(0);
+    },
+  );
+
+  it("does not fold an ordinary row with no split family", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [{ product: cafe, quantity: "2" }]);
+    const line = store.lines[0]!;
+    let changes = 0;
+    store.subscribe(() => changes++);
+    store.foldSplitFamily(line);
+    expect(store.lines[0]).toBe(line);
+    expect(store.lines).toHaveLength(1);
+    expect(line.quantity).toBe("2");
+    expect(store.dirty).toBe(false);
+    expect(changes).toBe(0);
+  });
+
+  it.each(["placement", "slot", "station", "adoption"] as const)(
+    "keeps remaining dishes unchanged when a %s target has disappeared",
+    (action) => {
+      const store = new WorkingOrderStore();
+      store.loadFrom("draft", [{ product: cafe, quantity: "2", place: { kind: "new", slot: 1 } }]);
+      const line = store.lines[0]!;
+      let changes = 0;
+      store.subscribe(() => changes++);
+      if (action === "placement") store.setLinePlaces([3], { kind: "new", slot: 2 }, { from: 1 });
+      if (action === "slot") store.moveSlot(3, 1);
+      if (action === "station") store.setLineMakeAt(3, "bar");
+      if (action === "adoption") store.adoptLines(new Map([[3, { ...line, quantity: "9" }]]));
+      expect(store.lines).toHaveLength(1);
+      expect(store.lines[0]).toBe(line);
+      expect(line.quantity).toBe("2");
+      expect(line.place).toEqual({ kind: "new", slot: 1 });
+      expect(line.makeAt).toBeUndefined();
+      if (action !== "adoption") {
+        expect(store.dirty).toBe(false);
+        expect(changes).toBe(0);
+      }
+    },
+  );
+
   it("appends already-chosen lines as one unsaved edit, merging none of them", () => {
     const store = new WorkingOrderStore();
     store.loadFrom("draft", [{ product: cafe, quantity: "1" }]);

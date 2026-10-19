@@ -141,6 +141,136 @@ afterEach(() => {
 });
 
 describe("bill-scoped saved work and retained local candidates", () => {
+  it.each(["other-bill", "old-generation", "old-editor"] as const)(
+    "does not replace the current outbox with an %s command snapshot",
+    async (stale) => {
+      const { sync, api } = fixture(saved("ana", 3, 4));
+      await sync.load();
+      const line = sync.store.lines[0]!;
+      const before = sync.expectedEdit;
+      const incoming = saved("luis", stale === "old-editor" ? 2 : 4, 5);
+      if (stale === "other-bill") incoming.edit.billId = "bill-2";
+      sync.applyBillSnapshot(incoming, sync.generation - (stale === "old-generation" ? 1 : 0));
+      expect(sync.expectedEdit).toEqual(before);
+      expect(sync.store.lines[0]).toBe(line);
+      expect(sync.store.editsLocked).toBe(false);
+      expect(sync.others).toEqual([]);
+      expect(api.saveDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps confirmed authority when a read names a draft it did not return", async () => {
+    const { sync, api } = fixture(saved());
+    await sync.load();
+    const line = sync.store.lines[0]!;
+    api.listDrafts.mockResolvedValueOnce({ drafts: [], billEdits: [saved("luis", 2).edit] });
+    expect(await sync.load()).toBe(false);
+    expect(sync.edit).toEqual(saved().edit);
+    expect(sync.store.lines[0]).toBe(line);
+    expect(sync.store.editsLocked).toBe(false);
+    expect(api.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("ignores candidate resolution when no local work was retained", async () => {
+    const { sync, api } = fixture(saved());
+    await sync.load();
+    const line = sync.store.lines[0]!;
+    sync.resolveCandidate([]);
+    expect(sync.store.lines[0]).toBe(line);
+    expect(sync.candidate).toBeNull();
+    expect(await sync.flush()).toBe("saved");
+    expect(api.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("applies a reviewed local candidate only after the new owner's saved view is read", async () => {
+    const { sync, api, set } = fixture(saved());
+    await sync.load();
+    sync.store.addProduct(salad, "2");
+    set(saved("ana", 2, 2));
+    await sync.load();
+    const candidate = sync.candidate!;
+    expect(candidate.lines.map((line) => line.product.name)).toEqual(["Steak", "Salad"]);
+    expect(sync.store.lines.map((line) => line.product.name)).toEqual(["Steak"]);
+    sync.resolveCandidate(candidate.lines);
+    expect(sync.candidate).toBeNull();
+    expect(sync.store.editsLocked).toBe(false);
+    expect(sync.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+      ["Steak", "1"],
+      ["Salad", "2"],
+    ]);
+    expect(api.saveDraft).not.toHaveBeenCalled();
+    await sync.flush();
+    expect(api.saveDraft.mock.calls[0]![1].expectedEdit).toEqual({
+      billId: "bill-1",
+      editorVersion: 2,
+      draftId: "draft-1",
+      draftRevision: 2,
+    });
+  });
+
+  it.each(["aborted", "left", "ended"] as const)(
+    "does not save recovered placement after its read becomes %s",
+    async (stale) => {
+      const { sync, api, wire } = fixture(saved());
+      await sync.load();
+      const line = sync.store.lines[0]!;
+      const pending = deferred<PartyDraftSnapshot>();
+      api.listDrafts.mockImplementationOnce(() => pending.promise);
+      const controller = new AbortController();
+      let live = true;
+      const correcting = sync.correctPlaces(
+        new Map([[0, { ...line, place: { kind: "new", slot: 2 } }]]),
+        controller.signal,
+        () => live,
+      );
+      await vi.waitFor(() => expect(api.listDrafts).toHaveBeenCalledTimes(2));
+      if (stale === "aborted") controller.abort();
+      if (stale === "left") live = false;
+      if (stale === "ended") sync.drop();
+      pending.resolve(wire());
+      expect(await correcting).toBe("failed");
+      expect(api.saveDraft).not.toHaveBeenCalled();
+      if (stale !== "ended")
+        expect(sync.store.lines[0]!.place).not.toEqual({ kind: "new", slot: 2 });
+    },
+  );
+
+  it("refuses recovered placement when a same-editor draft changes during the read", async () => {
+    const { sync, api, wire } = fixture(saved());
+    await sync.load();
+    const line = sync.store.lines[0]!;
+    const answer = wire();
+    answer.drafts[0]!.revision++;
+    api.listDrafts.mockResolvedValueOnce(answer);
+    expect(
+      await sync.correctPlaces(
+        new Map([[0, { ...line, place: { kind: "new", slot: 2 } }]]),
+        new AbortController().signal,
+        () => true,
+      ),
+    ).toEqual({ refused: "draft.out_of_date" });
+    expect(sync.store.lines[0]).toBe(line);
+    expect(api.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("does not begin a second placement recovery while the first read is held", async () => {
+    const { sync, api, wire } = fixture(saved());
+    await sync.load();
+    const pending = deferred<PartyDraftSnapshot>();
+    api.listDrafts.mockImplementationOnce(() => pending.promise);
+    const replacements = new Map([
+      [0, { ...sync.store.lines[0]!, place: { kind: "fire" as const } }],
+    ]);
+    const first = sync.correctPlaces(replacements, new AbortController().signal, () => true);
+    await vi.waitFor(() => expect(api.listDrafts).toHaveBeenCalledTimes(2));
+    expect(await sync.correctPlaces(replacements, new AbortController().signal, () => true)).toBe(
+      "failed",
+    );
+    pending.resolve(wire());
+    expect(await first).toBe("saved");
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+  });
+
   it("shows the bill editor's saved dishes read-only and takes over without a preparatory save", async () => {
     const { sync, api, set } = fixture(saved("luis", 3, 4));
     expect(await sync.load()).toBe(true);

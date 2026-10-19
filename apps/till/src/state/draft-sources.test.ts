@@ -95,6 +95,29 @@ const own = (lines: DraftLine[]): Draft => ({
 afterEach(() => vi.useRealTimers());
 
 describe("recalled draft sources", () => {
+  it.each(["missing-source", "different-source", "detached-row"] as const)(
+    "keeps the recorded family when a %s refresh answers an earlier edit",
+    (stale) => {
+      const store = new WorkingOrderStore();
+      const original = fromDraftLine(recalled(), new Map());
+      store.loadFrom("draft-1", [original]);
+      const line = store.lines[0]!;
+      const source = line.source;
+      const incoming = fromDraftLine(recalled("other-reference", "other-recorded"), new Map());
+      if (stale === "missing-source") delete incoming.source;
+      let changes = 0;
+      store.subscribe(() => changes++);
+      store.refreshRecalledLine(stale === "detached-row" ? { ...line } : line, incoming);
+      expect(store.lines[0]).toBe(line);
+      expect(line.source).toBe(source);
+      expect(line.source!.line.id).toBe("sent-dish");
+      expect(line.source!.extras[0]!.id).toBe("sent-dish-extra");
+      expect(lineGross(line)).toBe("17.25");
+      expect(store.dirty).toBe(false);
+      expect(changes).toBe(0);
+    },
+  );
+
   it("hydrates a menu-less family from its frozen names, choices, price and original allergy identity", () => {
     let restored!: OrderLine;
     expect(() => {

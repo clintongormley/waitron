@@ -11346,6 +11346,157 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     expect(api.getTransactionReceipt).not.toHaveBeenCalled();
   });
 
+  it("keeps a failed reason retry open and allows a later successful read", async () => {
+    const reasons = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue([]);
+    const { el } = await mountFinish({ listAdjustmentReasons: reasons });
+    await openFinish(el);
+    emit(finishDialog(el)!, "finish-table-reasons");
+    await flush(el, 6);
+    expect(finishDialog(el)!.reasons).toBeNull();
+    expect(finishDialog(el)!.reasonsLoading).toBe(false);
+    expect(finishDialog(el)!.refusal).toBe(t("adjust.reasons_error"));
+    emit(finishDialog(el)!, "finish-table-reasons");
+    await flush(el, 6);
+    expect(finishDialog(el)!.reasons).toEqual([]);
+    expect(finishDialog(el)!.refusal).toBe("");
+    expect(api.finishTable).toHaveBeenCalledOnce();
+  });
+
+  it("keeps only one reason retry in flight and ignores its answer after closing", async () => {
+    const pending = held();
+    const reasons = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockImplementation(() => pending.call());
+    const { el } = await mountFinish({ listAdjustmentReasons: reasons });
+    await openFinish(el);
+    const dialog = finishDialog(el)!;
+    emit(dialog, "finish-table-reasons");
+    emit(dialog, "finish-table-reasons");
+    await flush(el);
+    expect(reasons).toHaveBeenCalledTimes(2);
+    expect(finishDialog(el)!.reasonsLoading).toBe(true);
+    emit(dialog, "finish-table-close");
+    pending.answer.settle([]);
+    await flush(el, 8);
+    expect(finishDialog(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+    expect(api.finishTable).toHaveBeenCalledOnce();
+  });
+
+  it.each(["sale", "value", "quantity"] as const)(
+    "offers cancellation without a guessed refund when the filed %s is missing or empty",
+    async (missing) => {
+      const value = consent();
+      if (missing === "sale") delete value.saleId;
+      if (missing === "value") delete value.refundValue;
+      if (missing === "quantity") value.refundValue!.quantity = "0.000";
+      const { el } = await mountFinish({ getCancellation: vi.fn().mockResolvedValue(value) });
+      await openFinish(el);
+      expect(finishDialog(el)!.refunds).toEqual({});
+      expect(finishDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
+      if (missing !== "quantity") expect(api.getRefundableTenders).not.toHaveBeenCalled();
+      await choose(el);
+      expect(vi.mocked(api.finishTable).mock.calls[1]![3]!.cancellations).toEqual([
+        {
+          lineId: "line-1",
+          quantity: "1.000",
+          expectedBillRevision: 0,
+          expectedContext: dish().context,
+          reasonId: "r-cancel",
+        },
+      ]);
+      expect(tableOrder(el)).toBeNull();
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rereads a family payment refusal without closing or opening a refund", async () => {
+    const { el } = await mountFinish({
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce(refusal())
+        .mockRejectedValueOnce({ code: "bill.payments_received" }),
+    });
+    await openFinish(el);
+    const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+    await choose(el, true);
+    expect(finishDialog(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+    expect(banner(el)?.textContent).toContain(t("table.finish_bill_holds_money"));
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(reads);
+    expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+  });
+
+  it.each(["success", "refusal"] as const)(
+    "ignores a late Finish confirmation %s after another table opens",
+    async (outcome) => {
+      const pending = held();
+      const { el } = await mountFinish({
+        finishTable: vi
+          .fn()
+          .mockRejectedValueOnce(refusal())
+          .mockImplementation(() => pending.call()),
+      });
+      await openFinish(el);
+      await choose(el, true);
+      emit(tableOrder(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el, 8);
+      expect(tableOrder(el)?.party?.id).toBe("v7");
+      if (outcome === "success") pending.answer.settle({ state: "closed" });
+      else pending.answer.refuse({ code: "party.bill_outstanding" });
+      await flush(el, 8);
+      expect(tableOrder(el)?.party?.id).toBe("v7");
+      expect(finishDialog(el)).toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(api.getTransactionReceipt).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains a failed receipt choice after closing and opens it on an explicit retry", async () => {
+    const receipt = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(saleResult);
+    const { el } = await mountFinish({ getTransactionReceipt: receipt });
+    await openFinish(el);
+    await choose(el, true);
+    expect(tableOrder(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+    const choice = el.shadowRoot!.querySelector<HTMLElement>('[data-finish-refund="sale-wo-4"]')!;
+    expect(choice).not.toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("find_bill.invoice_load_failed"));
+    await userEvent.click(choice);
+    await flush(el, 10);
+    expect(receipt).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("[data-finish-refund]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+  });
+
+  it.each(["back", "close"] as const)(
+    "dismisses the remaining receipt choices with %s without initiating a refund",
+    async (action) => {
+      const { el } = await mountFinish({ getTransactionReceipt: vi.fn().mockRejectedValue({}) });
+      await openFinish(el);
+      await choose(el, true);
+      const choice = el.shadowRoot!.querySelector<HTMLElement>("[data-finish-refund]")!;
+      const dialog = choice.closest("wt-dialog")!;
+      expect(dialog).not.toBeNull();
+      if (action === "close") emit(dialog, "wt-close");
+      else await userEvent.click(dialog.querySelector<HTMLElement>('[slot="cancel"]')!);
+      await flush(el, 6);
+      expect(el.shadowRoot!.querySelector("[data-finish-refund]")).toBeNull();
+      expect(tableOrder(el)).toBeNull();
+      expect(api.getTransactionReceipt).toHaveBeenCalledOnce();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
+    },
+  );
+
   for (const locale of ["en", "es"] as const)
     for (const theme of ["light", "dark"] as const)
       for (const width of [390, 1280]) {
