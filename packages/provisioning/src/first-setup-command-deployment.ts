@@ -248,8 +248,9 @@ export function createFirstSetupCommandDeployment(options: {
             )
               conflict();
           },
-          sealSettings: async () => {
-            if (settings.required) await settings.secret!.seal({ db, ring }, settings.aeatCert);
+          sealSettings: async (result) => {
+            if (settings.required)
+              await settings.secret!.seal({ db, ring, nodeId: result.nodeId }, settings.aeatCert);
             if (settings.email !== undefined)
               await withTransaction(db, (tx) =>
                 putCredential(tx, ring, { purpose: "email.smtp", value: settings.email! }),

@@ -20,13 +20,19 @@ export default defineConfig({
     maxWorkers: 4,
     projects: [
       {
+        extends: true,
         test: {
           name: "node",
           sequence: { groupOrder: 1 },
           globals: true,
           clearMocks: false,
           include: ["src/**/*.test.ts"],
-          exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/dashboard/**", "src/**/*.browser.test.ts"],
+          exclude: [
+            ...configDefaults.exclude,
+            "**/.stryker-tmp/**",
+            "src/dashboard/**",
+            "src/**/*.browser.test.ts",
+          ],
           // `hookTimeout` bounds only a hook that passes no timeout of its own. `useVenueDb` times its
           // own beforeAll (packages/db/src/testing/venue-db.ts, default 60s), so what this bounds is
           // that helper's untimed afterEach/afterAll plus any hook a suite writes for itself.
@@ -36,8 +42,11 @@ export default defineConfig({
         },
       },
       {
+        extends: true,
         test: {
           name: "browser",
+          testTimeout: 30_000,
+          hookTimeout: 60_000,
           sequence: { groupOrder: 2 },
           globals: true,
           clearMocks: false,

@@ -322,14 +322,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   attached, before any build.
   [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17)
 
-- **A679. First Live setup: one page and one recovery PDF.** Finish the existing branch through the
-  [hour-code plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
-  Complete whole-range prose and current-main integration. Production protocol dispatch and
-  command/tool build entries are retired. Fiscal and provisioning package coverage are qualified;
-  the fiscal suite passes 3,552 cases with all four unchanged bars met.
-  The revised PDF and exact CLI-test patch are approved and the three launch cases pass.
-  Complete both final installed reviews, hook and current-head CI before landing.
-  [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route);
+- **A679. First Live setup: one page and one recovery PDF.** Finish integration checks,
+  both final installed Claude reviews, the normal push hook and current-head CI before landing.
+  Preserve current-main certificate-install recording and configuration-transfer format 4.
+  PDF viewing and the exact retained CLI-launch patch are already approved.
+  [Plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md);
+  [detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route);
   [changed-check inventory](operations/a679-changed-checks.md).
 
 - **A731. Recover from backup from the first-setup repair page.** Required before go-live.

@@ -4,6 +4,8 @@ import {
   AppError,
   businessDayAt,
   cutoverForBusinessDay,
+  firstUnusedStationColour,
+  isStationColour,
   locationId as brandLocationId,
 } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
@@ -133,7 +135,7 @@ export async function buildConfigurationBundle(
   };
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 3,
+    version: 4,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -167,7 +169,7 @@ export async function applyPreparedLocation(
 }
 
 export interface ConfigurationBundle {
-  version: 3;
+  version: 4;
   createdAt: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
@@ -478,10 +480,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 3) {
+  if (typeof value.version === "number" && value.version > 4) {
     throw new AppError("setup.request_invalid", { field: "version" });
   }
-  if (value.version !== 3) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 4) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const location = isRecord(venue) ? venue.location : undefined;
   if (
@@ -621,7 +623,26 @@ export async function importConfigurationTables(
   targetVersions: Readonly<Record<string, number>>,
 ): Promise<void> {
   validateConfigurationBundle(bundle, modules, targetVersions);
-  const checked = checkedRows(bundle, modules);
+  const incoming = checkedRows(bundle, modules);
+  const stationColours = new Set(
+    (incoming.find(([declaration]) => declaration.name === "kitchen_stations")?.[1] ?? [])
+      .map((row) => row.colour)
+      .filter(isStationColour),
+  );
+  const checked = incoming.map(
+    ([declaration, rows]) =>
+      [
+        declaration,
+        declaration.name === "kitchen_stations"
+          ? rows.map((row) => {
+              if (row.colour !== undefined) return row;
+              const colour = firstUnusedStationColour(stationColours);
+              stationColours.add(colour);
+              return { ...row, colour };
+            })
+          : rows,
+      ] as const,
+  );
   const columns = new Map<string, Set<string>>();
   // Which columns hold bytes, so the bundle's `\x<hex>` strings go back in as BYTES: a string bound
   // to a BLOB column is stored as text.

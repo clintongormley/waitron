@@ -269,9 +269,12 @@ export async function publishCheckedFirstFiscal(
         const stage = await host.keys.readStage({ ...owner, revision: current.revision }, hold);
         await host.keys.installStagedNodeKey(deps.db!, current, stage, hold);
       },
-      sealSettings: async () => {
+      sealSettings: async (result) => {
         if (payload.required)
-          await payload.secret!.seal({ db: deps.db!, ring: deps.ring! }, body.aeatCert);
+          await payload.secret!.seal(
+            { db: deps.db!, ring: deps.ring!, nodeId: result.nodeId },
+            body.aeatCert,
+          );
         const email = payload.email;
         if (email !== undefined)
           await withTransaction(deps.db!, (tx) =>

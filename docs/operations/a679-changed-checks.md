@@ -3128,3 +3128,52 @@ functions 99.17% and lines 98.98%. These meet the unchanged 98/95/98/98 bars, re
 The earlier complete runs passed 3,531 and 3,551 cases but failed statement coverage at 97.63%
 and 97.99%; neither is reported as a green package run. The final run closes fiscal coverage
 qualification, not the remaining whole-branch gates.
+
+## Current-main integration, 2026-10-19
+
+The 134 local commits were rebased onto `fcb1332f999136eae86961673f6680f2c713435a`.
+This integration preserves A795 certificate-install recording, A725 configuration-transfer
+format 4 and station ordering, the setup theme chooser, newer dependency versions and both
+sets of fiscal browser suites. No schema or migration path differs from that captured main.
+The protected golden and immutability files remain byte-identical to main.
+
+The relocation initially lost the configuration format update: the existing server transfer
+suite reported 65 failures and 54 passes, including the exact version-4 assertion. Carrying
+the main implementation into provisioning then passed 133 cases across three complete server
+suites. The moved configuration-transfer implementation is byte-identical to the captured
+main server implementation. Kitchen timing differs only in its generic location argument type.
+
+The existing production-command case used a base64 blob that was not a readable certificate.
+It still passed while typechecking found the missing node argument. Two new cases use a real
+synthetic certificate and reproduce the missing-node write failure through the command and
+browser activation service. Publication now supplies the checked committed node to the
+certificate seat. The production writer, fiscal numbering and historical records are unchanged.
+
+Changed checks and fixtures:
+
+| File | Before and after | Authority |
+| --- | --- | --- |
+| `packages/provisioning/test/configuration-bundle.ts` | The valid synthetic bundle moves from format 3 to format 4; other fixture values remain. | Preserve landed A725, `6a4331b4d5e038ecdfc482318eaa6c9e5a5abefe`; hour-code plan Task 12 requires retaining current-main behavior. |
+| `packages/provisioning/src/configuration-transfer.boundaries.test.ts` | The future-format refusal uses 5 instead of the now-supported 4. Its expected error code and field remain unchanged. | The same A725 format change; this preserves the future-version boundary. |
+| `packages/provisioning/src/cli-first-setup.test.ts` | `productionFixture` optionally accepts a readable certificate; its default and every earlier assertion remain. A new case asserts one install row with the committed node, exact fingerprint, setup source, null person and certificate kind. | Preserve A795 and Task 12's current-main integration requirement. |
+| `apps/server/src/first-fiscal-declared-publication.test.ts` | The fixture optionally retains the real certificate seat and adds its certificate input. Earlier invocations still use their original stub and body. A new activation case asserts the actual install row and committed node. | Preserve A795 through the real browser activation service. |
+
+Focused post-fix runs pass 248 provisioning cases, 122 activation/readiness/boot cases, 133
+configuration-transfer/timing cases, 80 setup/recovery fiscal-browser cases, 56 certificate
+browser cases and 56 setup/theme/browser cases. The protected pair plus venue-field suite
+passes 34 cases; the pair remains the original 20. The fiscal contract suite passes 190 and
+six focused root suites pass 3,517. Six affected package typechecks pass. These are focused
+integration receipts, not whole-branch coverage or final review results.
+
+An initial fiscal browser command included two nonexistent screen filenames; only its two
+real setup/recovery files supplied the 80 cases. The later four-file certificate command
+supplies the separate 56 cases. The first relocation-patch check failed before applying;
+its shell continued the rebase. The lost changes were then exposed by the counted transfer
+failures and carried over explicitly. Neither failed experiment is successful validation.
+
+The backlog retains open A679 work. Its former checkpoint narrative is preserved byte-for-byte
+in [a historical snapshot](a679-development-checkpoints.md); the current decision entry points
+to the approved hour design. The provisioning reference now states the existing 21-character
+base bound. A relative-link check resolves 935 local destinations across the changed prose
+paths; it does not check anchors or the meaning of those pages. Final installed reviews,
+current-head CI and authorised landing remain open.

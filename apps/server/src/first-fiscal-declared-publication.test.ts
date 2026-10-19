@@ -49,11 +49,11 @@ afterEach(async () => {
   vi.mocked(fs.rename).mockImplementation(actual.rename);
   await Promise.all(fixtures.splice(0).map((f) => f.dispose()));
 });
-async function fixture() {
+async function fixture(certificate?: { pfxBase64: string; passphrase: string; certKind: string }) {
   const modules = ALL_MODULES.filter((module) =>
     ["core", "fiscal-verifactu", "fiscal-none"].includes(module.name),
   ).map((m) =>
-    m.name !== "fiscal-verifactu"
+    m.name !== "fiscal-verifactu" || certificate !== undefined
       ? m
       : {
           ...m,
@@ -118,6 +118,7 @@ async function fixture() {
   };
   const body = {
     mode: "live",
+    ...(certificate === undefined ? {} : { aeatCert: certificate }),
     email: {
       server: "smtp.example.test",
       port: 465,
@@ -418,4 +419,26 @@ it("Finish setup refuses changed publication inputs after exact commitment", asy
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
   expect(f.counts()).toEqual({ activations: 1, publications: 0 });
+});
+
+it("browser setup records a readable certificate against its committed node", async () => {
+  const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
+  const { fiscalCertificateInstalls } =
+    await import("@waitron/fiscal-verifactu/src/schema/index.js");
+  const candidate = makeAuthority().issue();
+  const f = await fixture({
+    pfxBase64: candidate.pfx.toString("base64"),
+    passphrase: candidate.passphrase,
+    certKind: "sello",
+  });
+  const result = await f.activate();
+  const rows = await suite.db.select().from(fiscalCertificateInstalls);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    nodeId: result.nodeId,
+    fingerprint: candidate.fingerprint,
+    source: "setup",
+    personId: null,
+    kind: "sello",
+  });
 });

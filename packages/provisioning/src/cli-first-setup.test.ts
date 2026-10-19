@@ -882,18 +882,16 @@ const productionEmail = {
   from: "elena@example.test",
 };
 
-async function productionFixture(accepted: boolean) {
+async function productionFixture(accepted: boolean, certificate = productionCertificate) {
   const { mkdir, writeFile } = await import("node:fs/promises");
   const f = await realActivationFixture({ WAITRON_BUILD_ID: "synthetic-production-build" });
   f.deps.env.WAITRON_ENV = "production";
   f.env.WAITRON_ENV = "production";
   const settingsPath = join(f.root, "publication-settings.json");
   f.env.WAITRON_SETUP_SETTINGS_FILE = settingsPath;
-  await writeFile(
-    settingsPath,
-    JSON.stringify({ aeatCert: productionCertificate, email: productionEmail }),
-    { mode: 0o600 },
-  );
+  await writeFile(settingsPath, JSON.stringify({ aeatCert: certificate, email: productionEmail }), {
+    mode: 0o600,
+  });
   const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
   const modules = enabledModules(ALL_MODULES, selected.config);
   const versions: Record<string, number> = {};
@@ -912,7 +910,7 @@ async function productionFixture(accepted: boolean) {
       },
     },
     contribution: selected.contribution!,
-    secret: productionCertificate,
+    secret: certificate,
     moduleVersions: versions,
     applicationVersion: "synthetic-production-build",
   });
@@ -1458,4 +1456,28 @@ it("exact command Finish ignores --test-fiscal and preserves the accepted sample
   } finally {
     f.drain.mockRestore();
   }
+});
+
+it("the production command records a readable certificate against the committed setup node", async () => {
+  const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
+  const { fiscalCertificateInstalls } =
+    await import("@waitron/fiscal-verifactu/src/schema/index.js");
+  const candidate = makeAuthority().issue();
+  const certificate = {
+    pfxBase64: candidate.pfx.toString("base64"),
+    passphrase: candidate.passphrase,
+    certKind: "sello",
+  };
+  const f = await productionFixture(true, certificate);
+  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  const state = (await f.runtime.store.read())!;
+  const rows = await venue.db.select().from(fiscalCertificateInstalls);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
+    nodeId: state.frozen.nodeId,
+    fingerprint: candidate.fingerprint,
+    source: "setup",
+    personId: null,
+    kind: "sello",
+  });
 });

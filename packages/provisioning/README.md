@@ -173,7 +173,7 @@ country pack's languages nor against a region that fixes one (Catalonia); the da
 page and setup do. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
 refuses a legal name or operation description carrying a character XML forbids, an operation
 description over 500 characters, and any series code outside AEAT's character set or longer than
-the 38-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
+the 21-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
 races a conflicting row is caught as `provisioning.venue_conflict`. A run against a database whose
 taxpayer row names a different country or tax id is refused with `provisioning.foreign_tenant`, and
 refused BEFORE the plan is applied: `venue` reads the stored identity and calls the shared
@@ -189,7 +189,7 @@ between this run's read and its write.
 If your filing seed declares a `series` contribution, it creates the invoice series itself.
 Setup skips the base-series inserts and checks that `series.resolve` returns the complete active
 set for the new node. On retry, setup calls that resolver without running the seed again. The
-resolver must reject requested bases that differ from its allocation.
+resolver must reject requested bases that differ from the active series configuration.
 
 ## Secrets
 

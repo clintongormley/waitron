@@ -165,7 +165,7 @@ export interface FirstSetupPublicationDeps {
   db: Database;
   publishSelection(state: FirstSetupState): Promise<void>;
   publishIdentity(result: VenueResult, state: FirstSetupState): Promise<void>;
-  sealSettings(): Promise<void>;
+  sealSettings(result: VenueResult): Promise<void>;
   persistTrading(result: VenueResult, state: FirstSetupState): Promise<void>;
   clearConfiguration?(): Promise<void>;
   installLegacyKey?(
@@ -208,7 +208,7 @@ export async function publishCheckedFirstSetup(
   await deps.publishSelection(state);
   const result = checked.venue;
   await deps.publishIdentity(result, state);
-  await deps.sealSettings();
+  await deps.sealSettings(result);
   await deps.persistTrading(result, state);
   await deps.clearConfiguration?.();
   if (state.status === "committed") await advance({ kind: "publication" });
