@@ -351,8 +351,10 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
     it("too many wrong PINs, even once the right one is sent", async () => {
       const v = await setup();
       const { earlier } = await twoHeld(v);
+      const alertsBefore = heldAlerts();
       for (let i = 0; i <= PIN_THROTTLE_FREE_ATTEMPTS; i += 1) {
-        await post(v, outcomePath(earlier.holdId), { outcome: "kept", pin: "9999" });
+        const wrong = await post(v, outcomePath(earlier.holdId), { outcome: "kept", pin: "9999" });
+        expect(wrong.status).toBe(401);
       }
 
       const res = await post(v, outcomePath(earlier.holdId), { outcome: "kept", pin: "1234" });
@@ -360,6 +362,7 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
       expect(res.status).toBe(429);
       expect((await errorOf(res)).code).toBe("pin.throttled");
       expect(outcomeRows()).toEqual([]);
+      expect(heldAlerts()).toEqual(alertsBefore);
     });
 
     it("an unknown outcome", async () => {
@@ -373,6 +376,15 @@ describe("POST /management-api/payments/held/:id/outcome", () => {
 
     it("a note that is not text", async () => {
       const { res } = await refused(() => ({ body: { outcome: "kept", note: 7, pin: "1234" } }));
+      expect(res.status).toBe(400);
+      expect(await errorOf(res)).toEqual({
+        code: "management.request_invalid",
+        params: { field: "note" },
+      });
+    });
+
+    it("a note sent as null", async () => {
+      const { res } = await refused(() => ({ body: { outcome: "kept", note: null, pin: "1234" } }));
       expect(res.status).toBe(400);
       expect(await errorOf(res)).toEqual({
         code: "management.request_invalid",
@@ -446,6 +458,9 @@ describe("the held payment outcome checks the manager's PIN before the write loc
 
     expect(res.status).toBe(200);
     expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(outcomeRows()).toEqual([
+      { hold_id: earlier.holdId, outcome: "kept", note: null, person_id: v.managerId },
+    ]);
   });
 
   it("derives no key for a session without payments.manage", async () => {

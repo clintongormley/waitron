@@ -19,10 +19,7 @@ import type { TickResult } from "@waitron/scheduler";
 import { decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import { reconcilerAsDuty } from "./reconcile-duty.js";
 
-const suite = useVenueDb({
-  migrations: migrationOptionsFor(manifestSets(), null),
-  timeoutMs: 60_000,
-});
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 const HELD = "payment.reconcile_held";
 const JUL_1_NOON = new Date("2026-07-01T12:00:00Z");
@@ -123,7 +120,7 @@ describe("held card payments on the real scheduler", () => {
     }
   });
 
-  it("a handled alert comes back the next morning, not the same day", async () => {
+  it("a handled alert comes back the next morning, not the same day unless a new payment is held", async () => {
     const JUL_3_NOON = new Date("2026-07-03T12:00:00Z");
     const records = [await heldPayment("p1", JUL_1_NOON), await heldPayment("p2", JUL_3_NOON)];
     const { tick, control } = scheduler(records);

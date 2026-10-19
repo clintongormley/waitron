@@ -41,9 +41,9 @@ async function aPayment(): Promise<string> {
   });
 }
 
-let holdCounter = 0;
-function holdId(): string {
-  return `11111111-1111-4111-8111-${String(++holdCounter).padStart(12, "0")}`;
+let rowCounter = 0;
+function rowId(): string {
+  return `11111111-1111-4111-8111-${String(++rowCounter).padStart(12, "0")}`;
 }
 
 function insertHold(id: string, paymentId: string, providerAmount = 1210) {
@@ -68,7 +68,7 @@ function insertOutcome(
 }
 
 async function aHold(): Promise<string> {
-  const id = holdId();
+  const id = rowId();
   await insertHold(id, await aPayment());
   return id;
 }
@@ -76,9 +76,9 @@ async function aHold(): Promise<string> {
 describe("payment_holds and payment_hold_outcomes", () => {
   it("stores a hold and its outcome and reads them back", async () => {
     const paymentId = await aPayment();
-    const hold = holdId();
+    const hold = rowId();
     await insertHold(hold, paymentId, 2420);
-    const outcome = holdId();
+    const outcome = rowId();
     await insertOutcome(outcome, hold, { outcome: "refunded_at_provider", note: null });
     const { rows } = await suite.db.execute(sql`
       select h.payment_id, h.provider_amount, h.found_at, o.hold_id, o.outcome, o.note,
@@ -101,7 +101,7 @@ describe("payment_holds and payment_hold_outcomes", () => {
 
   it("keeps a note given with an outcome", async () => {
     const hold = await aHold();
-    const outcome = holdId();
+    const outcome = rowId();
     await insertOutcome(outcome, hold, { outcome: "kept", note: "Guest paid twice; kept one" });
     const { rows } = await suite.db.execute(
       sql`select outcome, note from payment_hold_outcomes where id = ${outcome}`,
@@ -111,8 +111,8 @@ describe("payment_holds and payment_hold_outcomes", () => {
 
   it("refuses a second hold for one payment", async () => {
     const paymentId = await aPayment();
-    await insertHold(holdId(), paymentId);
-    const error = await captureError(() => insertHold(holdId(), paymentId));
+    await insertHold(rowId(), paymentId);
+    const error = await captureError(() => insertHold(rowId(), paymentId));
     // SQLite names the columns that collided, not the index.
     expect(
       refusalOn(error, UNIQUE_VIOLATION, { table: "payment_holds", columns: ["payment_id"] }),
@@ -121,8 +121,8 @@ describe("payment_holds and payment_hold_outcomes", () => {
 
   it("refuses a second outcome for one hold", async () => {
     const hold = await aHold();
-    await insertOutcome(holdId(), hold);
-    const error = await captureError(() => insertOutcome(holdId(), hold));
+    await insertOutcome(rowId(), hold);
+    const error = await captureError(() => insertOutcome(rowId(), hold));
     expect(
       refusalOn(error, UNIQUE_VIOLATION, { table: "payment_hold_outcomes", columns: ["hold_id"] }),
     ).toBe(true);
@@ -130,37 +130,38 @@ describe("payment_holds and payment_hold_outcomes", () => {
 
   it("refuses a provider amount that is not above zero", async () => {
     const paymentId = await aPayment();
-    const zero = await captureError(() => insertHold(holdId(), paymentId, 0));
+    const zero = await captureError(() => insertHold(rowId(), paymentId, 0));
     expect(checkFailed(zero, "payment_holds_provider_amount_ck")).toBe(true);
-    const negative = await captureError(() => insertHold(holdId(), paymentId, -1));
+    const negative = await captureError(() => insertHold(rowId(), paymentId, -1));
     expect(checkFailed(negative, "payment_holds_provider_amount_ck")).toBe(true);
   });
 
   it("refuses an outcome it does not know", async () => {
     const hold = await aHold();
-    const error = await captureError(() => insertOutcome(holdId(), hold, { outcome: "voided" }));
+    const error = await captureError(() => insertOutcome(rowId(), hold, { outcome: "voided" }));
     expect(checkFailed(error, "payment_hold_outcomes_outcome_ck")).toBe(true);
   });
 
   it("refuses a blank note", async () => {
     const hold = await aHold();
-    const empty = await captureError(() => insertOutcome(holdId(), hold, { note: "" }));
+    const empty = await captureError(() => insertOutcome(rowId(), hold, { note: "" }));
     expect(checkFailed(empty, "payment_hold_outcomes_note_ck")).toBe(true);
-    const spaces = await captureError(() => insertOutcome(holdId(), hold, { note: "   " }));
+    const spaces = await captureError(() => insertOutcome(rowId(), hold, { note: "   " }));
     expect(checkFailed(spaces, "payment_hold_outcomes_note_ck")).toBe(true);
   });
 
   it("refuses a hold naming no payment and an outcome naming no hold", async () => {
-    const hold = await captureError(() => insertHold(holdId(), NO_ROW));
+    const hold = await captureError(() => insertHold(rowId(), NO_ROW));
     expect(isRefusal(hold, FOREIGN_KEY_VIOLATION)).toBe(true);
     expect(String((hold as Error).message)).toContain("FOREIGN KEY constraint failed");
-    const outcome = await captureError(() => insertOutcome(holdId(), NO_ROW));
+    const outcome = await captureError(() => insertOutcome(rowId(), NO_ROW));
     expect(isRefusal(outcome, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(String((outcome as Error).message)).toContain("FOREIGN KEY constraint failed");
   });
 
   it("is append-only: updates and deletes of either table are refused", async () => {
     const hold = await aHold();
-    const outcome = holdId();
+    const outcome = rowId();
     await insertOutcome(outcome, hold);
     const updateHold = await captureError(() =>
       suite.db.execute(sql`update payment_holds set provider_amount = 1 where id = ${hold}`),
