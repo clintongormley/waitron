@@ -2227,7 +2227,7 @@ export const es: Record<StringKey, string> = {
   "device.join_refused_title": "Este dispositivo no fue aprobado",
   "device.join_refused_hint": "Pide a un responsable que lo apruebe e inténtalo de nuevo",
   "device.join_retry": "Intentar de nuevo",
-  "device.type.till": "Caja de mostrador",
+  "device.type.till": "Caja registradora",
   "device.type.handheld": "Terminal de camarero",
   "device.type.kds": "Pantalla de cocina",
   "device.switch": "Cambiar de dispositivo",

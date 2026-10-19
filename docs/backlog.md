@@ -2379,11 +2379,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile`.
 
-- **A837. The till calls a counter till "Caja registradora", as the dashboard does (owner,
-  2026-10-17).** The till's `device.type.till` reads "Caja de mostrador"
-  (`apps/till/src/i18n/strings.ts`); the dashboard's two labels read "Caja registradora". Change
-  the till's string to match. Done when the till's Spanish string reads "Caja registradora".
-
 - Recorded, not blocking: a handheld's Order tab is tappable with no active table; Counter has no
   prep-queue rail.
 
