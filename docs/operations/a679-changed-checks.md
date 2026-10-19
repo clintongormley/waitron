@@ -3389,3 +3389,36 @@ expressions remain syntactically present; that does not make their changed dispa
 test scope. The queue's exact fiscal-check rule therefore gates that proposed scope change.
 Its literal patch and SHA-256 are in Lane E's local questions. No production source, SQL, migration,
 guard, coverage threshold or exclusion changes in this qualification step.
+
+## Production refusal and retained signed-host proposal, 2026-10-19
+
+`retired-fiscal-operation-entry.test.ts` adds three cases without changing existing checks.
+Each supplies a correctly signed paper allocation, its matching node key and current outside
+files to the production `provisionNode`, `register-till` or restore runner. Each requires
+`sif.allocation_invalid` / `outside_confirmation_missing` and identical registrations,
+allocations and series, including counters set to 37. The script case also compares the actual
+archived venue it opened. This does not qualify a current-hour success through `register-till`.
+
+In an independently frozen-installed candidate, replacing the production operation export with
+the retained historical dispatcher makes all three calls succeed and all three refusal assertions
+fail. Restoring that export passes the three cases. The source run also passes the 36 existing
+hour-promotion cases, including current-hour re-registration through `provisionNode` and exact
+replay. Initial new-test drafts omitted the archive directory and passed an extra confirmation
+property to the strict restore-operation parser; those fixture mistakes were corrected before
+qualification. A type check accidentally overlapped the deliberate dispatcher substitution;
+the restored tree was checked again separately and passed.
+
+A separate, unapplied proposal changes the two signed-host fixtures in
+`provision-allocation-input.test.ts` and `register-till-allocation.test.ts` to import the
+historical dispatcher explicitly. It preserves every existing assertion expression and value
+across all 25 cases. Their source baseline has 13 failures and 12 passes; the proposed historical
+fixtures pass all 25. The changed admission scope requires the queue's exact approval despite
+the preserved assertions. The three production refusal cases above keep that scope separate
+from the current composition. The literal patch and hash are in Lane E's local questions.
+
+The wider investigation reproduced 43 failures and 19 passes across nine server suites. A
+broader historical-dispatch experiment still fails 17 of its 50 cases; it is not proposed or
+applied. In particular, the current restore runner checks admission before placement, while
+retained one-use protocols can spend their evidence at that check. Remaining source failures
+are open; none of these focused runs replaces package coverage or current-head CI. No production
+source, SQL, fiscal writer, migration, guard, threshold or exclusion changes here.

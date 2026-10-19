@@ -264,6 +264,13 @@ requires the retired offline-tool URL to return 404. Other setup, retirement, re
 cases remain open. A separately tested composition-check patch awaits exact scope approval in
 Lane E's questions; it has not been applied to the feature branch.
 
+New production-entry checks refuse a valid retired signed request through `provisionNode`,
+`register-till` and the restore runner while retaining the existing registrations, series and
+counters. These are refusal checks, not qualification of current-hour recovery through every
+entry point. A separate proposal keeps the signed provisioning and registration checks against
+their historical dispatcher; its scope change also awaits exact approval. The other restore,
+Cloud, retirement and promotion failures still need diagnosis and qualification.
+
 Provisioning's new layout of six shards still needs CI timing qualification. `test-light-a`
 reaches its ten-minute job limit while still reporting advancing provisioning files:70 completed
 files total520.5seconds, with the largest taking160.9seconds. The dedicated shards retain the
