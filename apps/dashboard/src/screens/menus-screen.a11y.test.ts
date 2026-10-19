@@ -620,6 +620,33 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("accessible Delete confirm for a selected section with a section below it", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    q(el, '[data-test="select"]').click();
+    await vi.waitFor(() =>
+      treeRows(el).querySelector<HTMLInputElement>('[data-test="select-m-drinks"]')!.click(),
+    );
+    await vi.waitFor(() =>
+      expect(
+        (q(el, '[data-test="selection-delete"]') as HTMLElement & { disabled: boolean }).disabled,
+      ).toBe(false),
+    );
+    q(el, '[data-test="selection-delete"]').click();
+    await vi.waitFor(() =>
+      expect(
+        (q(el, 'wt-modal[data-test="delete-selected"]') as HTMLElement & { open: boolean }).open,
+      ).toBe(true),
+    );
+    await vi.waitFor(() =>
+      expect(
+        q(el, 'wt-modal[data-test="delete-selected"]')
+          .querySelectorAll('[data-test="delete-selected-items"] li')[0]
+          ?.textContent?.trim(),
+      ).toBe("Drinks y la sección debajo"),
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("accessible Move dialog for the selected rows, a destination chosen", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     q(el, '[data-test="select"]').click();

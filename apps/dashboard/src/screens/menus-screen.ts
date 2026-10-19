@@ -639,6 +639,8 @@ export class MenusScreen extends LitElement {
   /** The row keys the open Remove confirm sends, or null while it is shut. */
   @state() private removingSelected: string[] | null = null;
   @state() private removeSelectedError = "";
+  @state() private deletingSelected: string[] | null = null;
+  @state() private deleteSelectedError = "";
   /** The row keys the open Move dialog sends, or null while it is shut. */
   @state() private movingSelected: string[] | null = null;
   /** The chosen destination list's id; empty until one is chosen. */
@@ -1252,6 +1254,7 @@ export class MenusScreen extends LitElement {
     this.structureSelecting = false;
     this.structureSelected = [];
     this.removingSelected = null;
+    this.deletingSelected = null;
     this.movingSelected = null;
     this.structure = null;
     this.structureError = false;
@@ -2616,6 +2619,11 @@ export class MenusScreen extends LitElement {
         data-test="selection-delete"
         variant=${deletable ? "danger" : "secondary"}
         .disabled=${!deletable || this.busy}
+        @click=${() => {
+          if (!deletable || this.busy) return;
+          this.deleteSelectedError = "";
+          this.deletingSelected = sent;
+        }}
         >${t("action.delete")}</wt-button
       >
       <wt-button
@@ -2637,8 +2645,8 @@ export class MenusScreen extends LitElement {
     </div>`;
   }
 
-  /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows the menu still
-   * owns. */
+  /** Keeps the selection, and an open Remove or Delete confirm or Move dialog, to the rows the menu
+   * still owns. */
   #keepSelectionOwned(previous?: MenuStructure | null): void {
     // An empty menu's table draws no toolbar, so nothing could turn a mode off or clear the search.
     if (this.structure?.nodes.length === 0) {
@@ -2660,6 +2668,7 @@ export class MenusScreen extends LitElement {
       );
     this.structureSelected = remap(this.structureSelected);
     if (this.removingSelected) this.removingSelected = remap(this.removingSelected);
+    if (this.deletingSelected) this.deletingSelected = remap(this.deletingSelected);
     if (this.movingSelected) this.movingSelected = remap(this.movingSelected);
     this.#keepSelection((key) => owned.has(key));
   }
@@ -2673,6 +2682,7 @@ export class MenusScreen extends LitElement {
       return left.length > 0 ? left : null;
     };
     this.removingSelected = trim(this.removingSelected);
+    this.deletingSelected = trim(this.deletingSelected);
     this.movingSelected = trim(this.movingSelected);
     if (
       this.movingSelected !== null &&
@@ -2743,6 +2753,48 @@ export class MenusScreen extends LitElement {
       return;
     }
     this.removingSelected = null;
+    this.structureSelected = [];
+    await this.#refresh();
+    this.busy = false;
+    await this.updateComplete;
+    const tree = this.renderRoot.querySelector("dashboard-menu-structure-table");
+    if (this.structureSelecting)
+      this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
+    else tree?.focusRowMenu("");
+  }
+
+  /** Each section the selected rows name, once however many places show it, with how many of the
+   * menu's own sections sit below it. */
+  #selectedSections(keys: readonly string[]) {
+    const seen = new Set<string>();
+    return keys.flatMap((key) => {
+      const node = nodeAt(this.structure, key.split("/"));
+      if (node?.ref.kind !== "section" || seen.has(node.ref.sectionId)) return [];
+      seen.add(node.ref.sectionId);
+      return [
+        {
+          id: node.ref.sectionId,
+          name: memberName(node.ref, NO_NAMES, this.#sectionNames),
+          below: this.#ownedDescendants(node.children ?? []),
+        },
+      ];
+    });
+  }
+
+  async #deleteSelected(): Promise<void> {
+    const keys = this.deletingSelected;
+    if (!keys || this.busy) return;
+    const ids = this.#selectedSections(keys).map(({ id }) => id);
+    this.busy = true;
+    this.deleteSelectedError = "";
+    try {
+      await this.api.deleteSections(ids);
+    } catch (error) {
+      this.deleteSelectedError = codeMessage(codeOf(error));
+      this.busy = false;
+      return;
+    }
+    this.deletingSelected = null;
     this.structureSelected = [];
     await this.#refresh();
     this.busy = false;
@@ -3336,7 +3388,7 @@ export class MenusScreen extends LitElement {
         closed: () => this.#windowClosed(),
         submit: () => void this.#deleteSection(),
       })}
-      ${this.#renderRemoveSelected()} ${this.#renderMoveSelected()}`;
+      ${this.#renderRemoveSelected()} ${this.#renderDeleteSelected()} ${this.#renderMoveSelected()}`;
   }
 
   #renderMoveSelected() {
@@ -3429,6 +3481,41 @@ export class MenusScreen extends LitElement {
         this.removingSelected = null;
       },
       submit: () => void this.#removeSelected(),
+    });
+  }
+
+  #renderDeleteSelected() {
+    const sections = this.#selectedSections(this.deletingSelected ?? []);
+    return this.#formModal({
+      test: "delete-selected",
+      open: this.deletingSelected !== null,
+      heading: countOf("menus.delete_sections_heading", sections.length),
+      body: html`<ul data-test="delete-selected-items">
+          ${sections.map(
+            ({ name, below }) =>
+              html`<li>
+                ${
+                  below === 0
+                    ? name
+                    : fill(
+                        below === 1
+                          ? "menus.delete_sections_item_one"
+                          : "menus.delete_sections_item",
+                        { name, count: String(below) },
+                      )
+                }
+              </li>`,
+          )}
+        </ul>
+        <p data-test="delete-selected-note">${t("menus.delete_sections_note")}</p>`,
+      save: "delete-selected-save",
+      saveLabel: t("action.delete"),
+      saveVariant: "danger",
+      errors: { blocked: false, bottom: this.deleteSelectedError },
+      close: () => {
+        this.deletingSelected = null;
+      },
+      submit: () => void this.#deleteSelected(),
     });
   }
 

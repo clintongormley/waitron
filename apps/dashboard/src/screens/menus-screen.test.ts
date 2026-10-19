@@ -345,6 +345,7 @@ const WRITES = [
   "addSectionProducts",
   "removeSectionMember",
   "removeSectionMembers",
+  "deleteSections",
   "moveSectionMember",
   "moveSectionMembersInto",
   "updateMenuItem",
@@ -558,6 +559,28 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
         .filter(({ listId }) => listId === "root-lunch")
         .map(({ memberId }) => memberId);
       root = root.filter((node) => !gone.includes(node.memberId));
+    }),
+    /** Deletes the named sections and every section below them, wherever each is shown. */
+    deleteSections: vi.fn(async (ids: string[]) => {
+      const gone = new Set<string>();
+      const collect = (nodes: MenuStructureNode[], inside: boolean) => {
+        for (const node of nodes) {
+          const deleted =
+            node.ref.kind === "section" &&
+            !node.includedMenuId &&
+            (inside || ids.includes(node.ref.sectionId));
+          if (deleted && node.ref.kind === "section") gone.add(node.ref.sectionId);
+          collect(node.children ?? [], deleted);
+        }
+      };
+      collect(root, false);
+      const strip = (nodes: MenuStructureNode[]): MenuStructureNode[] =>
+        nodes.flatMap((node) =>
+          node.ref.kind === "section" && gone.has(node.ref.sectionId)
+            ? []
+            : [node.children ? { ...node, children: strip(node.children) } : node],
+        );
+      root = strip(root);
     }),
     /** Takes the named members out wherever they sit and appends them, in order, to `listId`. */
     moveSectionMembersInto: vi.fn(
@@ -4837,6 +4860,162 @@ describe("the Structure tree", () => {
         expect(text(note(el))).toBe(
           "Elimina las secciones y quita los demás elementos por separado.",
         );
+      });
+
+      async function openDelete(el: MenusScreen): Promise<void> {
+        deleteButton(el).click();
+        await vi.waitFor(() => expect(modal(el, "delete-selected").open).toBe(true));
+        await el.updateComplete;
+      }
+
+      const deleteLines = (el: MenusScreen) =>
+        [
+          ...modal(el, "delete-selected").querySelectorAll(
+            '[data-test="delete-selected-items"] li',
+          ),
+        ].map(text);
+      const confirmDelete = (el: MenusScreen) =>
+        inModal<HTMLElementTagNameMap["wt-button"]>(
+          el,
+          "delete-selected",
+          '[data-test="delete-selected-save"]',
+        );
+
+      it("deletes two of the menu's own sections in one request after a confirm, and both are gone", async () => {
+        const client = api();
+        const el = await mountLunch(client);
+        await pressSelect(el);
+        await tick(el, "m-drinks");
+        await tick(el, "m-fav");
+        await openDelete(el);
+        const dialog = modal(el, "delete-selected");
+        expect(dialog.getAttribute("size")).toBe("compact");
+        expect(dialog.getAttribute("heading")).toBe("Delete 2 sections?");
+        expect(text(dialog.querySelector('[data-test="delete-selected-note"]'))).toBe(
+          "Their products stay.",
+        );
+        const confirm = confirmDelete(el);
+        expect(confirm.variant).toBe("danger");
+        expect(text(confirm)).toBe("Delete");
+        confirm.click();
+        await vi.waitFor(() =>
+          expect(client.deleteSections).toHaveBeenCalledExactlyOnceWith(["s-drinks", "s-fav"]),
+        );
+        expect(writeCalls(client)).toEqual(["deleteSections"]);
+        await vi.waitFor(() => expect(modal(el, "delete-selected").open).toBe(false));
+        await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+        await afterDialogCloses(el);
+        await settleStructure(el);
+        expect(topLevelKeys(el)).toEqual(["m-burger"]);
+        expect(rowOf(el, "m-drinks")).toBeNull();
+        expect(rowOf(el, "m-fav")).toBeNull();
+        expect(structure(el).selected).toEqual([]);
+        expect(text(q(el, '[data-test="selected-count"]'))).toBe("0 selected");
+        expect(selectToggle(el).getAttribute("aria-pressed")).toBe("true");
+        expect(el.shadowRoot!.activeElement).toBe(selectToggle(el));
+      });
+
+      it("lists a section ticked in two places once and sends its id once", async () => {
+        const client = api();
+        const el = await mountLunch(client);
+        await toggleRow(el, "m-fav");
+        await pressSelect(el);
+        await tick(el, "m-drinks");
+        await tick(el, "m-fav/m-fav-drinks");
+        expect(text(q(el, '[data-test="selected-count"]'))).toBe("2 selected");
+        await openDelete(el);
+        expect(modal(el, "delete-selected").getAttribute("heading")).toBe("Delete 1 section?");
+        expect(deleteLines(el)).toEqual(["Drinks and the section below it"]);
+        confirmDelete(el).click();
+        await vi.waitFor(() =>
+          expect(client.deleteSections).toHaveBeenCalledExactlyOnceWith(["s-drinks"]),
+        );
+      });
+
+      it("names how many of the menu's own sections sit below each listed section", async () => {
+        const el = await mountLunch();
+        await toggleRow(el, "m-drinks");
+        await pressSelect(el);
+        await tick(el, "m-drinks/m-beer");
+        await tick(el, "m-fav");
+        await openDelete(el);
+        expect(deleteLines(el)).toEqual(["Beer", "Favourites and the 2 sections below it"]);
+        inModal(el, "delete-selected", '[data-test="delete-selected-cancel"]').click();
+        await vi.waitFor(() => expect(modal(el, "delete-selected").open).toBe(false));
+        await afterDialogCloses(el);
+        await select(el, ["m-drinks"]);
+        await openDelete(el);
+        expect(deleteLines(el)).toEqual(["Drinks and the section below it"]);
+      });
+
+      it("keeps the confirm open with the refusal's message and its Delete enabled", async () => {
+        const deleting = deferred<void>();
+        const client = api({ deleteSections: vi.fn(() => deleting.promise) });
+        const el = await mountLunch(client);
+        await pressSelect(el);
+        await tick(el, "m-drinks");
+        await openDelete(el);
+        const confirm = confirmDelete(el);
+        confirm.click();
+        await vi.waitFor(() => expect(client.deleteSections).toHaveBeenCalledOnce());
+        await el.updateComplete;
+        expect(confirm.disabled).toBe(true);
+        deleting.reject({ code: "menu_section.not_found" });
+        await vi.waitFor(() =>
+          expect(bottom(el, "delete-selected")).resolves.toBe(
+            codeMessage("menu_section.not_found"),
+          ),
+        );
+        expect(modal(el, "delete-selected").open).toBe(true);
+        expect(confirm.disabled).toBe(false);
+        expect(confirm.variant).toBe("danger");
+        expect(structure(el).selected).toEqual(["m-drinks"]);
+      });
+
+      it("trims the open confirm when a live update takes a section away, and closes it once none is left", async () => {
+        const live = new LiveData();
+        const client = api({ liveData: live });
+        const el = await mountLunch(client);
+        await pressSelect(el);
+        await tick(el, "m-drinks");
+        await tick(el, "m-fav");
+        await openDelete(el);
+        expect(modal(el, "delete-selected").getAttribute("heading")).toBe("Delete 2 sections?");
+
+        const [burger, , favourites] = lunchNodes();
+        client.getMenuStructure.mockResolvedValue(lunchWith([burger!, favourites!]));
+        live.invalidate([{ type: "section_members" }]);
+        await vi.waitFor(() =>
+          expect(modal(el, "delete-selected").getAttribute("heading")).toBe("Delete 1 section?"),
+        );
+        expect(deleteLines(el)).toEqual(["Favourites and the 2 sections below it"]);
+
+        client.getMenuStructure.mockResolvedValue(lunchWith([burger!]));
+        live.invalidate([{ type: "section_members" }]);
+        await vi.waitFor(() => expect(modal(el, "delete-selected").open).toBe(false));
+        expect(client.deleteSections).not.toHaveBeenCalled();
+      });
+
+      it("asks in Spanish, naming what stays", async () => {
+        setLocale("es");
+        const el = await mountLunch();
+        await toggleRow(el, "m-drinks");
+        await pressSelect(el);
+        await tick(el, "m-drinks/m-beer");
+        await tick(el, "m-fav");
+        await openDelete(el);
+        expect(modal(el, "delete-selected").getAttribute("heading")).toBe("¿Eliminar 2 secciones?");
+        expect(deleteLines(el)).toEqual(["Beer", "Favourites y las 2 secciones debajo"]);
+        expect(
+          text(modal(el, "delete-selected").querySelector('[data-test="delete-selected-note"]')),
+        ).toBe("Sus productos se conservan.");
+        inModal(el, "delete-selected", '[data-test="delete-selected-cancel"]').click();
+        await vi.waitFor(() => expect(modal(el, "delete-selected").open).toBe(false));
+        await afterDialogCloses(el);
+        await select(el, ["m-drinks"]);
+        await openDelete(el);
+        expect(modal(el, "delete-selected").getAttribute("heading")).toBe("¿Eliminar 1 sección?");
+        expect(deleteLines(el)).toEqual(["Drinks y la sección debajo"]);
       });
     });
 
