@@ -18,6 +18,7 @@ import {
   focusFirstInvalid,
   submitOnEnter,
   leaveCoordinatorFor,
+  type WtButton,
   type WtDialog,
   type DraftScope,
   type LeaveCoordinator,
@@ -860,9 +861,22 @@ export class TillBillPayDialog extends LitElement {
     }
     if (this.method !== "cash" && this.#cardInProgress()) {
       this.askingSecondCard = true;
+      await this.#focusButton("[data-pay-card-ask-take]");
       return;
     }
     this.#send();
+  }
+
+  async #focusButton(selector: string): Promise<void> {
+    await this.updateComplete;
+    const host = this.shadowRoot!.querySelector<WtButton>(selector)!;
+    await host.updateComplete;
+    host.shadowRoot!.querySelector("button")!.focus();
+  }
+
+  async #backFromSecondCard(): Promise<void> {
+    this.askingSecondCard = false;
+    await this.#focusButton("[data-pay-continue]");
   }
 
   #cardInProgress(): boolean {
@@ -890,9 +904,7 @@ export class TillBillPayDialog extends LitElement {
           variant="secondary"
           data-pay-card-ask-back
           .disabled=${this.busy}
-          @click=${() => {
-            this.askingSecondCard = false;
-          }}
+          @click=${() => void this.#backFromSecondCard()}
         >
           ${t("action.back")}
         </wt-button>

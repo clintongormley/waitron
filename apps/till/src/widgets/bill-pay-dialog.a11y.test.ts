@@ -3,6 +3,7 @@ import { commands, page } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./bill-pay-dialog.js";
+import { pendingCard } from "../../test/bill-pay-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
 import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/client.js";
 
@@ -319,23 +320,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
 
   /** A card contribution on a bill whose balance holds a card in progress, asked about. */
   async function askingSecondCard() {
-    const pendingCard: BillPaymentView = {
-      id: "pay-9",
-      submissionId: "sub-9",
-      kind: "contribution",
-      shareOf: null,
-      method: "card",
-      entry: "reader",
-      applied: "20.00",
-      tip: "0.00",
-      tendered: null,
-      change: null,
-      state: "pending",
-      createdAt: "2026-10-19T20:00:00.000Z",
-      receivedAt: null,
-      lines: [],
-      refunds: [],
-    };
     const mounted = await mount({
       way: "contribution",
       cardReader: "stripe_terminal",

@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
+import { pendingCard } from "../../test/bill-pay-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
 import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/client.js";
 
@@ -1057,23 +1058,6 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
 });
 
 describe("till-bill-pay-dialog: a card already in progress", () => {
-  const pendingCard: BillPaymentView = {
-    id: "pay-9",
-    submissionId: "sub-9",
-    kind: "contribution",
-    shareOf: null,
-    method: "card",
-    entry: "reader",
-    applied: "20.00",
-    tip: "0.00",
-    tendered: null,
-    change: null,
-    state: "pending",
-    createdAt: "2026-10-19T20:00:00.000Z",
-    receivedAt: null,
-    lines: [],
-    refunds: [],
-  };
   const holding = balanceOf({
     reserved: "20.00",
     outstanding: "100.00",
@@ -1134,13 +1118,27 @@ describe("till-bill-pay-dialog: a card already in progress", () => {
     const el = await chosen("card");
     const asked = capture<PayRequest>(el, "bill-pay-preview");
     await click(el, "[data-pay-continue]");
-    field(el, "amount")!
-      .shadowRoot!.querySelector("input")!
-      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    const enter = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    field(el, "amount")!.shadowRoot!.querySelector("input")!.dispatchEvent(enter);
     await el.updateComplete;
 
+    expect(enter.defaultPrevented).toBe(false);
     expect(asked).toEqual([]);
     expect(ask(el)).not.toBeNull();
+  });
+
+  it("puts the keyboard on Take another when it asks, and back on Continue after Back", async () => {
+    const el = await chosen("card");
+    await click(el, "[data-pay-continue]");
+    await expect.poll(() => root(el).activeElement).toBe(button(el, "[data-pay-card-ask-take]"));
+
+    await click(el, "[data-pay-card-ask-back]");
+    await expect.poll(() => root(el).activeElement).toBe(button(el, "[data-pay-continue]"));
   });
 
   it("stops asking once the form is changed", async () => {
