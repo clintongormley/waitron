@@ -119,3 +119,25 @@ it("the repair shell preserves API refusals and missing assets while serving its
       404,
     );
 });
+
+it.each(["not JSON", "null"])(
+  "damaged module configuration %s leaves repair available without publication routes",
+  async (configuration) => {
+    const f = await fixture(null);
+    await writeFile(join(f.stateDir, "modules.json"), configuration);
+    const marker = await readFile(join(f.venueDir, "first-setup-claim.json"));
+    const admitted = await resolveFirstSetupEntry(f, { WAITRON_ENV: "production" });
+    expect(admitted.kind).toBe("resolution");
+    if (admitted.kind !== "resolution") throw new Error("expected repair");
+    expect((await admitted.app.request("/setup-api/first-setup/resolution")).status).toBe(200);
+    for (const [path, method] of [
+      ["/setup-api/first-setup/resolution/publication", "GET"],
+      ["/setup-api/first-setup/resolution/finish", "POST"],
+      ["/setup-api/provision", "POST"],
+    ] as const)
+      expect((await admitted.app.request(path, { method })).status).toBe(404);
+    expect(await readFile(join(f.stateDir, "modules.json"), "utf8")).toBe(configuration);
+    expect(await readFile(join(f.venueDir, "first-setup-claim.json"))).toEqual(marker);
+    await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);

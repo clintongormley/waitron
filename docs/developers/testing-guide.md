@@ -2263,3 +2263,17 @@ its commit, compares two inspections, then starts another command to finish publ
 Without the ordering change, the comparison reports `venue.db-wal` changing from missing to the hash
 of an empty file. Sample the files after the inspection connection closes; keep the snapshot,
 password and exact-commit checks.
+
+## Pin release metadata beside a built command's fixed clock
+
+A child command fixed to yesterday can refuse today's build before reaching the behavior you want
+to test. When you fix its clock, supply an explicit synthetic release stamp through the shared
+`bundle()` API too. The CLI fixtures below originally bundled the checkout's release metadata
+while fixing only the child clock.
+
+Measured on Node v26.11.1 for A679, 2026-10-19: the checkout stamp at `f01a5d00a` was
+`2026-10-19T05:50:14Z`, while the CLI fixtures ran at `2026-10-18T11:40:00Z`. Running
+`pnpm --filter @waitron/provisioning exec vitest run src/cli-owned-entry.test.ts src/cli-same-hour-entry.test.ts`
+reported five `clock_unconfirmed` failures and one pass. Supplying a synthetic 15 October stamp in
+the two build fixtures passed all six with the original test bodies preserved. Keep tests of real
+build provenance on real build metadata; these fixed-clock fixtures qualify command behavior.

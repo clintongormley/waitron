@@ -15,6 +15,8 @@ import {
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
+import { spawnSync } from "node:child_process";
+import { DatabaseSync } from "node:sqlite";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 const dirs: string[] = [];
@@ -416,3 +418,131 @@ it("changing a selected workspace after discovery refuses before staged work", a
     await f.dispose();
   }
 });
+
+function startupLockFromAnotherProcess(venueDir: string) {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync(process.argv[1]);
+try {
+  db.exec("pragma busy_timeout = 0");
+  try { db.exec("begin immediate"); process.stdout.write("AVAILABLE"); }
+  catch (error) {
+    if (error.errcode !== 5) throw error;
+    process.stdout.write("HELD");
+  }
+} finally { db.close(); }`,
+      join(venueDir, "venue.lock"),
+    ],
+    { encoding: "utf8", timeout: 10_000 },
+  );
+  expect(result.status, result.stderr).toBe(0);
+  return result.stdout;
+}
+
+it.each([
+  { selected: false, failure: false },
+  { selected: false, failure: true },
+  { selected: true, failure: false },
+  { selected: true, failure: true },
+])(
+  "startup holds and releases its real locks: selected=$selected failure=$failure",
+  async ({ selected, failure }) => {
+    const selectedFixture = selected ? await replacement() : null;
+    const f = selectedFixture ?? (await firstFiscalFixture());
+    try {
+      const anchor = selectedFixture?.anchor ?? f;
+      const target = selectedFixture?.binding ?? f;
+      if (!selected) await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+      const paths = [...new Set([anchor.venueDir, target.venueDir])];
+      const originals = await readFile(join(f.stateDir, "first-setup.json"));
+      const admission = await resolveFirstSetupEntry(anchor, {});
+      expect(admission.kind).toBe("normal");
+      if (admission.kind !== "normal") throw new Error("expected startup admission");
+      const sentinel = new Error("synthetic startup failure");
+      const start = admission.run(async () => {
+        for (const path of paths) expect(startupLockFromAnotherProcess(path)).toBe("HELD");
+        if (failure) throw sentinel;
+        return "startup completed";
+      });
+      if (failure) await expect(start).rejects.toBe(sentinel);
+      else await expect(start).resolves.toBe("startup completed");
+      for (const path of paths) expect(startupLockFromAnotherProcess(path)).toBe("AVAILABLE");
+      expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(originals);
+      if (selected) {
+        await expect(stat(join(anchor.venueDir, "venue.db"))).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+        await expect(stat(join(target.venueDir, "venue.db"))).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      }
+    } finally {
+      await f.dispose();
+    }
+  },
+);
+
+it.each(["activation-started", "abandoned", "uncertain"] as const)(
+  "startup rechecks a newly %s attempt before entering its callback",
+  async (kind) => {
+    const f = await firstFiscalFixture();
+    try {
+      await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+      const admission = await resolveFirstSetupEntry(f, {});
+      expect(admission.kind).toBe("normal");
+      if (admission.kind !== "normal") throw new Error("expected startup admission");
+      const state = (await f.store.read())!;
+      await f.store.update(state.frozen.attemptId, state.revision, { kind });
+      const retained = await readFile(join(f.stateDir, "first-setup.json"));
+      let entered = false;
+      await expect(
+        admission.run(async () => {
+          entered = true;
+        }),
+      ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+      expect(entered).toBe(false);
+      expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(retained);
+      expect(startupLockFromAnotherProcess(f.venueDir)).toBe("AVAILABLE");
+    } finally {
+      await f.dispose();
+    }
+  },
+);
+
+it.each(["anchor", "selected"] as const)(
+  "startup refuses a busy %s venue before its callback and releases earlier locks",
+  async (busy) => {
+    const f = await replacement();
+    let blocker: DatabaseSync | undefined;
+    try {
+      const admission = await resolveFirstSetupEntry(f.anchor, {});
+      expect(admission.kind).toBe("normal");
+      if (admission.kind !== "normal") throw new Error("expected startup admission");
+      const path = busy === "anchor" ? f.anchor.venueDir : f.binding.venueDir;
+      blocker = new DatabaseSync(join(path, "venue.lock"));
+      blocker.exec("begin immediate");
+      let entered = false;
+      await expect(
+        admission.run(async () => {
+          entered = true;
+        }),
+      ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+      expect(entered).toBe(false);
+      if (busy === "selected")
+        expect(startupLockFromAnotherProcess(f.anchor.venueDir)).toBe("AVAILABLE");
+      blocker.close();
+      blocker = undefined;
+      for (const venueDir of [f.anchor.venueDir, f.binding.venueDir]) {
+        expect(startupLockFromAnotherProcess(venueDir)).toBe("AVAILABLE");
+        await expect(stat(join(venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
+      }
+    } finally {
+      blocker?.close();
+      await f.dispose();
+    }
+  },
+);

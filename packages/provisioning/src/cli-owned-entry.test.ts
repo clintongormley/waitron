@@ -19,10 +19,22 @@ beforeAll(async () => {
   binary = join(directory, "provision.js");
   const env = { ...process.env };
   for (const name of Object.keys(env)) if (name.startsWith("GIT_")) delete env[name];
-  await execute(process.execPath, ["../../scripts/bundle-node.mjs", `src/bin.ts=${binary}`], {
-    env,
-    timeout: 120_000,
-  });
+  const buildScript = join(directory, "build-command.mjs");
+  await writeFile(
+    buildScript,
+    `import { bundle } from ${JSON.stringify(new URL("../../../scripts/bundle-node.mjs", import.meta.url).href)};
+bundle([{ entry: "src/bin.ts", outfile: ${JSON.stringify(binary)} }], {
+  release: {
+    sourceCommit: "${"a".repeat(40)}",
+    committedAt: "2026-10-15T00:00:00.000Z",
+    instantMs: Date.parse("2026-10-15T00:00:00Z"),
+    generator: "scripts/generate-hour-release.mjs:v1",
+    generatorSha256: "${"b".repeat(64)}",
+  },
+});
+`,
+  );
+  await execute(process.execPath, [buildScript], { env, timeout: 120_000 });
 });
 afterAll(async () => {
   if (directory !== undefined) await rm(directory, { recursive: true, force: true });

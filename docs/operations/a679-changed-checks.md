@@ -2729,3 +2729,83 @@ No production implementation, fiscal writer, schema, SQL, migration, threshold o
 The exact CLI-launch patch and revised PDF viewing approvals remain separate pending gates.
 Remaining entry acceptance, protocol/prose retirement, current-main integration, both final
 installed reviews, the normal hook and current-head CI still precede landing.
+
+## Startup exclusion and damaged-configuration admission, 2026-10-19
+
+The hour plan's Task 10 gains eleven host-admission cases. Nine additions in
+`apps/server/src/first-setup-resolution.boot.test.ts` exercise `resolveFirstSetupEntry().run()`:
+claimed and selected workspaces hold the anchor and selected venue locks during the callback,
+release them on success and failure, refuse a busy anchor or target before entering the callback,
+and recheck an attempt that became activation-started, abandoned or uncertain after discovery.
+Child processes try real SQLite lock transactions and distinguish held from available. Busy-target
+cases also check that an earlier anchor hold was released. These are callback-admission checks,
+not new fiscal activations or separate-process trading boots.
+
+Two additions in `first-setup-resolution.bootstrap.test.ts` keep repair inspection available with
+malformed or invalid module configuration while publication and provisioning routes remain absent.
+They retain the configuration and claim bytes and require the venue database to remain missing.
+Existing helper bodies, tests and assertions are unchanged: stripping the new imports and appended
+blocks reconstructs both previous files byte for byte. This adds acceptance under Tasks 10/12;
+it changes no fiscal expected value and needs no new exception to the standing test-change rules.
+
+Five complete source files pass 59 cases, including the existing adoption-refusal suites. The
+unchanged golden/immutability pair passes 20. The two changed files pass 31 cases in an independent
+frozen-installed checkout. Six serial faulty variants fail their intended assertions: premature
+anchor release, premature selected-lock release, omitted anchor release, omitted selected-lock
+release, omitted attempt recheck and publication routes despite damaged configuration. Each
+restored variant passes; the final installed two-file run passes all 31 cases. The first control
+wrapper incorrectly counted occurrences of `AssertionError` instead of failed cases; its log
+already contains four intended failures. The corrected wrapper checks Vitest's failed-test count.
+The initial compiler run also rejected the new union narrowing; only new-test setup was corrected.
+
+The earlier two-file and seven-file coverage measurements were narrower than the package and
+failed their unchanged thresholds. The latter passed 91 behavioral cases and measured this entry
+file at 58/60 statements, 31/35 branches, 12/15 functions and 55/55 lines. It is not a package
+coverage pass, and uncalled default log callbacks do not justify meaningless tests. Full package
+coverage remains a separate gate.
+
+The consumer trace finds promotion routes in `boot.ts`/`promote-api.ts`, and no literal
+`management-api/promote` or `promote/preparation` caller under the setup, dashboard or till source
+search. No promotion browser screen is introduced. Existing real boot adoption qualification
+retains pending adoption with `module.operation_invalid`, no selling identity and its original
+latch. It does not qualify successful allocated adoption or supply the missing venue-copy path.
+The hour promotion HTTPS and reboot acceptance remains in `hour-promotion.test.ts`; it was not
+repeated for this test-only change.
+
+Receipts: Lane E's `receipts/a679-entry-admission-20261019`, including commands, source counts,
+installed omission/restoration logs, byte comparisons and consumer search output. No production
+implementation, protected writer, SQL, schema, migration, guard, threshold or existing fiscal
+assertion changes. The exact CLI-launch patch and revised PDF viewing questions remain pending;
+protocol retirement, current-main integration, both final reviews, hook and current-head CI remain
+before landing.
+
+### Built CLI clock fixtures in the same qualification
+
+The full provisioning run reports 1,324 passes and five failures across
+`cli-owned-entry.test.ts` and `cli-same-hour-entry.test.ts`. All five report
+`sif.allocation_invalid` with `reason: clock_unconfirmed`; the focused two-file reproduction
+reports the same five failures and one pass. Their child clocks are explicitly
+`2026-10-18T11:40:00Z`, while `readBuildHourRelease()` at source
+`f01a5d00a2c8ace511701f7eb1067025a63e4be8` reports `2026-10-19T05:50:14Z`.
+
+Only the two `beforeAll` build blocks change. They call the shared `bundle()` API with an
+explicitly synthetic 15 October release stamp, as the retained command-import fixture already
+does. The focused run then passes all six cases. Restoring only those build blocks reconstructs
+both original files byte for byte: no existing test body, child answer, clock, series value,
+refusal expectation, readiness check, PDF check or publication assertion changes. This supplies
+missing fixture context under the standing 27 September decision; it does not alter release-floor
+policy or qualify genuine image release provenance. The existing exact CLI-launch approval
+request concerns a different server test and remains untouched.
+
+The independent installed 31-case startup/repair run and its complete-tree comparison preceded
+these two fixture changes. These fixture repairs have source RED/GREEN evidence; they are not
+included in that installed-tree qualification. The full provisioning coverage rerun is recorded
+separately in the lane receipts.
+
+The final full provisioning rerun passes all 1,329 tests in 69 files (319.09 seconds), then fails
+coverage: statements 3,613/3,788 (95.38%), branches 2,685/2,876 (93.35%), functions 682/696
+(97.98%) and lines 3,271/3,356 (97.46%). No threshold or exclusion changes. The retained report's
+largest statement gaps are workspace selection, resolution, configuration transfer and command
+deployment; `coverage-gaps.json` records the individual locations. This is an unresolved package
+coverage gate, not a passing coverage result. Both affected packages' types, scoped lint, code
+formatting and whitespace checks pass. Markdown paths remain ignored by Prettier.

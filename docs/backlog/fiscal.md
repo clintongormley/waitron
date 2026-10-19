@@ -248,8 +248,13 @@ Four UTC-hour characters replace paper/Cloud name allocation, leaving a recovery
 The earlier plan's Tasks 9–12 are superseded; completed components need qualification against the new policy.
 The owner views real generated EN/ES PDFs through Drive; the driver tests entry of
 rendered keys. Earlier register and physical-check instructions below are historical
-where superseded. Clock/history selection, entry-path integration and generated-PDF acceptance
-remain open.
+where superseded. Remaining work includes package coverage, retiring active register/Cloud
+allocation tooling and its operator instructions, current-main integration, both installed
+reviews, current-head CI and generated-PDF viewing approval. The retained CLI-launch test
+replacement awaits exact approval. Allocated adoption remains pending venue-copy support;
+A679 does not add a promotion browser screen. Provisioning still falls below its package coverage
+threshold; workspace/resolution handling and the retained configuration-transfer paths need
+behavioral qualification.
 
 **Hour-plan Task 1 checkpoint, 2026-10-16:** module tests exercise four-character hour names,
 the complete configured series set (including multiple standard bases and `FF/full`),
