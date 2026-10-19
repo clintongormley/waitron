@@ -106,7 +106,7 @@ export async function runCertificateReminderPass(
       outcome = "unknown";
     }
     await withTransaction(deps.db, (tx) =>
-      deps.seat.reminders.report(tx, claimed.id, outcome, deps.now()),
+      deps.seat.reminders.report(tx, { nodeId: deps.nodeId }, claimed.id, outcome, deps.now()),
     );
   }
   return { processed };

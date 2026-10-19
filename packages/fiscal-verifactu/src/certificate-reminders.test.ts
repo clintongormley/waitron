@@ -56,8 +56,15 @@ function claimAt(
   );
 }
 
-function reportAt(id: string, outcome: "sent" | "rejected" | "unknown", at: string | Date) {
-  return withTransaction(suite.db, (tx) => reportReminder(tx, id, outcome, new Date(at)));
+function reportAt(
+  id: string,
+  outcome: "sent" | "rejected" | "unknown",
+  at: string | Date,
+  nodeId: string = TENANT_A.nodeId,
+) {
+  return withTransaction(suite.db, (tx) =>
+    reportReminder(tx, { nodeId }, id, outcome, new Date(at)),
+  );
 }
 
 async function rows(): Promise<Record<string, unknown>[]> {
@@ -165,6 +172,15 @@ describe("claimReminder", () => {
     const [row] = await rows();
     expect(row).toMatchObject({ status: "sent", reported_at: "2026-08-26T10:01:00.000Z" });
     await expect(claimAt("2026-08-27T11:02:00Z", [ANA])).resolves.toBeNull();
+  });
+
+  it("leaves a row claimed when the report names another node", async () => {
+    await seedTenantTillSif(suite.db);
+    await install(TENANT_A.nodeId);
+    const claimed = await claimAt(WARNING, [ANA]);
+    await reportAt(claimed!.id, "sent", "2026-08-26T10:01:00Z", TENANT_A.nodeId2);
+    const [row] = await rows();
+    expect(row).toMatchObject({ status: "claimed", reported_at: null });
   });
 
   it("never claims again a row that names another node", async () => {

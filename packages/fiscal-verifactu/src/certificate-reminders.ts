@@ -135,6 +135,7 @@ const STATUS = { sent: "sent", rejected: "failed", unknown: "unknown" } as const
 /** Records how a claimed send ended. A row no longer `claimed` is left as it is. */
 export async function reportReminder(
   tx: Transaction,
+  deps: { nodeId: string },
   id: string,
   outcome: "sent" | "rejected" | "unknown",
   now: Date,
@@ -143,6 +144,10 @@ export async function reportReminder(
     .update(fiscalCertificateReminders)
     .set({ status: STATUS[outcome], reportedAt: now })
     .where(
-      and(eq(fiscalCertificateReminders.id, id), eq(fiscalCertificateReminders.status, "claimed")),
+      and(
+        eq(fiscalCertificateReminders.nodeId, deps.nodeId),
+        eq(fiscalCertificateReminders.id, id),
+        eq(fiscalCertificateReminders.status, "claimed"),
+      ),
     );
 }

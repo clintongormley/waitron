@@ -95,6 +95,7 @@ export interface FiscalCertificateSeat {
     ): Promise<{ id: string; recipient: string; subject: string; text: string } | null>;
     report(
       tx: Transaction,
+      deps: { nodeId: string },
       id: string,
       outcome: "sent" | "rejected" | "unknown",
       now: Date,
