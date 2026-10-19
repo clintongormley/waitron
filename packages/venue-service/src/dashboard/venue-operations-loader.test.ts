@@ -24,7 +24,7 @@ function model(name = "Restaurant"): VenueServiceView {
     printHeldWork: false,
     printMovedSlips: true,
     releaseReminderMinutes: null,
-    clearingWorkflow: false,
+    needsClearingDepartmentIds: [],
   };
 }
 class App extends LitElement {

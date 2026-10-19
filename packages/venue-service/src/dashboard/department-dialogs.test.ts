@@ -51,7 +51,7 @@ export const view: VenueServiceView = {
   printHeldWork: false,
   printMovedSlips: true,
   releaseReminderMinutes: null,
-  clearingWorkflow: false,
+  needsClearingDepartmentIds: [],
 };
 export const dialogs: DepartmentDialog[] = [
   { kind: "add-department" },

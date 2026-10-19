@@ -120,7 +120,7 @@ const model: VenueServiceView = {
   printHeldWork: false,
   printMovedSlips: true,
   releaseReminderMinutes: null,
-  clearingWorkflow: false,
+  needsClearingDepartmentIds: [],
 };
 
 class App extends LitElement {
@@ -481,6 +481,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
+          needsClearing: false,
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
             destinationDepartmentIds: [],
@@ -540,6 +541,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
+          needsClearing: false,
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
             destinationDepartmentIds: [],
@@ -612,6 +614,7 @@ it("keeps native edits made during Save dirty against the submitted Settings sna
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
+        needsClearing: false,
         transfers: { receivingProfileId: null, destinationDepartmentIds: [] },
       },
     ]);
@@ -697,6 +700,7 @@ it("a native receiving-profile edit during Save retains the submitted baseline a
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
+          needsClearing: false,
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
         },
       ],
@@ -767,5 +771,39 @@ it("switching tabs neither asks to leave nor dirties the draft", async () => {
   expect(
     (el.shadowRoot!.querySelector("[name=name]")! as HTMLElementTagNameMap["wt-input"]).value,
   ).toBe("Draft");
+  expect(el.hasUnsavedChanges).toBe(true);
+});
+it("toggling Needs clearing dirties the form, toggling it back cleans it, and leaving asks only while dirty", async () => {
+  const el = await mount();
+  await selectDepartmentTab(el, "service");
+  const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    "wt-switch[name=needsClearing]",
+  )!;
+  expect(control).not.toBeNull();
+  const toggle = async (checked: boolean) => {
+    control.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+  };
+  const saveButton = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!;
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(unload()).toBe(false);
+  expect(await el.requestLeave("navigation")).toBe(true);
+  await toggle(true);
+  expect(el.hasUnsavedChanges).toBe(true);
+  expect(saveButton().disabled).toBe(false);
+  expect(unload()).toBe(true);
+  await toggle(false);
+  expect(el.hasUnsavedChanges).toBe(false);
+  expect(saveButton().disabled).toBe(true);
+  expect(unload()).toBe(false);
+  expect(await el.requestLeave("navigation")).toBe(true);
+  await toggle(true);
+  const leaving = el.requestLeave("navigation");
+  await choice("keep");
+  expect(await leaving).toBe(false);
+  expect(control.checked).toBe(true);
   expect(el.hasUnsavedChanges).toBe(true);
 });

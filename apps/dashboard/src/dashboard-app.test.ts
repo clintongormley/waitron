@@ -1762,7 +1762,7 @@ describe("dashboard-app", () => {
             printHeldWork: false,
             printMovedSlips: true,
             releaseReminderMinutes: 10,
-            clearingWorkflow: false,
+            needsClearingDepartmentIds: [],
           } as never)
         : stubRequest(path, method, body, options);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
@@ -4358,7 +4358,7 @@ describe("dashboard URL navigation", () => {
             printHeldWork: false,
             printMovedSlips: true,
             releaseReminderMinutes: null,
-            clearingWorkflow: false,
+            needsClearingDepartmentIds: [],
             settings: { editSentLines: true },
           }
         : []) as never;
@@ -4434,7 +4434,7 @@ describe("dashboard URL navigation", () => {
             printHeldWork: false,
             printMovedSlips: true,
             releaseReminderMinutes: null,
-            clearingWorkflow: false,
+            needsClearingDepartmentIds: [],
             settings: { editSentLines: true },
           }
         : []) as never;
@@ -7816,7 +7816,7 @@ describe("department list links inside dashboard capture", () => {
       printHeldWork: false,
       printMovedSlips: true,
       releaseReminderMinutes: 10,
-      clearingWorkflow: false,
+      needsClearingDepartmentIds: [],
     };
     el.shadowRoot!.append(list);
     await list.updateComplete;
@@ -7934,7 +7934,7 @@ describe("mounted public department dialogs", () => {
       printHeldWork: false,
       printMovedSlips: true,
       releaseReminderMinutes: null,
-      clearingWorkflow: false,
+      needsClearingDepartmentIds: [],
     };
     const request: DashboardRequest = async (url) => {
       if (url === "/management-api/venue-service") return structuredClone(model) as never;

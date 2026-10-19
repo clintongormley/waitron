@@ -35,7 +35,7 @@ function view(): VenueServiceView {
     printHeldWork: false,
     printMovedSlips: true,
     releaseReminderMinutes: null,
-    clearingWorkflow: false,
+    needsClearingDepartmentIds: [],
   };
 }
 beforeEach(() => setLocale("en"));
@@ -507,6 +507,7 @@ it.each(["success", "failure"] as const)(
           orderStart: "counter",
           paidWhen: "prepay",
           collectionNumber: "none",
+          needsClearing: false,
         },
       ],
     ]);

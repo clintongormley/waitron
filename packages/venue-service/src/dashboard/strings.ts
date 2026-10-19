@@ -425,6 +425,10 @@ const en = {
   "venue.department_tab.receipt": "Receipts",
   "venue.department_tab.transfers": "Transfers",
   "venue.orders_and_payment": "Orders and payment",
+  "venue.table_states": "Table states",
+  "venue.needs_clearing": "Needs clearing",
+  "venue.needs_clearing_hint":
+    "A table stays “Needs clearing” after the party leaves, until marked cleared.",
   "venue.tab_needs_fixing": "needs fixing",
   "venue.zones_that_differ": "Zones that differ",
   "venue.receipt_on_request": "Receipt on request",
@@ -1317,6 +1321,10 @@ const es: Record<keyof typeof en, string> = {
   "venue.department_tab.receipt": "Recibos",
   "venue.department_tab.transfers": "Traslados",
   "venue.orders_and_payment": "Pedidos y cobro",
+  "venue.table_states": "Estados de la mesa",
+  "venue.needs_clearing": "Por recoger",
+  "venue.needs_clearing_hint":
+    "Una mesa queda «Por recoger» cuando el grupo se va, hasta que se marca como recogida.",
   "venue.tab_needs_fixing": "hay que corregirlo",
   "venue.zones_that_differ": "Zonas con otros ajustes",
   "venue.receipt_on_request": "Recibo a petición",

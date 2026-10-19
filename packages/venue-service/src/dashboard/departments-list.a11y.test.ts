@@ -61,7 +61,7 @@ describe.each(["light", "dark"] as const)("departments list (%s)", (theme) => {
         printHeldWork: false,
         printMovedSlips: true,
         releaseReminderMinutes: 10,
-        clearingWorkflow: false,
+        needsClearingDepartmentIds: [],
       };
       await el.updateComplete;
       await new Promise((resolve) => setTimeout(resolve, 0));

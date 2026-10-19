@@ -52,6 +52,7 @@ it("successful Save closes before its host is asked to refresh", async () => {
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
+        needsClearing: false,
         transfers: { receivingProfileId: null, destinationDepartmentIds: [] },
       },
     ],

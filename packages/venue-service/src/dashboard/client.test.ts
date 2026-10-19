@@ -204,7 +204,7 @@ describe("VenueServiceApi", () => {
       printHeldWork: true,
       printMovedSlips: false,
       releaseReminderMinutes: null,
-      clearingWorkflow: true,
+      needsClearingDepartmentIds: ["d1"],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(model));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
@@ -420,6 +420,7 @@ describe("combined settings requests", () => {
       orderStart: "table",
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
+      needsClearing: false,
       transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
     });
     expect(
@@ -438,6 +439,7 @@ describe("combined settings requests", () => {
           orderStart: "table",
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
+          needsClearing: false,
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
         },
       ],

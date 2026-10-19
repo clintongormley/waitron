@@ -37,7 +37,7 @@ const model: VenueServiceView = {
   printHeldWork: false,
   printMovedSlips: true,
   releaseReminderMinutes: null,
-  clearingWorkflow: false,
+  needsClearingDepartmentIds: [],
 };
 const dialogs: DepartmentDialog[] = [
   { kind: "add-department" },

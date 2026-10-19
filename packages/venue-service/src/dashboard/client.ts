@@ -46,6 +46,7 @@ export interface DepartmentSettingsInput extends Pick<
 > {
   name: string;
   tradingName: string;
+  needsClearing: boolean;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
 }
 export type DepartmentEditInput = DepartmentSettingsInput;
@@ -103,7 +104,8 @@ export interface VenueServiceModel {
   /** Minutes after the work fired before it is served that staff are reminded to fire the next
    * held group; null when reminders are off. */
   releaseReminderMinutes: number | null;
-  clearingWorkflow: boolean;
+  /** The active departments whose tables stay "Needs clearing" after the party leaves. */
+  needsClearingDepartmentIds: string[];
 }
 export interface VenueServiceSettings {
   editSentLines: boolean;

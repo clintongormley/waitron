@@ -112,5 +112,5 @@ export const zonesModel: VenueServiceView = {
   printHeldWork: false,
   printMovedSlips: true,
   releaseReminderMinutes: null,
-  clearingWorkflow: false,
+  needsClearingDepartmentIds: [],
 };
