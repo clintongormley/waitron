@@ -198,5 +198,8 @@ const translate = makeT<AeatCertificateKey>();
 
 /** Translates `key` and fills each `{name}` slot from `values`. */
 export function t(key: AeatCertificateKey, values: Record<string, string | number> = {}): string {
-  return translate(key).replace(/\{(\w+)\}/g, (_slot, name: string) => String(values[name]));
+  return translate(key).replace(/\{(\w+)\}/g, (whole, name: string) => {
+    const value = values[name];
+    return value === undefined ? whole : String(value);
+  });
 }
