@@ -14,6 +14,8 @@ import type { OrphanRemediation } from "./errors.js";
 import type { ReconcilableRow } from "./store.js";
 import { existingReferences, listReconcilable, markReconcileRemediated } from "./store.js";
 import { recordHold } from "./holds.js";
+import { refreshHeldAlert } from "./held-alert.js";
+import type { HeldAlertSink } from "./held-alert.js";
 
 /** Half-open `[from, to)`. */
 export interface ReconcilePeriod {
@@ -191,6 +193,7 @@ export interface ReconcileDeps {
   report: SettlementReportSource;
   reverse: ReversalFn;
   incidents: IncidentSink;
+  heldAlerts: HeldAlertSink;
   settlementLagMs: number;
 }
 
@@ -227,8 +230,13 @@ export async function reconcilePayments(
   period: ReconcilePeriod,
   now: Date,
 ): Promise<PaymentReconcileResult> {
-  // T1 — our rows for the period.
-  const rows = await withTransaction(deps.db, (tx) => listReconcilable(tx, deps.provider, period));
+  // T1 — our rows for the period. The held alert is refreshed here too, so its morning return does
+  // not wait on the settlement report.
+  let heldRaised = 0;
+  const rows = await withTransaction(deps.db, async (tx) => {
+    if (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null })) heldRaised += 1;
+    return listReconcilable(tx, deps.provider, period);
+  });
 
   // Widened by the settlement lag: a payment captured at the end of the period settles days after.
   const records = await deps.report.fetch({
@@ -245,7 +253,7 @@ export async function reconcilePayments(
     orphan: [],
     missingLocal: [],
     drift: [],
-    incidentsRaised: 0,
+    incidentsRaised: heldRaised,
     remediated: 0,
     remediationFailures: [],
   };
@@ -285,6 +293,7 @@ export async function reconcilePayments(
     //     while we record ours. Sending our amount is no fix: where the processor's charge is the
     //     smaller, the refund is refused after the permanent marker is stamped.
     const remediation = new Map<string, OrphanRemediation>();
+    const held = new Set<string>();
     for (const entry of classified.rows) {
       if (entry.klass !== "orphan") continue;
       const ref = entry.row.paymentRef;
@@ -308,6 +317,7 @@ export async function reconcilePayments(
         // refusal would undo all of T2, so no hold is written unless the figure rounds to a cent.
         if (decimalToCents(providerAmount) > 0) {
           await recordHold(tx, { paymentId: entry.row.paymentId, providerAmount, foundAt: now });
+          held.add(ref);
         }
         continue;
       }
@@ -322,8 +332,9 @@ export async function reconcilePayments(
       if (claimed) remediable.push(entry.row);
     }
 
-    result.incidentsRaised += await raiseRowIncidents(tx, deps, classified, remediation, now);
+    result.incidentsRaised += await raiseRowIncidents(tx, deps, classified, remediation, held, now);
     result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
+    if (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null })) result.incidentsRaised += 1;
   });
 
   // One failure does not abort the pass. See `PaymentReconcileResult.remediationFailures` for why
@@ -349,16 +360,21 @@ const PAYMENT_CHECK = jobOrigin("payment_check");
 
 /** One aggregate incident per class, returning how many were really inserted. Aggregate because
  * the open-incident dedup keys on `(source, device, code, sale_id)` and these rows share the payment
- * check's source and a null sale_id, so per-payment incidents would collapse into one. */
+ * check's source and a null sale_id, so per-payment incidents would collapse into one. A held
+ * payment is named by the held alert instead of the orphan and drift ones. */
 async function raiseRowIncidents(
   tx: Transaction,
   deps: ReconcileDeps,
   classified: Classification,
   remediation: Map<string, OrphanRemediation>,
+  held: Set<string>,
   now: Date,
 ): Promise<number> {
   const groups = new Map<MismatchClass, ClassifiedRow[]>();
   for (const entry of classified.rows) {
+    if ((entry.klass === "orphan" || entry.klass === "drift") && held.has(entry.row.paymentRef)) {
+      continue;
+    }
     const group = groups.get(entry.klass);
     if (group === undefined) groups.set(entry.klass, [entry]);
     else group.push(entry);

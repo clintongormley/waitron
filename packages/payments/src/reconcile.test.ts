@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError, decimal, deviceOrigin } from "@waitron/shared";
-import { recordIncidentOnce } from "@waitron/core";
+import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
+import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
 import type { ReconcileDeps, SettlementRecord } from "./reconcile.js";
@@ -63,6 +63,11 @@ function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): Re
     report,
     reverse,
     incidents: recordIncidentOnce,
+    heldAlerts: {
+      raise: recordIncidentOnce,
+      current: currentIncidentsOf,
+      handle: markIncidentHandled,
+    },
     settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
   };
 }
@@ -834,25 +839,16 @@ describe("orphan remediation", () => {
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).toBeNull();
-    expect(await openIncidentCodes()).toEqual([
-      "payment.reconcile_drift",
-      "payment.reconcile_orphan",
-    ]);
-    const orphan = parseParams<{ payments: { remediation: string }[] }>(
-      await suite.db.execute<{ params: string }>(
-        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
-      ),
-    );
-    expect(orphan.rows[0].params.payments[0].remediation).toBe("amountDrifted");
-    const drift = parseParams<{
-      payments: { paymentRef: string; captured: string; settled: string }[];
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_held"]);
+    const held = parseParams<{
+      payments: { paymentRef: string; amount: string; providerAmount: string }[];
     }>(
       await suite.db.execute<{ params: string }>(
-        sql`select params from incidents where code = 'payment.reconcile_drift'`,
+        sql`select params from incidents where code = 'payment.reconcile_held'`,
       ),
     );
-    expect(drift.rows[0].params.payments).toEqual([
-      { paymentRef: "p1", captured: "10.00", settled: "12.50" },
+    expect(held.rows[0].params.payments).toMatchObject([
+      { paymentRef: "p1", amount: "10.00", providerAmount: "12.50" },
     ]);
   });
 
@@ -868,6 +864,92 @@ describe("orphan remediation", () => {
       select h.provider_amount, h.found_at from payment_holds h
       join payments p on p.id = h.payment_id where p.payment_ref = 'p1'`);
     expect(rows).toEqual([{ provider_amount: 1250, found_at: NOW.toISOString() }]);
+  });
+
+  it("leaves a held payment out of the orphan and difference alerts", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await capture(seeded, "p2", "ext-nomatch", "20.00");
+    await setOrderStatus(seeded, "abandoned");
+    const report = new FakeSettlementReport([settlement({ amount: decimal("12.50") })]);
+    const result = await reconcilePayments(deps(report), PERIOD, NOW);
+
+    // Still in the sweep's own lists.
+    expect(result.orphan.map((m) => m.paymentRef).sort()).toEqual(["p1", "p2"]);
+    expect(result.drift.map((m) => m.paymentRef)).toEqual(["p1"]);
+    expect(await openIncidentCodes()).toEqual([
+      "payment.reconcile_held",
+      "payment.reconcile_orphan",
+      "payment.reconcile_unsettled",
+    ]);
+    expect(result.incidentsRaised).toBe(3);
+    const orphan = parseParams<{ payments: { paymentRef: string; remediation: string }[] }>(
+      await suite.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
+      ),
+    );
+    expect(orphan.rows[0].params.payments).toMatchObject([
+      { paymentRef: "p2", remediation: "claimed" },
+    ]);
+    const held = parseParams<{ payments: unknown[] }>(
+      await suite.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_held'`,
+      ),
+    );
+    expect(held.rows[0].params.payments).toEqual([
+      {
+        paymentRef: "p1",
+        workingOrderId: seeded.workingOrderId,
+        amount: "10.00",
+        providerAmount: "12.50",
+      },
+    ]);
+
+    // A later day's sweep finds the hold already written, and still leaves the payment out.
+    await suite.db.execute(sql`delete from incidents`);
+    await reconcilePayments(deps(report), PERIOD, new Date("2026-07-26T12:00:00Z"));
+    expect(await openIncidentCodes()).toEqual([
+      "payment.reconcile_held",
+      "payment.reconcile_orphan",
+      "payment.reconcile_unsettled",
+    ]);
+    const later = parseParams<{ payments: { paymentRef: string; remediation: string }[] }>(
+      await suite.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
+      ),
+    );
+    expect(later.rows[0].params.payments).toMatchObject([
+      { paymentRef: "p2", remediation: "alreadyClaimed" },
+    ]);
+  });
+
+  it("raises the morning alert even when the settlement report cannot be fetched", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await setOrderStatus(seeded, "abandoned");
+    await reconcilePayments(
+      deps(new FakeSettlementReport([settlement({ amount: decimal("12.50") })])),
+      PERIOD,
+      NOW,
+    );
+    await withTransaction(suite.db, async (tx) => {
+      const { open } = await currentIncidentsOf(tx, {
+        origin: jobOrigin("payment_check"),
+        code: "payment.reconcile_held",
+      });
+      await markIncidentHandled(tx, { id: open!.id, personId: null, handledAt: NOW });
+    });
+
+    const failing = {
+      fetch: () => Promise.reject(new Error("report unavailable")),
+    } as unknown as FakeSettlementReport;
+    await expect(
+      reconcilePayments(deps(failing), PERIOD, new Date("2026-07-26T06:00:00Z")),
+    ).rejects.toThrow("report unavailable");
+    const { rows } = await suite.db.execute<{ code: string }>(
+      sql`select code from incidents where acknowledged_at is null`,
+    );
+    expect(rows.map((r) => r.code)).toEqual(["payment.reconcile_held"]);
   });
 
   it("records no hold for an orphan that is claimed for a refund", async () => {
@@ -1039,7 +1121,6 @@ describe("orphan remediation", () => {
     expect(result.drift).toHaveLength(1);
     expect(result.remediated).toBe(1);
     expect(reverse.calls).toEqual(["p1"]);
-    // One aggregate orphan incident carrying both reasons.
     const orphan = parseParams<{ payments: { paymentRef: string; remediation: string }[] }>(
       await suite.db.execute<{ params: string }>(
         sql`select params from incidents where code = 'payment.reconcile_orphan'`,
@@ -1050,9 +1131,12 @@ describe("orphan remediation", () => {
       orphan.rows[0].params.payments
         .map(({ paymentRef, remediation }) => ({ paymentRef, remediation }))
         .sort((a, b) => a.paymentRef.localeCompare(b.paymentRef)),
-    ).toEqual([
-      { paymentRef: "p1", remediation: "claimed" },
-      { paymentRef: "p2", remediation: "amountDrifted" },
-    ]);
+    ).toEqual([{ paymentRef: "p1", remediation: "claimed" }]);
+    const held = parseParams<{ payments: { paymentRef: string }[] }>(
+      await suite.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_held'`,
+      ),
+    );
+    expect(held.rows[0].params.payments.map(({ paymentRef }) => paymentRef)).toEqual(["p2"]);
   });
 });

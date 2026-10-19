@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin } from "@waitron/shared";
-import { recordIncidentOnce } from "@waitron/core";
+import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { workingOrders } from "@waitron/db";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
@@ -59,6 +59,11 @@ describe("concurrent reconcile sweeps", () => {
         reversed.push(ref);
       },
       incidents: recordIncidentOnce,
+      heldAlerts: {
+        raise: recordIncidentOnce,
+        current: currentIncidentsOf,
+        handle: markIncidentHandled,
+      },
       settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
     });
 
@@ -121,6 +126,11 @@ describe("concurrent reconcile sweeps", () => {
         reversed.push(ref);
       },
       incidents: recordIncidentOnce,
+      heldAlerts: {
+        raise: recordIncidentOnce,
+        current: currentIncidentsOf,
+        handle: markIncidentHandled,
+      },
       settlementLagMs: DEFAULT_SETTLEMENT_LAG_MS,
     });
 

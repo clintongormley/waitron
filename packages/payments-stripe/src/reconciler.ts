@@ -1,4 +1,4 @@
-import { recordIncidentOnce } from "@waitron/core";
+import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import type { Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { DEFAULT_SETTLEMENT_LAG_MS, reconcilePayments } from "@waitron/payments";
@@ -44,6 +44,11 @@ export class StripeReconciler implements PaymentReconciler {
         report: stripeSettlementReport(account.report, settlementLagMs),
         reverse: (paymentRef) => this.reverse(account, paymentRef),
         incidents: recordIncidentOnce,
+        heldAlerts: {
+          raise: recordIncidentOnce,
+          current: currentIncidentsOf,
+          handle: markIncidentHandled,
+        },
         settlementLagMs,
       },
       period,

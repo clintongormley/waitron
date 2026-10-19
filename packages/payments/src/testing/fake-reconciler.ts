@@ -1,5 +1,5 @@
 import type { Database } from "@waitron/db";
-import { recordIncidentOnce } from "@waitron/core";
+import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { DEFAULT_SETTLEMENT_LAG_MS, reconcilePayments } from "../reconcile.js";
 import type {
   PaymentReconcileResult,
@@ -30,6 +30,11 @@ export class FakeReconciler implements PaymentReconciler {
           this.reversed.push(paymentRef);
         },
         incidents: recordIncidentOnce,
+        heldAlerts: {
+          raise: recordIncidentOnce,
+          current: currentIncidentsOf,
+          handle: markIncidentHandled,
+        },
         settlementLagMs: this.settlementLagMs,
       },
       period,
