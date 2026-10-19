@@ -815,10 +815,8 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /** Adopts a RETRIEVED order's `id` verbatim, so paying it keys the same idempotency slot the server
-   * stored it under, and the `revision` its copy was read at. The same order read again (a saved
-   * draft's answer rebuilds every line) keeps {@link lastAdded} on the line ordering the same thing,
-   * by the draft merge rule. */
+  /** A saved line's id survives replacement even when its quantity or being kept separate prevents
+   * merging. Without a saved id, only the draft merge rule can identify the last-added line. */
   loadFrom(
     id: string,
     lines: OrderLine[],
@@ -832,7 +830,12 @@ export class WorkingOrderStore {
     },
   ): void {
     const last = id === this.#id ? this.lastAdded : undefined;
-    this.#lastAdded = last === undefined ? undefined : mergingWith(lines, last);
+    this.#lastAdded =
+      last === undefined
+        ? undefined
+        : last.draftLineId === undefined
+          ? mergingWith(lines, last)
+          : lines.find((line) => line.draftLineId === last.draftLineId);
     this.#id = id;
     this.#fullInvoiceOrderId = undefined;
     this.#revision = revision;

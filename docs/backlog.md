@@ -2734,8 +2734,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   - A dish no longer on the menu shows an empty name on its tick button in the person's own draft,
     and in the spoken names of its course picker and Split quantity button (read in the code, not
     run).
-  - The last-added bar is empty for a draft read back from the server until the next tap, and does
-    not follow a weighed line when the server's answer replaces the lines.
+  - The last-added bar is empty for a draft first read back from the server until the next tap.
   - While a weight is being entered, the weight entry covers the bottom of the menu and the bar.
   - "Review (N)" counts items (Beer ×2 counts 2), while the floor's mark counts lines and calls
     them "items", so the two can differ for one draft.

@@ -3008,9 +3008,8 @@ export class TillTableOrderScreen extends LitElement {
    * table's offers no longer hold has no name to show, so it reads as not offered. */
   #lineSummary(line: OrderLine, nameClass: string): TemplateResult {
     const name = shownName(line.product);
-    return html`<span class=${nameClass}
-        >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
-      >
+    const quantity = formatDecimalInput(this.#displayQty(line.quantity), currentLocale());
+    return html`<span class=${nameClass}>${name}${this.#nutrition(line)} ×${quantity}</span>
       ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map(
         (answer) => html`<span class="modifier-answer">${answer}</span>`,
       )}
