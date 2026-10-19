@@ -11637,10 +11637,7 @@ export class TillApp extends LitElement {
         await this.#sendItemCancellation(open, choice);
         return;
       }
-      const authorizers =
-        preview.needsApproval.by === "refund"
-          ? await open.api.listRefundAuthorizers()
-          : await open.api.listAdjustmentApprovers(preview.needsApproval.roles);
+      const authorizers = await open.api.listRefundAuthorizers();
       if (!this.#cancellationReady(open)) return;
       this.cancellingItem = {
         ...open,
