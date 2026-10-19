@@ -972,6 +972,25 @@ it("a last page whose accounted items fall short of Cloud's total ends the job",
   expect(await jobRow(job.id)).toMatchObject({ state: "failed", failure: "rejected" });
 });
 
+it("a last page that accounts for Cloud's total but not every sent item ends the job", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await app((tx) =>
+    tx.update(contentSuggestionJobs).set({ total: 2 }).where(eq(contentSuggestionJobs.id, job.id)),
+  );
+  expect(
+    await store(
+      job.id,
+      page(0, null, [
+        result(ref(venue.bread), breadNames("CLIENT-EN Bread")),
+        result(ref(venue.wine), { ca: "CLIENT-CA Vi" }),
+      ]),
+    ),
+  ).toBe("ended");
+  expect(await jobRow(job.id)).toMatchObject({ state: "failed", failure: "rejected" });
+  expect(await app(allJobs)).toHaveLength(1);
+});
+
 it("a result for an item the box did not send does not by itself fail the walk", async () => {
   await seedSuggestionVenue(suite.db);
   const job = await runningJob(suite.db);
