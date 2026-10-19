@@ -2226,7 +2226,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The line-Recall client also carries that observation, and Recall to New order exposes the
   returned editing state. Stored station choices now carry the original bill observation through
   the question and an inactive-station retry; a changed app identity or bill observation stops
-  the waiting path before another request. Recalled-dish removal now retains its opening bill
+  the waiting path before another request. API replacement during a preceding draft save is also
+  checked for Recall and recalled-dish splitting: neither command reaches the replacement client,
+  and the local changes remain available for review. Recalled-dish removal retains its opening bill
   context while reading reasons and checking a preview, confirmation or manager PIN; a newer
   draft revision refuses the old action, including a command delayed after confirmation. Held-dish
   splitting retains the bill observation from before a pending kitchen-note save; it stops after

@@ -7649,6 +7649,54 @@ describe("recalled draft source splitting", () => {
     expect(split).toHaveBeenCalledOnce();
   });
 
+  it("retires a source split while its save waits across an API replacement", async () => {
+    const split = vi.fn(async () => {
+      saveSplit();
+      return { revision: 4 };
+    });
+    const { el, button } = await opening(split);
+    const old = draft(el);
+    let release!: () => void;
+    let signal: AbortSignal | undefined;
+    api.saveDraft.mockImplementationOnce(async (partyId, ask, options) => {
+      signal = options?.signal;
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return server.snapshot(server.save(partyId, ask));
+    });
+    old.setLineExtras(0, { note: "No pepper" });
+    await userEvent.click(button);
+    await flush(el);
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(old.sending).toBe(true);
+    expect(split).not.toHaveBeenCalled();
+    const replacement = {
+      ...api,
+      splitHeldLineIntoUnits: vi.fn(split.getMockImplementation()!),
+      listDrafts: vi.fn(server.listDrafts.getMockImplementation()!),
+    };
+    try {
+      el.api = replacement as unknown as TillApi;
+      await flush(el, 6);
+    } finally {
+      release();
+    }
+    await flush(el, 8);
+    expect(split).not.toHaveBeenCalled();
+    expect(replacement.splitHeldLineIntoUnits).not.toHaveBeenCalled();
+    expect(replacement.listDrafts).toHaveBeenCalled();
+    expect(draft(el)).not.toBe(old);
+    expect(signal?.aborted).toBe(true);
+    expect(rows(el)).toEqual(["Recorded steak ×2"]);
+    expect(draft(el).lines[0]!.note).toBe("Recorded note");
+    expect(retainedCandidate(el)?.lines[0]!.note).toBe("No pepper");
+    expect(draft(el).editsLocked).toBe(true);
+    expect(old.sending).toBe(false);
+    expect(tableOrder(el)!.groupCommandBusy).toBe(false);
+    expect(draft(el).total).toBe("17.25");
+  });
+
   it("does not send a source removed by the pending save's authoritative answer", async () => {
     const split = vi.fn().mockResolvedValue({ revision: 4 });
     const { el, button } = await opening(split);
@@ -7979,6 +8027,49 @@ describe("recalled draft source splitting", () => {
       expect(rows(el)).toEqual(["Beer ×1", "Recorded steak ×2"]);
       expect(api.saveDraft).toHaveBeenCalledOnce();
       expect(draft(el).sending).toBe(false);
+    });
+
+    it("retires Recall while its save waits across an API replacement", async () => {
+      const { el, order } = await recallOpening();
+      await tap(el, "Beer");
+      const old = draft(el);
+      let release!: () => void;
+      let signal: AbortSignal | undefined;
+      api.saveDraft.mockImplementationOnce(async (partyId, ask, options) => {
+        signal = options?.signal;
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return server.snapshot(server.save(partyId, ask));
+      });
+      emit(order, "recall-lines", { lineNos: [7] });
+      await flush(el);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(old.sending).toBe(true);
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+      const replacement = {
+        ...api,
+        recallToDraft: vi.fn(api.recallToDraft.getMockImplementation()!),
+        listDrafts: vi.fn(server.listDrafts.getMockImplementation()!),
+      };
+      try {
+        el.api = replacement as unknown as TillApi;
+        await flush(el, 6);
+      } finally {
+        release();
+      }
+      await flush(el, 8);
+      expect(api.recallToDraft).not.toHaveBeenCalled();
+      expect(replacement.recallToDraft).not.toHaveBeenCalled();
+      expect(api.recallLines).not.toHaveBeenCalled();
+      expect(replacement.listDrafts).toHaveBeenCalled();
+      expect(draft(el)).not.toBe(old);
+      expect(signal?.aborted).toBe(true);
+      expect(rows(el)).toEqual([]);
+      expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+      expect(draft(el).editsLocked).toBe(true);
+      expect(old.sending).toBe(false);
+      expect(tableOrder(el)!.groupCommandBusy).toBe(false);
     });
 
     it("retains the fresh edit and does not Recall when its preceding save fails", async () => {

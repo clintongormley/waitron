@@ -2254,7 +2254,7 @@ build after A757's board if it has been decided, else name the table alone.
 [plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md), preserving earlier behavioral checks.
 The remaining work includes:
 
-- Integrate the owner's Q43 cancellation changes after lane C publishes A758's revised design,
+- Integrate the owner's Q43 cancellation changes after A758's revised design is published,
   as the watcher's 2026-10-18 instruction requires. Finish the held-dish resolution before Finish
   table (plan T20/T22); the earlier picture-03 implementation is not that revised design.
 - Reconcile the full branch with current main, including migration collisions and prose describing
@@ -2322,6 +2322,13 @@ waiting for a kitchen-note save. It checks that context before sending the split
 The Current orders cases in `till-app-parties.test.ts` cover changed editor versions,
 draft identity and revision, an API replacement, and an allowed split when only another bill
 changes. These checks cover that existing command handler; whole-item acceptance remains open.
+
+Two more cases in `till-app-drafts.test.ts` hold a preceding draft save through an API-client
+replacement, then release its reply. Recall and recalled-dish splitting send no command to either
+client, release their busy state, and keep the local changes for review. Removing the existing
+API-change draft restart in a disposable installed checkout makes each case observe the forbidden
+command on the replacement client. This closes that API-lifetime follow-up without changing
+production code; the remaining ownership audit and whole-item acceptance stay open.
 
 The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
 uses the authenticated routes and a real venue database. A fresh route instance reads the saved
