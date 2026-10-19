@@ -2040,7 +2040,7 @@ money in flight, since a move changes no amount (plan P19). Stated at its site i
   failed, Move to table keeps free tables offered and leaves an unknown area to the server, as the
   order screen does.
 - **A counter till is "Caja registradora" in Spanish, on the till and the dashboard alike (owner,
-  2026-10-17).** The till's change is A837.
+  2026-10-17).**
 - **"Ready" and "Fired N min ago" on the table screen stay as built (owner, 2026-10-17).** They
   were the service plan's default (Task 5, #750).
 - **A child extras row in the Tab drawer stays on its own indented, muted, smaller line (owner,

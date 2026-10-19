@@ -1,5 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { DEV_DEVICE_STORAGE_KEY } from "../api/dev-device.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillDeviceChooser } from "./till-device-chooser.js";
@@ -28,6 +29,7 @@ async function flush(el: TillDeviceChooser): Promise<void> {
 
 afterEach(() => {
   cleanupWidgets();
+  setLocale("en-GB");
   sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
 });
 
@@ -67,6 +69,15 @@ describe("till-device-chooser", () => {
     expect(text).toContain("Handheld");
     expect(text).toContain("Kitchen display");
     expect(text).not.toContain("kds_station");
+  });
+
+  it("A837 shows the Spanish counter till as Caja registradora in the device list", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<TillDeviceChooser>("till-device-chooser", {
+      list: { devices: [{ id: "front", kind: "till", label: "Front", active: true }] },
+    });
+    const row = el.shadowRoot!.querySelector('[data-device="front"]')!;
+    expect(row.querySelector(".meta")?.textContent?.trim()).toBe("· Caja registradora");
   });
 
   it("uses a pre-fetched `list` without re-reading getDevDevices", async () => {
