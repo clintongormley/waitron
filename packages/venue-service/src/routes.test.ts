@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -787,37 +787,53 @@ describe("whole service settings saves", () => {
     },
   );
 
-  it("answers 404 naming a step another manager deleted, and a course deleted meanwhile", async () => {
+  it("answers 404 naming a step another manager deleted, and a course deleted meanwhile, and writes nothing", async () => {
     const fx = await settingsFixture();
     await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
       ...departmentSettings,
-      serviceSteps: [setUp],
+      serviceSteps: [setUp, takeOrder],
     });
     const [step] = await db
       .select()
       .from(serviceSteps)
-      .where(eq(serviceSteps.departmentId, fx.departmentId));
+      .where(and(eq(serviceSteps.departmentId, fx.departmentId), eq(serviceSteps.position, 1)));
     await db.delete(serviceSteps).where(eq(serviceSteps.id, step!.id));
+    const stepsBefore = await db
+      .select()
+      .from(serviceSteps)
+      .where(eq(serviceSteps.departmentId, fx.departmentId));
+    expect(stepsBefore).toHaveLength(1);
+    const retired = await seedCourse(fx, "Retired", false);
+    const before = await rawSettingsSnapshot();
+    const unchanged = async () => {
+      expect(await rawSettingsSnapshot()).toEqual(before);
+      expect(
+        await db.select().from(serviceSteps).where(eq(serviceSteps.departmentId, fx.departmentId)),
+      ).toEqual(stepsBefore);
+    };
     const stale = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
       ...departmentSettings,
-      serviceSteps: [{ ...setUp, id: step!.id }],
+      name: "Renamed",
+      serviceSteps: [setUp, { ...takeOrder, id: step!.id }],
     });
     expect(stale.status).toBe(404);
-    expect(await stale.json()).toMatchObject({
+    expect(await stale.json()).toEqual({
       error: { code: "service_step.not_found", params: { stepId: step!.id } },
     });
-    const retired = await seedCourse(fx, "Retired", false);
+    await unchanged();
     const gone = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
       ...departmentSettings,
+      name: "Renamed",
       serviceSteps: [
         setUp,
         { name: "Dessert?", start: "course_served", courseId: retired, minutes: 10 },
       ],
     });
     expect(gone.status).toBe(404);
-    expect(await gone.json()).toMatchObject({
+    expect(await gone.json()).toEqual({
       error: { code: "course.not_found", params: { courseId: retired } },
     });
+    await unchanged();
   });
 
   it.each(["departmentPath", "zonePath"] as const)("requires a manager for %s", async (path) => {

@@ -235,9 +235,10 @@ function requireServiceSteps(value: unknown): ServiceStepInput[] {
       seen.add(id);
     }
     const name = requireName(entry.name, `${field}.name`);
-    const start = entry.start as ServiceStepStart;
-    if (!SERVICE_STEP_STARTS.includes(start) || (index === 0 && start === "after_previous"))
+    const starts: readonly unknown[] = SERVICE_STEP_STARTS;
+    if (!starts.includes(entry.start) || (index === 0 && entry.start === "after_previous"))
       throw new AppError("management.request_invalid", { field: `${field}.start` });
+    const start = entry.start as ServiceStepStart;
     if (start !== "course_served" && entry.courseId !== undefined && entry.courseId !== null)
       throw new AppError("management.request_invalid", { field: `${field}.courseId` });
     const courseId =
@@ -251,7 +252,7 @@ function requireServiceSteps(value: unknown): ServiceStepInput[] {
       (start === "since_last_order" && minutes < 1)
     )
       throw new AppError("management.request_invalid", { field: `${field}.minutes` });
-    return { ...(id === undefined ? {} : { id }), name: name.trim(), start, courseId, minutes };
+    return { ...(id === undefined ? {} : { id }), name, start, courseId, minutes };
   });
 }
 
