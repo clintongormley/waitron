@@ -179,6 +179,14 @@ describe("till-pay-equipment", () => {
       expect(reader.disabled).toBe(true);
       expect(reader.options.map((each) => each.label)).toEqual(["Lector de prueba"]);
     });
+
+    it("names a practice venue's fixed reader before the equipment has been read", async () => {
+      const el = await mount({
+        equipment: null,
+        fixedReader: { id: "demo", name: "Lector de prueba" },
+      });
+      expect(summary(el)).toBe("Lector de prueba · Leyendo…");
+    });
   });
 
   it("Cambiar asks to open the row, and never opens it itself", async () => {

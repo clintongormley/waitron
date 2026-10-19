@@ -4,6 +4,7 @@ import {
   payPrinterOf,
   payReaderOf,
   printerChoices,
+  printerWantsRowOpen,
   readerChoices,
   rowStartsOpen,
   type PayPrinter,
@@ -302,6 +303,17 @@ describe("rowStartsOpen", () => {
     ["no reader, no printer listed", { kind: "none" }, { kind: "none_listed" }, true],
   ])("%s: %s", (_label, reader, printer, open) => {
     expect(rowStartsOpen(reader, printer)).toBe(open);
+  });
+});
+
+describe("printerWantsRowOpen", () => {
+  it.each<[PayPrinter, boolean]>([
+    [{ kind: "ready", id: "p1", name: "B", fromDefault: false }, false],
+    [{ kind: "none_listed" }, false],
+    [{ kind: "switched_off", id: "p1", name: "B" }, true],
+    [{ kind: "unset" }, true],
+  ])("%j: %s", (printer, open) => {
+    expect(printerWantsRowOpen(printer)).toBe(open);
   });
 });
 

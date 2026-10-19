@@ -52,7 +52,12 @@ import {
   typedAmount,
 } from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
-import { payPrinterOf, payReaderOf, rowStartsOpen } from "../state/pay-equipment.js";
+import {
+  payPrinterOf,
+  payReaderOf,
+  printerWantsRowOpen,
+  rowStartsOpen,
+} from "../state/pay-equipment.js";
 import type { CardProvider, ReceiptGuestsDetail } from "./tender-pay.js";
 
 /** `whole` is the till's own: it asks for a contribution of what is left. */
@@ -81,8 +86,14 @@ export interface PayRequest {
   allocation?: AllocationChoice;
 }
 
-/** `bill-pay-confirm`'s detail: on a handheld, a reader card names the reader to charge. */
-export type BillPayConfirmDetail = ReceiptGuestsDetail & { readerId?: string };
+/** `bill-pay-confirm`'s detail: on a handheld, a reader card names the reader to charge and, on a
+ * practice venue, the outcome chosen. */
+export type BillPayConfirmDetail = ReceiptGuestsDetail & {
+  readerId?: string;
+  simulationOutcome?: "captured" | "declined";
+};
+/** `bill-pay-recheck`'s detail: on a handheld whose kept card needs a reader, the reader picked. */
+export type BillPayRecheckDetail = ReceiptGuestsDetail & { readerId?: string };
 
 /** A refusal's code, the request field it names when it names one, for a tip the venue does not
  * take the most the card can be charged, and the permission an `authorization.not_permitted`
@@ -872,8 +883,7 @@ export class TillBillPayDialog extends LitElement {
   #rowWantsOpen(): boolean {
     if (!this.handheld || this.equipment === null) return false;
     const printer = payPrinterOf(this.equipment);
-    if (this.fixedReader !== null)
-      return printer.kind === "switched_off" || printer.kind === "unset";
+    if (this.fixedReader !== null) return printerWantsRowOpen(printer);
     return rowStartsOpen(payReaderOf(this.equipment), printer);
   }
 
@@ -1110,7 +1120,14 @@ export class TillBillPayDialog extends LitElement {
       await this.#focusInvalid();
       return;
     }
-    this.#emit("bill-pay-recheck", this.#guestsDetail(unanswered.guests));
+    const reader =
+      this.handheld && (unanswered.readerRefused || unanswered.noReader)
+        ? this.#readyReader()
+        : null;
+    this.#emit("bill-pay-recheck", {
+      ...this.#guestsDetail(unanswered.guests),
+      ...(reader === null ? {} : { readerId: reader.id }),
+    } satisfies BillPayRecheckDetail);
   }
 
   async #focusInvalid(): Promise<void> {
@@ -1615,7 +1632,7 @@ export class TillBillPayDialog extends LitElement {
 
   /** The practice simulator's result, or the reader when the venue has more than one. */
   #readerFields(): TemplateResult | typeof nothing {
-    if (this.handheld) return nothing;
+    if (this.handheld) return this.cardReader === "simulator" ? this.#simulationFields() : nothing;
     if (this.cardReader === "simulator") {
       const demoReaders = this.readers.filter((reader) => reader.provider === "simulator");
       return html`${
@@ -1766,6 +1783,9 @@ export class TillBillPayDialog extends LitElement {
     this.#emit("bill-pay-confirm", {
       ...this.#guestsDetail(guestsShown),
       ...(reader === null ? {} : { readerId: reader.id }),
+      ...(reader !== null && this.cardReader === "simulator"
+        ? { simulationOutcome: this.simulationOutcome }
+        : {}),
     } satisfies BillPayConfirmDetail);
   }
 

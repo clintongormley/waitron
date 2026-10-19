@@ -141,7 +141,10 @@ export class TillPayEquipment extends LitElement {
   }
 
   #summary(): TemplateResult {
-    if (this.equipment === null) return html`${t("pay_equipment.reading")}`;
+    if (this.equipment === null)
+      return this.fixedReader === null
+        ? html`${t("pay_equipment.reading")}`
+        : html`<b>${this.fixedReader.name}</b> · ${t("pay_equipment.reading")}`;
     const reader = payReaderOf(this.equipment);
     const readerName = this.fixedReader?.name ?? (reader.kind === "ready" ? reader.name : null);
     const printer = payPrinterOf(this.equipment);

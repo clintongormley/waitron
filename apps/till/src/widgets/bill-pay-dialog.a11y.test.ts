@@ -523,7 +523,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
   });
 
   it("has no violations on a handheld with the row opened and no reader", async () => {
-    const { host } = await mount({
+    const { host, el } = await mount({
       handheld: true,
       way: undefined,
       cardReader: "stripe_terminal",
@@ -531,6 +531,10 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       takesCash: true,
       equipment: { roles: [role("receipt", BARRA)] },
     });
+    const row = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "till-pay-equipment",
+    )!;
+    expect(row.open).toBe(true);
     await expectNoA11yViolations(host);
   });
 
