@@ -5,11 +5,16 @@
 **Revision 2, 2026-10-19**, after the fresh plan review
 (`~/waitron-campaign-b/a796b-review/plan-review-1.md`): Part 1 is rewritten so the lock cannot lift
 while the first send may have charged (per-bill sends, a balance read that settles a send, Check
-again naming the current reader); the first revision's Task 9 is split into Tasks 10 and 11; tasks are renumbered (24 now).
+again naming the current reader); the first revision's Task 9 is split into Tasks 10 and 11.
+
+**Revision 3, 2026-10-19**, after the narrow re-review (`plan-review-2.md`): a send is judged attempt
+by attempt, so any network-failed attempt marks it uncertain; a balance read without the payment
+lifts the lock but keeps the submission id (default 7 holds); Task 4 asks before a typed card too;
+revision 2's Tasks 2, 13 and 20 are each split in two (now 2–3, 14–15 and 22–23). Tasks are renumbered (27 now).
 
 **No migration.** Nothing in this plan adds or changes a table, a column, an index or a trigger.
-The server data changes are provisioning's seed (Task 4) and new rows in an existing table,
-`device_profile_card_readers` (Task 5). Checked: the design says so (§5, "No migration, and nothing
+The server data changes are provisioning's seed (Task 5) and new rows in an existing table,
+`device_profile_card_readers` (Task 6). Checked: the design says so (§5, "No migration, and nothing
 new stored on the phone"), and no task below touches a `schema/` or `drizzle/` file. If an
 implementer finds they need one, that is a STOP: report it, because it changes how the campaign may
 schedule this item.
@@ -20,7 +25,7 @@ request**: branch `feat/a796-handheld-payments`, worktree
 `/Users/clintongormley/workspace/worktrees/waitron-feat-a796-handheld-payments`, from `main` at
 `942a0ed64`. The design suggests a pull request per slice; nothing here is live yet, so the parts
 land together, in order, each commit leaving the branch green. Implementers are dispatched as
-`subagent_type: "implementer"` (the owner's rule allows no exception); Tasks 1 and 2 carry the
+`subagent_type: "implementer"` (the owner's rule allows no exception); Tasks 1 to 3 carry the
 hardest reasoning in the plan, so their briefs include this plan's Part 1 in full and their
 per-task reviewers run at high effort. Keep the ledger
 `docs/handoffs/2026-10-19-a796-handheld-payments.md` current after every task.
@@ -76,7 +81,7 @@ Every task's requirements include these.
 
 - **Every commit `git commit -s`.** Never `--no-verify`. Stage explicit paths only.
 - **Fiscal golden tests pass unedited**: `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and
-  `packages/fiscal-verifactu/src/inmutabilidad.test.ts`. Tasks 4 and 5 (the only server tasks) run
+  `packages/fiscal-verifactu/src/inmutabilidad.test.ts`. Tasks 5 and 6 (the only server tasks) run
   both: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
 - **A test that must be EDITED to pass is a STOP** — report, do not edit — with two exceptions:
   1. a test this plan lists under its task's **"Tests the spec changes"**, edited only as described
@@ -89,14 +94,14 @@ Every task's requirements include these.
   (and `apps/dashboard/src/i18n/codes.ts` if the dashboard can show it), with a case in
   `apps/till/src/i18n/codes.test.ts`; say so in the PR.
 - **The drawer.** Nothing here queues a `drawer` job or adds a route that can. Móvil does not get
-  `open-cash-drawer` (default 15); a cash payment on Móvil opens no drawer (Task 4 pins it, with a
+  `open-cash-drawer` (default 15); a cash payment on Móvil opens no drawer (Task 5 pins it, with a
   control). A card on a connected reader never opens the drawer (unchanged;
   `apps/server/src/bill-payments-api.test.ts:4987`).
 - **Nothing external blocks a sale.** No task adds a call to AEAT, a provider or the internet on the
   payment path; a printer that has gone never holds up a payment (default 19).
 - **Automatic reads stay passive.** The till's auto-logout counts only `pointerdown` and `keydown`
-  (`#onInteraction`, `till-app.ts:1703`, listeners at `:1751-1752`). The 5-second re-read (Task 19)
-  and the re-read when the sheet opens (Task 10) never call `#onInteraction`.
+  (`#onInteraction`, `till-app.ts:1703`, listeners at `:1751-1752`). The 5-second re-read (Task 21)
+  and the re-read when the sheet opens (Task 11) never call `#onInteraction`.
 - **Forms** follow `docs/developers/conventions-ui.md` → "New or changed forms use the shared UI
   contract": a required field is marked; a refusal that names a shown field shows under it; a
   refusal never disables the action by itself; the bottom message sits in `wt-form-actions`. A
@@ -117,7 +122,7 @@ Every task's requirements include these.
   and Spanish, in each task. `apps/till/src/i18n/strings.ts` holds `en` (`:4`) and
   `es: Record<StringKey, string>` (`:1588`); the type checker enforces both.
 - **Guides**: no user guide covers a till screen today (`apps/server/src/guide/{en,es}` hold only
-  `content-and-images.md`, `modifiers.md`, `products.md`), so no guide is updated. Task 24 records
+  `content-and-images.md`, `modifiers.md`, `products.md`), so no guide is updated. Task 27 records
   that in the backlog rather than writing one.
 - **Every task ends with**: its focused tests; `pnpm --filter <pkg> typecheck` for every package it
   touched; `pnpm exec prettier --check <changed files>`; reading each run's `Tests` count (a run that
@@ -141,22 +146,25 @@ Every task's requirements include these.
 Choices this plan makes where the design is silent or where a reviewer could reasonably expect
 otherwise. Each is restated in its task.
 
-1. Part 1's lock rules (Task 1), including that a send still out counts as unanswered (default 7:
-   "no new payment of any way or method"), and that a balance read without the submission id frees
-   the bill — with the narrow window it leaves (Task 1, "Known limit").
-2. Slices 3–6 apply on a handheld only; counter tills keep today's dialog (Part 1 and Task 3 apply
+1. Part 1's lock rules (Task 1): a send still out counts as unanswered (default 7: "no new payment
+   of any way or method"); any network-failed attempt makes a send uncertain; a balance read
+   without the payment lifts the lock but keeps the submission id, so the id is still dropped only
+   when an answer comes, as default 7 says; and the residual window it leaves (Task 1, "Known
+   limit").
+2. Slices 3–6 apply on a handheld only; counter tills keep today's dialog (Part 1 applies
    everywhere).
-3. A practice venue (the simulator) keeps its fixed demo reader in the row (Task 9).
+3. A practice venue (the simulator) keeps its fixed demo reader in the row (Task 10).
 4. Only a newly created reader — from the add route or a first adoption — joins profile lists; a
-   re-adopted disabled reader changes no list (Task 5).
-5. The takeover question is asked inside the row, not in a second dialog (Task 7).
-6. The slip-only pick-up wording shows in the toast as well as the sheet (Task 15).
-7. Task 3 asks only before a second **reader** card, never before cash or a typed card.
+   re-adopted disabled reader changes no list (Task 6).
+5. The takeover question is asked inside the row, not in a second dialog (Task 8).
+6. The slip-only pick-up wording shows in the toast as well as the sheet (Task 17).
+7. Task 4 asks before a second card of either kind, as the design says, and never before cash:
+   the design is silent on cash.
 8. `reader.not_held`'s general message in `apps/till/src/i18n/codes.ts:697-700` ("Elige un lector en
    Equipo") stays for counter tills; the handheld sheet shows its own wording under the reader field,
-   which is what design §4 asks of the form (Task 23).
+   which is what design §4 asks of the form (Task 26).
 9. The paid screen replaces the ticket view only for a simplified invoice; a full invoice keeps
-   today's ticket view with its delivery and handover steps (Task 20).
+   today's ticket view with its delivery and handover steps (Tasks 22–23).
 
 ## Review focus
 
@@ -165,25 +173,26 @@ Each has a test in the task that owns the code.
 
 1. **The phone lost its reader while the sheet sat on the confirmation step** (another phone
    scanned it). Cobrar is refused `reader.not_held`, nothing is charged, the refusal shows under the
-   reader field in the sheet's own words, and the row opens with the reader empty. → Task 23.
+   reader field in the sheet's own words, and the row opens with the reader empty. → Task 26.
 2. **The 5-second re-read outlives its sheet**, or two reads overlap: after the sheet closes, after
    logout, or once the pending card settles, no further `GET …/payments` is sent, and an older answer
-   never replaces a newer one. → Task 19.
+   never replaces a newer one. → Task 21.
 3. **The automatic pick fires twice** (the 15-second poll or a tap lands while it is out), taking a
    reader twice or after the waiter picked another. It is sent at most once per sheet opening, and
-   never once the phone has a reader. → Task 21.
+   never once the phone has a reader. → Task 24.
 4. **A long reader or printer name on a 390-pixel phone** pushes QR, NFC or Cambiar off the row.
-   The summary wraps and the buttons stay inside the row. → Task 7 (a width assertion, plus LOOK).
+   The summary wraps and the buttons stay inside the row. → Task 8 (a width assertion, plus LOOK).
 5. **An equipment change still being sent when Cobrar is pressed** — a pick, a tap or a scan —
    charges a reader the server has not given the phone. Continuar and a card's Cobrar are disabled
-   while any equipment change is out. → Task 11.
+   while any equipment change is out. → Task 12.
 
 ---
 
 ## Part 1 — the resend fix, on every device (design slice 1, default 7)
 
 Fixes the backlog entry "The next identical bill payment can be answered with an unanswered one".
-Two tasks: the rules as pure functions (Task 1), then the till wired to them (Task 2).
+Four tasks: the rules as pure functions (Task 1), the dialog's lock view (Task 2), the till wired
+to both (Task 3), and the question before a second card (Task 4).
 
 ### Task 1: the rules for a bill's unanswered payment
 
@@ -193,8 +202,9 @@ what ends the doubt. No UI.
 **Risk triggers:** payments; concurrency. **Per-task review: yes** (high-effort reviewer).
 
 **Files:** Modify `apps/till/src/state/bill-payment.ts` (`submissionFor` `:143-150`,
-`FRESH_ID_AFTER` `:156-161`, `unansweredAfter` `:173-177`, which stays for refunds).
-Test `apps/till/src/state/bill-payment.test.ts`.
+`FRESH_ID_AFTER` `:156-161`, `unansweredAfter` `:173-177`, which stays for refunds) and
+`apps/till/src/state/draft-sync.ts` (`resendUnanswered` `:119-132`). Test
+`apps/till/src/state/bill-payment.test.ts`, `apps/till/src/state/draft-sync.test.ts`.
 
 **What the code shows, and why the rules are what they are** (each read on `942a0ed64`):
 
@@ -204,26 +214,42 @@ Test `apps/till/src/state/bill-payment.test.ts`.
   (`packages/payments/src/store.ts:129-141`), raising `reader.not_held` or
   `reader.payment_in_progress`; only then does `beginBillPayment` call `findSubmission`
   (`apps/server/src/bill-payments.ts:1050`). So a reader refusal of a resend says nothing about an
-  earlier send, and neither does any other refusal raised before that look-up (the session,
-  zone, action and reader checks on the route, and `assertStillSignedIn`, `bill-payments.ts:1044`).
+  earlier send, and neither does any other refusal raised before that look-up (the session, zone,
+  action and reader checks on the route, and `assertStillSignedIn`, `bill-payments.ts:1044`).
+- `resendUnanswered` sends again after a network failure, up to twice, and throws only the **last**
+  attempt's error (`draft-sync.ts:119-132`). So an attempt that reached the server and recorded a
+  pending card can be followed by a retry refused before the look-up — for instance
+  `reader.not_held` after the phone picked up another reader during the pause — and the send's
+  final error hides the first attempt. A send is therefore judged attempt by attempt.
 - A provider call that throws anything outside `REFUSED_START` leaves the pending row in place and
   the error goes back to the phone (`bill-payments.ts:1368-1374`). The client turns a body with no
   code into `code: "server.internal"` with the HTTP status (`apps/till/src/api/client.ts:4468-4478`).
   So a code-less error, or any status of 500 or more, may follow a recorded payment.
-- The server's replay match ignores the reader: `BillPaymentRequest` has no `readerId`
-  (`bill-payments.ts:128-141`; the route parses it separately, `bill-payments-api.ts:172-176`), and
-  `retryShapeOf` spreads only the parsed request, with `guests` removed (`bill-payments.ts:977-990`).
-  So a resend may name a different reader and still be answered with the first payment.
+  (`reader.provider_disconnected` is answered 409, `apps/server/src/till-api.ts:515`, before
+  anything is recorded, `:356`.)
+- The server's replay match ignores the reader and the guests: `BillPaymentRequest` has no
+  `readerId` (`bill-payments.ts:128-141`; the route parses it separately,
+  `bill-payments-api.ts:172-176`), and `retryShapeOf` spreads only the parsed request with `guests`
+  removed (`bill-payments.ts:977-990`). So a resend may name a different reader and still be
+  answered with the first payment. A replay of a payment whose bill is settled carries the bill's
+  invoice (`resultOf`, `bill-payments.ts:959-970`).
 - A bill's balance lists its payments with their submission ids (`BillPaymentView.submissionId`,
-  `apps/till/src/api/client.ts:1006-1008`), any state (`:1019`). A balance read is answered from
-  committed rows. So a read sent after a send ended either shows that send's payment, or shows that
-  it was not recorded when the read ran.
+  `apps/till/src/api/client.ts:1006-1008`), any state (`:1019`), read in its own transaction
+  (`getBillBalance`, `bill-payments.ts:1412-1417`).
 - Today one slot holds the phone's unanswered send for every bill (`#unansweredPayment`,
   `till-app.ts:2640`), overwritten by the latest send (`:12130`): a result on Mesa 9 clears Mesa 4's.
 
-**Interfaces** (all in `bill-payment.ts`):
+**Interfaces:**
 
 ```ts
+// draft-sync.ts: resendUnanswered gains an optional fourth parameter, called after each attempt
+// that failed with a network failure, before the pause or the rethrow.
+export async function resendUnanswered<T>(
+  send: (signal: AbortSignal) => Promise<T>, signal: AbortSignal, live: () => boolean,
+  onUnanswered?: () => void,
+): Promise<T>;
+
+// bill-payment.ts
 export interface PendingSend {
   billId: string;
   submission: Submission;
@@ -232,7 +258,7 @@ export interface PendingSend {
   inFlight: boolean;
   uncertain: boolean;
   endedTick: number;     // the tick its last send ended at; 0 while in flight
-  refusal: { code: string } | null; // the last coded refusal of this entry, if any
+  refusal: { code: string } | null; // the last coded refusal of this entry's sends, if any
 }
 export type PendingPayments = ReadonlyMap<string, PendingSend>;
 
@@ -240,6 +266,7 @@ export function isUncertainFailure(error: unknown): boolean;
 export function sendStarted(
   pending: PendingPayments, billId: string, submission: Submission, turn: number, dialogId: number,
 ): PendingPayments;
+export function sendUnanswered(pending: PendingPayments, billId: string, turn: number): PendingPayments;
 export function sendEnded(
   pending: PendingPayments, billId: string, turn: number, tick: number, error?: unknown,
 ): PendingPayments;
@@ -247,115 +274,113 @@ export function settledByBalance(
   pending: PendingPayments, balance: BillBalance, readStartedTick: number,
 ): { pending: PendingPayments; found: BillPaymentView | null; freed: PendingSend | null };
 export function lockFor(pending: PendingPayments, billId: string, dialogId: number): PendingSend | null;
+export function holdsReload(pending: PendingPayments): boolean;
 ```
 
 The rules, which the tests pin one by one:
 
 1. `isUncertainFailure(error)`: true for a network failure (`isNetworkFailure`), a status of 500 or
    more, or a missing code or `code === "server.internal"`.
-2. `sendStarted` writes the bill's entry `{ inFlight: true, endedTick: 0 }`, keeping `uncertain`
-   and `refusal` from an entry it replaces (a Check again of an uncertain send stays uncertain).
-3. `sendEnded` changes nothing unless the entry's `turn` equals `turn` (a late answer to an older
-   send of that bill is ignored). Otherwise, with `endedTick: tick`, `inFlight: false`:
+2. `sendStarted` writes the bill's entry `{ inFlight: true, endedTick: 0 }`. When it replaces an
+   entry with the **same** submission id (a Check again) it keeps `uncertain` and `refusal`; with a
+   different id it starts `uncertain: false, refusal: null`.
+3. `sendUnanswered` — called through `onUnanswered` after **any** attempt of the send that failed
+   with a network failure — sets `uncertain: true` at once, while the send is still in flight (only
+   if the entry's `turn` equals `turn`).
+4. `sendEnded` changes nothing unless the entry's `turn` equals `turn` (a late answer to an older
+   send of that bill is ignored; this is the property today's
+   `till-app-bill-payments.test.ts:2072` and `:2111` protect, moved here). Otherwise, with
+   `endedTick: tick`, `inFlight: false`:
    - no error (a result): the entry is removed;
-   - `isUncertainFailure(error)`: `uncertain: true`;
-   - any other refusal while `uncertain`: stays `uncertain` — **reader refusals and the
-     `FRESH_ID_AFTER` codes included** — and records `refusal: { code }`;
+   - `isUncertainFailure(error)`: `uncertain: true`, and `refusal: { code }` when the error has a
+     code other than `server.internal`;
+   - any other refusal while `uncertain` (set by rule 3 or an earlier send): stays `uncertain` —
+     **reader refusals and the `FRESH_ID_AFTER` codes included** — and records `refusal: { code }`;
    - any other refusal while not `uncertain`: a `FRESH_ID_AFTER` code removes the entry (today's
-     rule); any other keeps it with `uncertain: false` and `refusal` recorded, so an identical
-     resend still reuses an id the server never recorded (today's key rule, harmless).
-4. `settledByBalance` acts only on the entry for `balance.workingOrderId`, only when it is not in
+     rule); any other keeps it with `uncertain: false` and `refusal` recorded.
+5. `settledByBalance` acts only on the entry for `balance.workingOrderId`, only when it is not in
    flight and `readStartedTick > entry.endedTick` (a read sent before the send ended proves
    nothing). If a payment in `balance.payments` has the entry's submission id, the entry is removed
-   and that payment is `found` (whatever its state). If none has it and the entry is `uncertain`, it
-   is removed and returned as `freed`. A certain entry with no payment is left as it is.
-5. `lockFor(pending, billId, dialogId)`: the bill's entry when it is `uncertain`, or when it is in
-   flight and was sent by another dialog than `dialogId` (a dialog reopened after a logout closed
-   the one that sent it). The dialog that is itself waiting shows today's busy confirmation instead.
-6. `submissionFor` is called with the bill's own entry's submission (`pending.get(billId)?.submission ?? null`).
+   and that payment is `found` (whatever its state). If none has it and the entry is `uncertain`,
+   the entry **stays, with `uncertain: false`**, and is also returned as `freed`: the lock lifts but
+   the submission id is kept, so an identical retake reuses it, and the id is still dropped only
+   when an answer comes — which keeps default 7 ("the kept id is dropped only when an answer
+   comes"). A certain entry with no payment is left as it is.
+6. `lockFor(pending, billId, dialogId)`: the bill's entry when it is `uncertain` — in flight or
+   not, so a Check again in flight, or a first send whose attempt has already failed and is being
+   retried, shows the lock with its button busy — or when it is in flight and was sent by another
+   dialog than `dialogId` (a dialog reopened after a logout closed the one that sent it). A first
+   send still in flight with no failed attempt shows today's busy confirmation in its own dialog.
+7. `holdsReload`: some entry is in flight or uncertain. A certain kept entry lives for the page's
+   life and does not hold a reload.
+8. `submissionFor` is called with the bill's own entry's submission (`pending.get(billId)?.submission ?? null`).
 
-**Known limit, to state in the PR.** "Not in the balance" means "not recorded when the read ran".
-A request the network delayed past both the phone's retries and the read could still be recorded
-after it. The phone sends the read only after its own send has ended (retries included), and the
-pending row is committed in the first transaction, before the provider is called
-(`bill-payments.ts:1331-1351`), so the window is the time a delayed request spends in the network
-and the write queue. The plan does not close it; the reservation stops the bill being overpaid, and
-the server's payment list shows both payments if it happens.
+**Known limit, to state in the PR.** "Not in the balance" means "not committed when the read ran".
+Every `withTransaction` — the balance read included — queues on one write lock
+(`packages/db/src/tenancy.ts:30-44`), and the payment route's earlier steps (the reader resolution,
+`till-api.ts:329`) are separate queue entries from the transaction that records the payment
+(`bill-payments.ts:1331-1351`), so a read can run after the server has the request and before its
+first write commits. The server gives no other signal: the balance shows committed rows only, and a
+card's pending row commits before the provider is called. Without a kept id, the harm would be cash
+recorded twice, or a card charged twice if both sends reach a reader, within what the bill still
+owes. With the kept id (rule 5), an **identical** retake is matched to the first payment; only a
+**different** retake (another amount or way) gets a fresh id. That residual is what the plan leaves
+open.
 
-- [ ] **Step 1: Write the failing cases** in `bill-payment.test.ts`, describe
+- [ ] **Step 1: Write the failing `draft-sync` case** in `draft-sync.test.ts`:
+  `onUnanswered` is called once per network-failed attempt (twice when the first two attempts fail
+  and the third answers), and never for a coded refusal.
+- [ ] **Step 2: Write the failing cases** in `bill-payment.test.ts`, describe
   `"a bill's payment that got no answer"`, one `it` per rule above, named after it. Among them:
-  `sendEnded` after `new TypeError("Failed to fetch")` gives `uncertain: true`; after
-  `{ code: "server.internal", status: 500 }` and after `{ code: "reader.provider_disconnected", status: 503 }`
-  gives `uncertain: true`; after `{ code: "bill.nothing_outstanding", status: 409 }` on a certain
-  send keeps the entry certain; `it.each(["reader.not_held", "reader.payment_in_progress", "device.profile_changed", "submission.id_reused", "session.required"])`
+  `sendEnded` after `new TypeError("Failed to fetch")` gives `uncertain: true`; after a code-less
+  `{ code: "server.internal", status: 502 }` gives `uncertain: true` with no `refusal`; after the
+  real `{ code: "reader.provider_disconnected", status: 409 }` on a first send keeps the entry
+  certain; after `{ code: "bill.nothing_outstanding", status: 409 }` on a certain send keeps it
+  certain; the review's series — `sendUnanswered` then `sendEnded` with
+  `{ code: "reader.not_held", status: 409 }`, and with `{ code: "device.profile_changed", status: 409 }`
+  — leaves the entry uncertain; `it.each(["reader.not_held", "reader.payment_in_progress", "device.profile_changed", "submission.id_reused", "session.required"])`
   on an uncertain entry keeps it uncertain; the same `FRESH_ID_AFTER` codes on a certain send remove
   it; a result on Mesa 9 leaves Mesa 4's uncertain entry; an older turn's answer changes nothing;
-  `settledByBalance` with the id present (each of the four states) removes it and returns it as
-  `found`, with the id absent frees an uncertain entry and leaves a certain one, and with
-  `readStartedTick <= endedTick` or `inFlight` does nothing; `lockFor` returns an uncertain entry for
-  any dialog, an in-flight entry for another dialog only, and null for another bill.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/state/bill-payment.test.ts -t "got no answer"` —
-  FAIL (`sendStarted` not exported).
-- [ ] **Step 3: Implement** the five functions with immutable `Map` copies.
-- [ ] **Step 4: Run** the whole `src/state/bill-payment.test.ts` — PASS (the existing describes,
-  including "the submission id of a confirmation" `:121`, are untouched).
-- [ ] **Step 5: Typecheck, format, commit** — `"Bill payments: per-bill rules for a payment that got no answer (A796 default 7)"`.
+  `sendStarted` with a new submission id resets `uncertain` and `refusal`, with the same id keeps
+  them; `settledByBalance` with the id present (each of the four states) removes it and returns it
+  as `found`, with the id absent turns an uncertain entry certain, keeps it, and returns it as
+  `freed`, leaves a certain one, and with `readStartedTick <= endedTick` or `inFlight` does nothing;
+  `lockFor` returns an uncertain entry for any dialog, in flight or not, a certain in-flight entry
+  for another dialog only, and null for another bill; `holdsReload` is false for a certain kept entry.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/till exec vitest run src/state/bill-payment.test.ts src/state/draft-sync.test.ts -t "got no answer|onUnanswered"` —
+  FAIL (`sendStarted` not exported; `onUnanswered` never called).
+- [ ] **Step 4: Implement** the functions with immutable `Map` copies, and `onUnanswered` in
+  `resendUnanswered`.
+- [ ] **Step 5: Run** the whole `src/state/bill-payment.test.ts` and `src/state/draft-sync.test.ts`
+  — PASS (the existing describes, including "the submission id of a confirmation" `:121`, are
+  untouched).
+- [ ] **Step 6: Typecheck, format, commit** — `"Bill payments: per-bill rules for a payment that got no answer (A796 default 7)"`.
 
-### Task 2: lock the bill's dialog to "Comprobar de nuevo"
+### Task 2: the dialog's lock view
 
-**Goal:** the till keeps Task 1's model per bill. While a bill has an uncertain send — or a send
-still out from a dialog that was closed — that bill's dialog shows only the lock: "Sin conexión con
-el servidor", the reworded explanation and **Comprobar de nuevo** (picture 7, right). Comprobar de
-nuevo resends the same submission naming the reader this phone would charge **now**. Every balance
-read sent after the send ended settles it (Task 1, rule 4). Closing, reopening and logging out keep
-the lock.
+**Goal:** the dialog can show the lock of picture 7, right — "Sin conexión con el servidor", the
+reworded explanation and **Comprobar de nuevo** — and nothing else, while a property says so. No
+till wiring yet.
 
-**Risk triggers:** payments; concurrency. **Per-task review: yes** (high-effort reviewer).
+**Risk triggers:** payments (what the waiter can press). **Per-task review: yes.**
 
-**Files:**
-- Modify: `apps/till/src/till-app.ts` — `#unansweredPayment` and `#paymentSends` (`:2640-2643`)
-  become `#pendingPayments: PendingPayments` and a `#payTicks` counter; `#busyForReload`
-  (`:1412-1425`); `#onBillPayConfirm` (`:12107-12150`); `#rereadBillPaying` (`:12064-12078`);
-  `#onBillPayRefused` (`:12204-12235`); `#renderBillPaying` (`:8324-8351`); a new `#onBillPayRecheck`.
-- Modify: `apps/till/src/widgets/bill-pay-dialog.ts` (a lock view; `#guestsShown` `:1429-1435`).
-- Modify: `apps/till/src/i18n/strings.ts`.
-- Test: `apps/till/src/till-app-bill-payments.test.ts`, `apps/till/src/widgets/bill-pay-dialog.test.ts`,
-  `apps/till/src/widgets/bill-pay-dialog.a11y.test.ts`.
+**Files:** Modify `apps/till/src/widgets/bill-pay-dialog.ts` (a lock view; `#guestsShown`
+`:1429-1435`), `apps/till/src/i18n/strings.ts`. Test `apps/till/src/widgets/bill-pay-dialog.test.ts`,
+`apps/till/src/widgets/bill-pay-dialog.a11y.test.ts`.
 
 **Interfaces:**
-- Dialog: `@property({ attribute: false }) unanswered: { applied: string; method: "cash" | "card"; guests: boolean; waiting: boolean; readerRefused: boolean } | null = null`.
-  While not null the dialog shows only the lock view: a tone box `data-pay-unanswered` with
-  `t("bill_pay.unanswered_title")`; the `wt-form-actions` message `t("bill_pay.unconfirmed")`, and
-  under it `t("bill_pay.recheck_choose_reader")` when `readerRefused`; the receipt guests field when
-  `guests` (picture 7 has none; it is kept because the server's replay ignores guests,
-  `bill-payments.ts:982`, so the count can still change); and one primary `[data-pay-recheck]`,
-  disabled and labelled as loading while `waiting` or `busy`. No Atrás. The dialog stays closable.
-  Pressing it emits `bill-pay-recheck` with `ReceiptGuestsDetail` (`{ guests }` when the field shows,
-  else `{}`).
-- `till-app`:
-  - `#onBillPayConfirm`: `sendStarted(...)` before sending, `sendEnded(..., ++this.#payTicks, error?)`
-    after (replacing `settle`/`unansweredAfter` at `:12129-12131`).
-  - `#onBillPayRecheck()`: resends the bill's entry's `submission.request` with `guests` from the
-    event when given, and — for `entry: "reader"` — `readerId` set to the reader this phone would
-    charge now: the kept id on a practice venue (`cardProvider === "simulator"`); otherwise the id
-    of the reader this device holds and can charge (`payReaderOf(this.deviceEquipment)`,
-    `till-app.ts:403-407`), or no `readerId` when there is none (the server then refuses before the
-    look-up and the entry stays uncertain). Same `#holdingReload` → `#withReaderPayment` → `#resend`
-    path and the same `sendStarted`/`sendEnded`.
-  - `#rereadBillPaying`: records `const tick = ++this.#payTicks` before the read and, on an answer,
-    applies `settledByBalance(this.#pendingPayments, balance, tick)`. A `found` payment sets the open
-    dialog's state as `#onBillPaid` would for it: `received` → `taken: { change }`; `pending` →
-    `taken: { change: null, pending: applied }`; `failed`/`declined` → `refusal: { code: "declined" }`,
-    back on the confirmation. A `freed` entry sets `refusal` to its recorded `refusal` when that code
-    is not `server.internal`, else `{ code: "not_recorded" }`, and leaves `asked`/`preview` so the
-    waiter can take it again (a fresh id: the entry is gone).
-  - `#onBillPayRefused`: on a refusal that answers a Check again, the dialog never shows that
-    refusal's own message (`reader.not_held`'s says "No se ha cobrado ninguna tarjeta", which is not
-    known); the lock view shows instead, with `readerRefused` for `reader.not_held`,
-    `reader.payment_in_progress` and `reader.not_found`. It still re-reads the balance, which may
-    settle the send.
-  - `.unanswered` for the open dialog comes from `lockFor(this.#pendingPayments, open.billId, open.id)`.
-  - `#busyForReload` counts `this.#pendingPayments.size > 0` in place of `#unansweredPayment !== null`.
+- `@property({ attribute: false }) unanswered: { applied: string; method: "cash" | "card"; guests: boolean; waiting: boolean; readerRefused: boolean; noReader: boolean } | null = null`.
+- While not null the dialog shows only the lock view:
+  - a tone box `data-pay-unanswered` with `t("bill_pay.unanswered_title")`;
+  - the `wt-form-actions` message `t("bill_pay.unconfirmed")`, with these lines under it:
+    `t("bill_pay.recheck_choose_reader")` when `readerRefused` or `noReader`;
+    `t("bill_pay.read_failed")` when the dialog's `refusal` is `{ code: "unread" }` (the failed
+    balance read, `till-app.ts:12072-12074`);
+  - the receipt guests field when `guests` (picture 7 has none; it is kept because the server's
+    replay ignores guests, so the count can still change);
+  - one primary `[data-pay-recheck]`, disabled while `waiting`, `noReader` or `busy`, loading while
+    `busy`; no Atrás; the dialog stays closable. Pressing it emits `bill-pay-recheck` with
+    `ReceiptGuestsDetail` (`{ guests }` when the field shows, else `{}`).
 
 **Strings** (`bill_pay.unconfirmed` keeps its key and is reworded):
 - `bill_pay.unanswered_title`: en "No connection to the server" / es "Sin conexión con el servidor"
@@ -366,8 +391,85 @@ the lock.
 - `bill_pay.recheck`: en "Check again" / es "Comprobar de nuevo"
 - `bill_pay.recheck_choose_reader`: en "That card reader cannot check it. Choose a reader, then check again." /
   es "Ese lector no puede comprobarlo. Elige un lector y vuelve a comprobar."
-- `bill_pay.not_recorded`: en "The payment did not reach the server, so it was not recorded. You can take it again." /
-  es "El pago no ha llegado al servidor, así que no se ha registrado. Puedes cobrarlo de nuevo."
+
+- [ ] **Step 1: Failing cases** in `bill-pay-dialog.test.ts`, describe
+  `"till-bill-pay-dialog: a payment that got no answer"`: with `unanswered` set the dialog shows the
+  title, the message, one `[data-pay-recheck]`, no `[data-pay-back]`, no `[data-pay-continue]`;
+  `readerRefused` and `noReader` each add the reader line, and `noReader` disables the button; an
+  `unread` refusal adds `bill_pay.read_failed`; `guests` shows the guests field and the recheck event
+  carries its value; `waiting` disables the button; pressing it emits `bill-pay-recheck`.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/bill-pay-dialog.test.ts -t "got no answer"` — FAIL.
+- [ ] **Step 3: Implement.** **Step 4: Run** the dialog's test, unsaved and a11y files — PASS. Add
+  the lock view to the a11y two-theme describe.
+- [ ] **Step 5: Typecheck, format, commit** — `"Bill payment dialog: the lock view for a payment that got no answer (A796 default 7)"`.
+
+### Task 3: lock a bill to "Comprobar de nuevo"
+
+**Goal:** the till keeps Task 1's model per bill and drives Task 2's lock view. Comprobar de nuevo
+resends the same submission naming the reader this phone would charge **now**. Every balance read
+sent after a send ended settles it (Task 1, rule 5). Closing, reopening and logging out keep the
+lock.
+
+**Risk triggers:** payments; concurrency. **Per-task review: yes** (high-effort reviewer).
+
+**Files:**
+- Modify: `apps/till/src/till-app.ts` — `#unansweredPayment` and `#paymentSends` (`:2640-2643`)
+  become `#pendingPayments: PendingPayments` and a `#payTicks` counter; `#busyForReload`
+  (`:1412-1425`); `#resend` (`:1473-1479`); `#onBillPayConfirm` (`:12107-12150`); `#onBillPaid`
+  (`:12159-12195`); `#rereadBillPaying` (`:12064-12078`); `#onBillPayRefused` (`:12204-12235`);
+  `#renderBillPaying` (`:8324-8351`); a new `#onBillPayRecheck`.
+- Modify: `apps/till/src/i18n/strings.ts`.
+- Test: `apps/till/src/till-app-bill-payments.test.ts`.
+
+**Interfaces:**
+- `#resend` passes `onUnanswered` through to `resendUnanswered`; `#onBillPayConfirm` and
+  `#onBillPayRecheck` give it `() => (this.#pendingPayments = sendUnanswered(this.#pendingPayments, billId, turn))`.
+- `#onBillPayConfirm`: `sendStarted(...)` before sending, `sendEnded(..., ++this.#payTicks, error?)`
+  after (replacing `settle`/`unansweredAfter` at `:12129-12131`).
+- `#onBillPayRecheck()`: resends the bill's entry's `submission.request` with `guests` from the
+  event when given, and — for `entry: "reader"` — `readerId` set to the reader this phone would
+  charge now: the kept id on a practice venue (`cardProvider === "simulator"`); otherwise the id of
+  the reader this device holds and can charge (`payReaderOf(this.deviceEquipment)`,
+  `till-app.ts:403-407`). With none: on a counter till the request carries no `readerId`, so the
+  server charges the device's chosen or default reader as a counter's card does today
+  (`resolvePayReader`, `till-api.ts:330-334`); on a handheld that fallback would charge a reader the
+  waiter did not choose (default 16), so the lock's `noReader` is set and Check again stays
+  disabled. Same `#holdingReload` → `#withReaderPayment` → `#resend` path, `sendStarted`,
+  `sendUnanswered` and `sendEnded`.
+- `#rereadBillPaying`: records `const tick = ++this.#payTicks` before the read and, on an answer,
+  applies `settledByBalance(this.#pendingPayments, balance, tick)`:
+  - `found`, `received`, and `balance.status === "settled"`: today a Check again of that payment
+    replays it with the bill's invoice and `#onBillPaid` shows the ticket and its original print;
+    so the till sends that Check again itself, at once (same id; the server writes nothing new). If
+    it is refused, fall back to the next line.
+  - `found`, `received`, bill not settled → `taken: { change }`; `pending` →
+    `taken: { change: null, pending: applied }`; `declined` → `refusal: { code: "declined" }`;
+    `failed` → `refusal: { code: "payment_failed" }`, back on the confirmation. `failed` is the
+    only state `failBillPayment` writes (`bill-payments.ts:1280`), and every caller writes it where
+    no money moved: a start refusal (`:1369-1372`), a provider answer that charged nothing, a
+    decline included (`:1291-1295`, `:1394-1400`), the loop finding no provider row or a failed one
+    (`bill-payments-loop.ts:100-124`), and a manager's resolution the provider confirms
+    (`payments-api.ts:1181-1187`). It is not shown as a decline.
+  - `freed` → `refusal: freed.refusal ?? { code: "not_recorded" }`, except that a recorded
+    `reader.not_held` shows `{ code: "recheck_reader" }` (its general wording claims no card was
+    charged); `asked`/`preview` stay so the waiter can retake it, and an identical retake reuses
+    the kept id (Task 1, rule 5).
+- `#onBillPaid` for a dialog that is no longer open (`#billPayingNow` null, `:12161-12162`): when
+  another dialog is open on the same bill, re-read the balance into it, so a lock lifted by that
+  late result does not leave an old balance on screen.
+- `#onBillPayRefused`: on a refusal that answers a Check again, the dialog never shows that
+  refusal's own message; the lock view shows instead, with `readerRefused` for `reader.not_held`,
+  `reader.payment_in_progress` and `reader.not_found`. It still re-reads the balance, which may
+  settle the send.
+- `.unanswered` for the open dialog comes from `lockFor(this.#pendingPayments, open.billId, open.id)`.
+- `#busyForReload` uses `holdsReload(this.#pendingPayments)` in place of `#unansweredPayment !== null`.
+
+**Strings:**
+- `bill_pay.not_recorded`: en "This payment is not on the bill. You can take it again." /
+  es "Este cobro no está en la cuenta. Puedes volver a cobrarlo."
+- `bill_pay.payment_failed`: en "This payment did not go through and nothing was taken. You can take it again." /
+  es "Este cobro no se ha completado y no se ha cobrado nada. Puedes volver a cobrarlo."
+- `recheck_reader` shows `t("bill_pay.recheck_choose_reader")` (Task 2).
 
 - [ ] **Step 1: Write the failing till cases** in `till-app-bill-payments.test.ts`, a new describe
   `"till-app: a bill payment that got no answer"`, each with the balance read failing while the
@@ -378,33 +480,30 @@ the lock.
     shows `[data-pay-unanswered]`, no `[data-pay-continue]`, no `[data-pay-confirm]`; answer the next
     call with `takenOf(...)`, press `[data-pay-recheck]`; its `submissionId` equals the first; then a
     new identical contribution's `submissionId` differs.
-  - `it("an unanswered payment on one bill stays locked after another bill's payment is answered")`
-    (review C2): Mesa 4 uncertain; a payment on another bill answered; back on Mesa 4 the lock shows.
-  - `it("a Check again of a card names the reader this device holds now, and a reader refusal keeps the lock")`
-    (review C1): a reader card on r1 gets no answer; `getDeviceEquipment`/the held equipment now
-    resolves r2; Check again sends `readerId: "r2"` and the first `submissionId`; answer it
-    `{ code: "reader.not_held", status: 409 }`; the lock still shows with
-    `t("bill_pay.recheck_choose_reader")`, and `codeMessage("reader.not_held")` is nowhere in the
-    dialog.
-  - `it("a server error with no code leaves the bill locked")`: the first send rejects
-    `{ code: "server.internal", status: 500 }`; the lock shows.
-  - `it("a balance read that shows the unanswered payment frees the bill and shows its state")`: the
-    balance read answers with a payment whose `submissionId` is the sent one, `state: "pending"`;
-    the lock goes and the card-pending line shows.
-  - `it("a balance read without the unanswered payment frees the bill, saying it was not recorded")`:
-    the balance read answers without it; the lock goes, `t("bill_pay.not_recorded")` shows, and the
-    next confirm sends a fresh `submissionId`.
-  - `it("a reopened dialog waits on a payment still out from a dialog a logout closed")`: the first
-    send never answers; logout; the next operator opens the bill: lock shown, `[data-pay-recheck]`
-    disabled; the late answer frees the bill.
-- [ ] **Step 2: Write the failing dialog cases** in `bill-pay-dialog.test.ts`, describe
-  `"till-bill-pay-dialog: a payment that got no answer"`: with `unanswered` set the dialog shows the
-  title, the message, one `[data-pay-recheck]`, no `[data-pay-back]`, no `[data-pay-continue]`;
-  `readerRefused` adds the reader line; `guests` shows the guests field and the recheck event
-  carries its value; `waiting` disables the button; pressing it emits `bill-pay-recheck`.
-- [ ] **Step 3: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/bill-pay-dialog.test.ts src/till-app-bill-payments.test.ts -t "got no answer|unanswered"` — FAIL.
-- [ ] **Step 4: Implement.**
-- [ ] **Step 5: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts src/state/bill-payment.test.ts src/widgets/bill-pay-dialog.test.ts src/widgets/bill-pay-dialog.unsaved.test.ts src/widgets/bill-pay-dialog.a11y.test.ts`
+  - `it("an unanswered payment on one bill stays locked after another bill's payment is answered")`.
+  - `it("a card whose first attempt got no answer and whose retry was refused for the reader stays locked")`
+    (review 2's C1): `takeBillPayment` rejects `new TypeError("Failed to fetch")` then
+    `{ code: "reader.not_held", status: 409 }`; the lock shows, and `codeMessage("reader.not_held")`
+    is nowhere in the dialog.
+  - `it("a Check again of a card names the reader this device holds now, and a reader refusal keeps the lock")`:
+    a reader card on r1 gets no answer; the held equipment now resolves r2; Check again sends
+    `readerId: "r2"` and the first `submissionId`; answered `{ code: "reader.not_held", status: 409 }`,
+    the lock stays with `t("bill_pay.recheck_choose_reader")`.
+  - `it("on a handheld with no reader it can charge, Check again is held and asks for a reader")`.
+  - `it("a server error with no code leaves the bill locked")`: `{ code: "server.internal", status: 502 }`.
+  - `it("a balance read that shows the unanswered payment frees the bill and shows its state")`:
+    the read answers with the sent `submissionId` in state `pending`; the lock goes and the
+    card-pending line shows; the same with state `failed` shows `bill_pay.payment_failed`.
+  - `it("a balance read that shows the unanswered payment settled the bill sends Check again itself and shows the ticket")`:
+    the read shows it `received` and the bill `settled`; one more `takeBillPayment` with the same id,
+    answered with an invoice; the ticket view shows.
+  - `it("a balance read without the unanswered payment lifts the lock and keeps its id for an identical retake")`:
+    the lock goes, `t("bill_pay.not_recorded")` shows, and the next confirm sends the **same**
+    `submissionId`.
+  - `it("a reopened dialog waits on a payment still out from a dialog a logout closed, and its late result re-reads the balance")`.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts -t "got no answer"` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-bill-payments.test.ts src/state/bill-payment.test.ts src/state/draft-sync.test.ts src/widgets/bill-pay-dialog.test.ts src/widgets/bill-pay-dialog.unsaved.test.ts`
   — PASS except the tests below, which the spec changes. Any other red test is a STOP.
 
 **Tests the spec changes.** Two reasons cover them all: (A) default 7 replaces "take it again" with
@@ -417,45 +516,47 @@ would with no connection (a fixture change, named in the commit).
 - `:2072` "keeps the next operator's payment that got no answer when an earlier operator's payment
   is answered late" and `:2111` "resends the next operator's unanswered payment under its own id when
   an earlier operator's payment is refused while it is out" — (A) both start a second payment on a
-  bill while the first is still out, which default 7 forbids. Each is replaced by a case of the new
-  rule with the same setup: the next operator's dialog opens on the lock with `[data-pay-recheck]`
-  disabled; for `:2072` the earlier send's late result frees the bill and the form shows; for `:2111`
-  the earlier send ends with no answer (`new TypeError("Failed to fetch")`, the balance read failing),
-  `[data-pay-recheck]` becomes enabled, and it sends the **earlier** submission id. The replaced names and the new ones go in the commit.
+  bill while the first is still out, which default 7 forbids. The property they protected — a late
+  answer never overwrites a newer send — moves to Task 1's "an older turn's answer changes nothing"
+  case; say so in the commit. Each is replaced by a case of the new rule with the same setup: the
+  next operator's dialog opens on the lock with `[data-pay-recheck]` disabled; for `:2072` the
+  earlier send's late result frees the bill and the form shows; for `:2111` the earlier send ends
+  with no answer (`new TypeError("Failed to fetch")`, the balance read failing),
+  `[data-pay-recheck]` becomes enabled, and it sends the **earlier** submission id.
 - `:2153` "sends the next operator's same payment under the id of one that got no answer after its
   operator logged out" — (B) the reopened dialog's balance read fails; (A) the next operator opens the
   dialog on the lock and presses `[data-pay-recheck]` in place of `payTheRest(el)`. The assertion
   `expect(next).toBe(earlier)` stays. A sibling case, with the read succeeding without the id, pins
-  the opposite: the form shows and an identical payment gets a fresh id.
+  that the form shows and an identical payment keeps the id (Task 1, rule 5).
 - `:2374` "sends a payment that got no answer again under the same submission id after the guests
   count changed, carrying the new count" — (B) as above; (A) the stepper is the lock view's guests
   field and the press after changing it is `[data-pay-recheck]`. Its assertions stay; if any later
   step cannot pass unchanged, STOP and report.
 - `:3139` "sends a card that got no answer under the same submission id after the reader is refused"
-  — (B) as above; (A) after the `reader.provider_disconnected` (503) answer the lock stays
-  (`expect(inDialog(el, "[data-pay-confirm]")).toBeNull()` still holds), and the `[data-pay-continue]`,
-  `[data-pay-confirm]` presses become one `[data-pay-recheck]`. The final assertions (taken text, one
-  submission id) stay.
-- [ ] **Step 6: Add the lock view to `bill-pay-dialog.a11y.test.ts`'s two-theme describe** and run it.
-- [ ] **Step 7: Typecheck, format, commit** — `"Bill payments: lock a bill to Check again while its payment is in doubt (A796 default 7)"`.
+  — (B) as above; (A) after the fixture's `reader.provider_disconnected` (503) answer the lock stays
+  (a 5xx is uncertain, rule 1; `expect(inDialog(el, "[data-pay-confirm]")).toBeNull()` still holds),
+  and the `[data-pay-continue]`, `[data-pay-confirm]` presses become one `[data-pay-recheck]`. The
+  final assertions (taken text, one submission id) stay.
+- [ ] **Step 5: Typecheck, format, commit** — `"Bill payments: lock a bill to Check again while its payment is in doubt (A796 default 7)"`.
 
-### Task 3: ask before a second card when a card is already in progress
+### Task 4: ask before a second card when a card is already in progress
 
 **Goal:** if the phone has no entry for the bill (the browser was killed and the id lost), the
 reopened dialog shows the pending card "En curso" with its amount reserved (today's payments list
-and balance already do, `bill-pay-dialog.ts:864-938`), and before a **reader card** payment on a
-bill whose balance holds a pending card it asks "Hay un pago con tarjeta en curso en esta cuenta.
-¿Cobrar otro?". Cash and a typed card are not asked (decision 7). Every device.
+and balance already do, `bill-pay-dialog.ts:864-938`), and before **any card** payment — on a reader
+or typed on another machine, as design §4 and default 7 say "another card" — on a bill whose balance
+holds a pending card it asks "Hay un pago con tarjeta en curso en esta cuenta. ¿Cobrar otro?". Cash
+is not asked: the design is silent on it (decision 7). Every device.
 
 **Risk triggers:** payments. **Per-task review: yes.**
 
 **Files:** Modify `apps/till/src/widgets/bill-pay-dialog.ts`, `apps/till/src/i18n/strings.ts`.
 Test `apps/till/src/widgets/bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`.
 
-**Interfaces:** consumes `BillBalance.payments[].state === "pending"` with `.method === "card"` and
-`.entry === "reader"` (`apps/till/src/api/client.ts:1006-1019`). The question is an inline
-confirmation inside the form: while it shows, Continuar and Enter submission are suspended
-(conventions-ui.md, "An inline confirmation embedded IN a form suspends that form's Save").
+**Interfaces:** consumes `BillBalance.payments[].state === "pending"` with `.method === "card"`
+(`apps/till/src/api/client.ts:1006-1019`). The question is an inline confirmation inside the form:
+while it shows, Continuar and Enter submission are suspended (conventions-ui.md, "An inline
+confirmation embedded IN a form suspends that form's Save").
 
 **Strings:**
 - `bill_pay.card_in_progress_ask`: en "A card payment is in progress on this bill. Take another?" /
@@ -463,11 +564,11 @@ confirmation inside the form: while it shows, Continuar and Enter submission are
 - `bill_pay.card_in_progress_take`: en "Take another" / es "Cobrar otro"
 
 - [ ] **Step 1: Failing cases** in `bill-pay-dialog.test.ts`, describe
-  `"till-bill-pay-dialog: a card already in progress"`: with a balance holding one pending reader
-  card and `unanswered` null, choosing card (on a reader) and pressing Continuar emits no
-  `bill-pay-preview` and shows `[data-pay-card-ask]`; `[data-pay-card-ask-take]` emits
-  `bill-pay-preview` once; `[data-pay-card-ask-back]` hides it and emits nothing; cash emits at once;
-  a typed card emits at once; with no pending card, a reader card emits at once.
+  `"till-bill-pay-dialog: a card already in progress"`: with a balance holding one pending card and
+  `unanswered` null, choosing card and pressing Continuar emits no `bill-pay-preview` and shows
+  `[data-pay-card-ask]` — on a reader and typed (`cardReader: "none"`) alike;
+  `[data-pay-card-ask-take]` emits `bill-pay-preview` once; `[data-pay-card-ask-back]` hides it and
+  emits nothing; cash emits at once; with no pending card, a card emits at once.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/bill-pay-dialog.test.ts -t "already in progress"` — FAIL.
 - [ ] **Step 3: Implement** `@state() private askingSecondCard = false` and the inline question in
   `#form()` above `wt-form-actions`, entered from `#continue()` (`:800`).
@@ -479,7 +580,7 @@ confirmation inside the form: while it shows, Continuar and Enter submission are
 
 ## Part 2 — the handheld profile and new readers (design slice 2, defaults 15 and 16)
 
-### Task 4: Móvil takes reader cards, cash and prints receipts; never the drawer
+### Task 5: Móvil takes reader cards, cash and prints receipts; never the drawer
 
 **Goal:** the seeded handheld profile's actions become, in this order:
 `["take-orders", "take-cash", "integrated-card-payment", "hand-keyed-card-payment", "print-receipt", "prepare-orders", "hand-over-orders", "clock-in"]`
@@ -527,7 +628,7 @@ list; nothing else in them changes.
   Then the fiscal golden tests (Global constraints).
 - [ ] **Step 6: Typecheck, format, commit** — `"Móvil takes reader cards and cash and prints receipts; never the drawer (A796 default 15)"`.
 
-### Task 5: a new card reader joins every profile that takes reader payments
+### Task 6: a new card reader joins every profile that takes reader payments
 
 **Goal:** when a manager adds a card reader, or adopts one that did not exist before, it is appended
 to the reader list of every live device profile that has `integrated-card-payment`, never as that
@@ -575,7 +676,7 @@ joins nothing.
 
 ## Part 3 — the pay sheet on a handheld (design slice 3)
 
-### Task 6: what the row shows, worked out from the equipment read
+### Task 7: what the row shows, worked out from the equipment read
 
 **Goal:** pure functions that turn the phone's `DeviceEquipment` into the row's reader and printer
 states, so every later task reads one model. Also make Equipment's option labels shareable.
@@ -619,7 +720,7 @@ export function printerChoices(equipment: DeviceEquipment | null): EquipmentItem
   (`packages/layouts/src/device-equipment.ts:274-276`), so it reads `unset` or `none_listed` by the
   receipt choices.
 - The name clashes with `till-app.ts`'s private `payReaderOf`; rename the private one
-  `activeReaderOf` in this task (Task 2's `#onBillPayRecheck` uses it).
+  `activeReaderOf` in this task (Task 3's `#onBillPayRecheck` uses it).
 
 - [ ] **Step 1: Pin the server's read for a switched-off printer and reader.** Find the
   `apps/server/src/device-equipment.test.ts` cases that read a device whose chosen receipt printer,
@@ -641,7 +742,7 @@ export function printerChoices(equipment: DeviceEquipment | null): EquipmentItem
   — PASS (the move and rename change nothing they see).
 - [ ] **Step 6: Typecheck, format, commit** — `"Till: the reader and printer a payment would use, from the equipment read (A796)"`.
 
-### Task 7: the folded reader-and-printer row
+### Task 8: the folded reader-and-printer row
 
 **Goal:** a new element draws the row of pictures 2, 3, 4 and 5: closed, "Lector e impresora" over
 "**Lector 2** · ticket en **Barra**" with 📷 QR and Cambiar (and NFC when asked for); opened, the
@@ -658,14 +759,14 @@ heading with QR (and NFC) and two drop-downs. It only shows and asks; it sends n
   `open: boolean` (reflected; the parent owns it); `saving: { role: "card_terminal" | "receipt"; id: string } | null`;
   `fieldErrors: Partial<Record<"card_terminal" | "receipt", string>>`; `readerReason: string | null`;
   `canScan: boolean`; `askNfc: boolean`; `disabled: boolean`; `fixedReader: { id: string; name: string } | null`
-  (a practice venue's demo reader: shown, not choosable; Task 9).
+  (a practice venue's demo reader: shown, not choosable; Task 10).
 - Events: `pay-equipment-toggle` `{ open: boolean }`; `pay-equipment-pick`
   `{ role: "card_terminal" | "receipt"; id: string; takeOver: boolean }`; `pay-equipment-qr` `{}`;
   `pay-equipment-nfc` `{}`.
 - Behaviour:
   - `equipment === null` (not read yet): the summary reads `pay_equipment.reading` and the drop-downs
     are not drawn.
-  - Closed summary from Task 6: reader name bold, then "ticket en {printer}" — with
+  - Closed summary from Task 7: reader name bold, then "ticket en {printer}" — with
     " (predeterminada)" when `fromDefault`, "sin ticket" for `none_listed`. Reader `none` or
     `switched_off` reads "sin lector".
   - Opened: `wt-combobox name="cardReaderId"` labelled `t("equipment.card_terminal")`, `required`
@@ -704,7 +805,7 @@ heading with QR (and NFC) and two drop-downs. It only shows and asks; it sends n
 
 - [ ] **Step 1: Write failing cases** in `pay-equipment.test.ts` (describe
   `"till-pay-equipment"`), with picks and the takeover question pressed through `userEvent.click`:
-  the closed summary for each Task 6 state and for `equipment === null` (Spanish and English, using
+  the closed summary for each Task 7 state and for `equipment === null` (Spanish and English, using
   `setLocale`); Cambiar emits `pay-equipment-toggle {open: true}`; opened, the reader combobox is
   required only with `cardRequired`; a busy reader's option is disabled; picking a free reader emits
   `{role: "card_terminal", id, takeOver: false}`; picking a held one shows the question and emits
@@ -722,7 +823,7 @@ heading with QR (and NFC) and two drop-downs. It only shows and asks; it sends n
 - [ ] **Step 5: Root guards**: `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/screenshot-paths.test.ts`.
 - [ ] **Step 6: Typecheck, format, commit** — `"Till: the folded reader and printer row (A796)"`.
 
-### Task 8: the handheld's ways and methods
+### Task 9: the handheld's ways and methods
 
 **Goal:** with `handheld` set, the dialog offers the ways **Toda la cuenta**, Pagar artículos,
 Aportar una cantidad, Dividir a partes iguales (Toda la cuenta first and chosen by default, and
@@ -748,7 +849,7 @@ Test `bill-pay-dialog.test.ts`, `bill-pay-dialog.unsaved.test.ts`, `bill-pay-dia
   change.
 - The method state becomes `"cash" | "card" | "manual"`; radio values `card`, `cash`, `manual`.
   `manual` sends `{ entry: "manual", externalRef? }` with `pay.method: "card"`; on a handheld,
-  `card` always sends `{ entry: "reader", ... }` (its reader is Task 9's). The draft records the
+  `card` always sends `{ entry: "reader", ... }` (its reader is Task 10's). The draft records the
   new method value so the unsaved-changes comparison sees a change of method.
 - Default method on a handheld: Tarjeta if offered, else Efectivo, else Otro datáfono. With none
   offered, the method fieldset shows `bill_pay.no_method` and Continuar stays disabled.
@@ -772,7 +873,7 @@ Test `bill-pay-dialog.test.ts`, `bill-pay-dialog.unsaved.test.ts`, `bill-pay-dia
   form" to the a11y two-theme describe and a LOOK case at 390 (Spanish).
 - [ ] **Step 5: Typecheck, format, commit** — `"Bill payment dialog: Whole bill and Other card machine on a handheld (A796 defaults 2, 3)"`.
 
-### Task 9: the row in the sheet; the charge names its reader
+### Task 10: the row in the sheet; the charge names its reader
 
 **Goal:** on a handheld the dialog holds `till-pay-equipment` under the methods (picture 2), the
 charge button reads "Cobrar 20,80 € en Lector 2", and the request carries that reader's id
@@ -791,7 +892,7 @@ Test `bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`, `till-app-bill-p
 **Interfaces:**
 - New dialog properties, passed straight to the row: `equipment: DeviceEquipment | null`,
   `equipmentSaving`, `equipmentErrors`, `readerReason`, `canScan`, `askNfc`; plus
-  `equipmentBusy: boolean` (any equipment change out, Task 11) and
+  `equipmentBusy: boolean` (any equipment change out, Task 12) and
   `fixedReader: { id: string; name: string } | null`.
 - The dialog re-emits nothing: the row's events bubble and are composed. It owns the row's `open`
   state: true on each opening when `rowStartsOpen`, else false; toggled by `pay-equipment-toggle`.
@@ -807,7 +908,12 @@ Test `bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`, `till-app-bill-p
   `till-app.ts:7952-7954`) the row shows the boot's demo reader fixed (`fixedReader`, no reader
   drop-down) and the request names its id, which the server accepts only on the simulator
   (`resolveCardCollector`, `apps/server/src/till-api.ts:370-384`). The design does not cover the
-  simulator; this keeps the demo usable (decision 3).
+  simulator; this keeps the demo usable (decision 3). On the simulator the fixed reader counts as
+  `ready` whether or not the equipment has been read, because it is not an equipment choice; the
+  "wait for the first equipment read" hold above applies to a real reader only.
+- **The lock view on a handheld** (Task 2) gains the row, under the explanation, when the kept send
+  is a reader card and `noReader` or `readerRefused` is set: its line says "Choose a reader", and
+  this is where the waiter does. Check again then names the reader picked (Task 3's rule).
 
 **Strings:**
 - `bill_pay.take_on_reader`: en "Take {amount} on {reader}" / es "Cobrar {amount} en {reader}"
@@ -819,8 +925,10 @@ Test `bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`, `till-app-bill-p
   the next confirm carries `"r3"`; with reader `none` and Tarjeta the row is open and Continuar is
   disabled, and with Efectivo it is enabled; with `equipment` null and Tarjeta, Continuar is disabled;
   with `equipmentBusy`, Continuar and Cobrar are disabled; the row is closed again after the dialog
-  closes and reopens with a ready reader; with `fixedReader` the confirm carries its id and no reader
-  combobox shows; with `handheld` false nothing of this shows.
+  closes and reopens with a ready reader; with `fixedReader` and `equipment` null, Continuar is
+  enabled and the confirm carries its id, and no reader combobox shows; the lock view with a reader
+  card and `noReader` shows the row, and once `equipment` resolves a reader Check again is enabled;
+  with `handheld` false nothing of this shows.
 - [ ] **Step 2: Failing app case** in `till-app-bill-payments.test.ts`: a confirm event carrying
   `readerId` makes `takeBillPayment` send that id.
 - [ ] **Step 3: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/bill-pay-dialog.test.ts src/till-app-bill-payments.test.ts -t "reader and printer on a handheld|carrying readerId"` — FAIL.
@@ -830,14 +938,14 @@ Test `bill-pay-dialog.test.ts`, `bill-pay-dialog.a11y.test.ts`, `till-app-bill-p
   and confirmation.
 - [ ] **Step 6: Typecheck, format, commit** — `"Bill payment dialog: the folded reader and printer row; Cobrar names its reader (A796)"`.
 
-### Task 10: open the sheet from a handheld's bill
+### Task 11: open the sheet from a handheld's bill
 
 **Goal:** on a handheld, a bill that owes and is **open** shows one primary "Cobrar" button in place
 of `till-tender-pay`, the "pay the rest" button and the three part-payment buttons, in both branches
 of `#paySection` (`till-table-order-screen.ts:3461-3500`): the partly-paid amount lines and
 `#billChoices` (full invoice, receipt language, `:3506`) stay. It opens the dialog in handheld mode on
 "Toda la cuenta" (picture 2), and opening it reads the equipment again (§4, "proposed, whenever the
-sheet opens"). A **presented** bill keeps today's `till-tender-pay` until Task 13. Picks are Task 11's.
+sheet opens"). A **presented** bill keeps today's `till-tender-pay` until Task 15. Picks are Task 12's.
 
 **Risk triggers:** payments (the whole bill on a handheld now goes through the bill payment path,
 default 2). **Per-task review: yes.**
@@ -857,7 +965,7 @@ default 2). **Per-task review: yes.**
   with `{ way: "whole", lines: <PayLine[] as #payPart builds them> }` (`BillPayDetail`, `:383`).
 - `till-app` passes `.handheld=${this.handheldMode}`, `.tableName`, `.takesManualCard` (the
   `hand-keyed-card-payment` action), `.equipment=${this.deviceEquipment}`, `.canScan=${canScan()}`
-  (exported from `equipment-dialog.ts:64-66` in this task) and `.fixedReader` (Task 9).
+  (exported from `equipment-dialog.ts:64-66` in this task) and `.fixedReader` (Task 10).
 - `#openBillPaying` on a handheld also calls `#readEquipment()` (`:7916`), not awaited by the
   dialog's opening.
 
@@ -890,7 +998,7 @@ silent typed card):
   `src/screens/till-table-order-screen.test.ts` — PASS apart from the listed change.
 - [ ] **Step 6: Typecheck, format, commit** — `"Handheld: Cobrar opens the pay sheet on the whole bill (A796 default 2)"`.
 
-### Task 11: picks from the row, and charging waits for every equipment change
+### Task 12: picks from the row, and charging waits for every equipment change
 
 **Goal:** a pick from a drop-down goes through `till-app`'s existing equipment queue as a list pick;
 while it is out the sheet shows it as saving. Continuar and a card's Cobrar are held while **any**
@@ -905,10 +1013,13 @@ counts in `#equipmentWaiting` (`:2613`) (Review focus 5).
 `#switchEquipment` `:8171-8257`, `#renderBillPaying`). Test `till-app-handheld-pay.test.ts`.
 
 **Interfaces:**
-- `#equipmentWaiting` is a plain field, so a change to it does not redraw. Add
-  `@state() private equipmentInFlight = 0`, kept equal to `#equipmentWaiting` wherever that changes
-  (increment in `#onEquipmentChange`, decrement in `#switchEquipment`'s `finally`), and pass
-  `.equipmentBusy=${this.equipmentInFlight > 0}`.
+- `#equipmentWaiting` (`:2613`) is a plain field, so a change to it does not redraw. It changes in
+  three places: up in `#onEquipmentChange` (`:8162`), down in `#switchEquipment`'s early return for
+  a tap whose session has ended (`:8180`) and down in its `finally` (`:8253`); it is read at `:2268`
+  and `:7937`. Make it one reactive field instead of copying it: `@state() private equipmentWaiting = 0`,
+  replacing every use, and pass `.equipmentBusy=${this.equipmentWaiting > 0}`.
+- The same `equipmentBusy` also holds Check again in the lock view when the kept send is a reader
+  card (Task 2's `waiting`), as Cobrar is held.
 - `payEquipmentSaving: { role; id } | null` — the sheet's own latest pick, for the field's "saving"
   hint only (set before queueing, cleared when that pick ends). The hold is the count, not this.
 - `@pay-equipment-pick` → `#onEquipmentChange(new CustomEvent("equipment-change", { detail: { role, selection: { id }, via: "list", takeOver } }))`.
@@ -919,13 +1030,15 @@ counts in `#equipmentWaiting` (`:2613`) (Review focus 5).
   unanswered `[data-pay-continue]` is disabled and the field shows `pay_equipment.saving`; once
   answered the row shows the new reader and Continuar is enabled; two picks out at once, the first
   answered: still held until the second answers; an NFC tap still out (the `FakeNdefReader` from
-  `apps/till/test/equipment-nfc.ts`) holds Continuar too.
+  `apps/till/test/equipment-nfc.ts`) holds Continuar too; a tap queued, then a logout and a sign-in
+  again (the early-return path) leaves Continuar enabled; a reader card's Check again is held while
+  a pick is out.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-handheld-pay.test.ts -t "pick from the sheet"` — FAIL.
 - [ ] **Step 3: Implement.** **Step 4: Run** the file, `src/till-app.nfc.test.ts` and
   `src/widgets/equipment-dialog.test.ts` — PASS.
 - [ ] **Step 5: Typecheck, format, commit** — `"Handheld pay sheet: picks save through Equipment, and charging waits for every equipment change (A796)"`.
 
-### Task 12: a pick refused, or with no answer
+### Task 13: a pick refused, or with no answer
 
 **Goal:** default 22. A refused pick puts the field back to what the equipment read says and shows
 the refusal's message under that field. A pick with no answer re-reads the equipment (as
@@ -955,72 +1068,94 @@ dialog's own `equipmentError` handling is unchanged.
 - [ ] **Step 3: Implement.** **Step 4: Run** the file and `src/widgets/equipment-dialog.test.ts` — PASS.
 - [ ] **Step 5: Typecheck, format, commit** — `"Handheld pay sheet: a refused or unanswered pick shows under its field (A796 default 22)"`.
 
-### Task 13: the presented-bill sheet
+### Task 14: the presented-bill sheet element
 
-**Goal:** default 1, picture 11. On a handheld, a presented bill's pay section shows the same Cobrar
-button, which opens `till-presented-pay-dialog`: "Cuenta presentada" and its amount, the line "Esta
-cuenta ya está presentada: se cobra entera, en un solo pago.", the methods as in Task 8, the same
-row, the receipt guests field where today's tender asks for it, and the charge "Cobrar 62,40 € en
-Lector 2". A reader card goes to `POST /api/pay` with `{ id: <working order id>, lines: [], readerId, guests? }`
-(a placed order ignores `lines`, `apps/server/src/till-sale.ts:1136`; the body takes `guests`,
-`IntegratedPayRequest`, `till-sale.ts:543-573`); cash and Otro datáfono go to `collectOrder`, as
-`#onPayTab` does today (`till-app.ts:11871-11934`). No route changes; when the invoice is issued
-does not change (design default 1).
+**Goal:** default 1, picture 11. A new element, `till-presented-pay-dialog`, draws a presented
+bill's sheet: "Cuenta presentada" and its amount, the line "Esta cuenta ya está presentada: se cobra
+entera, en un solo pago.", the methods as in Task 9, the same row, the receipt guests field where
+today's tender asks for it, and the charge "Cobrar 62,40 € en Lector 2". It only shows and asks; no
+till wiring yet.
 
-**Risk triggers:** payments; fiscal invariants (the invoice path — unchanged, but a wrong route here
-would issue or settle it differently). **Per-task review: yes.**
+**Risk triggers:** payments (what the sheet asks to charge). **Per-task review: yes.**
 
 **Files:** Create `apps/till/src/widgets/presented-pay-dialog.ts`, `presented-pay-dialog.test.ts`,
-`presented-pay-dialog.a11y.test.ts`. Modify `apps/till/src/screens/till-table-order-screen.ts`,
-`apps/till/src/till-app.ts`, `apps/till/src/i18n/strings.ts`. Test `till-app-handheld-pay.test.ts`.
+`presented-pay-dialog.a11y.test.ts`. Modify `apps/till/src/i18n/strings.ts`.
 
 **Interfaces:**
 - `@customElement("till-presented-pay-dialog")`; properties `open`, `amount: string`, `tableName`,
   `takesCash`, `takesManualCard`, `cardOffered`, `asksGuests`, `receiptGuests`, the equipment
-  properties of Task 9 (`equipmentBusy` included); `busy`; `refusal: { code: string; field?: string } | null`.
+  properties of Task 10 (`equipmentBusy` included); `busy`; `refusal: { code: string; field?: string } | null`.
   Event `presented-pay`
   `{ method: "card"; readerId: string; guests?: number | null } | { method: "cash"; tendered: string; guests?: number | null } | { method: "manual"; externalRef?: string; guests?: number | null }`,
-  plus the row's events. It reuses `till-pay-equipment` and `pay-equipment.ts`.
-- Table screen: on `handheld` with a `placed` bill, `[data-pay-sheet]` dispatches `pay-presented`
-  `{ workingOrderId }`.
-- `till-app`: `#onPayPresented` opens it (passing `asksGuests = bill.invoiceType !== "F1"` and
-  `receiptGuests = defaultReceiptGuests(this.orderParty)`, as the screen does for its tender,
-  `till-table-order-screen.ts:3471-3478`); `#onPresentedPay` sends, keeping what `#onPayTab` does
-  around the send: `submitting`, `#flushPartyKitchenNote()` first (`:5627`), the visit, session and
-  active-tab checks, and its error mapping for cash and manual (`paidMeanwhile` →
-  `bill.pay_with_bill_payments` and a re-read; `isPermanentSaleRefusal` → `sale.refused`;
-  `isNetworkFailure` → `sale.unconfirmed`; `isTakePaymentRefusal`; `isPaymentInFlight`;
-  `settleRefusalOf`), shown in the dialog's `wt-form-actions`. A card goes through
-  `#withReaderPayment(true, () => this.api.pay({...}))` and maps the outcome as `#collectCard` does
-  (`:5174` onward: captured → done; declined, timeout, network → today's tender wording); a
-  `reader.not_held` refusal is Task 23's. A success shows the ticket as today (`#showTicket`) until
-  Task 20.
+  plus the row's events, and `presented-pay-close` `{}`. It reuses `till-pay-equipment` and
+  `pay-equipment.ts`, and the same Continuar/Cobrar holds as Task 10.
 
 **Strings:**
 - `presented_pay.balance`: en "Bill presented" / es "Cuenta presentada"
 - `presented_pay.whole_only`: en "This bill has already been presented: it is paid whole, in one payment." /
   es "Esta cuenta ya está presentada: se cobra entera, en un solo pago."
 
-- [ ] **Step 1: Failing element cases** in `presented-pay-dialog.test.ts`: no ways offered; the
-  amount and the line; Cobrar names the reader and emits `{ method: "card", readerId }`; cash needs
-  the tendered field; Otro datáfono emits `manual`; no reader + Tarjeta disables Cobrar; the guests
-  field shows with `asksGuests` and its value travels in the event.
-- [ ] **Step 2: Failing app cases** in `till-app-handheld-pay.test.ts`, describe
-  `"a presented bill on a handheld"`: card → one `api.pay` call with `lines: []`, the reader id and
-  the guests, no `takeBillPayment`; cash → `collectOrder` with the tender and guests; the party's
-  kitchen note is flushed before either; a declined card keeps the dialog open with today's decline
-  wording; a cash send refused as paid meanwhile shows `bill.pay_with_bill_payments` and re-reads the
-  bills.
-- [ ] **Step 3: Run** both files — FAIL. **Step 4: Implement.** **Step 5: Run** both, the a11y file
-  (two themes) and LOOK at 390 — PASS. Task 10's case "a presented bill still shows
-  `till-tender-pay`" is this task's spec change: it now expects `[data-pay-sheet]`.
+- [ ] **Step 1: Failing cases** in `presented-pay-dialog.test.ts`: no ways offered; the amount and
+  the line; Cobrar names the reader and emits `{ method: "card", readerId }`; cash needs the
+  tendered field; Otro datáfono emits `manual`; no reader + Tarjeta disables Cobrar; `equipmentBusy`
+  disables Cobrar for a card; the guests field shows with `asksGuests` and its value travels in the
+  event; a `refusal` shows in `wt-form-actions`, or under the field it names.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/widgets/presented-pay-dialog.test.ts` — FAIL.
+- [ ] **Step 3: Implement.** **Step 4: Run** it and the a11y file (two themes); LOOK at 390 and
+  1280 — PASS.
+- [ ] **Step 5: Typecheck, format, commit** — `"Till: the presented-bill pay sheet (A796 default 1)"`.
+
+### Task 15: pay a presented bill from the handheld
+
+**Goal:** on a handheld, a presented bill's pay section shows the same Cobrar button, which opens
+Task 14's sheet. A reader card goes to `POST /api/pay` with
+`{ id: <working order id>, lines: [], readerId, guests? }` (a placed order ignores `lines`,
+`apps/server/src/till-sale.ts:1136`; the body takes `guests`, `IntegratedPayRequest`,
+`till-sale.ts:543-573`); cash and Otro datáfono go to `collectOrder`, as `#onPayTab` does today
+(`till-app.ts:11871-11934`). No route changes; when the invoice is issued does not change (design
+default 1).
+
+**Risk triggers:** payments; fiscal invariants (the invoice path — unchanged, but a wrong route here
+would issue or settle it differently). **Per-task review: yes.**
+
+**Files:** Modify `apps/till/src/screens/till-table-order-screen.ts`, `apps/till/src/till-app.ts`.
+Test `till-app-handheld-pay.test.ts`, `till-table-order-screen.bill-payments.test.ts`.
+
+**Interfaces:**
+- Table screen: on `handheld` with a `placed` bill, `[data-pay-sheet]` dispatches `pay-presented`
+  `{ workingOrderId }`.
+- `till-app`: `#onPayPresented` opens it (passing `asksGuests = bill.invoiceType !== "F1"` and
+  `receiptGuests = defaultReceiptGuests(this.orderParty)`, as the screen does for its tender,
+  `till-table-order-screen.ts:3471-3478`), and reads the equipment again as Task 11 does.
+  `#onPresentedPay` sends, keeping what `#onPayTab` does around the send: `submitting`,
+  `#flushPartyKitchenNote()` first (`:5627`), the visit, session and active-tab checks, and its
+  error mapping for cash and manual (`paidMeanwhile` → `bill.pay_with_bill_payments` and a re-read;
+  `isPermanentSaleRefusal` → `sale.refused`; `isNetworkFailure` → `sale.unconfirmed`;
+  `isTakePaymentRefusal`; `isPaymentInFlight`; `settleRefusalOf`), shown as the sheet's `refusal`. A
+  card goes through `#withReaderPayment(true, () => this.api.pay({...}))` and maps the outcome as
+  `#collectCard` does (`:5174` onward: captured → done; declined, timeout, network → today's tender
+  wording); a `reader.not_held` refusal is Task 26's. A success shows the ticket as today
+  (`#showTicket`) until Task 23.
+
+- [ ] **Step 1: Failing app cases** in `till-app-handheld-pay.test.ts`, describe
+  `"a presented bill on a handheld"`: `[data-pay-sheet]` opens `till-presented-pay-dialog`; card →
+  one `api.pay` call with `lines: []`, the reader id and the guests, no `takeBillPayment`; cash →
+  `collectOrder` with the tender and guests; the party's kitchen note is flushed before either; a
+  declined card keeps the sheet open with today's decline wording; a cash send refused as paid
+  meanwhile shows `bill.pay_with_bill_payments` and re-reads the bills; a success shows the ticket.
+- [ ] **Step 2: Failing screen case**: with `handheld` and a placed bill, `[data-pay-sheet]` and no
+  `till-tender-pay`.
+- [ ] **Step 3: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-handheld-pay.test.ts src/screens/till-table-order-screen.bill-payments.test.ts -t "presented"` — FAIL.
+- [ ] **Step 4: Implement.** **Step 5: Run** both files and `src/till-app-bill-payments.test.ts` —
+  PASS. Task 11's case "a presented bill still shows `till-tender-pay`" is this task's spec change:
+  it now expects `[data-pay-sheet]`.
 - [ ] **Step 6: Typecheck, format, commit** — `"Handheld: a presented bill is paid whole from the pay sheet (A796 default 1)"`.
 
 ---
 
 ## Part 4 — stickers in the sheet (design slice 4, defaults 20 and 21)
 
-### Task 14: 📷 QR in the sheet, reading either kind of sticker
+### Task 16: 📷 QR in the sheet, reading either kind of sticker
 
 **Goal:** the row's QR opens today's camera inside the sheet, in place of the sheet's body, with
 "Volver" to go back (picture 12, left). In this use the camera accepts a reader's or a printer's
@@ -1061,7 +1196,7 @@ default 5). **Per-task review: yes.**
   `src/till-app.nfc.test.ts`, `src/widgets/equipment-dialog.test.ts` — PASS.
 - [ ] **Step 7: Typecheck, format, commit** — `"Handheld pay sheet: scan a reader's or printer's QR sticker without opening the row (A796 default 20)"`.
 
-### Task 15: a tap's notice shows inside the sheet
+### Task 17: a tap's notice shows inside the sheet
 
 **Goal:** while a pay sheet is open, the notice of a tap or a scan — "Has recogido {item}", its
 refusal, `equipment.no_printer_role`, a foreign sticker — shows as one line inside the sheet above
@@ -1100,7 +1235,7 @@ es "Has recogido {item} solo para justificantes de pago."
   both themes.
 - [ ] **Step 5: Typecheck, format, commit** — `"Handheld pay sheet: a sticker's notice shows inside the sheet (A796 default 20)"`.
 
-### Task 16: ask for NFC from the row
+### Task 18: ask for NFC from the row
 
 **Goal:** default 21. Where the browser has Web NFC and the permission is "prompt", an **NFC**
 button sits beside 📷 QR on the folded row and in the opened heading (pictures 4 and 12, right).
@@ -1142,7 +1277,7 @@ listener runs with **one** reader listening, the button goes, and the sheet's li
 
 ## Part 5 — waiting, uncertain, the next guest, the paid screen (design slice 5)
 
-### Task 17: the card at the table
+### Task 19: the card at the table
 
 **Goal:** picture 6. While the card is at the reader, the handheld sheet shows "Acerca o inserta la
 tarjeta…", "20,80 € en Lector 2" and "Esperando desde hace 0:12" (counting each second), naming the
@@ -1176,7 +1311,7 @@ ends and on disconnect).
   and the NFC file — PASS; LOOK at the waiting and declined views at 390, both themes.
 - [ ] **Step 6: Typecheck, format, commit** — `"Handheld pay sheet: the card at the table, and a retry on the reader in hand (A796)"`.
 
-### Task 18: Cobrar al siguiente
+### Task 20: Cobrar al siguiente
 
 **Goal:** default 10, picture 8 left. After a payment that leaves money owing, the handheld sheet
 shows "Pago cobrado." with "20,80 € con tarjeta en Lector 2" (for a reader card), the payments
@@ -1208,10 +1343,10 @@ again on the same way. The reader and printer stay as they were.
   `till-app-handheld-pay.test.ts` — PASS. LOOK at 390.
 - [ ] **Step 5: Typecheck, format, commit** — `"Handheld pay sheet: take the next guest's share (A796 default 10)"`.
 
-### Task 19: an uncertain card refreshes itself
+### Task 21: an uncertain card refreshes itself
 
 **Goal:** default 8, picture 7 left. While the handheld sheet shows **its own** pending card
-payment (the one this sheet sent, or the one Task 2's balance read found for its send), it says "Aún
+payment (the one this sheet sent, or the one Task 3's balance read found for its send), it says "Aún
 no sabemos si se ha cobrado" with "El lector no ha contestado. No cobres a este cliente de otra forma
 todavía: 20,80 € quedan reservados en la cuenta y esta pantalla se actualiza sola.", keeps today's
 last sentence about a manager, and re-reads the bill every 5 seconds until that payment is no longer
@@ -1254,54 +1389,30 @@ not:
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** the files — PASS; LOOK.
 - [ ] **Step 5: Typecheck, format, commit** — `"Handheld pay sheet: an uncertain card re-reads itself every 5 seconds (A796 default 8)"`.
 
-### Task 20: the paid screen, with Cerrar mesa
+### Task 22: the paid screen element
 
-**Goal:** defaults 11 and 12, picture 8 right. On a handheld, the payment that settles a bill whose
-invoice is **simplified** (bill path or presented path) shows `till-paid-view` instead of the
-ticket view: "✓ Mesa 4 pagada", "62,40 € en 3 pagos · factura simplificada emitida", the payments
-with their states, the ticket line, a primary **Cerrar mesa** and "Volver a la mesa". Paying never
-frees the table by itself. A **full** invoice keeps today's ticket view, whose original-print,
-handover and delivery steps are tied to it (`#refreshReceiptPrint`, `till-app.ts:7447-7461`;
-decision 9).
+**Goal:** defaults 11 and 12, picture 8 right. A new element, `till-paid-view`, draws "✓ Mesa 4
+pagada", "62,40 € en 3 pagos · factura simplificada emitida", the payments with their states, the
+ticket line, the print actions, a primary **Cerrar mesa** and "Volver a la mesa". It only shows and
+asks; Task 23 wires it.
 
-The paid screen is drawn from the state `#showTicket` already sets (`:12469-12487`:
-`ticketWorkingOrderId`, `originalReceiptAvailable`, `originalReceiptPrint`,
-`originalReceiptReadFailed`, `originalReceiptBusy`), so today's actions keep working:
-- **The original receipt where receipts print on request.** `originalReceiptAvailable` is true when
-  the invoice was issued now and `receiptPrintMode !== "auto"` (`:12483`); the paid screen then
-  offers today's "print the original" action (`print-receipt` → `#onPrintReceipt()`, `:7627`,
-  `api.printReceipt`, `POST /api/sales/:id/receipt`).
-- **The ticket line** reads `GET /api/sales/:id/receipt` (`api.getReceiptPrintStatus`) for a
-  simplified invoice too: today `#refreshReceiptPrint` reads it only for a full invoice (`:7449`), so
-  it widens to read it while the paid screen shows. It names no printer: `queued`, `printing`,
-  `done` → "Ticket enviado"; `failed` → "No se ha podido imprimir" with today's retry where
-  `canRetry` (`retry-receipt` → `#onPrintReceipt(true)`, whose retry today returns early unless the
-  invoice is full, `:7633-7639`, so it widens the same way; the server's retry route takes either
-  type, `apps/server/src/till-api.ts:2245-2267`); `not_queued` → "No se ha impreso ticket" and "Un
-  dispositivo cuyo perfil puede imprimir tickets puede reimprimirlo."; a failed read → today's
-  `invoice.print_status_failed`.
-- **Reimprimir** queues a copy (`reprint` → `#onReprint()`, `till-app.ts:13140`; the server's
-  `enqueueReceiptCopy`, `apps/server/src/transaction-receipt-api.ts:69`), shown where the profile
-  has `print-receipt` and the original is not on offer.
-
-**Risk triggers:** auth and permissions (Cerrar mesa needs `take-orders`, printing needs
-`print-receipt` — both existing routes). **Per-task review: yes.**
+**Risk triggers:** none in the element (display and events). **Per-task review: no.**
 
 **Files:** Create `apps/till/src/screens/till-paid-view.ts`, `till-paid-view.test.ts`,
-`till-paid-view.a11y.test.ts`. Modify `apps/till/src/till-app.ts` (`#onBillPaid` `:12173-12176`,
-`#onPresentedPay`, `#showTicket` `:12469-12487`, `#refreshReceiptPrint` `:7447`, `#onPrintReceipt`
-`:7627-7660`, the drill rendering, `#onFinishTable` `:11176`), `apps/till/src/i18n/strings.ts`. Test
-`till-app-handheld-pay.test.ts`.
+`till-paid-view.a11y.test.ts`. Modify `apps/till/src/i18n/strings.ts`.
 
 **Interfaces:**
 - `@customElement("till-paid-view")`; properties `tableName`, `total: string`,
-  `payments: BillPaymentView[]`, `receipt: OriginalReceiptPrint | null`, `receiptReadFailed`,
-  `originalAvailable`, `canPrint` (the `print-receipt` action), `busy`. Events: `finish-table` `{}`
-  (the name the table screen sends, handled by `#onFinishTable`), `back-to-table` `{}`,
-  `print-receipt` `{}`, `retry-receipt` `{}`, `reprint` `{}` — the names `till-ticket-view` sends,
-  so `till-app`'s existing handlers take them (`:13139-13152`).
-- `till-app`: on a handheld with a simplified invoice, `#showTicket` pushes `{ kind: "paid" }` in
-  place of `{ kind: "ticket" }`; everything else it sets is unchanged.
+  `payments: BillPaymentView[]`, `receipt: OriginalReceiptPrint | null` (null while reading),
+  `receiptReadFailed`, `originalAvailable`, `canPrint` (the `print-receipt` action), `busy`.
+- Events: `finish-table` `{}` (the name the table screen sends, handled by `#onFinishTable`),
+  `back-to-table` `{}`, `print-receipt` `{}`, `retry-receipt` `{}`, `reprint` `{}` — the names
+  `till-ticket-view` sends, so `till-app`'s existing handlers take them (`till-app.ts:13139-13152`).
+- The ticket line names no printer (the status route returns none; design default 12): `queued`,
+  `printing`, `done` → "Ticket enviado"; `failed` → "No se ha podido imprimir", with Retry where
+  `canRetry`; `not_queued` → "No se ha impreso ticket" and the reprint hint; `receiptReadFailed` →
+  today's `invoice.print_status_failed`. The original-print action shows with `originalAvailable`;
+  Reimprimir (a copy) shows otherwise, only with `canPrint`.
 
 **Strings:**
 - `paid.title`: en "{table} paid" / es "{table} pagada"
@@ -1315,33 +1426,75 @@ The paid screen is drawn from the state `#showTicket` already sets (`:12469-1248
 - Reuse `table.finish` ("Cerrar mesa"), `action.reprint` ("Reimprimir"), `bill_pay.payment`, and
   the original-print label the ticket view uses (`invoice.print_original` / `action.print_receipt`).
 
-- [ ] **Step 1: Failing element cases**: each receipt status gives its line; retry shows only with
-  `canRetry`; the original-print action shows with `originalAvailable`, Reimprimir otherwise and
-  only with `canPrint`; buttons emit their events.
-- [ ] **Step 2: Failing app cases**: the third share's answer with a simplified invoice shows
+- [ ] **Step 1: Failing cases** in `till-paid-view.test.ts`: each receipt status gives its line;
+  retry shows only with `canRetry`; the original-print action shows with `originalAvailable`,
+  Reimprimir otherwise and only with `canPrint`; three payments list with their states; buttons emit
+  their events.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/screens/till-paid-view.test.ts` — FAIL.
+- [ ] **Step 3: Implement.** **Step 4: Run** it and the a11y file (two themes); LOOK at 390 and
+  1280 — PASS.
+- [ ] **Step 5: Typecheck, format, commit** — `"Till: the paid screen (A796 defaults 11, 12)"`.
+
+### Task 23: show the paid screen on a handheld
+
+**Goal:** on a handheld, the payment that settles a bill whose invoice is **simplified** (bill path
+or presented path) shows `till-paid-view` instead of the ticket view. Paying never frees the table
+by itself; Cerrar mesa does. A **full** invoice keeps today's ticket view, whose original-print,
+handover and delivery steps are tied to it (`#refreshReceiptPrint`, `till-app.ts:7447-7461`;
+decision 9).
+
+The paid screen is drawn from the state `#showTicket` already sets (`:12469-12487`:
+`ticketWorkingOrderId`, `originalReceiptAvailable`, `originalReceiptPrint`,
+`originalReceiptReadFailed`, `originalReceiptBusy`), so today's actions keep working:
+- **The original receipt where receipts print on request.** `originalReceiptAvailable` is true when
+  the invoice was issued now and `receiptPrintMode !== "auto"` (`:12483`); the paid screen then
+  offers today's "print the original" action (`print-receipt` → `#onPrintReceipt()`, `:7627`,
+  `api.printReceipt`, `POST /api/sales/:id/receipt`).
+- **The ticket line** reads `GET /api/sales/:id/receipt` (`api.getReceiptPrintStatus`) for a
+  simplified invoice too: today `#refreshReceiptPrint` reads it only for a full invoice (`:7449`), so
+  it widens to read it while the paid screen shows. Retry (`retry-receipt` →
+  `#onPrintReceipt(true)`) today returns early unless the invoice is full (`:7633-7639`), so it
+  widens the same way; the server's retry route takes either type
+  (`apps/server/src/till-api.ts:2245-2267`).
+- **Reimprimir** queues a copy (`reprint` → `#onReprint()`, `till-app.ts:13140`; the server's
+  `enqueueReceiptCopy`, `apps/server/src/transaction-receipt-api.ts:69`).
+
+**Risk triggers:** auth and permissions (Cerrar mesa needs `take-orders`, printing needs
+`print-receipt` — both existing routes). **Per-task review: yes.**
+
+**Files:** Modify `apps/till/src/till-app.ts` (`#onBillPaid` `:12173-12176`, `#onPresentedPay`,
+`#showTicket` `:12469-12487`, `#refreshReceiptPrint` `:7447`, `#onPrintReceipt` `:7627-7660`, the
+drill rendering, `#onFinishTable` `:11176`). Test `till-app-handheld-pay.test.ts`.
+
+**Interfaces:** on a handheld with a simplified invoice, `#showTicket` pushes `{ kind: "paid" }` in
+place of `{ kind: "ticket" }`; everything else it sets is unchanged. `back-to-table` pops that
+drill.
+
+- [ ] **Step 1: Failing app cases**: the third share's answer with a simplified invoice shows
   `till-paid-view`, not `till-ticket-view`, with three payments; one `getReceiptPrintStatus` call;
   with `receiptPrintMode` "on_request" the original-print action calls `printReceipt` once; a failed
   print's retry calls `retryReceipt`; Cerrar mesa calls `finishTable` once; Volver a la mesa returns
-  to the order (spy on `history.pushState`/`replaceState`, not `history.length`); a full invoice on a
-  handheld still shows `till-ticket-view`; on a counter till the ticket view still shows (cite the
-  existing case).
-- [ ] **Step 3: Run** — FAIL. **Step 4: Implement.** **Step 5: Run** the new files,
-  `till-app-handheld-pay.test.ts`, `till-app-bill-payments.test.ts` and the ticket view's tests —
-  PASS; a11y and LOOK at 390 and 1280, both themes.
-- [ ] **Step 6: Typecheck, format, commit** — `"Handheld: a short paid screen with Cerrar mesa and the ticket line (A796 defaults 11, 12)"`.
+  to the order (spy on `history.pushState`/`replaceState`, not `history.length`); the presented path
+  (Task 15) shows it too; a full invoice on a handheld still shows `till-ticket-view`; on a counter
+  till the ticket view still shows (cite the existing case).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-handheld-pay.test.ts -t "paid screen"` — FAIL.
+- [ ] **Step 3: Implement.** **Step 4: Run** `till-app-handheld-pay.test.ts`,
+  `till-app-bill-payments.test.ts` and the ticket view's tests (`src/screens/till-ticket-view*.test.ts`)
+  — PASS.
+- [ ] **Step 5: Typecheck, format, commit** — `"Handheld: the paid screen replaces the ticket view for a simplified invoice (A796 defaults 11, 12)"`.
 
 ---
 
 ## Part 6 — first use, and a reader or printer that has gone (design slice 6, defaults 18 and 19)
 
-### Task 21: the first payment on a phone with no reader
+### Task 24: the first payment on a phone with no reader
 
 **Goal:** default 18, picture 4. A phone with no reader it can charge opens the row with the reader
-empty (already so from Tasks 6 and 9; the placeholder is Task 7's). New: when the phone has had no
+empty (already so from Tasks 7 and 10; the placeholder is Task 8's). New: when the phone has had no
 reader this page session, the equipment read offers exactly one reader for the card-reader role,
 and that reader has no `heldBy` and is not `busy`, the sheet picks it up as it opens — the same
 request as a list pick (`via: "list"`, `takeOver: false`) — and the row stays closed naming it. A
-refused or unanswered automatic pick leaves the left-hand form with Task 12's message.
+refused or unanswered automatic pick leaves the left-hand form with Task 13's message.
 
 **Risk triggers:** payments (the phone takes a reader by itself). **Per-task review: yes.**
 
@@ -1355,8 +1508,8 @@ refused or unanswered automatic pick leaves the left-hand form with Task 12's me
 - `till-app`: `#hadReader = false` — set true whenever a held read's `card_terminal` resolves a
   reader, and after any accepted reader pick; never stored, never reset by logout (it describes the
   page, not the person). `#autoPickedFor: number | null` — the sheet opening it was sent for.
-- The automatic pick is sent once the sheet's opening re-read (Task 10) answers, at most once per
-  opening, and not while any equipment change is out (`equipmentInFlight > 0`, Task 11).
+- The automatic pick is sent once the sheet's opening re-read (Task 11) answers, at most once per
+  opening, and not while any equipment change is out (`equipmentWaiting > 0`, Task 12).
 
 - [ ] **Step 1: Failing unit cases** for `autoPickReader`: one free reader and no history → its id;
   `hadReader` → null; two readers → null; one held elsewhere or busy → null; the phone already has
@@ -1369,7 +1522,7 @@ refused or unanswered automatic pick leaves the left-hand form with Task 12's me
 - [ ] **Step 3: Run** — FAIL. **Step 4: Implement.** **Step 5: Run** both files — PASS.
 - [ ] **Step 6: Typecheck, format, commit** — `"Handheld pay sheet: a phone's first payment picks the one free reader (A796 default 18)"`.
 
-### Task 22: a reader that has gone
+### Task 25: a reader that has gone
 
 **Goal:** default 19, picture 5 left. When the row opens because the reader is not ready, one line
 says why, where the phone knows:
@@ -1404,7 +1557,7 @@ not memory.
   left's state at 390.
 - [ ] **Step 5: Typecheck, format, commit** — `"Handheld pay sheet: say why the reader has gone (A796 default 19)"`.
 
-### Task 23: a reader refused at Cobrar, and a printer that has gone
+### Task 26: a reader refused at Cobrar, and a printer that has gone
 
 **Goal:** default 19 and §4. (a) On a handheld, a **first** send of a card refused `reader.not_held`
 (the phone lost the reader before it learned) — on the bill path or the presented path — shows,
@@ -1412,14 +1565,14 @@ under the reader field, "Este teléfono ya no tiene ese lector de tarjetas. Elig
 tienes en la mano. No se ha cobrado ninguna tarjeta.", re-reads the equipment, and the row opens with
 the reader empty (Review focus 1). The claim "nothing was charged" holds there because the server
 refuses before recording (Task 1's reading); a refusal that answers a Check again never shows it
-(Task 2). `reader.not_held`'s general message stays for counter tills (decision 8). (b) The printer
+(Task 3). `reader.not_held`'s general message stays for counter tills (decision 8). (b) The printer
 states of picture 5: a switched-off printer (chosen or default) opens the row with the printer field
 empty and "Barra está desactivada: si no eliges otra, no se imprimirá el ticket", Continuar enabled;
 receipt printers listed but none resolving opens it with "Sin impresora de tickets: si no eliges
 una, no se imprimirá el ticket"; a printer the server forgot (deleted, off the list, marked
-portable) falls back to the profile's default, row closed, "(predeterminada)" — already Task 7's
+portable) falls back to the profile's default, row closed, "(predeterminada)" — already Task 8's
 summary; no receipt printer here reads "sin ticket", row closed. The paid screen then says "No se ha
-impreso ticket" from the `not_queued` status (Task 20).
+impreso ticket" from the `not_queued` status (Task 23).
 
 **Risk triggers:** payments (refusal handling on the charge). **Per-task review: yes.**
 
@@ -1439,7 +1592,9 @@ and `presented-pay-dialog.ts` (refusal → field), `apps/till/src/till-app.ts` (
 - [ ] **Step 1: Failing cases**: (Review focus 1) on the confirmation step `takeBillPayment` rejects
   `{ code: "reader.not_held", status: 409 }` on a first send → the reader field shows
   `bill_pay.reader_not_held`, one more `getDeviceEquipment` is sent, the row is open with the reader
-  empty, and that request was the only one; the same on the presented path through `api.pay`; each
+  empty, and that request was the only one; (review 2's C1) when a first attempt failed with a
+  network failure and its automatic retry was refused `reader.not_held`, the not-charged wording
+  shows nowhere and the lock shows instead; the same on the presented path through `api.pay`; each
   printer state's row and warning, with Continuar enabled and the payment sent.
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** the files — PASS; LOOK at
   picture 5's middle and right states at 390, both themes.
@@ -1449,7 +1604,7 @@ and `presented-pay-dialog.ts` (refusal → field), `apps/till/src/till-app.ts` (
 
 ## Part 7 — documentation and the backlog
 
-### Task 24: docs and backlog
+### Task 27: docs and backlog
 
 **Risk triggers:** none. **Per-task review: no.** Docs-only commit on this branch.
 
@@ -1457,15 +1612,15 @@ and `presented-pay-dialog.ts` (refusal → field), `apps/till/src/till-app.ts` (
 `docs/superpowers/specs/2026-10-19-a796-handheld-payments-design.md` (status line only).
 
 - [ ] **Step 1: `docs/backlog.md`.** Delete the entry "The next identical bill payment can be
-  answered with an unanswered one" (fixed by Tasks 1–2). Rewrite "Slice 2 — the handheld NFC/QR link
+  answered with an unanswered one" (fixed by Tasks 1–3). Rewrite "Slice 2 — the handheld NFC/QR link
   … (A796)" to what is left, each as its own short entry in _Payments and card readers_:
   restoring `stripe_on_device` (Tap-to-Pay), waiting for the native-app decision (N1/N2);
   "Name the printer on the paid screen's ticket line" (default 12: the route would have to return
   the print job's printer, `readOriginalReceiptPrints`, `apps/server/src/receipt-print.ts:437-453`);
   "Check paying at the table on the OnePlus 13 at the box's address" (a reader card, a QR scan and
   an NFC tap from the sheet, the NFC button's permission ask; browser tests use fakes); "A user
-  guide for the till's payment sheet" (no till guide exists yet); "A bill payment recorded after the
-  phone read it as not recorded" (Task 1's known limit, in one line). Add any point a task's
+  guide for the till's payment sheet" (no till guide exists yet); "A different retake after a
+  payment the phone read as not on the bill" (Task 1's known limit, in one line). Add any point a task's
   handover left open. Keep the W102 loose ends as they are.
 - [ ] **Step 2: `docs/backlog/payments.md`** "Slice 2" section: a dated line (the landing date)
   saying the handheld payment flow landed as A796, pointing at the PR.
@@ -1483,9 +1638,10 @@ and `presented-pay-dialog.ts` (refusal → field), `apps/till/src/till-app.ts` (
 
 ## Execution notes
 
-- Order: Parts 1 → 7, tasks in order. Tasks 1–5 do not depend on each other except Task 2 on
-  Task 1 and Task 3 on Task 2's dialog; Tasks 6–23 depend on their predecessors' interfaces.
-- After Task 23, run `/finish-branch` with this plan named; the full review wave runs (risk
+- Order: Parts 1 → 7, tasks in order. Task 2 and Task 3 depend on Task 1, Task 3 on Task 2, and
+  Task 4 on Task 3's dialog; Tasks 5 and 6 stand alone; Tasks 7–26 depend on their predecessors'
+  interfaces.
+- After Task 26, run `/finish-branch` with this plan named; the full review wave runs (risk
   triggers: payments, auth and permissions, a cross-package write, concurrency), with the two Codex
   reviews. The PR description lists every test edited under a task's "Tests the spec changes",
   every fixture move or addition, and "Decisions to name in the PR description".
