@@ -1563,6 +1563,12 @@ Its weighed-dish cases cover both languages at 390 and 1280 px. They retain the 
 `0.375` while showing `0,375` in Spanish. These are component
 checks, not a server polling or physical-till trial.
 
+New order's editable and read-only row labels and the basket's measured quantities use the
+screen's decimal mark. `till-table-order-screen.new-order-quantities.test.ts` checks English and
+Spanish rows at 390 and 1280 px, unit names containing punctuation, unnamed units and retained
+trailing zeros. Its native selected Fire checks still emit `0.375` when Spanish shows `0,375`;
+names and notes keep their punctuation. These component checks do not exercise server persistence.
+
 Choosing Keep in an unavailable dish's line window survives a refresh of that saved line in the
 open screen. The warning stays and the dish still cannot be sent. A different draft, bill, store
 or editor, a different warning, a removed line or a cleared warning ends that choice.
@@ -2201,9 +2207,6 @@ The remaining work includes:
   till trial and final whole-branch validation and review before publication. Read the campaign's
   local checkpoint ledger for exact remaining checks and receipts; do not treat earlier focused
   checks as whole-item acceptance.
-- The last-added acceptance captures show Spanish New order's selection heading and basket
-  quantity still reading `0.375`, while the strip reads `0,375`. Include those rows in the
-  remaining quantity-display acceptance; the strip's check does not cover them.
 
 The approved [courses/groups spec](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md)
 and [one-editor-per-bill amendment](../superpowers/specs/2026-10-17-a773-one-editor-design.md)

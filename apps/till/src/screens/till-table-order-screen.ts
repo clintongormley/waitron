@@ -3343,6 +3343,7 @@ export class TillTableOrderScreen extends LitElement {
       scope === this.#draftArrangementScope() &&
       api === this.api;
     const name = lineProductName(line.product);
+    const quantity = formatDecimalInput(this.#displayQty(line.quantity), currentLocale());
     const selected = this.#selected.has(line);
     const family = store.splitFamily(line);
     const splits =
@@ -3357,7 +3358,7 @@ export class TillTableOrderScreen extends LitElement {
     ];
     if (store.editsLocked)
       return html`<span slot=${`lead-${index}`} class="draft-line-name"
-        >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
+        >${name}${this.#nutrition(line)} ×${quantity}</span
       >`;
     return html`${
         family?.[0] === line
@@ -3393,9 +3394,7 @@ export class TillTableOrderScreen extends LitElement {
         }}
       >
         <span aria-hidden="true">${selected ? "☑" : "☐"}</span>
-        <span class="draft-line-name"
-          >${name}${this.#nutrition(line)} ×${this.#displayQty(line.quantity)}</span
-        >
+        <span class="draft-line-name">${name}${this.#nutrition(line)} ×${quantity}</span>
       </button>
       ${
         splits

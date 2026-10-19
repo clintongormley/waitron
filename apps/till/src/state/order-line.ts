@@ -13,6 +13,8 @@ import { sellingValuesOf, type SaleLine, type TillProduct } from "../api/client.
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { productUnit, soldByTheUnit, unitName } from "../widgets/product-name.js";
+import { formatDecimalInput } from "@waitron/ui";
+import { currentLocale } from "../i18n/t.js";
 
 type PricedPick = Pick<SelectedExtra, "price" | "quantity">;
 
@@ -102,7 +104,8 @@ export function displayQuantity(product: TillProduct, quantity: string): string 
 
 export function quantityLabel(line: OrderLine): string {
   const unit = unitName(line.product);
-  return unit === "" ? line.quantity : `${line.quantity} ${unit}`;
+  const quantity = formatDecimalInput(line.quantity, currentLocale());
+  return unit === "" ? quantity : `${quantity} ${unit}`;
 }
 
 /** The decimal places a quantity uses, trailing zeros aside. */
