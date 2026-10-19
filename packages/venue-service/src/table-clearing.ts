@@ -12,6 +12,8 @@ export async function readTablesNeedingClearing(
     .select({ id: diningTables.id })
     .from(diningTables)
     .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, diningTables.zoneId))
+    // Not filtered on departments.active, unlike listNeedsClearingDepartmentIds:
+    // plan 2026-10-19-a757-1, Decision 3.
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
     .where(and(inArray(diningTables.id, [...tableIds]), eq(departments.needsClearing, true)));
   return new Set(rows.map((row) => row.id));
