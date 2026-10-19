@@ -645,9 +645,8 @@ export class DepartmentSettings extends LitElement {
           committed.transfers = copy(this.baseline!).transfers;
         if (!this.showsTransfers) delete committed.transfers;
         this.baseline = committed;
-        // A model that is not the saved list with ids filled in is treated as older than this save
-        // and recorded as seen, so neither path takes it back. A later save by another manager
-        // delivered during the send is treated the same way.
+        // The copy held now, unless it is the saved list with ids filled in, is recorded as seen
+        // and not taken back; an older copy arriving after this answer is still followed.
         const steps = this.modelSteps(id);
         if (submitted.serviceSteps && !withSavedIds(committed.serviceSteps, steps))
           this.source = { ...this.source!, serviceSteps: steps };
@@ -864,7 +863,7 @@ export class DepartmentSettings extends LitElement {
               .courses=${this.model!.courses}
               .errors=${this.shownStepErrors}
               .listError=${errors.serviceSteps ?? ""}
-              ?disabled=${disabled}
+              ?disabled=${disabled || this.refreshing}
               @steps-change=${(e: CustomEvent<{ steps: ServiceStepDraft[] }>) => {
                 e.stopPropagation();
                 this.stepsChanged(e.detail.steps);
