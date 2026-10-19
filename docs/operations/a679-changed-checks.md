@@ -3041,3 +3041,45 @@ input snapshot produces three intended malformed-input assertion failures; resto
 all eight public-dispatch cases. The earlier export and native-reader controls remain valid for
 their unchanged assertions. Whole-range prose/current-main reconciliation, fiscal coverage, both
 final installed reviews, normal push hook/current-head CI and authorised landing remain open.
+
+## Public recovery and retained-evidence qualification, 2026-10-19
+
+This extension adds 97 cases and changes no earlier assertion or fixture. The original bytes
+of each extended test file remain its exact prefix. The protected write-path and immutability
+test files remain unchanged from `58286f8fa52e571e5c9940a29a934854f2090221`.
+
+| File | Added checks |
+| --- | --- |
+| `hosted-hour-recovery.test.ts` | 42 cases exercise the public operation export with the real clock and selection code: restore/re-registration/promotion authority, complete series, retained waits, manual confirmation invalidation, committed replay, malformed proposals, country/isolation refusals, reported floors, bounded confirmations and revocation around host/network awaits. The host supplies an opaque in-memory journal; no provisioning dependency is added. |
+| `initial-hour-setup.test.ts` | Eight appended cases cover terminal resume/cancellation, altered requests, malformed previews, renewed ownership with the same retained hour and exact public document binding. |
+| `setup/first-hour.browser.test.ts` | 23 appended Chromium cases cover malformed challenges/comparisons/selections/waits, retry after refusal, absent numeric countdowns and late failures after disconnection. |
+| `register-history.test.ts` | 24 appended cases cover malformed retained revisions/checkpoints/originals, signed authority mismatches and conflicting independently retained heads, with a matching-head control. |
+
+Authority is the approved hour-code plan's Tasks 7, 9, 10 and 12, including preservation of
+historical evidence and meaningful omission controls. No product behavior, permission,
+recorded fiscal identity, money, SQL, schema, migration or coverage setting changes.
+
+The complete command `pnpm --filter @waitron/fiscal-verifactu test:coverage` passes all 3,413
+tests in 155 files, then exits 1 solely for statement coverage: 6,425/6,637 (96.80%). Branches
+are 6,089/6,386 (95.34%), functions 1,325/1,337 (99.10%) and lines 5,813/5,906 (98.42%). Hosted
+recovery measures all 72 statements, 50 branches, 17 functions and 67 lines. Package types,
+scoped lint, explicit TypeScript formatting and whitespace checks pass.
+
+An independent checkout with its own frozen dependency installation runs the four complete
+suites successfully: 42, 79, 55 and 39 cases. Nineteen serial omissions fail their intended
+checks and every restored selection passes. Restored name-filtered runs deliberately skip the
+unselected cases; their counts are not complete-suite counts. The final comparison finds no
+differences across 6,901 tracked/new candidate paths, and the owned candidate and parent are
+removed after the visible current-directory holder check returns empty.
+
+Retained unsuccessful experiments are not product-defect receipts: the first new series
+expectation used the wrong order; the first owner-resume fixture omitted its continuation key;
+the first resume-authority omission was caught later and did not check suppression of network
+activity; the first reported-floor omission supplied an invalid empty list instead of omitting
+the floor; and one checkpoint-control selector matched two source locations. The corrected
+authority case checks that no network call happens after revocation, the corrected floor
+control observes wrongful selection, and the checkpoint control targets its exact condition.
+
+Statement coverage, whole-range prose/current-main integration, both installed whole-branch
+reviews, the normal push hook/current-head CI and landing remain open. This test-only extension
+does not repeat the unchanged visual matrix or claim a complete installed wizard journey.

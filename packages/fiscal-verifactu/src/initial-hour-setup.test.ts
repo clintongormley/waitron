@@ -643,3 +643,106 @@ it.each(["standard", "rectificative", "unknown"])(
     );
   },
 );
+
+it.each(["yes", "no"])(
+  "terminal resume with clock answer %s never selects a replacement hour",
+  async (answer) => {
+    const f = configured();
+    const t = terminal(f, [answer]);
+    expect(await f.seat.commandResume!(fixture(), t.actions)).toEqual(
+      answer === "yes" ? { status: "ready", input } : { status: "cancelled" },
+    );
+    expect(t.prompts).toEqual(["The box's displayed date and time are correct? [y/N]: "]);
+    expect(f.history).toEqual([]);
+  },
+);
+
+it("terminal resume refuses an altered retained request before comparing clocks", async () => {
+  const f = configured();
+  const t = terminal(f, ["yes"]);
+  const saved = fixture();
+  saved.request.identity = "06RC";
+  await expect(f.seat.commandResume!(saved, t.actions)).rejects.toMatchObject(refusal);
+  expect(t.output).toEqual([]);
+  expect(t.prompts).toEqual([]);
+  expect(f.history).toEqual([]);
+});
+
+it.each([null, { status: "other", answer: "no" }, { status: "preview", answer: "other" }])(
+  "terminal refuses malformed preview %j before requesting an allocation",
+  async (preview) => {
+    const f = configured();
+    const t = terminal(f, ["yes", "no"]);
+    await expect(
+      f.seat.command!(context, {
+        ...t.actions,
+        prepare: async (proposal) =>
+          (proposal as { action: string }).action === "selection"
+            ? preview
+            : t.actions.prepare(proposal),
+      }),
+    ).rejects.toMatchObject(refusal);
+    expect(f.history).toEqual([]);
+    expect(t.prompts).toEqual(["The box's displayed date and time are correct? [y/N]: "]);
+  },
+);
+
+it("resumes an authenticated retained setup without spending another hour", async () => {
+  const f = configured();
+  const read = f.host.readSetupFacts!;
+  let contextKey = "original-owner";
+  f.host.readSetupFacts = async (binding) => ({
+    ...(await read(binding)),
+    contextKey,
+    continuationKey: "retained-attempt",
+  });
+  await f.clock();
+  const saved = await f.select();
+  const before = structuredClone(f.history);
+  contextKey = "reauthenticated-owner";
+  await f.clock();
+  await f.seat.resume!({ ...context, request: saved }, input, "a".repeat(64));
+  expect(f.history).toHaveLength(before.length + 1);
+  expect(f.history[0]).toEqual(before[0]);
+  const operations = FISCAL_OPERATIONS.configure!(f.host);
+  expect(
+    await withOperationAuthority(context.binding, context.administratorId, (authority) =>
+      operations.prepare({ binding: context.binding, authority, input }, async () => "resumed"),
+    ),
+  ).toBe("resumed");
+});
+
+it("binds an exact public recovery statement to its staged node and frozen setup", () => {
+  const f = configured();
+  const saved = fixture();
+  const statement = {
+    kind: "waitron-recovery-document",
+    version: 1,
+    installationCodes: ["06RB"],
+    scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
+    taxpayerName: "Olivo",
+    venueName: "Centro",
+    createdAt: "2026-10-16T11:40:00.000Z",
+    nodeKey: { nodeId: "node", name: "key" },
+  };
+  const document = {
+    statement,
+    stage: { nodeId: "node", name: "key" },
+    identity: { taxpayerName: "Olivo", venueName: "Centro" },
+  } as Parameters<NonNullable<typeof f.seat.recoveryDocument>>[2];
+  expect(f.seat.recoveryDocument!(saved, f.seat.inspect(saved, input), document)).toEqual(
+    statement,
+  );
+  expect(() =>
+    f.seat.recoveryDocument!(saved, f.seat.inspect(saved, input), {
+      ...document,
+      statement: null,
+    }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "outside_confirmation_missing" },
+    }),
+  );
+  expect(f.history).toEqual([]);
+});

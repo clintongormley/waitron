@@ -249,11 +249,22 @@ The earlier plan's Tasks 9–12 are superseded; completed components need qualif
 The owner views real generated EN/ES PDFs through Drive; the driver tests entry of
 rendered keys. Earlier register and physical-check instructions below are historical
 where superseded. Provisioning package coverage is qualified. Production protocol entry points
-are retired and all 3,316 fiscal cases pass, but fiscal package coverage remains below its
-unchanged bars. Whole-range prose/current-main integration, both installed reviews and
+are retired and all 3,413 fiscal cases pass, but fiscal statement coverage remains below its
+unchanged bar. Whole-range prose/current-main integration, both installed reviews and
 current-head CI remain. The owner approved the generated PDF and exact retained CLI-launch
 patch on 19 October; the byte-identical applied patch passes all three launch cases. Allocated adoption remains pending venue-copy support;
 A679 does not add a promotion browser screen.
+
+**Public-boundary qualification, 2026-10-19:** 97 added cases cover hosted recovery and
+promotion, revoked authority around host/network waits, clock confirmation, retained waits,
+terminal resume, recovery-document binding, malformed browser results and retained signed
+history. Existing test bodies and fixtures remain byte-identical. Nineteen independently
+installed omissions fail their intended checks and pass after restoration. The complete fiscal
+suite passes 3,413 cases; coverage is statements 96.80%, branches 95.34%, functions 99.10% and
+lines 98.42%. Hosted recovery reaches 100% in each measure. Only the statement bar still fails;
+the remaining inventory begins with historical initial setup, custody state, the first-hour
+screen and register reading. No product, schema, migration, threshold or exclusion changes.
+See the [changed-check inventory](../operations/a679-changed-checks.md#public-recovery-and-retained-evidence-qualification-2026-10-19).
 
 **Qualification update, 2026-10-19:** the full provisioning suite passes 1,469 cases in 73 files
 with statements 98.09%, branches 96.76%, functions 98.70% and lines 99.07%, meeting the unchanged

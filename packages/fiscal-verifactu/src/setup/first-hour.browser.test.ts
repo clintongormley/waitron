@@ -457,3 +457,115 @@ it("a displayed countdown reaching zero never imports an hour without the server
   expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
   expect(calls.filter((c) => c.action === "input")).toEqual([]);
 });
+
+it.each([null, [], { id: 1 }])(
+  "refuses malformed challenge %j before comparison or hour selection",
+  async (challenge) => {
+    const { el, calls } = await mount({ prepare: async () => challenge });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+        "true",
+      ),
+    );
+    expect(button(el, "select").disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).toBeNull();
+    expect(calls.map((call) => call.value)).toEqual([{ action: "clock-challenge" }]);
+  },
+);
+
+it.each([
+  null,
+  { id: 1, clock },
+  { id: "comparison", clock: null },
+  { id: "comparison", clock: { ...clock, usable: {} } },
+  { id: "comparison", clock: { ...clock, unavailable: {} } },
+])("refuses malformed comparison %j before hour selection", async (compared) => {
+  const { el, calls } = await mount({
+    prepare: async (proposal) =>
+      (proposal as { action: string }).action === "clock-challenge"
+        ? { id: "challenge" }
+        : compared,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+      "true",
+    ),
+  );
+  expect(button(el, "select").disabled).toBe(true);
+  expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).toBeNull();
+  expect(calls.some((call) => call.action === "candidates" || call.action === "input")).toBe(false);
+});
+
+it.each([
+  null,
+  { status: "other" },
+  { ...selected, kind: "legacy" },
+  { ...selected, identity: "S000001" },
+  { ...selected, input: null },
+  { ...selected, input: { allocation: [] } },
+  { ...selected, input: { allocation: { installationIdentity: "06TJ", series: [] } } },
+  { ...selected, input: { allocation: { installationIdentity: "06TH", series: {} } } },
+  { status: "waiting", targetMs: instant + 0.5, remainingMs: 1000 },
+  { status: "waiting", targetMs: instant, remainingMs: -1 },
+  { status: "waiting", targetMs: instant, remainingMs: Infinity },
+  { status: "waiting", targetMs: instant, remainingMs: "1000" },
+])("refuses malformed hour result %j without importing it and permits retry", async (result) => {
+  const { el, calls } = await mount({ select: async () => result });
+  await ready(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+      "true",
+    ),
+  );
+  expect(calls.filter((call) => call.action === "input")).toEqual([]);
+  expect(
+    el.shadowRoot!.querySelector("[data-test=selected-hour], [data-test=hour-wait]"),
+  ).toBeNull();
+  expect(button(el, "select").disabled).toBe(false);
+});
+
+it("shows a server wait requiring fresh clocks without inventing a numeric countdown", async () => {
+  const { el, calls } = await mount({
+    select: async () => ({ status: "waiting", targetMs: instant + 1800000, remainingMs: null }),
+  });
+  await ready(el, "unknown");
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=hour-wait]")).not.toBeNull(),
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+  expect(calls.filter((call) => call.action === "input")).toEqual([]);
+});
+
+it.each(["clock-challenge", "compare-clocks"])(
+  "ignores a late rejected %s after the screen disconnects",
+  async (action) => {
+    let reject!: (reason: Error) => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const { el, host, calls } = await mount({
+      prepare: async (proposal) => {
+        if ((proposal as { action: string }).action !== action) return { id: "challenge" };
+        entered();
+        return new Promise((_resolve, fail) => {
+          reject = fail;
+        });
+      },
+    });
+    await started;
+    host.remove();
+    reject(new Error("late network refusal"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).not.toBe(
+      "true",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).toBeNull();
+    expect(calls.filter((call) => call.action === "candidates" || call.action === "input")).toEqual(
+      [],
+    );
+  },
+);

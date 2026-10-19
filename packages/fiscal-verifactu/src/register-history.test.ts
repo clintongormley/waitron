@@ -418,3 +418,130 @@ describe("signed paper register history", () => {
     ).rejects.toEqual(invalid);
   });
 });
+
+it.each([
+  ["revision timestamp", { createdAt: 123 }],
+  ["revision events", { events: null }],
+  ["non-record event", { events: [null] }],
+  ["malformed reservation", { events: [{ kind: "reserve", block: null }] }],
+  ["malformed consumption", { events: [{ kind: "consume", consumption: null }] }],
+  [
+    "unknown event",
+    { events: [{ kind: "unknown", allocationId: "allocation-1", eventId: "event-1" }] },
+  ],
+  ["blank retirement", { events: [{ kind: "retire", allocationId: "", eventId: "event-1" }] }],
+] as const)("rejects retained history with %s", async (_label, changed) => {
+  const api = await load();
+  const source = completeHistory();
+  const first = source.revisions[0]!;
+  expect(() =>
+    api.parseRegisterHistory({
+      ...source,
+      revisions: [{ ...first, payload: { ...first.payload, ...changed } }],
+    }),
+  ).toThrowError(invalid);
+});
+
+it.each([
+  ["shape", { extra: true }],
+  ["checkpoint identity", { checkpointId: " " }],
+  ["timestamp", { createdAt: 123 }],
+  ["retired floor", { pHighWater: -1 }],
+  ["original acknowledgement", { currentOriginalConfirmed: false }],
+  ["parallel allocation", { noParallelPaperAllocation: false }],
+  ["history acknowledgement", { completeHistoryUnavailable: false }],
+  ["burn acknowledgement", { burnAllPrior: false }],
+] as const)("rejects a malformed retained checkpoint %s", async (_label, changed) => {
+  const api = await load();
+  const source = checkpointHistory();
+  expect(() =>
+    api.parseRegisterHistory({
+      ...source,
+      checkpoint: { ...source.checkpoint, payload: { ...source.checkpoint.payload, ...changed } },
+    }),
+  ).toThrowError(invalid);
+});
+
+it.each([null, [null], [reservation(1), { payload: {}, signature: "A".repeat(86) }]])(
+  "rejects malformed retained original collection %j",
+  async (retainedOriginals) => {
+    const api = await load();
+    expect(() =>
+      api.parseRegisterHistory({ ...checkpointHistory(), retainedOriginals }),
+    ).toThrowError(invalid);
+  },
+);
+
+it.each([
+  { custodianId: "another-custodian" },
+  { fingerprint: "a".repeat(64) },
+  { scope: { ...registerScope, taxpayerNif: "89890001K" } },
+])("rejects a correctly signed checkpoint for another authority: %j", async (changed) => {
+  const api = await load();
+  const source = checkpointHistory();
+  const input = api.parseRegisterHistory({
+    ...source,
+    checkpoint: fixtureSign(
+      { ...source.checkpoint.payload, ...changed },
+      "waitron.paper-burn-checkpoint",
+    ),
+  });
+  await expect(api.verifyRegisterHistory(input, registerTrust, known)).rejects.toEqual(invalid);
+});
+
+it.each([
+  ["custodian", { custodianId: "another-custodian" }],
+  [
+    "scope",
+    { allocations: [{ ...reservation(1).payload.allocations[0]!, taxpayerNif: "89890001K" }] },
+  ],
+] as const)("rejects retained signed original with another %s", async (_label, changed) => {
+  const api = await load();
+  const block = reservation(1);
+  const payload = { ...block.payload, ...changed };
+  const signed = {
+    payload,
+    signature: sign(
+      null,
+      paperBlockBytes(payload),
+      createPrivateKey({
+        key: Buffer.from(
+          "302e020100300506032b6570042204209d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+          "hex",
+        ),
+        format: "der",
+        type: "pkcs8",
+      }),
+    ).toString("base64url"),
+  };
+  await expect(
+    api.verifyRegisterHistory(
+      api.parseRegisterHistory({
+        ...checkpointHistory(),
+        retainedOriginals: [signed],
+      }),
+      registerTrust,
+      known,
+    ),
+  ).rejects.toEqual(invalid);
+});
+
+it("rejects a conflicting independently retained head at a known revision", async () => {
+  const api = await load();
+  const input = api.parseRegisterHistory(completeHistory());
+  await expect(
+    api.verifyRegisterHistory(input, registerTrust, {
+      ...known,
+      retainedHeads: [{ registerId: "register-1", revision: "1", digest: "a".repeat(64) }],
+    }),
+  ).rejects.toEqual(invalid);
+  const valid = await api.verifyRegisterHistory(input, registerTrust, known);
+  expect(
+    (
+      await api.verifyRegisterHistory(input, registerTrust, {
+        ...known,
+        retainedHeads: [valid.head],
+      })
+    ).head,
+  ).toEqual(valid.head);
+});
