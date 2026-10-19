@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
 import {
@@ -127,9 +127,12 @@ export class VenueDefaultsPanel extends LitElement {
     this.submitting = false;
     super.disconnectedCallback();
   }
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("readOnly") && this.readOnly) this.#cancel();
+  }
   #begin(): void {
     const model = this.model;
-    if (!model || this.readOnly) return;
+    if (!model) return;
     this.#expected = {
       receiptLanguage: model.receiptLanguage,
       defaultProductVatClass: model.defaultProductVatClass,
@@ -209,7 +212,7 @@ export class VenueDefaultsPanel extends LitElement {
   }
   #change(field: Field, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    if (!this.draft || this.readOnly || this.submitting) return;
+    if (!this.draft || this.submitting) return;
     this.draft = { ...this.draft, [field]: event.detail.value };
     const errors = { ...this.errors };
     delete errors[field];
@@ -218,7 +221,7 @@ export class VenueDefaultsPanel extends LitElement {
     this.#scope?.changed();
   }
   async #save(): Promise<void> {
-    if (this.submitting || this.readOnly || !this.draft || !this.#expected) return;
+    if (this.submitting || !this.draft || !this.#expected) return;
     if (saveActionState(this.#scope).unchanged) return;
     const generation = this.#generation;
     const scope = this.#scope;
@@ -336,13 +339,11 @@ export class VenueDefaultsPanel extends LitElement {
           },
         )
         .catch(() => {}),
-      this.readOnly
-        ? undefined
-        : this.#contentQueries
-            .watch("getContentLanguages", [], (value) => {
-              if (generation === this.#generation) this.content = value;
-            })
-            .catch(() => {}),
+      this.#contentQueries
+        .watch("getContentLanguages", [], (value) => {
+          if (generation === this.#generation) this.content = value;
+        })
+        .catch(() => {}),
     ]);
   }
   override render() {

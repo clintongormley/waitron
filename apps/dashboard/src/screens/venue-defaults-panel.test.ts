@@ -177,9 +177,9 @@ it("says nothing about a fixed language where none is fixed, or where the stored
   expect(q(matching, "[data-test=stored-differs]")).toBeNull();
 });
 
-it("a read-only card shows the stored defaults and the stored-differs note, offers no Edit and reads no content languages", async () => {
+it("a read-only card shows the stored defaults, the stored-differs note and the receipt-language warning, and offers no Edit", async () => {
   setLocale("en-GB");
-  const { api } = rig(BARCELONA);
+  const { api } = rig(BARCELONA, { defaultLanguage: "ca", languages: ["ca"] });
   const el = await mount(api, true);
   expect(rows(el)).toEqual([
     "Default receipt language: Spanish",
@@ -188,7 +188,7 @@ it("a read-only card shows the stored defaults and the stored-differs note, offe
   expect(q(el, "[data-test=stored-differs]")).not.toBeNull();
   expect(q(el, "[data-test=edit]")).toBeNull();
   expect(q(el, "form")).toBeNull();
-  expect(api.getContentLanguages).not.toHaveBeenCalled();
+  await expect.poll(() => text(q(el, "[data-test=receipt-language-warning]"))).toContain("Spanish");
 });
 
 it("a draft open when the card turns read-only shows the stored defaults, with no form to save", async () => {
