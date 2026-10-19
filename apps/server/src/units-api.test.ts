@@ -173,13 +173,19 @@ describe("unit management routes", () => {
         name: { en: "millilitre" },
         precision: 0,
         abbreviation: { en: "ml" },
+        measure: true,
       })
     ).json()) as { id: string };
-    const response = await send("PATCH", `/management-api/units/${created.id}`, { measure });
+    const before = await (await send("GET", "/management-api/units")).json();
+    const response = await send("PATCH", `/management-api/units/${created.id}`, {
+      measure,
+      precision: 2,
+    });
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "measure" } },
     });
+    expect(await (await send("GET", "/management-api/units")).json()).toEqual(before);
   });
 
   it("rejects a create with no abbreviation object", async () => {

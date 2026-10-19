@@ -2347,9 +2347,14 @@ describe("ordering extras and options — parent + child lines", () => {
     const panId = await requireBread(v, "Mililitro", 0, true);
     const deps = { db: suite.db, backend, clock };
     const burger = v.offerFor(v.burgerId);
-    const tender = { method: "cash" as const, amount: "2250.00" };
+    const tender = { method: "cash" as const, amount: "3000.00" };
+    const pan = [{ listId: panId, picks: [{ productId: v.patatasId, quantity: 1 }] }];
+    const refused = {
+      code: "extras.unsupported_product",
+      params: { productId: v.burgerId, soldBy: "measure" },
+    };
 
-    // 250 × 9.00.
+    // A new sale: 250 × 9.00.
     const sale = await recordTillSale(deps, v.cfg, {
       zoneId: v.zoneId,
       lines: [{ menuItemId: burger, quantity: "250" }],
@@ -2357,22 +2362,57 @@ describe("ordering extras and options — parent + child lines", () => {
     });
     expect(sale.total).toBe("2250.00");
 
+    // A held order, then paid.
+    const heldId = randomUUID();
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(tx, v.cfg, heldId, [{ menuItemId: burger, quantity: "250" }], null, {
+        zoneId: v.zoneId,
+      }),
+    );
+    expect((await payWorkingOrder(deps, v.cfg, { id: heldId, lines: [], tender })).total).toBe(
+      "2250.00",
+    );
+
+    // A table round, then a change of the sent line that answers the extras lists with nothing and
+    // raises its quantity: 300 × 9.00. A change that picks from the required list is refused.
+    const tabId = await tabWith(v, { menuItemId: burger, quantity: "250" });
+    await expect(
+      withTransaction(suite.db, async (tx) =>
+        updateOrderLine(tx, v.cfg, tabId, 1, { extras: pan }, await revisionOf(tabId)),
+      ),
+    ).rejects.toMatchObject(refused);
+    await withTransaction(suite.db, async (tx) =>
+      updateOrderLine(
+        tx,
+        v.cfg,
+        tabId,
+        1,
+        { quantity: "300", extras: [] },
+        await revisionOf(tabId),
+        "cccccccc-0000-4000-8000-00000000000c",
+      ),
+    );
+    expect((await payWorkingOrder(deps, v.cfg, { id: tabId, lines: [], tender })).total).toBe(
+      "2700.00",
+    );
+
+    // A new sale with a pick is refused, with no sale or fiscal record written.
+    const written = async () =>
+      (
+        await suite.db.execute<{ sales: number; records: number }>(sql`
+          select
+            (select cast(count(*) as integer) from sales) as sales,
+            (select cast(count(*) as integer) from registros_facturacion) as records`)
+      ).rows;
+    const before = await written();
     await expect(
       recordTillSale(deps, v.cfg, {
         zoneId: v.zoneId,
-        lines: [
-          {
-            menuItemId: burger,
-            quantity: "250",
-            extras: [{ listId: panId, picks: [{ productId: v.patatasId, quantity: 1 }] }],
-          },
-        ],
+        lines: [{ menuItemId: burger, quantity: "250", extras: pan }],
         tender,
       }),
-    ).rejects.toMatchObject({
-      code: "extras.unsupported_product",
-      params: { productId: v.burgerId, soldBy: "measure" },
-    });
+    ).rejects.toMatchObject(refused);
+    expect(await written()).toEqual(before);
   });
 
   it("a ración still takes extras", async () => {
