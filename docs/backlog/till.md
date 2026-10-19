@@ -1554,6 +1554,14 @@ visible numbers alone do not imply a numbering defect.
 
 ### Replacement order controls (A773)
 
+The native partial-serving cases in `apps/till/src/till-app-parties.test.ts` open Sent's dish
+window and choose two of three remaining portions. They check the quantity buttons' 44 px targets,
+one request despite repeated confirmation, unchanged service facts until acceptance, and Undo of
+the accepted two portions. They cover English and Spanish, both themes, at 390 and 1280 px.
+These app checks use a controlled API boundary; server persistence and the physical-till trial
+remain separate. The quantity buttons use the standard size; their previous small setting measured
+32 px high in those cases on 2026-10-19.
+
 The [modifiers integration guide](../developers/modifiers.md#ordering-and-stored-facts) distinguishes
 fresh table-draft selections, priced on submission, from recalled sources whose modifier changes
 are saved to their existing bill rows. The 2026-10-19 documentation check ran the complete

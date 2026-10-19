@@ -4305,7 +4305,6 @@ export class TillTableOrderScreen extends LitElement {
                 <span>${t("table.split_quantity")}</span>
                 <wt-button
                   variant="ghost"
-                  size="sm"
                   data-serve-dec
                   aria-label=${`${t("basket.decrease")} ${pending.row.name}`}
                   ?disabled=${count <= 1}
@@ -4316,7 +4315,6 @@ export class TillTableOrderScreen extends LitElement {
                 <span class="split-count" data-serve-count>${count}</span>
                 <wt-button
                   variant="ghost"
-                  size="sm"
                   data-serve-inc
                   aria-label=${`${t("basket.increase")} ${pending.row.name}`}
                   ?disabled=${

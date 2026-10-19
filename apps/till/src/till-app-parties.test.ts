@@ -7668,6 +7668,152 @@ describe("till-app: Current orders", () => {
       );
     }
 
+    describe.each(["light", "dark"] as const)("native partial serving in %s", (theme) => {
+      it.each([
+        ["en", 390],
+        ["es", 390],
+        ["en", 1280],
+        ["es", 1280],
+      ] as const)(
+        "confirms and undoes only the chosen quantity in %s at %i",
+        async (locale, width) => {
+          const oldWidth = innerWidth,
+            oldHeight = innerHeight;
+          await page.viewport(width, 900);
+          const state = structuredClone(orders);
+          state.reminder = null;
+          const row = state.groups[0]!.rows[0]!;
+          row.quantity = "4.000";
+          row.servedQuantity = "1.000";
+          let accept!: () => void;
+          const pending = new Promise<{ revision: number }>((resolve) => {
+            accept = () => {
+              row.servedQuantity = "3.000";
+              state.revision = 4;
+              resolve({ revision: 4 });
+            };
+          });
+          const markServed = vi.fn(() => pending);
+          const unmarkServed = vi.fn(async () => {
+            row.servedQuantity = "1.000";
+            state.revision = 5;
+            return { revision: 5 };
+          });
+          try {
+            const { el, host } = await mountApp({
+              getTill: vi.fn().mockResolvedValue({
+                ...till,
+                formFactor: width === 390 ? "phone-portrait" : "till",
+              }),
+              readCurrentOrders: vi.fn(async () => structuredClone(state)),
+              markServed,
+              unmarkServed,
+            });
+            host.setAttribute("data-theme", theme);
+            await toFloor(el);
+            setLocale(locale);
+            await flush(el);
+            emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+            await flush(el);
+            const order = tableOrder(el)!;
+            await expect
+              .poll(
+                () =>
+                  order
+                    .shadowRoot!.querySelector<HTMLElement>("[data-review-open]")
+                    ?.checkVisibility() ?? false,
+              )
+              .toBe(width === 390);
+            const panel = await visiblePanel(order);
+            await userEvent.click(
+              panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="line-1"]')!,
+            );
+            await flush(el);
+            await userEvent.click(
+              order.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-serve]")!,
+            );
+            await flush(el);
+            const dialog = order.shadowRoot!.querySelector<HTMLElement>("[data-serve-dialog]")!;
+            const count = () => dialog.querySelector("[data-serve-count]")!.textContent!.trim();
+            const control = (name: string) =>
+              dialog
+                .querySelector<HTMLElement>(`[data-serve-${name}]`)!
+                .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+            expect(innerWidth).toBe(width);
+            expect(dialog.hasAttribute("open")).toBe(true);
+            expect(count()).toBe("3");
+            expect(control("inc").disabled).toBe(true);
+            for (const name of ["inc", "dec", "dismiss", "confirm"]) {
+              const button = control(name);
+              const rect = button.getBoundingClientRect();
+              expect(button.checkVisibility()).toBe(true);
+              expect(rect.width).toBeGreaterThanOrEqual(44);
+              expect(rect.height).toBeGreaterThanOrEqual(44);
+              expect(rect.left).toBeGreaterThanOrEqual(0);
+              expect(rect.right).toBeLessThanOrEqual(width);
+            }
+            await userEvent.click(control("dec"));
+            await flush(el);
+            expect(count()).toBe("2");
+            expect(control("inc").disabled).toBe(false);
+            await userEvent.click(control("inc"));
+            await flush(el);
+            expect(count()).toBe("3");
+            await userEvent.click(control("dec"));
+            await flush(el);
+            expect(count()).toBe("2");
+            await expect
+              .element(control("confirm"))
+              .toHaveAccessibleName(locale === "es" ? "Marcar 2 servidos" : "Mark 2 served");
+            await expectNoA11yViolations(dialog);
+            await page.screenshot({
+              path: `__screenshots__/a773-partial-serve-${locale}-${theme}-${width}.png`,
+            });
+            await userEvent.dblClick(control("confirm"));
+            await expect.poll(() => markServed.mock.calls.length).toBe(1);
+            await flush(el);
+            expect(markServed).toHaveBeenCalledExactlyOnceWith(
+              "v1",
+              [{ lineId: "line-1", quantity: "2" }],
+              { submissionId: expect.any(String), expectedPartyRevision: 3 },
+            );
+            expect(order.currentOrders!.groups[0]!.rows[0]!.servedQuantity).toBe("1.000");
+            const toast = () => el.shadowRoot!.querySelector<WtToast>("[data-served-toast]")!;
+            expect(toast().open).toBe(false);
+            expect(unmarkServed).not.toHaveBeenCalled();
+            accept();
+            await expect.poll(() => toast().open).toBe(true);
+            await flush(el);
+            expect(order.currentOrders!.revision).toBe(4);
+            expect(order.currentOrders!.groups[0]!.rows[0]!.servedQuantity).toBe("3.000");
+            const undo = toast()
+              .querySelector<HTMLElement>("[data-undo-served]")!
+              .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+            await expect.element(undo).toHaveAccessibleName(locale === "es" ? "Deshacer" : "Undo");
+            await userEvent.dblClick(undo);
+            await flush(el, 6);
+            expect(unmarkServed).toHaveBeenCalledExactlyOnceWith(
+              "v1",
+              [{ lineId: "line-1", quantity: "2" }],
+              { submissionId: expect.any(String), expectedPartyRevision: 4 },
+            );
+            expect(order.currentOrders!.revision).toBe(5);
+            expect(order.currentOrders!.groups[0]!.rows[0]!.servedQuantity).toBe("1.000");
+            expect(toast().open).toBe(false);
+            expect(markServed).toHaveBeenCalledOnce();
+            expect(drafts.saveDraft).not.toHaveBeenCalled();
+            expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+            expect(banner(el)).toBeNull();
+          } finally {
+            accept();
+            cleanupWidgets();
+            setLocale("en");
+            await page.viewport(oldWidth, oldHeight);
+          }
+        },
+      );
+    });
+
     async function visiblePanel(order: TillTableOrderScreen): Promise<TillSentOrders> {
       await order.updateComplete;
       const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
