@@ -1107,7 +1107,7 @@ From "Extras and Options — deliberate limits, and what is left open"
   `packages/catalogue/src/migrations.test.ts` checks they stay gone.
 - **Extras only on a dish sold by the unit (owner, 2026-10-15; A663 Part 2d).** A dish whose unit
   has a scale or allows decimal places takes no extras, so 1 l of sangría cannot carry one; to sell
-  it with extras, sell it in a unit with no decimals and the measure switch off (a jug).
+  it with extras, sell it in a unit with no scale, no decimals and the measure switch off (a jug).
   Owner, 2026-10-19 (A821): a unit can be marked a measure ("Mide una cantidad (ml, g…) — sin
   extras"), and a dish in a measure takes no extras either. On a newly set-up venue the seeded ml,
   l, g, kg and mg start with it on; a new unit starts with it off. The switch is frozen into the
