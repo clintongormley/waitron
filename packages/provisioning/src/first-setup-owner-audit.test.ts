@@ -15,6 +15,8 @@ import {
 } from "./index.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
+import { createFirstSetupOwnerAudit } from "./first-setup-owner-audit.js";
+import type { ResolutionInput } from "./first-setup-resolution.js";
 import { request, PASSWORD } from "../test/first-setup-request.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -311,3 +313,134 @@ it("keeps legacy password recovery out of a venue held by another process", asyn
     }
   }
 });
+
+async function pendingAudit(
+  f: Awaited<ReturnType<typeof fixture>>,
+  action: "marker-repair" | "ownership-rebind",
+  mutate: (input: ResolutionInput, originals: { name: string; bytes: Buffer | null }[]) => void,
+) {
+  const before = (await f.store.readForRepair())!.state;
+  const snapshot = await f.resolution.captureFirstSetupOriginals();
+  const hash = createHash("sha256")
+    .update(
+      JSON.stringify([
+        "waitron-owner-audit-v1",
+        before.stateDir,
+        before.venueDir,
+        before.frozen.attemptId,
+      ]),
+    )
+    .digest("hex");
+  const resolutionId = `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+  const input: ResolutionInput = {
+    resolutionId,
+    attemptId: before.frozen.attemptId,
+    observedRevision: before.revision,
+    observedOwnerGeneration: before.ownerGeneration,
+    database: "empty-preactivation",
+    authority: "original-password",
+    register: null,
+    action,
+    nextWorkspace: null,
+  };
+  mutate(input, snapshot.originals);
+  const prepared = await f.records.prepare(input, snapshot.originals);
+  return { before, prepared, audit: createFirstSetupOwnerAudit(before, f.resolution) };
+}
+
+it.each(["register", "authority", "attempt", "action", "revision", "generation", "missing-state"])(
+  "does not complete a pending ownership audit with inconsistent %s evidence",
+  async (fault) => {
+    const f = await fixture("active");
+    const { before, prepared, audit } = await pendingAudit(
+      f,
+      "ownership-rebind",
+      (input, originals) => {
+        if (fault === "register") input.register = { kind: "no-current-master", confirmed: true };
+        if (fault === "authority") {
+          input.authority = "local-empty-unused-assignment";
+          input.action = "retire";
+        }
+        if (fault === "attempt") input.attemptId = "00000000-0000-4000-8000-000000000001";
+        if (fault === "action") {
+          input.action = "finish-publication";
+          input.database = "committed-exact";
+        }
+        if (fault === "revision") input.observedRevision!++;
+        if (fault === "generation") input.observedOwnerGeneration!++;
+        if (fault === "missing-state")
+          originals.splice(
+            originals.findIndex((entry) => entry.name === "state/first-setup.json"),
+            1,
+          );
+      },
+    );
+    const state = await fs.readFile(join(f.stateDir, "first-setup.json"));
+    const marker = await fs.readFile(f.markerPath);
+    await expect(audit.reconcile(before)).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect(await f.records.read(prepared.resolutionId)).toEqual([prepared]);
+    expect(await fs.readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
+    expect(await fs.readFile(f.markerPath)).toEqual(marker);
+  },
+);
+
+it.each(["state", "missing-marker", "nonobject-marker", "unexpected-marker"])(
+  "does not apply a pending marker audit after %s changes",
+  async (fault) => {
+    const f = await fixture("claim");
+    const { before, prepared, audit } = await pendingAudit(
+      f,
+      "marker-repair",
+      (_input, originals) => {
+        if (fault === "nonobject-marker")
+          originals.find((entry) => entry.name === "venue/first-setup-claim.json")!.bytes =
+            Buffer.from("null");
+      },
+    );
+    const current = structuredClone(before);
+    if (fault === "state") current.revision++;
+    if (fault === "missing-marker") await fs.unlink(f.markerPath);
+    if (fault === "unexpected-marker") {
+      const marker = JSON.parse(await fs.readFile(f.markerPath, "utf8"));
+      marker.status = "complete";
+      await fs.writeFile(f.markerPath, JSON.stringify(marker));
+    }
+    const state = await fs.readFile(join(f.stateDir, "first-setup.json"));
+    await expect(audit.reconcile(current)).rejects.toMatchObject({
+      code:
+        fault === "missing-marker" || fault === "nonobject-marker"
+          ? "setup.attempt_invalid"
+          : "setup.attempt_conflict",
+    });
+    expect(await f.records.read(prepared.resolutionId)).toEqual([prepared]);
+    expect(await fs.readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
+  },
+);
+
+it.each(["revision", "ownerGeneration"] as const)(
+  "does not call the ownership writer after the inspected %s changes",
+  async (field) => {
+    const f = await fixture("active");
+    const before = (await f.store.read())!;
+    const stale = { ...before, [field]: before[field] + 1 };
+    const audit = createFirstSetupOwnerAudit(before, f.resolution);
+    const body = vi.fn(async () => "must not run");
+    await expect(audit.perform("ownership-rebind", stale, body)).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+    expect(body).not.toHaveBeenCalled();
+    expect(await f.ids()).toEqual([]);
+    expect(await f.store.read()).toEqual(before);
+  },
+);
+
+it.each(["marker-repair", "ownership-rebind"] as const)(
+  "leaves an interrupted %s prepared while its source bytes are still unchanged",
+  async (action) => {
+    const f = await fixture(action === "marker-repair" ? "claim" : "active");
+    const { before, prepared, audit } = await pendingAudit(f, action, () => {});
+    await audit.reconcile(before);
+    expect(await f.records.read(prepared.resolutionId)).toEqual([prepared]);
+    expect((await f.store.readForRepair())!.state).toEqual(before);
+  },
+);

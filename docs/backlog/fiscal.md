@@ -252,9 +252,17 @@ where superseded. Remaining work includes package coverage, retiring active regi
 allocation tooling and its operator instructions, current-main integration, both installed
 reviews, current-head CI and generated-PDF viewing approval. The retained CLI-launch test
 replacement awaits exact approval. Allocated adoption remains pending venue-copy support;
-A679 does not add a promotion browser screen. Provisioning still falls below its package coverage
-threshold; workspace/resolution handling and the retained configuration-transfer paths need
-behavioral qualification.
+A679 does not add a promotion browser screen.
+
+**Qualification update, 2026-10-19:** the full provisioning suite passes 1,469 cases in 73 files
+with statements 98.09%, branches 96.76%, functions 98.70% and lines 99.07%, meeting the unchanged
+package bars. The 44 new cases cover ownership and marker races, archived audit consistency,
+workspace selection and retained state, evidence capture, host-path filtering and early module
+reads. Existing assertions and fixtures remain unchanged. Nineteen independently installed fault
+controls fail their intended assertions and pass after restoration; the separate redundant
+stat-size omission is unqualified. Active protocol retirement, current instructions/main
+integration, both final installed reviews, hook/current-head CI and the existing PDF-viewing
+and exact CLI-test approvals remain open. See the [changed-check inventory](../operations/a679-changed-checks.md#ownership-and-workspace-qualification-2026-10-19).
 
 **Hour-plan Task 1 checkpoint, 2026-10-16:** module tests exercise four-character hour names,
 the complete configured series set (including multiple standard bases and `FF/full`),

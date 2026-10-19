@@ -82,6 +82,30 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
+it("does not replace ownership which changed while a resume password was checked", async () => {
+  const f = await fixture();
+  await f.claim();
+  const read = f.store.readResumable.bind(f.store);
+  let reads = 0;
+  let replacement: Awaited<ReturnType<typeof f.store.read>>;
+  f.store.readResumable = async () => {
+    const result = await read();
+    if (++reads === 1) {
+      replacement = await f.store.update(result!.state.frozen.attemptId, result!.state.revision, {
+        kind: "resume",
+        capabilityHash: "a".repeat(64),
+      });
+    }
+    return result;
+  };
+  await expect(
+    f.owner.resumeFirstSetup(f.nonce, { password: payload.request.admin.password }),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  expect(reads).toBe(2);
+  expect(replacement!).toMatchObject({ revision: 2, ownerGeneration: 2 });
+  expect(await f.store.read()).toEqual(replacement!);
+});
+
 it("binds normalized planned identity, hashing both secrets and returning no verifiers/imports", async () => {
   const f = await fixture();
   const claimed = await f.claim();

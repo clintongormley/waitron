@@ -324,8 +324,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A679. First Live setup: one page and one recovery PDF.** Finish the existing branch through the
   [hour-code plan](superpowers/plans/2026-10-16-a679-hour-code-implementation.md).
-  Close remaining coverage and entry checks, retire active allocation protocols, reconcile current
-  instructions and integrate main. Revised PDF viewing and the exact retained CLI-test replacement
+  Finish the remaining entry checks, retire active allocation protocols, reconcile current
+  instructions and integrate main. Provisioning's package coverage now meets its unchanged bars. Revised PDF viewing and the exact retained CLI-test replacement
   still need approval. Complete both final installed reviews, hook and current-head CI before landing.
   [Detail](backlog/fiscal.md#a-venue-without-cloud-needs-a-usable-paper-custodian-route);
   [changed-check inventory](operations/a679-changed-checks.md).

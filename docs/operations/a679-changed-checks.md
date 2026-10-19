@@ -2901,3 +2901,46 @@ SQL migration or protected fiscal assertion changes in this step.
 Receipts: Lane E's `receipts/a679-import-publication-20261019`. The existing PDF-viewing and exact
 CLI-test approval requests remain pending, alongside the remaining A679 implementation,
 integration, reviews and CI gates.
+
+
+## Ownership and workspace qualification, 2026-10-19
+
+No existing test check or fixture changes. The six existing test files retain every earlier line;
+`first-setup-host-path.test.ts` is new. All 44 cases are additions, with no production, SQL,
+schema, migration, guard, coverage-threshold or protected-fiscal edit.
+
+- `packages/provisioning/src/first-setup-owner-audit.test.ts`: 15 cases retain pending records for
+  inconsistent authority/source evidence, damaged markers and stale snapshots, with valid
+  unchanged-source controls.
+- `packages/provisioning/src/first-setup-workspace.test.ts`: 14 cases refuse conflicting selection
+  records, copied workspace pointers and missing retired state, and return the exact archived
+  state and resolution record for a valid retirement.
+- `packages/provisioning/src/first-setup-resolution-inspection.test.ts`: nine cases retain evidence
+  when capture races with file/directory changes, refuse damaged ownership state, and check the
+  audit and final inspection of password-based marker repair.
+- `packages/provisioning/src/first-setup-owner.test.ts`, `first-setup-state.test.ts`,
+  `first-setup-runtime.test.ts` and new `first-setup-host-path.test.ts`: six cases cover a resume
+  racing another owner, marker/root changes, setup-authority path boundaries and module reads
+  before the host is initialized.
+
+`pnpm --filter @waitron/provisioning test:coverage`, with reports isolated outside the package,
+passes all 1,469 cases in 73 files in 579.76 seconds. Coverage is 98.09% statements, 96.76%
+branches, 98.70% functions and 99.07% lines. No test case is skipped. The earlier run passed
+1,458 cases but failed statement coverage at 97.67%; it is not the passing package receipt.
+
+Independent frozen-installed checks pass the complete original three suites before and after
+fault controls (174 cases), and the eleven-case extension selection before and after its controls.
+Nineteen faulty variants fail their intended assertions, and every restored selection passes.
+Omitting the first stat-size check alone still passes because the later byte-length check refuses
+the oversized file; that probe does not qualify the first check independently. Initial new-fixture
+mistakes and the control selector that matched two branches are retained, not product defects.
+Both disposable checkouts are removed after their restored source and tests match the feature tree.
+
+The unchanged golden huella/immutability pair passes 20 cases. Provisioning types, scoped lint,
+explicit test-file formatting and whitespace checks pass. The pending server CLI-launch file
+and its exact proposed patch remain unchanged. These results qualify the provisioning package,
+not the remaining whole-branch entry/protocol, owner PDF, review or current-head CI gates.
+
+Local receipts: Lane E `receipts/a679-ownership-qualification-20261019/`, including
+`final-results.json`, `coverage-gaps-final.json`, `test-preservation-final.json`, both control
+inventories, restored-candidate equality checks, full logs and cleanup records.

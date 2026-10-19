@@ -17,6 +17,8 @@ import * as provision from "./index.js";
 import * as durable from "./durable-host-json.js";
 import * as filesystem from "node:fs/promises";
 import { assertFirstSetupVenueTarget } from "./first-setup-workspace.js";
+import { createFirstSetupOwner } from "./first-setup-owner.js";
+import { request } from "../test/first-setup-request.js";
 vi.mock("node:fs/promises", { spy: true });
 vi.mock("./durable-host-json.js", { spy: true });
 const dirs: string[] = [];
@@ -946,4 +948,172 @@ it("keeps a present archived directory listing when selecting and resolving the 
   expect(await provision.selectFirstSetupWorkspace(f.anchor, next.applied)).toEqual(next.binding);
   expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(next.binding);
   expect(await readFile(join(path, "one.json"), "utf8")).toBe("unchanged");
+});
+
+it.each(["retirement", "backlink", "state-selection", "venue-selection"])(
+  "does not overwrite a conflicting %s while selecting a workspace",
+  async (point) => {
+    const f = await fixture();
+    const paths = {
+      retirement: join(f.anchor.venueDir, "first-setup-retirement.json"),
+      backlink: join(f.binding.venueDir, "first-setup-workspace.json"),
+      "state-selection": join(f.anchor.stateDir, "first-setup-selection.json"),
+      "venue-selection": join(f.anchor.venueDir, "first-setup-selection.json"),
+    };
+    const path = paths[point as keyof typeof paths];
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, '{"conflicting":"retained"}');
+    const before = await readFile(path);
+    await expect(provision.selectFirstSetupWorkspace(f.anchor, f.applied)).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
+    expect(await readFile(path)).toEqual(before);
+    expect(
+      (await f.store.read(f.binding.resolutionId)).some(
+        (record) => record.action === "select-workspace" && record.phase === "applied",
+      ),
+    ).toBe(false);
+  },
+);
+
+it.each(["anchor", "generation", "selection-action", "selection-revision"])(
+  "does not select a digest-bound workspace record with inconsistent %s",
+  async (fault) => {
+    const f = await fixture();
+    const {
+      version: _v,
+      sequence: _s,
+      previousRecordDigest: _p,
+      evidenceDigest: _e,
+      evidenceReferences: _r,
+      phase: _h,
+      recordedAt: _t,
+      ...input
+    } = f.prepared;
+    void [_v, _s, _p, _e, _r, _h, _t];
+    const resolutionId = randomUUID();
+    const binding = { ...f.binding, resolutionId };
+    if (fault === "generation") binding.selectionGeneration = 2;
+    const originals = await f.store.readOriginals(f.binding.resolutionId);
+    const prepared = await f.store.prepare(
+      { ...input, resolutionId, nextWorkspace: binding },
+      originals,
+    );
+    const applied = await f.store.apply(prepared);
+    if (fault.startsWith("selection-")) {
+      await f.store.prepare(
+        {
+          ...input,
+          resolutionId,
+          nextWorkspace: binding,
+          action: fault === "selection-action" ? "ownership-rebind" : "select-workspace",
+          observedRevision: input.observedRevision! + (fault === "selection-revision" ? 1 : 0),
+        },
+        originals,
+      );
+    }
+    const before = await f.store.read(resolutionId);
+    const anchor =
+      fault === "anchor" ? { ...f.anchor, venueDir: join(f.root, "other-venue") } : f.anchor;
+    await expect(provision.selectFirstSetupWorkspace(anchor, applied)).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
+    expect(await f.store.read(resolutionId)).toEqual(before);
+    await expect(stat(binding.venueDir)).rejects.toMatchObject({ code: "ENOENT" });
+  },
+);
+
+it.each(["resolve-roots", "venue-only", "boot-roots"])(
+  "refuses copied workspace evidence through %s admission",
+  async (entry) => {
+    const f = await fixture();
+    await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+    const copy = { venueDir: join(f.root, "copy-venue"), stateDir: join(f.root, "copy-state") };
+    await mkdir(copy.venueDir);
+    await mkdir(copy.stateDir);
+    const bytes = await readFile(join(f.binding.venueDir, "first-setup-workspace.json"));
+    await writeFile(join(copy.venueDir, "first-setup-workspace.json"), bytes);
+    const operation =
+      entry === "resolve-roots"
+        ? provision.resolveFirstSetupWorkspace(copy)
+        : entry === "venue-only"
+          ? assertFirstSetupVenueTarget(copy.venueDir)
+          : provision.assertFirstSetupBootTarget(copy);
+    await expect(operation).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+    expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(f.binding);
+    expect(await readFile(join(copy.venueDir, "first-setup-workspace.json"))).toEqual(bytes);
+  },
+);
+
+it("interrupted discovery refuses a backlink which disagrees with the retained retirement", async () => {
+  const f = await fixture();
+  await provision.selectFirstSetupWorkspace(f.anchor, f.applied);
+  await unlink(join(f.anchor.stateDir, "first-setup-selection.json"));
+  const path = join(f.binding.venueDir, "first-setup-workspace.json");
+  const witness = JSON.parse(await readFile(path, "utf8"));
+  witness.resolutionDigest = "0".repeat(64);
+  await writeFile(path, JSON.stringify(witness));
+  const before = await readFile(path);
+  await expect(provision.inspectFirstSetupWorkspaceSelection(f.anchor)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  expect(await readFile(path)).toEqual(before);
+});
+
+it("returns the exact original setup state and retirement record from the selected workspace", async () => {
+  const f = await fixture();
+  await unlink(join(f.anchor.stateDir, "first-setup.json"));
+  await unlink(join(f.anchor.venueDir, "first-setup-claim.json"));
+  const coordinator = provision.createFirstSetupCoordinator();
+  const store = provision.createFirstSetupStore({ ...f.anchor, coordinator });
+  const owner = createFirstSetupOwner({
+    ...f.anchor,
+    store,
+    coordinator,
+    bootId: "retirement-reading",
+    freeze: async (request, environment, ids) => ({
+      ...ids,
+      sourceId: `first-setup:${ids.attemptId}`,
+      request,
+      environment,
+      modules: [],
+    }),
+  });
+  await owner.claimFirstSetup({ environment: "preproduction", request }, "A".repeat(43));
+  const state = (await store.read())!;
+  const next = await customRetirement(f, [
+    {
+      name: "state/first-setup.json",
+      bytes: await readFile(join(f.anchor.stateDir, "first-setup.json")),
+    },
+    {
+      name: "venue/first-setup-claim.json",
+      bytes: await readFile(join(f.anchor.venueDir, "first-setup-claim.json")),
+    },
+    { name: "venue/venue.db", bytes: null },
+  ]);
+  await provision.selectFirstSetupWorkspace(f.anchor, next.applied);
+  expect(await provision.readFirstSetupRetirements(next.binding)).toEqual([
+    { state, record: next.applied },
+  ]);
+  expect(await provision.readRetiredFirstSetupStates(next.binding)).toEqual([state]);
+});
+
+it("does not invent a retired setup state when its archived original was absent", async () => {
+  const f = await fixture();
+  await unlink(join(f.anchor.stateDir, "first-setup.json"));
+  const originals = await f.store.readOriginals(f.binding.resolutionId);
+  const next = await customRetirement(
+    f,
+    originals.map((original) =>
+      original.name === "state/first-setup.json" ? { ...original, bytes: null } : original,
+    ),
+  );
+  await provision.selectFirstSetupWorkspace(f.anchor, next.applied);
+  const records = await f.store.read(next.binding.resolutionId);
+  await expect(provision.readFirstSetupRetirements(next.binding)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+  expect((await provision.resolveFirstSetupWorkspace(f.anchor)).binding).toEqual(next.binding);
+  expect(await f.store.read(next.binding.resolutionId)).toEqual(records);
 });

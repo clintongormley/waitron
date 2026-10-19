@@ -88,6 +88,51 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
+it("does not read a bound venue replaced by a symlink after claiming", async () => {
+  const f = await fixture();
+  await f.claim();
+  const before = await readFile(f.markerPath);
+  const moved = join(f.dir, "relocated-venue");
+  const filesystem = await import("node:fs/promises");
+  await filesystem.rename(f.options.venueDir, moved);
+  await symlink(moved, f.options.venueDir);
+  await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(await readFile(join(moved, "first-setup-claim.json"))).toEqual(before);
+});
+
+it("does not repair a marker with an unsupported version", async () => {
+  const f = await fixture();
+  await f.claim();
+  const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
+  marker.version = 2;
+  await writeFile(f.markerPath, JSON.stringify(marker));
+  const before = await readFile(f.markerPath);
+  await expect(f.store.readForRepair()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect(await readFile(f.markerPath)).toEqual(before);
+});
+
+it("rechecks the retained setup state after the empty-database proof returns", async () => {
+  const f = await fixture();
+  await f.claim();
+  const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
+  marker.status = "claiming";
+  await writeFile(f.markerPath, JSON.stringify(marker));
+  const expected = (await f.store.readForRepair())!;
+  const before = await readFile(f.markerPath);
+  const changed = structuredClone(expected.state);
+  changed.revision++;
+  changed.ownerGeneration++;
+  changed.capabilityHash = digest("replacement-during-empty-proof");
+  changed.history.push({ kind: "recover", revision: 2, ownerGeneration: 2 });
+  await expect(
+    f.store.repairMarker(expected, async () => {
+      await writeFile(f.statePath, JSON.stringify(changed));
+    }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await readFile(f.markerPath)).toEqual(before);
+  expect((await f.store.readForRepair())!.state).toEqual(changed);
+});
+
 it("lets one simultaneous claim win and retains its exact identities across restart", async () => {
   const f = await fixture();
   const input = frozen();

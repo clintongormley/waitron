@@ -434,3 +434,38 @@ it("cannot retain an hour selection without a fresh owner password grant", async
   expect((await f.host.store.read())!.status).toBe("claimed");
   expect((await f.host.store.read())!.inputs).toEqual({});
 });
+
+it("a module cannot read setup facts or enter preparation during host initialization", async () => {
+  const f = await fixture();
+  const checks: Promise<void>[] = [];
+  let configured = false;
+  const modules = f.args.modules.map((module) => {
+    if (module.name !== MODULE) return module;
+    const seat = module.provisioning!.initialSetup!;
+    return {
+      ...module,
+      provisioning: {
+        ...module.provisioning!,
+        initialSetup: {
+          ...seat,
+          configure(host: ModuleOperationHost) {
+            configured = true;
+            checks.push(
+              expect(host.readSetupFacts!(f.context.binding)).rejects.toMatchObject({
+                code: "setup.not_ready",
+              }),
+            );
+            expect(() =>
+              host.withPreparationState!(f.context.binding, async () => "must not run"),
+            ).toThrowError(expect.objectContaining({ code: "setup.not_ready" }));
+            return seat.configure!(host);
+          },
+        },
+      },
+    };
+  });
+  createFirstSetupModuleHost({ ...f.args, modules });
+  await Promise.all(checks);
+  expect(configured).toBe(true);
+  expect((await f.host.store.read())!.revision).toBe(1);
+});

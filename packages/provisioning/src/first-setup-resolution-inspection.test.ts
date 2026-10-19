@@ -8,6 +8,7 @@ import {
   rm,
   writeFile,
   symlink,
+  truncate,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -601,3 +602,146 @@ it.each(["file", "symlink"] as const)(
     expect(inspected.password).toBe("uncheckable");
   },
 );
+
+it.each(["directory", "oversize", "removed"])(
+  "does not archive a state artifact replaced by %s after inspection",
+  async (fault) => {
+    const f = await fixture("active");
+    const path = join(f.stateDir, "module-operation-public.json");
+    await writeFile(path, '{"retained":true}');
+    const inspect = f.service.inspectFirstSetupResolution.bind(f.service);
+    let changed = false;
+    f.service.inspectFirstSetupResolution = async () => {
+      const result = await inspect();
+      if (!changed) {
+        changed = true;
+        if (fault === "oversize") await truncate(path, 128 * 1024 * 1024 + 1);
+        else {
+          await rm(path);
+          if (fault === "directory") await mkdir(path);
+        }
+      }
+      return result;
+    };
+    const state = await readFile(join(f.stateDir, "first-setup.json"));
+    await expect(f.service.captureFirstSetupOriginals()).rejects.toMatchObject({
+      code: fault === "removed" ? "setup.attempt_conflict" : "setup.not_ready",
+    });
+    expect(changed).toBe(true);
+    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
+  },
+);
+
+it.each(["file", "overflow"])(
+  "does not archive a delivery directory replaced by %s after inspection",
+  async (fault) => {
+    const f = await fixture("active");
+    const directory = join(f.stateDir, "first-fiscal-documents");
+    const inspect = f.service.inspectFirstSetupResolution.bind(f.service);
+    let changed = false;
+    f.service.inspectFirstSetupResolution = async () => {
+      const result = await inspect();
+      if (!changed) {
+        changed = true;
+        if (fault === "file") await writeFile(directory, "not a directory");
+        else {
+          await mkdir(directory);
+          await Promise.all(
+            Array.from({ length: 1025 }, (_, i) => writeFile(join(directory, `${i}.json`), "{}")),
+          );
+        }
+      }
+      return result;
+    };
+    const state = await readFile(join(f.stateDir, "first-setup.json"));
+    await expect(f.service.captureFirstSetupOriginals()).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+    expect(changed).toBe(true);
+    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
+  },
+);
+
+it.each([false, true])(
+  "refuses damaged ownership state through inspected=%s recovery",
+  async (inspected) => {
+    const f = await fixture("active");
+    const snapshot = await f.service.inspectFirstSetupResolution();
+    const path = join(f.stateDir, "first-setup.json");
+    await writeFile(path, "{damaged setup state");
+    const before = await readFile(path);
+    const marker = await readFile(f.markerPath);
+    const nonce = randomBytes(32).toString("base64url");
+    const recovery = inspected
+      ? f.recovering.recoverFirstSetupOwner({
+          inspectionId: snapshot.inspectionId,
+          revision: snapshot.revision!,
+          ownerGeneration: snapshot.ownerGeneration!,
+          clientClaimNonce: nonce,
+          password: PASSWORD,
+        })
+      : f.recovering.recoverFirstSetup(nonce, { password: PASSWORD });
+    await expect(recovery).rejects.toMatchObject({
+      code: inspected ? "setup.owner_required" : "setup.attempt_invalid",
+    });
+    expect(await readFile(path)).toEqual(before);
+    expect(await readFile(f.markerPath)).toEqual(marker);
+  },
+);
+
+it("audits legacy password recovery's marker repair before rebinding ownership", async () => {
+  const f = await fixture("claim");
+  const before = (await f.store.readForRepair())!.state;
+  const owner = createFirstSetupOwner({
+    ...f.ownerOptions,
+    resolution: f.service,
+    assertRepairAllowed: async () => {
+      expect((await f.service.inspectFirstSetupResolution()).repairEligible).toBe(true);
+    },
+  });
+  const recovered = await owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
+    password: PASSWORD,
+  });
+  expect(recovered.state).toMatchObject({ status: "claimed", ownerGeneration: 2, revision: 2 });
+  expect((await f.store.read())!.frozen).toEqual(before.frozen);
+  const ids = await readdir(join(f.stateDir, "first-setup-resolutions"));
+  expect(ids).toHaveLength(1);
+  const records = await import("./first-setup-resolution.js").then(
+    ({ createFirstSetupResolutionStore }) =>
+      createFirstSetupResolutionStore({ ...f, coordinator: createFirstSetupCoordinator() }).read(
+        ids[0]!,
+      ),
+  );
+  expect(records.map(({ action, phase }) => [action, phase])).toEqual([
+    ["marker-repair", "prepared"],
+    ["marker-repair", "applied"],
+    ["ownership-rebind", "prepared"],
+    ["ownership-rebind", "applied"],
+  ]);
+});
+
+it("does not repair the marker after evidence changes immediately before its unused check", async () => {
+  const f = await fixture("claim");
+  const snapshot = await f.service.inspectFirstSetupResolution();
+  const repair = f.store.repairMarker.bind(f.store);
+  let changed = false;
+  f.store.repairMarker = async (...args) => {
+    changed = true;
+    await writeFile(join(f.stateDir, "module-operation-public.json"), '{"changed":true}');
+    return repair(...args);
+  };
+  const before = await readFile(f.markerPath);
+  const state = await readFile(join(f.stateDir, "first-setup.json"));
+  await expect(
+    f.recovering.recoverFirstSetupOwner({
+      inspectionId: snapshot.inspectionId,
+      revision: snapshot.revision!,
+      ownerGeneration: snapshot.ownerGeneration!,
+      clientClaimNonce: randomBytes(32).toString("base64url"),
+      password: PASSWORD,
+    }),
+  ).rejects.toMatchObject({ code: "setup.owner_required" });
+  expect(changed).toBe(true);
+  expect(await readFile(f.markerPath)).toEqual(before);
+  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
+});
