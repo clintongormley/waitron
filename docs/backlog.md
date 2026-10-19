@@ -4948,10 +4948,12 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
 - **a local maintenance account on each box** — belongs with B3; a discussion record, not an approved spec. Its remote-support half is tracked in Cloud and not approved. [Detail](backlog/box.md#a-local-maintenance-account-on-each-box)
 
-- **Upgrade testing — blocking before go-live (owner, 2026-09-26).** Still open: rows the product
-  itself writes. Every step here is built by this image's own migrator from today's change-feed
-  and append-only lists; a snapshot of a box at an earlier release, upgraded by the new image, is
-  the test that matches what a box does.
+- **A799. Upgrade testing with rows an older product wrote — blocking before go-live.**
+  [Design proposal](superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md)
+  and [review boards](backlog/mockups/a799-real-database-upgrade-testing/README.md) await owner
+  agreement. The build remains open: a supported post-A760 captured venue, a later image applying
+  pending migrations, exact preservation and a separate new sale. Issued-F1 coverage must be
+  resolved explicitly; an unpaid recipient-bearing order does not cover an issued invoice.
   [Detail](backlog/box.md#upgrade-testing--blocking-before-go-live-owner-2026-09-26)
 
 - **Automatic upgrades that can be undone until the first order** — owner, 2026-10-02. It takes no backup first, and once the new image has migrated the database there is no way back — an older image then refuses to start with `provisioning.database_ahead` (`deploy/README.md`, "It can migrate the box's database one way"). The point of no return is the first order taken on the new version, not the restart: rolling back after that would lose the order. [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)

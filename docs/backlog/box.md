@@ -505,6 +505,15 @@ and it predates A538-5 too (`placeValidated`, `setAsideExistingIdentity`).
 
 ## Upgrade testing — blocking before go-live (owner, 2026-09-26)
 
+**A799 design proposal, 19 October 2026:** the [design](../superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md)
+and [worked-example boards](mockups/a799-real-database-upgrade-testing/README.md) await owner
+agreement. Recommend an invented venue captured after an immutable older image writes it through
+product paths, with independently frozen facts and a separate candidate copy. Supported captures
+begin after A760’s approved squash/reset; this proposal does not execute that operator job or
+authorize an upgrade across it. Implementation, an actual pending-migration case and issued-F1
+coverage remain open. The existing synthetic walk stays complementary and unchanged. The detail
+below records the gap that prompted the design, not a new runtime measurement.
+
 - **Upgrade testing — blocking before go-live (owner, 2026-09-26).**
   `scripts/migration-upgrade.test.ts` walks one database through every shipped migration in date
   order, with the change feed installed between steps, and since A164 (#970) carries two synthetic
