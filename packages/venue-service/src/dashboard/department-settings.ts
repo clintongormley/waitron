@@ -697,7 +697,10 @@ export class DepartmentSettings extends LitElement {
     if (!row || !row.active || !draft) return nothing;
     const errors = this.shownErrors,
       disabled = !row.active,
-      state = saveActionState(this.scope);
+      state = saveActionState(this.scope),
+      highlighted =
+        Object.keys(errors).some((field) => field !== "serviceSteps") ||
+        Object.keys(this.shownStepErrors).length > 0;
     const serviceErrors: Partial<Record<keyof ServiceSettingsValue, string>> = {};
     for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
       if (errors[field]) serviceErrors[field] = errors[field];
@@ -890,7 +893,7 @@ export class DepartmentSettings extends LitElement {
             : nothing
         }
       </wt-tabs>
-      ${row.active && this.tab !== "receipt" ? html`<wt-form-actions .error=${[this.failure, Object.keys(errors).length ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
+      ${row.active && this.tab !== "receipt" ? html`<wt-form-actions .error=${[this.failure, highlighted ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
     </div>`;
   }
 }
