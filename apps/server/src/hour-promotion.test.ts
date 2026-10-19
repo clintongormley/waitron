@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,6 +10,7 @@ import {
   tenants,
   locations,
   nodes,
+  openVenueDatabase,
   readDeploymentMode,
   readSingletonRole,
   setDeploymentMode,
@@ -41,6 +44,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { promoteMirrorToPrimary } from "./promote.js";
 import { provisionNode } from "./provision-till.js";
+import { registerTill, registerTillFromArgs } from "../scripts/register-till.js";
 import { Hono } from "hono";
 import { mountPromoteApi } from "./promote-api.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
@@ -560,6 +564,349 @@ it("re-registers through provisionNode with the matching key and frozen hour", a
     ),
   );
   expect(await rows()).toEqual(after);
+});
+
+async function selectedRegistrationCommand(derived = false) {
+  const venueDir = derived ? join(root, "state", "venue") : join(root, "venue");
+  if (derived) await mkdir(venueDir);
+  const s = createNodeOperationPreparation({
+    stateDir: join(root, "state"),
+    venueDir,
+    db: suite.db,
+    node: primary,
+    modules: ALL_MODULES,
+    credentialKeyRing: TOTP_KEY_RING,
+    coordinator: createFirstSetupCoordinator(),
+    environment: {},
+  });
+  const recoveryKey = await mintBreakGlassKey(suite.db, primary.nodeId);
+  const recovery = {
+    ...binding,
+    action: "re-register",
+    eventId: "command-re-registration",
+    sourceId: "surviving-command-recovery",
+    targetNodeId: primary.nodeId,
+  };
+  const auth = { breakGlass: recoveryKey.secret };
+  const challenge = (await s.prepare(recovery, auth, context, { action: "clock-challenge" })) as {
+    id: string;
+  };
+  await s.prepare(recovery, auth, context, {
+    action: "compare-clocks",
+    browser: { challengeId: challenge.id, instantMs: Date.now() },
+  });
+  const selected = (await s.prepare(recovery, auth, context, {
+    action: "select",
+    answer: "no",
+    installationCodes: ["06RB"],
+  })) as { input: unknown };
+  expect(selected).toMatchObject({ identity: "06RC" });
+  const file = join(root, "operation.json");
+  await writeFile(file, JSON.stringify({ binding: recovery, input: selected.input }));
+  await suite.db.archiveTo(join(venueDir, "venue.db"));
+  const env: NodeJS.ProcessEnv = {
+    WAITRON_STATE_DIR: join(root, "state"),
+    WAITRON_VENUE_DIR: derived ? undefined : venueDir,
+    WAITRON_RECOVERY_OPERATION_FILE: file,
+    WAITRON_NODE_RECOVERY_KEY: recoveryKey.secret,
+  };
+  return { env, venueDir, recovery, file, recoveryKey };
+}
+
+it.each([false, true])(
+  "register-till consumes the authenticated selected hour and preserves counters on replay (derived venue %s)",
+  async (derived) => {
+    const command = await selectedRegistrationCommand(derived);
+    const { env, venueDir } = command;
+    const before = await rows();
+    external.internet.mockImplementation(async () => ({
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 0,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: performance.now(),
+      monotonicFinishedMs: performance.now(),
+    }));
+    await expect(registerTill(primary.nodeId, env, context)).resolves.toContainEqual({
+      module: "fiscal-verifactu",
+      report: expect.stringContaining("installation 06RC"),
+    });
+    const store = await openVenueDatabase(venueDir);
+    let after;
+    try {
+      const series = await store.venue.select().from(invoiceSeries);
+      expect(series.filter((row) => row.retiredAt !== null)).toEqual(
+        before.series.map((row) => ({ ...row, retiredAt: expect.any(Date) })),
+      );
+      expect(
+        series
+          .filter((row) => row.retiredAt === null)
+          .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
+      ).toEqual([
+        { code: "A-06RC", purpose: "standard", nextNumber: 1 },
+        { code: "FF-06RC", purpose: "full", nextNumber: 1 },
+        { code: "R-06RC", purpose: "rectificative", nextNumber: 1 },
+      ]);
+      await store.venue
+        .update(invoiceSeries)
+        .set({ nextNumber: 37 })
+        .where(sql`${invoiceSeries.retiredAt} is null`);
+      after = {
+        series: await store.venue.select().from(invoiceSeries),
+        sif: await store.venue.select().from(registroSif),
+        allocations: await store.venue.select().from(fiscalAllocations),
+      };
+      expect(after.sif.filter((row) => row.revocadoEn === null)).toEqual([
+        expect.objectContaining({ numeroInstalacion: "06RC" }),
+      ]);
+      expect(after.allocations).toHaveLength(2);
+    } finally {
+      await store.close();
+    }
+    await expect(
+      registerTillFromArgs(
+        [primary.nodeId, "--confirm-old-box-gone", "--confirm-sole-recovery"],
+        env,
+      ),
+    ).resolves.toContainEqual({
+      module: "fiscal-verifactu",
+      report: expect.stringContaining("installation 06RC"),
+    });
+    const replay = await openVenueDatabase(venueDir);
+    try {
+      expect({
+        series: await replay.venue.select().from(invoiceSeries),
+        sif: await replay.venue.select().from(registroSif),
+        allocations: await replay.venue.select().from(fiscalAllocations),
+      }).toEqual(after);
+    } finally {
+      await replay.close();
+    }
+    expect(
+      await readFile(join(root, "state", "module-preparation-state.json"), "utf8"),
+    ).not.toContain(command.recoveryKey.secret);
+  },
+);
+
+it("the built register-till command activates its selected hour and replays without allocating again", async () => {
+  const { env, venueDir, recoveryKey } = await selectedRegistrationCommand();
+  await cp(new URL("./assets", import.meta.url), join(root, "assets"), { recursive: true });
+  const binary = join(root, "register-till.mjs");
+  const buildScript = join(root, "build-command.mjs");
+  await writeFile(
+    buildScript,
+    `import { bundle } from ${JSON.stringify(new URL("../../../scripts/bundle-node.mjs", import.meta.url).href)};
+bundle([{ entry: "scripts/register-till.ts", outfile: ${JSON.stringify(binary)} }], {
+  release: { sourceCommit: "${"a".repeat(40)}", committedAt: "2026-10-15T00:00:00.000Z", instantMs: Date.parse("2026-10-15T00:00:00Z"), generator: "scripts/generate-hour-release.mjs:v1", generatorSha256: "${"b".repeat(64)}" },
+});
+`,
+  );
+  const environment = { ...process.env, ...env };
+  for (const name of Object.keys(environment))
+    if (name.startsWith("GIT_")) delete environment[name];
+  await promisify(execFile)(process.execPath, [buildScript], { timeout: 60_000, env: environment });
+  const preload = join(root, "synthetic-clock.mjs");
+  await writeFile(
+    preload,
+    `import https from "node:https";
+import { EventEmitter } from "node:events";
+import { syncBuiltinESMExports } from "node:module";
+const OriginalDate = Date;
+globalThis.Date = class extends OriginalDate {
+  constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:40:00Z"])); }
+  static now() { return OriginalDate.parse("2026-10-16T12:40:00Z"); }
+};
+https.request = (url, options, receive) => {
+  if (url.protocol !== "https:" || options.method !== "HEAD" || options.rejectUnauthorized !== true) throw new Error("unexpected clock request");
+  const request = new EventEmitter();
+  request.end = () => receive({ headers: { date: new Date().toUTCString() }, statusCode: 200, destroy() {} });
+  return request;
+};
+syncBuiltinESMExports();
+`,
+  );
+  const argv = [
+    "--import",
+    preload,
+    binary,
+    primary.nodeId,
+    "--confirm-old-box-gone",
+    "--confirm-sole-recovery",
+  ];
+  const first = await promisify(execFile)(process.execPath, argv, {
+    timeout: 20_000,
+    env: environment,
+  });
+  expect(first.stdout).toMatch(
+    /^fiscal-verifactu: .*\(installation 06RC\); series A-06RC, FF-06RC, R-06RC$/m,
+  );
+  expect(first.stdout + first.stderr).not.toContain(recoveryKey.secret);
+  const store = await openVenueDatabase(venueDir);
+  const snapshot = async (db: typeof store.venue) => ({
+    series: await db.select().from(invoiceSeries),
+    sif: await db.select().from(registroSif),
+    allocations: await db.select().from(fiscalAllocations),
+  });
+  let beforeReplay;
+  try {
+    const current = await snapshot(store.venue);
+    expect(current.sif.filter((row) => row.revocadoEn === null)).toEqual([
+      expect.objectContaining({ numeroInstalacion: "06RC" }),
+    ]);
+    expect(current.allocations).toHaveLength(2);
+    expect(
+      current.series.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber),
+    ).toEqual([123, 123, 123]);
+    expect(
+      current.series
+        .filter((row) => row.retiredAt === null)
+        .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
+    ).toEqual([
+      { code: "A-06RC", purpose: "standard", nextNumber: 1 },
+      { code: "FF-06RC", purpose: "full", nextNumber: 1 },
+      { code: "R-06RC", purpose: "rectificative", nextNumber: 1 },
+    ]);
+    await store.venue
+      .update(invoiceSeries)
+      .set({ nextNumber: 37 })
+      .where(sql`${invoiceSeries.retiredAt} is null`);
+    beforeReplay = await snapshot(store.venue);
+  } finally {
+    await store.close();
+  }
+  const second = await promisify(execFile)(process.execPath, argv, {
+    timeout: 20_000,
+    env: environment,
+  });
+  expect(second.stdout).toMatch(
+    /^fiscal-verifactu: .*\(installation 06RC\); series A-06RC, FF-06RC, R-06RC$/m,
+  );
+  expect(second.stdout + second.stderr).not.toContain(recoveryKey.secret);
+  const replay = await openVenueDatabase(venueDir);
+  try {
+    expect(await snapshot(replay.venue)).toEqual(beforeReplay);
+  } finally {
+    await replay.close();
+  }
+});
+
+it.each([
+  ["wrong key", "promotion.break_glass_invalid", undefined],
+  ["missing key", "promotion.break_glass_invalid", undefined],
+  ["old box not confirmed", "promotion.fence_not_attested", undefined],
+  ["parallel recovery not excluded", "module.operation_invalid", undefined],
+  ["changed event", "sif.allocation_invalid", undefined],
+  ["different target", "module.operation_invalid", undefined],
+  ["different state directory", "sif.allocation_invalid", undefined],
+  ["offline clock", "sif.allocation_invalid", "clock_unconfirmed"],
+  ["no confirmations", "sif.allocation_invalid", "outside_confirmation_missing"],
+])("register-till refuses %s without changing the selected venue", async (fault, code, reason) => {
+  const { env, recovery, file } = await selectedRegistrationCommand();
+  const beforeStore = await openVenueDatabase(join(root, "venue"));
+  const snapshot = async (db: typeof beforeStore.venue) => ({
+    series: await db.select().from(invoiceSeries),
+    sif: await db.select().from(registroSif),
+    allocations: await db.select().from(fiscalAllocations),
+  });
+  let before;
+  try {
+    before = await snapshot(beforeStore.venue);
+  } finally {
+    await beforeStore.close();
+  }
+  if (fault === "wrong key") env.WAITRON_NODE_RECOVERY_KEY = "wrong";
+  if (fault === "missing key") env.WAITRON_NODE_RECOVERY_KEY = "";
+  if (fault === "different state directory") {
+    env.WAITRON_STATE_DIR = join(root, "other-state");
+    await mkdir(env.WAITRON_STATE_DIR);
+  }
+  if (fault === "changed event")
+    await writeFile(
+      file,
+      JSON.stringify({
+        binding: { ...recovery, eventId: "changed" },
+        input: JSON.parse(await readFile(file, "utf8")).input,
+      }),
+    );
+  if (fault === "different target")
+    await writeFile(
+      file,
+      JSON.stringify({
+        binding: { ...recovery, targetNodeId: standby.nodeId },
+        input: JSON.parse(await readFile(file, "utf8")).input,
+      }),
+    );
+  if (fault !== "offline clock")
+    external.internet.mockImplementation(async () => ({
+      source: "internet",
+      result: "usable",
+      instantMs: Date.now(),
+      uncertaintyMs: 0,
+      wallStartedMs: Date.now(),
+      wallFinishedMs: Date.now(),
+      monotonicStartedMs: performance.now(),
+      monotonicFinishedMs: performance.now(),
+    }));
+  const attempt =
+    fault === "no confirmations"
+      ? registerTillFromArgs([primary.nodeId], env)
+      : registerTill(primary.nodeId, env, {
+          oldNodeNeutralised: fault !== "old box not confirmed",
+          noParallelRecovery: fault !== "parallel recovery not excluded",
+        });
+  await expect(attempt).rejects.toMatchObject({
+    code,
+    ...(reason === undefined ? {} : { params: { reason } }),
+  });
+  const afterStore = await openVenueDatabase(join(root, "venue"));
+  try {
+    expect(await snapshot(afterStore.venue)).toEqual(before);
+  } finally {
+    await afterStore.close();
+  }
+});
+
+it.each(
+  [
+    [],
+    ["node", "--confirm-old-box-gone"],
+    ["node", "--confirm-sole-recovery"],
+    ["node", "--confirm-old-box-gone", "--confirm-old-box-gone"],
+    ["node", "--confirm-sole-recovery", "--confirm-sole-recovery"],
+    ["node", "--unknown"],
+    ["node", "--confirm-old-box-gone", "--confirm-sole-recovery", "--extra"],
+  ].map((args) => ({ args })),
+)(
+  "register-till refuses incomplete or unknown command arguments %j before opening a venue",
+  ({ args }) => {
+    expect(() => registerTillFromArgs(args, { WAITRON_VENUE_DIR: join(root, "absent") })).toThrow(
+      "usage:",
+    );
+  },
+);
+
+it("a key-only operation service refuses administrator credentials without a credential key ring", async () => {
+  const s = createNodeOperationPreparation({
+    stateDir: join(root, "state"),
+    venueDir: join(root, "venue"),
+    db: suite.db,
+    node: standby,
+    modules: ALL_MODULES,
+    coordinator: createFirstSetupCoordinator(),
+    environment: {},
+  });
+  const before = await rows();
+  await expect(
+    s.withOperation(
+      { binding: joinBinding, input: { kind: "hour-dormant", version: 1 } },
+      credentials,
+      {},
+      async () => "unexpected-activation",
+    ),
+  ).rejects.toMatchObject({ code: "module.operation_invalid" });
+  expect(await rows()).toEqual(before);
 });
 
 it("invalidates an earlier comparison when the named recovery key changes", async () => {

@@ -285,7 +285,16 @@ registrations, series and counters; a historical-dispatch substitution fails bot
 Three more exact test-scope proposals retain the older command, live promotion and HTTP restart
 checks with their historical adapter explicitly named. All existing expected expressions remain,
 but the proposals are unapplied pending bundled owner approval. Current-hour success through
-`register-till` and the remaining restore integration are still open.
+`register-till` was still unqualified at that checkpoint; the following command qualification supersedes that limit. The remaining restore integration stays open.
+
+Current-hour re-registration now passes through the command and its built executable. Both
+require a previously selected operation, the matching node key and explicit old-box/sole-recovery
+confirmations. The command refreshes its clocks through the authenticated host; unavailable
+internet time refuses this non-interactive entry. The new series start at one, the old counters
+remain, and an exact replay keeps counters advanced to 37. The focused cases cover both venue
+path forms and command argument refusals. Synthetic clock responses and a pinned release fixture
+are used for the built-command test; no real external clock or hardware acceptance is claimed.
+The seven exact historical/protocol test-scope proposals remain unapplied.
 
 Provisioning's new layout of six shards still needs CI timing qualification. `test-light-a`
 reaches its ten-minute job limit while still reporting advancing provisioning files:70 completed

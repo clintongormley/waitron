@@ -44,3 +44,29 @@ formats. Their old environment-file collectors do not provide authority through 
 production preparation API. Shared Cloud accounts, backup access and recovery approvals continue
 to serve their separate purposes. The [hour-code design](../superpowers/specs/2026-10-16-a679-hour-coded-series-design.md)
 records the limits of clock and operator assurance.
+
+
+## Re-register an existing node from the operator command
+
+Use this command only with an operation already selected by the authenticated preparation host.
+It does not ask the recent-setup question or choose an hour for you. Keep the operation file and
+its host state together; editing its event, source or target does not create a new authorisation.
+
+Stop the server before opening its venue folder. Set `WAITRON_STATE_DIR` to the state directory
+that retains the selection. Set `WAITRON_VENUE_DIR` if the venue is outside that directory's
+`venue` subdirectory. `WAITRON_RECOVERY_OPERATION_FILE` names the selected operation file;
+`WAITRON_NODE_RECOVERY_KEY` supplies the matching secret through the environment, never an argument.
+After building the server, run:
+
+```sh
+node apps/server/dist/register-till.js <nodeId> --confirm-old-box-gone --confirm-sole-recovery
+```
+
+Those confirmations attest that the former seller is stopped and no parallel recovery is running.
+The command checks the key again, refreshes its clock comparison and checks the retained selection
+before activation. This non-interactive entry needs usable internet time alongside the box clock.
+An unavailable second clock refuses `sif.allocation_invalid` with reason `clock_unconfirmed`.
+Do not delete the retained state to bypass that refusal.
+
+A new event starts the selected series at one and retains the retired series and counters. An
+exact replay returns the original installation and preserves subsequent counter advances.

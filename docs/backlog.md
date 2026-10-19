@@ -324,7 +324,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A679. Finish first Live setup integration.** PR #1752 remains a draft after its first
   complete CI run. Migrate the remaining old protocol test inputs without losing behavioral
-  assertions, resolve current-hour command and restore integration, obtain the bundled exact
+  assertions, complete restore integration, obtain the bundled exact
   fiscal-check approvals, and qualify provisioning's six new CI shards against the job budget. [Detail](backlog/fiscal.md#finish-first-live-setup-integration).
 
 - **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault

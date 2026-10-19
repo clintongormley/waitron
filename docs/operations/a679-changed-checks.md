@@ -3,6 +3,47 @@
 Use this inventory to review changes to checks that existed before the replacement setup flow.
 It records changes on the candidate branch, not acceptance of the finished product.
 
+## Current-hour registration command, 2026-10-19
+
+This qualification supersedes the earlier command-success limits recorded below. The matching
+node key, retained selection and explicit old-box/sole-recovery confirmations now reach the
+existing authenticated preparation service from `register-till`. The command refreshes its clock
+comparison before consuming the opaque module input. A key-only service refuses administrator
+credentials when no credential-encryption ring was supplied; ordinary server callers retain theirs.
+No writer, SQL, migration, hash, numbering, guard or existing test assertion changes.
+
+The first new positive failed with `sif.allocation_invalid` / `outside_confirmation_missing`.
+After the host was connected, both explicit and derived venue paths activate `06RC`, keep the old
+series at 123 and create `A-06RC`, `FF-06RC`, `R-06RC` at one. Replay retains all stored activation
+rows and counters subsequently advanced to 37. A real subprocess runs the executable built through
+`scripts/bundle-node.mjs`, with the shipped font asset, a synthetic release stamp and a synthetic
+HTTPS Date response; it checks those same stored results and a second subprocess replay. This
+qualifies the command entry, not real internet time or deployment packaging.
+
+Nine refusal cases retain the selected venue's fiscal rows for absent/wrong keys, either missing
+isolation confirmation, changed binding/target, another host state directory, unavailable internet
+time and omitted command confirmations. Seven additional argument cases refuse incomplete,
+duplicate or unknown flags. Existing hour-promotion checks remain byte-for-byte; the file gains
+20 cases. The complete three-file current-entry selection passes 63 tests, the protected fiscal
+pair passes 20 unchanged, and the two focused root suites pass 3,348. Server types, scoped lint,
+explicit TypeScript formatting and whitespace checks pass.
+
+In an independently cloned and frozen-installed candidate, reverting the command to raw modules
+fails all three source/built positives with `outside_confirmation_missing`. Omitting fresh clock
+comparison fails those same three with `clock_stale`. Replacing the caller's isolation context
+with unconditional confirmations makes both isolation refusal cases resolve, failing their
+rejection assertions. Removing the key-only service's missing-ring refusal makes the authenticated
+administrator callback return its sentinel, failing the intended rejection. The candidate is
+restored between controls. Lane E retains the logs under
+`receipts/a679-register-current-20261019-2023`.
+
+Initial qualification mistakes are retained in those logs: the offline sample expected
+`clock_disagreement` instead of `clock_unconfirmed`; a table supplied spread arguments instead of
+one argument array; the first built fixture omitted its font; and the first stdout check omitted
+the report's SIF identifier. Only these new test fixtures/checks were corrected. The original
+assertions and seven pending scope patches are unchanged, unapplied and still applicable.
+Remaining restore/protocol integration, exact approvals and current-head CI still gate landing.
+
 ## Retired promotion inputs and retained command checks, 2026-10-19
 
 `apps/server/src/retired-fiscal-operation-entry.test.ts` adds two production-adapter checks:

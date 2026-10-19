@@ -45,7 +45,7 @@ export function createNodeOperationPreparation(options: {
   db: Database;
   node: ProvisionedNode;
   modules: readonly WaitronModule[];
-  credentialKeyRing: TotpKeyRing;
+  credentialKeyRing?: TotpKeyRing;
   coordinator: FirstSetupCoordinator;
   environment: Readonly<Record<string, string | undefined>>;
 }) {
@@ -147,6 +147,7 @@ export function createNodeOperationPreparation(options: {
         heldCredentials.breakGlass,
         authenticated,
       );
+    if (options.credentialKeyRing === undefined) return invalid(binding);
     return withAuthenticatedOperation(
       { db: options.db, credentialKeyRing: options.credentialKeyRing },
       {
