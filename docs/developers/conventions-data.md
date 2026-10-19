@@ -1860,7 +1860,10 @@ row, all six placement fields equal) blocks no other table's new place (`blocksP
 A closing party keeps its table names as text and releases its `party_tables` rows
 (`closePartyTables`, `apps/server/src/parties.ts`). Permanent removal releases order delivery
 references and calls each module's `TableRemoval` seat before deleting the table
-(`apps/server/src/table-removal.ts`). Bookings copies the table label and clears its pointer
+(`apps/server/src/table-removal.ts`). Boot supplies these contributions from modules with an applied
+schema version above zero, including switched-off modules; never-installed modules are left out.
+`apps/server/src/boot.table-removal.test.ts` exercises the enabled, switched-off and never-installed
+bookings cases through the trading till's floor read. Bookings copies the table label and clears its pointer
 (`packages/bookings/src/table-removal.ts`); the delivery release copies the label onto referenced
 orders (`apps/server/src/delivery-release.ts`). A table is in service through `tableInService`
 (`packages/db/src/table-in-service.ts`): it has a today's row in a live zone. That test does not
