@@ -1296,21 +1296,23 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 **Design (2026-10-17, revised the same day after the owner's answers to Q15–Q20):** [the lifecycle,
 one order of precedence, how each state is shown on the card, the map and the zone tabs, service
 steps, and six new owner questions, Q29–Q34](../superpowers/specs/2026-10-17-a757-table-states-design.md),
-with [mock-ups](mockups/a757-table-states/). Nothing is built until Q29–Q34 are answered and A756
-has landed.
+with [mock-ups](mockups/a757-table-states/). Q29–Q34 were answered on 2026-10-17; slice 1, Needs clearing per department, landed (plan
+`docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`).
 
-Today Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) holds two
-things:
+Venue settings' Tables tab (`apps/dashboard/src/screens/service-status-screen.ts`) held two things:
 
-- **Needs clearing, on or off for the whole venue** (`service_settings.clearing_workflow`,
-  `packages/venue-service/src/schema/settings.ts`). When on, a table a party leaves shows "Needs
-  clearing" on the till's floor until someone taps "Mark cleared".
+- **Needs clearing** — until A757 slice 1 (2026-10-19), on or off for the whole venue
+  (`service_settings.clearing_workflow`). When on, a table a party leaves shows "Needs clearing" on
+  the till's floor until someone taps "Mark cleared". Slice 1 moved the switch to each department,
+  in the department dialog's Service tab under Table states (`departments.needs_clearing`).
 - **Statuses the venue makes up** (`table_service_statuses`,
   `packages/db/src/schema/table-service-statuses.ts`): a label and a colour. A waiter puts one on a
   table from the till's table screen (`apps/till/src/screens/till-table-order-screen.ts:2558`); a
   table carries at most one (`dining_tables.status_id`), and the floor shows its colour. They sit
   beside the lifecycle the till works out itself — Free, Reserved, Seated, Needs clearing — and
   change none of it.
+
+The Tables tab now holds only the venue's own statuses, which slice 2 retires.
 
 Decided (owner, 2026-10-16):
 
@@ -1345,6 +1347,30 @@ seated, joined, paid and taken off. Three additions the owner asked for:
   number of LINES (`itemCount`, `apps/server/src/working-order.ts`), unlabelled. Show instead the
   number of items ordered, then how many are held, waiting, ready and so on — in Held, Waiting and
   the other lists A765 names.
+
+## A893. Owner review of every table state and its look, after A757 lands
+
+**A893 (owner, 2026-10-18).** Waits for the whole of A757 (owner, relayed by the watcher,
+2026-10-18); Waiter called (design §4 row 5) cannot be shown until A508. Once A757 lands, show the
+owner, on the running till:
+
+- every row of [A757 §4](../superpowers/specs/2026-10-17-a757-table-states-design.md#4-one-order-of-precedence),
+  Forgotten through Free, on the floor map and on the list card, in light and dark, at 390 and
+  1280 px;
+- the two pulse speeds (fast for Forgotten, slow for Overdue and Time to fire) and what each looks
+  like with reduced motion;
+- the zone tabs carrying a hidden zone's most urgent state, and the toolbar edge's "›" for a tab
+  scrolled out of sight (A757 §7);
+- Nothing needed's calm look (A757 §9).
+
+Two owner suggestions are open; settle them here:
+
+- "Dashes should maybe be used for any table which is unoccupied" (owner, 2026-10-18, Q42 notes) —
+  Free, Reserved and Needs clearing all dashed, told apart by colour and cue. To weigh in the A797
+  revision with a picture, beside A757's rule of dashes for Needs clearing only, in both themes.
+- "It feels like we need a key of the different states when we click the ?" (owner, 2026-10-18) —
+  assigned to A582 slice 4: with help on, the floor shows a badge, “What the colours mean”, that
+  opens a key of every table state. It follows whatever look this review settles.
 
 ## A758. Adjustment reasons: review the rules, then a page of their own
 

@@ -585,6 +585,62 @@ describe("whole service settings saves", () => {
     expect(await settingsSnapshot(fx)).toEqual(before);
   });
 
+  async function needsClearingIds(fx: Awaited<ReturnType<typeof settingsFixture>>) {
+    const model = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+    expect(model.status).toBe(200);
+    return ((await model.json()) as { needsClearingDepartmentIds: string[] })
+      .needsClearingDepartmentIds;
+  }
+
+  it("saves a department's Needs clearing switch and lists it in the model", async () => {
+    const fx = await settingsFixture();
+    const on = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      needsClearing: true,
+    });
+    expect(on.status).toBe(204);
+    expect(await needsClearingIds(fx)).toEqual([fx.departmentId]);
+    const off = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      needsClearing: false,
+    });
+    expect(off.status).toBe(204);
+    expect(await needsClearingIds(fx)).toEqual([]);
+  });
+
+  it("leaves the switch as it was when the save does not name it", async () => {
+    const fx = await settingsFixture();
+    await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      needsClearing: true,
+    });
+    const saved = await send(
+      fx.app,
+      "PUT",
+      fx.departmentPath,
+      fx.managerCookie,
+      departmentSettings,
+    );
+    expect(saved.status).toBe(204);
+    expect(await needsClearingIds(fx)).toEqual([fx.departmentId]);
+  });
+
+  it("refuses a switch that is not true or false, naming it, and writes nothing", async () => {
+    const fx = await settingsFixture();
+    for (const needsClearing of ["true", 1, null, [true]]) {
+      const before = await rawSettingsSnapshot();
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        ...departmentSettings,
+        needsClearing,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "needsClearing" } },
+      });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+    }
+  });
+
   it.each(["departmentPath", "zonePath"] as const)("requires a manager for %s", async (path) => {
     const fx = await settingsFixture();
     const body = path === "departmentPath" ? departmentSettings : zoneSettings;
@@ -2137,7 +2193,6 @@ describe("the venue's service settings", () => {
     expect(await read.json()).toMatchObject({
       settings: { editSentLines: true },
       kitchenTicketGrouping: "combined",
-      clearingWorkflow: false,
     });
     expect(
       (await send(fx.app, "GET", "/management-api/venue-service", fx.supervisorCookie)).status,
@@ -2426,89 +2481,36 @@ describe("the print-moved-slips setting", () => {
       kitchenTicketGrouping: unknown;
       printHeldWork: unknown;
       releaseReminderMinutes: unknown;
-      clearingWorkflow: unknown;
     };
     expect(body.settings).toEqual({ editSentLines: true });
     expect(body.kitchenTicketGrouping).toBe("combined");
     expect(body.printHeldWork).toBe(false);
     expect(body.releaseReminderMinutes).toBe(10);
-    expect(body.clearingWorkflow).toBe(false);
   });
 });
 
-describe("the clearing setting", () => {
-  const CLEARING = "/management-api/venue-service/settings/clearing-workflow";
-  async function stored(fx: Fixture): Promise<unknown> {
-    return (
-      (await (
-        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-      ).json()) as { clearingWorkflow: unknown }
-    ).clearingWorkflow;
-  }
-
-  it("reads off until a manager turns it on, and back", async () => {
-    const fx = await fixture();
-    expect(await stored(fx)).toBe(false);
-    expect(
-      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: true })).status,
-    ).toBe(204);
-    expect(await stored(fx)).toBe(true);
-    expect(
-      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: false })).status,
-    ).toBe(204);
-    expect(await stored(fx)).toBe(false);
-  });
-
-  it("refuses anything but true or false, naming the field, and keeps the stored value", async () => {
+describe("the venue-wide clearing switch", () => {
+  it("is no longer served", async () => {
     const fx = await fixture();
     expect(
-      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: true })).status,
-    ).toBe(204);
-    for (const body of [
-      {},
-      { clearingWorkflow: "false" },
-      { clearingWorkflow: 0 },
-      { clearingWorkflow: null },
-      { clearingWorkflow: [false] },
-    ]) {
-      const rejected = await send(fx.app, "PUT", CLEARING, fx.managerCookie, body);
-      expect(rejected.status).toBe(400);
-      expect(await rejected.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "clearingWorkflow" } },
-      });
-    }
-    expect(await stored(fx)).toBe(true);
-  });
-
-  it("lets only a signed-in manager change it", async () => {
-    const fx = await fixture();
-    const body = { clearingWorkflow: true };
-    expect((await send(fx.app, "PUT", CLEARING, undefined, body)).status).toBe(401);
-    const refused = await send(fx.app, "PUT", CLEARING, fx.staffCookie, body);
-    expect(refused.status).toBe(403);
-    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    expect(await stored(fx)).toBe(false);
-  });
-
-  it("leaves the other settings as they were", async () => {
-    const fx = await fixture();
+      await (await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)).json(),
+    ).not.toHaveProperty("clearingWorkflow");
     expect(
-      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: true })).status,
-    ).toBe(204);
-    const body = (await (
-      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-    ).json()) as {
-      settings: unknown;
-      kitchenTicketGrouping: unknown;
-      printHeldWork: unknown;
-      printMovedSlips: unknown;
-      releaseReminderMinutes: unknown;
-    };
-    expect(body.settings).toEqual({ editSentLines: true });
-    expect(body.kitchenTicketGrouping).toBe("combined");
-    expect(body.printHeldWork).toBe(false);
-    expect(body.printMovedSlips).toBe(true);
-    expect(body.releaseReminderMinutes).toBe(10);
+      await (
+        await send(fx.app, "GET", "/management-api/venue-service/settings", fx.managerCookie)
+      ).json(),
+    ).not.toHaveProperty("clearingWorkflow");
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          "/management-api/venue-service/settings/clearing-workflow",
+          fx.managerCookie,
+          { clearingWorkflow: true },
+        )
+      ).status,
+    ).toBe(404);
   });
 });
 

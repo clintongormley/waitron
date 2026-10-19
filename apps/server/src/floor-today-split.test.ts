@@ -11,7 +11,7 @@ import {
   tableServiceStatuses,
   workingOrders,
 } from "@waitron/db";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
 import { foodOnItsWay } from "./delivery-release.js";
@@ -477,11 +477,11 @@ describe("guests at a joined table that is split", () => {
   }
 
   async function withClearing<T>(fn: () => Promise<T>): Promise<T> {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     try {
       return await fn();
     } finally {
-      await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+      await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     }
   }
 

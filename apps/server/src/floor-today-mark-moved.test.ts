@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { readLayout, saveLayout } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { resetZone } from "./floor-today-store.js";
@@ -78,7 +78,7 @@ beforeAll(async () => {
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });
   cookie = `${SESSION_COOKIE}=${session.token}`;
-  await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+  await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
 });
 
 async function send(method: string, path: string, body?: unknown): Promise<Response> {

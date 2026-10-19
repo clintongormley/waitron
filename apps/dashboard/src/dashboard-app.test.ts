@@ -1741,7 +1741,7 @@ describe("dashboard-app", () => {
       child.tagName.toLowerCase(),
     );
 
-  it("puts venue service's Needs clearing switch above statuses on Tables and its kitchen panel after the core one", async () => {
+  it("leaves Tables to its core statuses panel and puts venue service's kitchen panel after the core one", async () => {
     history.replaceState(null, "", "/manage/venue-settings/view/tables");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -1762,15 +1762,12 @@ describe("dashboard-app", () => {
             printHeldWork: false,
             printMovedSlips: true,
             releaseReminderMinutes: 10,
-            clearingWorkflow: false,
+            needsClearingDepartmentIds: [],
           } as never)
         : stubRequest(path, method, body, options);
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(el);
-    expect(panelsOn(el, "tables")).toEqual([
-      "dashboard-venue-service-settings",
-      "dashboard-service-status-screen",
-    ]);
+    expect(panelsOn(el, "tables")).toEqual(["dashboard-service-status-screen"]);
     expect(panelsOn(el, "kitchen")).toEqual([
       "dashboard-kitchen-screen",
       "dashboard-venue-service-settings",
@@ -2943,7 +2940,7 @@ describe("dashboard-app", () => {
     expect(courses.shadowRoot!.querySelector("[data-test=name-c1]")).toBeNull();
   });
 
-  it("includes venue-service settings panels for a supervisor as read-only", async () => {
+  it("includes the venue-service settings panel for a supervisor as read-only", async () => {
     const supervisor = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -2960,11 +2957,8 @@ describe("dashboard-app", () => {
     const panels = settings.shadowRoot!.querySelectorAll<HTMLElement & { readOnly: boolean }>(
       "dashboard-venue-service-settings",
     );
-    expect(panels).toHaveLength(2);
-    expect([...panels].map((panel) => [panel.getAttribute("subject"), panel.readOnly])).toEqual([
-      ["tables", true],
-      ["kitchen", true],
-    ]);
+    expect(panels).toHaveLength(1);
+    expect(panels[0]!.readOnly).toBe(true);
   });
 
   it("hides the diagnostics nav from a supervisor and shows it to a manager", async () => {
@@ -4364,7 +4358,7 @@ describe("dashboard URL navigation", () => {
             printHeldWork: false,
             printMovedSlips: true,
             releaseReminderMinutes: null,
-            clearingWorkflow: false,
+            needsClearingDepartmentIds: [],
             settings: { editSentLines: true },
           }
         : []) as never;
@@ -4440,7 +4434,7 @@ describe("dashboard URL navigation", () => {
             printHeldWork: false,
             printMovedSlips: true,
             releaseReminderMinutes: null,
-            clearingWorkflow: false,
+            needsClearingDepartmentIds: [],
             settings: { editSentLines: true },
           }
         : []) as never;
@@ -7822,7 +7816,7 @@ describe("department list links inside dashboard capture", () => {
       printHeldWork: false,
       printMovedSlips: true,
       releaseReminderMinutes: 10,
-      clearingWorkflow: false,
+      needsClearingDepartmentIds: [],
     };
     el.shadowRoot!.append(list);
     await list.updateComplete;
@@ -7940,7 +7934,7 @@ describe("mounted public department dialogs", () => {
       printHeldWork: false,
       printMovedSlips: true,
       releaseReminderMinutes: null,
-      clearingWorkflow: false,
+      needsClearingDepartmentIds: [],
     };
     const request: DashboardRequest = async (url) => {
       if (url === "/management-api/venue-service") return structuredClone(model) as never;

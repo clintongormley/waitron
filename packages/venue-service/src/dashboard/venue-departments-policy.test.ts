@@ -150,6 +150,7 @@ it.each([
                 orderStart: "table",
                 paidWhen: "prepay",
                 collectionNumber: "none",
+                needsClearing: false,
                 [field]: changed,
               },
       },

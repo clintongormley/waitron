@@ -31,6 +31,7 @@ export const departments = table(
     tradingName: label("trading_name").notNull(),
     isDefault: flag("is_default").notNull().default(false),
     active: flag("active").notNull().default(true),
+    needsClearing: flag("needs_clearing").notNull().default(false),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [

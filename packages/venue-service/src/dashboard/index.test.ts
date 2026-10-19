@@ -4,7 +4,6 @@ import { LiveData, createRequest, currentLocale, setLocale } from "@waitron/dash
 import { VENUE_SERVICE_DASHBOARD } from "./index.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
-import type { ServiceSettingsPanel } from "./service-settings-panel.js";
 import type { OpeningHoursScreen } from "./opening-hours-screen.js";
 import type { PeriodsList } from "./periods-list.js";
 
@@ -20,7 +19,7 @@ afterEach(() => {
 });
 
 describe("VENUE_SERVICE_DASHBOARD", () => {
-  it("adds a kitchen panel and a Needs clearing switch above statuses for venue service managers", () => {
+  it("adds a kitchen panel for venue service managers", () => {
     expect(
       VENUE_SERVICE_DASHBOARD.settingsPanels!.map(({ id, tab, order, requiresPermission }) => ({
         id,
@@ -35,52 +34,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
         order: 10,
         requiresPermission: "venue_service.manage",
       },
-      {
-        id: "venue-service-tables",
-        tab: "tables",
-        order: -10,
-        requiresPermission: "venue_service.manage",
-      },
     ]);
-  });
-
-  it("renders the tables panel on the context's request and live data", async () => {
-    const fetchImpl = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        text: async () =>
-          JSON.stringify({
-            settings: { editSentLines: true },
-            kitchenTicketGrouping: "combined",
-            printHeldWork: false,
-            printMovedSlips: true,
-            releaseReminderMinutes: 10,
-            clearingWorkflow: true,
-          }),
-      } as Response),
-    );
-    const liveData = new LiveData();
-    const handle = VENUE_SERVICE_DASHBOARD.settingsPanels![1]!.create({
-      request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
-      liveData,
-    });
-    const container = document.createElement("div");
-    document.body.append(container);
-    containers.push(container);
-    render(handle.render(), container);
-    const panel = container.querySelector<ServiceSettingsPanel>(
-      "dashboard-venue-service-settings",
-    )!;
-    expect(panel.subject).toBe("tables");
-    expect(panel.api.liveData).toBe(liveData);
-    await vi.waitFor(() =>
-      expect(panel.shadowRoot!.querySelector('wt-switch[name="clearingWorkflow"]')).not.toBeNull(),
-    );
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "/management-api/venue-service",
-      expect.objectContaining({ method: "GET" }),
-    );
   });
 
   it("places Departments and zones first in the Venue operations group", () => {
@@ -108,7 +62,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       hours: [],
       readiness: [],
       settings: { editSentLines: true },
-      clearingWorkflow: false,
+      needsClearingDepartmentIds: [],
     };
     const fetchImpl = vi.fn((path: string) =>
       Promise.resolve({
@@ -159,7 +113,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       printHeldWork: false,
       printMovedSlips: true,
       releaseReminderMinutes: null,
-      clearingWorkflow: false,
+      needsClearingDepartmentIds: [],
     };
     const fetchImpl = vi.fn((path: string) =>
       Promise.resolve({

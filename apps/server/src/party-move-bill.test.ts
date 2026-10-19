@@ -13,7 +13,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { mergeBills, splitBill } from "./bill-actions.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill, type MoveBillOptions, type MoveTarget } from "./move-bill.js";
@@ -490,7 +490,7 @@ describe("what a move refuses, changing nothing", () => {
   it("refuses a table that needs clearing", async () => {
     const p = await twoParties("Mesa por recoger");
     const dirty = await v.table("Mesa por recoger D");
-    // Stands in for a party having left it with the venue's clearing setting on.
+    // Stands in for a party having left it with every department's Needs clearing on.
     await inTx(v, (tx) =>
       tx
         .update(diningTables)
@@ -1532,20 +1532,20 @@ describe("two tills at once", () => {
 });
 
 describe("the guests take their only unpaid bill to the counter (Review Focus 2)", () => {
-  it("lets the party finish, its tables follow the clearing setting, and the counter bill is paid once", async () => {
+  it("lets the party finish, its tables follow their departments' Needs clearing switch, and the counter bill is paid once", async () => {
     const mesa = await v.table("Mesa se van");
     const ana = await seat(v, mesa);
     await order(v, ana.tabId, "Burger");
     await move(ana.tabId, { counter: { zoneId: v.counter.zoneId } });
     const expectedPartyRevision = await revisionOf(v, ana.partyId);
 
-    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     try {
       await inTx(v, (tx) =>
         finishTable(tx, { partyId: ana.partyId, expectedPartyRevision, operatorId: OPERATOR }),
       );
     } finally {
-      await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+      await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     }
 
     expect((await partyRow(v, ana.partyId)).state).toBe("closed");

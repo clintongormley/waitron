@@ -33,14 +33,12 @@ import {
   acknowledgeKitchenNotice,
   listStationNotices,
   listStationsNotices,
-  readClearingWorkflow,
   readEditSentLines,
   readKitchenTicketGrouping,
   readPrintHeldWork,
   readPrintMovedSlips,
   readReleaseReminderMinutes,
   recordKitchenNotices,
-  writeClearingWorkflow,
   writeEditSentLines,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
@@ -1313,7 +1311,6 @@ describe("the edit-sent-lines setting", () => {
       {
         id: 1,
         editSentLines: true,
-        clearingWorkflow: false,
         kitchenTicketGrouping: "combined",
         printHeldWork: false,
         printMovedSlips: true,
@@ -1323,38 +1320,6 @@ describe("the edit-sent-lines setting", () => {
     // Raw SQL, so the stored value is read without the column's boolean mapping.
     await db.execute(sql`update service_settings set edit_sent_lines = 0`);
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
-  });
-});
-
-describe("the clearing-workflow setting", () => {
-  it("reads OFF when the venue has no settings row", async () => {
-    expect(await inTx((tx) => readClearingWorkflow(tx))).toBe(false);
-  });
-
-  it("reads what was written, creating the row when it is missing, and leaves the other setting alone", async () => {
-    await inTx((tx) => writeEditSentLines(tx, false));
-    await inTx((tx) => writeClearingWorkflow(tx, true));
-    expect(await inTx((tx) => readClearingWorkflow(tx))).toBe(true);
-    expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
-    await inTx((tx) => writeClearingWorkflow(tx, false));
-    expect(await inTx((tx) => readClearingWorkflow(tx))).toBe(false);
-    await db.execute(sql`update service_settings set clearing_workflow = 1`);
-    expect(await inTx((tx) => readClearingWorkflow(tx))).toBe(true);
-  });
-
-  it("creates the row with the other setting at its default when only this one is written", async () => {
-    await inTx((tx) => writeClearingWorkflow(tx, true));
-    expect(await db.select().from(serviceSettings)).toEqual([
-      {
-        id: 1,
-        editSentLines: true,
-        clearingWorkflow: true,
-        kitchenTicketGrouping: "combined",
-        printHeldWork: false,
-        printMovedSlips: true,
-        releaseReminderMinutes: 10,
-      },
-    ]);
   });
 });
 
@@ -1368,7 +1333,6 @@ describe("the kitchen ticket grouping setting", () => {
     await inTx((tx) => writeKitchenTicketGrouping(tx, "separate"));
     expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("separate");
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
-    expect(await inTx((tx) => readClearingWorkflow(tx))).toBe(false);
     await inTx((tx) => writeKitchenTicketGrouping(tx, "combined"));
     expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("combined");
     await db.execute(sql`update service_settings set kitchen_ticket_grouping = 'separate'`);
@@ -1381,7 +1345,6 @@ describe("the kitchen ticket grouping setting", () => {
       {
         id: 1,
         editSentLines: true,
-        clearingWorkflow: false,
         kitchenTicketGrouping: "separate",
         printHeldWork: false,
         printMovedSlips: true,
@@ -1410,7 +1373,6 @@ describe("the print-held-work setting", () => {
     await inTx((tx) => writePrintHeldWork(tx, true));
     expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(true);
     expect(await inTx((tx) => readEditSentLines(tx))).toBe(false);
-    expect(await inTx((tx) => readClearingWorkflow(tx))).toBe(false);
     expect(await inTx((tx) => readKitchenTicketGrouping(tx))).toBe("combined");
     await inTx((tx) => writePrintHeldWork(tx, false));
     expect(await inTx((tx) => readPrintHeldWork(tx))).toBe(false);
@@ -1425,7 +1387,6 @@ describe("the print-held-work setting", () => {
       {
         id: 1,
         editSentLines: true,
-        clearingWorkflow: false,
         kitchenTicketGrouping: "combined",
         printHeldWork: true,
         printMovedSlips: true,
@@ -1463,7 +1424,6 @@ describe("the print-moved-slips setting", () => {
       {
         id: 1,
         editSentLines: true,
-        clearingWorkflow: false,
         kitchenTicketGrouping: "combined",
         printHeldWork: false,
         printMovedSlips: false,
@@ -1496,7 +1456,6 @@ describe("the release-reminder setting", () => {
       {
         id: 1,
         editSentLines: true,
-        clearingWorkflow: false,
         kitchenTicketGrouping: "combined",
         printHeldWork: false,
         printMovedSlips: true,

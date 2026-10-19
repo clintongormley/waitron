@@ -185,31 +185,12 @@ describe("VenueServiceApi", () => {
       printHeldWork: false,
       printMovedSlips: true,
       releaseReminderMinutes: 10,
-      clearingWorkflow: false,
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
     expect(await api.loadSettingsReadOnly()).toEqual(settings);
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service/settings", "GET"],
-    ]);
-  });
-  it("stores whether tables need clearing after Finish table", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.saveClearingWorkflow(true);
-    expect(
-      fetchImpl.mock.calls.map(([path, init]) => [
-        path,
-        init.method,
-        JSON.parse(init.body as string),
-      ]),
-    ).toEqual([
-      [
-        "/management-api/venue-service/settings/clearing-workflow",
-        "PUT",
-        { clearingWorkflow: true },
-      ],
     ]);
   });
 
@@ -223,7 +204,7 @@ describe("VenueServiceApi", () => {
       printHeldWork: true,
       printMovedSlips: false,
       releaseReminderMinutes: null,
-      clearingWorkflow: true,
+      needsClearingDepartmentIds: ["d1"],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(model));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
@@ -233,7 +214,6 @@ describe("VenueServiceApi", () => {
       printHeldWork: true,
       printMovedSlips: false,
       releaseReminderMinutes: null,
-      clearingWorkflow: true,
     });
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service", "GET"],
@@ -440,6 +420,7 @@ describe("combined settings requests", () => {
       orderStart: "table",
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
+      needsClearing: false,
       transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
     });
     expect(
@@ -458,6 +439,7 @@ describe("combined settings requests", () => {
           orderStart: "table",
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
+          needsClearing: false,
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
         },
       ],

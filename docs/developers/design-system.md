@@ -5007,28 +5007,30 @@ dialog's Receipts tab, and a zone's layouts are reached from the Floor plans pag
 The sidebar returns to the bare list. An editor's deep link keeps that list underneath it;
 closing the editor returns focus to its originating row menu, or Add when that row is gone.
 
-Edit department is tabbed. Details holds name and trading name. Service holds one section per
-topic, each under its own heading; today the one section is “Orders and payment”, with the service
-settings and the zones that differ. Receipts, between Service and Transfers, holds the department's
-receipt editor, and is offered only to someone with `layout.configure`. Transfers holds the allowed
-destinations and the receiving desk profile, and is offered only while two or more departments are
-active. The dialog is wide whenever it offers Receipts, and standard otherwise, so changing tab
-never changes its width. Details, Service and Transfers share one draft and one Save, in a row
-below the strip; Receipts has its own draft and its own Cancel and Save, and the shared row is
-hidden while it shows. Changing tab keeps both drafts. A Save closes the dialog only when the other
-draft is clean, and closing asks one question covering both. Changing tab never asks about unsaved
-changes, because the screen's `navigationScopes` (`venue-departments-shell.ts`) lets an address
-change between the open department's offered tabs through. The address keeps the open tab (`view`
-is `service`, `receipt` or `transfers`; Details has none); the list's “Set up the tax-agency
-description” and the image library's receipt-logo link open Receipts, and an address naming an unknown view,
-or a tab not offered, opens Details and replaces the address without adding a history entry. A
-refusal naming a field, or an invalid Save, of the shared draft shows the first of Details, Service
-and Transfers holding a marked field; a mark appearing in the receipt editor, such as a refusal naming a
-field, while another tab shows brings back Receipts (`department-receipt-invalid`). A tab shown this way replaces the
-address, the field takes focus, and every tab holding a marked field is marked. A strip too wide for the dialog scrolls sideways inside it. Edit zone
-holds its name and four raw service overrides. Each override offers “Same as department (…)”, and saving that choice writes null. How
-orders start chooses Table service or Counter service. Counter service has a paid-when choice and
-a collection-ticket choice. The zone's name and policy save in one request. Edit department preserves the department's receipt policy.
+Edit department is tabbed. Details holds name and trading name. Service holds two sections, each
+under its own heading: “Orders and payment”, with the service settings and the zones that differ,
+and “Table states”, with the Needs clearing switch. Receipts, between Service and Transfers, holds
+the department's receipt editor, and is offered only to someone with `layout.configure`. Transfers
+holds the allowed destinations and the receiving desk profile, and is offered only while two or more
+departments are active. The dialog is wide whenever it offers Receipts, and standard otherwise, so
+changing tab never changes its width. Details, Service and Transfers share one draft and one Save,
+in a row below the strip; Receipts has its own draft and its own Cancel and Save, and the shared row
+is hidden while it shows. Changing tab keeps both drafts. A Save closes the dialog only when the
+other draft is clean, and closing asks one question covering both. Changing tab never asks about
+unsaved changes, because the screen's `navigationScopes` (`venue-departments-shell.ts`) lets an
+address change between the open department's offered tabs through. The address keeps the open tab
+(`view` is `service`, `receipt` or `transfers`; Details has none); the list's “Set up the tax-agency
+description” and the image library's receipt-logo link open Receipts, and an address naming an
+unknown view, or a tab not offered, opens Details and replaces the address without adding a history
+entry. A refusal naming a field, or an invalid Save, of the shared draft shows the first of Details,
+Service and Transfers holding a marked field; a mark appearing in the receipt editor, such as a
+refusal naming a field, while another tab shows brings back Receipts (`department-receipt-invalid`).
+A tab shown this way replaces the address, the field takes focus, and every tab holding a marked
+field is marked. A strip too wide for the dialog scrolls sideways inside it. Edit zone holds its
+name and four raw service overrides. Each override offers “Same as department (…)”, and saving that
+choice writes null. How orders start chooses Table service or Counter service. Counter service has a
+paid-when choice and a collection-ticket choice. The zone's name and policy save in one request.
+Edit department preserves the department's receipt policy.
 
 The Receipts tab (`dashboard-department-receipt-editor`) holds receipt printing, trading-name
 printing, address printing, logo, phone, email, the installed tax-agency description field,

@@ -32,7 +32,7 @@ function model(count = 2): VenueServiceView {
     printHeldWork: false,
     printMovedSlips: true,
     releaseReminderMinutes: null,
-    clearingWorkflow: false,
+    needsClearingDepartmentIds: [],
   };
 }
 beforeEach(() => setLocale("en"));

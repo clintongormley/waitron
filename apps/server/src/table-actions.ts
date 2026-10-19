@@ -71,7 +71,8 @@ export interface CombineResult {
 
 /**
  * The party moves off all its tables to `toTableId`. A table another party holds combines this
- * party into that one; the tables left behind need clearing where the venue's setting says so.
+ * party into that one; the tables left behind need clearing where their department has Needs
+ * clearing on.
  */
 export async function moveGuests(
   tx: Transaction,

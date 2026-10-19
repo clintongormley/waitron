@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { partyTablesName } from "@waitron/shared";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -172,11 +172,11 @@ function noticesOn(billIds: string[]) {
 }
 
 async function withClearing<T>(fn: () => Promise<T>): Promise<T> {
-  await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+  await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
   try {
     return await fn();
   } finally {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
   }
 }
 

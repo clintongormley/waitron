@@ -2646,6 +2646,45 @@ it("leaves a table's clearing state behind", async () => {
   }
 });
 
+it("carries a department's Needs clearing switch to the importing venue", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(
+      tx,
+      { locationId: brandLocationId(source.locationId) },
+      { name: "Cleared terrace" },
+    );
+    await tx
+      .update(departments)
+      .set({ needsClearing: true })
+      .where(eq(departments.id, department.id));
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-19T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const [imported] = await withTransaction(targetSuite.db, (tx) =>
+    tx
+      .select({ needsClearing: departments.needsClearing })
+      .from(departments)
+      .where(eq(departments.name, "Cleared terrace")),
+  );
+  expect(imported).toEqual({ needsClearing: true });
+});
+
 it("leaves out a print agent's node, so the importing venue does not show it as on this box", async () => {
   const configFor = (venue: {
     nodeId: string;

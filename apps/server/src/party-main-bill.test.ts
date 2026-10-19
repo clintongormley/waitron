@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { captureError, parties, saleLines, sales, workingOrders } from "@waitron/db";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { abandonHeldOrder, listTablesWithState } from "./working-order.js";
 import { placeGroups, submitGroups } from "./order-groups.js";
 import { finishTable, partyZone, readPartyBills, setMainBill, setPartyName } from "./parties.js";
@@ -388,7 +388,7 @@ describe("pay, then order dessert", () => {
   });
 
   it("refuses a round for a finished party", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     try {
       const mesa23 = await v.table("Mesa 23");
       const { partyId, tabId } = await seat(v, mesa23);
@@ -404,7 +404,7 @@ describe("pay, then order dessert", () => {
       });
       expect(await billsOfParty(v, partyId)).toEqual([tabId]);
     } finally {
-      await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+      await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     }
   });
 

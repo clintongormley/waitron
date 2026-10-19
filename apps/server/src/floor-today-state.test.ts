@@ -11,11 +11,8 @@ import {
   floorTodayZones,
   floorZones,
 } from "@waitron/db";
-import {
-  writeClearingWorkflow,
-  zoneSalePolicies,
-  zoneServicePolicies,
-} from "@waitron/venue-service";
+import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -466,7 +463,7 @@ async function readyToMoveOf(tableId: string): Promise<boolean | undefined> {
 describe("the till's table-state answer says what needs moving", () => {
   /** 3 stands at 0 in Standard and 40 in Dinner, 6 at 60 in both; guests at 3 leave after a reset onto Dinner. */
   async function threeFreedAfterDinner() {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     const s = await standardAndDinner(
       v,
       NOW,
@@ -507,7 +504,7 @@ describe("the till's table-state answer says what needs moving", () => {
   });
 
   it("4+5 with guests is marked once free under a layout that leaves it off", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     const s = await standardAndDinner(
       v,
       NOW,
@@ -545,7 +542,7 @@ describe("the till's table-state answer says what needs moving", () => {
   });
 
   it("a marked joined group is not due while a sibling part still moves", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     const s = await standardAndDinner(
       v,
       NOW,
@@ -578,7 +575,7 @@ describe("the till's table-state answer says what needs moving", () => {
   });
 
   it("a marked joined table of three parts is not due while its far part still moves", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     const s = await standardAndDinner(
       v,
       NOW,
@@ -615,7 +612,7 @@ describe("the till's table-state answer says what needs moving", () => {
   });
 
   it("a member of a marked group whose own change is seats only (seats changed today) reads false", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     const s = await standardAndDinner(
       v,
       NOW,
@@ -643,7 +640,7 @@ describe("the till's table-state answer says what needs moving", () => {
   });
 
   it("refuses seating the member of a marked group that moves, and seats the one the till shows free", async () => {
-    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     const s = await standardAndDinner(
       v,
       NOW,

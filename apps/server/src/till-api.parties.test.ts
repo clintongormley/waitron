@@ -20,7 +20,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -709,16 +709,16 @@ describe("a table that needs clearing", () => {
     const floor = (await res.json()) as { id: string; condition: string }[];
     return floor.find((row) => row.id === id)!.condition;
   }
-  /** A table whose party has finished with the venue's clearing setting on. */
+  /** A table whose party has finished with every department's Needs clearing on. */
   async function finishedWithClearing(): Promise<{ tableId: string; partyId: string }> {
-    await withTransaction(suite.db, (tx) => writeClearingWorkflow(tx, true));
+    const { tableId, partyId } = await seat();
+    await withTransaction(suite.db, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     try {
-      const { tableId, partyId } = await seat();
       const finished = await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: 0 });
       expect(await finished.json()).toEqual({ state: "closed" });
       return { tableId, partyId };
     } finally {
-      await withTransaction(suite.db, (tx) => writeClearingWorkflow(tx, false));
+      await withTransaction(suite.db, (tx) => setNeedsClearingInEveryDepartment(tx, false));
     }
   }
 

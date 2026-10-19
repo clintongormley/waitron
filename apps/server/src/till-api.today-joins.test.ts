@@ -13,7 +13,7 @@ import {
   parties,
   partyTables,
 } from "@waitron/db";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { asc, eq } from "drizzle-orm";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -556,7 +556,7 @@ describe("moving guests to one of their own merged tables", () => {
 
   for (const clearing of [false, true]) {
     it(`shrinks the party to that table and ends the merge (clearing ${clearing ? "on" : "off"})`, async () => {
-      await inTx(v, (tx) => writeClearingWorkflow(tx, clearing));
+      await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, clearing));
       try {
         const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
         await freeMerge(a!, b!);
@@ -581,7 +581,7 @@ describe("moving guests to one of their own merged tables", () => {
         expect(await needsClearing(b!)).toBe(false);
         expect(await revision(p)).toBeGreaterThan(old);
       } finally {
-        await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+        await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
       }
     });
   }

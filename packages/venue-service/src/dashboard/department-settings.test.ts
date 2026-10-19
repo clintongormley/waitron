@@ -120,7 +120,7 @@ const model: VenueServiceView = {
   printHeldWork: false,
   printMovedSlips: true,
   releaseReminderMinutes: null,
-  clearingWorkflow: false,
+  needsClearingDepartmentIds: [],
 };
 
 const hosts: HTMLElement[] = [];
@@ -243,6 +243,7 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
+        needsClearing: false,
         transfers: { receivingProfileId: "p2", destinationDepartmentIds: ["d2"] },
       },
     },
@@ -1351,4 +1352,113 @@ it("losing the second department while Transfers shows returns to Details and ke
   expect(shownPanel(el).querySelector("[name=name]")).not.toBeNull();
   expect(field(el, "name").value).toBe("Draft");
   expect(el.hasUnsavedChanges).toBe(true);
+});
+function needsClearing(el: DepartmentSettings) {
+  const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    "wt-switch[name=needsClearing]",
+  );
+  expect(control, "Needs clearing switch").not.toBeNull();
+  return control!;
+}
+async function toggleNeedsClearing(el: DepartmentSettings, checked: boolean) {
+  needsClearing(el).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
+it("shows Needs clearing under Table states on the Service tab, off for a department the model does not list", async () => {
+  const { el } = await mount();
+  await selectDepartmentTab(el, "service");
+  const panel = shownPanel(el);
+  const section = needsClearing(el).closest("section")!;
+  expect(panel.contains(section)).toBe(true);
+  expect(section.getAttribute("aria-label")).toBe("Table states");
+  expect(section.querySelector("h3")!.textContent!.trim()).toBe("Table states");
+  const sections = [...panel.querySelectorAll("section")];
+  expect(sections.indexOf(section)).toBe(1);
+  expect(needsClearing(el).label).toBe("Needs clearing");
+  expect(needsClearing(el).checked).toBe(false);
+  expect(needsClearing(el).getAttribute("aria-invalid")).toBeNull();
+  const hint = "A table stays “Needs clearing” after the party leaves, until marked cleared.";
+  expect(needsClearing(el).description).toBe(hint);
+  expect(section.querySelector(".hint")!.textContent!.trim()).toBe(hint);
+  expect(section.querySelector("[data-field-error=needsClearing]")).toBeNull();
+});
+it("shows it on for a department the model lists", async () => {
+  const view = structuredClone(model);
+  view.needsClearingDepartmentIds = ["d1"];
+  const { el } = await mount(view);
+  expect(needsClearing(el).checked).toBe(true);
+});
+it("switching it on enables Save and saves it with the department", async () => {
+  const { el, writes } = await mount();
+  await selectDepartmentTab(el, "service");
+  expect(save(el).disabled).toBe(true);
+  expect(save(el).variant).toBe("secondary");
+  await toggleNeedsClearing(el, true);
+  expect(save(el).disabled).toBe(false);
+  expect(save(el).variant).toBe("primary");
+  save(el).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]!.path).toBe("/management-api/venue-service/departments/d1/settings");
+  expect(writes[0]!.body).toMatchObject({ needsClearing: true });
+  await expect.poll(() => save(el).disabled).toBe(true);
+});
+it("a refusal naming the switch, sent while Details shows, brings back Service and marks it", async () => {
+  const { el } = await mount(structuredClone(model), {
+    code: "management.request_invalid",
+    params: { field: "needsClearing" },
+  });
+  await change(el, "name", "Revised");
+  expect(el.tab).toBe("details");
+  const events = tabEvents(el);
+  save(el).click();
+  await expect.poll(() => el.tab).toBe("service");
+  expect(events).toEqual([{ tab: "service", replace: true }]);
+  await strip(el).updateComplete;
+  expect(strip(el).items.map((item) => item.marked)).toEqual([
+    undefined,
+    "needs fixing",
+    undefined,
+  ]);
+  const control = needsClearing(el);
+  expect(shownPanel(el).contains(control)).toBe(true);
+  expect(control.getAttribute("aria-invalid")).toBe("true");
+  expect(control.description).toContain("This value was not accepted. Change it and save again.");
+  expect(
+    shownPanel(el).querySelector("[data-field-error=needsClearing]")!.textContent!.trim(),
+  ).toBe("This value was not accepted. Change it and save again.");
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(control);
+  expect(control.shadowRoot!.activeElement).toBe(
+    control.shadowRoot!.querySelector("input[role=switch]"),
+  );
+  expect(save(el).disabled).toBe(false);
+});
+it("follows a change another dashboard makes while the form is clean, and keeps a draft while it is not", async () => {
+  const { el } = await mount();
+  const listed = structuredClone(model);
+  listed.needsClearingDepartmentIds = ["d1"];
+  el.model = listed;
+  await el.updateComplete;
+  expect(needsClearing(el).checked).toBe(true);
+  expect(save(el).disabled).toBe(true);
+  await toggleNeedsClearing(el, false);
+  expect(save(el).disabled).toBe(false);
+  const relisted = structuredClone(listed);
+  relisted.departments[0]!.tradingName = "Casa nueva";
+  el.model = relisted;
+  await el.updateComplete;
+  expect(needsClearing(el).checked).toBe(false);
+  expect(el.hasUnsavedChanges).toBe(true);
+  expect(save(el).disabled).toBe(false);
+});
+it("reads in Spanish", async () => {
+  setLocale("es");
+  const { el } = await mount();
+  const section = needsClearing(el).closest("section")!;
+  expect(section.querySelector("h3")!.textContent!.trim()).toBe("Estados de la mesa");
+  expect(needsClearing(el).label).toBe("Por recoger");
+  expect(section.querySelector(".hint")!.textContent!.trim()).toBe(
+    "Una mesa queda «Por recoger» cuando el grupo se va, hasta que se marca como recogida.",
+  );
 });

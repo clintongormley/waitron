@@ -119,7 +119,7 @@ const model: VenueServiceView = {
   printHeldWork: false,
   printMovedSlips: true,
   releaseReminderMinutes: null,
-  clearingWorkflow: false,
+  needsClearingDepartmentIds: [],
 };
 
 afterEach(() => {
@@ -173,6 +173,57 @@ describe.each(["light", "dark"] as const)("department-settings %s", (theme) => {
               ?.textContent,
         )
         .toContain("Correct the highlighted fields");
+    }
+    await expectNoA11yViolations(host);
+  });
+  it.each(["needs-clearing-on", "needs-clearing-refusal"])("%s", async (state) => {
+    setLocale("en");
+    const el = (await mountThemed(
+      "<department-settings></department-settings>",
+      theme,
+    )) as HTMLElementTagNameMap["department-settings"];
+    el.model = {
+      ...structuredClone(model),
+      needsClearingDepartmentIds: state === "needs-clearing-on" ? ["d1"] : [],
+    };
+    el.departmentId = "d1";
+    el.api = new VenueServiceApi((async (path, method) => {
+      if (method === "GET")
+        return path.endsWith("/profiles")
+          ? [{ id: "p1", name: "Restaurant counter" }]
+          : { departmentId: "d1", receivingProfileId: "p1", destinationDepartmentIds: ["d2"] };
+      throw { code: "management.request_invalid", params: { field: "needsClearing" } };
+    }) as DashboardRequest);
+    await el.updateComplete;
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]"))
+      .not.toBeNull();
+    const shownPanel = () =>
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-tabs > [slot]")].find((panel) =>
+        panel.checkVisibility(),
+      );
+    if (state === "needs-clearing-on") {
+      await selectDepartmentTab(el, "service");
+      expect(
+        shownPanel()!.querySelector<HTMLElement & { checked: boolean }>(
+          "wt-switch[name=needsClearing]",
+        )!.checked,
+      ).toBe(true);
+    } else {
+      el.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "Revised" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+      await expect
+        .poll(
+          () => shownPanel()?.querySelector("[data-field-error=needsClearing]")?.textContent ?? "",
+        )
+        .toContain("This value was not accepted");
     }
     await expectNoA11yViolations(host);
   });

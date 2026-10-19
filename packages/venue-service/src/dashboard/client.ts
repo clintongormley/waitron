@@ -46,6 +46,7 @@ export interface DepartmentSettingsInput extends Pick<
 > {
   name: string;
   tradingName: string;
+  needsClearing: boolean;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
 }
 export type DepartmentEditInput = DepartmentSettingsInput;
@@ -103,7 +104,8 @@ export interface VenueServiceModel {
   /** Minutes after the work fired before it is served that staff are reminded to fire the next
    * held group; null when reminders are off. */
   releaseReminderMinutes: number | null;
-  clearingWorkflow: boolean;
+  /** The active departments whose tables stay "Needs clearing" after the party leaves. */
+  needsClearingDepartmentIds: string[];
 }
 export interface VenueServiceSettings {
   editSentLines: boolean;
@@ -115,7 +117,6 @@ export type VenueServiceSettingsView = Pick<
   | "printHeldWork"
   | "printMovedSlips"
   | "releaseReminderMinutes"
-  | "clearingWorkflow"
 >;
 export type KitchenTicketGrouping = "combined" | "separate";
 export interface VenueServiceChoices {
@@ -298,7 +299,6 @@ export class VenueServiceApi {
       printHeldWork: model.printHeldWork,
       printMovedSlips: model.printMovedSlips,
       releaseReminderMinutes: model.releaseReminderMinutes,
-      clearingWorkflow: model.clearingWorkflow,
     };
   }
 
@@ -418,12 +418,6 @@ export class VenueServiceApi {
   savePrintMovedSlips(printMovedSlips: boolean): Promise<void> {
     return this.request("/management-api/venue-service/settings/print-moved-slips", "PUT", {
       printMovedSlips,
-    });
-  }
-
-  saveClearingWorkflow(clearingWorkflow: boolean): Promise<void> {
-    return this.request("/management-api/venue-service/settings/clearing-workflow", "PUT", {
-      clearingWorkflow,
     });
   }
 

@@ -1,9 +1,13 @@
 # A757 — Table states: the lifecycle, how each state is shown, and retiring the Tables tab
 
-Status: **revised 2026-10-17 after the owner's answers to Q15–Q20; six new questions, Q29–Q34, are
-open (end of this file).** Nothing is built until they are answered, and the build also waits for
-A756. Backlog entry: `docs/backlog.md` "A757" and
+Status: **answered (Q29–Q34 all A, 2026-10-17); slice 1 built 2026-10-19; slices 2–8 left (§11).**
+Backlog entry: `docs/backlog.md` "A757" and
 [its detail](../../backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab).
+
+**2026-10-19:** Q29–Q34 were all answered A by the owner on 2026-10-17, and the build depends only
+on A756's first pull request, #1852, which landed; slice 1 is built by
+`docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`.
+
 Pictures: `docs/backlog/mockups/a757-table-states/` (01–11; 03, 04, 07, 08, 09 and 11 also in dark,
 `-dark.png`). They are drawn in HTML with the till's own colour values, not screenshots of the
 running till; the symbols on them (⏱ ▶ ⏸ 🛎 ✓ 🍽 € 🧹 ⊘) stand in for icons the build draws with
@@ -60,6 +64,18 @@ The owner's answers (2026-10-17):
 - **One order of precedence** decides the table's colour on the map, its card and the zone tab
   (the owner, with the zone tabs and again with the whole-table map). Section 4, picture 07.
 
+The owner's answers (2026-10-17), second round:
+
+- **Q29: A.** Set up (when seated), Take order (2 min after Set up), Anything else? (10 min after
+  everything is served). The venue edits or deletes them.
+- **Q30: A.** Any order sent after a step started clears it; Done is for when the guests want nothing.
+- **Q31: A.** A fifth start, "every N minutes since the last order", for venues that want it; not in
+  the starter set.
+- **Q32: A.** A seated table that needs nothing is pale blue with ✓ ("Nothing needed"); solid blue
+  means "go to this table".
+- **Q33: A.** Ready does not pulse on the map; only Overdue, Forgotten and Time to fire move.
+- **Q34: A.** The order of precedence as drawn in section 4.
+
 All file references are to `main` at `5ade0d4f5`.
 
 ---
@@ -99,6 +115,8 @@ The switch "Needs clearing" is one value for the whole venue, `service_settings.
 (`packages/venue-service/src/schema/settings.ts`), read once each time a party leaves
 (`parties.ts:663`). Switching it off does not clear tables already marked
 (`packages/venue-service/src/kitchen-notices.ts:340-345`).
+**2026-10-19:** slice 1 replaced this with each department's switch, `departments.needs_clearing`
+(§3.1); `kitchen-notices.ts` no longer holds it.
 
 ### 1.2 What is happening at it — signals while seated
 
@@ -204,7 +222,9 @@ Service tab, A756, section "Table states"). A table's department is its zone's
 (`zone_service_policies.department_id`, `packages/venue-service/src/schema/service.ts:56`).
 `leaveForClearing` reads the switch of each table's own department instead of one venue value —
 when a party spanning two departments leaves, each table follows its own. The build plan settles
-what a table whose zone has no department row reads (expected: off). Not live, so the venue value is
+what a table whose zone has no department row reads (expected: off). Settled 2026-10-19 by the
+slice 1 plan: off — such a table drops out of the join from table to department
+(`docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`, Decision 3). Not live, so the venue value is
 dropped, not copied (A756's own note, `docs/backlog/kitchen.md:217-218`).
 
 ## 4. One order of precedence
@@ -499,8 +519,10 @@ and the venue-service panel `venue-service-tables`
 (`packages/venue-service/src/dashboard/index.ts:153-171`). The open note that its colour-field
 labels are clipped to an ellipsis at 390 and 1280 px (`docs/backlog.md:4048-4052`; "C…" in
 `docs/backlog/till.md:1438-1439`) goes with it.
+**2026-10-19:** slice 1 removed `venue-service-tables`; the core `statuses` panel is the tab's only
+content.
 
-## 11. Build slices (after the answers; the build waits for A756)
+## 11. Build slices
 
 Each slice is one pull request one implementer can finish well under ~100 tool calls.
 
@@ -539,6 +561,8 @@ are independent of A756; 5 follows 4; 7 needs A756 and 1; 8 follows 4 and 7.
 ---
 
 ## Open questions (Q29–Q34)
+
+Answered 2026-10-17: all A.
 
 Numbered in the owner's list; each is one decision with a recommended default.
 

@@ -53,6 +53,7 @@ const fieldTab: Record<Field, DepartmentTab> = {
   orderStart: "service",
   paidWhen: "service",
   collectionNumber: "service",
+  needsClearing: "service",
   transfers: "transfers",
   receivingProfileId: "transfers",
   destinationDepartmentIds: "transfers",
@@ -74,6 +75,7 @@ const equal = (a: DepartmentSettingsInput, b: DepartmentSettingsInput) =>
   a.orderStart === b.orderStart &&
   a.paidWhen === b.paidWhen &&
   a.collectionNumber === b.collectionNumber &&
+  a.needsClearing === b.needsClearing &&
   a.transfers?.receivingProfileId === b.transfers?.receivingProfileId &&
   (a.transfers?.destinationDepartmentIds.length ?? 0) ===
     (b.transfers?.destinationDepartmentIds.length ?? 0) &&
@@ -148,8 +150,12 @@ export class DepartmentSettings extends LitElement {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
-      .readonly {
+      .readonly,
+      .hint {
         color: var(--wt-color-text-muted);
+      }
+      .hint {
+        font-size: var(--wt-font-size-sm);
       }
     `,
   ];
@@ -258,6 +264,7 @@ export class DepartmentSettings extends LitElement {
       orderStart: policy?.orderStart ?? "counter",
       paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
+      needsClearing: this.model!.needsClearingDepartmentIds.includes(row.id),
     };
     if (this.opened !== row.id) {
       this.scope?.dispose();
@@ -437,6 +444,7 @@ export class DepartmentSettings extends LitElement {
       "orderStart",
       "paidWhen",
       "collectionNumber",
+      "needsClearing",
       ...(this.draft?.transfers
         ? (["receivingProfileId", "destinationDepartmentIds"] as const)
         : []),
@@ -682,6 +690,25 @@ export class DepartmentSettings extends LitElement {
                   </p>`
                 : nothing
             }
+          </section>
+          <section aria-label=${t("venue.table_states")}>
+            <h3>${t("venue.table_states")}</h3>
+            <div>
+              <wt-switch
+                name="needsClearing"
+                label=${t("venue.needs_clearing")}
+                .description=${errors.needsClearing ? `${errors.needsClearing} ${t("venue.needs_clearing_hint")}` : t("venue.needs_clearing_hint")}
+                .checked=${draft.needsClearing}
+                ?disabled=${disabled}
+                aria-invalid=${errors.needsClearing ? "true" : nothing}
+                @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
+                  e.stopPropagation();
+                  this.changed("needsClearing", e.detail.checked);
+                }}
+              ></wt-switch>
+              <p class="hint">${t("venue.needs_clearing_hint")}</p>
+              ${errors.needsClearing ? html`<p class="error" data-field-error="needsClearing">${errors.needsClearing}</p>` : nothing}
+            </div>
           </section>
         </div>
         ${

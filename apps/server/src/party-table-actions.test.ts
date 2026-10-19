@@ -14,7 +14,7 @@ import {
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { splitBill } from "./bill-actions.js";
 import { readDrafts, saveDraft } from "./order-drafts.js";
 import { placeGroups } from "./order-groups.js";
@@ -139,13 +139,13 @@ async function needsClearing(tableId: string): Promise<void> {
   );
 }
 
-/** Runs `fn` with the venue's clearing setting on, and puts it back off. */
+/** Runs `fn` with every department's Needs clearing on, and puts it back off. */
 async function withClearing<T>(fn: () => Promise<T>): Promise<T> {
-  await act((tx) => writeClearingWorkflow(tx, true));
+  await act((tx) => setNeedsClearingInEveryDepartment(tx, true));
   try {
     return await fn();
   } finally {
-    await act((tx) => writeClearingWorkflow(tx, false));
+    await act((tx) => setNeedsClearingInEveryDepartment(tx, false));
   }
 }
 
@@ -299,7 +299,7 @@ describe("move guests", () => {
     });
   });
 
-  it("leaves the tables behind free when the venue's clearing setting is off", async () => {
+  it("leaves the tables behind free when their department has Needs clearing off", async () => {
     const [m4, m9] = await tables("Libre", 4, 9);
     const ana = await seat(v, m4);
 

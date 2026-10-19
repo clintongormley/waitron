@@ -2083,12 +2083,18 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   state (the waiter fired it; the pass has not yet); the held mark counts it. **Owner answered
   Q15–Q20 on 2026-10-17 and added a countdown to Time to fire, two pulse speeds, zone tabs that
   carry a hidden zone's most urgent state, service steps a venue defines, a "nothing needed" look
-  and whole-table status on the map; the design is revised and six new questions, Q29–Q34, are
-  open.** The build waits for those answers (A756's department Service tab, which it builds on, landed
-  in #1852).
+  and whole-table status on the map; the design is revised and Q29–Q34 answered A, A, A, A, A, A on
+  2026-10-17.** Slice 1, Needs clearing per department, landed (plan
+  `docs/superpowers/plans/2026-10-19-a757-1-clearing-per-department.md`); slices 2–8 are left
+  (design §11).
   [Detail](backlog/till.md#a757-table-states-review-the-lifecycle-then-retire-the-tables-tab),
   [Design](superpowers/specs/2026-10-17-a757-table-states-design.md),
   [mockups](backlog/mockups/a757-table-states/)
+
+- **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
+  Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
+  settle the two suggestions in the detail. Waits for the whole of A757 (slices 2–8 are left).
+  [Detail](backlog/till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)
 
 - **A758. Voids and comps: the rules, then a page of their own (owner, 2026-10-16).** The owner
   answered all eight questions on 2026-10-17: two kinds of reason, Void and Comp (a 100% comp is
@@ -3823,6 +3829,15 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The
   `[Cancel] [Delete…] … [Save]` row (design-system.md → Forms) has each dialog space its own group;
   move it into `packages/ui/src/components/wt-form-actions.ts`. Left open by A719 (#1838).
+
+- **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
+  2026-10-19).** The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:71`)
+  and a dialog's background is `--wt-color-surface-raised` (`packages/ui/src/components/wt-dialog.ts:57`).
+  Computed with the WCAG contrast formula from the values declared in
+  `packages/ui-core/src/tokens/colors.css`: dark `#333945` on `#22262e` is 1.31:1 (1.47:1 on
+  `--wt-color-surface`, `#191c22`); light `#d6d9e0` on `#ffffff` is 1.41:1. WCAG 2.1's non-text
+  contrast criterion (1.4.11) asks 3:1. Not measured on a rendered page. Fix it in the primitive,
+  not per screen.
 
 - **A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by
   #1828).** `wt-colour-chooser` copies the panel placement (which since A783 also picks two or four

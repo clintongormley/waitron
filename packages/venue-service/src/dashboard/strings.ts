@@ -425,6 +425,10 @@ const en = {
   "venue.department_tab.receipt": "Receipts",
   "venue.department_tab.transfers": "Transfers",
   "venue.orders_and_payment": "Orders and payment",
+  "venue.table_states": "Table states",
+  "venue.needs_clearing": "Needs clearing",
+  "venue.needs_clearing_hint":
+    "A table stays “Needs clearing” after the party leaves, until marked cleared.",
   "venue.tab_needs_fixing": "needs fixing",
   "venue.zones_that_differ": "Zones that differ",
   "venue.receipt_on_request": "Receipt on request",
@@ -513,9 +517,6 @@ const en = {
   "venue.print_moved_slips": "Print MOVED slips",
   "venue.print_moved_slips_hint":
     "When food the kitchen already has moves to another table or another order, each of its prep stations' printers prints a MOVED slip saying from where to where. A prep station can be set to differ.",
-  "venue.clearing_workflow": "Needs clearing",
-  "venue.clearing_workflow_hint":
-    "When on, a table a party leaves — at Finish table, or by moving to another table or joining another party — shows Needs clearing until someone marks it cleared.",
   "venue.combobox_search": "Search",
   "venue.combobox_no_results": "No results",
   "nav.calendar": "Calendar",
@@ -1320,6 +1321,10 @@ const es: Record<keyof typeof en, string> = {
   "venue.department_tab.receipt": "Recibos",
   "venue.department_tab.transfers": "Traslados",
   "venue.orders_and_payment": "Pedidos y cobro",
+  "venue.table_states": "Estados de la mesa",
+  "venue.needs_clearing": "Por recoger",
+  "venue.needs_clearing_hint":
+    "Una mesa queda «Por recoger» cuando el grupo se va, hasta que se marca como recogida.",
   "venue.tab_needs_fixing": "hay que corregirlo",
   "venue.zones_that_differ": "Zonas con otros ajustes",
   "venue.receipt_on_request": "Recibo a petición",
@@ -1410,9 +1415,6 @@ const es: Record<keyof typeof en, string> = {
   "venue.print_moved_slips": "Imprimir avisos MOVIDO",
   "venue.print_moved_slips_hint":
     "Cuando comida que ya tiene la cocina pasa a otra mesa u otro pedido, las impresoras de cada estación imprimen un aviso MOVIDO que dice de dónde a dónde. Cada estación puede configurarse aparte.",
-  "venue.clearing_workflow": "Por recoger",
-  "venue.clearing_workflow_hint":
-    "Si está activado, una mesa que un grupo deja —al Cerrar mesa, al cambiarse a otra mesa o al unirse a otro grupo— aparece Por recoger hasta que alguien la marca como recogida.",
   "venue.combobox_search": "Buscar",
   "venue.combobox_no_results": "Sin resultados",
   "nav.calendar": "Calendario",

@@ -223,16 +223,22 @@ export async function updateDepartment(
     name?: string;
     tradingName?: string;
     orderStart?: OrderStart;
+    needsClearing?: boolean;
   },
 ): Promise<void> {
   await assertDepartment(tx, cfg, departmentId);
   if (input.name !== undefined) await requireDepartmentName(tx, cfg, input.name, departmentId);
-  if (input.name !== undefined || input.tradingName !== undefined)
+  if (
+    input.name !== undefined ||
+    input.tradingName !== undefined ||
+    input.needsClearing !== undefined
+  )
     await tx
       .update(departments)
       .set({
         ...(input.name === undefined ? {} : { name: input.name }),
         ...(input.tradingName === undefined ? {} : { tradingName: input.tradingName }),
+        ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
       })
       .where(eq(departments.id, departmentId));
   if (input.orderStart === undefined) return;
@@ -744,6 +750,7 @@ export interface DepartmentEditInput extends Pick<
   name: string;
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
+  needsClearing?: boolean;
 }
 
 export async function saveDepartmentEditSettings(
@@ -755,6 +762,7 @@ export async function saveDepartmentEditSettings(
   await updateDepartment(tx, cfg, departmentId, {
     name: input.name,
     tradingName: input.tradingName,
+    ...(input.needsClearing === undefined ? {} : { needsClearing: input.needsClearing }),
   });
   const settings = {
     orderStart: input.orderStart,

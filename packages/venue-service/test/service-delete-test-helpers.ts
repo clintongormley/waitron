@@ -38,7 +38,7 @@ export const view: VenueServiceView = {
   printHeldWork: false,
   printMovedSlips: true,
   releaseReminderMinutes: null,
-  clearingWorkflow: false,
+  needsClearingDepartmentIds: [],
 };
 
 const hosts: HTMLElement[] = [];

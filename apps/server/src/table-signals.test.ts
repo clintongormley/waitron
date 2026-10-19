@@ -22,7 +22,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeClearingWorkflow, writeReleaseReminderMinutes } from "@waitron/venue-service";
+import { writeReleaseReminderMinutes } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { takeBillPayment } from "./bill-payments.js";
 import { requestBill } from "./bill-request.js";
 import { createStation } from "./kitchen.js";
@@ -507,7 +508,7 @@ describe("the floor's attention signals", () => {
 
   it("shows a table that needs clearing, with no party at it", async () => {
     const v = await setupPartyVenue(suite.db);
-    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     const mesa2 = await v.table("Mesa 2");
     const { partyId } = await seat(v, mesa2);
     const finish = { partyId, ...(await commandFor(v, partyId)) };

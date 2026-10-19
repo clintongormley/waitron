@@ -65,7 +65,7 @@ export async function mountReceiptApp(
     printHeldWork: false,
     printMovedSlips: true,
     releaseReminderMinutes: null,
-    clearingWorkflow: false,
+    needsClearingDepartmentIds: [],
   };
   const fetchImpl = vi.fn(async (path: string, init: RequestInit) => {
     const answer = options.respond?.(path, init);

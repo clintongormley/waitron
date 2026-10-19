@@ -24,7 +24,7 @@ import { catchUpDue, resetZone } from "./floor-today-store.js";
 import { resetTable } from "./floor-today-reset-table.js";
 import { splitOff } from "./floor-today-split-group.js";
 import { writeMerge } from "./floor-today-merges.js";
-import { writeClearingWorkflow } from "@waitron/venue-service";
+import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { holdersOf, memberTables } from "./parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -1108,7 +1108,8 @@ async function readStates() {
   return new Map(tables.map((t) => [t.id, t]));
 }
 
-const clearingWorkflow = (on: boolean) => inTx(v, (tx) => writeClearingWorkflow(tx, on));
+const needsClearingEverywhere = (on: boolean) =>
+  inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, on));
 
 /**
  * Table 3 stands at 0 in Standard and 40 in Dinner, beside `more`; guests sit at 3 when the zone
@@ -1137,7 +1138,7 @@ async function threeSeatedAcrossDinner(
 
 describe("a table that frees up after a reset needs moving", () => {
   it("a table that frees up after a reset needs moving and stays put", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await threeSeatedAcrossDinner();
 
     await finish(z.partyId);
@@ -1151,9 +1152,9 @@ describe("a table that frees up after a reset needs moving", () => {
   });
 
   it("with clearing on, a table shows Needs clearing first and Needs moving once cleared", async () => {
-    await clearingWorkflow(true);
     try {
       const z = await threeSeatedAcrossDinner();
+      await needsClearingEverywhere(true);
 
       await finish(z.partyId);
       const first = await readStates();
@@ -1171,12 +1172,12 @@ describe("a table that frees up after a reset needs moving", () => {
       expect(second.get(z.t3)!.today.needsMoving).toBe(true);
       expect(await todayRow(z.t3)).toMatchObject({ x: 0 });
     } finally {
-      await clearingWorkflow(false);
+      await needsClearingEverywhere(false);
     }
   });
 
   it("a seats-only change still applies by itself", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const label = fresh("Seats");
     const { zoneId, tableId, masterId, revision } = await plannedTable(label);
     const partyId = await seatAt(tableId);
@@ -1193,7 +1194,7 @@ describe("a table that frees up after a reset needs moving", () => {
   });
 
   it("a row waiting for its name still applies", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const zoneId = await zone();
     const [p, q, r] = [fresh("P"), fresh("Q"), fresh("R")];
     const first = await save(zoneId, 0, [
@@ -1221,7 +1222,7 @@ describe("a table that frees up after a reset needs moving", () => {
   });
 
   it("a table seated with no today's row is still seeded", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const label = fresh("Unrowed seat");
     const { zoneId, tableId, masterId, revision } = await plannedTable(label);
     const partyId = await seatAt(tableId);
@@ -1238,7 +1239,7 @@ describe("a table that frees up after a reset needs moving", () => {
   });
 
   it("Reset table's catch-up marks another table, not moves it", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await threeSeatedAcrossDinner([
       { key: "t4", standard: 60, dinner: null },
       { key: "t5", standard: 80, dinner: null },
@@ -1261,7 +1262,7 @@ describe("a table that frees up after a reset needs moving", () => {
   });
 
   it("Split's catch-up marks another table, not moves it", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await plannedZone(
       v,
       [
@@ -1316,7 +1317,7 @@ describe("a table that frees up after a reset needs moving", () => {
   });
 
   it("a marked table taken off the map goes to its new place by itself, still off", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await threeSeatedAcrossDinner();
     await finish(z.partyId);
     expect((await readStates()).get(z.t3)!.today.needsMoving).toBe(true);
@@ -1330,7 +1331,7 @@ describe("a table that frees up after a reset needs moving", () => {
   });
 
   it("a room whose only waiting rows still need moving is not caught up again", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await threeSeatedAcrossDinner();
     const due = async () =>
       (
@@ -1371,7 +1372,7 @@ describe("a table that frees up after a reset needs moving", () => {
     );
 
   it("a marked table moved by hand onto its new place applies by itself, but not while turned", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await threeSeatedAcrossDinner();
     await finish(z.partyId);
     await readStates();
@@ -1388,7 +1389,7 @@ describe("a table that frees up after a reset needs moving", () => {
   });
 
   it("a marked table that loses its place applies by itself at its new place", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await threeSeatedAcrossDinner();
     await finish(z.partyId);
     await readStates();
@@ -1456,7 +1457,7 @@ describe("no reset puts a table down on another", () => {
   }
 
   it("Update to Dinner keeps 2 and 1 in place while 3 waits", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const s = await standardAndDinner(
       [
         { key: "t3", label: fresh("3") },
@@ -1485,7 +1486,7 @@ describe("no reset puts a table down on another", () => {
   });
 
   it("a stored table whose new place is taken waits off the map, and a later read places it once the place is clear", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await sixBehindSeven();
 
     const states = await readStates();
@@ -1539,7 +1540,7 @@ describe("no reset puts a table down on another", () => {
   });
 
   it("a table blocked on a later read is marked, and a stored table may then be put down on it, as it needs moving (spec §7.5, No lock)", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const s = await standardAndDinner(
       [
         { key: "b", label: fresh("B") },
@@ -1565,7 +1566,7 @@ describe("no reset puts a table down on another", () => {
   });
 
   it("a free table whose new place is taken on a later read is marked, and the room is not caught up again", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const s = await standardAndDinner(
       [
         { key: "b", label: fresh("B") },
@@ -1588,7 +1589,7 @@ describe("no reset puts a table down on another", () => {
   });
 
   it("a joined group waiting for its stored joined table's place is not caught up on every read", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const s = await standardAndDinner(
       [
         { key: "t4", label: fresh("4") },
@@ -1636,7 +1637,7 @@ describe("no reset puts a table down on another", () => {
   }
 
   it("a room whose only waiting rows are stored tables with their place taken is caught up only once the place clears", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await sixBehindEight();
     expect(await todayRow(z.t6)).toMatchObject({ x: null });
 
@@ -1649,7 +1650,7 @@ describe("no reset puts a table down on another", () => {
   });
 
   it("a table taken off after the reset no longer blocks a stored table", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await sixBehindEight();
 
     await setToday(z.t8, { takenOff: true });
@@ -1683,7 +1684,7 @@ describe("no reset puts a table down on another", () => {
   });
 
   it("a stored table waiting behind a table off its own place is caught up once that table stands in it", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     // Dinner stands stored 6 at 40 and 8 at 46, over two squares of 6; seated 7 stands at 36.
     const s = await standardAndDinner(
       [
@@ -1714,7 +1715,7 @@ describe("no reset puts a table down on another", () => {
   });
 
   it("a part out of service inside a joined table blocks nothing", async () => {
-    await clearingWorkflow(false);
+    await needsClearingEverywhere(false);
     const z = await sixBehindEight([
       { key: "t4", standard: 0, dinner: null },
       { key: "t5", standard: 20, dinner: null },
@@ -1735,7 +1736,7 @@ describe("no reset puts a table down on another", () => {
   it.each(["Reset to … plan", "Update layout"])(
     "%s keeps a stored table off behind a table the reset keeps in place; a later read puts it down there, as that table needs moving (spec §7.5, No lock)",
     async (path) => {
-      await clearingWorkflow(false);
+      await needsClearingEverywhere(false);
       const s = await standardAndDinner(
         [
           { key: "a", label: fresh("A") },

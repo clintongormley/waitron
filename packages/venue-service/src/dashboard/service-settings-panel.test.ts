@@ -20,59 +20,45 @@ const model: VenueServiceSettingsView = {
   printHeldWork: false,
   printMovedSlips: true,
   releaseReminderMinutes: 10,
-  clearingWorkflow: false,
 };
 
-async function mount(
-  api: VenueServiceApi,
-  subject: "kitchen" | "tables" = "kitchen",
-  readOnly = false,
-): Promise<ServiceSettingsPanel> {
+async function mount(api: VenueServiceApi, readOnly = false): Promise<ServiceSettingsPanel> {
   const host = document.createElement("div");
   applyTokens(host);
   document.body.appendChild(host);
   hosts.push(host);
   const el = document.createElement("dashboard-venue-service-settings") as ServiceSettingsPanel;
   el.api = api;
-  el.subject = subject;
   el.readOnly = readOnly;
   host.appendChild(el);
   await settle(el);
   return el;
 }
 
-it("shows both settings panels to a read-only viewer with every control disabled", async () => {
+it("shows the settings panel to a read-only viewer with every control disabled", async () => {
   const api = {
     loadSettingsReadOnly: vi.fn().mockResolvedValue(model),
     saveSettings: vi.fn(),
-    saveClearingWorkflow: vi.fn(),
   } as unknown as VenueServiceApi;
-  const kitchen = await mount(api, "kitchen", true);
-  const tables = await mount(api, "tables", true);
-  expect(api.loadSettingsReadOnly).toHaveBeenCalledTimes(2);
+  const kitchen = await mount(api, true);
+  expect(api.loadSettingsReadOnly).toHaveBeenCalledTimes(1);
   expect(kitchen.shadowRoot!.querySelector('[data-test="kitchen-changes"]')).not.toBeNull();
-  expect(tables.shadowRoot!.querySelector('[data-test="clearing-settings"]')).not.toBeNull();
-  for (const panel of [kitchen, tables]) {
-    for (const control of panel.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
-      "wt-switch, wt-combobox",
-    )) {
-      expect(control.disabled).toBe(true);
-    }
+  for (const control of kitchen.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
+    "wt-switch, wt-combobox",
+  )) {
+    expect(control.disabled).toBe(true);
   }
   expect(api.saveSettings).not.toHaveBeenCalled();
-  expect(api.saveClearingWorkflow).not.toHaveBeenCalled();
 });
 
 it("refuses synthetic changes from a read-only viewer even when a control emits them", async () => {
   const api = {
     loadSettingsReadOnly: vi.fn().mockResolvedValue(model),
     saveSettings: vi.fn(),
-    saveClearingWorkflow: vi.fn(),
     saveReleaseReminderMinutes: vi.fn(),
     saveKitchenTicketGrouping: vi.fn(),
   } as unknown as VenueServiceApi;
-  const kitchen = await mount(api, "kitchen", true);
-  const tables = await mount(api, "tables", true);
+  const kitchen = await mount(api, true);
   const change = (root: ShadowRoot, selector: string, detail: object) => {
     const control = root.querySelector(selector)!;
     control.dispatchEvent(new CustomEvent("wt-change", { detail, bubbles: true, composed: true }));
@@ -82,13 +68,10 @@ it("refuses synthetic changes from a read-only viewer even when a control emits 
   change(kitchen.shadowRoot!, 'wt-combobox[name="kitchenTicketGrouping"]', {
     value: "separate",
   });
-  change(tables.shadowRoot!, 'wt-switch[name="clearingWorkflow"]', { checked: true });
   await settle(kitchen);
-  await settle(tables);
   expect(api.saveSettings).not.toHaveBeenCalled();
   expect(api.saveReleaseReminderMinutes).not.toHaveBeenCalled();
   expect(api.saveKitchenTicketGrouping).not.toHaveBeenCalled();
-  expect(api.saveClearingWorkflow).not.toHaveBeenCalled();
 });
 
 async function settle(el: ServiceSettingsPanel) {
@@ -604,7 +587,7 @@ describe("the setting that prints MOVED slips", () => {
       loadSettingsReadOnly: vi.fn().mockResolvedValue(model),
       savePrintMovedSlips: vi.fn(),
     } as unknown as VenueServiceApi;
-    const el = await mount(api, "kitchen", true);
+    const el = await mount(api, true);
     const { host } = movedSwitch(el);
     expect(host.disabled).toBe(true);
     host.dispatchEvent(
@@ -802,91 +785,6 @@ describe("the kitchen panel's fields", () => {
     expect([reminder.search, reminder.placeholder, reminder.value]).toEqual(["auto", "Off", ""]);
     expect(reminder.hint).toContain("marked served");
     expect(reminder.shadowRoot!.querySelector(".trigger")!.textContent!.trim()).toBe("Off");
-  });
-});
-
-describe("the Needs clearing setting", () => {
-  function clearingSwitch(el: ServiceSettingsPanel) {
-    const host = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-      'wt-switch[name="clearingWorkflow"]',
-    )!;
-    expect(host).not.toBeNull();
-    return { host, input: host.shadowRoot!.querySelector<HTMLInputElement>('[role="switch"]')! };
-  }
-  const withClearing = (clearingWorkflow: boolean): VenueServiceSettingsView => ({
-    ...structuredClone(model),
-    clearingWorkflow,
-  });
-
-  it("shows only the Needs clearing switch on the tables panel, with its hint, off by default", async () => {
-    const el = await mount(
-      { loadSettings: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi,
-      "tables",
-    );
-    const { host, input } = clearingSwitch(el);
-    expect(host.shadowRoot!.querySelector("label")!.textContent).toBe("Needs clearing");
-    expect(input.checked).toBe(false);
-    expect(
-      el.shadowRoot!.querySelector('[data-test="clearing-workflow-hint"]')!.textContent,
-    ).toContain("Finish table");
-    expect(el.shadowRoot!.querySelector('wt-switch[name="editSentLines"]')).toBeNull();
-    expect(el.shadowRoot!.querySelector("h1")).toBeNull();
-  });
-
-  it("saves the new value at once, disabled until the save finishes, then shows the stored one", async () => {
-    let finish!: () => void;
-    const api = {
-      loadSettings: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(withClearing(true)),
-      saveClearingWorkflow: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api, "tables");
-    clearingSwitch(el).input.click();
-    await settle(el);
-    expect(api.saveClearingWorkflow).toHaveBeenCalledWith(true);
-    expect(clearingSwitch(el).host.disabled).toBe(true);
-    finish();
-    await settle(el);
-    expect(api.loadSettings).toHaveBeenCalledTimes(2);
-    expect(clearingSwitch(el).input.checked).toBe(true);
-    expect(clearingSwitch(el).host.disabled).toBe(false);
-  });
-
-  it("says a refused save failed, beside the switch and at the top, and shows the stored value again", async () => {
-    const api = {
-      loadSettings: vi.fn().mockResolvedValue(model),
-      saveClearingWorkflow: vi.fn().mockRejectedValue(new Error("offline")),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api, "tables");
-    clearingSwitch(el).input.click();
-    await settle(el);
-    expect(pageAlert(el)).toContain("could not be saved");
-    expect(
-      el.shadowRoot!.querySelector('[data-field-error="clearingWorkflow"]')!.textContent,
-    ).toContain("could not be saved");
-    expect(clearingSwitch(el).input.checked).toBe(false);
-  });
-
-  it("follows a change another dashboard makes", async () => {
-    const liveData = new LiveData();
-    const loadSettings = vi.fn().mockResolvedValue(model);
-    const el = await mount({ loadSettings, liveData } as unknown as VenueServiceApi, "tables");
-    loadSettings.mockResolvedValue(withClearing(true));
-    liveData.invalidate([{ type: "service_settings" }]);
-    await vi.waitFor(() => expect(clearingSwitch(el).input.checked).toBe(true));
-  });
-
-  it("reads in Spanish", async () => {
-    setLocale("es");
-    const el = await mount(
-      { loadSettings: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi,
-      "tables",
-    );
-    expect(clearingSwitch(el).host.shadowRoot!.querySelector("label")!.textContent).toBe(
-      "Por recoger",
-    );
-    expect(
-      el.shadowRoot!.querySelector('[data-test="clearing-workflow-hint"]')!.textContent,
-    ).toContain("Cerrar mesa");
   });
 });
 
