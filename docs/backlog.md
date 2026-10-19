@@ -1450,11 +1450,13 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   - The Venue card says nothing about a time zone locked by a past business-day change. The server
     gives the reason `business_day_history` (`apps/server/src/venue-details.ts`); `REASONS` in
     `apps/dashboard/src/screens/venue-details-panel.ts` has no sentence for it.
-  - A896. The Venue details panel (its Business and Venue cards) may keep an open draft's
-    unsaved-changes protection when it turns read-only (believed; not probed).
-    `venue-details-panel.ts` guards `readOnly` the way A824's Defaults card first did, which hid
-    the form but left the leave warning asking about changes the person could no longer see; the
-    Defaults card now drops its draft when it turns read-only.
+  - A896. The Venue details panel's Venue card keeps an open draft's unsaved-changes protection
+    when it turns read-only. Measured 2026-10-19 with a throwaway case in
+    `venue-details-panel.unsaved.test.ts`: after a Venue-card field change, setting `readOnly`
+    hid the form and the Edit button, a `beforeunload` event was still cancelled (the browser's
+    leave-page warning), and a request to navigate elsewhere in the dashboard had still not been
+    answered a second later; nothing was saved. The Defaults card drops its draft when it turns
+    read-only (`willUpdate` in `venue-defaults-panel.ts`). Left open by A824.
 
   [Mockups](backlog/mockups/a755-venue-settings/)
 

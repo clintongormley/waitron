@@ -1,5 +1,7 @@
 # A755: Venue settings as four cards — implementation plan
 
+> 2026-10-19, A824: `GET /management-api/venue-defaults` now needs `venue.view`, not `venue.configure`, and a session without `venue.configure` sees the Defaults card read-only; saving still needs `venue.configure`. So T1's heading, T1's two refused reads (withholding `venue.configure`, and the real supervisor), the "supervisor sees no Defaults card" test step and table row, and decision 3 no longer hold.
+
 > 2026-10-18, A788: the Business day card's Replace and Cancel actions and its Editable until row are gone — see `docs/superpowers/specs/2026-10-18-a788-business-day-next-changeover-design.md`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (or
