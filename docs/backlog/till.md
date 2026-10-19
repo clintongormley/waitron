@@ -2243,8 +2243,10 @@ The remaining work includes:
   table (plan T20/T22); the earlier picture-03 implementation is not that revised design.
 - Reconcile the full branch with current main, including migration collisions and prose describing
   changed behavior beyond the documented fresh/recalled modifiers and checks before closing.
-  The original service spec and plan now carry dated pointers for their superseded draft rules;
-  the whole-branch prose audit remains open. Complete the remaining
+  The original service spec and plan now carry dated pointers for their superseded draft rules.
+  The table-actions spec/plan and the two station/extra plans also point to the replacement
+  bill-selection and table Recall contracts, preserving their historical bodies.
+  The whole-branch prose audit remains open. Complete the remaining
   ownership/copy/native-screen acceptance, the physical till trial and final whole-branch validation
   and review before publication. Read the campaign's
   local checkpoint ledger for exact remaining checks and receipts; do not treat earlier focused

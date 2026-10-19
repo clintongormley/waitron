@@ -1,5 +1,12 @@
 # Tables, parties and bills: the till's table actions — design
 
+> **2026-10-19, A773-1:** for new table orders, the approved
+> [bill contract](2026-10-16-a773-courses-and-groups-design.md#4-bills) replaces the default-to-main-bill
+> and Send to choices below with ordering on the bill on screen. The
+> [ownership amendment](2026-10-17-a773-one-editor-design.md) specifies one saved New order and
+> editor per bill. These amendments do not remove `main_bill_id` from other table/bill actions.
+> The body below retains this design's earlier rules; A773-1 remains unlanded.
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to
