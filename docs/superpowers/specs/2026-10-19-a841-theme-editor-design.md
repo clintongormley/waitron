@@ -32,7 +32,7 @@ Goals
   light and dark side by side, and saves.
 - Both the light and the dark palette are worked out from those choices; the owner never has to
   pick a dark-mode colour.
-- For the owner who wants one colour exactly, an **Advanced** section, closed until opened, lets her
+- For the owner who wants one colour exactly, an **Advanced** section, closed until opened, lets them
   set any of 22 colours by hand, each with its own light and dark value (owner, Q1, 2026-10-19;
   section 5).
 - Every saved theme passes every contrast rule Waitron's own palette is tested against, plus
@@ -47,7 +47,10 @@ Non-goals (not in A841; each could be its own item later)
 - The server's own pages: the trust page, the user guide pages, the recovery page.
 - Setup (the first-run wizard): it runs before the venue has a theme.
 - Colours that carry a meaning: red for danger, green for success, amber for warning, the table
-  states on the floor plan, prep-station colours, calendar colours, Google's sign-in button.
+  states on the floor plan, prep-station colours, calendar colours, Google's sign-in button, and the
+  search highlight — the yellow behind a matched word (`--wt-color-highlight` and
+  `--wt-color-on-highlight`, `packages/ui-core/src/tokens/colors.css:121-122`, painting `<mark>` at
+  `packages/venue-service/src/dashboard/routing-grid.ts:152-155`).
 - Product and category colours: those are the venue's own data, already chosen per product.
 
 Anti-goals (things this must never do)
@@ -55,7 +58,7 @@ Anti-goals (things this must never do)
 - Let a saved theme make a button's words, a link or a focus ring unreadable.
 - Delay or block the till's start-up or a sale: fetching the theme never holds the page (section 12).
 - Become a second, hand-kept copy of Waitron's default colours: a venue's theme stores only the
-  owner's choices — the three main choices and any colour she set by hand — and everything else is
+  owner's choices — the three main choices and any colour they set by hand — and everything else is
   worked out from the current release's defaults (section 11).
 
 ## 3. What Waitron does today (receipts)
@@ -119,9 +122,9 @@ CSS `color-scheme` property (`colors.css:5,127`) so the browser draws its own co
   uses it.
 - `design-system.md:189-208` says a tenant theme cannot set `--wt-color-primary-text`, the hover or
   the disabled colours, and that "no screen applies a stored tenant theme yet". Backlog entries on
-  it: the `--wt-color-primary-text` entry (`docs/backlog.md:4379-4385`, detail
-  `docs/backlog/dashboard.md:1239-1246`) and "`tenant_themes`: decide the remaining DELETE
-  restriction (A805 follow-up)" (`docs/backlog.md:6123-6125`).
+  it: the `--wt-color-primary-text` entry (`docs/backlog.md:4487-4493`, detail
+  `docs/backlog/dashboard.md:1227-1236`) and "`tenant_themes`: decide the remaining DELETE
+  restriction (A805 follow-up)" (`docs/backlog.md:6238-6240`).
 
 **Surfaces that do not use the token layer, or copy from it.** The trust page inlines four token
 pairs by hand and says so (`apps/server/src/trust-page.ts:106-111`). The user guide pages carry their
@@ -206,7 +209,7 @@ ade4b3a3c):
   (`dashboard-app.ts:252-257`). It has four tabs, Venue details, Tables, Adjustment reasons and
   Kitchen (`apps/dashboard/src/screens/venue-settings-screen.ts:11-24`), each holding cards. Its
   Defaults card needs `venue.view` to be seen and `venue.configure` to be edited
-  (`dashboard-app.ts:321-330,1915`), and saves through `PUT /management-api/venue-defaults`, gated
+  (`dashboard-app.ts:321-330,1916`), and saves through `PUT /management-api/venue-defaults`, gated
   the same way (`apps/server/src/location-settings-api.ts:297-327`).
 - Pages whose own words say "settings" but which are about one thing: mail ("Retry loading mail
   settings", `strings.ts:997`, an unlisted screen, `dashboard-app.ts:299`) and Backups ("Change
@@ -333,16 +336,25 @@ Product text, English (Spanish to be written with the strings):
 | Advanced columns | Colour · Light screens · Dark screens |
 | A value | Worked out · Set by hand · Use worked-out colour |
 | Advanced, end | Reset all to worked-out |
-| After a main choice changes | You set {n} colour(s) by hand, and they are kept: {names}. Advanced shows them. |
+| After a main choice changes (one) | You set 1 colour by hand, and it is kept: {name}. Advanced shows it. |
+| After a main choice changes (several) | You set {n} colours by hand, and they are kept: {names}. Advanced shows them. |
 | Colour choices | Waitron's · Custom |
 | Preview | Preview · Light · Dark |
 | Reset | Use Waitron's look |
 | Note | Applies to the dashboard and every till. Each browser still chooses Light, Dark or Follow device. |
-| Adjusted (Q2 A) | Darkened to {colour} on light screens, so buttons stand out. |
-| Refused (Q2 B) | Too pale for buttons on light screens. Pick a darker colour. |
-| Hand-set, adjusted (Q2 A) | Darkened to {colour}, so it can be read on cards and fields. |
-| Hand-set, refused (Q2 B, or A when moving it is not enough) | Too pale to read on cards and fields. Pick a darker colour. |
+| Brand colour adjusted (Q2 A) | Darkened to {colour} on light screens, so buttons stand out. / Lightened to {colour} on dark screens, so buttons stand out. |
+| Brand colour refused (Q2 B) | Too pale for buttons on light screens. Pick a darker colour. / Too dark for buttons on dark screens. Pick a lighter colour, or set the dark Main buttons colour by hand. |
+| Hand-set colour adjusted (Q2 A), under its row | {Light screens / Dark screens}: {darkened / lightened} to {colour} so it can be read {on / with} {names}. |
+| Hand-set colour refused (Q2 B), under its row | {Light screens / Dark screens}: too close to {names} to read. Pick a {darker / lighter} colour. |
+| Hand-set colour refused, no shade passes (either answer) | {Light screens / Dark screens}: no shade of this colour can be read {on / with} {names}. Pick another colour. |
 | Bad custom value | Enter a colour as # and six digits or letters a–f. |
+
+In the hand-set rows, {names} are the plain names (section 5) of the other colours in the rules the
+value failed; "darker" or "lighter" is the way Q2 A moved it, or would have; "on" is used when the
+hand-set colour is drawn on the others (a text), "with" when the others are drawn on it (a
+background). The round-3 reviewer's sweep (`/tmp/a841r3/i.mjs`) found hand-set values moved lighter
+as well as darker (a light page set to `#ff00ff` went to `#ffbdfb`), so every sentence has both
+forms.
 
 ## 5. What is editable
 
@@ -370,11 +382,16 @@ and added the hand-set list behind an opening.
 `surface-raised`, `surface-lifted`, `surface-sunken`, `track`, `text`, `text-muted`, `primary`,
 `primary-hover`, `on-primary`, `primary-text`, `primary-disabled`, `on-primary-disabled`, `border`,
 `focus`, `scrim`, `field-fill`, `field-line`, `field-label-focus`, `field-fill-disabled`,
-`field-value`, `stepper-button`. **Advanced offers 22: all but `scrim`** (my call). The scrim is the
-shade laid over the page behind an open dialog, and it is see-through: `rgb(0 0 0 / 0.4)` in every
-block (`colors.css:30,152,269,385`). A value set by hand is a six-digit `#rrggbb` code, which has no
-see-through part, so a hand-set scrim would black out (or white out) the page behind every dialog.
-It is not a brand colour either. The owner was told "23"; the question file says why it is 22.
+`field-value`, `stepper-button`. **Advanced offers 22: all but `scrim`.** I left the scrim out
+because it is the shade laid over the page behind an open dialog, and it is see-through: `rgb(0 0 0
+/ 0.4)` in every block (`colors.css:30,152,269,385`), read by
+`packages/ui/src/components/wt-dialog.ts:72`, `packages/staffing/src/dashboard/rota-popup.ts:61` and
+`apps/dashboard/src/dashboard-app.ts:727`. Every other hand-set value is a six-digit `#rrggbb` code,
+which has no see-through part, so the same field would black out (or white out) the page behind
+every dialog. A see-through value is possible — CSS takes eight digits, `#rrggbbaa`, and a
+"darkness" choice beside a colour would do it — but the shade is not a brand colour, so it did not
+seem worth a field of its own. If the owner wants it, it can come back as a darkness choice. The
+owner was told "23"; the question file says why it is 22 and offers it.
 
 The plain names Advanced shows, in its order: Page (`bg`), Cards (`surface`), Menus and dialogs
 (`surface-raised`), Selected item (`surface-lifted`), Sunken areas (`surface-sunken`), Bar tracks
@@ -419,8 +436,9 @@ All my call; the plan pins the exact numbers.
   takes Waitron's default values from `colors.css` itself, never from a hand-kept copy (the trust
   page and guide pages show what a copy costs: section 3).
 - "Waitron's" brand colour is stored as `brandColor: null`, and keeps Waitron's own primary family
-  in each mode: the theme writes none of the brand-colour tokens. With Neutral and Standard as well
-  it is no theme at all: no row, Waitron's exact tokens. With Tinted, the tint takes the hue of
+  in each mode: the theme writes none of the brand-colour tokens, unless Main buttons is set by hand
+  (below). With Neutral and Standard as well, and nothing set by hand, it is no theme at all: no
+  row, Waitron's exact tokens. With Tinted, the tint takes the hue of
   Waitron's own primary. The prototype, run for `brandColor: null`, wrote 0 tokens for Neutral in
   both modes, and 6 (light) and 8 (dark) background tokens for Tinted with the tint at full
   strength, every rule passing. A custom colour typed as Waitron's own `#1f6feb` is a theme like any
@@ -469,31 +487,46 @@ All my call; the plan pins the exact numbers.
 
 ### Colours set by hand
 
-Added for the owner's Q1 answer. My calls, except where a rule depends on Q2 or on the extra
-question before it (section 19).
+Added for the owner's Q1 answer, revised after review round 3. My calls, except where a rule depends
+on Q2 or on the extra question before it (section 19).
 
 - **Stored as a choice.** A hand-set value is one of the owner's choices, like the brand colour:
-  the stored document holds it, keyed by mode and colour (section 11). Nothing worked out is stored.
+  the stored document holds it as typed, keyed by mode and colour (section 11). Nothing worked out
+  is stored.
 - **Fixed while the rest is worked out.** `deriveTheme` takes the hand-set values as fixed, and
-  works the other colours out around them. Where a colour is normally worked out from another, it is
-  worked out from the hand-set value: the text on the main button and its hover from a hand-set main
-  button; the button's and the links' search for 3:1 and 4.5:1 against a hand-set page, cards or
-  field background.
-- **When a rule still fails**, it is settled in this order:
-  1. the tint gives way, as above;
-  2. a worked-out colour named in the failing rule is moved, if moving it alone makes the rule pass
-     (no note, as for the tint: the preview shows it);
-  3. otherwise the hand-set value is what makes the rule fail, and Q2's answer decides: with Q2 A
-     it is moved just enough, keeping its hue, with a note under its row; with Q2 B it is refused
-     under its row and Save stays off. Under B, a hand-set value is refused exactly when A would
-     have moved it. When both colours in the rule are hand-set, the one drawn on top (text, line or
-     button) is the one moved or named. Meaning colours (danger, success, station dots, Google's
-     button line) never move, so a hand-set background that fails against one of them is always the
-     one at fault;
-  4. anything still failing after that is refused, under either Q2 answer, naming the hand-set
-     values in the failing rules. **What guarantees that nothing unreadable is saved is the server's
-     final check of the finished set (section 9), not the settling steps**; they only try to avoid a
-     refusal.
+  works the other colours out around them: the button's and the links' search for 3:1 and 4.5:1
+  runs against a hand-set page, cards or field background.
+- **A hand-set Main buttons colour leads its family.** When Main buttons is set by hand, the rest of
+  the brand colour's family — pointed at, text on it, switched off and its text, links and accent
+  text, focus ring, field label while typing, selected item, + and − buttons — is worked out from
+  that colour, as if it were the brand colour, unless one of them is set by hand too. This holds
+  even with "Waitron's" brand colour, which otherwise writes none of them: a burgundy main button
+  must not turn Waitron's blue when pointed at. Prototype (`/tmp/a841r3/f.mjs`, the round-3
+  reviewer's script, re-run after the change): brand "Waitron's", Neutral, light Main buttons set to
+  `#7a1f2b` gave pointed at `#67081c`, links and focus `#7a1f2b`, selected item `#fee2e2`, every rule
+  passing; with the dark value set to the same burgundy, Q2 A lightened it to `#9e4048` and the
+  family followed (pointed at `#8a2e38`), every rule passing.
+- **When a rule fails**, it is settled in this order:
+  1. **the tint gives way, but only for failing rules between colours Waitron works out**, at least
+     one of them tinted. A rule with a hand-set colour in it is left to steps 2 and 3, so one bad
+     hand-set colour cannot strip the tint from everything else;
+  2. **a worked-out colour named in the failing rule moves**, if moving it alone makes the rule pass
+     (no note, as for the tint: the preview shows it). The main button colour is not moved here;
+     the brand colour's own adjustment is Q2's;
+  3. **otherwise the hand-set value is what makes the rule fail, and Q2's answer decides.**
+     - With **Q2 A** it is moved, keeping its hue, to the nearest lightness at which every rule
+       passes after steps 1 and 2, with a note under its row. When both colours in a failing rule
+       are hand-set, the one drawn on top (text, line or button) is moved first. Meaning colours
+       (danger, success, station dots, Google's button line, the search highlight) never move, so a
+       hand-set background that fails against one of them is the one moved. It is refused only when
+       no lightness of its hue, from black to white, passes every rule.
+     - With **Q2 B** it is refused under its row and Save stays off. The refused set is computed
+       this way: settle with steps 1 and 2 only, nothing hand-set moving; every hand-set value named
+       by a rule still failing is refused, and no other. So under B a hand-set value is refused
+       exactly when A would have had to move it.
+  4. **What guarantees that nothing unreadable is saved is the server's final check of the finished
+     set (section 9)**, not the settling steps: a save whose finished set still fails a rule is
+     refused, naming the hand-set values in the failing rules.
 - **Changing a main choice later keeps hand-set values** (recommended; the extra question in
   section 19). Each stays exactly as set, marked "Set by hand", with **Use worked-out colour** on
   its row and **Reset all to worked-out** at the end of the section. After a change, a note under
@@ -506,7 +539,7 @@ question before it (section 19).
 - **Use Waitron's look** puts every hand-set value back as well (section 4).
 
 **Worked example — Bar Lucía** (prototype: `deriveHand` in `a841-mockups-src/derive.mjs`, run by
-`node build.mjs` there and by `examples-hand.mjs`, outside the repository):
+`node build.mjs` there and by `node examples-hand.mjs`, outside the repository):
 
 1. Lucía's look is brand `#1e5b3a`, Tinted, Round. Her light page is worked out as `#f0f9f3`.
 2. She opens Advanced and sets the light page to the bar's cream, `#f8f1e1`. The page is that cream
@@ -522,22 +555,37 @@ question before it (section 19).
    sunken areas `#e2d6d6`, field background `#f7eeed`. All rules passed in both modes. Without the
    hand-set page, her light page would have been `#fff3f3`; **Use worked-out colour** on the page row
    gives exactly that. Mock-up `14-q-hand-kept-or-put-back-light.png`, left.
-4. She sets Secondary text (light) to a pale sage, `#8fa898`. It reads 2.55:1 on white cards, 2.27:1
-   on the field background and 2.04:1 on the selected item, where the rule asks 4.5:1. No worked-out
-   colour can move far enough from it (even white reaches only 2.55:1), so the sage is at fault
-   (step 3). With Q2 A the prototype darkens it to `#556c5d`, every rule then passing, and the row
-   says "Darkened to #556c5d, so it can be read on cards and fields."; the stored choice stays
-   `#8fa898`. With Q2 B it is refused: "Too pale to read on cards and fields. Pick a darker colour."
+4. Back on green, with the cream page, she sets Secondary text (light) to a pale sage, `#8fa898`.
+   The rules for secondary text ask 4.5:1 on the selected item, the field background and the
+   switched-off field background; the sage reads 2.04:1, 2.24:1 and 2.38:1. No worked-out colour
+   can move far enough from it (even white reaches only 2.55:1), so the sage is at fault (step 3).
+   With Q2 A the prototype darkens it to `#526a5b`, which reads 4.70:1, 5.17:1 and 5.49:1, every rule
+   passing; its row says "Darkened to #526a5b so it can be read on Selected item, Field background
+   and Switched-off field background."; the stored choice stays `#8fa898`. With Q2 B the refused set
+   is the sage alone — the cream page is named by no failing rule, and the tint stays at full
+   strength (the round-3 reviewer's `/tmp/a841r3/e.mjs`, re-run: `tint 1 field-fill #ebf2ed`, only
+   the three secondary-text rules failing) — and its row says "Too close to Selected item, Field
+   background and Switched-off field background to read. Pick a darker colour." Mock-up
+   `15-q2-hand-set-adjust-or-refuse-light.png`.
 
-**What the prototype does not yet do.** A rough sweep (`sweep-hand.mjs` in the same folder: Bar
-Lucía, Tinted, light and dark, each of the 22 colours set by hand in turn to each of the eight
-corner colours of the colour cube — black, white, red, green, blue, cyan, magenta, yellow — 352
-cases) printed `still failing 107, hand-set value moved in 106`. These are extreme picks: a pure
-blue cards colour failed all fifteen station dots on it (a station dot is a meaning colour and never
-moves), and with a black or a blue light page the prototype's button stood 1.00:1 and 2.44:1 from
-the page, where the rule asks 3:1. The prototype settles one colour at a time and gives up early;
-the plan decides how hard the real settling tries, and step 4's refusal covers what it cannot
-settle. The realistic picks above all settled.
+**Extreme picks** (`node sweep-hand.mjs a light`, `… a dark`, `… b light`, `… b dark` in the same
+folder: Bar Lucía, Tinted, each of the 22 colours set by hand in turn to each of the eight corner
+colours of the colour cube — black, white, red, green, blue, cyan, magenta, yellow — 176 cases per
+mode). Under Q2 A they printed `Q2 A light: cases 176, passing as typed 87, moved lighter 32, moved
+darker 57, refused 0, saved failing 0` and `Q2 A dark: cases 176, passing as typed 79, moved lighter
+31, moved darker 66, refused 0, saved failing 0`: no case was refused, so I have no example of a
+hand-set colour that no lightness of its hue can make readable, and give none. An example of a
+move: pure blue cards in light mode fail all fifteen station dots and more; Q2 A lightens them,
+keeping the hue, to `#e2ecff`, where every rule passes (the round-3 reviewer's `/tmp/a841r3/g.mjs`
+found the same hue passing from lightness 0.94). Under Q2 B, light mode printed `refused 89, saved
+failing 0` — the 89 that A moved, and no others. Dark mode under Q2 B printed `refused 100, saved
+failing 70`: there Bar Lucía's own green, no longer adjusted, failed a dark button rule in every
+case except the six where Main buttons itself was set by hand to a light enough colour (a
+follow-up run listed exactly `primary=` green, cyan, red, magenta, yellow and white as passing), so
+under B the brand colour itself would be refused (section 9). The prototype's settling is still
+simple — step 2 moves one worked-out colour at a time and only when that lowers the number of
+failing rules, and step 3 tries lightness in steps of a hundredth — so the plan decides how the real
+one searches; the final check (step 4) covers whatever it misses.
 
 ## 7. Light, Dark and Follow device
 
@@ -628,9 +676,13 @@ read from script; the plan lists those by hand.
 field; Save stays enabled. The alternative refuses the colour with the form's usual field message
 and keeps Save disabled until the owner picks another (`05-refused-light.png`). **Whichever Q2
 answer comes back applies to colours set by hand too**, under their own rows (section 6, "Colours
-set by hand", step 3), with one addition under either answer: a hand-set colour that moving cannot
-make readable is refused (step 4). The same rules check hand-set and worked-out colours alike; a
-hand-set colour gets no exemption for having been typed exactly.
+set by hand", step 3). Under A a hand-set colour is moved, keeping its hue, until every rule
+passes, and refused only when no lightness of its hue passes. The same rules check hand-set and
+worked-out colours alike; a hand-set colour gets no exemption for having been typed exactly.
+Under B, Bar Lucía's own green would be refused for dark screens: unmoved, `#1e5b3a` stands
+2.33:1 on Waitron's dark page and 2.12:1 on its dark cards, where buttons need 3:1 (`derive.mjs`,
+`derive({ brand: "#1e5b3a", background: "neutral" }, "dark", { adjust: false })`). She could keep
+it for light screens only by setting the dark Main buttons colour by hand.
 
 **Every way in is checked.** The server derives and checks on every save, hand-set values included,
 so a request that skips the screen cannot store an unreadable theme; it answers `theme.invalid` for
@@ -679,9 +731,10 @@ My call: **reuse and reshape what exists** rather than adding a parallel table.
   "tinted", "corners": "round", "handSet": { "light": { "bg": "#f8f1e1" }, "dark": {} } }`. A
   hand-set value is stored as typed, never as moved (section 6). No worked-out values are stored, so
   a release that improves Waitron's defaults reaches a themed venue too; the cost is that a release
-  changing the defaults or the formula can shift a venue's worked-out colours slightly (never a
-  hand-set one, unless a moved one moves differently), which the editor shows as it works them out
-  now.
+  changing the defaults or the formula can shift a venue's worked-out colours slightly, which the
+  editor shows as it works them out now. A release never changes a hand-set value as stored, but it
+  can change how one is served: one Q2 A moves may be moved differently, and one that no longer
+  passes is served as worked out (section 17).
 - **No migration is needed:** the table and its JSON column stay; the document's shape is checked in
   code. Before go-live any installation may be reset (CLAUDE.md §3), so an old `{ tokens }` row is
   not carried forward: the server reads one as no theme (my call).
@@ -690,18 +743,18 @@ My call: **reuse and reshape what exists** rather than adding a parallel table.
 - **Error code:** `theme.invalid` stays. It carries `field` (`brandColor`, `background`, `corners`,
   or a hand-set value as `handSet.light.bg`, the same string as that input's `name`) and `reason`
   (among them `unknown_colour` for a name outside the 22, `bad_value`, and `unreadable` for section
-  6's step 3 under Q2 B and step 4 under either answer), replacing `token`, so the card can put the
-  sentence under the field or row (CLAUDE.md §3:
-  "A screen puts a refusal beside a field by what the error CARRIES"); renaming params is free
-  before go-live.
+  6's step 3 — under Q2 B, or under A when no lightness of the colour's hue passes — and for step
+  4), replacing `token`, so the card can put the sentence under the field or row (CLAUDE.md §3: "A
+  screen puts a refusal beside a field by what the error CARRIES"); renaming params is free before
+  go-live.
 - **Retired:** `THEMEABLE_TOKENS` and `MAX_THEME_VALUE_LENGTH` (`theme.ts:12-22`) and
   `validateThemeOverride`, with their exports (`packages/layouts/src/index.ts:28-29`) and the case
   that checks one (`packages/layouts/src/index.test.ts:7`), replaced by the choice check and the derived token list; the till's unused
   `ThemeOverride` copy (`apps/till/src/layout.ts:58-60`); the `--wt-font-family` override (no knob
   for it).
-- **Backlog this closes or changes:** the `--wt-color-primary-text` entry (`backlog.md:4379-4385`,
-  detail `backlog/dashboard.md:1239-1246`) closes — the theme writes primary text, hover and
-  disabled colours; the `tenant_themes` DELETE restriction (`backlog.md:6123-6125`) is answered —
+- **Backlog this closes or changes:** the `--wt-color-primary-text` entry (`backlog.md:4487-4493`,
+  detail `backlog/dashboard.md:1227-1236`) closes — the theme writes primary text, hover and
+  disabled colours; the `tenant_themes` DELETE restriction (`backlog.md:6238-6240`) is answered —
   Reset deletes the row, so DELETE is an intended path; `design-system.md:189-208` is rewritten.
 - **Configuration copy:** the theme already travels (`configuration-transfer.ts:77`); the build adds
   its check to `validateCoreConfiguration` (section 9).
@@ -772,7 +825,7 @@ and administrators change it.
 - Editing: **stays `layout.configure`**, the permission `PUT /management-api/theme` already checks
   (`packages/layouts/src/theme-store.ts:23-26`). The earlier draft moved it to `venue.configure`
   only because the card sat on Venue settings, whose cards edit under that permission
-  (`dashboard-app.ts:1915`). On the Settings section the nearest page is Device profiles, read and
+  (`dashboard-app.ts:1916`). On the Settings section the nearest page is Device profiles, read and
   saved under `layout.configure` (section 3), and receipt layouts use it too
   (`packages/layouts/src/receipt-store.ts:171`). Only managers and admins hold it, and supervisors
   do not (`permissions.ts:46-83`), so nobody gains or loses the right, and the `PUT` gate does not
@@ -780,7 +833,7 @@ and administrators change it.
 - Seeing the page: the Appearance item in the side menu names `requiresPermission: "venue.view"`
   (supervisors and up), so a supervisor sees the read-only card; the card offers Edit only to a
   person holding `layout.configure`, as Venue settings offers it by `venue.configure`
-  (`dashboard-app.ts:1915`). Staff cannot open the page: a staff session is sent to Orders or My
+  (`dashboard-app.ts:1916`). Staff cannot open the page: a staff session is sent to Orders or My
   schedule whatever it asks for (`dashboard-app.ts:1930`).
 - Applying the look: `/api/theme` needs no session; the dashboard's live read needs a session but no
   permission (section 12).
@@ -813,9 +866,11 @@ and administrators change it.
   1.39:1 on the page.
 - Hand-set values: section 6's worked example as cases (the cream page kept exactly and every rule
   passing; the brand change keeping it; Use worked-out colour giving `#fff3f3`; the sage moved under
-  Q2 A, refused under Q2 B); a sweep of hand-set values in which every case either passes every
-  rule or is refused naming a hand-set value — never saved failing; and the extreme picks of
-  `sweep-hand.mjs` (a pure blue cards colour) refused.
+  Q2 A, refused under Q2 B, with the cream page not named); a hand-set Main buttons colour with
+  "Waitron's" brand colour writing its whole family; a sweep of hand-set values in which every case
+  either passes every rule or is refused naming a hand-set value — never saved failing; and, under
+  Q2 A, an extreme hand-set colour (pure blue cards) moved, keeping its hue, until every rule passes,
+  or refused only when no lightness of its hue passes.
 - Server: `PUT` refuses invalid choices with `theme.invalid` naming the field (a hand-set value as
   `handSet.light.bg`); refuses without `layout.configure`; a supervisor's `GET` is answered and its
   `PUT` refused; a configuration import with a bad theme row is refused; `/api/theme` answers
@@ -901,7 +956,12 @@ and administrators change it.
 In `docs/backlog/mockups/a841-theme-editor/`, built from the real token files with Playwright's
 Chromium (sources and the prototype outside the repository, in
 `/Users/clintongormley/waitron-campaign/a841-mockups-src/`; `node build.mjs` there re-renders every
-picture except 08, which it leaves as the owner saw it):
+picture except 08, which it leaves as the owner saw it). The side menu is the one a manager sees on
+that page: every group starts folded and the open page's group unfolds
+(`apps/dashboard/src/dashboard-app.ts:863-867`), and the Settings group lists the eight pages a
+manager may open — all of `dashboard-app.ts:280-291` but Servers, which needs `mirror.create`, an
+admin's permission (`permissions.ts:56-83`). In the editor pictures only the preview shows the draft;
+the dashboard around the card, the card included, keeps the saved look (section 4, step 4):
 
 | File | Shows |
 | --- | --- |
@@ -912,13 +972,14 @@ picture except 08, which it leaves as the owner saw it):
 | `05-refused-light.png` | The same colour refused (Q2 B) |
 | `06-till-{light,dark}.png` | A till counter screen in Bar Lucía's look; product tiles keep their own colours |
 | `07-dashboard-{light,dark}.png` | The Products screen in Bar Lucía's look |
-| `08-q1-knobs-or-every-colour-light.png` | Q1 options side by side, kept unchanged as the record of what the owner saw when he answered (2026-10-19). Superseded by 02 and 12: its B side says 23 colours and has no Set by hand marks |
+| `08-q1-knobs-or-every-colour-light.png` | Q1 options side by side, kept unchanged as the record of what the owner saw when they answered (2026-10-19). Superseded by 02 and 12: its B side says 23 colours and has no Set by hand marks |
 | `09-q2-adjust-or-refuse-light.png` | Q2 options side by side |
 | `10-q3-one-theme-or-per-device-light.png` | Q3 options side by side |
 | `11-q4-text-size-light.png` | Q4 options side by side |
-| `12-advanced-{light,dark}.png` | Advanced opened: Bar Lucía's light page set by hand to cream, marked, beside worked-out colours; her dark page still worked out |
+| `12-advanced-{light,dark}.png` | Advanced opened: Bar Lucía's light page set by hand to cream in the draft, marked, beside worked-out colours; her dark page still worked out. The saved look around the card has no cream |
 | `13-advanced-phone-light.png` | Advanced opened at 390 px: each row stacks its Light and Dark values |
-| `14-q-hand-kept-or-put-back-light.png` | The extra question: after the brand changes to burgundy, the cream page kept (A) or put back (B) |
+| `14-q-hand-kept-or-put-back-light.png` | The extra question: with the cream page saved, the brand changed to burgundy in the draft; the cream page kept (A) or put back (B) |
+| `15-q2-hand-set-adjust-or-refuse-light.png` | Q2's hand-set half: the sage secondary text darkened under its row (A) or refused (B); under B the green itself is refused for dark screens too (section 9) |
 
 ## 19. Questions for the owner
 
@@ -931,10 +992,11 @@ menu's Settings section (section 4). It raised one extra question, asked before 
 **Extra question (from the Q1 answer) — When the brand colour changes, what happens to colours set
 by hand?** Bar Lucía's manager has set the light page to the bar's cream by hand. Later she changes
 the brand colour from green to burgundy. With A, the cream page stays, still marked "Set by hand",
-and a note under the brand colour says it was kept; one tap ("Use worked-out colour") gives her the
-burgundy-tinted page instead. With B, changing the brand colour (or the background) puts every
-colour set by hand back to worked out, and a note says which; Cancel still brings them back.
-Pictures: `14-q-hand-kept-or-put-back-light.png` (and `12-advanced-light.png`).
+and a note under the brand colour says "You set 1 colour by hand, and it is kept: Page (light).
+Advanced shows it."; one tap ("Use worked-out colour") gives her the burgundy-tinted page instead.
+With B, changing the brand colour (or the background) puts every colour set by hand back to worked
+out, and a note says which; Cancel still brings them back. Pictures:
+`14-q-hand-kept-or-put-back-light.png` (and `12-advanced-light.png`).
 
 - **A (recommended):** colours set by hand are kept until she puts them back herself.
 - **B:** changing the brand colour or background puts them all back.
@@ -944,15 +1006,18 @@ Café Limón's owner picks lemon yellow. On a white page a lemon button is almos
 where Waitron's own rule for buttons asks for 3 to 1. With A, Waitron darkens it to a mustard for
 light screens only, keeps the lemon on dark screens, and shows "Darkened to #9f8b18 on light
 screens, so buttons stand out." With B, Waitron refuses: the colour is marked "Too pale for buttons
-on light screens. Pick a darker colour." and Save stays off until she picks another. The answer
-applies to colours set by hand in Advanced too: at Bar Lucía, a pale sage typed for "Secondary text"
-reads 2.55 to 1 on white cards, where text needs 4.5 to 1; with A Waitron darkens it to #556c5d and
-says so under its row, with B it is refused under its row. Either way, a hand-set colour that no
-adjustment can make readable (pure blue for the cards, say) is refused. Pictures:
-`09-q2-adjust-or-refuse-light.png` (and `04-adjusted-light.png`, `05-refused-light.png`).
+on light screens. Pick a darker colour." and Save stays off until she picks another. B also
+refuses Bar Lucía's own dark green for dark screens (2.33 to 1 on the dark page), unless she sets
+the dark Main buttons colour by hand. The answer applies to colours set by hand in Advanced too: at
+Bar Lucía, a pale sage typed for "Secondary text" reads about 2 to 1 on the selected item and the
+field backgrounds, where text needs 4.5 to 1; with A Waitron darkens it to #526a5b and says so under
+its row, with B it is refused under its row. Under A, Waitron moves a hand-set colour lighter or
+darker, keeping its hue, until every rule passes, and refuses it only when no shade of it would
+pass. Pictures: `09-q2-adjust-or-refuse-light.png` (and `04-adjusted-light.png`,
+`05-refused-light.png`), and `15-q2-hand-set-adjust-or-refuse-light.png` for the hand-set colour.
 
 - **A (recommended):** Waitron adjusts the colour just enough and says so.
-- **B:** Waitron refuses the colour until a darker one is picked.
+- **B:** Waitron refuses the colour until another is picked.
 
 **Q3 of 4 — One look for the whole business, or one per kind of device?**
 Bar Lucía has bar tills and terrace handhelds. With A there is one look, and every till and dashboard
