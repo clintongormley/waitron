@@ -560,6 +560,123 @@ describe("DraftSync: a refused save", () => {
     },
   );
 
+  it("keeps editing frozen after a refused save's recovery read fails until a current read succeeds", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    server.saveDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+    server.listDrafts.mockRejectedValueOnce(new TypeError("Offline"));
+
+    expect(await draft.flush()).toEqual({ refused: "draft.out_of_date" });
+    expect(draft.store.editsLocked).toBe(true);
+    const candidate = draft.candidate!;
+    expect(candidate.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    draft.resolveCandidate(candidate.lines);
+    expect(draft.candidate).toBe(candidate);
+    draft.store.addProduct(steak, "1");
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(await draft.flush()).toBe("failed");
+    await settle();
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+
+    expect(await draft.load()).toBe(true);
+    expect(draft.candidate).toBe(candidate);
+    draft.resolveCandidate(candidate.lines);
+    expect(draft.candidate).toBeNull();
+    expect(draft.store.editsLocked).toBe(false);
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(await draft.flush()).toBe("saved");
+    expect(server.drafts[0]!.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      ["offer-beer", "1"],
+    ]);
+    draft.drop();
+  });
+
+  it("discarding a candidate after failed recovery never saves its discarded lines on the next read", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    server.saveDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+    server.listDrafts.mockRejectedValueOnce(new TypeError("Offline"));
+
+    expect(await draft.flush()).toEqual({ refused: "draft.out_of_date" });
+    draft.resolveCandidate(null);
+    expect(draft.candidate).toBeNull();
+    expect(rows(draft)).toEqual([]);
+    expect(draft.store.editsLocked).toBe(true);
+    expect(await draft.flush()).toBe("failed");
+    expect(await draft.load()).toBe(true);
+    expect(draft.store.editsLocked).toBe(false);
+    await settle();
+    expect(rows(draft)).toEqual([]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.drafts).toEqual([]);
+
+    draft.store.addProduct(steak, "1");
+    expect(await draft.flush()).toBe("saved");
+    expect(server.drafts[0]!.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      ["offer-steak", "1"],
+    ]);
+    draft.drop();
+  });
+
+  it("discarding a candidate after lost-save recovery never saves its discarded lines on the next read", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    server.saveDraft.mockRejectedValueOnce(new TypeError("Lost save answer"));
+    server.listDrafts.mockRejectedValueOnce(new TypeError("Offline"));
+
+    expect(await draft.flush()).toBe("failed");
+    draft.resolveCandidate(null);
+    expect(draft.candidate).toBeNull();
+    expect(rows(draft)).toEqual([]);
+    expect(draft.store.editsLocked).toBe(true);
+    expect(await draft.flush()).toBe("failed");
+    expect(await draft.load()).toBe(true);
+    expect(draft.store.editsLocked).toBe(false);
+    await settle();
+    expect(rows(draft)).toEqual([]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.drafts).toEqual([]);
+
+    draft.store.addProduct(steak, "1");
+    expect(await draft.flush()).toBe("saved");
+    expect(server.drafts[0]!.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      ["offer-steak", "1"],
+    ]);
+    draft.drop();
+  });
+
+  it("discard after failed recovery restores the last confirmed saved lines without discarding that order", async () => {
+    seed("p1", beer);
+    const draft = sync();
+    await draft.load();
+    const saved = structuredClone(server.drafts);
+    draft.store.setLineQuantity(0, "2");
+    draft.store.addProduct(steak, "1");
+    server.saveDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+    server.listDrafts.mockRejectedValueOnce(new TypeError("Offline"));
+
+    expect(await draft.flush()).toEqual({ refused: "draft.out_of_date" });
+    expect(draft.candidate?.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+      ["Beer", "2"],
+      ["Steak", "1"],
+    ]);
+    draft.resolveCandidate(null);
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(draft.candidate).toBeNull();
+    expect(draft.store.editsLocked).toBe(true);
+    expect(server.drafts).toEqual(saved);
+    expect(await draft.load()).toBe(true);
+    expect(draft.store.editsLocked).toBe(false);
+    await settle();
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.drafts).toEqual(saved);
+    draft.drop();
+  });
+
   it("keeps the edit unsaved after a save rejected with nothing at all", async () => {
     const draft = sync();
     await draft.load();

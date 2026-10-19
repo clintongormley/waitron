@@ -640,8 +640,6 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
       came the draft can stay locked for up to two limits: the send, then the re-read.
     - When a send is refused because the menu changed, the re-read of the table's menu runs
       outside that limit.
-    - After a draft refusal whose re-read also fails, the till keeps the draft's old revision,
-      so the next Send is refused as out of date and re-reads first: a wasted round trip.
     - While the till follows a party onto its next bill, the screen can show no draft for a
       moment; and when a merge or move coincides with a refused save, the save's message can
       replace "another device changed this table".
@@ -1524,6 +1522,13 @@ not a real server's expiry clock. `state/draft-sync.test.ts` also checks that cl
 unsaved dish and starts no save. Recovery lasts only in the current app instance;
 [ownership design section 5](../superpowers/specs/2026-10-17-a773-one-editor-design.md)
 gives no guarantee across reload or close.
+
+A failed recovery read keeps editing frozen, even if you discard the local copy. Discard restores
+the last confirmed saved lines; it cannot make the discarded edits available to a later save.
+A successful read restores editing authority, and applying a retained copy still needs your
+explicit review. The sync suite checks both a draft refusal and a lost save answer, including a
+bill with previously saved dishes. The app suite checks the native Discard action and recovery
+on focus. This replaces Task 8's old refusal-and-repeat-send observation.
 
 While the table is visible, drafts refresh every 15 seconds and on window focus. The app's draft
 suite checks the interval, an unchanged focus refresh preserving selection and its Move window,

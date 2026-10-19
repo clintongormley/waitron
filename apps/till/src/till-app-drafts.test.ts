@@ -8619,6 +8619,45 @@ describe("A773 retained bill candidates in the app", () => {
     expect(api.saveDraft).toHaveBeenCalledOnce();
   });
 
+  it("keeps writes frozen after discarding a candidate whose recovery read failed", async () => {
+    const size = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(1280, 900);
+    try {
+      const { el } = await mountApp();
+      await openMesa(el);
+      await tap(el, "Beer");
+      api.saveDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+      const readDrafts = api.listDrafts.getMockImplementation()!;
+      api.listDrafts.mockRejectedValue(new TypeError("Offline"));
+      emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-4" });
+      await flush(el, 6);
+      expect(candidate(el)?.textContent ?? "").toContain("Beer");
+      await resized(tableOrder(el)!);
+      await userEvent.click(candidate(el)!.querySelector<HTMLElement>("[data-candidate-discard]")!);
+      await flush(el, 6);
+      expect(candidate(el)).toBeNull();
+      expect(draft(el).editsLocked).toBe(true);
+      expect(rows(el)).toEqual([]);
+      await tap(el, "Steak");
+      expect(rows(el)).toEqual([]);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+
+      api.listDrafts.mockImplementation(readDrafts);
+      window.dispatchEvent(new Event("focus"));
+      await flush(el, 6);
+      expect(draft(el).editsLocked).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
+      expect(rows(el)).toEqual([]);
+      expect(api.saveDraft).toHaveBeenCalledOnce();
+      expect(api.submitDraft).not.toHaveBeenCalled();
+      expect(server.drafts).toEqual([]);
+      await tap(el, "Steak");
+      expect(rows(el)).toEqual(["Steak ×1"]);
+    } finally {
+      await page.viewport(size.width, size.height);
+    }
+  });
+
   it("discards only the local candidate without writing or sending the saved order", async () => {
     const { el } = await mountApp();
     await openMesa(el);

@@ -371,6 +371,7 @@ export class DraftSync {
       }
     }
     this.#candidates.delete(this.#candidateKey);
+    if (reviewedLines === null && this.#recoveryRequired) this.#show(this.#authoritative);
     this.#lockAuthority();
     if (reviewedLines !== null) {
       this.#quietly(() => this.store.loadFrom(this.store.id, structuredClone([...reviewedLines])));
@@ -828,8 +829,9 @@ export class DraftSync {
     if (DRAFT_REFUSALS.has(refusal.refused)) {
       this.#unsaved = true;
       this.retainCandidate();
-      const reloaded = await this.#load();
-      if (this.#commanding && !reloaded) this.#recoveryRequired = true;
+      this.#recoveryRequired = true;
+      this.#lockAuthority();
+      await this.#load();
     } else this.#unsaved = true;
     this.#options.onRefused(refusal.refused, refusal.ownerName);
     return refusal;
