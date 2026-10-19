@@ -5387,6 +5387,16 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **A902. Say in the testing guide that Vite also prints browser console output under an AI
+  agent.** Its section "Vitest hides a passing test's console output under an AI agent" names only
+  Vitest's reporter. A811 (#1888) found that Vite 8.3.4, when an agent variable such as `AI_AGENT`,
+  `CLAUDECODE` or `CODEX_THREAD_ID` is set, prints a browser test's `console.error`, `console.warn`,
+  uncaught errors and unhandled rejections to the terminal, a passing test's included (seen in
+  `apps/dashboard`, which now sets `server: { forwardConsole: false }`). The other browser packages
+  (`grep -l browser */*/vitest.config.ts`) still forward. Measure one of them with and without an
+  agent variable, then add the receipt to the guide, and decide with the owner whether they should
+  turn forwarding off as the dashboard did.
+
 - **A late move or second finger can overtake the gesture hold timer.** A delayed move is
   treated as a pan, and a delayed second finger misses hold cancellation. Disposable probes
   reproduce both on unchanged main `d5230d32d` and A891's candidate. Extend hold recognition
