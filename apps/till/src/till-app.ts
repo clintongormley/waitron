@@ -15755,7 +15755,7 @@ export class TillApp extends LitElement {
       ...(out === undefined ? {} : { ...out.shown, busy: true, refusal: { code: "sending" } }),
     };
     this.billPaying = open;
-    await this.#rereadBillPaying(open.id, billId);
+    await this.#rereadBillPaying(open.id, billId, order);
     return open;
   }
 
@@ -15765,41 +15765,50 @@ export class TillApp extends LitElement {
   }
 
   /** The bill's balance read again into the dialog `id` and the screen, and returned. A failed read
-   * says so above the dialog's action unless it already shows a refusal. */
-  async #rereadBillPaying(id: number, billId: string): Promise<BillBalance | undefined> {
+   * says so above the dialog's action unless it already shows a refusal. Given `order`, a read that
+   * frees the bill reads the order's amounts again too. */
+  async #rereadBillPaying(
+    id: number,
+    billId: string,
+    order?: PayingOrder,
+  ): Promise<BillBalance | undefined> {
     const sentAt = ++this.#payTicks;
+    let balance: BillBalance;
     try {
-      const balance = await this.api.getBillBalance(billId);
-      if (this.activeTabId === billId) this.billBalance = balance;
-      const now = this.#billPayingNow(id);
-      if (now !== null) this.billPaying = { ...now, balance };
-      if (sentAt > (this.#sendEndedAt.get(billId) ?? 0)) this.#freeShownPayment(billId, balance);
-      return balance;
+      balance = await this.api.getBillBalance(billId);
     } catch {
       const now = this.#billPayingNow(id);
       if (now !== null && now.refusal === null)
         this.billPaying = { ...now, refusal: { code: "unread" } };
       return undefined;
     }
+    if (this.activeTabId === billId) this.billBalance = balance;
+    const now = this.#billPayingNow(id);
+    if (now !== null) this.billPaying = { ...now, balance };
+    const freed =
+      sentAt > (this.#sendEndedAt.get(billId) ?? 0) && this.#freeShownPayment(billId, balance);
+    if (freed && order !== undefined) await this.#rereadPayingOrder(order, balance);
+    return balance;
   }
 
   /**
-   * A payment A773-1 holds that a balance read shows frees its bill, and an open dialog on the bill
-   * goes to the form saying what the bill records of it. One that settled the bill stays held: its
-   * Check again replays it and shows the ticket. A read sent while a send was out may show the
-   * payment as it stood before that send settled it, so the caller passes only reads sent after.
+   * A payment A773-1 holds that a balance read shows frees its bill, answering true, and an open
+   * dialog on the bill goes to the form saying what the bill records of it. One that settled the
+   * bill stays held: its Check again replays it and shows the ticket. A read sent while a send was
+   * out may show the payment as it stood before that send settled it, so the caller passes only
+   * reads sent after.
    */
-  #freeShownPayment(billId: string, balance: BillBalance): void {
+  #freeShownPayment(billId: string, balance: BillBalance): boolean {
     const entry = this.#unansweredPayments.get(billId);
-    if (entry?.unconfirmed !== true || this.#paymentsOut.has(billId)) return;
+    if (entry?.unconfirmed !== true || this.#paymentsOut.has(billId)) return false;
     const payment = balance.payments.find(
       (shown) => shown.submissionId === entry.request.submissionId,
     );
-    if (payment === undefined) return;
-    if (payment.state === "received" && balance.status === "settled") return;
+    if (payment === undefined) return false;
+    if (payment.state === "received" && balance.status === "settled") return false;
     this.#unansweredPayments.delete(billId);
     const open = this.billPaying;
-    if (open === null || open.billId !== billId) return;
+    if (open === null || open.billId !== billId) return true;
     const outcome: Pick<BillPaying, "taken" | "refusal"> =
       payment.state === "received"
         ? { taken: { change: payment.change }, refusal: null }
@@ -15810,6 +15819,7 @@ export class TillApp extends LitElement {
               refusal: { code: payment.state === "declined" ? "declined" : "payment_failed" },
             };
     this.billPaying = { ...open, asked: null, preview: null, ...outcome };
+    return true;
   }
 
   async #onBillPayPreview(event: Event): Promise<void> {
