@@ -318,3 +318,59 @@ describe.each(["light", "dark"] as const)("department-settings tabs (%s)", (them
     await expectNoA11yViolations(host);
   });
 });
+describe.each(["light", "dark"] as const)("department-settings service steps (%s)", (theme) => {
+  it.each(["steps", "marked-step"] as const)("%s", async (state) => {
+    setLocale("en");
+    const el = (await mountThemed(
+      "<department-settings></department-settings>",
+      theme,
+    )) as HTMLElementTagNameMap["department-settings"];
+    const view = structuredClone(model);
+    view.courses = [{ id: "c1", name: "Mains" }];
+    view.serviceSteps = [
+      { id: "s1", departmentId: "d1", name: "Set up", start: "seated", courseId: null, minutes: 0 },
+      {
+        id: "s2",
+        departmentId: "d1",
+        name: "Dessert?",
+        start: "course_served",
+        courseId: "c1",
+        minutes: 10,
+      },
+    ];
+    el.model = view;
+    el.departmentId = "d1";
+    el.api = new VenueServiceApi((async (path, method) => {
+      if (method === "GET")
+        return path.endsWith("/profiles")
+          ? [{ id: "p1", name: "Restaurant counter" }]
+          : { departmentId: "d1", receivingProfileId: "p1", destinationDepartmentIds: ["d2"] };
+      throw { code: "management.request_invalid", params: { field: "serviceSteps.1.minutes" } };
+    }) as DashboardRequest);
+    await el.updateComplete;
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]"))
+      .not.toBeNull();
+    await selectDepartmentTab(el, "service");
+    const list = el.shadowRoot!.querySelector("department-service-steps")!;
+    await list.updateComplete;
+    expect(list.shadowRoot!.querySelectorAll("tbody tr").length).toBe(2);
+    if (state === "marked-step") {
+      const name = list.shadowRoot!.querySelector("tbody tr wt-input[name=serviceStepName]")!;
+      name.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "Lay" }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+      await expect
+        .poll(
+          () =>
+            list.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>(
+              "wt-input[name=serviceStepMinutes]",
+            )[1]!.error,
+        )
+        .toBe("This value was not accepted. Change it and save again.");
+    }
+    await expectNoA11yViolations(host);
+  });
+});

@@ -496,6 +496,8 @@ const en = {
   "venue.service_step_minutes_repeat": "At least 1 minute.",
   "venue.service_step_first_after_previous": "The first step has no step before it.",
   "venue.service_step_course_gone": "That course was deleted. Choose another start.",
+  "venue.service_step_changed_elsewhere":
+    "A step was changed elsewhere. Cancel and open it again to see the latest.",
   "venue.field_refused": "This value was not accepted. Change it and save again.",
   "venue.day.0": "Sunday",
   "venue.day.1": "Monday",
@@ -1412,6 +1414,8 @@ const es: Record<keyof typeof en, string> = {
   "venue.service_step_minutes_repeat": "Al menos 1 minuto.",
   "venue.service_step_first_after_previous": "El primer paso no tiene paso anterior.",
   "venue.service_step_course_gone": "Ese curso se ha eliminado. Elige otro inicio.",
+  "venue.service_step_changed_elsewhere":
+    "Un paso se ha cambiado en otra pantalla. Cancela y vuelve a abrirlo para ver lo último.",
   "venue.field_refused": "No se ha aceptado este valor. Cámbialo y vuelve a guardar.",
   "venue.day.0": "Domingo",
   "venue.day.1": "Lunes",

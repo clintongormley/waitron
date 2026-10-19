@@ -4,7 +4,7 @@ import { departments } from "./schema/service.js";
 import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { MAX_SERVICE_STEPS } from "./service-step-limits.js";
+import { MAX_SERVICE_STEP_MINUTES, MAX_SERVICE_STEPS } from "./service-step-limits.js";
 import { floorZones, withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
@@ -247,7 +247,7 @@ function requireServiceSteps(value: unknown): ServiceStepInput[] {
       typeof minutes !== "number" ||
       !Number.isInteger(minutes) ||
       minutes < 0 ||
-      minutes > 120 ||
+      minutes > MAX_SERVICE_STEP_MINUTES ||
       (start === "since_last_order" && minutes < 1)
     )
       throw new AppError("management.request_invalid", { field: `${field}.minutes` });

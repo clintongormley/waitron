@@ -19,6 +19,9 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "./service-settings-fields.js";
+import "./department-service-steps.js";
+import type { ServiceStepErrors, ServiceStepField } from "./department-service-steps.js";
+import { MAX_SERVICE_STEP_MINUTES } from "../service-step-limits.js";
 import type { ServiceSettingsValue } from "./service-settings-fields.js";
 import type {
   DepartmentSettingsInput,
@@ -181,6 +184,7 @@ export class DepartmentSettings extends LitElement {
   @state() private busy = false;
   @state() private attempted = false;
   @state() private refused: Partial<Record<Field, string>> = {};
+  @state() private refusedSteps: ServiceStepErrors = {};
   @state() private failure = "";
   @state() private transferFailure = "";
   @state() private profiles: DepartmentTransfersView["profiles"] = [];
@@ -291,6 +295,7 @@ export class DepartmentSettings extends LitElement {
       this.busy = false;
       this.attempted = false;
       this.refused = {};
+      this.refusedSteps = {};
       this.failure = "";
       this.transferFailure = "";
       this.profiles = [];
@@ -342,6 +347,7 @@ export class DepartmentSettings extends LitElement {
           this.draft = copy(value);
           this.attempted = false;
           this.refused = {};
+          this.refusedSteps = {};
           this.failure = "";
         },
       });
@@ -443,13 +449,85 @@ export class DepartmentSettings extends LitElement {
     this.scope?.changed();
     if (saveActionState(this.scope).unchanged) this.failure = "";
   }
+  private stepsChanged(steps: ServiceStepDraft[]) {
+    const before = new Map(this.draft!.serviceSteps.map((step) => [step.key, step]));
+    const kept: ServiceStepErrors = {};
+    for (const step of steps) {
+      const was = before.get(step.key),
+        row = { ...this.refusedSteps[step.key] };
+      if (!was) continue;
+      if (was.name !== step.name) delete row.name;
+      if (was.start !== step.start || was.courseId !== step.courseId) delete row.start;
+      if (was.minutes !== step.minutes) delete row.minutes;
+      if (Object.keys(row).length) kept[step.key] = row;
+    }
+    this.refusedSteps = kept;
+    this.changed("serviceSteps", steps);
+    if (Object.keys(kept).length) this.refused = { ...this.refused, serviceSteps: "" };
+  }
+  private get stepErrors(): ServiceStepErrors {
+    const courses = new Set(this.model?.courses.map((course) => course.id));
+    const found: ServiceStepErrors = {};
+    this.draft?.serviceSteps.forEach((step, index) => {
+      const row: Partial<Record<ServiceStepField, string>> = {};
+      if (!step.name.trim()) row.name = t("venue.field_required");
+      if (index === 0 && step.start === "after_previous")
+        row.start = t("venue.service_step_first_after_previous");
+      else if (step.start === "course_served" && !courses.has(step.courseId!))
+        row.start = t("venue.service_step_course_gone");
+      const minutes = step.minutes.trim();
+      if (!/^\d+$/.test(minutes) || Number(minutes) > MAX_SERVICE_STEP_MINUTES)
+        row.minutes = t("venue.service_step_minutes_invalid");
+      else if (step.start === "since_last_order" && Number(minutes) === 0)
+        row.minutes = t("venue.service_step_minutes_repeat");
+      if (Object.keys(row).length) found[step.key] = row;
+    });
+    return found;
+  }
+  private get shownStepErrors(): ServiceStepErrors {
+    const shown: ServiceStepErrors = this.attempted ? { ...this.stepErrors } : {};
+    for (const [key, row] of Object.entries(this.refusedSteps))
+      shown[key] = { ...shown[key], ...row };
+    return shown;
+  }
   private get errors(): Partial<Record<Field, string>> {
     return {
       ...(this.draft?.name.trim() ? {} : { name: t("venue.field_required") }),
       ...(this.draft?.tradingName.trim() ? {} : { tradingName: t("venue.field_required") }),
+      ...(Object.keys(this.stepErrors).length ? { serviceSteps: "" } : {}),
     };
   }
-  private fieldRefusal(error: unknown, submitted: DepartmentSettingsInput) {
+  /** Marks the steps a refusal names, by the draft key of the submitted row it points at. */
+  private stepRefusal(error: unknown, steps: ServiceStepDraft[]) {
+    const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
+    const named = typeof params?.field === "string" ? params.field : "";
+    const rows: ServiceStepErrors = {};
+    let list = "";
+    if (code === "management.request_invalid") {
+      const match = /^serviceSteps\.(\d+)\.(name|start|courseId|minutes)$/.exec(named);
+      const key = match ? steps[Number(match[1])]?.key : undefined;
+      if (key) {
+        const field = match![2] === "courseId" ? "start" : (match![2] as ServiceStepField);
+        rows[key] = { [field]: t("venue.field_refused") };
+      } else if (named === "serviceSteps" || named.startsWith("serviceSteps."))
+        list = t("venue.field_refused");
+    } else if (code === "service_step.not_found") list = t("venue.service_step_changed_elsewhere");
+    else if (code === "course.not_found")
+      for (const step of steps)
+        if (step.start === "course_served" && step.courseId === params?.courseId)
+          rows[step.key] = { start: t("venue.service_step_course_gone") };
+    if (!list && !Object.keys(rows).length) return false;
+    this.refused = { serviceSteps: list };
+    this.refusedSteps = rows;
+    this.showFirstInvalid();
+    return true;
+  }
+  private fieldRefusal(
+    error: unknown,
+    submitted: DepartmentSettingsInput,
+    steps: ServiceStepDraft[],
+  ) {
+    if (submitted.serviceSteps && this.stepRefusal(error, steps)) return;
     const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
     let field: Field | undefined;
     let message = t("venue.field_refused");
@@ -501,6 +579,7 @@ export class DepartmentSettings extends LitElement {
       return;
     this.attempted = true;
     this.refused = {};
+    this.refusedSteps = {};
     this.failure = "";
     if (Object.keys(this.errors).length) {
       this.showFirstInvalid();
@@ -528,7 +607,7 @@ export class DepartmentSettings extends LitElement {
         this.emit("saved", { departmentId: id });
       }
     } catch (error) {
-      if (this.current(id, generation)) this.fieldRefusal(error, submitted);
+      if (this.current(id, generation)) this.fieldRefusal(error, submitted, serviceSteps);
     } finally {
       if (this.current(id, generation)) this.busy = false;
     }
@@ -542,6 +621,7 @@ export class DepartmentSettings extends LitElement {
         this.draft = copy(this.baseline!);
         this.attempted = false;
         this.refused = {};
+        this.refusedSteps = {};
         this.failure = "";
         this.emit("cancelled", { departmentId: id });
       }
@@ -728,6 +808,17 @@ export class DepartmentSettings extends LitElement {
               <p class="hint">${t("venue.needs_clearing_hint")}</p>
               ${errors.needsClearing ? html`<p class="error" data-field-error="needsClearing">${errors.needsClearing}</p>` : nothing}
             </div>
+            <department-service-steps
+              .steps=${draft.serviceSteps}
+              .courses=${this.model!.courses}
+              .errors=${this.shownStepErrors}
+              .listError=${errors.serviceSteps ?? ""}
+              ?disabled=${disabled}
+              @steps-change=${(e: CustomEvent<{ steps: ServiceStepDraft[] }>) => {
+                e.stopPropagation();
+                this.stepsChanged(e.detail.steps);
+              }}
+            ></department-service-steps>
           </section>
         </div>
         ${
