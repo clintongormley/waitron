@@ -3408,7 +3408,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A790. Choose a document and its permitted printer.** The owner's A661 Q1–Q6 answers
   and latest 2026-10-19 decisions are recorded in the [design addendum](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
   with [mock-ups](backlog/mockups/a790-document-and-printer-choice/README.md).
-  **A+B+C+D approved only in their precise answered scope:** Receipt and Invoice retain
+  **A+B+C+D+E approved only in their precise answered scope:** Receipt and Invoice retain
   the same recorded full invoice; C keeps Invoice's printer row inline and foldable with
   its named final button, matching Receipt/payment. D's 2026-10-19 ~13:20 **“STRAIGHT TO
   RECEIPT”** skips the one-document choice for simplified-sale Print/reprint: `S/318`,
@@ -3423,26 +3423,36 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   enforcement remains unresolved. The phone's inline receipt selector at/after payment
   is its one Equipment setting: Mesa 4 chooses Terraza, Mesa 9 and Equipment show Terraza;
   no accepted-print-only memory or new receipt-preference storage. Device paths retain
-  their receipt and invoice lists by role. Ask **E only** next: on the dashboard without
-  a device profile, should this browser remember separate last-used Receipt and Invoice
-  printers for each sale venue (recommended), or one printer shared by both choices at
-  each sale venue? Proposed example: Harbour's `F/1042` prints Receipt on Bar receipt,
-  then Invoice on Office · A4; reopening Receipt suggests Bar if separate, Office if
-  shared, provided still active at Harbour and permitted. Recommend separate to keep invoice
-  printing from changing the receipt destination; Hillside would be independent. Per-venue
-  memory is proposed E scope, not approved B. This is routing, not conversion. E changes
-  no phone setting or invoice memory before an answer. Last-used/update trigger/storage/
-  expiry, first-use, role memory, wider step/default/sole/zero/fallback and remaining
-  persistence proposals stay open. A796 Revision 4 now decides Equipment save/concurrency
-  design in that lane, with overridable defaults; do not ask those answers again. A790
-  integration/build validation, portable receipt-holder enforcement and complete design/
-  plan/build agreement remain owed. Preserve authorization, sale-location rechecks,
-  request facts, uncertain-outcome reconciliation, server-derived original/copy, shared
-  delivery guard and closed public-F1 gate; no silent destination replacement, implicit
-  print, payment, fiscal or drawer change. [D-and-browser-memory illustrations](backlog/mockups/a790-document-and-printer-choice/revision-d-and-browser-memory/README.md)
-  include eight rendered/inspected EN/ES/theme/390/1280 PNGs, with native SVG text boxes measured.
-  Existing design/README bytes and conflicting boards remain history. Docs only, with no
-  runtime/test/hardware evidence; the source map stays historical and runtime-unverified.
+  their receipt and invoice lists by role. E's 2026-10-19 ~13:32 **“SEPARATE PER DOCUMENT”**
+  approves separate last-used Receipt and Invoice printers for each sale venue in this
+  browser on the dashboard without a device profile. Harbour's Invoice printer leaves
+  its Receipt memory alone; Hillside stays separate. E approves memory scope only.
+  Ask **F only** next, as a proposal: should this browser remember the selected printer
+  only after the server accepts its print request (recommended), or immediately when
+  selected, even if the form is cancelled? Harbour's `F/1042` Receipt remembers Bar receipt;
+  select Patio receipt, then Cancel. Recommended reopening suggests Bar; immediate-selection
+  memory suggests Patio. Acceptance avoids remembering an abandoned choice. Explicitly
+  printing Invoice on Office · A4 leaves Receipt alone under E. Under the recommendation,
+  acceptance remembers Patio even if physical printing later fails; refusal does not update.
+  An unknown response is not presumed accepted/refused: reconcile the same request before
+  claiming an update or offering a fresh request. Last physical output does not control
+  this proposed memory. Selection, folding and reads never print; retain the explicit
+  final named print action. F changes no phone Equipment setting. Storage, expiry/reset/
+  login sharing, first-use/unavailable fallback, general document-step/sole/zero behavior,
+  ordering concurrent/late accepted intents, device invoice-role memory and remaining
+  persistence proposals stay open. A796 Revision 4 owns phone Equipment save/concurrency
+  design, with overridable defaults; do not ask those answers again. A790 integration,
+  portable receipt-holder enforcement and complete design/plan/build agreement remain owed.
+  Preserve authorization and sale-location rechecks in the reservation transaction;
+  freeze sale/document/printer/language/context under request identity; retain uncertain/late
+  outcome reconciliation before a fresh request, separate successful-write/failed-refresh,
+  server-derived original/copy, shared F1 delivery guard and closed public-F1 gate. No silent
+  destination replacement, implicit print, payment, fiscal or drawer side effects.
+  [Eight static drawings](backlog/mockups/a790-document-and-printer-choice/revision-e-and-memory-update/README.md)
+  cover EN/ES, light/dark, at 390/1280 px. All eight PNGs were rendered in headless Chromium
+  and visually inspected; native SVG text boxes were measured within each drawing.
+  All previous design/README bytes and conflicting boards remain history. Docs only,
+  with no proof/test/runtime/hardware evidence; the source map stays historical and runtime-unverified.
 
 - **Loose ends left by A661 (#1745).**
   - The till's payment-time options and a staged A4 choice resolve the device's invoice printer

@@ -1,3 +1,76 @@
+# A790: E approved; F proposed, 2026-10-19, after the 13:32 answer
+
+**A+B+C+D+E are approved only in their precise answered scope. Ask F alone next;
+the complete design, plan and build remain unapproved.** This addendum takes precedence
+over conflicting text and boards below. All previous bytes remain unchanged as a
+historical suffix, including earlier memory proposals and open-question lists.
+
+Authority: the latest owner answer in `/Users/clintongormley/waitron-campaign-f/questions.md`,
+2026-10-19 about 13:32: **“SEPARATE PER DOCUMENT”**. On the dashboard without a device
+profile, remember separate last-used **Receipt** and **Invoice** printers for **each sale
+venue in this browser**. Changing Harbour's Invoice printer leaves its Receipt memory
+alone; Hillside has separate memories. E approves that scope only, not when memory updates
+or how it is stored. Memory never grants permission to a printer.
+
+A retains the same recorded full invoice through both document choices. C keeps Invoice's
+printer row inline and foldable with the named final button, matching Receipt/payment.
+D opens Receipt directly for simplified-sale Print/reprint: `S/318`, €14.50, Spanish,
+one guest, keeping its recorded facts and offered language. No issuance/conversion or email
+is added; paper size does not change the recorded document.
+
+B offers **every active printer at the sale's venue**, including A4 and portable printers
+for both document choices, bypassing profile lists on the dashboard without a device profile.
+Keep permission and accompanying-device restrictions; exclude disabled, deleted and other-venue
+equipment. No profile-selection step, till impersonation or dashboard change to Equipment.
+Portable receipt-holder enforcement remains explicitly unresolved. Device paths retain their
+role lists; the phone's receipt choice remains its **one Equipment setting**, with no separate
+receipt memory or new receipt-preference storage. [A796 Revision 4](2026-10-19-a796-handheld-payments-design.md)
+owns that phone setting's save/concurrency design, including overridable defaults. Do not
+re-ask those decisions; A790 integration remains to be verified.
+
+## F: the sole next owner question, proposal only
+
+**On the dashboard without a device profile, should this browser remember the selected
+printer only after the server accepts its print request (recommended), or immediately
+when selected, even if you cancel the form?**
+
+Worked proposal: Harbour's `F/1042` Receipt remembers **Bar receipt**. You expand the
+foldable row, select **Patio receipt**, then Cancel. Under the recommendation, reopening
+Receipt still suggests Bar; under immediate-selection memory, it suggests Patio. Recommend
+acceptance so an abandoned choice does not change the next form's suggestion. If you instead
+press **Print a copy on Patio receipt** when the server designates a copy, acceptance would
+remember Patio under the recommendation. Printing Invoice on **Office · A4** leaves Receipt
+unaffected under approved E; Hillside stays separate. These examples assume the named
+printer remains active at the sale's venue and passes the required checks.
+
+Under the recommendation, a refused request does not update memory. An unknown response
+is neither presumed accepted nor presumed refused: reconcile the **same request** before
+claiming a memory update or offering a fresh print request. If accepted but physical printing
+later fails, Patio remains remembered. Acceptance is not proof of paper, and last physical
+output does not define this proposed memory. Selection, folding and reads never print;
+the explicit final named print action remains required. F changes no phone Equipment setting.
+
+F does not settle storage, expiry/reset or sharing between logins; first-use/unavailable
+fallback; general document-step, sole/zero-printer behavior; ordering concurrent or late
+accepted intents; device invoice-role memory; portable receipt-holder enforcement; or
+the complete design/plan/build. Those decisions remain open even if F is accepted.
+
+Retain server-derived original/copy, the shared full-invoice (F1) delivery guard and the
+closed public F1 gate. Freeze sale, document, printer, language and context under the request
+identity. Recheck authorization and sale location in the reservation transaction. No silent
+rerouting or implicit print. Preserve late outcomes and reconcile uncertain requests before
+a fresh request; distinguish a successful write from a failed refresh. Print/reprint adds
+no payment, fiscal or drawer side effects. These remain design requirements, not runtime claims.
+
+[Eight static drawings](../../backlog/mockups/a790-document-and-printer-choice/revision-e-and-memory-update/README.md)
+in English/Spanish, light/dark, at 390/1280 px, showing approved E and proposed F.
+All eight PNGs were rendered in headless Chromium and visually inspected; native SVG
+text boxes were measured within the drawings. Earlier boards remain historical where
+they conflict; the prior source map stays historical and runtime-unverified. This update
+supplies no proof, test, runtime or physical-output evidence.
+
+---
+
 # A790: D approved; E next, 2026-10-19, after the 13:20 answer
 
 **A+B+C+D are approved only in their precise answered scope. E alone is next;

@@ -1,3 +1,61 @@
+# A790: E approved; F proposed, 2026-10-19, after the 13:32 answer
+
+**A+B+C+D+E are approved only in their precise answered scope; ask F alone next.
+The complete design, plan and build remain unapproved.** This addendum and the
+[latest design addendum](../../../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+take precedence over conflicting text/boards. All previous README bytes remain unchanged
+below as a historical suffix, including earlier memory proposals.
+
+E authority: the owner's **“SEPARATE PER DOCUMENT”** answer in lane F's `questions.md`,
+2026-10-19 about 13:32. Dashboard without a device profile remembers separate last-used
+Receipt and Invoice printers for **each sale venue in this browser**. Harbour's Invoice
+choice leaves Harbour's Receipt memory alone; Hillside stays separate. Only this scope is
+approved by E. Its update trigger and persistence details are not approved.
+
+**F: On the dashboard without a device profile, should this browser remember the selected
+printer only after the server accepts its print request (recommended), or immediately
+when selected, even if you cancel the form?**
+
+Draw Harbour's `F/1042` Receipt remembering **Bar receipt**. Expand the inline foldable
+row, select **Patio receipt**, then Cancel. Recommended: reopen with Bar suggested.
+Immediate-selection alternative: reopen with Patio suggested. Recommend acceptance so
+an abandoned choice does not change the next suggestion. Show the explicit final
+**Print a copy on Patio receipt** when server-designated. Under the recommendation,
+acceptance remembers Patio even if physical printing later fails; a refusal does not
+update memory. An unknown response is not presumed accepted or refused: reconcile the
+same request before claiming an update or offering a fresh request. Last physical output
+does not control this proposed memory. Invoice on **Office · A4** leaves Receipt alone
+under E; Hillside stays separate. Assume these printers remain active and permitted.
+
+Retain A's same recorded full invoice, C's inline foldable Invoice row and D's direct
+Receipt for simplified `S/318` (€14.50, Spanish, one guest), recorded facts and language.
+B lists every active sale-venue printer, including A4/portable for both documents, bypassing
+profile lists on this dashboard. Keep permission/device restrictions; exclude disabled,
+deleted and other-venue equipment. No till impersonation or dashboard Equipment change.
+Device lists remain by role. The phone keeps one Equipment receipt setting, with no new
+receipt memory/storage; [A796 Revision 4](../../../superpowers/specs/2026-10-19-a796-handheld-payments-design.md)
+owns its save/concurrency design, including overridable defaults. Do not re-ask those answers.
+
+F remains a proposal. Storage, expiry/reset/login sharing, first-use/unavailable fallback,
+general document-step/sole/zero behaviors, ordering concurrent/late accepted intents, device
+invoice-role memory and portable receipt-holder enforcement remain open. Full-design/plan/build
+agreement and A790 integration verification remain owed.
+
+Selection, folding and reads never print. Retain server-derived original/copy, the shared
+F1 delivery guard and closed public F1 gate; freeze sale/document/printer/language/context
+under request identity, recheck authorization/sale location in the reservation transaction,
+and reconcile uncertain/late outcomes before a fresh request. Separate successful write
+from failed refresh. No silent rerouting, implicit print, payment, fiscal or drawer side effects.
+
+[Eight static drawings](revision-e-and-memory-update/README.md)
+for approved E and proposed F in EN/ES, light/dark, at 390/1280 px. All eight PNGs were
+rendered in headless Chromium and visually inspected; native SVG text boxes were measured
+within each drawing. Conflicting earlier boards remain historical; the prior
+source map remains historical and runtime-unverified. No proof/test/runtime or physical-output
+evidence is supplied by this update.
+
+---
+
 # A790: D approved; E next, 2026-10-19, after the 13:20 answer
 
 **A+B+C+D are approved only in their precise answered scope; E alone is next.
