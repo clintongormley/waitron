@@ -658,8 +658,6 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
       bar.
     - "Review (N)" counts items (Beer ×2 counts 2), while the floor's mark counts lines and
       calls them "items", so the two can differ for one draft.
-    - Keep lasts only until the server's answer rebuilds the lines; a kept line then asks
-      Remove or Keep again.
     - A dish no longer on the menu, saved at a whole quantity, counts by that quantity on
       Review; its unit is unknown, so a weighed one saved at exactly 2 kg counts 2.
     - The counter's basket also tracks its last-added line, which it does not use.
@@ -1556,6 +1554,13 @@ is shown as Group 7. This replaces Task 4's position-derived-number observation;
 visible numbers alone do not imply a numbering defect.
 
 ### Replacement order controls (A773)
+
+Choosing Keep in an unavailable dish's line window survives a refresh of that saved line in the
+open screen. The warning stays and the dish still cannot be sent. A different draft, bill, store
+or editor, a different warning, a removed line or a cleared warning ends that choice.
+`apps/till/src/screens/till-table-order-screen.keep.test.ts` checks the saved-line refresh in both
+languages at 390 and 1280 px, local-to-saved identity, and those boundaries. This is an in-memory
+choice; it is not saved for another screen or session.
 
 Sent's counters, Served and Held headings, dish slices, companions and extras use the screen's
 decimal mark. Extras retain their stored decimal places. The fractional native-browser cases in

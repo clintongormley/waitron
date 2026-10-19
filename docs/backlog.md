@@ -2739,8 +2739,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   - While a weight is being entered, the weight entry covers the bottom of the menu and the bar.
   - "Review (N)" counts items (Beer ×2 counts 2), while the floor's mark counts lines and calls
     them "items", so the two can differ for one draft.
-  - Keep lasts only until the server's answer rebuilds the lines; a kept line then asks Remove or
-    Keep again.
   - A dish no longer on the menu, saved at a whole quantity, counts by that quantity on Review; its
     unit is unknown, so a weighed one saved at exactly 2 kg counts 2.
   - The counter's basket also tracks its last-added line, which it does not use.

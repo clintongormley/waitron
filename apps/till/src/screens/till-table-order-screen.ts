@@ -1356,6 +1356,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#cancelAutomaticRouting();
     this.#routingChecked = undefined;
     this.#selected = new WeakSet();
+    this.#kept.clear();
     this.#routingRows = new WeakMap();
     this.draftMoveStore = null;
     this.#draftMoveOpening = undefined;
@@ -1720,8 +1721,35 @@ export class TillTableOrderScreen extends LitElement {
   >();
   @state() private draftMoveStore: WorkingOrderStore | null = null;
   #draftMoveOpening?: DraftMoveOpening;
-  /** Flagged lines the person chose to keep, which no longer ask Remove or Keep. */
-  #kept = new WeakSet<OrderLine>();
+  /** Saved ids survive rebuilds; a local line keeps its object key until its id is assigned. */
+  #kept = new Map<OrderLine | string, string>();
+  #keptScope?: string;
+
+  #flagKey(line: OrderLine): string {
+    return JSON.stringify([line.blocked ?? null, !!line.unavailableOnServer, !!line.notOffered]);
+  }
+
+  #refreshKept(): void {
+    const store = this.#draftStore;
+    const scope = JSON.stringify([
+      this.orderId,
+      this.party?.id,
+      this.serviceVisit,
+      store?.id,
+      this.billEdit?.editorVersion,
+    ]);
+    if (scope !== this.#keptScope) this.#kept.clear();
+    this.#keptScope = scope;
+    const lines = new Map((store?.lines ?? []).map((line) => [line.draftLineId ?? line, line]));
+    const kept = new Map<OrderLine | string, string>();
+    for (const [previous, warning] of this.#kept) {
+      const key = typeof previous === "string" ? previous : (previous.draftLineId ?? previous);
+      const line = lines.get(key);
+      if (line !== undefined && flagged(line) && this.#flagKey(line) === warning)
+        kept.set(key, warning);
+    }
+    this.#kept = kept;
+  }
   #routingTimer?: ReturnType<typeof setTimeout>;
   #routingChecked?: string;
   #automaticRouting?: {
@@ -1825,6 +1853,7 @@ export class TillTableOrderScreen extends LitElement {
     if (this.sentLinePending !== null && this.#sentLine() === undefined)
       this.sentLinePending = null;
     this.#watchDraft();
+    this.#refreshKept();
     if (this.#draftPress !== undefined && !this.#draftPressCurrent()) this.#endDraftDrag();
     const move = this.#draftMoveOpening;
     if (
@@ -3322,7 +3351,6 @@ export class TillTableOrderScreen extends LitElement {
       Number.isInteger(Number(line.quantity)) &&
       Number(line.quantity) > 1;
     const isFlagged = flagged(line);
-    if (!isFlagged) this.#kept.delete(line);
     const tools = [
       ...(this.stations.length > 1 ? [this.#makeAtPicker(store, line, index, name)] : []),
       ...(isFlagged && line.source === undefined ? [this.#flagChoice(store, line, index)] : []),
@@ -3492,7 +3520,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #flagChoice(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
-    if (this.#kept.has(line))
+    if (this.#kept.has(line.draftLineId ?? line))
       return html`<span class="flag-kept" data-flag-kept tabindex="-1"
         >${t("table.flag_kept")}</span
       >`;
@@ -3544,7 +3572,7 @@ export class TillTableOrderScreen extends LitElement {
   /** The replaced choice keeps focus inside the line window. */
   async #keepFlagged(store: WorkingOrderStore, line: OrderLine): Promise<void> {
     if (!this.#canEditDraftLine(store, line)) return;
-    this.#kept.add(line);
+    this.#kept.set(line.draftLineId ?? line, this.#flagKey(line));
     this.requestUpdate();
     await this.updateComplete;
     this.renderRoot
