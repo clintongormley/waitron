@@ -2216,11 +2216,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A773. Courses, groups and the pass (owner, 2026-10-16; ownership approved 2026-10-17).**
   A773-1 remains unlanded: integrate A758's revised cancellation and Finish-table design,
-  and complete the remaining native-screen acceptance and delivery checks. Native repeated Sent
-  service checks cover held replies and accepted successor actions on till and phone; Sent's
-  fractional quantities use the screen's decimal mark. New order row checks cover the same
-  display conversion while retaining dot decimals in selected Fire requests. A773-2's firing/pass plan follows
-  A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+  and complete the remaining whole-path, native-screen, physical-till and delivery checks.
+  Mixed-dish phone Review and Back now have component checks; the full-app trial remains.
+  A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,
   2026-10-16).** For example, the bar pours the dessert wine when the kitchen marks the tarta ready,

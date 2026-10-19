@@ -1554,6 +1554,14 @@ visible numbers alone do not imply a numbering defect.
 
 ### Replacement order controls (A773)
 
+Phone Review counts the fixture's two Beers, one Flan with three Sauces, one weighed dish and
+two recalled portions as six dishes. The extras add no items to that count. The native Review
+and Back checks in `till-table-order-screen.review-acceptance.test.ts` retain the quantities,
+placement and selection without submitting, then show seven after the Beer quantity becomes three.
+They cover English and Spanish, both themes, at 360 and 390 px, with accessibility scans in both
+views. These are component checks; full-app navigation, server persistence and physical trials
+remain separate.
+
 The last-added strip follows a saved line's id when that order is refreshed, including weighed
 lines and lines kept separate. It clears when that id disappears or another order is loaded;
 it does not substitute a similar dish. Without a saved id, the existing draft merge rule still
