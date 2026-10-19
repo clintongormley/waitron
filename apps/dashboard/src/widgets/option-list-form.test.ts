@@ -14,7 +14,7 @@ import { formMessageOf, middleWithin, textLines } from "@waitron/ui/src/test-hel
 import { OptionListForm } from "./option-list-form.js";
 import type { OptionLabelForm } from "./option-label-form.js";
 import type { OptionList, OptionListInput } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
@@ -381,12 +381,13 @@ it.each([
   ["en", "Customer-facing names"],
   ["es", "Nombres para el cliente"],
 ])("heads the visible customer-facing fields (%s)", async (locale, words) => {
+  const previous = currentLocale();
   setLocale(locale);
   try {
     const { el } = await mount({ value: cooked });
     expect(namesSection(el).querySelector("legend")!.textContent!.trim()).toBe(words);
   } finally {
-    setLocale("en");
+    setLocale(previous);
   }
 });
 
@@ -429,12 +430,20 @@ it("shows the customer-facing names in their own fields, separate from the kitch
   ]);
 });
 
-it("labels each customer-facing field with its language code", async () => {
-  const { el } = await mount({ value: cooked });
-  expect(["en", "es"].map((locale) => field(el, `customer-name-${locale}`).label)).toEqual([
-    "Customer-facing name (en)",
-    "Customer-facing name (es)",
-  ]);
+it.each([
+  ["en", ["Customer-facing name (en)", "Customer-facing name (es)"]],
+  ["es", ["Nombre para el cliente (en)", "Nombre para el cliente (es)"]],
+])("labels each customer-facing field with its language code (%s)", async (locale, labels) => {
+  const previous = currentLocale();
+  setLocale(locale);
+  try {
+    const { el } = await mount({ value: cooked });
+    expect(["en", "es"].map((language) => field(el, `customer-name-${language}`).label)).toEqual(
+      labels,
+    );
+  } finally {
+    setLocale(previous);
+  }
 });
 
 function namesShown(el: OptionListForm) {

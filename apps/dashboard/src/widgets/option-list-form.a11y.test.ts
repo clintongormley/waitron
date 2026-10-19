@@ -100,10 +100,11 @@ describe.each(["light", "dark"] as const)("option list form (%s)", (theme) => {
     const editor = el.shadowRoot!.querySelector("dashboard-option-label-form")!;
     await editor.updateComplete;
     // Each named state is scanned in the shape it names.
-    for (const input of el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
+    const names = el.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-input"]>(
       '[data-test="names-section"] wt-input',
-    ))
-      expect(input.checkVisibility()).toBe(true);
+    );
+    expect(names).toHaveLength(el.languages.languages.length);
+    for (const input of names) expect(input.checkVisibility()).toBe(true);
     expect(editor.open).toBe(state === "option-editor");
     await expectNoA11yViolations(host);
   });
