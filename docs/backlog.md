@@ -2101,8 +2101,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   field's screen-reader label ("Minutes" / "Minutos") and the required stars on the "Step" and
   "Starts" column heads. The owner sees at land that deleting a course deletes the steps that start
   from it. Not put to the owner (plan's questions 2 and 3): the starter names are English when the
-  venue's first receipt language is English and Spanish otherwise, and a department added later
-  gets the starter steps.
+  venue's first receipt language is English and Spanish otherwise, and a department created later
+  in the dashboard gets the starter steps.
   [Open questions](superpowers/plans/2026-10-19-a757-7-service-step-settings.md#open-questions-each-with-the-default-this-plan-uses)
 
 - **A758. Voids and comps: the rules, then a page of their own (owner, 2026-10-16).** The owner

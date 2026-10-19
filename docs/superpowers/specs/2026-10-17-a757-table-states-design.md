@@ -497,8 +497,8 @@ its start time, so the till redraws when a step's minutes run out, as it does fo
 (at least 1 for the repeating start), a course start names a `kitchen_courses` row and goes when
 that course is deleted; a department created in the dashboard, or the one provisioning inserts,
 starts with the three starter steps, named in English when the venue's first receipt language is
-English and in Spanish otherwise (a configuration import brings the bundle's steps instead). Each party's done steps are
-slice 8's.
+English and in Spanish otherwise (a configuration import brings the bundle's steps instead). Each
+party's done steps are slice 8's.
 
 ## 9. Nothing needed: its own look
 
