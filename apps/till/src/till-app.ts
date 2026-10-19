@@ -1080,6 +1080,13 @@ interface CancelCrediting {
   done: CancelCreditDone | null;
 }
 
+/** Refusals the server can raise before it looks the submission id up (`resolvePayReader`,
+ * `apps/server/src/till-api.ts`), so they say nothing of an earlier attempt under the id. */
+const READER_REFUSED_BEFORE_LOOKUP: ReadonlySet<unknown> = new Set([
+  "reader.not_held",
+  "reader.payment_in_progress",
+]);
+
 /** A card the reader did not charge: nothing was recorded on the bill. */
 const NOT_CHARGED_OUTCOMES = new Set<BillPaymentResult["outcome"]>([
   "declined",
@@ -1713,8 +1720,9 @@ export class TillApp extends LitElement {
     send: (signal: AbortSignal) => Promise<T>,
     signal: AbortSignal,
     live: () => boolean,
+    onUnanswered?: () => void,
   ): Promise<T> {
-    return this.#holdingReload(() => resendUnanswered(send, signal, live));
+    return this.#holdingReload(() => resendUnanswered(send, signal, live, onUnanswered));
   }
 
   sessionActivity: SessionActivity = new SessionActivity();
@@ -15859,6 +15867,7 @@ export class TillApp extends LitElement {
       else this.#unansweredPayments.set(key, unanswered);
       release();
     };
+    let mayBeRecorded = previous?.unconfirmed === true;
     this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown });
     await this.#holdingReload(async () => {
       try {
@@ -15867,13 +15876,24 @@ export class TillApp extends LitElement {
             (signal) => api.takeBillPayment(open.billId, submission.request, { signal }),
             limit.signal,
             () => session === this.#operatorSession,
+            () => {
+              mayBeRecorded = true;
+            },
           ),
         );
         settle();
         await this.#onBillPaid(open, result);
       } catch (error) {
         settle(error);
-        await this.#onBillPayRefused(open.id, error, asked, "take");
+        const silent =
+          mayBeRecorded &&
+          READER_REFUSED_BEFORE_LOOKUP.has((error as { code?: unknown } | null)?.code);
+        await this.#onBillPayRefused(
+          open.id,
+          silent ? { code: "not_checked" } : error,
+          asked,
+          "take",
+        );
       } finally {
         limit.done();
         release();
