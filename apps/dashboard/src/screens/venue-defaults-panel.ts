@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
 import {
@@ -75,6 +75,7 @@ export class VenueDefaultsPanel extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) readOnly = false;
   @state() private model?: VenueDefaults;
   @state() private content?: ContentLanguages;
   @state() private readError = "";
@@ -125,6 +126,9 @@ export class VenueDefaultsPanel extends LitElement {
     this.#leave = undefined;
     this.submitting = false;
     super.disconnectedCallback();
+  }
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("readOnly") && this.readOnly) this.#cancel();
   }
   #begin(): void {
     const model = this.model;
@@ -226,10 +230,11 @@ export class VenueDefaultsPanel extends LitElement {
     this.actionError = "";
     try {
       const answer = await this.api.putVenueDefaults(changes(this.#expected, this.draft));
-      if (generation !== this.#generation || scope !== this.#scope) return;
+      if (generation !== this.#generation) return;
       this.#writes++;
       this.model = answer;
-      this.#cancel();
+      if (scope === this.#scope) this.#cancel();
+      else this.#adopt(answer);
     } catch (error) {
       if (generation !== this.#generation || scope !== this.#scope) return;
       const code = codeOf(error);
@@ -345,6 +350,7 @@ export class VenueDefaultsPanel extends LitElement {
   override render() {
     const model = this.model;
     const fixed = model?.fixedReceiptLanguage;
+    const editing = Boolean(this.draft);
     return html`${
       this.readError
         ? html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>
@@ -358,13 +364,14 @@ export class VenueDefaultsPanel extends LitElement {
         ? settingsCard({
             id: "defaults-card",
             heading: t("venue_settings.card.defaults"),
-            editing: Boolean(this.draft),
-            action: this.draft
-              ? nothing
-              : html`<wt-button data-test="edit" @click=${() => this.#begin()}
-                  >${t("action.edit")}</wt-button
-                >`,
-            body: this.draft
+            editing,
+            action:
+              editing || this.readOnly
+                ? nothing
+                : html`<wt-button data-test="edit" @click=${() => this.#begin()}
+                    >${t("action.edit")}</wt-button
+                  >`,
+            body: editing
               ? this.#form(model)
               : html`${settingsRows([
                   {

@@ -214,3 +214,14 @@ it("a live read that moves an untouched draft to a newly fixed language turns pr
   await expect.poll(() => field(panel, "receiptLanguage")?.value).toBe("ca-ES");
   expect(unload()).toBe(true);
 });
+
+it("turning read-only with a changed draft drops the draft and its protection", async () => {
+  const { app, panel, writes } = await mount();
+  await change(panel, "defaultProductVatClass", "zero");
+  expect(unload()).toBe(true);
+  panel.readOnly = true;
+  await panel.updateComplete;
+  expect(unload()).toBe(false);
+  expect(await leave(app)).toBe("proceeded");
+  expect(writes).toEqual([]);
+});

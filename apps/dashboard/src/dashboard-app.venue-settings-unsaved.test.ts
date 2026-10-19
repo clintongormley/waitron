@@ -930,7 +930,7 @@ it.each([["venue.view"], ["layout.configure"], ["venue.configure"]])(
     const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {}, [
       permission,
     ]);
-    expect(defaultsPanel(app) !== null).toBe(permission === "venue.configure");
+    expect(defaultsPanel(app) !== null).toBe(permission === "venue.view");
   },
 );
 

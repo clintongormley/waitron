@@ -55,8 +55,8 @@ function rig(
   };
   return { api: api as typeof api & DashboardApi, liveData, state };
 }
-async function mount(api: DashboardApi) {
-  const { el } = await mountWidget<Panel>("dashboard-venue-defaults-panel", { api });
+async function mount(api: DashboardApi, readOnly = false) {
+  const { el } = await mountWidget<Panel>("dashboard-venue-defaults-panel", { api, readOnly });
   await expect.poll(() => q(el, "section.settings-card dl")).toBeTruthy();
   await flush(el);
   return el;
@@ -175,6 +175,39 @@ it("says nothing about a fixed language where none is fixed, or where the stored
   expect(q(madrid, "[data-test=stored-differs]")).toBeNull();
   const matching = await mount(rig({ ...BARCELONA, receiptLanguage: "ca-ES" }).api);
   expect(q(matching, "[data-test=stored-differs]")).toBeNull();
+});
+
+it("a read-only card shows the stored defaults, the stored-differs note and the receipt-language warning, and offers no Edit", async () => {
+  setLocale("en-GB");
+  const { api } = rig(BARCELONA, { defaultLanguage: "ca", languages: ["ca"] });
+  const el = await mount(api, true);
+  expect(rows(el)).toEqual([
+    "Default receipt language: Spanish",
+    "VAT class for new products: Reduced (10%)",
+  ]);
+  expect(q(el, "[data-test=stored-differs]")).not.toBeNull();
+  expect(q(el, "[data-test=edit]")).toBeNull();
+  expect(q(el, "form")).toBeNull();
+  await expect.poll(() => text(q(el, "[data-test=receipt-language-warning]"))).toContain("Spanish");
+});
+
+it("a draft open when the card turns read-only shows the stored defaults, with no form to save", async () => {
+  setLocale("en-GB");
+  const { api } = rig();
+  const el = await mount(api);
+  await edit(el);
+  expect(q(el, "form")).not.toBeNull();
+  el.readOnly = true;
+  await flush(el);
+  expect(q(el, "form")).toBeNull();
+  expect(q(el, "wt-combobox")).toBeNull();
+  expect(q(el, "[data-test=edit]")).toBeNull();
+  expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
+  expect(rows(el)).toEqual([
+    "Default receipt language: Spanish",
+    "VAT class for new products: Reduced (10%)",
+  ]);
+  expect(api.putVenueDefaults).not.toHaveBeenCalled();
 });
 
 it("shows a read failure with Retry, and Retry recovers", async () => {
@@ -585,6 +618,53 @@ it.each(["success", "refusal"] as const)(
     expect(saveButton(el).disabled).toBe(false);
   },
 );
+
+it("a save in flight when the card turns read-only shows its answer once it succeeds", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "defaultProductVatClass", "zero");
+  saveButton(el).click();
+  await el.updateComplete;
+  el.readOnly = true;
+  await flush(el);
+  expect(q(el, "form")).toBeNull();
+  pending.resolve({ ...MADRID, defaultProductVatClass: "zero" });
+  await pending.promise;
+  await frame();
+  await flush(el);
+  expect(text(q(el, "[data-test=saved-defaultProductVatClass]"))).toBe("No tax (0%)");
+  expect(q(el, "form")).toBeNull();
+});
+
+it("a save that succeeds after the card turned read-only and back leaves the new clean draft open on its answer", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mountWithLeave(r.api);
+  await edit(el);
+  await pick(el, "defaultProductVatClass", "zero");
+  saveButton(el).click();
+  await el.updateComplete;
+  el.readOnly = true;
+  await flush(el);
+  el.readOnly = false;
+  await flush(el);
+  await edit(el);
+  pending.resolve({ ...MADRID, defaultProductVatClass: "zero" });
+  await pending.promise;
+  await frame();
+  await flush(el);
+  expect(q(el, "form")).not.toBeNull();
+  expect(combo(el, "defaultProductVatClass")!.value).toBe("zero");
+  expect(saveButton(el).disabled).toBe(true);
+  expect(saveButton(el).loading).toBe(false);
+  expect(unload()).toBe(false);
+});
 
 it("in Edit the content warning follows the staged language and goes once its content is enabled", async () => {
   setLocale("en-GB");

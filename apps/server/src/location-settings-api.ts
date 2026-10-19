@@ -297,7 +297,9 @@ export function mountLocationSettingsApi(
   app.get("/management-api/venue-defaults", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      return c.json(await gated(sessionId, (tx) => readVenueDefaults(tx, deps.cfg.locationId)));
+      return c.json(
+        await gated(sessionId, (tx) => readVenueDefaults(tx, deps.cfg.locationId), "venue.view"),
+      );
     }),
   );
   app.put("/management-api/venue-defaults", (c) =>
