@@ -507,7 +507,7 @@ it("falls every blank language back to the default language's name in the visibl
   });
 });
 
-it("reads customer-facing names stored under regional codes into the fields, their hints and the visible fields, and saves them back as stored when another field changes", async () => {
+it("shows regional-code customer names in the fields and saves them back as stored when another field changes", async () => {
   const stored = { "en-GB": "How would you like it?", "es-ES": "¿En qué punto?" };
   const { el, host } = await mount({ value: { ...cooked, customerName: stored } });
   const submitted = record(host);
@@ -598,7 +598,7 @@ it("follows a change of default or content languages in the visible fields, in t
   });
 });
 
-it("leaves a language out of the visible fields while nothing at all names the list", async () => {
+it("keeps blank fields and their fallbacks empty until a customer or staff name is entered", async () => {
   const { el } = await mount();
 
   expect(namesShown(el).line).toEqual([]);

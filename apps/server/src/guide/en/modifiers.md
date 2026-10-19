@@ -49,7 +49,9 @@ optional and fall back to the staff name when you leave them blank. On a receipt
 list's and an option's customer-facing names print in the default language, or another language's
 where the default is blank, and as the staff name only when no language has one; an extras
 list's own customer-facing name is not printed anywhere today. While a name is blank, its field
-shows, in place of the blank, the name it falls back to. In an options list and each option's own window, you see **Name**, then **Kitchen name**, then a
+shows, in place of the blank, the name it falls back to.
+
+In an options list and each option's own window, you see **Name**, then **Kitchen name**, then a
 plain **Customer-facing names** heading with every language's field already shown. You can compare
 and edit the names without opening a section. An extras list keeps its customer-facing names in a
 folded section: open **Customer-facing names** to edit them. Its closed line shows each language's

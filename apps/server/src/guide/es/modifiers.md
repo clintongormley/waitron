@@ -54,7 +54,9 @@ blanco. En un ticket, los nombres para el cliente de una lista de opciones y de 
 imprimen en el idioma predeterminado, o en otro idioma si el predeterminado está en blanco, y como
 el nombre del personal solo cuando ningún idioma tiene uno. El nombre para el cliente de una lista
 de extras no se imprime hoy en ningún sitio. Mientras un nombre está en blanco, su campo muestra en
-su lugar el nombre al que recurre. En una lista de opciones y en la ventana de cada opción ves **Nombre**, después **Nombre de cocina**
+su lugar el nombre al que recurre.
+
+En una lista de opciones y en la ventana de cada opción ves **Nombre**, después **Nombre de cocina**
 y después el encabezado **Nombres para el cliente**, con todos los campos de idioma ya visibles.
 Puedes comparar y editar los nombres sin abrir una sección. Una lista de extras conserva sus
 nombres para el cliente en una sección plegada: abre **Nombres para el cliente** para editarlos.
