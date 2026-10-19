@@ -2679,3 +2679,53 @@ The first new-test run had fixture/order errors and a logger passed as an enviro
 those failures are harness errors, not product regressions. The first control wrapper also
 expected the assertion's words in the wrong order; its retained log contains the intended two
 assertion failures. The corrected wrapper verifies the failures and restored controls.
+
+
+## Retained recovery delivery and command-import clock fixture, 2026-10-19
+
+`packages/provisioning/src/first-setup-recovery-delivery.test.ts` adds 36 cases for the hour
+plan's Tasks 9–10 and 12. Real owned command preparation stages the verifier and registers a
+public delivery reference; the document digest in this fixture is synthetic, with no PDF created.
+Configured runtime modules validate the retained snapshot. Cases reject altered attempt,
+revision, owner generation, frozen input, stage and digest bindings; changed taxpayer, venue,
+installation code and key name with a recomputed statement digest; missing or changed modules;
+and malformed or oversized retained bytes. Positive controls read the original record again.
+
+The kept-confirmation cases check acceptance just before the five-minute boundary, refusal at
+the boundary, fresh confirmation, one-use consumption, invalidation by matching attempt, changed
+delivery after confirmation, and refusal of different registration bindings or replacement bytes
+for the same stage. A module that returns a different rebuilt statement is supplied only in the
+new host-boundary test. Its snapshot and registration refusals are measured separately, removing
+the old record before registration so its earlier read cannot hide the registration comparison.
+The first omission experiment passed because that earlier read refused; it is not counted as a
+successful control. The corrected omission fails its intended assertion.
+
+The initial new suite incorrectly supplied unconfigured composition modules to the snapshot
+reader. After using `runtime.modules`, four new expectations still named the host refusal rather
+than the fiscal contribution's `sif.allocation_invalid` with
+`reason: outside_confirmation_missing`. Both were new-test errors, not product defects; their
+failed logs are retained. No previous assertion changes for these cases.
+
+`packages/provisioning/src/first-setup-command-import.test.ts` changes only the relocated
+command's build fixture. Before: the shared bundle CLI embedded the checkout's current commit
+stamp while the child clock stayed at `2026-10-18T11:40:00Z`. The complete four-file run reported
+105 passes and that case failing with `clock_unconfirmed`. Reading `readBuildHourRelease()` at
+`00767da726b8eadb7d28d9fc00776dba54cead86` measured a release floor of
+`2026-10-19T05:07:43Z`, later than its fixed clock. After: the same shared `bundle()` API embeds
+an explicitly synthetic 15 October release stamp, matching the fixed-release boundary already
+used by the in-process fixture. This supplies missing fixture context under the standing
+27 September test-change decision; every existing assertion, child answer, invoice-series value,
+PDF byte comparison and import/publication check remains byte-identical. This is not a production
+release-provenance qualification or a change to clock policy.
+
+Final four-file source run: 106 passes. The report includes only
+`src/first-setup-recovery-delivery.ts`: 109/110 statements, 101/102 branches, 32/32 functions and
+101/102 lines, passing the unchanged thresholds. This does not clear package-wide provisioning
+or entry coverage. Types, scoped lint, explicit TypeScript formatting and the unchanged protected
+fiscal pair pass. Installed controls and exact candidate comparisons are retained in the lane's
+`receipts/a679-delivery-integrity-20261019`; they do not qualify any new browser journey.
+
+No production implementation, fiscal writer, schema, SQL, migration, threshold or guard changes.
+The exact CLI-launch patch and revised PDF viewing approvals remain separate pending gates.
+Remaining entry acceptance, protocol/prose retirement, current-main integration, both final
+installed reviews, the normal hook and current-head CI still precede landing.

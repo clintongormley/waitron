@@ -338,7 +338,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   its concrete replacement is qualified in a disposable checkout and the original case remains a gate.
   The approved direct/supervised patch and fresh refused-restore marker checks are qualified locally.
   Preserve behavioral checks and obtain exact approval for further protected fiscal assertions.
-  Close the provisioning and entry coverage gaps without lowering the gates. Retire active paper
+  Recovery-delivery records and expiring kept confirmations have direct integrity checks and passing
+  file-scoped coverage; close the remaining provisioning and entry coverage gaps without lowering
+  the gates. Retire active paper
   and Cloud allocation protocols, reconcile current operator/developer prose, and integrate the
   current main branch and any migration collisions. Complete both final installed Claude reviews,
   the normal push hook and current-head CI before the authorised, serialised landing.

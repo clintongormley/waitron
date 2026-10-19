@@ -370,14 +370,25 @@ it("the actual relocated command resumes a retained import and publishes it once
   const environment = { ...process.env };
   for (const name of Object.keys(environment))
     if (name.startsWith("GIT_")) delete environment[name];
-  await promisify(execFile)(
-    process.execPath,
-    ["../../scripts/bundle-node.mjs", `src/bin.ts=${binary}`],
-    {
-      timeout: 120_000,
-      env: environment,
-    },
+  const buildScript = join(f.root, "build-command.mjs");
+  await writeFile(
+    buildScript,
+    `import { bundle } from ${JSON.stringify(new URL("../../../scripts/bundle-node.mjs", import.meta.url).href)};
+bundle([{ entry: "src/bin.ts", outfile: ${JSON.stringify(binary)} }], {
+  release: {
+    sourceCommit: "${"a".repeat(40)}",
+    committedAt: "2026-10-15T00:00:00.000Z",
+    instantMs: Date.parse("2026-10-15T00:00:00Z"),
+    generator: "scripts/generate-hour-release.mjs:v1",
+    generatorSha256: "${"b".repeat(64)}",
+  },
+});
+`,
   );
+  await promisify(execFile)(process.execPath, [buildScript], {
+    timeout: 120_000,
+    env: environment,
+  });
   const preload = join(f.root, "offline-clock.mjs");
   await writeFile(
     preload,
