@@ -3041,7 +3041,16 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   subscription model when it matters.
 
 - **A841. A theme editor (owner, 2026-10-17).** Lets the owner change how Waitron looks by setting
-  the `--wt-*` CSS variables it already reads. Not designed yet. Next: a design.
+  the `--wt-*` CSS variables it already reads. Design:
+  [2026-10-19-a841-theme-editor-design.md](superpowers/specs/2026-10-19-a841-theme-editor-design.md).
+  Next: the owner's answers to its questions, then a plan.
+
+- **A899. design-system.md's "Retheming a deployment" says a bare `[data-wt-theme-root]` selector
+  "only matches the token layer's own specificity" (`docs/developers/design-system.md:108-110`,
+  from the first commit, b20c26709).** Every token-layer rule is now `:where()`-wrapped, and A841's
+  probe (Chromium 156, the real `colors.css` adopted as `applyTokens` does) found a bare
+  `[data-wt-theme-root] { --wt-color-primary: … }` winning in all six Light / Dark / Follow device ×
+  OS light / dark cases. Next: reword the sentence, or keep the advice with its real reason.
 
 - **Bookings**, each greenfield: public/online/QR booking, availability, reminders, a CRM entity,
   recurring, a calendar grid, deposits.
