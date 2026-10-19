@@ -1,7 +1,12 @@
 # A798 — Degraded but trading: what the box does, and tells staff, when a part fails
 
-Status: **design proposal, revision 3; question 1 answered, two owner questions open (§9). Nothing
-is built; the build is planned as its own item once the questions are answered.**
+Status: **design proposal, revision 4; questions 1 and 2 answered, one owner question open (§9).
+Nothing is built; the build is planned as its own item once the questions are answered.**
+
+Revision 4, 2026-10-19: the owner's answer to question 2 applied — (a), every device at two minutes.
+Once one of a printer's tickets has waited two minutes, every till and handheld shows the amber strip
+naming it; a receipt printer only on the devices whose receipts go to it; the sending device's table
+banner stays as today (§4.2, §4.4).
 
 Revision 3, 2026-10-19: the owner's answer to question 1 applied — no reserved space; a warning at
 2 GB. The box keeps no spare on its disk; at 2 GB free every till and handheld shows the amber strip,
@@ -361,7 +366,7 @@ Which failures cross the line, and what the device shows:
 | Database cannot be opened or migrated | **Yes** | The server does not start | Recovery page, as today; a full disk at start as §4.7 |
 | AEAT unreachable, certificate missing or expired | No | Records chain locally and wait | Blue strip with the unsent count (§4.2) |
 | Bucket stream stopped or behind | No | The copy is outside the sale | Nothing for staff; the manager's bell |
-| Printer down | No | Printing is a queue | Amber strip (question 2) |
+| Printer down | No | Printing is a queue | Amber strip on every device at two minutes (question 2) |
 | Card reader or provider down | No | Cash and "Otro datáfono" remain | The payment's own message, as today |
 | Clock wrong but after 28-10-2024 | No | Records are written with the wrong time | Nothing for staff (A364); the manager's bell; question 3 for a clock behind the chain |
 
@@ -421,7 +426,7 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
 | Red | A write fails because the disk is full | No se puede guardar nada: el equipo no tiene espacio · Avisa al encargado | Nothing can be saved: the box is out of space · Tell a manager |
 | Red | The clock is before 28-10-2024 | No se pueden registrar ventas: la hora del equipo es incorrecta · Avisa al encargado | Sales can't be recorded: the box's clock is wrong · Tell a manager |
 | Amber | Less than 2 GB free on the box's disk (§4.6) | Queda poco espacio en el equipo · Avisa al encargado | The box is nearly out of space · Tell a manager |
-| Amber | A printer is down (question 2) | Impresora Cocina no imprime · desde 21:16 | Kitchen printer not printing · since 21:16 |
+| Amber | One of a printer's tickets has waited two minutes (question 2) | Impresora Cocina no imprime · desde 21:16 | Kitchen printer not printing · since 21:16 |
 | Blue | A record is waiting after a failed send | 12 ventas sin enviar a Hacienda · Se reintenta solo | 12 sales not yet sent to the tax agency · Retried automatically |
 
 - **The unsent count** appears from the first failed send attempt (or a send skipped for a missing
@@ -476,7 +481,10 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
 - **Outbox.** The blue strip (§4.2) answers the house's reading of art. 16.4. The Box status row
   shows the unsent count, the last accepted record and **Reintentar ahora**. The dashboard's own
   thresholds (4 h, 24 h) stay.
-- **Printers** — question 2. Today's per-table banner stays either way.
+- **Printers** — the owner's answer to question 2. Once one of a printer's tickets has waited two
+  minutes, every till and handheld shows the amber strip naming the printer (§4.2); a receipt printer
+  shows only on the devices whose receipts go to it. The sending device's per-table banner stays as
+  today.
 - **Card readers.** No new staff notice: the payment form already says when the reader does not
   answer, and "Otro datáfono" and cash are the ways on (A796). The manager gets `reader.offline`.
 
@@ -719,8 +727,8 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
 
 ## 9. Questions for the owner
 
-Three, one at a time. Each has a recommendation; the pictures are in the mock-ups folder. Question 1
-is answered; question 2 is the open one.
+Three, one at a time. Each has a recommendation; the pictures are in the mock-ups folder. Questions
+1 and 2 are answered; question 3 is the open one.
 
 ### Question 1 of 3 — When the disk fills, should the box free its reserve by itself?
 
@@ -732,6 +740,11 @@ with the red strip and the honest refusal (picture 1), and a start on a full dis
 (picture 5).
 
 ### Question 2 of 3 — When a printer stops printing, who is told, and how soon?
+
+Owner's answer (2026-10-19): (a) every device, at two minutes. From two minutes every till and
+handheld shows the amber strip "Impresora Cocina no imprime · desde 21:16"; a receipt printer only on
+the devices whose receipts go to it; the sending device's own table banner stays as today (§4.2,
+§4.4; picture 7).
 
 _Example._ 21:14, the Cocina printer's cable is knocked out. Ana sends Mesa 4's starters at 21:16. At
 21:18, two minutes on, her table screen shows "Un ticket de cocina no se ha impreso: Cocina". Marc, at
