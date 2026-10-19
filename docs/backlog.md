@@ -3212,12 +3212,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
-- **Where should the date go beside a long invoice number on 58 mm paper?** — left open by A754;
-  owner question posted 2026-10-19 in lane B's questions. A number longer than 12 characters (a
-  restored series such as `T-S123456/123`) puts the date on its own line under the number, and an
-  emergency-length number (31 characters) wraps inside the number with the date beside its last
-  digits. [Pictures](backlog/mockups/a754-receipt-date-line/2-long-numbers-58mm.png)
-
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
   reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
   is in the server log. Decide how the till should show that outcome and offer another copy.

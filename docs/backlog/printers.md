@@ -545,6 +545,10 @@ returns `null`. This checks those readers, not every sale path.
   - **A full invoice**, on every paper, prints «FACTURA» and its number on one row and «Fecha» and
     the date in words on the next, never merged, then «Fecha de operación» only when it differs
     from the issue day.
+  - **A long invoice number on 58 mm paper (owner, 2026-10-19, left as built).** A number longer
+    than 12 characters (a restored series such as `T-S123456/123`) puts the date on its own line
+    under the number; an emergency-length number (31 characters) wraps inside itself with the date
+    beside its last digits. The owner was shown that this wrap can read as two numbers and kept it.
   - **Every printed receipt date has a two-digit hour** (`00:34`, never `0:34`), in every receipt
     language, in words and in numbers.
   - When the right-hand value does not fit beside the end of the left-hand text, it drops to a
