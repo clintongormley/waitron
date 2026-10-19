@@ -1081,7 +1081,7 @@ interface CancelCrediting {
 }
 
 /** Refusals the server can raise before it looks the submission id up (`resolvePayReader`,
- * `apps/server/src/till-api.ts`), so they say nothing of an earlier attempt under the id. */
+ * `apps/server/src/till-api.ts`). */
 const READER_REFUSED_BEFORE_LOOKUP: ReadonlySet<unknown> = new Set([
   "reader.not_held",
   "reader.payment_in_progress",
@@ -15867,7 +15867,7 @@ export class TillApp extends LitElement {
       else this.#unansweredPayments.set(key, unanswered);
       release();
     };
-    let mayBeRecorded = previous?.unconfirmed === true;
+    let mayBeRecorded = keyed === previous;
     this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown });
     await this.#holdingReload(async () => {
       try {
@@ -15885,12 +15885,12 @@ export class TillApp extends LitElement {
         await this.#onBillPaid(open, result);
       } catch (error) {
         settle(error);
-        const silent =
+        const notChecked =
           mayBeRecorded &&
           READER_REFUSED_BEFORE_LOOKUP.has((error as { code?: unknown } | null)?.code);
         await this.#onBillPayRefused(
           open.id,
-          silent ? { code: "not_checked" } : error,
+          notChecked ? { code: "not_checked" } : error,
           asked,
           "take",
         );

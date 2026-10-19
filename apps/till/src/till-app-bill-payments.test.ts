@@ -4880,12 +4880,36 @@ describe("till-app: a bill payment on the card reader", () => {
         .map((node) => (node.shadowRoot === null ? "" : shownText(node.shadowRoot)))
         .join(" ") + ` ${root.textContent ?? ""}`;
 
-    async function lockedConfirmation(takeBillPayment: ReturnType<typeof vi.fn>) {
+    // Each send waits to be answered, so only the retry pauses run on fake timers.
+    function heldSends() {
+      const answers: ((error: unknown) => void)[] = [];
+      const takeBillPayment = vi.fn(
+        () => new Promise<BillPaymentResult>((_resolve, reject) => answers.push(reject)),
+      );
+      return { takeBillPayment, answers };
+    }
+
+    async function unansweredBefore(answers: ((error: unknown) => void)[], sends: number) {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        for (let attempt = 0; attempt < sends - 1; attempt++) {
+          answers[attempt]!(new TypeError("Failed to fetch"));
+          await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(answers).toHaveLength(sends);
+    }
+
+    async function lockedConfirmation() {
+      const { takeBillPayment, answers } = heldSends();
       const el = await takeOnReader(takeBillPayment);
-      await expect
-        .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
-        .toBe(t("bill_pay.unconfirmed"));
-      return el;
+      await unansweredBefore(answers, 3);
+      answers[2]!(new TypeError("Failed to fetch"));
+      await flush(el);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+      return { el, takeBillPayment };
     }
 
     async function takenAsANewPayment(el: TillApp, takeBillPayment: ReturnType<typeof vi.fn>) {
@@ -4899,14 +4923,12 @@ describe("till-app: a bill payment on the card reader", () => {
     it.each(["reader.not_held", "reader.payment_in_progress"])(
       "a card whose first attempt got no answer and whose retry was refused %s says the server could not check it",
       async (code) => {
-        const takeBillPayment = vi
-          .fn()
-          .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-          .mockRejectedValueOnce({ code, status: 409 });
+        const { takeBillPayment, answers } = heldSends();
         const el = await takeOnReader(takeBillPayment);
-        await expect
-          .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
-          .toBe(t("bill_pay.not_checked"));
+        await unansweredBefore(answers, 2);
+        answers[1]!({ code, status: 409 });
+        await flush(el);
+        expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.not_checked"));
         expect(sent()).toHaveLength(2);
         expect(shownText(dialog(el)!.shadowRoot!)).not.toContain(codeMessage(code));
 
@@ -4915,8 +4937,7 @@ describe("till-app: a bill payment on the card reader", () => {
     );
 
     it("a locked resend refused reader.not_held says the server could not check it", async () => {
-      const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-      const el = await lockedConfirmation(takeBillPayment);
+      const { el, takeBillPayment } = await lockedConfirmation();
 
       takeBillPayment.mockRejectedValueOnce({ code: "reader.not_held", status: 409 });
       await press(el, "[data-pay-confirm]");
@@ -4926,9 +4947,28 @@ describe("till-app: a bill payment on the card reader", () => {
       await takenAsANewPayment(el, takeBillPayment);
     });
 
+    it("a resend under the id a kept refusal answered, refused reader.not_held, says the server could not check it", async () => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "payment.provider_credential_rejected", status: 502 })
+        .mockRejectedValueOnce({ code: "reader.not_held", status: 409 });
+      const el = await takeOnReader(takeBillPayment);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(
+        codeMessage("payment.provider_credential_rejected"),
+      );
+
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      expect(sent()).toHaveLength(2);
+      expect(sent()[1]!.submissionId).toBe(sent()[0]!.submissionId);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.not_checked"));
+      expect(shownText(dialog(el)!.shadowRoot!)).not.toContain(codeMessage("reader.not_held"));
+
+      await takenAsANewPayment(el, takeBillPayment);
+    });
+
     it("a locked resend refused device.profile_changed keeps that code's words", async () => {
-      const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
-      const el = await lockedConfirmation(takeBillPayment);
+      const { el, takeBillPayment } = await lockedConfirmation();
 
       takeBillPayment.mockRejectedValueOnce({ code: "device.profile_changed", status: 409 });
       await press(el, "[data-pay-confirm]");
