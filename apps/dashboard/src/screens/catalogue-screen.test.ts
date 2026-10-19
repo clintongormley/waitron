@@ -983,18 +983,16 @@ describe("catalogue-screen", () => {
 
   it("offers the venue's courses and saves the course inside the product write", async () => {
     const api = stubApi({
-      listCourses: vi
-        .fn()
-        .mockResolvedValue([
-          {
-            id: "k1",
-            name: "Starters",
-            displayOrder: 0,
-            active: true,
-            inUse: false,
-            heldUntilFired: true,
-          },
-        ]),
+      listCourses: vi.fn().mockResolvedValue([
+        {
+          id: "k1",
+          name: "Starters",
+          displayOrder: 0,
+          active: true,
+          inUse: false,
+          heldUntilFired: true,
+        },
+      ]),
     });
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
