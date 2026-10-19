@@ -2148,6 +2148,7 @@ export class MenusScreen extends LitElement {
         label: t("menus.name"),
         sortValue: (menu) => menu.name,
         searchValue: (menu) => menu.name,
+        ...(narrow ? { activatesRow: false as const } : {}),
         cell: narrow
           ? (menu) => {
               const changes = this.#changesCell(menu);
@@ -2164,6 +2165,7 @@ export class MenusScreen extends LitElement {
               key: "status",
               label: t("menus.status"),
               choosable: "shown" as const,
+              ...(layout === "middle" ? { activatesRow: false as const } : {}),
               sortValue: (menu: MenuRow) =>
                 STATUS_ORDER.indexOf(
                   typeof menu.status === "string" ? menu.status : menu.status.state,

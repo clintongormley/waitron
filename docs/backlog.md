@@ -845,15 +845,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
   [Detail](backlog/catalogue.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
 
-- **A813 — a click beside the Menus list's Unpublished changes link stops opening the menu**
-  (owner, 2026-10-17: fix it, to match the other lists). In the middle layout the Status column,
-  and on a phone the Name column, hold the link but do not set `activatesRow: false`
-  (`apps/dashboard/src/screens/menus-screen.ts`), so a click beside the link opens the menu. Set it
-  on both, change the "opens the menu once from a click on the Status cell's blank space" cases in
-  `menus-screen.test.ts` to expect nothing to open, and delete the deviation paragraph in
-  [design-system.md](developers/design-system.md). Done when a test at each of the two widths
-  clicks beside the link and the menu stays closed.
-
 - **A menu's Structure tab is one tree (W88, #1209): not checked** — in Spanish at 390 px the Type
   column scrolls partly under the pinned Actions column, which is the table's own sideways scroll;
   the heading's height with "Checking…" or "Could not be checked" was not measured against the other

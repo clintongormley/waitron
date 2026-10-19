@@ -1008,12 +1008,6 @@ also applies to pinned columns. Without it, a control in a clickable row's cell 
 `input`, `select`, `label`, `wt-button`, `wt-row-actions` or `wt-relative-time` — still sits above the row's activator, so
 a click on it reaches that control and not the row: the Menus list's name button opens its menu once,
 by its own click (the "opens its menu once" cases in `apps/dashboard/src/screens/menus-screen.test.ts`).
-The Menus list's middle-width Status column and phone-width Name column depart from this rule, a
-deviation the owner chose to remove (owner, 2026-10-17; A813 in `docs/backlog.md`): each shows the menu's own state or name
-with the Unpublished changes link under it and does not set `activatesRow: false`, so a click
-beside the link opens the menu while the link opens only Preview. The middle-width half is guarded
-by the "opens the menu once from a click on the Status cell's blank space" cases in
-`apps/dashboard/src/screens/menus-screen.test.ts`; the phone-width half is not tested.
 
 The product editor's Modifiers table is a plain table, not a `wt-data-table`, and its rows open
 too: a transparent `.row-activate` button lies over each attached list's row, so a click on the
@@ -1153,8 +1147,8 @@ queries on probe elements:
   scrolling, a long name with no spaces or hyphens included.
 - Above `30rem` and below `50rem`, three columns: Name, Status and Actions, with the link on its own
   line under the state in the Status cell, so wherever the state shows, the link is under it. A
-  click on the Status cell's blank space opens the menu, as before Changes was added; a click on
-  the link opens only its Preview tab. The name wraps within the list's width less three
+  click on the Status cell's blank space opens nothing, as one beside the link under Changes does;
+  a click on the link opens only its Preview tab. The name wraps within the list's width less three
   `--wt-tap-min` and `8.5rem`, room for the row menu and for the link. A long name can still make
   the table wider than its box, and the end of the version's time then scrolls under the pinned
   Actions column; the link stays in view. With Status its only movable column, this layout has no Customise
