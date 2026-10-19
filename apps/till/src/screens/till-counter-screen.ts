@@ -19,6 +19,7 @@ import { MediaQueryController } from "../state/media-query-controller.js";
 import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
 import "../widgets/menu-browser.js";
 import "../widgets/basket.js";
+import "../widgets/last-added.js";
 import "../widgets/total.js";
 import "../widgets/tender-pay.js";
 import "../widgets/held-orders.js";
@@ -132,7 +133,21 @@ export class TillCounterScreen extends LitElement {
         grid-row: 1 / span 3;
         overflow: auto;
       }
+      .menu-column {
+        grid-column: 1;
+        grid-row: 1 / span 3;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        gap: var(--wt-space-2);
+      }
+      .menu-column .menu-cell {
+        flex: 1;
+        min-height: 0;
+      }
       .basket-cell {
+        background: var(--wt-color-surface);
+        border-inline-start: var(--wt-space-1) solid var(--wt-color-border);
         grid-column: 2;
         grid-row: 1;
         overflow: auto;
@@ -177,6 +192,10 @@ export class TillCounterScreen extends LitElement {
         .basket-cell {
           overflow: visible;
         }
+        .basket-cell {
+          border-inline-start: 0;
+          border-block-start: var(--wt-space-1) solid var(--wt-color-border);
+        }
       }
     `,
   ];
@@ -201,6 +220,8 @@ export class TillCounterScreen extends LitElement {
     keepOpen: null,
   };
   @property() departmentName = "";
+  @property({ attribute: false })
+  receiptEquipment?: import("../api/client.js").RoleEquipment["resolved"];
   @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected` for it to update. */
   @property() selectedMenuId = "";
@@ -283,7 +304,6 @@ export class TillCounterScreen extends LitElement {
 
   #menuControls(): TemplateResult {
     return html`
-      ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId, this.zoneName)}
       ${this.service?.open === true && this.service.zoneOpen && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
       ${
         this.service?.open === true && this.service.zoneOpen
@@ -360,20 +380,25 @@ export class TillCounterScreen extends LitElement {
 
   #gridBody(): TemplateResult {
     return html`<div class="body grid-body">
+      ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId, this.zoneName, this.receiptEquipment)}
       <div class="sale-grid">
-        <div class="menu-cell">
-          ${
-            this.orderList === null
-              ? html`<div class="menu-controls">${this.#menuControls()}</div>
-                  ${this.#menu()}`
-              : this.#lists()
-          }
+        <div class="menu-column">
+          <div class="menu-cell">
+            ${
+              this.orderList === null
+                ? html`<div class="menu-controls">${this.#menuControls()}</div>
+                    ${this.#menu()}`
+                : this.#lists()
+            }
+          </div>
+          ${this.store.lastAdded === undefined ? nothing : html`<till-last-added .store=${this.store} .disabled=${this.busy || this.orderInFlight} .readOnly=${this.stage === "collect"} @open-line-details=${(event: CustomEvent<{ line: import("../state/working-order.js").OrderLine }>) => this.shadowRoot!.querySelector("till-basket")?.openLineDetails(event.detail.line)}></till-last-added>`}
         </div>
         <div class="basket-cell">
           <till-basket
             ?stacked=${this.#phone.matches}
             .store=${this.store}
             .lineDetails=${true}
+            .revealAdded=${true}
             .allowPickRemoval=${true}
             .draftParent=${this}
             .readOnly=${this.stage === "collect"}

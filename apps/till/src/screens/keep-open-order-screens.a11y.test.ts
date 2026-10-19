@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
@@ -77,22 +77,18 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                 )!;
                 const want =
                   state === "closed"
-                    ? locale === "en-GB"
-                      ? "Restaurant is closed: no period is running"
-                      : "Restaurant está cerrado: no hay ningún periodo en curso"
-                    : state === "extended"
-                      ? locale === "en-GB"
-                        ? "Lunch · kept open until 14:30"
-                        : "Comida · horario ampliado hasta las 14:30"
-                      : locale === "en-GB"
-                        ? "Lunch · until 14:00"
-                        : "Comida · hasta las 14:00";
-                expect(line.textContent!.trim()).toBe(want);
+                    ? t("menu.department_closed").replace("{department}", "Restaurant")
+                    : t(state === "extended" ? "keep_open.line_extended" : "keep_open.line_until")
+                        .replace("{period}", t("service.open"))
+                        .replace("{time}", state === "extended" ? "14:30" : "14:00");
                 const widget = el.shadowRoot!.querySelector<TillKeepOpen>("till-keep-open")!;
                 await widget.updateComplete;
                 const button = widget.shadowRoot!.querySelector<HTMLElement>("wt-button")!;
+                expect((state === "closed" ? line : button).textContent!.trim()).toBe(want);
                 expect(button.textContent!.trim()).toBe(
-                  locale === "en-GB" ? "Keep Lunch open later" : "Ampliar el horario de Comida",
+                  state === "closed"
+                    ? t("keep_open.button").replace("{period}", widget.keepOpen!.periodName)
+                    : want,
                 );
                 for (const node of [line, button]) {
                   const bounds = node.getBoundingClientRect();

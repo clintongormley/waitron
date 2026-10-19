@@ -229,6 +229,7 @@ export class WorkingOrderStore {
   #kitchenNoteOwnerRevision = 0;
   #kitchenNoteScopeKey?: string;
   #lastAdded?: OrderLine;
+  #lastAddition = 0;
   #limit: Decimal | null = null;
   #fullInvoiceOrderId?: string;
   canSelectProduct: ((product: TillProduct) => boolean) | undefined;
@@ -336,6 +337,11 @@ export class WorkingOrderStore {
   get lastAdded(): OrderLine | undefined {
     const line = this.#lastAdded;
     return line !== undefined && this.#lines.includes(line) ? line : undefined;
+  }
+
+  /** Additions reveal their row; saved refreshes and ordinary edits leave scrolling alone. */
+  get lastAddition(): number {
+    return this.#lastAddition;
   }
 
   get persisted(): boolean {
@@ -483,6 +489,7 @@ export class WorkingOrderStore {
     if (this.#passesLimit(ZERO, lineGross(line))) return;
     this.#lines.push(line);
     this.#lastAdded = line;
+    this.#lastAddition++;
     this.#changedLines();
   }
 
@@ -508,6 +515,7 @@ export class WorkingOrderStore {
     if (into === undefined) this.#lines.push(line);
     else into.quantity = merged!.quantity;
     this.#lastAdded = into ?? line;
+    this.#lastAddition++;
     this.#changedLines();
   }
 

@@ -68,8 +68,8 @@ for (const kind of ["counter", "table"] as const) {
       return { el, calls };
     }
     it.each([
-      { extendedUntil: null, want: "Lunch · until 14:00" },
-      { extendedUntil: "14:30", want: "Lunch · kept open until 14:30" },
+      { extendedUntil: null, want: "Open · until 14:00" },
+      { extendedUntil: "14:30", want: "Open · kept open until 14:30" },
     ])("shows the effective endpoint: $want", async ({ extendedUntil, want }) => {
       const { el } = await mount({
         open: true,
@@ -80,14 +80,13 @@ for (const kind of ["counter", "table"] as const) {
         keepOpen: { ...subject, extendedUntil },
       });
       const line = el.shadowRoot!.querySelector("[data-service-period]")!;
-      expect(line.textContent!.trim()).toBe(want);
+      await (line as TillKeepOpen).updateComplete;
+      expect(line.shadowRoot!.querySelector("[data-action]")!.textContent!.trim()).toBe(want);
       const widget = el.shadowRoot!.querySelector<TillKeepOpen>("till-keep-open")!;
       expect(widget, "the control is beside the period line").not.toBeNull();
       expect(widget.parentElement).toBe(line.parentElement);
       await widget.updateComplete;
-      expect(widget.shadowRoot!.querySelector("wt-button")!.textContent!.trim()).toBe(
-        "Keep Lunch open later",
-      );
+      expect(widget.shadowRoot!.querySelector("wt-button")!.textContent!.trim()).toBe(want);
     });
     it("keeps recovery reachable in the closed-department notice and uses this screen's zone", async () => {
       const { el, calls } = await mount({

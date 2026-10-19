@@ -4087,7 +4087,8 @@ describe("till-app: the next person after an ordinary sign-out", () => {
 describe("till-app: the last-added bar across a save", () => {
   const bar = (el: TillApp) =>
     tableOrder(el)!
-      .shadowRoot!.querySelector<HTMLElement>("[data-last-added]")
+      .shadowRoot!.querySelector("till-last-added")
+      ?.shadowRoot!.querySelector<HTMLElement>("[data-last-added]")
       ?.textContent?.replace(/\s+/g, " ")
       .trim();
 
@@ -4101,7 +4102,10 @@ describe("till-app: the last-added bar across a save", () => {
     expect(api.saveDraft).toHaveBeenCalledOnce();
     expect(bar(el)).toContain("Beer ×2");
 
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-last-added-step="1"]')!.click();
+    tableOrder(el)!
+      .shadowRoot!.querySelector("till-last-added")!
+      .shadowRoot!.querySelector<HTMLElement>('[data-last-added-step="1"]')!
+      .click();
     await back(el);
 
     expect(savedLines()).toEqual(["offer-beer ×3"]);
@@ -4121,7 +4125,10 @@ describe("till-app: the last-added bar across a save", () => {
     expect(rows(el)).toEqual(["Beer ×2"]);
     expect(bar(el)).toContain("Beer ×2");
 
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>('[data-last-added-step="1"]')!.click();
+    tableOrder(el)!
+      .shadowRoot!.querySelector("till-last-added")!
+      .shadowRoot!.querySelector<HTMLElement>('[data-last-added-step="1"]')!
+      .click();
     await back(el);
 
     expect(savedLines()).toEqual(["offer-beer ×3"]);
@@ -4278,7 +4285,8 @@ describe("till-app: another device's save arriving while the draft is shown", ()
     tableOrder(el)!.shadowRoot!.querySelector(selector)?.checkVisibility() ?? false;
   const bar = (el: TillApp) =>
     tableOrder(el)!
-      .shadowRoot!.querySelector<HTMLElement>("[data-last-added]")
+      .shadowRoot!.querySelector("till-last-added")
+      ?.shadowRoot!.querySelector<HTMLElement>("[data-last-added]")
       ?.textContent?.replace(/\s+/g, " ")
       .trim();
   const displayedLines = (el: TillApp) =>

@@ -999,7 +999,12 @@ describe.each(["light", "dark"] as const)(
     it("has no violations while browsing, with the last-added bar and Review", async () => {
       const { el, host } = await phoneDraft();
       await settled(el);
-      if (!el.shadowRoot!.querySelector("[data-last-added]")?.checkVisibility())
+      if (
+        !el
+          .shadowRoot!.querySelector("till-last-added")
+          ?.shadowRoot!.querySelector("[data-last-added]")
+          ?.checkVisibility()
+      )
         throw new Error("the scan must include the last-added bar");
       await expectNoA11yViolations(host);
     });

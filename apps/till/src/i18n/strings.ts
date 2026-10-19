@@ -2,6 +2,12 @@
 // keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
 // fails typecheck.
 export const en = {
+  "service.open": "Open",
+  "service.printer_unknown": "Receipt printer status unknown",
+  "service.printer_none": "No receipt printer",
+  "service.printer_unavailable": "Receipt printer unavailable: {name}",
+  "service.printer_available": "Receipt printer available: {name}",
+
   "finish_table.unserved": "{n} dishes not served",
   "cancel_item.title": "Cancel item",
   "cancel_item.preparation": "Has preparation started?",
@@ -1605,6 +1611,12 @@ export type StringKey = keyof typeof en;
 
 // Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
+  "service.open": "Abierto",
+  "service.printer_unknown": "Estado de la impresora de recibos desconocido",
+  "service.printer_none": "Sin impresora de recibos",
+  "service.printer_unavailable": "Impresora de recibos no disponible: {name}",
+  "service.printer_available": "Impresora de recibos disponible: {name}",
+
   "finish_table.unserved": "{n} platos sin servir",
   "cancel_item.title": "Cancelar plato",
   "cancel_item.preparation": "En preparación",

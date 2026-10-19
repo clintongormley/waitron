@@ -350,9 +350,19 @@ describe("till-table-order-screen: Take over draft", () => {
     el.draftStore!.addProduct({ ...beer, id: "gone", menuItemId: "offer-gone", name: "" }, "2");
     await el.updateComplete;
 
-    const steps = [...el.shadowRoot!.querySelectorAll("[data-last-added-step]")].map((step) =>
-      step.getAttribute("aria-label"),
+    await el.shadowRoot!.querySelector("till-last-added")!.updateComplete;
+    await Promise.all(
+      [
+        ...el
+          .shadowRoot!.querySelector("till-last-added")!
+          .shadowRoot!.querySelectorAll("wt-button"),
+      ].map((button) => button.updateComplete),
     );
+    const steps = [
+      ...el
+        .shadowRoot!.querySelector("till-last-added")!
+        .shadowRoot!.querySelectorAll("[data-last-added-step]"),
+    ].map((step) => step.shadowRoot!.querySelector("button")!.getAttribute("aria-label"));
     expect(steps).toEqual([
       `${t("basket.decrease")} −1 · ${t("basket.not_offered")}`,
       `${t("basket.increase")} +1 · ${t("basket.not_offered")}`,

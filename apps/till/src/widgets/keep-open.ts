@@ -29,6 +29,7 @@ export class TillKeepOpen extends LitElement {
   ];
   @property({ attribute: false }) api?: TillApi;
   @property() zoneId = "";
+  @property() triggerLabel = "";
   @property() subject: "period" | "zone" = "period";
   @property({ attribute: false }) zoneKeepOpen: MenuState["service"]["zoneKeepOpen"] = null;
   @property({ attribute: false }) keepOpen: MenuState["service"]["keepOpen"] = null;
@@ -192,7 +193,7 @@ export class TillKeepOpen extends LitElement {
         variant="secondary"
         ?disabled=${this.busy || this.period !== null || this.authorizers !== null}
         @click=${() => this.#act()}
-        >${this.subject === "zone" ? t("keep_open.zone_button").replace("{zone}", () => this.zoneKeepOpen!.zoneName) : t("keep_open.button").replace("{period}", () => this.keepOpen!.periodName)}</wt-button
+        >${this.triggerLabel || (this.subject === "zone" ? t("keep_open.zone_button").replace("{zone}", () => this.zoneKeepOpen!.zoneName) : t("keep_open.button").replace("{period}", () => this.keepOpen!.periodName))}</wt-button
       >
       ${this.refusal && this.period === null ? html`<p class="refusal" role="alert">${codeMessage(this.refusal)}</p>` : nothing}
       ${

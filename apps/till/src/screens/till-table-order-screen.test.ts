@@ -998,6 +998,8 @@ describe("till-table-order-screen", () => {
     await el.updateComplete;
 
     const form = await openDraftLine(el, 0);
+    form.shadowRoot!.querySelector<HTMLElement>(".add-note")!.click();
+    await form.updateComplete;
     const note = form.shadowRoot!.querySelector('[data-test="line-note"]')!;
     note.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "table 4 — no ice" } }));
     await form.updateComplete;
@@ -3221,7 +3223,14 @@ describe("till-table-order-screen", () => {
       ]);
       await el.updateComplete;
       if (el.shadowRoot!.querySelector("[data-drawer]") !== null) await openDrawer(el);
-      return openDraftLine(el, 0);
+      const picker = await openDraftLine(el, 0);
+      const addNote = picker.shadowRoot!.querySelector<HTMLElement>(".add-note");
+      if (addNote !== null) {
+        addNote.click();
+        await picker.updateComplete;
+      }
+      await picker.shadowRoot!.querySelector("wt-textarea")?.updateComplete;
+      return picker;
     }
     const saved = (el: TillTableOrderScreen) => {
       const line = el.draftStore!.lines[0]!;
@@ -6699,14 +6708,18 @@ describe("A668 nutrition after table-order names", () => {
     draft.addProduct(dish, "1");
     const { el } = await mount({ draftStore: draft });
     expect(
-      el.shadowRoot!.querySelector(
-        '[data-last-added] .last-added-name wt-icon[name="allergen-milk"]',
-      ),
+      el
+        .shadowRoot!.querySelector("till-last-added")!
+        .shadowRoot!.querySelector(
+          '[data-last-added] .last-added-name wt-icon[name="allergen-milk"]',
+        ),
     ).not.toBeNull();
     expect(
-      el.shadowRoot!.querySelector(
-        '[data-last-added] .last-added-name wt-icon[name="diet-no_meat"]',
-      ),
+      el
+        .shadowRoot!.querySelector("till-last-added")!
+        .shadowRoot!.querySelector(
+          '[data-last-added] .last-added-name wt-icon[name="diet-no_meat"]',
+        ),
     ).not.toBeNull();
     await openReview(el);
     expect(

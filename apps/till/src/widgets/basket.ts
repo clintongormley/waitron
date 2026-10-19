@@ -750,6 +750,41 @@ export class TillBasket extends LitElement {
     this.#listedTotal = billGross(rows);
   }
 
+  @property({ type: Boolean }) revealAdded = false;
+  #revealedAddition?: { store: WorkingOrderStore; addition: number };
+  override updated(): void {
+    if (!this.revealAdded) return;
+    const store = this.store;
+    if (
+      this.#revealedAddition?.store === store &&
+      this.#revealedAddition.addition === store.lastAddition
+    )
+      return;
+    this.#revealedAddition = { store, addition: store.lastAddition };
+    const line = store.lastAdded;
+    if (line === undefined) return;
+    const generation = store.loadGeneration;
+    requestAnimationFrame(() => {
+      if (
+        !this.isConnected ||
+        this.store !== store ||
+        store.loadGeneration !== generation ||
+        store.lastAdded !== line
+      )
+        return;
+      const index = store.lines.indexOf(line);
+      const row = this.renderRoot
+        .querySelector<HTMLElement>(`[data-line-detail="${index}"]`)
+        ?.closest<HTMLElement>(".entry");
+      if (row?.checkVisibility())
+        row.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+          behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+        });
+    });
+  }
+
   @property({ type: Boolean }) hideKitchenNote = false;
 
   #kitchenHeading() {

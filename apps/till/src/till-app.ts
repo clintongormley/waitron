@@ -15590,6 +15590,7 @@ export class TillApp extends LitElement {
         .menus=${this.menus}
         .service=${this.counterService}
         .departmentName=${this.counterDepartmentName}
+        .receiptEquipment=${this.deviceEquipment?.roles.find((role) => role.role === "receipt")?.resolved}
         .zoneName=${this.profileServiceZones.find((zone) => zone.id === this.counterServiceZoneId)?.name ?? ""}
         .selectedMenuId=${this.selectedCatalogueId}
         .menuSelectionRequired=${true}
@@ -15688,6 +15689,7 @@ export class TillApp extends LitElement {
       .menus=${this.tableMenus}
       .service=${this.tableService}
       .departmentName=${this.tableDepartmentName}
+      .receiptEquipment=${this.deviceEquipment?.roles.find((role) => role.role === "receipt")?.resolved}
       .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
       .selectedMenuId=${this.tableSelectedCatalogueId}
       .menuSelectionRequired=${true}
@@ -15820,6 +15822,7 @@ export class TillApp extends LitElement {
           .menus=${this.tableMenus}
           .service=${this.tableService}
           .departmentName=${this.tableDepartmentName}
+          .receiptEquipment=${this.deviceEquipment?.roles.find((role) => role.role === "receipt")?.resolved}
           .zoneName=${this.zones.find((zone) => zone.id === this.#tableZoneId)?.name ?? ""}
           .selectedMenuId=${this.tableSelectedCatalogueId}
           .menuSelectionRequired=${true}
