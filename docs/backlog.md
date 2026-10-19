@@ -5114,10 +5114,11 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   behind the last sale). It adds a module seat for staff notices; no migration. The build is planned
   separately.
 
-- **Recovery actions left for when modules can be installed on a running box** — starting without a
-  module that fails at start, undoing the last module change, and a migration that applied only in
-  part. Handed on by the 2026-09-08 node-containers design (§9.3, §12); not designed. A798 covers a box
-  that is still trading.
+- **Recovery actions the 2026-09-08 node-containers design handed on** (§9.3, §12) — starting without
+  a module that fails at start, undoing the last module change, and a migration that applied only in
+  part. Not designed. Only undoing the last module change waits for modules that can be installed on
+  a running box; a migration that applies only in part can happen on any upgrade today. A798 covers a
+  box that is still trading.
 
 - **The recovery page's secret bound is a convention, not a guard.** #310 masks URL credentials on every log line — the connection-string shape and nothing else. [Detail](backlog/box.md#the-recovery-pages-secret-bound-is-a-convention-not-a-guard)
 

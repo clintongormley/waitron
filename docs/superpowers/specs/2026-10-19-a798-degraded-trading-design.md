@@ -163,7 +163,12 @@ The per-module "can a till sell without this" field the old design asked for is 
   sale's transaction opens, and the sale and its record are written afterwards
   (`apps/server/src/till-sale.ts:1306-1324`, `:1536-1552`). Before the reader is asked, the box
   already refuses a sale it could never file (`till-sale.ts:1225-1226`: "Before the reader is asked:
-  P3 could never file this sale").
+  P3 could never file this sale"). A card payment on a bill takes a second path with its own check
+  before the reader, `beginBillPayment`, which runs the same two calls
+  (`apps/server/src/bill-payments.ts:1068-1069`); the card is collected (`:1358`) and the sale is
+  filed afterwards, when that payment completes the bill (`completeBillPayment` →
+  `issueWhenFullyPaid` → `recordSale`, `:1237-1262`, `:706`). Neither check looks at the date or the
+  disk (read: `apps/server/src/invoice-selection.ts:87-140`).
 - **If the second step fails after a charge**, a later Pay files the sale without charging again —
   but only when the charge was saved as captured (`till-sale.ts:1149-1153`). SumUp saves the attempt
   first and the capture after the charge, in a separate write (`packages/payments-sumup/src/provider.ts:173-185`,
@@ -204,7 +209,8 @@ The per-module "can a till sell without this" field the old design asked for is 
   (`apps/till/src/till-app.ts:450-453`) and says "Esta venta no se puede registrar en Hacienda. … hay
   que corregir los datos de facturación del local, así que avisa a quien configuró esta caja. Si ya
   has cobrado con tarjeta en el datáfono, devuelve el importe ahí." (`strings.ts:2796`) — wrong advice
-  for a clock (picture 6).
+  for a clock (picture 6). With a connected reader the card is charged before that refusal, on both
+  card paths, because neither check before the reader looks at the date (§2.4; read).
 - **Any other wrong clock sells.** The round-2 claim check measured a sale stamped 2025 accepted
   after one stamped 2026, and a clock set to 2031 selling; the library's "not in the future" checks
   are judged against the record's own time, so they cannot fire (`chain.ts:187-189`).
@@ -352,8 +358,9 @@ Which failures cross the line, and what the device shows:
 | Clock wrong but after 28-10-2024 | No | Records are written with the wrong time | Nothing for staff (A364); the manager's bell; question 3 for a clock behind the chain |
 
 **No card is charged while the line is crossed.** When the disk or the clock is red, the box refuses
-at the existing check before the reader is asked (`till-sale.ts:1225-1226`), so a connected reader is
-never charged for a sale that cannot be recorded. A card taken on another machine can still have
+at both checks before the reader: `till-sale.ts:1225-1226` for a sale, and `beginBillPayment`
+(`bill-payments.ts:1068-1069`) for a card payment on a bill. So a connected reader is never charged
+for a sale that cannot be recorded; today it is, for a clock before 28-10-2024 (§2.5, §11). A card taken on another machine can still have
 been charged, which is why the clock refusal keeps today's card advice. The one gap left is a disk
 that fills between the charge and the record: then the till says "Cobrado con tarjeta, pero la venta
 no se ha registrado: el equipo no tiene espacio. No vuelvas a cobrar; avisa al encargado." (EN: "Card
@@ -394,9 +401,10 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
   15 seconds (§2.8) gains a `notices` list the box works out on each ask. No new connection; the menu
   check is not used, because a till with no counter zone never makes it. A device that cannot reach
   the box already shows its own "unreachable" line (§2.7).
-- **Where the notices come from.** The core supplies the disk notices. Every other notice comes from
-  the module that owns the part, through a new seat (§5): the Veri*Factu module supplies the unsent
-  count and the clock-before-28-10-2024 notice, printing supplies the printer notice.
+- **Where the notices come from.** The core supplies the disk and printer notices: printing is not a
+  module (`packages/composition/src/modules.ts:106` lists none), and the printer alerts are the
+  server's own (`apps/server/src/boot.ts:2059`; `alert-sources.ts:395`, `:673`). The Veri*Factu
+  module supplies the unsent count and the clock-before-28-10-2024 notice through the new seat (§5).
 - **The notices** — one wording each, used in every picture (Spanish as shown; English for the
   English till):
 
@@ -448,7 +456,7 @@ need it. Kitchen screens keep their own printer line (§2.3) and get no strip: t
     refusals (§2.2). It is the Veri*Factu module's own route.
   - **Liberar** deletes only what the box can make again (§4.6) and says how much it can free before
     it does. Below the rows the page names what really fills the disk and who can clear it.
-- **Email.** The red conditions — disk full, reserve in use, clock before 28-10-2024 — and a clock
+- **Email.** The red conditions (disk full, clock before 28-10-2024), the reserve in use, and a clock
   behind the chain email everyone with `system.manage` and an email address, once per episode (§6,
   default 7). "Once per episode" is held in memory: a restart during an episode may send one more,
   which keeps the build free of a new table (§7).
@@ -481,8 +489,9 @@ What the box does instead:
    with today's card advice kept, `clock.unusable` and an email (picture 6). The Veri*Factu module
    supplies it, since the date is its rule.
 2. **Detect a clock behind the chain, with no internet.** When the box's clock is earlier than the
-   last record's time by more than a minute, it is wrong for certain. The Veri*Factu module, which
-   owns the chain, runs this check. It does not notice a clock that is ahead.
+   last record's time by more than a minute, one of two clocks was wrong: this one, or the one that
+   stamped the last record. A clock that ran ahead and was then put right looks exactly the same. The
+   Veri*Factu module, which owns the chain, runs this check. It does not notice a clock that is ahead.
 3. **Use devices only as witnesses.** Requests from a till would carry the device's own time (none
    does today). When at least two devices that spoke in the last few minutes agree with each other and
    the box differs from both by more than a minute, the box raises `clock.disagrees` for the manager.
@@ -492,7 +501,8 @@ What the box does instead:
 4. **AEAT**, as today, whenever something is sent; and `timedatectl` where the box image provides it.
 5. **A clock behind the chain** is question 3. Any other wrong clock follows D8 and A364: it keeps
    selling, the manager is warned, staff see nothing.
-6. **The box image (B3)** should run time synchronisation; that belongs to the image, not this design.
+6. **The box image (B3)** should keep its clock synchronised; that belongs to the image, not this
+   design, and is now one of B3's image constraints (`docs/backlog/box.md:356-359`).
 
 ### 4.6 The disk
 
@@ -505,8 +515,10 @@ What the box does instead:
 2. **One message for any write**, and the sale's own (§3). Any refused save shows "No se ha guardado:
    el equipo no tiene espacio en disco. Avisa al encargado." (EN "Not saved: the box is out of disk
    space. Tell a manager."), and the red strip "No se puede guardar nada".
-3. **Refuse before the reader.** While the disk is red, the existing check before the reader refuses
-   (`till-sale.ts:1225-1226`), so no connected card is charged (§3).
+3. **Refuse before the reader.** While the disk is red, both checks before the reader refuse —
+   `till-sale.ts:1225-1226` for a sale and `beginBillPayment` (`bill-payments.ts:1068-1069`) for a card
+   payment on a bill — so no connected card is charged (§3). The same applies to a clock before
+   28-10-2024.
 4. **A free-space watch** every minute on the venue folder's disk (`apps/server/src/free-bytes.ts`
    already reads it): `storage.space_low` below 2 GiB free. Because sales can carry on past "0 free"
    on room the side file already holds (§2.6), this watch, not the first failed write, is what warns
@@ -518,7 +530,11 @@ What the box does instead:
    logs included, can take it. The box writes the reserve again once free space is back above 3 GiB.
 6. **Liberar** deletes only what can be made again: crash reports older than a week, rotated log
    files except the newest (at most about 40 MB), and backup staging leftovers from a run that was cut
-   off (none after a normal run). That is a few MB to about 45 MB; the button shows the figure before
+   off (none after a normal run). That is usually a few MB to about 45 MB; more after a backup run
+   that was cut off, whose leftovers are as large as the database: a plaintext dump of the whole
+   database and its encrypted copy (`apps/server/src/backup-sweep.ts:149-170`, under
+   `<state>/backup-staging`, `backup-supervisor.ts:247`), deleted only by the run itself
+   (`backup-sweep.ts:215-218`). Liberar deletes that dump first. The button shows the figure before
    it runs. It does not fold the side file back, because on a full disk that can need space (§2.6). It
    never touches a backup the owner configured, the database's rows, or anything fiscal. The page
    names the real fillers with sizes where the box can measure them: the database, backups kept on
@@ -530,9 +546,10 @@ What the box does instead:
 Today a full disk stops the start before it can count itself, so the box restarts forever and the
 page never appears (§2.6). The redesign:
 
-1. **The very first step of every start frees space**, before the failure count is written and before
-   anything opens the database: release the reserve if it is still there, then delete the leftovers of
-   §4.6 item 6 that need no database (crash reports, rotated logs, staging). If the start then works,
+1. **The very first step of every start checks free space**, before the failure count is written and
+   before anything opens the database. Below 256 MiB free, it releases the reserve if it is still
+   there, then deletes the leftovers of §4.6 item 6 that need no database (crash reports older than a
+   week, rotated logs, backup staging). If the start then works,
    there is no page and nothing for the operator to do.
 2. **If the count still cannot be written**, the start serves the recovery page at once, with the code
    `storage.disk_full`, instead of exiting and restarting forever. The page reads the free space as a
@@ -580,8 +597,10 @@ preference.
 item "a degraded-but-trading mode and the module-contract field it needs": a fact each module
 declares, whether a till can sell without it, so a "safe mode" could switch off the modules a till
 can do without. Revision 1 gave a false reason for leaving it out — that a module has no runtime
-hooks. It does: the alerts, fiscal, operations and routes seats, among others, are asked on every
-request (`module.ts:1462-1518`), and the alert registry already isolates a failing module's check —
+hooks. It does: seats are used while the box runs, for example the alert sources on every bell read
+(`apps/server/src/alerts.ts:120`) and the fiscal seat on every sale (its backend is made at start,
+`apps/server/src/boot.ts:1526`, and `recordSale` calls it, `packages/core/src/record-sale.ts:368`),
+and the alert registry already isolates a failing module's check —
 it reads each source in its own savepoint and turns a failure into `alert.source_unavailable`
 (`apps/server/src/alerts.ts:120-144`). The corrected reasons:
 
@@ -674,7 +693,8 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
    written, classify the open failure. Tested on a real full disk image. _Risk: auth (an
    unauthenticated page), concurrency (the start's ordering)._
 3. **The till names the red refusals and refuses before the reader** (`storage.disk_full`;
-   `fiscal.record_invalid` caused by the minimum date; `till-sale.ts:1225-1226`). _Risk: fiscal
+   `fiscal.record_invalid` caused by the minimum date; both checks before the reader,
+   `till-sale.ts:1225-1226` and `beginBillPayment`, `bill-payments.ts:1068-1069`). _Risk: fiscal
    invariants (the settle handlers), cross-package contract (a refusal's parameters)._
 4. **The module seat** of §5. _Risk: cross-package contract._
 5. **Free-space watch, reserve and the `storage.*` alerts.** _Risk: concurrency (a duty that deletes
@@ -732,14 +752,17 @@ the manager's alert use.
 ### Question 3 of 3 — When the box's clock is behind its last sale, what should it do?
 
 _Example._ After a power cut on Saturday morning the box's clock comes back reading 14 March 2025, a
-year and a half behind. Last night's last sale was recorded at 23:40 on 18 October 2026, so the box
-can tell its clock is wrong. There is no internet to check it against. Today it sells as if nothing
+year and a half behind. Last night's last sale was recorded at 23:40 on 18 October 2026, so one of
+the two times is wrong; usually it is the clock, but a clock that ran ahead yesterday and has since
+been put right looks the same. There is no internet to check it against. Today it sells as if nothing
 happened, stamping every sale 14 March 2025, and no one is told.
 
 - (a) **Keep selling, and stamp each sale with the later of the clock and the last sale's time**, so
   times never run backwards (every sale would carry 23:40 on 18 October until the clock is fixed); the
-  managers get an alert and an email. This changes how the fiscal record's time is chosen, so you would
-  land it yourself, and it needs the asesor's view first.
+  managers get an alert and an email. If it was yesterday's time that was wrong — a clock that ran
+  ahead — every sale would instead carry a time in the future until real time catches up. This
+  changes how the fiscal record's time is chosen, so you would land it yourself, and it needs the
+  asesor's view first.
 - (b) **Stop sales until the clock is fixed** (every till red). This reverses your earlier decision
   that a wrong clock warns and never stops a sale.
 - (c) **Recommended: keep selling with the clock's own time, and tell the managers** by alert and
@@ -760,14 +783,17 @@ known; it becomes a question for the asesor, and if the answer is no, (a) comes 
   Promotion to a standby is the replication work (`docs/backlog.md` → _Replication, membership &
   failover — residuals_).
 - **The old design's other recovery items** — starting without a module that fails at start, undoing
-  the last module change, and a migration that applied only in part — have no home in the backlog
-  today (grep for each found none). They are filed by this change as one new backlog entry under _The
-  box: backups, upgrades and recovery_, beside A798's, for when modules become installable.
+  the last module change, and a migration that applied only in part — had no home in the backlog
+  (grep for each found none). They are filed by this change as one new backlog entry under _The box:
+  backups, upgrades and recovery_, beside A798's: "Recovery actions the 2026-09-08 node-containers
+  design handed on". Only undoing the last module change waits for installable modules; a migration
+  that applies only in part can happen on any upgrade today.
 - **Restore, reset or image rollback from the recovery page** — separate backlog entries
   ("Resetting a box without a terminal", "Automatic upgrades that can be undone until the first
   order").
-- **Time synchronisation in the box image** and the HTTPS certificate minted before the clock is set
-  (B3; `docs/backlog.md:5087-5088`).
+- **Time synchronisation in the box image** — B3 (`docs/backlog.md:5039-5041`), whose image
+  constraints now name it (`docs/backlog/box.md:356-359`) — and the HTTPS certificate minted before
+  the clock is set (`docs/backlog.md:5088-5089`).
 - **The SumUp 15-minute wait** after an uncertain card (§2.4) is a payments decision.
 - **The receipt printer's paid-screen line** is A796's ("No se ha podido imprimir", Revision 4
   default 12) and the counter's is A739's.
@@ -789,7 +815,19 @@ For the runner to file; none is acted on here.
 3. **A drawer kick for a USB or Bluetooth printer that is not connected stays queued with no
    expiry**, and is claimed when the printer reappears, so the drawer can open long after the sale
    (`packages/printing/src/runtime.ts:80-83`, `:102`; measured by the round-2 claim check).
-4. **Corrected readings.** Revision 1 said SumUp treats a 5xx answer as a definite decline. It does
+4. **Today a connected card is charged before a clock before 28-10-2024 refuses the sale**, on both
+   card paths: neither check before the reader looks at the date (`till-sale.ts:1225-1226`;
+   `bill-payments.ts:1068-1069`; `invoice-selection.ts:87-140`), the card is collected
+   (`till-sale.ts:1314`, `bill-payments.ts:1358`), and only then does `recordSale` refuse
+   `fiscal.record_invalid`. On a bill this happens when the card payment completes the bill, inside
+   `completeBillPayment` (`bill-payments.ts:1237-1262`, `:706`). (read; not run) Slice 3 closes it.
+5. **A backup run that is cut off leaves a plaintext copy of the whole database** in
+   `<state>/backup-staging` (`backup-sweep.ts:155`: "The whole venue database in plaintext"), with its
+   encrypted copy beside it; only the run's own `finally` deletes them (`:215-218`), and nothing sweeps
+   the folder at start (read: grep for `backup-staging` and `stagingDir` in `apps/server/src`). The
+   backlog tracks the same for an interrupted restore (`docs/backlog.md:5236-5239`) but not for a
+   backup. The file is written owner-only (`chmod 0o600`, `:156`). Liberar deletes it (§4.6).
+6. **Corrected readings.** Revision 1 said SumUp treats a 5xx answer as a definite decline. It does
    not: a 5xx throws (`packages/payments-sumup/src/sumup-client.ts:120-123`) and the payment stays
    "attempting" (`packages/payments-sumup/src/provider.ts:186-198`); only a 4xx is a decline. A search
    helper also reported that deleted images keep their bytes; they do not (`media_image_data` rows go
