@@ -251,6 +251,24 @@ its port is already bound and so can be started again on another (the stream loo
 below, "The S3 test server knows its own server"). A Waitron server the suites start is not retried:
 a taken HTTP port is `server.listen_failed` (the `EADDRINUSE` case in `apps/server/src/boot.test.ts`).
 
+### Select a boot test's port at the real listener bind when its contract permits it
+
+A batch draw prevents duplicates within that draw; it does not reserve the ports through boot.
+`apps/server/src/boot.till-clock.test.ts` wraps only Hono's `serve` call to pass port 0, delegates
+all other options and the callback to the real implementation, and waits for that listener's
+`listening` event before reading its address. Its clock routes, boot modes, database, authentication
+and requests stay real. The production config parser still receives a positive port. Tests about
+configured ports, bind failures or advertised origins must keep checking those contracts.
+
+A907 followed main CI run `39198057052`, server shard 6: the mirror clock case failed with
+`EADDRINUSE` on 127.0.0.1:37003 despite drawing only one port and disabling the landing listener.
+A controlled competing HTTP listener reproduced `EADDRINUSE` in the same case. With the final
+bind changed to port 0, `pnpm --filter @waitron/server exec vitest run
+src/boot.till-clock.test.ts src/testing/free-ports.test.ts --reporter=dot` passed all 12 cases.
+Each real-listener clock case keeps its configured port occupied and requests the actual bound
+port instead. This checks the test harness against the occupied-port condition; it does not
+identify which process took port 37003 in the original CI run or measure the race's frequency.
+
 ## Locate the unfinished package before diagnosing a silent shard as database contention.
 
 Four inspected `test-light-a` hangs left only Bookings' browser files unfinished while Sync and

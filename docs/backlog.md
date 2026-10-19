@@ -5590,9 +5590,10 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full, and on CI's Linux
   runner `scripts/scratch-dir.mjs` measures 83% of branches. Neither is queued. [Detail](backlog/ci.md#what-moving-the-upgrade-tests-scratch-directory-to-devshm-a122-856-left-open)
 
-- **What the landing-port fix (A80, PR #740) left open:** `freePorts(n)` holds every probe until
-  the last port is drawn, but a port is still released before the server binds it, so another test
-  worker drawing or connecting in that gap can take it; nothing has measured how often.
+- **Boot suites that release a port probe before binding still have a race (A80/#740, A907).**
+  The clock boot suite selects ports at the real listener's bind. Other suites still release
+  probes before boot and can lose those ports to another worker or connection. Extend the
+  fix while retaining their real HTTP checks; the frequency of this race remains unmeasured.
   [Detail](backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open)
 
 - **`bundle-smoke` builds only the credentials and server bundles**, so a change to

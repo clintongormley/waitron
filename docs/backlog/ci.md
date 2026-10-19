@@ -73,13 +73,23 @@ Vitest 4.1.11 reads it.
 - **What the landing-port fix (A80, PR #740) left open:** `freePorts(n)`
   (`apps/server/src/testing/free-ports.ts`) holds every probe until the last port is drawn, but a
   port is still released before the server binds it, so another test worker drawing or connecting
-  in that gap can take it; nothing has measured how often. Removing that would need the server to
-  accept port 0 and report the port it bound (`WAITRON_HTTP_PORT` refuses `"0"` today).
+  in that gap can take it; nothing has measured how often. The normal `WAITRON_HTTP_PORT`
+  parser refuses `"0"`.
   `bench/sqlite-failover/src/unreachable-store.ts`'s `reservePort` and the inline copy in
   `apps/server/scripts/cloud-integration-fixture.ts` have the same release-then-use shape and were
   not changed. C88 (#920) reproduced this gap as one way the pause test's single CI failure could
-  happen, and `startS3TestServer` now recovers from it; the Waitron servers' own ports still have the
-  gap.
+  happen, and `startS3TestServer` now recovers from it; the remaining Waitron boot suites still
+  have the gap.
+
+A907 changes only `apps/server/src/boot.till-clock.test.ts`: its test-local wrapper calls the
+real Hono server with port 0 and reads the bound address. Configuration still passes through the
+real parser with a positive port. Each listener case keeps that configured port occupied, so
+restoring the old binding reproduces a collision. Production port validation is unchanged.
+Other boot suites still need an equivalent approach where their port and TLS assertions allow it.
+
+A sibling scan found two draws in `promote-endpoint-e2e.test.ts`, but its mirror is bound and
+closed before the primary draw. That is not two draws before either bind. The remaining work
+above concerns the release-to-bind interval, including single draws.
 
 ## The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum
 
