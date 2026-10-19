@@ -2,7 +2,13 @@ import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
+import {
+  adjustments,
+  createAdjustmentReason,
+  deactivateAdjustmentReason,
+} from "@waitron/adjustments";
+import { decimal } from "@waitron/shared";
+import { applyAdjustment } from "./adjustments-apply.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import {
@@ -88,6 +94,7 @@ async function askFor(
       quantity,
       expectedEdit: await readBillEditState(tx, order.billId),
       outcome,
+      ...(outcome === "keep_charge" ? { reasonId: venue.reasonId.house } : {}),
       expectedPartyRevision: party!.revision,
       expectedBillRevision: bill!.revision,
       expectedContext: await readCancellationContext(tx, order.partyId, order.parent.id),
@@ -133,6 +140,151 @@ async function startExtra(order: Fixture) {
 }
 
 describe("Cancel item service command", () => {
+  it.each([undefined, "", " "])(
+    "requires a reason for a charged cancellation (%j)",
+    async (reasonId) => {
+      const order = await fixture();
+      await startExtra(order);
+      const before = await snapshot(order);
+      await expect(cancel(order, { ...(await askFor(order)), reasonId })).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "reasonId" },
+      });
+      expect(await snapshot(order)).toEqual(before);
+    },
+  );
+
+  it.each(["not-found", "inactive", "wrong-action", "note"] as const)(
+    "refuses an invalid charged cancellation reason (%s) without changing service or money",
+    async (kind) => {
+      const order = await fixture();
+      await startExtra(order);
+      let reasonId: string = randomUUID();
+      if (kind === "wrong-action") reasonId = venue.reasonId.complaint;
+      if (kind === "note") reasonId = venue.reasonId.mistake;
+      if (kind === "inactive") {
+        const reason = await inTx(venue, (tx) =>
+          createAdjustmentReason(tx, {
+            name: `Retired cancellation ${randomUUID()}`,
+            names: {},
+            actions: ["cancel"],
+            maxPercentBp: null,
+            maxAmount: null,
+            applyRole: "staff",
+            approverRole: "staff",
+            noteRequired: false,
+          }),
+        );
+        reasonId = reason.id;
+        await inTx(venue, (tx) => deactivateAdjustmentReason(tx, reasonId));
+      }
+      const before = await snapshot(order);
+      await expect(
+        cancel(order, {
+          ...(await askFor(order)),
+          reasonId,
+          note: kind === "note" ? "   " : undefined,
+        }),
+      ).rejects.toMatchObject({
+        code: {
+          "not-found": "adjustment_reason.not_found",
+          inactive: "adjustment.reason_inactive",
+          "wrong-action": "adjustment.action_not_allowed",
+          note: "adjustment.note_required",
+        }[kind],
+      });
+      expect(await snapshot(order)).toEqual(before);
+    },
+  );
+
+  it("records one zero-off cancellation with its reason, note and original dish value without asking approval", async () => {
+    const order = await fixture();
+    await startExtra(order);
+    const reason = await inTx(venue, (tx) =>
+      createAdjustmentReason(tx, {
+        name: `Charged cancellation ${randomUUID()}`,
+        names: { en: "Guest declined", es: "Rechazado" },
+        actions: ["cancel"],
+        maxPercentBp: null,
+        maxAmount: decimal("0.01"),
+        applyRole: "manager",
+        approverRole: "manager",
+        noteRequired: true,
+      }),
+    );
+    const ask = { ...(await askFor(order)), reasonId: reason.id, note: "Guest changed their mind" };
+    const before = await snapshot(order);
+    await cancel(order, ask);
+    const after = await snapshot(order);
+    expect(after.lines).toEqual(before.lines);
+    expect(after.adjustments).toHaveLength(1);
+    expect(after.adjustments[0]).toMatchObject({
+      workingOrderId: order.billId,
+      lineId: order.parent.id,
+      lineName: "Pizza",
+      lineQuantity: 3000,
+      lineListUnitPrice: 900,
+      quantity: 2000,
+      reasonId: reason.id,
+      reasonName: "Rechazado",
+      action: "cancel",
+      stage: "fired",
+      beforeAmount: 2400,
+      afterAmount: 2400,
+      reduction: 0,
+      nominalValue: 2400,
+      requestedBy: venue.staffId,
+      approvedBy: null,
+      note: ask.note,
+      policySnapshot: { applyRole: "manager", approverRole: "manager", noteRequired: true },
+    });
+    expect(after.cancellations).toMatchObject([{ quantity: 2000, wasStarted: true }]);
+    await cancel(order, ask);
+    expect(await snapshot(order)).toEqual(after);
+    await expect(cancel(order, { ...ask, note: "Different reason detail" })).rejects.toMatchObject({
+      code: "submission.id_reused",
+    });
+    expect(await snapshot(order)).toEqual(after);
+  });
+
+  it("keeps discounted money and records the original list value for a charged cancellation", async () => {
+    const order = await fixture();
+    const original = await askFor(order);
+    await inTx(venue, (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        {
+          expectedEdit: original.expectedEdit,
+          orderId: order.billId,
+          expectedRevision: original.expectedBillRevision,
+          lineId: order.parent.id,
+          reasonId: venue.reasonId.house,
+          action: "discount_percent",
+          percentBp: 5000,
+          note: null,
+          operatorId: venue.staffId,
+          submissionId: randomUUID(),
+        },
+        venue.cfg.locale,
+      ),
+    );
+    await startExtra(order);
+    const before = await snapshot(order);
+    await cancel(order, await askFor(order));
+    const after = await snapshot(order);
+    expect(after.lines).toEqual(before.lines);
+    expect(after.adjustments.filter((row) => row.action === "cancel")).toMatchObject([
+      {
+        lineListUnitPrice: 900,
+        beforeAmount: 1200,
+        afterAmount: 1200,
+        reduction: 0,
+        nominalValue: 2400,
+      },
+    ]);
+  });
+
   it("keeps fired food charged when the waiter confirms preparation has started", async () => {
     const order = await fixture();
     const ask = { ...(await askFor(order)), preparationStarted: true };

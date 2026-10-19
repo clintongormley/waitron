@@ -2261,8 +2261,14 @@ The remaining work includes:
   only when its HOLD ticket was queued; fired work retains its correction. The command and HTTP
   route now carry the explicit preparation answer. Yes on fired food uses the started path and
   marks the correction started; No cannot override stored preparation state. Held food cannot
-  claim preparation Yes, and the answer is part of replay consent. The question in the dialog,
-  charged-cancel reasons, buttons and paid-table unserved-dish resolution remain open.
+  claim preparation Yes, and the answer is part of replay consent. Keep-charge cancellations now
+  require an active reason that allows cancel and its required note; they write one zero-reduction
+  adjustment beside the service cancellation, with no approval. Paid-bill HTTP tests retain their
+  bill rows, sales, tenders and payments while adding that adjustment; replay adds no second record, and a
+  discounted dish records its current value separately from its original list value. The question
+  and reason field in the dialog, action-named buttons and paid-table unserved-dish resolution
+  remain open. The new record uses today's adjustment schema; A758 still owns its later report
+  changes, including crediting zero-reduction cancels, and the preparation flag migration.
   The earlier picture-03 implementation is not the completed revised design. A758's later slices
   own the changed reason rules, starter list, reports and filled refund screen.
 - Reconcile the full branch with current main, including migration collisions and prose describing

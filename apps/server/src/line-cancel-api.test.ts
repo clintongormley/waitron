@@ -152,6 +152,32 @@ async function managerReason() {
 }
 
 describe("the public cancellation read and command", () => {
+  it.each([
+    { reasonId: undefined, code: "management.request_invalid", status: 400 },
+    { reasonId: "", code: "management.request_invalid", status: 400 },
+    { reasonId: "wrong-action", code: "adjustment.action_not_allowed", status: 409 },
+    { reasonId: "note-required", code: "adjustment.note_required", status: 400 },
+  ])(
+    "refuses charged cancellation with invalid reason $reasonId before any write",
+    async ({ reasonId, code, status }) => {
+      const p = await startedFixture();
+      const body = await bodyFor(p, {
+        outcome: "keep_charge",
+        reasonId:
+          reasonId === "wrong-action"
+            ? venue.reasonId.complaint
+            : reasonId === "note-required"
+              ? venue.reasonId.mistake
+              : reasonId,
+      });
+      const before = await frozen();
+      const result = await post(p, body);
+      expect(result.status).toBe(status);
+      expect(result.json).toMatchObject({ code });
+      expect(await frozen()).toEqual(before);
+    },
+  );
+
   it("carries preparation Yes through HTTP and records started service cancellation", async () => {
     const p = await fixture("fire");
     const body = await bodyFor(p, { outcome: "keep_charge", preparationStarted: true });
@@ -386,20 +412,26 @@ describe("the public cancellation read and command", () => {
       const read = await send(venue.app, venue.cookie.staff, "GET", path(p, true));
       expect(read.status).toBe(200);
       expect(read.json).toMatchObject({ context: { billStatus: "settled" }, billId: p.billId });
-      const body = await bodyFor(p, { outcome: "keep_charge", reasonId: undefined });
+      const body = await bodyFor(p, { outcome: "keep_charge" });
       const kept = await post(p, body);
       expect(kept.status, JSON.stringify(kept.json)).toBe(200);
       const after = await frozen();
-      for (const key of [
-        "bills",
-        "lines",
-        "sales",
-        "saleLines",
-        "tenders",
-        "payments",
-        "adjustments",
-      ] as const)
+      for (const key of ["bills", "lines", "sales", "saleLines", "tenders", "payments"] as const)
         expect(after[key]).toEqual(before[key]);
+      expect(after.adjustments.filter((row) => row.workingOrderId === p.billId)).toMatchObject([
+        {
+          lineId: p.parent.id,
+          reasonId: venue.reasonId.house,
+          action: "cancel",
+          reduction: 0,
+          beforeAmount: 2400,
+          afterAmount: 2400,
+          nominalValue: 2400,
+          quantity: 2000,
+          approvedBy: null,
+        },
+      ]);
+      expect(after.adjustments).toHaveLength(before.adjustments.length + 1);
       expect(after.cancellations.find((c) => c.lineId === p.parent.id)?.quantity).toBe(2000);
       expect((await post(p, body)).json).toEqual(kept.json);
       expect(await frozen()).toEqual(after);
@@ -861,7 +893,6 @@ describe("the public cancellation read and command", () => {
     await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
     const body = await bodyFor(p, {
       outcome: "keep_charge",
-      reasonId: undefined,
       approver: { personId: venue.managerId, pin: "9999" },
     });
     watchDerivationsAndLock(venue.db, "9999");
@@ -881,7 +912,7 @@ describe("the public cancellation read and command", () => {
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderLineId, p.parent.id));
     await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
-    const body = await bodyFor(p, { outcome: "keep_charge", reasonId: undefined });
+    const body = await bodyFor(p, { outcome: "keep_charge" });
     const app = new Hono();
     mountTillApi(
       app,

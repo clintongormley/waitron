@@ -2221,7 +2221,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   a reason or adjustment, retaining the open-bill, payment-in-flight and paid-quantity refusals.
   The command and HTTP route now carry a fired dish's preparation answer: Yes uses the started
   path and marks its correction as started; No cannot override stored preparation state. The dialog
-  still needs the question and revised reason/button choices.
+  still needs the question and revised reason/button choices. A keep-charge cancellation now
+  requires an active cancel reason and its required note, recording a cancel adjustment with
+  zero reduction beside the service cancellation. Paid-bill HTTP tests retain their bill rows,
+  sales, tenders and payments while adding that adjustment. Recorded reasons use the operator's
+  language. The revised dialog must
+  supply those reasons before the branch can be published.
   Preserve the completed behavioral checks and their receipts; the detail's
   Decisions section records their scope and limits. The product guide separates stored-line
   availability from the saved New order payment refusal; the till README distinguishes fresh-dish

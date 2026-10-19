@@ -8,12 +8,23 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import { AppError, decimal, divideDecimal, multiplyDecimal } from "@waitron/shared";
-import type { PinAttempts } from "@waitron/identity";
+import {
+  AppError,
+  centsToDecimal,
+  decimal,
+  divideDecimal,
+  MONEY_SCALE,
+  multiplyDecimal,
+  sumDecimals,
+  thousandthsToDecimal,
+} from "@waitron/shared";
+import { persons, type PinAttempts } from "@waitron/identity";
+import { findAdjustmentReason, policySnapshotOf, recordAdjustment } from "@waitron/adjustments";
+import { staffPresentationName } from "@waitron/catalogue";
 import type { CancellationContext } from "./line-cancel-context.js";
 import { requireCancellationContext } from "./line-cancel-context.js";
 import type { TillConfig } from "./till-config.js";
-import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
+import { applyAdjustment, reasonNameIn, type AdjustmentArgs } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { refusePaidLines } from "./bill-payments.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
@@ -225,6 +236,19 @@ export async function cancelItem(
         );
         await policy.completeAdjustment?.(bill!.id);
       } else {
+        if (typeof ask.reasonId !== "string" || ask.reasonId.trim().length === 0)
+          throw invalid("reasonId");
+        const reason = await findAdjustmentReason(tx, ask.reasonId);
+        if (!reason.active) throw new AppError("adjustment.reason_inactive", {});
+        if (!reason.actions.includes("cancel"))
+          throw new AppError("adjustment.action_not_allowed", {});
+        if (reason.noteRequired && (ask.note ?? "").trim().length === 0)
+          throw new AppError("adjustment.note_required", {});
+        const [actor] = await tx
+          .select({ locale: persons.locale })
+          .from(persons)
+          .where(eq(persons.id, operatorId));
+        if (actor === undefined) throw new AppError("person.not_found", { personId: operatorId });
         const quantity = removed + (prior?.quantity ?? 0);
         const rows = await tx
           .select()
@@ -250,6 +274,65 @@ export async function cancelItem(
                   );
             return { row, remaining: row.quantity - cancelled };
           });
+        const coveredValue = (list: boolean) =>
+          sumDecimals(
+            family.map(({ row }) => {
+              const covered =
+                row.id === lineId
+                  ? removed
+                  : Number(
+                      divideDecimal(
+                        multiplyDecimal(decimal(String(row.quantity)), decimal(String(removed))),
+                        decimal(String(line!.quantity)),
+                        0,
+                      ),
+                    );
+              return divideDecimal(
+                multiplyDecimal(
+                  centsToDecimal(
+                    list ? (row.listUnitPriceGross ?? row.unitPriceGross) : row.unitPriceGross,
+                  ),
+                  thousandthsToDecimal(covered),
+                ),
+                thousandthsToDecimal(row.priceQuantity),
+                MONEY_SCALE,
+              );
+            }),
+          );
+        const amount = coveredValue(false);
+        await recordAdjustment(tx, {
+          workingOrderId: bill!.id,
+          line: {
+            id: lineId,
+            name: staffPresentationName(line!),
+            quantity: thousandthsToDecimal(line!.quantity),
+            listUnitPriceGross: centsToDecimal(line!.listUnitPriceGross ?? line!.unitPriceGross),
+            creditedTo: line!.creditedTo,
+            stage:
+              line!.servedQuantity > 0
+                ? "served"
+                : context.components.some((item) => item.firedAt !== null)
+                  ? "fired"
+                  : group?.state === "held"
+                    ? "held"
+                    : "unsent",
+          },
+          quantity: thousandthsToDecimal(removed),
+          reason: {
+            id: reason.id,
+            name: reasonNameIn(reason, actor.locale, policy.venueLocale),
+            policy: policySnapshotOf(reason),
+          },
+          action: "cancel",
+          percentBp: null,
+          beforeAmount: amount,
+          afterAmount: amount,
+          reduction: decimal("0"),
+          nominalValue: coveredValue(true),
+          requestedBy: operatorId,
+          approvedBy: null,
+          note: ask.note ?? null,
+        });
         const corrections = [];
         for (const { row, remaining } of family) {
           const item = work.find((item) => item.workingOrderLineId === row.id);
