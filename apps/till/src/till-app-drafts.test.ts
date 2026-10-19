@@ -5662,10 +5662,14 @@ describe("till-app: a draft line that cannot be sold now", () => {
   describe("a draft line with an extra, read from the server", () => {
     function savedBeerWithLemon(): void {
       server.save("v1", {
+        billId: "wo-4",
         draftId: null,
         revision: 0,
         lines: [
           {
+            slot: 0,
+            joinGroupId: null,
+            afterGroupId: null,
             menuItemId: "offer-beer",
             variantId: null,
             menuVersionId: "v1",
@@ -5735,7 +5739,9 @@ describe("till-app: a draft line that cannot be sold now", () => {
 
       expect(rows(el)).toEqual(["Beer ×1"]);
       expect(flagText(el)).toEqual([t("basket.blocked.extra")]);
-      expect(await pressAndRead(el, "fire-all")).toContain(t("table.nothing_sent"));
+      await act(el, "send-all");
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(flagText(el)).toEqual([t("basket.blocked.extra")]);
       expect(api.submitDraft).not.toHaveBeenCalled();
     });
 
