@@ -617,18 +617,18 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
   - Only the draft routes fold the ids in the path to lower case (`requireDraftPartyParam`,
     `apps/server/src/till-api.ts`, and `submitDraft`'s `joinGroupId`); the other party routes
     only check that the id is an id, and the group submission passes `joinGroupId` on as sent.
-  - After a takeover into the taker's existing draft, or a merge that discards a draft, the
-    previous owner's next save of the old draft is answered `draft.not_found`, not
-    `draft.taken_over`.
+  - Recheck a save naming a draft consumed by a bill merge. The earlier note reported
+    `draft.not_found` instead of `draft.taken_over`; that case needs rechecking under the per-bill
+    version contract.
   - A save must carry `draftId` and `revision` even for a new draft. A chosen option whose label
     id is not a UUID is refused `options.invalid` at save, where pricing answers
     `options.label_required`. An options or extras refusal at save names only the field, not the
     line, and the till shows one message for the whole draft (`asRefusal`,
     `apps/till/src/state/draft-sync.ts`), so it names no line.
-  - Three rulings made on the branch for the owner to confirm: a line whose quantity is not a
+  - Rulings made on the branch for the owner to confirm: a line whose quantity is not a
     whole number never adds into another line; Finish table discards the party's open drafts,
-    keeping their lines, instead of refusing while one is open; taking over someone's draft when
-    you already have one adds their lines to yours and discards theirs, instead of refusing.
+    keeping their lines, instead of refusing while one is open. The takeover ruling is superseded
+    by the [per-bill ownership decision](#one-editor-per-bill-owner-2026-10-17-a773).
 
 ## Task 8 (#806, the till works from the server's drafts)
 
@@ -651,15 +651,11 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     - Drafts are not pushed to other tills: Sam's till sees Alex's latest draft only at its next
       read. Taking over an older copy is refused and the table read again.
   - Other people's drafts:
-    - When the take-over added Alex's lines into Sam's own draft, Alex sees "Sam has an unsent
-      order", not "Taken over by Sam": `takenOverFrom` on Sam's draft is empty.
     - At phone width nothing on the menu view says other people have drafts on the table; the
       button reads "Review (0)". The floor's mark does say so.
     - Three automatic changes to the draft (`adoptLines`, `removeLines` and `clear` on the
       till's store) are not blocked while a take-over is out. Read in the code, not run.
     - The Spanish "has taken over this order" wording has no test.
-  - The floor:
-    - The map tag says "Unsent" but not whose.
   - The table screen:
     - Seating a table whose answer arrives while a newer table is still opening shows the seated
       table briefly before the newer one replaces it.
@@ -914,22 +910,9 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     2026-10-17; recorded in kitchen.md's Decisions). Left by C78's review: the earliest fire
     time is picked by comparing the stored times as text, right only while every writer stores the
     same `toISOString()` form (every writer found uses `nowIso()`; not proven for all); and a dish
-    recalled and fired again carries its new fire time but its old group's firer. Left by C80
-    (read from `draftSections` and `groupArrivingDishes`, not compared with a running till): the
-    till files a dish whose course it does not list (an inactive course) under the earliest course
-    it lists, while a move keeps it in its own held group; and when a round is SENT,
-    `working-order.ts` picks its earliest course without checking whether it is active, so with a
-    switched-off course the send path and the move path can file a dish with no course under
-    different courses. Owner, 2026-10-17: such a dish is a dish with no course (Fire now, listed
-    first), whether sent or moved; relayed to lane G for A773, whose spec does not cover it yet.
-    **2026-10-10 update:** A435 step 5's retained metadata now gives saved drafts their recorded
-    course section and fired lines their recorded label, including when the active list is empty.
-    The earlier C80 reading above is historical; the move/send comparison remains unverified here.
-    **2026-10-17:** the owner chose Fire now, listed first, for a switched-off course on both paths.
-    A773-1 tests the new placement/send model and arriving-bill grouping; T11 must still replace the
-    active screen's legacy grouping controls. [Current follow-up](kitchen.md#left-by-c80-a-dish-whose-course-the-till-does-not-list).
-  - **Task 10 (#875).** Unchecked Send to radios are Chromium's own dark-theme control, dim grey on
-    the dark dialog (seen in the 390 px Spanish dark screenshot).
+    recalled and fired again carries its new fire time but its old group's firer.
+    The owner's replacement for C80's earlier course-placement rule is retained under
+    [Decisions and deliberate limits](kitchen.md#a-switched-off-course-uses-fire-now-owner-2026-10-17-c80).
   - **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a
     waiter who taps a free table to seat it, goes back to the order tab while the seating is still
     under way and starts Move guests can have the move set the wrong table on the new party; the
@@ -1522,6 +1505,20 @@ The boot cases in `apps/server/src/boot.table-removal.test.ts` cover enabled boo
 cancelled bookings with bookings switched off, and a venue with no bookings table.
 A future booking still keeps its table when bookings is switched off; the management deletion
 preview names that booking as a refusal.
+
+### One editor per bill (owner, 2026-10-17; A773)
+
+Taking over Bill 1 transfers its saved New order in place. It does not combine it with your
+Bill 2, even when the dishes match. This replaces Task 7's earlier takeover-and-merge ruling;
+the [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) gives the version,
+local-candidate and refusal contracts. `order-drafts.db.test.ts` checks both bills' identities,
+quantities and previous-editor metadata after takeover, plus the old editor's refused save.
+
+The floor shows each nonempty bill/editor pair. A compact map badge may remain "Unsent" when its
+accessible label names those pairs and the expanded detail shows them, as ownership design §6
+allows. `till-floor-screen.parties.test.ts` checks the card rows, compact accessible label and
+independent pair updates; `table-details-sheet.test.ts` checks the expanded list. These replace
+Task 8's ownerless-floor follow-up, not its other draft or navigation findings.
 
 ### Device equipment defaults (W100, #1332; owner kept every default, 2026-10-07)
 

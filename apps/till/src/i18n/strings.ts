@@ -972,7 +972,6 @@ export const en = {
   "table.course_label": "Course",
   "table.course_default": "Default",
   "table.course_none": "No course",
-  // The party's Current orders in the Tab drawer
   "table.group_n": "Group {n}",
   "table.group_held": "Held",
   "table.group_fired": "Fired",

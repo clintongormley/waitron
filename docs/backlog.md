@@ -1937,10 +1937,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   its old group's firer. Left open by the table actions plan's Task 9 (#874, dishes arriving in a
   party get a kitchen group).
 
-- **C80: a dish whose course is switched off is a dish with no course (owner, 2026-10-17)** — Fire
-  now, listed first, whether sent or moved; relayed to A773. Delete this entry once A773 covers it.
-  [Detail](backlog/kitchen.md#left-by-c80-a-dish-whose-course-the-till-does-not-list)
-
 - **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no
   caller** — found while removing the Stations tab's health read (A366 slice 4 decision 34): the
   route (`apps/server/src/management-api.ts`) and the client method
@@ -2143,13 +2139,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Design](superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md),
   [mockups](backlog/mockups/a758-adjustment-reasons/)
 
-- **Review follow-up: nutrition for extras in Current orders.** The A668-5 reviewer’s
-  read-only finding is that Current orders’ extra summaries carry names and quantities, while the
-  pending/served child rows can show their own nutrition icons. Reproduce the two views with a
-  dish and a differently declared extra, then decide whether the Current orders wire and rows
-  should carry the extra’s nutrition too. The visual difference is unverified; A668-5’s explicit
-  dish-name scope does not decide it. See `apps/till/src/api/client.ts` (`CurrentOrderRow.extras`)
-  and `apps/till/src/screens/till-table-order-screen.ts` (`#currentRow`).
+- **Review follow-up: nutrition for extras in Sent.** The Current orders wire's extra summaries
+  carry no nutrition. The Sent dish window can recover an extra's nutrition from matching bill
+  lines; `till-table-order-screen.served-details.test.ts` checks that fallback and its removal when
+  the line identities no longer match. Reproduce a dish and a differently declared extra with and
+  without those bill-line details, then decide whether the service read and Sent rows should carry
+  the extra's nutrition too. The visual comparison remains unverified; A668-5's dish-name scope
+  does not decide it. See `apps/till/src/api/client.ts` (`CurrentOrderRow.extras`) and
+  `apps/till/src/screens/till-table-order-screen.ts` (`#sentDetails` and `#sentLineDialog`).
 
 - **A765. Say which table an order belongs to (owner, 2026-10-16).** Held orders shows a table's
   bill as "#2" with nothing else; the summary carries only a party id. The server sends the table's
@@ -2727,13 +2724,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Loose ends left by service Task 7 (#789, each person's draft kept on the server).** A draft
   that moves to the other party in a merge records no history event; the server's own
-  `unavailable` flag misses some lines that are refused at submission; and three rulings made on
+  `unavailable` flag misses some lines that are refused at submission; and remaining rulings made on
   the branch are for the owner to confirm.
   [Detail](backlog/till.md#task-7-789-each-persons-draft-kept-on-the-server)
 
 - **Loose ends left by service Task 8 (#806, the till works from the server's drafts).** An edit
   can be lost at sign-out without a message; a send cut off by the 150-second limit is not sent
-  again; drafts are not pushed to other tills; and the map tag says "Unsent" but not whose.
+  again; drafts are not pushed to other tills.
   [Detail](backlog/till.md#task-8-806-the-till-works-from-the-servers-drafts)
   - Seating a table whose answer arrives while a newer table is still opening shows the seated
     table briefly before the newer one replaces it.
@@ -2883,8 +2880,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     to a table; and a database built on purpose with a delivery table in another location now
     names the order by its own label — no product path creates that state, and whether every
     existing venue database is free of it was not checked.
-  - Unchecked Send to radios are Chromium's own dark-theme control, dim grey on the dark dialog
-    (seen in the 390 px Spanish dark screenshot).
   - Open (found by #905's review, by reading, not reproduced): on a handheld, a waiter who taps a
     free table to seat it, goes back to the order tab while the seating is still under way and
     starts Move guests can have the move set the wrong table on the new party; the suggested fix

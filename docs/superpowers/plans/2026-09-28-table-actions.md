@@ -1,5 +1,10 @@
 # Tables, parties and bills: the till's table actions — Implementation Plan
 
+2026-10-19: A773-1's direct Send all and arriving-bill checks cover the replacement course rule
+described below; the [decision and test pointers](../../backlog/kitchen.md#a-switched-off-course-uses-fire-now-owner-2026-10-17-c80)
+are retained in the kitchen notes. A773-1 remains unlanded, with cancellation/Finish and final
+acceptance still open. The dated integration status below describes the earlier checkpoint.
+
 2026-10-17: [A773](../specs/2026-10-16-a773-courses-and-groups-design.md#1-courses)
 replaces the arriving-dish rule for no course, a switched-off course and a course that is not held:
 those dishes fire on arrival. The earliest-course holding rules below describe this plan's older

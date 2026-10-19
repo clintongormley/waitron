@@ -234,9 +234,9 @@ Where each one surfaces:
 | Make now, on the till that sent made-here items | the staff names through `staffPresentationName`, each option answer's staff wording, and each extra's frozen staff name with ` x<n>` | `readMadeHereItems`, `apps/server/src/made-here.ts`, shown by `apps/till/src/widgets/make-now.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |
-| Current orders on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts` |
+| Sent on the till's table screen | the staff names, for each dish and each extra under it, resolved server-side | `readCurrentOrders`, `apps/server/src/order-groups.ts`, rendered by `apps/till/src/widgets/sent-orders.ts` |
 | The floor's chip for a held dish that can no longer be sold ("Unavailable: Steak") | the staff names, resolved server-side | `readPartySignals`, `apps/server/src/table-signals.ts` |
-| Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the tab drawer | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
+| Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the Sent dish window | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |
 | An adjustment record's `line_name` | the line's frozen staff names through `staffPresentationName`: the product and any relative variant joined in parentheses | `recordAdjustment`, `packages/adjustments/src/record.ts`, given it by `applyAdjustment`, `apps/server/src/adjustments-apply.ts` |
 
