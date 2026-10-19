@@ -1,3 +1,58 @@
+## 2026-10-19 precedence addendum: D requires issued F1; E proposed
+
+At approximately 17:08 on 2026-10-19 in Lane F's `questions.md`, the owner answered
+**REQUIRE THE F1 CHECK**. A799 stays open until an issued full customer invoice, F1,
+is proven to keep its original recorded customer name and address through upgrade.
+In the invented Harbour example, the same invoice must keep **Mara Soler, 18 Market
+Street**, even if her live customer details later change. An unpaid recipient order,
+issued F2, restart or separate new sale cannot fill that issued-F1 gap. If a qualifying
+older release cannot issue F1 through its normal supported path, A799 stays open and
+must name the prerequisite item it needs. The later builder identifies that exact item;
+none is asserted here to supply it. No workaround or new fiscal writer is authorised.
+
+Only A–D's precise scopes are approved; the full design, plan and build remain unapproved.
+This addendum overrides conflicting wording below and keeps every pre-existing byte as
+an exact historical suffix.
+
+**Next question E:** for each invented historical venue capture, should you accept the
+IDs, invoice numbers and timestamps the frozen product actually assigns, freezing them
+once with independent expected facts for every later comparison (recommended), or require
+a freshly recreated capture to produce identical IDs, invoice numbers and timestamps too?
+
+Every later upgrade run already reuses a disposable copy of one identical frozen bundle
+under either choice. E concerns producing another historical bundle from scratch; exact
+comparisons remain, with no candidate-generated expectations or time tolerance. Capture
+Mara's one actual issued F1 number, recorded issue time and row IDs and retain them with
+its original recipient facts. Under the recommendation, a freshly recreated Harbour may
+get different assigned values but needs its own separately versioned bundle and independently
+recorded and reviewed expectations. Old published bundles and expectations are never overwritten.
+This is an invented example, not an observed invoice or capture.
+
+Recommend keeping assigned facts because the upgrade check should establish that yesterday's
+records remain exact. Repeatable initial clock, random and identity inputs may need an
+old-image-compatible mechanism that has not been established. Exact initial repeatability
+is unverified; choosing it creates an investigation requirement and possible separate dependency,
+without claiming it achievable or impossible. Fixed external test identity/key inputs use only
+supported old-image seams. No domain seed SQL, current writers, old-source patches, rewriting
+generated values or golden huella/`inmutabilidad` edits are permitted by either choice.
+
+A keeps invented data written through frozen older product paths. B requires oldest supported
+plus previous retained, keeps every original bundle and independent expectations, and gives no
+R2/R3 pass or support retirement from imagined R1/R4 results. C keeps bundles and facts in their
+own GitHub Releases on the Waitron repository and the checksum index in Git. Private downloads
+through existing CI access need later verification; no extra provider, token or permission is
+authorised. Support/retirement stays open. A760 execution/reset remains separate; the same
+post-reset history and a distinct later candidate applying pending migrations through normal
+boot remain required. Same-image runs are restart-only. Keep optional-module-off cases,
+exact raw fiscal bytes and node/SIF/series identity, and separate preservation/new-sale results.
+
+Read the [current design addendum](../../../superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md#2026-10-19-precedence-addendum-d-requires-issued-f1-capture-facts-question-e-proposed)
+and the [D/E static boards](revision-d-and-capture-facts/README.md). All eight were rendered and individually inspected, with native SVG text bounds checked. These drawings are not runtime evidence. Original source observations remain
+historical and **UNVERIFIED at runtime**; this revision provides no capture/runtime/upgrade/
+new-sale/size evidence or implementation plan. Ask only E next, without reopening A–D.
+
+---
+
 ## 2026-10-19 precedence addendum: C answered with GitHub Releases; D proposed
 
 The owner's A799 C answer at approximately 16:33 selects **SEPARATE STORE + CHECKSUMS**;
