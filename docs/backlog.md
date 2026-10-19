@@ -5683,11 +5683,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   also affects setup's existing links.
   [Detail](backlog/ci.md#cross-app-links-in-the-split-vite-dev-stack)
 
-- **A811. Check whether a catalogue-screen case still prints "[Unhandled rejection] Error:
-  marker".** The case near line 2624 of `apps/dashboard/src/screens/catalogue-screen.test.ts`
-  (added by #1087) printed it in passing runs. Run the file once; if it still prints, catch the
-  rejection where it escapes (in the test or the screen); if not, delete this entry.
-
 - **Loose ends left by W92 (#1250).**
   - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
     during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
