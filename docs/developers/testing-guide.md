@@ -1397,6 +1397,13 @@ suite keeps every Escape assertion with and without busy rendering, and checks a
 press still adds once. Run `pnpm --filter @waitron/ui exec vitest run src/gestures.test.ts` and
 `pnpm --filter @waitron/till exec vitest run src/widgets/menu-browser.nutrition.test.ts`.
 
+The separate shuffled-shard run (`--shard=2/2 --sequence.shuffle --sequence.seed=891`)
+passed nutrition but failed `basket.test.ts`'s custom fractional-unit label check. In the
+installed disposable checkout at unchanged base `d5230d32d3a111206e29238f0cc029cdfbddb872`,
+`pnpm --filter @waitron/till exec vitest run src/widgets/basket.test.ts --sequence.shuffle
+--sequence.seed=891` failed the same check (1 failed, 66 passed); without the shuffle options,
+all 67 passed. That finding remains separate in the backlog; A891 changes no basket assertion.
+
 ## A browser test waits for a dialog's close event, not a timer
 
 `wt-dialog` (`packages/ui/src/components/wt-dialog.ts`) sends `wt-close` only from the browser's own

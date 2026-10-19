@@ -5365,6 +5365,11 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **The basket's custom fractional-unit test fails under shuffled test order.** On unchanged
+  main `d5230d32d`, `basket.test.ts` passes all 67 cases normally, but seed 891 loses the
+  expected `0.25 tray` label (1 failed, 66 passed). Check its language state and isolate the
+  cause without weakening the assertion. Found while checking A891; basket code is outside that item.
+
 - **A891: retain input and timer timing if the missing product-information window recurs.**
   A busy-renderer probe reproduces the original CI symptom, and the gesture now recognizes a
   held release before its overdue timer. Main run `39180066136` retained no such trace, so its
