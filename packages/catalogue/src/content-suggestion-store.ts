@@ -76,15 +76,16 @@ function validFix(fix: Fix, missing: readonly string[], languages: readonly stri
 }
 
 /**
- * Stores a finished job's results as suggestions and, in the same transaction, inserts the run's
- * next job, so a run never has a moment with no active job between two of its jobs.
+ * Stores one page of a job's results, only at the job's saved position. The last page also finishes
+ * the job and, in the same transaction, inserts the run's next job, so a run never has a moment with
+ * no active job between two of its jobs.
  */
 export type PageStored = "stored" | "complete" | "ended" | "stale";
 
 export async function storeSuggestionPage(
   tx: Transaction,
   jobId: string,
-  results: SuggestionPage,
+  page: SuggestionPage,
   context: TranslationContext,
   now: Date = new Date(),
 ): Promise<PageStored> {
@@ -93,14 +94,21 @@ export async function storeSuggestionPage(
     .from(contentSuggestionJobs)
     .where(eq(contentSuggestionJobs.id, jobId));
   if (!job || job.state !== "running") return "stale";
+  // Null until the first page is stored; the last page writes null back, but by then the job is no
+  // longer running.
+  if ((job.collectCursor ?? 0) !== page.cursor) return "stale";
   const settings = await readTranslationSettings(tx, context);
   const { languages } = settings.config;
-  const failed = new Set(results.failed.filter((key) => Object.hasOwn(job.sent, key)));
+  const collected = new Set(job.collectedRefs);
+  const failed = new Set(
+    page.failed.filter((key) => Object.hasOwn(job.sent, key) && !collected.has(key)),
+  );
   const answered = new Map<string, { ref: TranslationRef; result: SuggestionResult }>();
   let dropped = 0;
-  for (const result of results.results) {
+  for (const result of page.results) {
     const ref = Object.hasOwn(job.sent, result.ref) ? parseSuggestionRef(result.ref) : null;
-    if (!ref || failed.has(result.ref) || answered.has(result.ref)) dropped += 1;
+    if (!ref || collected.has(result.ref) || failed.has(result.ref) || answered.has(result.ref))
+      dropped += 1;
     else answered.set(result.ref, { ref, result });
   }
   const current = await readLiveItems(
@@ -180,21 +188,34 @@ export async function storeSuggestionPage(
       })),
     );
   }
-  for (const key of Object.keys(job.sent)) if (!answered.has(key)) failed.add(key);
-  const failedRefs = [...failed].sort();
-  const limitReached = results.reason === "limit_reached";
+  const collectedRefs = [...new Set([...job.collectedRefs, ...answered.keys(), ...failed])];
+  const allFailed = new Set([...job.failedRefs, ...failed]);
+  const last = page.nextCursor === null;
+  if (last) {
+    const accounted = new Set(collectedRefs);
+    for (const key of Object.keys(job.sent)) if (!accounted.has(key)) allFailed.add(key);
+  }
+  const failedRefs = [...allFailed].sort();
+  const limitReached = page.reason === "limit_reached";
   await tx
     .update(contentSuggestionJobs)
     .set({
-      state: results.state,
-      ...(limitReached ? { failure: "limit" as const } : {}),
-      finishedAt: now.toISOString(),
+      collectCursor: page.nextCursor,
+      collectedRefs,
       failedRefs,
-      failed: failedRefs.length,
-      dropped,
-      done: Object.keys(job.sent).length - failedRefs.length,
+      dropped: job.dropped + dropped,
+      ...(last
+        ? {
+            state: page.state,
+            ...(limitReached ? { failure: "limit" as const } : {}),
+            finishedAt: now.toISOString(),
+            failed: failedRefs.length,
+            done: Object.keys(job.sent).length - failedRefs.length,
+          }
+        : {}),
     })
     .where(eq(contentSuggestionJobs.id, jobId));
+  if (!last) return "stored";
   const sent = await sentInRun(tx, job.runId);
   // The month's spending cap stopped this job, so Cloud would refuse the next one; a next job with
   // no item would be refused too (see buildSuggestionJob).

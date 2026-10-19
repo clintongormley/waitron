@@ -67,7 +67,7 @@ export const contentSuggestionJobs = table(
     finishedAt: tsString("finished_at"),
     openedAt: tsString("opened_at"),
     collectCursor: count("collect_cursor"),
-    // Refs answered or failed so far in this job, across every page stored.
+    // Refs this job sent that a stored page answered or listed as failed, each at most once.
     collectedRefs: labelList("collected_refs").notNull().default([]),
   },
   (t) => [

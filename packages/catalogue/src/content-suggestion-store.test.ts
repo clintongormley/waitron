@@ -1,14 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { products } from "@waitron/db";
+import { products, withTransaction } from "@waitron/db";
 import { deactivateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";
 import { saveContentTranslations } from "./content-translations.js";
 import { setProductVariants } from "./variants.js";
-import { readSuggestionRun, recordSuggestionJobReleased } from "./content-suggestion-jobs.js";
-import { storeSuggestionPage } from "./content-suggestion-store.js";
+import {
+  readActiveSuggestionJob,
+  readSuggestionRun,
+  recordSuggestionJobReleased,
+} from "./content-suggestion-jobs.js";
+import { discardContentSuggestion, storeSuggestionPage } from "./content-suggestion-store.js";
 import type { SuggestionPage } from "./content-suggestion-types.js";
 import { contentSuggestions } from "./schema/suggestions.js";
 import {
@@ -747,3 +751,182 @@ it("a later run replaces more than one batch of an item's rows in one store", as
   expect(rows.filter((row) => row.fixRight?.startsWith("ONE"))).toEqual([]);
   expect(new Set(rows.map((row) => `${row.itemId} ${row.language}`)).size).toBe(600 * 4);
 }, 120_000);
+
+const page = (
+  cursor: number,
+  nextCursor: number | null,
+  results: SuggestionPage["results"],
+  failed: string[] = [],
+): SuggestionPage => ({
+  state: failed.length > 0 ? "partly_done" : "done",
+  cursor,
+  nextCursor,
+  results,
+  failed,
+});
+const breadNames = (en: string) => ({ es: "CLIENT-ES Pan", en });
+const jobRow = async (id: string) => (await app(allJobs)).find((row) => row.id === id)!;
+
+it("a page before the last stores its suggestions and keeps the job running at the next cursor", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  expect(
+    await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))])),
+  ).toBe("stored");
+  const after = await jobRow(job.id);
+  expect(after.state).toBe("running");
+  expect(after).toMatchObject({
+    collectCursor: 1,
+    collectedRefs: [ref(venue.bread)],
+    finishedAt: null,
+  });
+  expect(await app(suggestionRows)).toEqual(
+    inOrder([text(venue.bread, "es", "CLIENT-ES Pan"), text(venue.bread, "en", "CLIENT-EN Bread")]),
+  );
+  expect((await app(readActiveSuggestionJob))?.id).toBe(job.id);
+});
+
+it("only the last page finishes the job, counts it and chains the next", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  const olives = await app((tx) =>
+    addProduct(tx, venue.menuId, "Olives", { ca: "CLIENT-CA Olives" }),
+  );
+  await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]));
+  expect(await app(allJobs)).toHaveLength(1);
+  expect(
+    await store(
+      job.id,
+      page(1, null, [result(ref(venue.cheese), { en: "CLIENT-EN Cheese" })], [ref(venue.wine)]),
+    ),
+  ).toBe("complete");
+  const jobs = await app(allJobs);
+  expect(jobs[0]).toMatchObject({
+    state: "partly_done",
+    done: 2,
+    failed: 1,
+    failedRefs: [ref(venue.wine)],
+  });
+  expect(jobs).toHaveLength(2);
+  expect(sortedSent(jobs[1]!.sent)).toEqual({ [ref(olives)]: ["en", "es"] });
+});
+
+it("a page stored again after its transaction committed changes nothing", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  const first = page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]);
+  await store(job.id, first);
+  const rows = await app(suggestionRows);
+  expect(await store(job.id, first)).toBe("stale");
+  const after = await jobRow(job.id);
+  expect(after.dropped).toBe(0);
+  expect(after.collectedRefs).toEqual([ref(venue.bread)]);
+  expect(after.collectCursor).toBe(1);
+  expect(await app(suggestionRows)).toEqual(rows);
+});
+
+it("a page whose transaction rolled back is stored once when fetched again", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  const first = page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]);
+  await expect(
+    withTransaction(suite.db, async (tx) => {
+      await storeSuggestionPage(tx, job.id, first, context, at);
+      throw new Error("rolled back");
+    }),
+  ).rejects.toThrow("rolled back");
+  expect(await store(job.id, first)).toBe("stored");
+  const after = await jobRow(job.id);
+  expect(after).toMatchObject({ collectCursor: 1, dropped: 0 });
+  expect(await app(suggestionRows)).toEqual(
+    inOrder([text(venue.bread, "es", "CLIENT-ES Pan"), text(venue.bread, "en", "CLIENT-EN Bread")]),
+  );
+});
+
+it("a ref repeated on a later page is stored once and counted dropped", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("EN Bread"))]));
+  await store(
+    job.id,
+    page(1, 2, [
+      result(ref(venue.bread), breadNames("EN Bread again")),
+      result(ref(venue.wine), { ca: "CLIENT-CA Vi" }),
+    ]),
+  );
+  expect(await app(suggestionRows)).toEqual(
+    inOrder([
+      text(venue.bread, "es", "CLIENT-ES Pan"),
+      text(venue.bread, "en", "EN Bread"),
+      text(venue.wine, "ca", "CLIENT-CA Vi"),
+    ]),
+  );
+  const after = await jobRow(job.id);
+  expect(after.dropped).toBe(1);
+  expect(after.collectedRefs).toEqual([ref(venue.bread), ref(venue.wine)]);
+});
+
+it("a failed ref already accounted for on an earlier page is ignored and not counted", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]));
+  await store(
+    job.id,
+    page(
+      1,
+      null,
+      [result(ref(venue.cheese), { en: "CLIENT-EN Cheese" })],
+      [ref(venue.bread), ref(venue.wine)],
+    ),
+  );
+  expect((await app(suggestionRows)).filter((row) => row.itemId === venue.bread)).toHaveLength(2);
+  expect(await jobRow(job.id)).toMatchObject({
+    failedRefs: [ref(venue.wine)],
+    dropped: 0,
+    done: 2,
+    failed: 1,
+  });
+});
+
+it("a suggestion discarded between pages stays discarded and the next page is stored", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  await store(job.id, page(0, 1, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))]));
+  await app(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(contentSuggestions)
+      .where(eq(contentSuggestions.itemId, venue.bread));
+    for (const row of rows) await discardContentSuggestion(tx, row.id);
+  });
+  await store(
+    job.id,
+    page(1, null, [
+      result(ref(venue.wine), { ca: "CLIENT-CA Vi" }),
+      result(ref(venue.cheese), { en: "CLIENT-EN Cheese" }),
+    ]),
+  );
+  expect(await app(suggestionRows)).toEqual(
+    inOrder([text(venue.wine, "ca", "CLIENT-CA Vi"), text(venue.cheese, "en", "CLIENT-EN Cheese")]),
+  );
+  expect((await jobRow(job.id)).state).toBe("done");
+});
+
+it("a page for a job that is not running, or at another cursor, is stale", async () => {
+  const venue = await seedSuggestionVenue(suite.db);
+  const job = await runningJob(suite.db);
+  const before = await jobRow(job.id);
+  expect(
+    await store(job.id, page(1, 2, [result(ref(venue.bread), breadNames("CLIENT-EN Bread"))])),
+  ).toBe("stale");
+  expect(await app(suggestionRows)).toEqual([]);
+  expect(await jobRow(job.id)).toEqual(before);
+  expect(await store(job.id, page(0, null, translateAll(job.sent)))).toBe("complete");
+  const rows = await app(suggestionRows);
+  const completed = await app(allJobs);
+  expect(
+    await store(job.id, page(0, null, [result(ref(venue.bread), breadNames("EN Bread later"))])),
+  ).toBe("stale");
+  expect(await app(suggestionRows)).toEqual(rows);
+  expect(await app(allJobs)).toEqual(completed);
+});
