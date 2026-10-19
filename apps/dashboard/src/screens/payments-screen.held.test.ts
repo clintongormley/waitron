@@ -107,6 +107,9 @@ describe("held card payments on the Payments screen", () => {
       `Order 63 · ${formatAlertTime("2026-07-02T11:05:00.000Z")}`,
       "Charged €10.00 · Stripe paid out €7.00",
     ]);
+    const time = q(el, "[data-test=held-payment-h-1] .stuck-order time")!;
+    expect(time.getAttribute("datetime")).toBe("2026-07-01T19:40:00.000Z");
+    expect(time.textContent!.trim()).toBe(formatAlertTime("2026-07-01T19:40:00.000Z"));
     const ids = [...section.querySelectorAll("li")].map((li) => li.dataset.test);
     expect(ids).toEqual(["held-payment-h-1", "held-payment-h-2"]);
     const button = q(el, "[data-test=record-held-h-1]")!;
@@ -114,6 +117,17 @@ describe("held card payments on the Payments screen", () => {
     expect(button.getAttribute("variant")).toBe("secondary");
     expect(button.getAttribute("aria-label")).toBe(
       `Record outcome: Order 57 · ${formatAlertTime("2026-07-01T19:40:00.000Z")}`,
+    );
+  });
+
+  it("shows only the order for a held payment with no payout time", async () => {
+    const el = await mount(
+      stubApi({ listHeldPayments: vi.fn().mockResolvedValue([{ ...HELD[0]!, settledAt: null }]) }),
+    );
+    expect(lines(el, "h-1")).toEqual(["Order 57", "Charged €10.00 · Stripe paid out €12.50"]);
+    expect(q(el, "[data-test=held-payment-h-1] time")).toBeNull();
+    expect(q(el, "[data-test=record-held-h-1]")!.getAttribute("aria-label")).toBe(
+      "Record outcome: Order 57",
     );
   });
 
@@ -349,6 +363,7 @@ describe("the Record what was done dialog", () => {
       expect(field(el, "pin").error).toBe(codeMessage(code));
       expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
       expect(dialog(el)).not.toBeNull();
+      expect(record(el).disabled, "a refusal alone leaves Record enabled").toBe(false);
       change(el, "note", "Checked Stripe");
       await flush(el);
       expect(field(el, "pin").error).toBe(codeMessage(code));

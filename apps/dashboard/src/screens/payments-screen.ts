@@ -1445,7 +1445,6 @@ export class PaymentsScreen extends LitElement {
     if (this.heldRefusal?.field) this.#focusFirstInvalid("[data-test=held-outcome-dialog]");
   }
 
-  /** The held dialog's own checks, once submitted, with a refusal that names a shown field. */
   #heldErrors(): Partial<Record<HeldField, string>> {
     const errors: Partial<Record<HeldField, string>> = {};
     if (this.heldAttempted) {
@@ -1677,9 +1676,16 @@ export class PaymentsScreen extends LitElement {
 
   #renderHeldRow(row: HeldPaymentRow): TemplateResult {
     const order = this.#heldOrder(row);
+    const number = fill("payments.stuck.order", { number: String(row.orderNumber) });
     return html`<li class="stuck" data-test=${`held-payment-${row.holdId}`}>
       <div class="stuck-body">
-        <p class="stuck-order">${order}</p>
+        <p class="stuck-order">
+          ${number}${
+            row.settledAt
+              ? html` · <time datetime=${row.settledAt}>${formatAlertTime(row.settledAt)}</time>`
+              : nothing
+          }
+        </p>
         <p class="held-amounts">
           ${fill("payments.held.amounts", {
             amount: formatMoney(row.amount, currentLocale()),
