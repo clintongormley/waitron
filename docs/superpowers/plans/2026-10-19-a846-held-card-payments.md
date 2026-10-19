@@ -66,7 +66,9 @@ the first case cannot pass by default. Control: with `stripe-report-client.ts:23
 as a difference at `9.66`; `12.11` for `12.50`); restored, all three pass.
 
 **Every cause that can make Stripe's figure differ from Waitron's**, each with Stripe's own words
-(fetched with `curl` from the `.md` form of each page on 2026-10-19 and quoted from the raw text)
+(fetched with `curl` from the `.md` form of each page on 2026-10-19 and quoted from the raw text;
+send `-H "Accept-Language: en-US"` to re-check — on 2026-10-19 the hold page came back in Italian
+without it)
 and whether Waitron can hit it. Waitron's figure is `payments.amount`
 (`packages/payments/src/schema/payments.ts:76`), read by `listReconcilable`
 (`packages/payments/src/store.ts:709-740`); no update in `store.ts` sets `amount` after a payment is
@@ -235,29 +237,42 @@ re-check chain are unchanged), so one held payment raises one alert, not three.
 "name every held payment" needs the alert to be replaced when the set changes.
 `refreshHeldAlert(tx, sink, { now, by })` in a new `packages/payments/src/held-alert.ts`:
 1. `H` = every hold with no outcome, oldest first.
-2. Find the latest `payment.reconcile_held` incident, open or handled.
-3. If `H` is empty: mark an open one handled (by `by`) and stop. ("When no held payment is left, the
-   alert goes.")
-4. If one is open and names exactly `H`'s payments: do nothing. If it names a different set: mark it
-   handled (by `by`) and raise a new one naming `H`.
-5. If none is open: raise one naming `H` when there was never one, when the latest was detected
-   before the start of the current UTC day (the morning return), or when `H` holds a payment the
-   latest did not name (a new held payment is never hidden).
-The sweep calls it in T1 (so the morning return happens even when the provider cannot be reached
-that day) and again at the end of T2 (after new holds are written), with `by: null`. The Record
-route calls it in its own transaction with `by` = the recording manager. A replaced alert therefore
-shows in the Handled tab as handled by the manager who recorded an outcome, or by "someone" when the
-sweep replaced it because a new held payment appeared (Open point 3).
+2. Read two incidents of code `payment.reconcile_held` from the payment check: `open`, the open one
+   (the `incidents_open_dedup` index allows at most one), and `lastHandled`, the most recently
+   handled one (newest `acknowledged_at`, then id). Do not pick "the latest, open or handled" by
+   `detected_at`: the sweep passes one `now` to T1 and T2, so a replacement in T2 gives the handled
+   alert and its successor the same `detected_at`, and the id tie-break between two random UUIDs
+   would then pick either.
+3. If `H` is empty: mark `open` handled (by `by`), if there is one, and stop. ("When no held payment
+   is left, the alert goes.")
+4. If `open` names exactly `H`'s payments: do nothing. If it names a different set: mark it handled
+   (by `by`) and raise a new one naming `H`.
+5. If there is no `open`: raise one naming `H` when `lastHandled` is null, when `lastHandled` was
+   handled before the start of the current UTC day (the morning return: the owner's "comes back the
+   next morning" counts from when it was marked handled, so an alert raised yesterday and handled
+   at 15:00 today stays down until tomorrow), or when `H` holds a payment `lastHandled` did not name
+   (a new held payment is never hidden).
+The sweep calls it in T1 (so the morning return happens even when the provider's settlement report
+cannot be fetched that day — though not when `StripeReconciler.reconcile`'s `resolveAccount()`
+throws first, `packages/payments-stripe/src/reconciler.ts:37`, for example with
+`server.credential_unusable` or `payment.credential_environment_mismatch`
+(`apps/server/src/stripe-account.ts:59,63`), because that throw comes before `reconcilePayments`
+opens T1; Open point 7) and again at
+the end of T2 (after new holds are written), with `by: null`. The Record route calls it in its own
+transaction with `by` = the recording manager. A replaced alert therefore shows in the Handled tab
+as handled by the manager who recorded an outcome, or by "someone" when the sweep replaced it
+because a new held payment appeared (Open point 3).
 
 **D6. How payments reaches incidents.** `packages/payments` keeps `@waitron/core` a development
 dependency (`reconcile.ts:47-51`), so the sink is typed structurally and injected, as `IncidentSink`
-is: `HeldAlertSink = { raise: IncidentSink; latest(tx, { origin, code }); handle(tx, { id, personId,
-handledAt }) }`. `@waitron/core` gains `latestIncident(tx, { origin, code })` (newest by
-`detected_at`, then id, open or handled) and `markIncidentHandled` accepts `personId: string | null`
-(`incidents.ts:216-224`; null today is what the Handled tab already reads as "someone").
-`StripeReconciler` (`packages/payments-stripe/src/reconciler.ts:40-50`) and `FakeReconciler`
-(`packages/payments/src/testing/fake-reconciler.ts`) pass `{ raise: recordIncidentOnce, latest:
-latestIncident, handle: markIncidentHandled }`.
+is: `HeldAlertSink = { raise: IncidentSink; current(tx, { origin, code }); handle(tx, { id,
+personId, handledAt }) }`. `@waitron/core` gains `currentIncidentsOf(tx, { origin, code })`,
+answering `{ open, lastHandled }` as D5 step 2 defines them (each `null` when there is none), and
+`markIncidentHandled` accepts `personId: string | null` (`incidents.ts:216-224`; null today is what
+the Handled tab already reads as "someone"). `StripeReconciler`
+(`packages/payments-stripe/src/reconciler.ts:40-50`) and `FakeReconciler`
+(`packages/payments/src/testing/fake-reconciler.ts`) pass `{ raise: recordIncidentOnce, current:
+currentIncidentsOf, handle: markIncidentHandled }`.
 
 **D7. "Next morning" is the next UTC day**, the same day boundary as the scheduler's periods
 (`utcDayStart`, `packages/scheduler/src/derive.ts:7`). The first check of each day runs at the first
@@ -286,16 +301,16 @@ so `/health` still reports that pass as degraded (`health.ts:86-90`).
 (the owner's decision): each keeps " Marking it handled does not fix it." (ES " Marcarla como
 resuelta no lo soluciona."). The held alert, adapted from the picture to the `{count}` form every
 payment alert uses:
-- EN: `{count} card payments for closed orders were paid out at a different amount than was charged. Waitron will not refund them. Record what was done with each on Payments.`
-- ES: `{count} pagos con tarjeta de pedidos cerrados se liquidaron por un importe distinto del cobrado. Waitron no los devolverá. Registra qué se hizo con cada uno en Pagos.`
-  (use the Spanish nav name the dashboard already gives the Payments screen; check it in
-  `strings.ts` and quote it.)
+- EN: `{count} card payments for closed orders were paid out at a different amount than was charged. Waitron will not refund them. Record what was done with each on Card payments.`
+- ES: `{count} pagos con tarjeta de pedidos cerrados se liquidaron por un importe distinto del cobrado. Waitron no los devolverá. Registra qué se hizo con cada uno en Pagos con tarjeta.`
+  (the screen's own nav names, `nav.payments`: "Card payments" at `strings.ts:978`, "Pagos con
+  tarjeta" at `:3993`.)
 It carries no `MORE_EN`: the replacement in D5 keeps the count true. The header comment (`:5-11`)
 gains the held alert among those that come back on their own.
 
 **D11. The list and the dialog, quoted from the picture.** Inside `#renderBillRecovery()`, after the
 existing lists, a sub-heading `Held: paid out at a different amount` and one row per held payment:
-`Order {number} · {date, time}` (the payment's `settled_at`, formatted as the section's other rows
+`Order {number} · {date, time}` (the payment's `settled_at`, sent as `settledAt`, formatted as the section's other rows
 format times), under it `Charged {amount} · {provider} paid out {providerAmount}` (the provider's
 display name as the section already shows it), and a secondary button `Record outcome`. Shown only
 when at least one held payment exists, and the section's "all lists empty" check (`:1429-1432`)
@@ -316,7 +331,7 @@ ese pago.`). Spanish list heading `Retenidos: liquidados por otro importe`; row 
 `Conservado: el dinero se debía`, `Nota`, `Registrar`.
 
 **D12. The Record route.** `GET /management-api/payments/held` lists every hold with no outcome,
-oldest first: `{ holdId, paymentRef, provider, orderNumber, capturedAt, amount, providerAmount }`
+oldest first: `{ holdId, paymentRef, provider, orderNumber, settledAt, amount, providerAmount }`
 (amounts as decimal strings via `centsToDecimal`). `POST /management-api/payments/held/:id/outcome`
 with `{ outcome, note?, pin }`: management session, `payments.manage`, the PIN checked before the
 write lock through `pinGated` exactly as the attest route does; one `withTransaction` that
@@ -324,8 +339,8 @@ re-checks the hold, writes the outcome row and calls `refreshHeldAlert` with `by
 Refusals, named by concept beside their siblings `payment.not_found` and
 `payment.already_associated` (`packages/payments/src/store.ts:291,313`):
 `payment.hold_not_found` (404), `payment.hold_already_recorded` (409), `management.request_invalid`
-with `field: "outcome"` or `field: "note"` (a note that is not text, or longer than the attest
-route's limit if it has one), `shared.invalid_id`, and the PIN and session refusals the attest
+with `field: "outcome"` or `field: "note"` (a note present but not text; `parseAttestation`
+sets no length limit, `payments-api.ts:221-232`, so neither does this route), `shared.invalid_id`, and the PIN and session refusals the attest
 route already gives. The note is trimmed and an empty note stored as null.
 
 ---
@@ -339,20 +354,23 @@ a pipe. `useVenueDb` empties every table between tests with the triggers dropped
 (`packages/db/src/testing/venue-db.ts:34-41,190-195`), so suites whose `beforeEach` deletes
 `payments` keep working after holds exist — confirm by running them, do not assume.
 
-### Task 1: core can find the latest alert of a code, and the system can mark one handled
+### Task 1: core can find a code's open and last-handled alert, and the system can mark one handled
 
-**Files:** Modify `packages/core/src/incidents.ts` (add `latestIncident`; `markIncidentHandled`'s
-`personId: string | null`), `packages/core/src/index.ts` (export). Test
+**Files:** Modify `packages/core/src/incidents.ts` (add `currentIncidentsOf`, D6;
+`markIncidentHandled`'s `personId: string | null`), `packages/core/src/index.ts` (export). Test
 `packages/core/src/incidents.test.ts`.
 
-- [ ] **Step 1: failing tests** — `"finds the latest incident of a code, open or handled"` (two
-  incidents of one code a day apart, the older handled; a third of another code; expects the newer,
-  and `null` for an unused code); `"marks an incident handled by no one"` (personId `null`; the row
-  is handled, `acknowledged_by` null, and the key is free: a `recordIncidentOnce` after it returns
-  `true`).
+- [ ] **Step 1: failing tests** — `"answers the open incident of a code and the last one handled"`
+  (three incidents of one code: two handled at different times, one open; a fourth of another code
+  and one of the same code from another source; expects the open one and the later-handled one,
+  and `{ open: null, lastHandled: null }` for an unused code); `"picks the open incident, not a
+  handled one detected at the same instant"` (a handled and an open incident with equal
+  `detected_at`, the handled one given the higher id — the case a `detected_at` ordering gets
+  wrong); `"marks an incident handled by no one"` (personId `null`; the row is handled,
+  `acknowledged_by` null, and the key is free: a `recordIncidentOnce` after it returns `true`).
 - [ ] **Step 2:** `pnpm --filter @waitron/core exec vitest run src/incidents.test.ts` → FAIL.
 - [ ] **Step 3:** implement; **Step 4:** same command → PASS. If `packages/core` has an
-  "exports exactly" pin, it gains `latestIncident` (say so in the commit).
+  "exports exactly" pin, it gains `currentIncidentsOf` (say so in the commit).
 - [ ] **Step 5:** `pnpm exec vitest run scripts/errors-reachable.test.ts`; typecheck `@waitron/core`
   and `@waitron/server` (the route's caller of `markIncidentHandled` still passes a string).
 - [ ] **Commit** — `Let the payments check find its latest alert and close one itself (A846)`.
@@ -361,17 +379,22 @@ a pipe. `useVenueDb` empties every table between tests with the triggers dropped
 
 **Files:** Modify `packages/scheduler/src/duty.ts` (`retryParkedAfterMs?: number` on `PeriodDuty`,
 and correct the comment at `:25-27` so it says parking is final unless the duty asks), `run.ts`
-(`runOne`, `:172-200`: the successor's due time is `resweepAfter` on success, or
-`now + duty.retryParkedAfterMs` on park; the "mutually exclusive" comment at `:209-210` still holds
-because a parked row has no `nextAttemptAt`), `apps/server/src/reconcile-duty.ts` (set
+(`runOne`, `:141-217`: the successor's due time is `resweepAfter` on success, or
+`now + duty.retryParkedAfterMs` on park; the "mutually exclusive" comment at `:213-214` still holds
+because a parked row has no `nextAttemptAt`, but `CompletedRun`'s comment at `:124-128` — "Null
+there when the run left nothing further due (… or a park …)" — becomes false for a duty that sets
+the field: correct it), `apps/server/src/reconcile-duty.ts` (set
 `retryParkedAfterMs: DAY_MS`). Tests `packages/scheduler/src/run.test.ts`,
 `packages/scheduler/src/resweep.test.ts`, `apps/server/src/reconcile-duty.test.ts`.
 
 - [ ] **Step 1: failing tests** in `run.test.ts`, with a throwing duty that sets the field
   (`packages/scheduler/src/testing/fake-duty.ts:12-35` shows the shape):
   `"queues the parked day again after the duty's retry delay"` (three failing ticks two hours apart;
-  the row is `parked`, a generation-1 `pending` row exists due at park time plus the delay, and
-  the tick reports that as `nextDueAt`); `"runs the requeued day when it is due and stops on
+  the row is `parked`, and a generation-1 `pending` row exists with `next_attempt_at` at park time
+  plus the delay. Do not assert the tick's `nextDueAt` equals that time: `runDue` folds in the
+  derivation's next UTC-day boundary (`derive.ts`, `nextBoundary`; `run.ts:88`), which is always
+  earlier than park time plus one day, so the tick reports the boundary); `"runs the requeued day
+  when it is due and stops on
   success"`; `"parks a first check too, and requeues it"` (generation 0 parks);
   `"keeps one chain: a parked requeue that fails again queues one more, not two"`. Keep
   `"parks a period after maxAttempts and stops retrying it"` (`:131`) unchanged — it is the duty
@@ -407,6 +430,10 @@ is).
 - [ ] **Step 5: guards** —
   `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts scripts/append-only-migration-sets.test.ts scripts/id-columns-are-references.test.ts scripts/column-vocabulary.test.ts scripts/module-graph-honesty.test.ts scripts/journal-monotonic.test.ts`.
   `schema-constraints.test.ts` lists constraint and index names by table: add the new ones there.
+  `append-only-triggers.test.ts` lists every append-only table by name (`payment_resolutions` at
+  `:51`): add both there. `packages/payments/src/migrations.ts:8` derives the descriptor's
+  `appendOnlyTables` from `PAYMENTS_CLASSIFICATION`, so the descriptor half of CLAUDE.md §3's
+  "travels in both" rule follows from the classification rows; the manifest half is the hand edit.
   `migration-upgrade.test.ts` may need sample values for the new tables in its `CANDIDATES` — adding
   them is allowed; say so in the commit. Then `pnpm --filter @waitron/composition exec vitest run`,
   `pnpm --filter @waitron/payments exec vitest run src/classification.test.ts src/migrations.test.ts src/schema-ownership.test.ts src/monetary-columns.test.ts`,
@@ -460,38 +487,61 @@ class but still marks its settlement matched). Tests `packages/payments/src/reco
   reconciler and the fee test); typecheck.
 - [ ] **Commit** — `The payments check keeps each held payment and stops checking one with an outcome (A846)`.
 
-### Task 6: the held-payments alert
+### Task 6a: the held-payments alert, on its own
+
+Split from one task so each implementer stays well under about 100 tool calls; 6b wires it in.
 
 **Files:** Create `packages/payments/src/held-alert.ts` (`HeldAlertSink`, `refreshHeldAlert`, D5–D7).
-Modify `reconcile.ts` (`ReconcileDeps.heldAlerts`; call it in T1 and at the end of T2; leave held
-payments out of the orphan and drift alert groups, D4; the comment at `:329-335` stays true),
-`packages/payments-stripe/src/reconciler.ts` and `packages/payments/src/testing/fake-reconciler.ts`
-(pass the core functions, D6), `apps/dashboard/src/i18n/alert-messages.ts` (the held message, D10),
+Modify `apps/dashboard/src/i18n/alert-messages.ts` (the held message, D10),
 `scripts/alert-codes.test.ts` (`INCIDENT_CODE_SOURCES`, `:24-40`, gains
 `packages/payments/src/held-alert.ts`, so the guard reads its code). Test: create
-`packages/payments/src/held-alert.test.ts` with the real `recordIncidentOnce`, `latestIncident` and
-`markIncidentHandled`; extend `reconcile.test.ts`.
+`packages/payments/src/held-alert.test.ts` with the real `recordIncidentOnce`, `currentIncidentsOf`
+and `markIncidentHandled`, and holds written through Task 4's `recordHold`/`recordHoldOutcome`.
 
 - [ ] **Step 1: failing tests**, each reading the `incidents` rows:
   `"raises one alert naming every held payment, whatever day it was held"` (holds from 1 and 2 July;
   one open `payment.reconcile_held`, `count: 2`, both refs); `"replaces an open alert when a payment
   is newly held"` (old one handled with `acknowledged_by` null, new names both);
-  `"raises again the next UTC day after it was handled"` and `"does not raise again the same day
-  after it was handled"`; `"raises at once, the same day, for a payment the handled alert did not
-  name"`; `"closes the open alert when no held payment is left"`; `"marks a replaced alert handled
-  by the person given"`; in `reconcile.test.ts`, `"leaves a held payment out of the orphan and
-  difference alerts"` and `"raises the morning alert even when the provider cannot be reached"`
-  (report `fetch` throws; T1 already raised it).
-- [ ] **Step 2:** `pnpm --filter @waitron/payments exec vitest run src/held-alert.test.ts src/reconcile.test.ts` → FAIL.
-- [ ] **Step 3–4:** implement; same command → PASS. Existing assertions that expected
-  `remediation: "amountDrifted"` inside `payment.reconcile_orphan`'s params
-  (`reconcile.test.ts:760-845`) now find that payment in `payment.reconcile_held` instead: move each
-  assertion, do not delete it, and list every moved one in the commit message.
+  `"replaces an alert twice at one instant and still finds the open one"` (two replacements with
+  the same `now`, then a third call with an unchanged set raises nothing and leaves exactly one open
+  row — the tie D5 step 2 avoids); `"raises again the next UTC day after it was handled"` and
+  `"does not raise again the same day after it was handled"`; `"does not raise again the day it
+  was handled, even when it was raised the day before"` (raised 1 July 00:05, handled 2 July 15:00,
+  called 2 July 16:00: no new row; called 3 July 00:05: a new row); `"raises at once, the same day,
+  for a payment the handled alert did not name"`; `"closes the open alert when no held payment is
+  left"`; `"marks a replaced alert handled by the person given"`; `"raises nothing when no payment
+  is held"`.
+- [ ] **Step 2:** `pnpm --filter @waitron/payments exec vitest run src/held-alert.test.ts` → FAIL.
+- [ ] **Step 3–4:** implement; same command → PASS.
 - [ ] **Step 5:** `pnpm exec vitest run scripts/alert-codes.test.ts scripts/ongoing-alert-codes.test.ts scripts/errors-reachable.test.ts`,
-  `pnpm --filter @waitron/dashboard exec vitest run src/i18n/alerts.test.ts`,
-  `pnpm --filter @waitron/payments-stripe exec vitest run --project node`; typecheck
-  `@waitron/payments`, `@waitron/payments-stripe`, `@waitron/dashboard`.
+  `pnpm --filter @waitron/dashboard exec vitest run src/i18n/alerts.test.ts`; typecheck
+  `@waitron/payments`, `@waitron/dashboard`.
 - [ ] **Commit** — `One alert names every held card payment and comes back each morning (A846)`.
+
+### Task 6b: the sweep raises the held alert instead of the orphan and difference alerts
+
+**Files:** Modify `reconcile.ts` (`ReconcileDeps.heldAlerts`; call `refreshHeldAlert` in T1 and at
+the end of T2; leave held payments out of the orphan and drift alert groups, D4; the comment at
+`:329-335` stays true), `packages/payments-stripe/src/reconciler.ts` and
+`packages/payments/src/testing/fake-reconciler.ts` (pass the core functions, D6). Tests: extend
+`reconcile.test.ts`.
+
+- [ ] **Step 1: failing tests** in `reconcile.test.ts`: `"leaves a held payment out of the orphan
+  and difference alerts"` (and an orphan that is not held still raises `payment.reconcile_orphan`
+  in the same sweep — the legitimate case beside the removal); `"raises the morning alert even when
+  the settlement report cannot be fetched"` (report `fetch` throws; T1 already raised it).
+- [ ] **Step 2:** `pnpm --filter @waitron/payments exec vitest run src/reconcile.test.ts src/reconcile.concurrency.test.ts src/reconcile.wiring.test.ts` → FAIL.
+- [ ] **Step 3–4:** implement; same command → PASS. Existing assertions that expected
+  `remediation: "amountDrifted"` inside `payment.reconcile_orphan`'s params (in `reconcile.test.ts`
+  today at `:845` and `:955`; grep `amountDrifted` across every `*.test.ts`, which also finds
+  `index.test.ts:190`, a type pin that stays) now find that payment in `payment.reconcile_held`
+  instead: move each assertion, do not delete it, and list every moved one in the commit message.
+  `OrphanRemediation` keeps `"amountDrifted"`: the sweep's result lists still carry it (D4).
+- [ ] **Step 5:** `pnpm --filter @waitron/payments-stripe exec vitest run --project node`,
+  `pnpm --filter @waitron/server exec vitest run src/alerts.test.ts src/reconcile-duty.test.ts`;
+  typecheck `@waitron/payments`,
+  `@waitron/payments-stripe`, `@waitron/server`.
+- [ ] **Commit** — `The payments check reports held payments in their own alert (A846)`.
 
 ### Task 7: a recorded alert can link to its screen; the wording stops promising nothing
 
@@ -504,9 +554,17 @@ screen's tests (grep `alert-go-to`), `apps/dashboard/src/i18n/alerts.test.ts`.
 
 - [ ] **Step 1: failing tests** — the server answers a `payment.reconcile_held` incident with
   `screen: "payments"` and area `payments`, and a `payment.reconcile_orphan` one with no screen; the
-  bell and the Alerts screen show both "Mark handled" and "Go to Payments" for the held alert, and
+  bell and the Alerts screen show both "Mark handled" and "Go to Card payments" (ES "Ir a Pagos con tarjeta"; the label is
+  `alerts.go_to` filled with `nav.payments`, `alert-format.ts:83`) for the held alert, and
   Go to opens Payments (`wt-alert-go-to`); an event with no screen still shows only "Mark handled";
   the five reconcile messages no longer contain "may not check", in either language.
+  `apps/dashboard/src/widgets/alert-format.test.ts:53` today asserts that an event WITH a screen
+  answers `null`: that is the behaviour this task changes on purpose, so invert it (an event with a
+  screen the session can open answers the screen; one it cannot open, and one with no screen,
+  answer `null`) and name the inversion in the commit message.
+  The header comment's "the daily payments check looks at each day once" (`alert-messages.ts:5`)
+  is already untrue of a day with a held payment (`reconcile-duty.ts` re-sweeps it) and becomes
+  untrue of a parked day after Task 2: correct it with D10's header change.
 - [ ] **Step 2:** run each file with `pnpm --filter <pkg> exec vitest run <file>` → FAIL.
 - [ ] **Step 3–4:** implement; same commands → PASS. Then
   `pnpm --filter @waitron/dashboard exec vitest run src/widgets src/screens/alerts-screen.test.ts`
@@ -519,7 +577,9 @@ screen's tests (grep `alert-go-to`), `apps/dashboard/src/i18n/alerts.test.ts`.
 
 **Files:** Modify `apps/server/src/payments-api.ts` (D12; follow `/payments/stuck` at `:938-974` for
 the list and the bill attest route at `:1196-1237` for the PIN gate), `apps/server/src/errors.ts` only
-if a code is thrown there (the two hold codes belong to `packages/payments`). Test: create
+if a code is thrown there (the two hold codes belong to `packages/payments`); the route file's
+`STATUS` map (`payments-api.ts:125`) gains `payment.hold_not_found: 404` and
+`payment.hold_already_recorded: 409`, beside `payment.not_stuck: 409`. Test: create
 `apps/server/src/payments-api.held.test.ts`, set up as `payments-api.stuck.test.ts:103-160` is.
 
 - [ ] **Step 1: failing tests** — legitimate: lists two held payments from different days, oldest
@@ -545,7 +605,7 @@ if a code is thrown there (the two hold codes belong to `packages/payments`). Te
 **Files:** Create `apps/server/src/held-payments.scheduler.test.ts`, built from the probe
 `~/waitron-campaign-c/a846-design/probe.test.ts` (outside the repository): `useVenueDb({ migrations:
 migrationOptionsFor(manifestSets(), null) })`, `runDue` with `DEFAULTS`, `reconcilerAsDuty` over
-`FakeReconciler` (Task 6 gave it the held sink), a settlement report that can be told to fail. Give
+`FakeReconciler` (Task 6b gave it the held sink), a settlement report that can be told to fail. Give
 `FakeReconciler` a provider-name option instead of the probe's `Object.defineProperty`, or use one
 database per `describe`.
 
@@ -561,48 +621,83 @@ database per `describe`.
   (and the control fails as described).
 - [ ] **Commit** — `Check the held-payment loop end to end on the real scheduler (A846)`.
 
-### Task 10: the Payments screen's Held list and its dialog
+### Task 10a: the Payments screen's Held list (rows only, no dialog)
+
+Split from one task so each implementer stays well under about 100 tool calls; 10b adds the dialog.
 
 **Files:** Modify `apps/dashboard/src/api/client.ts` (`listHeldPayments`, `recordHeldOutcome`, the
-row type beside `StuckBillPaymentRow` at `:1857-1872`), `apps/dashboard/src/api/live-queries.ts`
+row type beside `StuckBillPaymentRow` at `:1857-1872`; the list is a GET like
+`listStuckBillPayments`, `:4287-4289`), `apps/dashboard/src/api/live-queries.ts`
 (`listHeldPayments: ["payment_holds", "payment_hold_outcomes", "payments", "working_orders"]`),
 `apps/dashboard/src/screens/payments-screen.ts` (watch the list beside `:538-562`; the sub-list in
-`#renderBillRecovery()`; a held dialog following `#openBillAction`/`#attestBill`/`#renderBillDialog`,
-with `draftScopeFor` and `saveActionState`; field primitives only: `wt-combobox`, `wt-input`;
-required marks from `required`; the PIN refusal beside the PIN; not-found and already-recorded close
-the dialog and show the section's result line; other refusals in the bottom message),
-`apps/dashboard/src/i18n/strings.ts` (EN and ES, D11). Tests: create
-`apps/dashboard/src/screens/payments-screen.held.test.ts`,
-`apps/dashboard/src/screens/payment-held-outcome.unsaved.test.ts`; extend
-`payments-screen.a11y.test.ts` (the held list and the dialog, both themes),
-`payments-screen.save-state.test.ts`, `apps/dashboard/src/api/client-routes.test.ts`.
+`#renderBillRecovery()`, with a `Record outcome` button that does nothing yet), and
+`apps/dashboard/src/i18n/strings.ts` (the list's EN and ES words, D11). Tests: create
+`apps/dashboard/src/screens/payments-screen.held.test.ts`; extend
+`payments-screen.a11y.test.ts` (the held list, both themes), `apps/dashboard/src/api/client-routes.test.ts`
+and `apps/dashboard/src/api/live-queries.test.ts` (rows for `listHeldPayments`, as `:124-125`
+have for `listStuckBillPayments`).
 
-This task is large; if it passes about 100 tool calls, split it at the list (rows drawn, no dialog)
-and hand over.
+Every test that fakes the screen's API gains `listHeldPayments` (today these name
+`listStuckBillPayments`: `apps/dashboard/src/dashboard-app.test.ts`,
+`src/screens/payment-attestation.unsaved.test.ts`, `src/screens/payment-readers.unsaved.test.ts` and
+every `src/screens/payments-screen*.test.ts`; re-grep), so none of them starts failing on a
+missing method.
 
 - [ ] **Step 1: failing tests** — the list draws each row's two lines and button from the API, in
-  both languages; the section shows when only held payments exist; Record opens quiet and disabled
-  until the draft changes; submitting with no outcome marks the outcome field and shows the bottom
-  message `Correct the highlighted fields to continue.`; a refused PIN shows beside the PIN and stays
-  until it changes; `payment.hold_already_recorded` closes the dialog and shows the result line; a
-  successful record sends `{ outcome, note, pin }` (note omitted when blank) and refreshes the list;
-  leaving with a changed draft asks first (the unsaved test); axe passes in light and dark.
-- [ ] **Step 2:** `pnpm --filter @waitron/dashboard exec vitest run src/screens/payments-screen.held.test.ts src/screens/payment-held-outcome.unsaved.test.ts src/screens/payments-screen.a11y.test.ts src/screens/payments-screen.save-state.test.ts src/api/client-routes.test.ts` → FAIL.
-- [ ] **Step 3–4:** implement; same command → PASS. Then the rest of the screen's files:
-  `pnpm --filter @waitron/dashboard exec vitest run src/screens/payments-screen` (a path filter).
-- [ ] **Step 5:** `pnpm exec vitest run scripts/live-subscriptions.test.ts scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/pinned-actions-column.test.ts`;
+  both languages; the section shows when only held payments exist, and stays hidden when every
+  list, held included, is empty; a held payment whose outcome is recorded leaves the list when the
+  live query refreshes; axe passes in light and dark.
+- [ ] **Step 2:** `pnpm --filter @waitron/dashboard exec vitest run src/screens/payments-screen.held.test.ts src/screens/payments-screen.a11y.test.ts src/api/client-routes.test.ts src/api/live-queries.test.ts` → FAIL.
+- [ ] **Step 3–4:** implement; same command → PASS. Then
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/payments-screen src/screens/payment-attestation.unsaved.test.ts src/screens/payment-readers.unsaved.test.ts src/dashboard-app.test.ts`.
+- [ ] **Step 5:** `pnpm exec vitest run scripts/live-subscriptions.test.ts scripts/style-token-names.test.ts scripts/pinned-actions-column.test.ts`;
   typecheck `@waitron/dashboard`. Measure free memory before the browser run
   (`memory_pressure | grep free`).
-- [ ] **Commit** — `The Payments screen lists held card payments and records what was done (A846)`.
+- [ ] **Commit** — `The Payments screen lists held card payments (A846)`.
+
+### Task 10b: the Record what was done dialog
+
+**Files:** `apps/dashboard/src/screens/payments-screen.ts` (a held dialog following
+`#openBillAction`/`#attestBill`/`#renderBillDialog`, with `draftScopeFor` and `saveActionState`;
+field primitives only: `wt-combobox`, `wt-input`; required marks from `required`, the note not
+required; the PIN refusal beside the PIN; not-found and already-recorded close the dialog and show
+the section's result line; other refusals in the bottom message),
+`apps/dashboard/src/i18n/strings.ts` (the dialog's EN and ES words, D11),
+`apps/dashboard/src/i18n/codes.ts` (sentences for `payment.hold_not_found` and
+`payment.hold_already_recorded`, D11, beside `payment.not_stuck` at `:1159`). Tests: create
+`apps/dashboard/src/screens/payment-held-outcome.unsaved.test.ts` (set up as
+`payment-attestation.unsaved.test.ts` is); extend `payments-screen.held.test.ts`,
+`payments-screen.a11y.test.ts` (the dialog, both themes), `payments-screen.save-state.test.ts`,
+`apps/dashboard/src/i18n/codes.test.ts` (each new code has its own sentence, not the generic one,
+as the case at `:358` checks for `payment.not_stuck`).
+
+- [ ] **Step 1: failing tests** — Record opens quiet and disabled until the draft changes;
+  submitting with no outcome marks the outcome field and shows the bottom message `Correct the
+  highlighted fields to continue.` on its own line above the buttons; a refused PIN shows beside
+  the PIN and stays until it changes; `payment.hold_already_recorded` and `payment.hold_not_found`
+  each close the dialog and show the result line; a successful record sends `{ outcome, note, pin }`
+  (note omitted when blank), closes the dialog, shows `Outcome recorded. …` and refreshes the list;
+  leaving with a changed draft asks first (the unsaved test); axe passes in light and dark.
+- [ ] **Step 2:** `pnpm --filter @waitron/dashboard exec vitest run src/screens/payments-screen.held.test.ts src/screens/payment-held-outcome.unsaved.test.ts src/screens/payments-screen.a11y.test.ts src/screens/payments-screen.save-state.test.ts src/i18n/codes.test.ts` → FAIL.
+- [ ] **Step 3–4:** implement; same command → PASS. Then
+  `pnpm --filter @waitron/dashboard exec vitest run src/screens/payments-screen src/screens/payment-attestation.unsaved.test.ts`.
+- [ ] **Step 5:** `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts`;
+  typecheck `@waitron/dashboard`. Measure free memory before the browser run.
+- [ ] **Commit** — `The Payments screen records what was done with a held card payment (A846)`.
 
 ### Task 11: docs and the backlog
 
 **Files:** `apps/server/README.md` (`:469-483`, `:504-507`, `:542-545`: a parked payments check is
-now tried again the next day); the comments at `apps/server/src/pass.ts:30-36` and
-`packages/scheduler/src/duty.ts:25-27` if Task 2 left them; `docs/backlog.md` (delete the A846 entry);
+now tried again the next day); the comments at `apps/server/src/pass.ts:30-36` and `:202-205`
+("`parked`, which nothing will claim again") and `packages/scheduler/src/duty.ts:25-27` if Task 2
+left them; `docs/developers/design-system.md`'s list of forms that open quiet until their draft
+changes (batch 3b at `:2579-2581` names "the bill attestation's Record") gains the held payment's
+Record; `docs/backlog.md` (delete the A846 entry);
 `docs/backlog/payments.md` (delete the A846 section; add the new entries below); then grep the prose
 for stale claims across the whole branch range:
-`git grep -n -i "parked\|may not check\|never retried\|not check these payments\|held payment" -- docs apps/server/README.md packages/*/README.md`.
+`git grep -n -i "parked\|may not check\|never retried\|not check these payments\|held payment" -- docs apps/server/README.md packages/*/README.md`,
+and for code comments
+`git grep -n -i "nothing will claim\|nothing retries\|or a park\|looks at each day once" -- apps packages ':!*.test.ts'`.
 Read each hit; edit only what this branch made false.
 
 New backlog entries (Payments and card readers), each one short line plus detail:
@@ -644,7 +739,8 @@ fix what differs from the design system. No commit unless a fix is needed.
   key or name: `packages/payments/src/index.test.ts` exports; `@waitron/core` exports if pinned;
   `migration-upgrade.test.ts` `CANDIDATES` if extended; `schema-constraints.test.ts` names.
 - Assertions moved, not deleted: every `amountDrifted` assertion moved from the orphan alert to the
-  held alert (list them).
+  held alert (list them). Assertion inverted on purpose: `alert-format.test.ts:53` (an event with a
+  screen now links to it).
 - Behaviour changes a reader must know: held payments leave the orphan and difference alerts; a
   parked payments check is requeued the next day; recorded alerts can carry a screen link.
 - The fee question's answer, with the test command and the control.
@@ -658,10 +754,16 @@ fix what differs from the design system. No commit unless a fix is needed.
    changeover. A venue still open then sees the alert come back during service.
 3. **A replaced alert reads "handled by someone"** in the Handled tab when the check replaced it
    because a new held payment appeared. Alternative: a distinct "replaced by a newer alert" line.
-4. **The alert's button reads "Go to Payments"**, as every other alert's link does, not the picture's
-   "Open Payments".
+4. **The alert's button reads "Go to Card payments"** (the screen's nav name), as every other
+   alert's link does, not the picture's "Open Payments".
 5. **The outcome is a dropdown, not the picture's two radio buttons**, because no radio-group field
    exists in the shared components and the section's existing dialog uses a dropdown. Building one is
    a new shared field with its own tests.
 6. **Stripe's on-reader tipping** (fee question table): one Stripe Dashboard setting would make every
    tipped reader payment differ. Backlog entry added; the guard is a one-line change.
+7. **The morning return needs the payments check to start.** While the Stripe credential cannot be
+   used (`resolveAccount()` throws before the check reads anything), no check runs, so a handled
+   held-payment alert does not come back. What shows instead is the check's own failure: the pass
+   log's `reconcile.run_failed` and `reconcile.run_parked` lines (`logNonSucceededRun`,
+   `apps/server/src/pass.ts:202-213`), and `/health` reporting degraded for the pass that parks it
+   (`health.ts:86-90`). Moving the refresh ahead of `resolveAccount()` is the alternative.
