@@ -187,6 +187,8 @@ async function signedIn(overrides: Record<string, unknown> = {}): Promise<TillAp
   await flush(el);
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
+  emit(el.shadowRoot!.querySelector("till-shell")!, "show-counter-orders", { kind: "waiting" });
+  await flush(el);
   return el;
 }
 

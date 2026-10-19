@@ -226,7 +226,7 @@ export class TillBasket extends LitElement {
         justify-self: start;
       }
       :host([line-details][stacked]) .option .name {
-        grid-column: 1 / -1;
+        grid-column: 1 / 3;
       }
       :host([line-details][stacked]) .option .qty {
         grid-column: 1 / 3;
@@ -242,9 +242,11 @@ export class TillBasket extends LitElement {
           grid-column: 1 / -1;
           grid-row: auto;
         }
-        :host([line-details]) .line .name,
-        :host([line-details]) .option .name {
+        :host([line-details]) .line .name {
           grid-column: 1 / -1;
+        }
+        :host([line-details]) .option .name {
+          grid-column: 1 / 3;
         }
         :host([line-details]) .line .qty,
         :host([line-details]) .option .qty {

@@ -91,6 +91,8 @@ describe.each(["en", "es"] as const)("retained routing warning %s", (locale) => 
       expect(window.innerWidth).toBe(width);
       expect(warning.checkVisibility()).toBe(true);
       const picker = await openDraftLine(el, 0);
+      await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".add-note")!);
+      await picker.updateComplete;
       const detail = pane.querySelector<TillDeadEndsSection>(
         "[data-draft-routing-detail] till-dead-ends-section",
       )!;
