@@ -2270,7 +2270,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   observed set and closes in one transaction; HTTP cases check rollback, replay, served quantities,
   zero-reduction adjustments and unchanged filed rows. Fired, not-started food needs an explicit
   preparation answer, and refund handoffs check refund permission before kitchen writes.
-  The Finish-table dialog, its per-dish Refund choices and the public refund handoff remain open.
+  The Finish-table client now carries the complete closing confirmation and an optional refund
+  approver, with an abort signal. A standalone dialog collects each dish's preparation answer and
+  Refund tick, the shared reason and its required note, and protects staged choices on Back or
+  Escape. It is not yet rendered by the app: connect it to the unserved-dish refusal, authoritative
+  refund eligibility reads, approval and the public refund handoff.
   A773-2's firing/pass plan follows A773-1. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Later, after A773: a station waits for another station's part of a group (owner,

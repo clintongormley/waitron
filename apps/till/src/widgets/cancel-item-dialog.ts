@@ -587,7 +587,7 @@ export class TillCancelItemDialog extends LitElement {
                         data-retry-reasons
                         variant="secondary"
                         .disabled=${this.#busy() || this.reasonsLoading}
-                        .busy=${this.reasonsLoading}
+                        .loading=${this.reasonsLoading}
                         @click=${() => this.#requestReasons()}
                         >${t("find_page.retry")}</wt-button
                       >`
@@ -614,7 +614,7 @@ export class TillCancelItemDialog extends LitElement {
             data-confirm
             variant=${disabled && !this.#busy() ? "secondary" : "danger"}
             .disabled=${disabled}
-            .busy=${this.#busy()}
+            .loading=${this.#busy()}
             @click=${() => void this.#confirm()}
             >${this.draft.outcome !== null ? this.#label(this.draft.outcome) : this.consent?.context.billStatus === "settled" ? t("table.cancel_line") : t("adjust.continue")}</wt-button
           >

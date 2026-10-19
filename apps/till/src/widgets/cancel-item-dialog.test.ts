@@ -571,3 +571,9 @@ it("uses Back and the required-note hint in the cancellation form", async () => 
     root(el).querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="note"]')!.placeholder,
   ).toBe("Say why");
 });
+
+it("shows its in-flight cancellation on the native action button", async () => {
+  const el = await mount({ busy: true });
+  await button(el).updateComplete;
+  expect(button(el).shadowRoot!.querySelector("button")!.getAttribute("aria-busy")).toBe("true");
+});

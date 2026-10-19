@@ -3728,6 +3728,68 @@ describe("TillApi: a seated party", () => {
     });
   });
 
+  it("finishTable sends each confirmed paid dish and the refund authorizer in one closing command", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ state: "closed" }));
+    const expectedEdits = [
+      { billId: "wo-1", editorVersion: 3, draftId: null, draftRevision: null },
+    ];
+    const resolution = {
+      submissionId: "finish-1",
+      cancellations: [
+        {
+          lineId: "line-1",
+          quantity: "2",
+          expectedBillRevision: 8,
+          expectedContext: {
+            billStatus: "settled" as const,
+            stage: "not_started" as const,
+            components: [
+              {
+                id: "ticket-1",
+                lineId: "line-1",
+                state: "queued" as const,
+                firedAt: "2026-10-19T12:00:00.000Z",
+                quantity: "3",
+                kitchenQuantity: "3",
+                servedQuantity: "1",
+                cancelledQuantity: "0",
+              },
+            ],
+          },
+          preparationStarted: false,
+          refundHandoff: true,
+          reasonId: "not-served",
+          note: "Guests left",
+        },
+      ],
+      approver: { personId: "supervisor-1", pin: "1234" },
+    };
+    await expect(
+      new TillApi("", fetchStub).finishTable("v1", 4, expectedEdits, resolution),
+    ).resolves.toEqual({ state: "closed" });
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/v1/finish",
+      post({
+        expectedPartyRevision: 4,
+        expectedEdits,
+        ...resolution,
+      }),
+    );
+  });
+
+  it("finishTable cancels a closing request with its caller's abort signal", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ state: "closed" }));
+    const signal = new AbortController().signal;
+    await new TillApi("", fetchStub).finishTable("v1", 4, [], undefined, { signal });
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/v1/finish",
+      expect.objectContaining({
+        method: "POST",
+        signal,
+      }),
+    );
+  });
+
   it("recordUnpaidDeparture POSTs the revision, reason and override to the party's /unpaid-departure route", async () => {
     const request: UnpaidDepartureRequest = {
       expectedEdits: [],

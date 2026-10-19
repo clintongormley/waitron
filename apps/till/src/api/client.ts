@@ -1,3 +1,4 @@
+import type { FinishTableResolution } from "./finish-table-types.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import type { CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
 export type {
@@ -3663,21 +3664,23 @@ export class TillApi {
     });
   }
 
-  /**
-   * Finish a party's table → `POST /api/parties/:partyId/finish`. Rejects `party.bill_outstanding`
-   * while a bill is unpaid, `bill.payments_received` while an open bill with no items left still
-   * holds money, `party.not_open`, or `party.out_of_date` when the party changed since
-   * `expectedPartyRevision` was read.
-   */
   finishTable(
     partyId: string,
     expectedPartyRevision: number,
     expectedEdits: BillEditExpected[],
+    resolution?: FinishTableResolution,
+    options: ReadOptions = {},
   ): Promise<{ state: "closed" }> {
-    return this.#request(`/api/parties/${partyId}/finish`, "POST", {
-      expectedPartyRevision,
-      expectedEdits,
-    });
+    return this.#request(
+      `/api/parties/${partyId}/finish`,
+      "POST",
+      {
+        expectedPartyRevision,
+        expectedEdits,
+        ...resolution,
+      },
+      options.signal,
+    );
   }
 
   /**
