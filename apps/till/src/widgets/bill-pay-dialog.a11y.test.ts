@@ -61,7 +61,6 @@ async function previewed(el: TillBillPayDialog, preview: AllocationPreview): Pro
   await el.updateComplete;
 }
 
-const lockBackgrounds = new Map<string, string>();
 const askBackgrounds = new Map<string, string>();
 const handheldBackgrounds = new Map<string, string>();
 const rowBackgrounds = new Map<string, string>();
@@ -310,62 +309,6 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       balance: { ...balance, reserved: "40.00" },
     });
     await expectNoA11yViolations(host);
-  });
-  const unanswered = (over: Partial<NonNullable<TillBillPayDialog["unanswered"]>> = {}) => ({
-    applied: "50.00",
-    method: "card" as const,
-    guests: false,
-    waiting: false,
-    readerRefused: false,
-    noReader: false,
-    ...over,
-  });
-
-  it("has no violations locked on a payment that got no answer", async () => {
-    const { host } = await mount({ unanswered: unanswered() });
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations locked with the guests field, a reader to choose and an unread balance", async () => {
-    const { el, host } = await mount({
-      unanswered: unanswered({ guests: true, noReader: true }),
-      asksGuests: true,
-      receiptGuests: 4,
-      refusal: { code: "unread" },
-    });
-    if (!el.shadowRoot!.querySelector('[name="guests"]')) throw new Error("no guests field");
-    await expectNoA11yViolations(host);
-  });
-
-  it.each([390, 1280])("looks right locked at %i px", async (width) => {
-    const viewport = { width: window.innerWidth, height: window.innerHeight };
-    await page.viewport(width, 900);
-    try {
-      expect(window.innerWidth).toBe(width);
-      const { el } = await mount({ unanswered: unanswered() });
-      const panel = el
-        .shadowRoot!.querySelector("wt-dialog")!
-        .shadowRoot!.querySelector<HTMLElement>("dialog")!;
-      const background = getComputedStyle(panel).backgroundColor;
-      lockBackgrounds.set(`${theme}-${width}`, background);
-      if (theme === "dark") {
-        const light = lockBackgrounds.get(`light-${width}`);
-        expect(light, "run the light case first").toBeDefined();
-        expect(background).not.toBe(light);
-      }
-      const shot = `__screenshots__/look/a796-lock-${theme}-${width}`;
-      await page.screenshot({
-        element: panel,
-        path: `__screenshots__/look/a796-lock-${theme}-${width}.png`,
-      });
-      const box = panel.getBoundingClientRect();
-      await commands.writeFile(
-        `src/widgets/${shot}.json`,
-        JSON.stringify({ innerWidth: window.innerWidth, panelWidth: box.width, background }),
-      );
-    } finally {
-      await page.viewport(viewport.width, viewport.height);
-    }
   });
 
   /** A card contribution on a bill whose balance holds a card in progress, asked about. */
