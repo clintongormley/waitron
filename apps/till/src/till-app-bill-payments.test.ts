@@ -453,6 +453,160 @@ beforeEach(() => {
 });
 afterEach(cleanupWidgets);
 
+describe("stored station-choice ownership", () => {
+  const answer = {
+    sends: true,
+    revision: 2,
+    deadEnds: [
+      {
+        key: "line-1",
+        name: "Paella",
+        quantity: "1",
+        stationId: "bar",
+        stationName: "Bar",
+        why: "closed",
+      },
+    ],
+    stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+  };
+  const expectedEdit = {
+    billId: "wo-4",
+    editorVersion: 0,
+    draftId: null,
+    draftRevision: null,
+  };
+  const preview = (el: TillApp) =>
+    emit(dialog(el)!, "bill-pay-preview", {
+      choice: { kind: "contribution", amount: "40" },
+      pay: { method: "cash", tendered: "50" },
+    });
+  async function choose(el: TillApp) {
+    const question = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    expect(question).not.toBeNull();
+    question
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(
+        new CustomEvent("make-at", { detail: { key: "line-1", stationId: "kitchen" } }),
+      );
+    await (question as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+  }
+
+  it("retains the original bill observation when a selected station becomes inactive", async () => {
+    const askOrderDeadEnds = vi.fn().mockResolvedValue(answer);
+    const setMakeAt = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "route.station_inactive" })
+      .mockResolvedValue({ revision: 3 });
+    const { el } = await mountApp({ askOrderDeadEnds, setMakeAt });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    preview(el);
+    await flush(el);
+    await choose(el);
+    expect(askOrderDeadEnds).toHaveBeenCalledTimes(2);
+    expect(api.previewBillPayment).not.toHaveBeenCalled();
+    await choose(el);
+    expect(setMakeAt.mock.calls).toEqual([
+      ["wo-4", 2, { "line-1": "kitchen" }, expectedEdit],
+      ["wo-4", 2, { "line-1": "kitchen" }, expectedEdit],
+    ]);
+    expect(api.previewBillPayment).toHaveBeenCalledExactlyOnceWith(
+      "wo-4",
+      expect.objectContaining({ expectedEdit }),
+    );
+  });
+
+  it.each(["logout", "api", "ownership"] as const)(
+    "drops a held station read after %s changes",
+    async (change) => {
+      let release!: (value: typeof answer) => void;
+      const askOrderDeadEnds = vi.fn(() => new Promise((resolve) => (release = resolve)));
+      const setMakeAt = vi.fn().mockResolvedValue({ revision: 3 });
+      const { el } = await mountApp({ askOrderDeadEnds, setMakeAt });
+      await openTable(el);
+      await openDialog(el, "contribution");
+      preview(el);
+      await flush(el);
+      expect(askOrderDeadEnds).toHaveBeenCalledOnce();
+      if (change === "logout") emit(tableOrder(el), "logout");
+      else if (change === "api") el.api = { ...api } as TillApi;
+      else {
+        const priorEdit = drafts.edit;
+        drafts.edit = (billId) => ({ ...priorEdit(billId), editorVersion: 2 });
+        window.dispatchEvent(new Event("focus"));
+        await expect.poll(() => tableOrder(el).billEdit?.editorVersion).toBe(2);
+      }
+      await flush(el);
+      release(answer);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBeNull();
+      expect(setMakeAt).not.toHaveBeenCalled();
+      expect(api.previewBillPayment).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not save station choices from an ownership-stale question", async () => {
+    const setMakeAt = vi.fn().mockResolvedValue({ revision: 3 });
+    const { el } = await mountApp({
+      askOrderDeadEnds: vi.fn().mockResolvedValue(answer),
+      setMakeAt,
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    preview(el);
+    await flush(el);
+    const priorEdit = drafts.edit;
+    drafts.edit = (billId) => ({ ...priorEdit(billId), editorVersion: 2 });
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => tableOrder(el).billEdit?.editorVersion).toBe(2);
+    await choose(el);
+    expect(setMakeAt).not.toHaveBeenCalled();
+    expect(api.previewBillPayment).not.toHaveBeenCalled();
+  });
+
+  it("does not retry a station choice after its bill observation changed", async () => {
+    let refuse!: (error: unknown) => void;
+    const setMakeAt = vi.fn(() => new Promise((_resolve, reject) => (refuse = reject)));
+    const askOrderDeadEnds = vi.fn().mockResolvedValue(answer);
+    const { el } = await mountApp({ askOrderDeadEnds, setMakeAt });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    preview(el);
+    await flush(el);
+    await choose(el);
+    expect(setMakeAt).toHaveBeenCalledOnce();
+    const priorEdit = drafts.edit;
+    drafts.edit = (billId) => ({ ...priorEdit(billId), editorVersion: 2 });
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => tableOrder(el).billEdit?.editorVersion).toBe(2);
+    refuse({ code: "route.station_inactive" });
+    await flush(el);
+    expect(askOrderDeadEnds).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBeNull();
+    expect(api.previewBillPayment).not.toHaveBeenCalled();
+  });
+
+  it("does not use a refreshed observation to pay after its station read", async () => {
+    let release!: (value: { sends: boolean; deadEnds: [] }) => void;
+    const askOrderDeadEnds = vi.fn(() => new Promise((resolve) => (release = resolve)));
+    const { el } = await mountApp({ askOrderDeadEnds });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    preview(el);
+    await flush(el);
+    expect(askOrderDeadEnds).toHaveBeenCalledOnce();
+    const priorEdit = drafts.edit;
+    drafts.edit = (billId) => ({ ...priorEdit(billId), editorVersion: 2 });
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(() => tableOrder(el).billEdit?.editorVersion).toBe(2);
+    release({ sends: false, deadEnds: [] });
+    await flush(el);
+    expect(api.previewBillPayment).not.toHaveBeenCalled();
+  });
+});
+
 describe("A773 bill document choices retain their editing observation", () => {
   const recipient = {
     taxId: "12345678Z",
@@ -1051,7 +1205,12 @@ describe("till-app: the three ways to pay part of a bill", () => {
     await (question as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     question.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
     await flush(el);
-    expect(setMakeAt).toHaveBeenCalledWith("wo-4", 2, { "line-1": "kitchen" });
+    expect(setMakeAt).toHaveBeenCalledWith(
+      "wo-4",
+      2,
+      { "line-1": "kitchen" },
+      { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+    );
     expect(previewBillPayment).toHaveBeenCalledOnce();
     expect(setMakeAt.mock.invocationCallOrder[0]!).toBeLessThan(
       previewBillPayment.mock.invocationCallOrder[0]!,

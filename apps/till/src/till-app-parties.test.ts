@@ -3266,7 +3266,12 @@ describe("till-app: moving a bill", () => {
     await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
     await flush(el);
-    expect(setMakeAt).toHaveBeenCalledWith("wo-check", 3, { "line-1": "kitchen" });
+    expect(setMakeAt).toHaveBeenCalledWith(
+      "wo-check",
+      3,
+      { "line-1": "kitchen" },
+      { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
+    );
     expect(moveBill).toHaveBeenCalledOnce();
   });
 

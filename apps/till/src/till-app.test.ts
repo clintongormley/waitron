@@ -16795,7 +16795,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
     await flush(el);
-    expect(setMakeAt).toHaveBeenCalledWith("wo-12", 3, { "line-1": "kitchen" });
+    expect(setMakeAt).toHaveBeenCalledWith("wo-12", 3, { "line-1": "kitchen" }, null);
     expect(moveBill).toHaveBeenCalledOnce();
     expect(setMakeAt.mock.invocationCallOrder[0]!).toBeLessThan(
       moveBill.mock.invocationCallOrder[0]!,

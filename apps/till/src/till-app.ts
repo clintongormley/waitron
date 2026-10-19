@@ -5622,28 +5622,39 @@ export class TillApp extends LitElement {
     return this.#store.lineCount > 0;
   }
 
-  async #askStoredDeadEnds(workingOrderId: string, toZoneId?: string): Promise<boolean> {
+  async #askStoredDeadEnds(
+    workingOrderId: string,
+    asked: { api: TillApi; expectedEdit: BillEditExpected | null; current: () => boolean },
+    toZoneId?: string,
+  ): Promise<boolean> {
+    if (!asked.current()) return false;
     const question = limited(3_000);
     let answer: DeadEndAnswer | undefined;
     try {
       answer = await Promise.race([
-        this.api.askOrderDeadEnds(workingOrderId, toZoneId),
+        asked.api.askOrderDeadEnds(workingOrderId, toZoneId),
         pause(question.signal).then(() => undefined),
       ]);
     } catch {
-      return true;
+      return asked.current();
     } finally {
       question.done();
     }
+    if (!asked.current()) return false;
     if (!answer?.sends || answer.deadEnds.length === 0) return true;
     const decision = await this.#openDeadEnds(answer, false);
-    if (decision === null) return false;
+    if (decision === null || !asked.current()) return false;
     try {
-      await this.api.setMakeAt(workingOrderId, answer.revision!, decision.choices);
-      return true;
+      await asked.api.setMakeAt(
+        workingOrderId,
+        answer.revision!,
+        decision.choices,
+        asked.expectedEdit,
+      );
+      return asked.current();
     } catch (error) {
       if ((error as { code?: string }).code === "route.station_inactive")
-        return this.#askStoredDeadEnds(workingOrderId, toZoneId);
+        return this.#askStoredDeadEnds(workingOrderId, asked, toZoneId);
       throw error;
     }
   }
@@ -12486,7 +12497,18 @@ export class TillApp extends LitElement {
         const zoneId = toTable
           ? this.tables.find((table) => table.id === to.tableId)?.zoneId
           : this.counterServiceZoneId;
-        if (!(await this.#askStoredDeadEnds(billId, zoneId || undefined))) return;
+        if (
+          !(await this.#askStoredDeadEnds(
+            billId,
+            {
+              api: asked.source.api,
+              expectedEdit: asked.source.expectedEdits.find((edit) => edit.billId === billId)!,
+              current: () => this.#billCompositionUnchanged(asked.source),
+            },
+            zoneId || undefined,
+          ))
+        )
+          return;
         if (!this.#billCompositionUnchanged(asked.source)) return;
         result = await asked.source.api.moveBill(
           billId,
@@ -12667,7 +12689,14 @@ export class TillApp extends LitElement {
     const moveTo = this.tables.find((table) => table.id === tableId);
     const label = moveTo === undefined ? "" : shownUnder(moveTo);
     try {
-      if (!(await this.#askStoredDeadEnds(orderId, moveTo?.zoneId ?? undefined))) return;
+      if (
+        !(await this.#askStoredDeadEnds(
+          orderId,
+          { api: asked.api, expectedEdit: null, current: live },
+          moveTo?.zoneId ?? undefined,
+        ))
+      )
+        return;
       if (!live()) return;
       await asked.api.moveBill(orderId, { tableId }, bills, {
         partyId: null,
@@ -14185,16 +14214,28 @@ export class TillApp extends LitElement {
     }
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     try {
-      if (!(await this.#askStoredDeadEnds(open.billId))) {
-        const now = this.#billPayingNow(open.id);
-        if (now !== null) this.billPaying = { ...now, busy: false };
-        return;
-      }
       const expectedEdit =
         open.surface === "counter" ? null : this.#draftSync?.expectedEditFor(open.billId);
       if (expectedEdit === undefined || (open.surface === "table" && expectedEdit === null))
         throw { code: "draft.out_of_date" };
-      const preview = await this.api.previewBillPayment(
+      const api = this.api;
+      const session = this.#operatorSession;
+      const visit = this.#orderVisit;
+      const sync = this.#draftSync;
+      const current = () =>
+        this.api === api &&
+        this.#operatorSession === session &&
+        this.#billPayingNow(open.id) !== null &&
+        (open.surface === "counter" ||
+          (this.#orderVisit === visit &&
+            this.#draftSync === sync &&
+            this.#billChoiceCurrent(expectedEdit!)));
+      if (!(await this.#askStoredDeadEnds(open.billId, { api, expectedEdit, current }))) {
+        const now = this.#billPayingNow(open.id);
+        if (now !== null) this.billPaying = { ...now, busy: false };
+        return;
+      }
+      const preview = await api.previewBillPayment(
         open.billId,
         paymentAsk(asked.choice, asked.pay, asked.allocation, expectedEdit),
       );

@@ -3915,10 +3915,12 @@ export class TillApi {
     workingOrderId: string,
     revision: number,
     lines: Record<string, string>,
+    expectedEdit: BillEditExpected | null,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/working-orders/${workingOrderId}/make-at`, "PUT", {
       revision,
       lines,
+      expectedEdit,
     });
   }
 

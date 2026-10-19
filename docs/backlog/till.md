@@ -2299,10 +2299,14 @@ The client-contract audit also covers the older line-Recall route: `recallLines`
 explicit bill editing observation, or `null` for a counter order, and sends it with the line
 numbers. `recallToDraft` exposes the server's returned `edit` alongside its draft and party
 revision. The request-body and compiler checks are in `client.recall-ownership.test.ts`.
-Continue with `TillApi.setMakeAt` and `till-app.ts`'s `#askStoredDeadEnds`: the client still sends
-only the order revision and station choices, while the route checks `expectedEdit` for a table
-bill. Follow all three callers, retain the original observation through the question and retry,
-and test changed ownership before writing. This remains part of T24, not a new queued item.
+`TillApi.setMakeAt` also requires and sends that observation, with explicit `null` for a counter
+order. Its app callers cover table-bill relocation, held counter relocation and payment preview.
+The stored-station question retains the caller's original API and editing observation through an
+inactive-station retry; it checks the caller's current context before reading, after the read, and
+before saving a choice. The payment path captures its observation before that preparatory read.
+The request/compiler cases in `client.station-ownership.test.ts` and the app payment cases cover
+serialization, changed identity/ownership, stale choices and retry. These checks close that T24
+client finding; the remaining whole-path audit and delivery work above stay open.
 
 The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
 uses the authenticated routes and a real venue database. A fresh route instance reads the saved
