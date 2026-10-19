@@ -2068,13 +2068,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 ### The till, devices and table service
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
-  2026-10-18).** Owner-approved design, not built; follows A773-1, queued in lane G. Every order line holds one portion with its
-  own extras ("2 ×" is display only); bills can be named and the name reaches kitchen tickets and
-  the pass; the main bill and the Tab button go; every device shows one "Bill 1 of 3 ▾" switcher
-  with Bill ⋯ and Table ⋯ menus; Move dishes… replaces Split by item and Transfer items; Split a
-  table takes any mix of bills and dishes in one step, waiting courses included; one payment pays
-  one bill; "Give back" becomes "Refund". The pre-bill part waits for the asesor (S2, A446).
+  2026-10-18).** Owner-approved design, not built; A773-1 has landed, queued in lane G.
+  Six-slice plan: portions and current ticket/receipt grouping; named, stable-numbered bills;
+  always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
+  then Whole table headings; one picker for Move dishes and Split a table, including waiting
+  courses; Refund wording; pre-bills after asesor S2 (A446). The main bill and Tab go; the table
+  footer has totals and Pay, no Hold. This bill's unsent dishes make Pay quiet but tappable,
+  explaining "Send or remove the unsent dishes before paying." Other bills' drafts do not quiet
+  it. Full invoice is offered at payment per A739; the plan keeps an unpaid-bill menu shortcut,
+  while paid correction waits for A802's known entry or an owner decision, with no A803 fiscal
+  implementation. One payment pays one bill. Station modes, pass naming and grouped cross-bill
+  firing wait for pending A773-2, independently of S2. Slice 1 requires owner sign-off at land;
+  new Spanish wording requires approval during implementation. Before slice 2, confirm whether
+  numbers restart at a new seating; bills staying at their table always retain their numbers.
   [Spec](superpowers/specs/2026-10-18-a803-bills-and-tables-design.md);
+  [plan](superpowers/plans/2026-10-19-a803-bills-and-tables.md);
   [mockups](backlog/mockups/a803-bills-and-tables/).
 
 - **A757. Table states: review the lifecycle, then retire the Tables tab (owner, 2026-10-16).**
