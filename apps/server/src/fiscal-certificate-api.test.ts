@@ -356,6 +356,12 @@ describe("POST /management-api/fiscal-certificate", () => {
     );
     expect(response.status).toBe(500);
     expect(logs.map((line) => line[1])).toContain("fiscal_certificate.failed");
+    const logged = logs.map((line) =>
+      JSON.stringify(line, (_key, value: unknown) =>
+        value instanceof Error ? `${value.message} ${value.stack ?? ""}` : value,
+      ),
+    );
+    expect([await response.text(), ...logged].join("\n")).not.toContain(PASSPHRASE);
   });
 
   it("no response or log line carries the passphrase or the file", async () => {

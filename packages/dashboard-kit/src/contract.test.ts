@@ -37,3 +37,9 @@ it("lists no screen for a contribution that brings only settings panels", () => 
   };
   expect(contributedScreens(c)).toEqual([]);
 });
+
+it("lists only the further screens for a contribution with no own screen", () => {
+  const report = { screen: placement("report"), create };
+  const c: DashboardContribution = { module: "certs", strings, moreScreens: [report] };
+  expect(contributedScreens(c)).toEqual([report]);
+});

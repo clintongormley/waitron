@@ -128,16 +128,14 @@ describe("the certificate routes with the real Veri*Factu seat", () => {
     const v = await venue();
     const before = await revision();
     const candidate = authority.issue();
+    const pfxBase64 = candidate.pfx.toString("base64");
+    const passphrase = "not-the-passphrase";
     const response = await v.app.request(path, {
       method: "POST",
       headers: { cookie: v.cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        pfxBase64: candidate.pfx.toString("base64"),
-        passphrase: "not-the-passphrase",
-        certKind: "sello",
-        expectedRevision: before,
-      }),
+      body: JSON.stringify({ pfxBase64, passphrase, certKind: "sello", expectedRevision: before }),
     });
+    const responseText = await response.clone().text();
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       outcome: "refused",
@@ -148,6 +146,9 @@ describe("the certificate routes with the real Veri*Factu seat", () => {
     expect(v.logged.filter(([, event]) => event.startsWith("fiscal.certificate"))).toEqual([
       ["info", "fiscal.certificate_refused", { reason: "passphrase_wrong", field: "passphrase" }],
     ]);
+    const everything = [responseText, ...v.logged.map((line) => JSON.stringify(line))].join("\n");
+    expect(everything).not.toContain(passphrase);
+    expect(everything).not.toContain(pfxBase64);
   });
 
   it("GET through the route shows the setup-installed certificate with the installer null", async () => {

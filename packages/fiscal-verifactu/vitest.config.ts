@@ -10,8 +10,6 @@ export default defineConfig({
       {
         test: {
           name: "node",
-          // From 1, not 0: Vitest 4 moves a groupOrder-0 project that pins one worker after every
-          // other group (CLAUDE.md §4).
           sequence: { groupOrder: 1 },
           globals: true,
           clearMocks: false,

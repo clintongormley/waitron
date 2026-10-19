@@ -21,10 +21,16 @@ import { sealAeatSecret } from "./provisioning-secret.js";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_SLOT, rejectResolveClient } from "./slot.js";
 
-// A spy over the real transport, so a case can see that no connection to the authority was opened.
+// Never the real mtlsFetch: no test may open a connection to AEAT.
+const refusedFetch = vi.fn<typeof globalThis.fetch>(async () => {
+  throw Object.assign(new Error("network disabled in tests"), { code: "ECONNREFUSED" });
+});
 vi.mock("./aeat-transport.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./aeat-transport.js")>();
-  return { ...actual, mtlsFetch: vi.fn(actual.mtlsFetch) };
+  return {
+    ...actual,
+    mtlsFetch: vi.fn(() => ({ fetch: refusedFetch, close: async () => {} })),
+  };
 });
 
 // `makeBackend` only CONSTRUCTS the backend (no connection is opened until a method runs).

@@ -1,8 +1,9 @@
 /**
  * The dashboard's certificate dialog carries its own copy of the setup wizard's export guides,
- * because a module cannot import from `apps/setup`. This pins the copy to setup's text. The
- * dashboard shows the guides under the file field, so each step-3 sentence there says "above"
- * where setup's says "below".
+ * because a module cannot import from `apps/setup`. This pins the copy to setup's text and each
+ * guide's id, title key, link and steps, reading setup's guide list as TEXT. The dashboard shows
+ * the guides under the file field, so each step-3 sentence there says "above" where setup's says
+ * "below".
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -16,16 +17,30 @@ import {
 type Entry = { en: string; es: string };
 type Copy = Record<string, Entry>;
 
-/** Setup's guide ids and links, read as TEXT: `GUIDES` is not exported. */
-function setupLinks(): [string, string][] {
+interface Guide {
+  id: string;
+  title: string;
+  href: string;
+  steps: string[];
+}
+
+/** Setup's guides, read as TEXT: `GUIDES` is not exported. */
+function setupGuides(): Guide[] {
   const source = readFileSync(
     resolve(import.meta.dirname, "../apps/setup/src/certificate-export-help.ts"),
     "utf8",
   );
-  return [...source.matchAll(/id: "(\w+)",\s*title: "[^"]+",\s*href: "([^"]+)"/g)].map((match) => [
-    match[1]!,
-    match[2]!,
-  ]);
+  const shape = /id: "(\w+)",\s*title: "([^"]+)",\s*href: "([^"]+)",\s*steps: \[([^\]]*)\]/g;
+  return [...source.matchAll(shape)].map((match) => ({
+    id: match[1]!,
+    title: match[2]!,
+    href: match[3]!,
+    steps: [...match[4]!.matchAll(/"([^"]+)"/g)].map((step) => step[1]!),
+  }));
+}
+
+function setupLinks(): [string, string][] {
+  return setupGuides().map((guide) => [guide.id, guide.href]);
 }
 
 const STEP3 = new Set([
@@ -93,6 +108,19 @@ describe("the dashboard's certificate export guides", () => {
     const links = setupLinks();
     expect(links.map(([id]) => id)).toEqual(["windows", "mac", "firefox"]);
     expect(EXPORT_GUIDES.map((guide) => [guide.id, guide.href])).toEqual(links);
+  });
+
+  it("carry setup's title key and steps for each guide", () => {
+    const guides = setupGuides();
+    expect(guides.every((guide) => guide.steps.length > 0)).toBe(true);
+    expect(
+      EXPORT_GUIDES.map((guide) => ({
+        id: guide.id,
+        title: guide.title,
+        href: guide.href,
+        steps: [...guide.steps],
+      })),
+    ).toEqual(guides);
   });
 
   it("report a planted one-word change", () => {

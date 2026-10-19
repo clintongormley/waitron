@@ -44,8 +44,9 @@ export function lastAcceptedQuery(tx: Transaction, since: Date) {
     .from(envios)
     .where(
       and(
-        // The unary `+` keeps the planner off `envios_drenaje_idx`: on estado it would sort every
-        // accepted envío before taking one, where `envios_confirmado_idx` stops at the first.
+        // The unary `+` keeps the planner off `envios_drenaje_idx`: through it the query reads every
+        // accepted envío and sorts those confirmed at or after `since`, where a newest-first walk of
+        // `envios_confirmado_idx` stops at the first accepted one.
         sql`+${envios.estado} in (${"aceptado"}, ${"aceptado_con_errores"})`,
         gte(envios.confirmadoEn, since),
       ),
