@@ -416,6 +416,7 @@ export class PaymentsScreen extends LitElement {
   @state() private billRefundLoadError: string | null = null;
   @state() private heldPayments: HeldPaymentRow[] = [];
   @state() private heldLoadError: string | null = null;
+  #heldRead = 0;
   @state() private billResult: { text: string; refused: boolean } | null = null;
   @state() private billAction: { target: BillTarget; mode: "check" | "attest" } | null = null;
   @state() private billBusy = false;
@@ -577,6 +578,7 @@ export class PaymentsScreen extends LitElement {
       .catch(() => undefined);
     void this.#heldQuery
       .watch("listHeldPayments", [], (rows) => {
+        this.#heldRead++;
         this.heldPayments = rows;
         this.heldLoadError = null;
       })
@@ -586,6 +588,7 @@ export class PaymentsScreen extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#tenderRefundRead++;
+    this.#heldRead++;
     this.#closeDelete();
     this.#statusVersion++;
     this.#billOperation = undefined;
@@ -1107,6 +1110,7 @@ export class PaymentsScreen extends LitElement {
 
   async #loadBillRecovery(background: boolean): Promise<void> {
     const tenderRead = ++this.#tenderRefundRead;
+    const heldRead = ++this.#heldRead;
     const client = background ? (this.api.background ?? this.api) : this.api;
     const [payments, refunds, tenders, held] = await Promise.allSettled([
       client.listStuckBillPayments(),
@@ -1122,10 +1126,12 @@ export class PaymentsScreen extends LitElement {
       this.billRefunds = refunds.value;
       this.billRefundLoadError = null;
     } else this.billRefundLoadError = codeOf(refunds.reason);
-    if (held.status === "fulfilled") {
-      this.heldPayments = held.value;
-      this.heldLoadError = null;
-    } else this.heldLoadError = codeOf(held.reason);
+    if (heldRead === this.#heldRead && this.isConnected) {
+      if (held.status === "fulfilled") {
+        this.heldPayments = held.value;
+        this.heldLoadError = null;
+      } else this.heldLoadError = codeOf(held.reason);
+    }
     if (tenderRead === this.#tenderRefundRead && this.isConnected) {
       if (tenders.status === "fulfilled") {
         this.tenderRefunds = tenders.value;

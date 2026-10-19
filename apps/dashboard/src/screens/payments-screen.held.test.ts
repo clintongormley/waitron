@@ -201,4 +201,33 @@ describe("held card payments on the Payments screen", () => {
     expect(q(el, "[data-test=bill-load-error]")).toBeNull();
     expect(q(el, "[data-test=held-payment-h-1]")).not.toBeNull();
   });
+
+  it.each(["success", "failure"] as const)(
+    "keeps a live update delivered while an older Refresh is still waiting (%s)",
+    async (outcome) => {
+      let release!: () => void;
+      const listHeldPayments = vi
+        .fn()
+        .mockResolvedValueOnce([HELD[0]])
+        .mockImplementationOnce(async () => {
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          if (outcome === "failure") throw { code: "connection.failed" };
+          return [HELD[0]];
+        })
+        .mockResolvedValue([]);
+      const api = stubApi({ listHeldPayments });
+      const el = await mount(api);
+      q(el, "[data-test=refresh-bill-recovery]")!.click();
+      await vi.waitFor(() => expect(typeof release).toBe("function"));
+      api.liveData!.invalidate([{ type: "payment_hold_outcomes" }]);
+      await vi.waitFor(() => expect(q(el, "[data-test=held-payment-h-1]")).toBeNull());
+      release();
+      await flush(el);
+      expect(listHeldPayments).toHaveBeenCalledTimes(3);
+      expect(q(el, "[data-test=held-payment-h-1]")).toBeNull();
+      expect(q(el, "[data-test=bill-load-error]")).toBeNull();
+    },
+  );
 });
