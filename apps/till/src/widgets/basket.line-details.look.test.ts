@@ -9,7 +9,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 
 const dish: TillProduct = {
   id: "dish",
-  name: "Crema de calabaza con verduras de temporada (Ración grande)",
+  name: "Roasted pumpkin soup with seasonal garden vegetables (Large portion)",
   customerName: { en: "Customer soup" },
   kitchenName: "Kitchen soup",
   unitPrice: "123.45",
@@ -30,7 +30,7 @@ const dish: TillProduct = {
       items: [
         {
           productId: "cheese",
-          name: "Queso curado de oveja",
+          name: "Mature farmhouse sheep cheese",
           customerName: { en: "Customer cheese" },
           kitchenName: "Kitchen cheese",
           price: "1.25",
@@ -66,19 +66,19 @@ for (const locale of ["en-GB", "es-ES"])
         try {
           const store = new WorkingOrderStore();
           store.addProduct(dish, "2", {
-            note: "Sin sal. Servir el queso aparte, por favor.",
+            note: "No salt. Serve the cheese separately on a small plate, please.",
             extras: [
               {
                 listId: "sides",
                 productId: "cheese",
-                name: "Queso curado de oveja",
+                name: "Mature farmhouse sheep cheese",
                 price: "1.25",
                 quantity: 2,
               },
             ],
           });
           store.addProduct(
-            { ...dish, id: "water", name: "Agua", unitPrice: "1.50", allergens: null },
+            { ...dish, id: "water", name: "Water", unitPrice: "1.50", allergens: null },
             "1",
           );
           const { el, host } = await mountWidget<TillBasket>(

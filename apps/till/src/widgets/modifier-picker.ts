@@ -1,6 +1,7 @@
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { trackDialog } from "./track-dialog.js";
 import { baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
@@ -234,12 +235,14 @@ export class TillModifierPicker extends LitElement {
   @state() private answers: Record<string, string> = {};
 
   @state() private note = "";
+  @state() private noteExpanded = false;
 
   @state() private variantId = "";
 
   #seeded = false;
 
   @state() private active = true;
+  #connection = 0;
   #scope?: DraftScope<ModifierDraft>;
   #leave?: LeaveCoordinator;
   #baseline?: ModifierDraft;
@@ -259,6 +262,8 @@ export class TillModifierPicker extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    // Keep the draft across reconnects while creating a fresh native modal opening.
+    if (this.hasUpdated) this.#connection++;
     this.requestUpdate();
   }
 
@@ -314,6 +319,7 @@ export class TillModifierPicker extends LitElement {
     this.courseId = this.initialCourse ?? "";
     if (this.initialSelections !== undefined) {
       if (this.withNote) this.note = this.initialSelections.note ?? "";
+      this.noteExpanded = this.note !== "";
       for (const extra of this.initialSelections.extras ?? [])
         this.picks[pickKey(extra.listId, extra.productId)] = extra.quantity;
       for (const answer of this.initialSelections.options ?? [])
@@ -575,7 +581,7 @@ export class TillModifierPicker extends LitElement {
     const totals = this.#listTotals();
     const saveAction = this.#saveAction();
     const satisfied = this.#satisfied(stale, totals);
-    return html`<wt-modal
+    const modal = html`<wt-modal
       ${trackDialog()}
       size="standard"
       .open=${this.active}
@@ -593,9 +599,9 @@ export class TillModifierPicker extends LitElement {
                 ${(this.initialSelections?.extras ?? []).map((extra) => html`<p>${extra.name} ×${extra.quantity}</p>`)}
                 ${
                   this.initialSelections?.optionSnapshots !== undefined
-                    ? optionAnswers(this.initialSelections.optionSnapshots, { reads: "staff" }).map(
-                        (answer) => html`<p>${answer}</p>`,
-                      )
+                    ? optionAnswers(this.initialSelections.optionSnapshots, {
+                        reads: "staff",
+                      }).map((answer) => html`<p>${answer}</p>`)
                     : (this.initialSelections?.options ?? []).map(
                         (answer) =>
                           html`<p>
@@ -703,14 +709,38 @@ export class TillModifierPicker extends LitElement {
                 ${
                   this.initialSelections !== undefined && !this.withNote
                     ? nothing
-                    : renderLineExtrasEditor({
-                        note: this.note,
-                        onNoteChange: (note) => {
-                          if (!this.isConnected || !this.active) return;
-                          this.note = note;
-                          this.#scope?.changed();
-                        },
-                      })
+                    : this.lineDetails && this.note === "" && !this.noteExpanded
+                      ? html`<wt-button
+                          class="add-note"
+                          variant="secondary"
+                          @click=${async (event: Event) => {
+                            event.stopPropagation();
+                            if (!this.isConnected || !this.active || this.disabled || this.readOnly)
+                              return;
+                            const connection = this.#connection;
+                            this.noteExpanded = true;
+                            await this.updateComplete;
+                            const field = this.shadowRoot!.querySelector("wt-textarea");
+                            await field?.updateComplete;
+                            if (
+                              connection === this.#connection &&
+                              this.isConnected &&
+                              this.active &&
+                              !this.disabled &&
+                              !this.readOnly
+                            )
+                              field?.focus();
+                          }}
+                          >${t("line.note.add")}</wt-button
+                        >`
+                      : renderLineExtrasEditor({
+                          note: this.note,
+                          onNoteChange: (note) => {
+                            if (!this.isConnected || !this.active) return;
+                            this.note = note;
+                            this.#scope?.changed();
+                          },
+                        })
                 }
                 ${
                   this.showTotal
@@ -746,6 +776,7 @@ export class TillModifierPicker extends LitElement {
             </wt-button>`
       }
     </wt-modal>`;
+    return keyed(this.#connection, modal);
   }
 
   #quantityInvalid(): boolean {

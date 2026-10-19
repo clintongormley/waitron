@@ -797,6 +797,7 @@ export const en = {
   "diet.filter.no_fish": "No fish",
   // Per-line kitchen note
   "line.note.label": "Kitchen note",
+  "line.note.add": "+ Add a note",
   "line.note.placeholder": "e.g. no onion, allergy — nut",
   "line.note.button": "Note",
   // Staff schedule (the staff-facing swap/absence request path)
@@ -2377,6 +2378,7 @@ export const es: Record<StringKey, string> = {
   "diet.filter.no_meat": "Sin carne",
   "diet.filter.no_fish": "Sin pescado",
   "line.note.label": "Nota para cocina",
+  "line.note.add": "+ Añadir una nota",
   "line.note.placeholder": "p. ej. sin cebolla, alergia — frutos secos",
   "line.note.button": "Nota",
   "schedule.open": "Mi horario",

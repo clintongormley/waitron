@@ -371,13 +371,13 @@ describe("A738 published product description", () => {
   it.each([
     {
       locale: "en-GB",
-      description: { en: "Slow roasted soup", es: "Sopa a fuego lento" },
+      description: { en: "Slow roasted soup", es: "Alternate soup description" },
       want: "Slow roasted soup",
     },
     {
       locale: "es-ES",
-      description: { en: "Slow roasted soup", es: "Sopa a fuego lento" },
-      want: "Sopa a fuego lento",
+      description: { en: "Slow roasted soup", es: "Alternate soup description" },
+      want: "Alternate soup description",
     },
     { locale: "en-GB", description: null, want: null },
     { locale: "en-GB", description: { en: "   ", es: "" }, want: null },

@@ -625,6 +625,8 @@ describe("table line windows after editing authority changes", () => {
     const field = picker.shadowRoot!.querySelector('[name="quantity"]');
     expect(field).not.toBeNull();
     field!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "1" } }));
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".add-note")!);
+    await picker.updateComplete;
     picker
       .shadowRoot!.querySelector("wt-textarea")!
       .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "No salt" } }));
@@ -652,6 +654,8 @@ describe("table line windows after editing authority changes", () => {
     const field = picker.shadowRoot!.querySelector('[name="quantity"]');
     expect(field).not.toBeNull();
     field!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "1" } }));
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".add-note")!);
+    await picker.updateComplete;
     picker
       .shadowRoot!.querySelector("wt-textarea")!
       .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "No salt" } }));

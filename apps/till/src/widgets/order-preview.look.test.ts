@@ -10,19 +10,19 @@ afterEach(cleanupWidgets);
 const items = [
   {
     lineId: "dish",
-    name: "Crema de calabaza (Ración grande)",
+    name: "Roasted pumpkin soup (Large portion)",
     quantity: "0.375",
-    note: "Sin sal. Servir el queso aparte, por favor.",
-    extras: [{ lineId: "extra", name: "Queso curado de oveja", quantity: "0.750" }],
+    note: "No salt. Serve the cheese separately on a small plate, please.",
+    extras: [{ lineId: "extra", name: "Mature farmhouse sheep cheese", quantity: "0.750" }],
   },
-  { lineId: "plain", name: "Agua mineral", quantity: "2.000", note: null, extras: [] },
+  { lineId: "plain", name: "Mineral water", quantity: "2.000", note: null, extras: [] },
   { lineId: "blank", name: "Pan", quantity: "1.000", note: "", extras: [] },
 ];
 const held: HeldOrderSummary = {
   items,
   id: "held",
   orderNumber: 41,
-  label: "Ana Isabel García López — comedor de la terraza",
+  label: "Alex Morgan Smith Jones — covered garden terrace dining area",
   itemCount: 4,
   total: "18.50",
   outstanding: "18.50",

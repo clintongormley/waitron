@@ -21,7 +21,7 @@ it.each([
     try {
       const { el } = await mountWidget<TillShell>("till-shell", {
         formFactor: "till",
-        operatorName: "Ana Isabel García López",
+        operatorName: "Alex Morgan Smith Jones",
         parkedCount: 12,
         waitingCount: 3,
         transferAvailable: true,
@@ -39,7 +39,7 @@ it.each([
       expect(root.querySelector(".till-strip [data-open-transfers]")).not.toBeNull();
       expect(root.querySelector(".till-strip .expo")).not.toBeNull();
       expect(root.querySelector(".session > .operator-menu")?.textContent).toContain(
-        "Ana Isabel García López",
+        "Alex Morgan Smith Jones",
       );
       const more = root.querySelector<WtRowActions>('[data-test="more-menu"]')!;
       expect(more).not.toBeNull();
@@ -160,7 +160,7 @@ it("A738 Language choices remain reachable inside More and emit one selection", 
   const { el } = await mountWidget<TillShell>("till-shell", {
     loadLocales: async () => [
       { code: "en-GB", label: "English" },
-      { code: "es-ES", label: "Español" },
+      { code: "es-ES", label: "Spanish" },
     ],
   });
   const more = el.shadowRoot!.querySelector<WtRowActions>('[data-test="more-menu"]')!;
@@ -208,7 +208,7 @@ it.each([390, 1280])(
     await page.viewport(width, 844);
     try {
       const { el } = await mountWidget<TillShell>("till-shell", {
-        operatorName: "Ana Isabel García López",
+        operatorName: "Alex Morgan Smith Jones",
         clockAvailable: true,
         clockState: {
           personId: "ana",
