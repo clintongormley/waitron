@@ -622,10 +622,9 @@ allergens, or show only dishes matching a chosen diet. Icons and words as in
     `options.label_required`. An options or extras refusal at save names only the field, not the
     line, and the till shows one message for the whole draft (`asRefusal`,
     `apps/till/src/state/draft-sync.ts`), so it names no line.
-  - Rulings made on the branch for the owner to confirm: a line whose quantity is not a
-    whole number never adds into another line; Finish table discards the party's open drafts,
-    keeping their lines, instead of refusing while one is open. The takeover ruling is superseded
-    by the [per-bill ownership decision](#one-editor-per-bill-owner-2026-10-17-a773).
+  - Ruling made on the branch for the owner to confirm: a line whose quantity is not a
+    whole number never adds into another line. The takeover and finish-with-drafts rulings are
+    superseded by the [per-bill ownership decision](#one-editor-per-bill-owner-2026-10-17-a773).
 
 ## Task 8 (#806, the till works from the server's drafts)
 
@@ -1499,6 +1498,14 @@ the [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md
 local-candidate and refusal contracts. `order-drafts.db.test.ts` checks both bills' identities,
 quantities and previous-editor metadata after takeover, plus the old editor's refused save.
 
+Closing compares every bill's editing state, including bills retained by a merged party. A
+colleague's outbox refuses `draft.taken_over`; stale editing state refuses `draft.out_of_date`;
+the editor's remaining saved dishes refuse `bill.unsent_dishes` rather than being discarded.
+`apps/server/src/bill-editing.finish.test.ts` checks these refusals and unchanged database rows
+through direct Finish/close and authenticated Finish/unpaid-departure requests. It also checks
+closing with current empty observations while another party keeps its outbox. These ownership
+checks do not complete plan T22's held-dish resolution, which still waits for A758's revised design.
+
 The floor shows each nonempty bill/editor pair. A compact map badge may remain "Unsent" when its
 accessible label names those pairs and the expanded detail shows them, as ownership design §6
 allows. `till-floor-screen.parties.test.ts` checks the card rows, compact accessible label and
@@ -2235,7 +2242,9 @@ The remaining work includes:
   as the watcher's 2026-10-18 instruction requires. Finish the held-dish resolution before Finish
   table (plan T20/T22); the earlier picture-03 implementation is not that revised design.
 - Reconcile the full branch with current main, including migration collisions and prose describing
-  changed behavior beyond the documented fresh/recalled modifier paths. Complete the remaining
+  changed behavior beyond the documented fresh/recalled modifiers and checks before closing.
+  The original service spec and plan now carry dated pointers for their superseded draft rules;
+  the whole-branch prose audit remains open. Complete the remaining
   ownership/copy/native-screen acceptance, the physical till trial and final whole-branch validation
   and review before publication. Read the campaign's
   local checkpoint ledger for exact remaining checks and receipts; do not treat earlier focused
