@@ -2258,7 +2258,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     expect(rechecked).toEqual([{}]);
   });
 
-  it("puts the row in the lock when the kept card's reader was refused, and Check again fires after a reader is picked", async () => {
+  it("in the lock after a refused reader, shows the row closed, opens it on Cambiar, and keeps it open once another reader is picked", async () => {
     const el = await handheld({
       unanswered: {
         applied: "20.80",
@@ -2272,6 +2272,8 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     const rechecked = capture<unknown>(el, "bill-pay-recheck");
     expect(row(el)).not.toBeNull();
     expect(row(el)!.open).toBe(false);
+    expect(actions(el).error).toBe(t("bill_pay.recheck_choose_reader"));
+    expect(button(el, "[data-pay-recheck]").disabled).toBe(false);
     await row(el)!.updateComplete;
     row(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-equipment-change]")!.click();
     await el.updateComplete;
@@ -2279,9 +2281,11 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
 
     el.equipment = equipmentWith(LECTOR_3);
     await el.updateComplete;
-    expect(button(el, "[data-pay-recheck]").disabled).toBe(false);
+    expect(row(el)).not.toBeNull();
+    expect(row(el)!.open).toBe(true);
+    expect(actions(el).error).toBe(t("bill_pay.recheck_choose_reader"));
     await click(el, "[data-pay-recheck]");
-    expect(rechecked).toHaveLength(1);
+    expect(rechecked).toEqual([{}]);
   });
 
   it("shows no row in the lock when the kept payment is not waiting on a reader", async () => {
