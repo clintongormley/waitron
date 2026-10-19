@@ -2196,8 +2196,8 @@ describe("ordering extras and options — parent + child lines", () => {
   });
 
   /** Gives the burger a second extras list, "Pan", that needs one pick, and a unit of `precision`
-   * decimal places with no scale. Answers the list's id. */
-  const requireBread = (v: ModifierVenue, unitName: string, precision: number) =>
+   * decimal places with no scale, a measure when `measure` is set. Answers the list's id. */
+  const requireBread = (v: ModifierVenue, unitName: string, precision: number, measure = false) =>
     withTransaction(suite.db, async (tx) => {
       const pan = await createExtraList(
         tx,
@@ -2222,6 +2222,7 @@ describe("ordering extras and options — parent + child lines", () => {
           name: { [v.defaultLanguage]: unitName },
           abbreviation: { [v.defaultLanguage]: unitName.slice(0, 2) },
           precision,
+          measure,
         },
         v.defaultLanguage,
       );
@@ -2339,6 +2340,59 @@ describe("ordering extras and options — parent + child lines", () => {
         updateOrderLine(tx, v.cfg, tabId, 1, { extras: [] }, await revisionOf(tabId)),
       ),
     ).rejects.toMatchObject(refused);
+  });
+
+  it("sells a dish in a measure unit with no extras picks, whatever its extras lists require", async () => {
+    const v = await setupModifierVenue();
+    const panId = await requireBread(v, "Mililitro", 0, true);
+    const deps = { db: suite.db, backend, clock };
+    const burger = v.offerFor(v.burgerId);
+    const tender = { method: "cash" as const, amount: "2250.00" };
+
+    // 250 × 9.00.
+    const sale = await recordTillSale(deps, v.cfg, {
+      zoneId: v.zoneId,
+      lines: [{ menuItemId: burger, quantity: "250" }],
+      tender,
+    });
+    expect(sale.total).toBe("2250.00");
+
+    await expect(
+      recordTillSale(deps, v.cfg, {
+        zoneId: v.zoneId,
+        lines: [
+          {
+            menuItemId: burger,
+            quantity: "250",
+            extras: [{ listId: panId, picks: [{ productId: v.patatasId, quantity: 1 }] }],
+          },
+        ],
+        tender,
+      }),
+    ).rejects.toMatchObject({
+      code: "extras.unsupported_product",
+      params: { productId: v.burgerId, soldBy: "measure" },
+    });
+  });
+
+  it("a ración still takes extras", async () => {
+    const v = await setupModifierVenue();
+    const panId = await requireBread(v, "Ración", 0);
+    const deps = { db: suite.db, backend, clock };
+
+    // 2 × 9.00 dish + 2 × 1.00 Pan.
+    const sale = await recordTillSale(deps, v.cfg, {
+      zoneId: v.zoneId,
+      lines: [
+        {
+          menuItemId: v.offerFor(v.burgerId),
+          quantity: "2",
+          extras: [{ listId: panId, picks: [{ productId: v.patatasId, quantity: 1 }] }],
+        },
+      ],
+      tender: { method: "cash", amount: "50.00" },
+    });
+    expect(sale.total).toBe("20.00");
   });
 
   // An extra that is Unavailable or Inactive is refused like a pick the list does not offer. Each

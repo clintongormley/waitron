@@ -7434,6 +7434,45 @@ describe("frozen answers through a fractional quantity edit", () => {
       params: { productId: cafeId, soldBy: "weight" },
     });
   });
+
+  it("refuses an extras pick on a dish sold in millilitres (A821)", async () => {
+    const { cfg, cafeId, catalogueId, cafeOfferId, zoneId } = await setupVenue();
+    const bacon = await withTransaction(db, async (tx) => {
+      const ml = await catalogue.createUnit(
+        tx,
+        {
+          name: { [CONTENT_LANGUAGE]: "Mililitro" },
+          abbreviation: { [CONTENT_LANGUAGE]: "ml" },
+          precision: 0,
+          measure: true,
+        },
+        LOCALE,
+      );
+      await catalogue.assignProductUnit(tx, cafeId, ml.id);
+      const attached = await addExtraList(tx, catalogueId, cafeId, "Bacon", { price: "1.00" });
+
+      await republishMenus(tx);
+      return attached;
+    });
+    await expect(
+      parkOrder({ db }, cfg, {
+        id: randomUUID(),
+        zoneId,
+        lines: [
+          {
+            menuItemId: cafeOfferId,
+            quantity: "250",
+            extras: [
+              { listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "extras.unsupported_product",
+      params: { productId: cafeId, soldBy: "measure" },
+    });
+  });
 });
 
 it("does not let an omitted payload waive a required extras list it cannot satisfy because its only extra product is Unavailable", async () => {
