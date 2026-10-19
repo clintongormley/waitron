@@ -2229,8 +2229,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the question and an inactive-station retry; a changed app identity or bill observation stops
   the waiting path before another request. API replacement during a preceding draft save is also
   checked for Recall and recalled-dish splitting: neither command reaches the replacement client,
-  and the local changes remain available for review. Recalled-dish removal retains its opening bill
-  context while reading reasons and checking a preview, confirmation or manager PIN; a newer
+  and the local changes remain available for review. Fresh Discard and confirmed recalled removal
+  and Discard also retire waiting commands after an API replacement; fresh unsaved dishes stay
+  available for review and the checked recorded source rows remain. Recalled-dish removal retains
+  its opening bill context while reading reasons and checking a preview, confirmation or manager PIN; a newer
   draft revision refuses the old action, including a command delayed after confirmation. Held-dish
   splitting retains the bill observation from before a pending kitchen-note save; it stops after
   that observation or the API client changes. Continue auditing the remaining public ownership

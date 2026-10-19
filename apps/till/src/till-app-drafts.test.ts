@@ -6660,6 +6660,57 @@ describe("recalled draft source splitting", () => {
     expect(rows(el)).toEqual([]);
   });
 
+  it("retires fresh Discard while its save waits across an API replacement", async () => {
+    const discardDraft = vi.fn();
+    const { el } = await mountApp({ discardDraft });
+    const order = await openMesa(el);
+    const old = draft(el);
+    const saved = server.saveDraft.getMockImplementation()!;
+    let release!: () => void;
+    api.saveDraft.mockImplementationOnce(async (partyId, ask) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return saved(partyId, ask);
+    });
+    await tap(el, "Beer");
+    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+    if (review?.checkVisibility()) await userEvent.click(review);
+    await order.updateComplete;
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]")!);
+    await expect.poll(() => api.saveDraft.mock.calls.length).toBe(1);
+    expect(old.sending).toBe(true);
+    const replacement = {
+      ...api,
+      discardDraft: vi.fn().mockResolvedValue({
+        draftId: "draft-1",
+        billId: "wo-4",
+        revision: 2,
+        adjustmentIds: [],
+        party: { id: "v1", revision: 4 },
+      }),
+      listDrafts: vi.fn(server.listDrafts.getMockImplementation()!),
+    };
+    try {
+      el.api = replacement as unknown as TillApi;
+      await flush(el, 6);
+    } finally {
+      release();
+    }
+    await flush(el, 8);
+    expect(discardDraft).not.toHaveBeenCalled();
+    expect(replacement.discardDraft).not.toHaveBeenCalled();
+    expect(replacement.listDrafts).toHaveBeenCalled();
+    expect(draft(el)).not.toBe(old);
+    expect(rows(el)).toEqual([]);
+    expect(retainedCandidate(el)?.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+      ["Beer", "1"],
+    ]);
+    expect(draft(el).editsLocked).toBe(true);
+    expect(old.sending).toBe(false);
+    expect(tableOrder(el)!.groupCommandBusy).toBe(false);
+  });
+
   it("Discard combines the source previews and requires the highest returned approval role", async () => {
     const discardDraft = vi.fn(async () => {
       server.drafts.splice(0);
@@ -7148,6 +7199,59 @@ describe("recalled draft source splitting", () => {
       command.mockRestore();
     }
   });
+
+  it.each(["remove", "discard"])(
+    "retires recalled %s while its command waits across an API replacement",
+    async (action) => {
+      const { el, order } = await cancellationOpening({ discardDraft: vi.fn() });
+      if (action === "discard") await discardPreview(el, order);
+      else await cancellationPreview(el);
+      const old = draft(el);
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const runCommand = DraftSync.prototype.runCommand;
+      const command = vi
+        .spyOn(DraftSync.prototype, "runCommand")
+        .mockImplementation(async function <T>(
+          this: DraftSync,
+          send: (state: DraftCommandState, options: { signal: AbortSignal }) => Promise<T>,
+        ): Promise<DraftCommandOutcome<T>> {
+          await held;
+          return (runCommand<T>).call(this, send);
+        });
+      const replacement = {
+        ...api,
+        discardDraft: vi.fn(),
+        applyAdjustment: vi.fn(),
+        listDrafts: vi.fn(server.listDrafts.getMockImplementation()!),
+      };
+      try {
+        emit(adjustment(el)!, "adjust-confirm");
+        await expect.poll(() => command.mock.calls.length).toBe(1);
+        el.api = replacement as unknown as TillApi;
+        await flush(el, 6);
+        release();
+        await flush(el, 8);
+        expect(api.applyAdjustment).not.toHaveBeenCalled();
+        expect(api.discardDraft).not.toHaveBeenCalled();
+        expect(replacement.applyAdjustment).not.toHaveBeenCalled();
+        expect(replacement.discardDraft).not.toHaveBeenCalled();
+        expect(replacement.listDrafts).toHaveBeenCalled();
+        expect(draft(el)).not.toBe(old);
+        expect(rows(el)).toEqual(["Recorded steak ×2"]);
+        expect(server.drafts[0]!.lines).toEqual([reference()]);
+        expect(adjustment(el)).toBeNull();
+        expect(draft(el).editsLocked).toBe(false);
+        expect(old.sending).toBe(false);
+        expect(tableOrder(el)!.groupCommandBusy).toBe(false);
+      } finally {
+        release();
+        command.mockRestore();
+      }
+    },
+  );
 
   it("recalled Discard stops its preview list when the bill observation changes", async () => {
     let release!: (value: import("./api/client.js").AdjustmentPreview) => void;

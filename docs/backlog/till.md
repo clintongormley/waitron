@@ -2332,6 +2332,12 @@ API-change draft restart in a disposable installed checkout makes each case obse
 command on the replacement client. This closes that API-lifetime follow-up without changing
 production code; the remaining ownership audit and whole-item acceptance stay open.
 
+The same suite also pauses fresh Discard's preparatory save and the confirmed recalled removal
+and Discard commands across an API replacement. Neither API receives the retired command. The
+fresh dish stays in the retained candidate, while the recalled dish remains in its saved outbox;
+the old adjustment window closes and the new synchronizer reads through the replacement API.
+These cases concern client lifetime, without changing cancellation reasons, permissions or money.
+
 The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
 uses the authenticated routes and a real venue database. A fresh route instance reads the saved
 arrangement before another person takes it over. Sending only the fresh beer leaves the measured
