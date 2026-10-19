@@ -86,3 +86,47 @@ export function readerChoices(equipment: DeviceEquipment | null): EquipmentItem[
 export function printerChoices(equipment: DeviceEquipment | null): EquipmentItem[] {
   return roleOf(equipment, "receipt")?.choices ?? [];
 }
+
+/** A practice venue's demo reader: charged whatever the equipment says. */
+export interface FixedReader {
+  id: string;
+  name: string;
+}
+
+/** The reader a card would be charged on now: the demo reader, else the equipment's ready one;
+ * null before the equipment has been read. */
+export function readyPayReader(
+  equipment: DeviceEquipment | null,
+  fixedReader: FixedReader | null,
+): FixedReader | null {
+  if (fixedReader !== null) return fixedReader;
+  if (equipment === null) return null;
+  const reader = payReaderOf(equipment);
+  return reader.kind === "ready" ? reader : null;
+}
+
+/** Whether a handheld holds a payment for its equipment: a change is out, or a card on the reader
+ * has no ready reader. */
+export function heldForEquipment(
+  card: boolean,
+  state: {
+    equipment: DeviceEquipment | null;
+    equipmentBusy: boolean;
+    fixedReader: FixedReader | null;
+  },
+): boolean {
+  if (state.equipmentBusy) return true;
+  return card && readyPayReader(state.equipment, state.fixedReader) === null;
+}
+
+/** Whether the row opens by itself; an unread equipment does not open it, and the demo reader
+ * counts as ready. */
+export function payRowWantsOpen(
+  equipment: DeviceEquipment | null,
+  fixedReader: FixedReader | null,
+): boolean {
+  if (equipment === null) return false;
+  const printer = payPrinterOf(equipment);
+  if (fixedReader !== null) return printerWantsRowOpen(printer);
+  return rowStartsOpen(payReaderOf(equipment), printer);
+}

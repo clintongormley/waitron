@@ -1485,6 +1485,9 @@ export const en = {
   "bill_pay.tip_amount_invalid": "Enter a tip above zero and no more than {amount}",
   "bill_pay.take": "Take payment",
   "bill_pay.take_on_reader": "Take {amount} on {reader}",
+  "presented_pay.balance": "Bill presented",
+  "presented_pay.whole_only":
+    "This bill has already been presented: it is paid whole, in one payment.",
   "bill_pay.taken": "Payment taken.",
   "bill_pay.taken_change": "Payment taken. Give {amount} in change.",
   "bill_pay.unconfirmed":
@@ -3124,6 +3127,8 @@ export const es: Record<StringKey, string> = {
   "bill_pay.tip_amount_invalid": "Introduce una propina mayor que cero y de {amount} como mucho",
   "bill_pay.take": "Cobrar",
   "bill_pay.take_on_reader": "Cobrar {amount} en {reader}",
+  "presented_pay.balance": "Cuenta presentada",
+  "presented_pay.whole_only": "Esta cuenta ya está presentada: se cobra entera, en un solo pago.",
   "bill_pay.taken": "Pago cobrado.",
   "bill_pay.taken_change": "Pago cobrado. Devuelve {amount} de cambio.",
   "bill_pay.unconfirmed":

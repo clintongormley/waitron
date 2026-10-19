@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/client.js";
 import {
+  heldForEquipment,
   payPrinterOf,
+  payRowWantsOpen,
   payReaderOf,
   printerChoices,
   printerWantsRowOpen,
   readerChoices,
+  readyPayReader,
   rowStartsOpen,
   type PayPrinter,
   type PayReader,
@@ -340,5 +343,63 @@ describe("the choices the drop-downs offer", () => {
   it("no equipment read offers nothing", () => {
     expect(readerChoices(null)).toEqual([]);
     expect(printerChoices(null)).toEqual([]);
+  });
+});
+
+describe("the payment's hold for its equipment", () => {
+  const ready = equipment(
+    { selection: "item", chosenId: "p1", resolved: { id: "p1", name: "Barra", available: true } },
+    {
+      selection: "item",
+      chosenId: "r1",
+      resolved: { id: "r1", name: "Lector barra", available: true, provider: "sumup" },
+      chosen: lector,
+      choices: [lector],
+    },
+  );
+  const noReader = equipment({
+    selection: "item",
+    chosenId: "p1",
+    resolved: { id: "p1", name: "Barra", available: true },
+  });
+  const demo = { id: "sim-1", name: "Demo reader" };
+
+  it("charges the equipment's ready reader, the demo reader before it, and none before a read", () => {
+    expect(readyPayReader(ready, null)).toMatchObject({ id: "r1", name: "Lector barra" });
+    expect(readyPayReader(ready, demo)).toEqual(demo);
+    expect(readyPayReader(null, demo)).toEqual(demo);
+    expect(readyPayReader(null, null)).toBeNull();
+    expect(readyPayReader(noReader, null)).toBeNull();
+  });
+
+  it("holds a card until a reader is ready, and never cash", () => {
+    const state = (
+      equipment: DeviceEquipment | null,
+      fixedReader = null as typeof demo | null,
+    ) => ({
+      equipment,
+      equipmentBusy: false,
+      fixedReader,
+    });
+    expect(heldForEquipment(true, state(ready))).toBe(false);
+    expect(heldForEquipment(true, state(noReader))).toBe(true);
+    expect(heldForEquipment(true, state(null))).toBe(true);
+    expect(heldForEquipment(true, state(null, demo))).toBe(false);
+    expect(heldForEquipment(false, state(null))).toBe(false);
+    expect(heldForEquipment(false, state(noReader))).toBe(false);
+  });
+
+  it("holds every method while an equipment change is out", () => {
+    const busy = { equipment: ready, equipmentBusy: true, fixedReader: demo };
+    expect(heldForEquipment(true, busy)).toBe(true);
+    expect(heldForEquipment(false, busy)).toBe(true);
+  });
+
+  it("opens the row only once the equipment is read, and the demo reader counts as ready", () => {
+    expect(payRowWantsOpen(null, null)).toBe(false);
+    expect(payRowWantsOpen(ready, null)).toBe(false);
+    expect(payRowWantsOpen(noReader, null)).toBe(true);
+    expect(payRowWantsOpen(noReader, demo)).toBe(false);
+    expect(payRowWantsOpen(equipment({ choices: [barra] }), demo)).toBe(true);
   });
 });

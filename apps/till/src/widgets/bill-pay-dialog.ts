@@ -53,10 +53,10 @@ import {
 } from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import {
-  payPrinterOf,
-  payReaderOf,
-  printerWantsRowOpen,
-  rowStartsOpen,
+  heldForEquipment,
+  payRowWantsOpen,
+  readyPayReader,
+  type FixedReader,
 } from "../state/pay-equipment.js";
 import type { CardProvider, ReceiptGuestsDetail } from "./tender-pay.js";
 
@@ -521,7 +521,7 @@ export class TillBillPayDialog extends LitElement {
   /** An equipment change is out: nothing is taken until it is answered. */
   @property({ type: Boolean }) equipmentBusy = false;
   /** A practice venue's demo reader, charged whatever the equipment says. */
-  @property({ attribute: false }) fixedReader: { id: string; name: string } | null = null;
+  @property({ attribute: false }) fixedReader: FixedReader | null = null;
 
   @state() private chosenWay: PayWay = "items";
   @state() private picks = new Map<number, number>();
@@ -858,27 +858,16 @@ export class TillBillPayDialog extends LitElement {
 
   /** The reader a card would be charged on now: the practice venue's demo reader, else the
    * equipment's ready one; null before the equipment has been read. */
-  #readyReader(): { id: string; name: string } | null {
-    if (this.fixedReader !== null) return this.fixedReader;
-    if (this.equipment === null) return null;
-    const reader = payReaderOf(this.equipment);
-    return reader.kind === "ready" ? reader : null;
+  #readyReader(): FixedReader | null {
+    return readyPayReader(this.equipment, this.fixedReader);
   }
 
-  /** Whether a handheld holds the payment for its equipment: a change is out, or a reader card has
-   * no ready reader. */
   #heldForEquipment(method: Method): boolean {
-    if (!this.handheld) return false;
-    if (this.equipmentBusy) return true;
-    return method === "card" && this.#readyReader() === null;
+    return this.handheld && heldForEquipment(method === "card", this);
   }
 
-  /** An unread equipment does not open the row; the demo reader counts as ready. */
   #rowWantsOpen(): boolean {
-    if (!this.handheld || this.equipment === null) return false;
-    const printer = payPrinterOf(this.equipment);
-    if (this.fixedReader !== null) return printerWantsRowOpen(printer);
-    return rowStartsOpen(payReaderOf(this.equipment), printer);
+    return this.handheld && payRowWantsOpen(this.equipment, this.fixedReader);
   }
 
   #readerEntry(): CardEntry {
