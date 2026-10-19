@@ -3415,47 +3415,33 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A790. Choose a document and its permitted printer.**
   [Design addenda](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
   and [mockups](backlog/mockups/a790-document-and-printer-choice/README.md).
-  **A–K approved only in their precise scopes; full design/plan/build unapproved.**
-  **K, 2026-10-19 ~16:55: STAY OPEN + REFRESH.** After a successful offers read finds
-  no eligible printer, retain the document form, explanation, quiet disabled Print,
-  Refresh printers and Cancel. Refresh explicitly reads offers only, never prints/polls;
-  no inaccessible printer details. Loading/read failure/unanswered print stay separate.
-  **L alone, proposed:** targeted Forget saved printer for this document/venue/browser
-  (recommended), or no targeted control, leaving site-data clearing as the only manual
-  forgetting route. Example: Ana's accepted/completed Harbour F/1042 Receipt on Patio;
-  all outcomes known. Bar and Patio eligible to Luis. Targeted Forget clears only shared
-  Harbour/Receipt memory and the open form's selection; choose again, then confirm by name.
-  Harbour Invoice's Office · A4 and Hillside Receipt's Hillside bar remain unchanged.
-  Next newly opened form with both offers follows J: Choose a printer, quiet disabled Print.
-  Luis chooses Bar and still presses Print a copy on Bar receipt when server-designated;
-  only acceptance remembers. Alternative keeps Patio until accepted replacement or clearing
-  site data (I), with no clear-all-data form button or claim about unrelated site data.
-  Forget is shared browser preference clearing, not printer/admin/Equipment changes, printing
-  or cancellation. Current permissions/offers remain. L requires no unanswered submission;
-  never discard its identity or imply cancelled paper. G cannot auto-select mid-form.
-  A keeps identical full-invoice/customer facts across formats. B includes all active
-  sale-venue dashboard printers, A4/portable included, subject to authorization/offers/Orders/
-  accompanying-device restrictions, without profile step/till identity/Equipment changes.
-  C keeps inline foldable Invoice; D opens simplified Receipt directly with facts/language
-  retained, no F1 conversion/email. E/H/I share memory across logins, separately by venue/
-  document, surviving ordinary reopening; site-data clearing forgets it. F remembers a chosen printer
-  on acceptance, not paper; refusal/cancel-before-submit/empty offers leave memory alone.
-  G solely preselects on newly opened forms with one eligible/no usable memory; J requires
-  explicit choice with several. No mid-form automatic replacement or submitted rerouting.
-  Device role lists/phone's one Equipment receipt setting/A796 Revision 4 save concurrency
-  and overridable defaults remain; Q1–Q6 retain scope subject to A–K, no exclusive invoice-role
-  holder check. Do not reopen A–K/A796. Freeze sale/document/printer/language/
-  context under request identity; check authorization/location at reservation; reconcile
-  same-identity unknown/late outcomes before fresh work. Retain successful-write vs failed-
-  refresh, server original/copy, shared F1 delivery guard and closed public F1. No added
-  fiscal/payment/drawer effects. L, storage/expiry/errors/private lifecycles, concurrent/late
-  accepted intents/account transitions, device Invoice memory, portable receipt holding,
-  wider steps, integration and full design/plan/build remain open.
-  [Eight static K/L boards](backlog/mockups/a790-document-and-printer-choice/revision-k-and-forget-printer/README.md)
-  cover EN/ES, light/dark, 390/1280; all eight PNGs rendered in headless Chromium from native
-  SVGs inside an HTML wrapper and individually inspected; native text bounds checked.
-  Old design/README bytes remain exact historical suffixes. No existing implementation or
-  new runtime/accessibility/legal/physical-output evidence claimed.
+  **A–L approved only in their precise scopes; full design/plan/build unapproved.**
+  **L, 2026-10-19 ~17:22: NO FORGET BUTTON.** Dashboard print forms offer no Forget
+  control. Only the next accepted print replaces the remembered printer for that browser,
+  venue and document; browser site-data clearing forgets it. Selection, cancel-before-submit
+  and refusal leave it alone. Site-data clearing cancels no pending print and must not
+  discard an unanswered request's identity. No extra automatic expiry/manual reset is added.
+  **M alone, proposed:** should choosing an Invoice printer on an authenticated phone/till
+  update the same Equipment Invoice setting on successful save (recommended), or apply only
+  to this invoice? Ana's Invoice setting is Office · A4; her profile also permits Terrace
+  belt on receipt paper. She chooses Terrace for recorded F/1042. Shared-setting proposal:
+  after a successful save, Equipment and the next new Invoice form F/1043 use Terrace while
+  eligible. Alternative: F/1042 requests Terrace after named confirmation, while Equipment
+  and the next new form stay Office. Receipt stays Bar receipt in both. Choosing/saving
+  never prints; an unanswered save is not yet confirmed. Exact save/concurrency/permission/
+  failure/late-identity handling remains open, without an atomic save+print promise.
+  M grants no permission and changes neither dashboard browser memory nor A796 Receipt.
+  Q2's eligible device choice then profile default, mixed-paper invoice list and Q4's lack
+  of an exclusive Invoice holder check remain. A–K's document facts, dashboard scope,
+  inline forms, browser-memory rules, fallback and empty-list behavior remain in the design.
+  Keep fixed request context, same-identity reconciliation, current authorization/location
+  checks, server original/copy and the shared F1 guard; public F1 stays closed. No extra
+  payment/fiscal/drawer effect. M, technical storage/errors/private lifecycles/concurrent-late
+  outcomes/account transitions, portable Receipt holding, wider steps, integration and full
+  design/plan/build remain open. Do not re-ask A–L/A796; A799 is untouched.
+  [Eight static L/M boards](backlog/mockups/a790-document-and-printer-choice/revision-l-and-invoice-equipment/README.md)
+  cover EN/ES, light/dark, 390/1280. All eight final PNGs rendered and individually inspected; native SVG text bounds checked. Historical design
+  and README bytes remain exact suffixes; no runtime/accessibility/physical result claimed.
 
 - **Loose ends left by A661 (#1745).**
   - The till's payment-time options and a staged A4 choice resolve the device's invoice printer

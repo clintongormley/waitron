@@ -1,3 +1,63 @@
+# A790: L agreed; M proposed, 2026-10-19, after the 17:22 answer
+
+**A–L keep their precise answered scopes; M alone is proposed. Full design, plan and build
+remain unapproved.** This addendum and the
+[latest design addendum](../../../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+take precedence over conflicting historical text and boards. Every previous README byte
+follows unchanged as an exact historical suffix.
+
+L records the owner's **NO FORGET BUTTON** answer in lane F's `questions.md` at about 17:22.
+The dashboard print form has no Forget control. In the same normal shared browser, Ana's
+accepted/completed Harbour F/1042 Receipt on Patio remains remembered when Luis chooses
+eligible Bar. Only his named final confirmation followed by server acceptance replaces
+Patio. Cancel-before-submit or refusal does not; unknown/late outcomes require the same
+request identity. Harbour Invoice's Office · A4 and Hillside memories stay independent.
+Site-data clearing remains outside the form, cancels no pending print and must not discard
+its identity. No extra automatic expiry or manual reset is added. K's successful-empty
+form stays open with quiet disabled Print, offers-only Refresh printers and Cancel;
+loading/read failure/unknown print remain separate. Do not re-ask K or L.
+
+**M, proposal only:** when choosing another Invoice printer on an authenticated phone/till,
+update its existing Equipment Invoice setting immediately on successful save (recommended,
+matching Receipt), or use it only for this invoice? Recommend the same setting at/after
+payment so Equipment and future Invoice forms agree. This grants no new permission, adds
+no invoice-history preference and does not change dashboard F's acceptance trigger.
+
+Ana starts with Equipment Invoice **Office · A4**, Receipt **Bar receipt**. Both Office and
+**Terrace belt · Receipt paper** are on her profile's invoice list. She explicitly chooses
+Terrace in F/1042's inline Invoice row. Recommended: after a successful Equipment save,
+Equipment and the next new Invoice form F/1043 use Terrace while eligible. Alternative:
+F/1042 requests Terrace after named confirmation, but Equipment and next form stay Office.
+Receipt stays Bar in both. Choosing/saving never prints. An in-progress save is not yet confirmed; a refused save is not saved; save/permission/concurrency/failure/late-identity details remain builder/design work,
+not inherited from A796 Receipt, with no atomic save+print promise. A submitted F/1042
+cannot be rerouted by later settings. Existing field/role source readings and exact Q1–Q6
+scope are in the design addendum; no existing selector update is claimed.
+
+A–K's boundaries remain: identical recorded full-invoice/customer facts; all active
+sale-venue dashboard printers including A4/portable under current authorization/offers/
+Orders/device restrictions; no dashboard profile/till identity/Equipment changes; inline
+foldable Invoice; direct simplified Receipt with facts/language and no F1 conversion/email;
+shared browser memory by venue/document through ordinary reopening; acceptance-only updates;
+G/J newly-opened fallback only; K's successful-empty form. Device Invoice still starts with
+its eligible setting else eligible profile default, uses the profile's mixed-paper invoice
+list, and Q4 adds no exclusive Invoice holder. Phone Receipt's one Equipment setting and
+A796 Revision 4 stay unchanged. Preserve frozen request context, reservation authorization/
+location checks, same-identity unknown/late reconciliation, successful-write versus failed-
+refresh, server original/copy, shared F1 guard and closed public F1. No payment/fiscal/drawer
+effects. M, technical storage/errors/private lifecycles/concurrent-late intents/account
+transitions, portable Receipt holding, integration and full design/plan/build stay open.
+A799 is untouched.
+
+[Eight new native SVG boards](revision-l-and-invoice-equipment/README.md) and their PNGs
+cover EN/ES, light/dark, 390/1280 px. Green labels identify agreed L; amber labels identify
+both proposed M alternatives. All eight final PNGs were rendered in headless Chromium and
+individually inspected; native SVG text bounds were checked. Cards show UI details;
+surrounding prose explains the design. These static drawings provide no runtime,
+accessibility or physical-output evidence. Earlier inspection statements belong only to
+their earlier artifacts.
+
+---
+
 # A790: K agreed; L proposed, 2026-10-19, after the 16:55 answer
 
 **A–K retain only their precise answered scopes. L alone is proposed; full design, plan

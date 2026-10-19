@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="850" viewBox="0 0 1280 850" role="img" aria-labelledby="title desc" xml:lang="es">
+<title id="title">Sin botón de olvidar. ¿Un ajuste de Factura?</title>
+<desc id="desc">L acordado · M solo propuesto · 19 oct 2026. Static design snapshots: dashboard has no Forget control; proposed device Invoice setting alternatives. UI cards and design explanation are labelled separately. No runtime verification.</desc>
+<!-- Static palette snapshot from packages/ui-core/src/tokens/colors.css; no external assets. -->
+<rect x="0" y="0" width="1280" height="850" rx="0" fill="#f7f7f8"/>
+<text x="24" y="30" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600">L acordado · M solo propuesto · 19 oct 2026</text>
+<text x="24" y="69" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">Sin botón de olvidar. ¿Un ajuste de Factura?</text>
+<text x="24" y="98" fill="#8a5300" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Diseño/plan/construcción sin aprobar.</text>
+<path d="M24 118h1232" stroke="#d6d9e0" fill="none"/>
+<text x="24" y="150" fill="#1a7f5a" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700">L · ACORDADO / PANEL</text>
+<text x="24" y="177" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Patio: solicitud aceptada y completada.</text>
+<text x="24" y="195" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Luis también puede elegir Bar aquí.</text>
+<rect x="24" y="215" width="396" height="96" rx="12" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="38" y="236" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Luis abre el formulario · Harbour</text>
+<text x="38" y="261" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Recibo · F/1042</text>
+<text x="38" y="293" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600">Impresora * Patio receipt</text>
+<path d="M392 284l5 5 5 -5" fill="none" stroke="#5c626e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="24" y="323" width="396" height="164" rx="12" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="38" y="346" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Luis ha elegido Bar receipt</text>
+<text x="38" y="370" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">Impresora *</text>
+<rect x="38" y="380" width="368" height="42" rx="7" fill="#f0f1f4" stroke="#7d8390"/>
+<text x="50" y="406" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600">Bar receipt</text>
+<path d="M380 398l5 5 5 -5" fill="none" stroke="#5c626e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="38" y="460" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Cancelar</text>
+<rect x="174" y="430" width="232" height="52" rx="8" fill="#1f6feb"/>
+<text x="188" y="451" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Imprimir una copia en</text>
+<text x="188" y="469" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Bar receipt</text>
+<text x="24" y="505" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Diseño · Solo la aceptación recuerda Bar.</text>
+<text x="24" y="523" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Cancelar/rechazo no. Sin respuesta: mismo ID.</text>
+<text x="24" y="541" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Factura Office / Hillside siguen separados.</text>
+<text x="442" y="150" fill="#8a5300" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700">M · PROPUESTO / RECOMENDADO</text>
+<text x="442" y="177" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Ana · teléfono autenticado · Harbour</text>
+<text x="442" y="195" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Antes: Equipo Factura = Office · A4.</text>
+<rect x="442" y="215" width="396" height="148" rx="12" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="456" y="236" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Fila Factura desplegada (detalle)</text>
+<text x="456" y="260" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Factura · F/1042</text>
+<text x="456" y="280" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">Impresora *</text>
+<circle cx="463" cy="298" r="7" fill="#ffffff" stroke="#7d8390" stroke-width="1.5"/>
+<text x="479" y="303" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Office · A4</text>
+<circle cx="463" cy="323" r="7" fill="#ffffff" stroke="#1f6feb" stroke-width="1.5"/>
+<circle cx="463" cy="323" r="3.5" fill="#1f6feb"/>
+<text x="479" y="328" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Terrace belt · Papel de recibo</text>
+<text x="456" y="351" fill="#8a5300" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600">Guardando… · Aún sin confirmar</text>
+<text x="442" y="385" fill="#1a5fd0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600">Diseño · Tras guardar correctamente</text>
+<rect x="442" y="397" width="396" height="74" rx="12" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="456" y="418" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Equipo</text>
+<text x="456" y="440" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Factura · Terrace belt</text>
+<text x="456" y="460" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Recibo · Bar receipt · sin cambios</text>
+<rect x="442" y="483" width="396" height="58" rx="12" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="456" y="503" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · NUEVA Factura · F/1043</text>
+<text x="456" y="526" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Impresora * Terrace belt</text>
+<text x="860" y="150" fill="#8a5300" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700">M · PROPUESTO / ALTERNATIVA</text>
+<text x="860" y="177" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Usar Terrace solo para esta factura.</text>
+<text x="860" y="195" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">El perfil permite Office y Terrace belt.</text>
+<rect x="860" y="215" width="396" height="192" rx="12" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="874" y="237" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Formulario Factura · Harbour</text>
+<text x="874" y="261" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Factura · F/1042</text>
+<text x="874" y="281" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">Impresora *</text>
+<rect x="874" y="290" width="368" height="42" rx="7" fill="#f0f1f4" stroke="#7d8390"/>
+<text x="886" y="316" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600">Terrace belt</text>
+<path d="M1216 308l5 5 5 -5" fill="none" stroke="#5c626e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="874" y="372" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Cancelar</text>
+<rect x="1010" y="342" width="232" height="52" rx="8" fill="#1f6feb"/>
+<text x="1024" y="363" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Imprimir una copia en</text>
+<text x="1024" y="381" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Terrace belt</text>
+<text x="860" y="428" fill="#1a5fd0" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600">Diseño · Equipo conserva su ajuste</text>
+<rect x="860" y="440" width="396" height="74" rx="12" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="874" y="461" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Equipo</text>
+<text x="874" y="483" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Factura · Office · A4</text>
+<text x="874" y="503" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Recibo · Bar receipt · sin cambios</text>
+<rect x="860" y="526" width="396" height="58" rx="12" fill="#ffffff" stroke="#d6d9e0"/>
+<text x="874" y="546" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · NUEVA Factura · F/1043</text>
+<text x="874" y="569" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Impresora * Office · A4</text>
+<path d="M24 614h1232" stroke="#d6d9e0" fill="none"/>
+<text x="24" y="643" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700">Explicación del diseño · se mantienen los límites</text>
+<text x="24" y="674" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600">L · Memoria del navegador</text>
+<text x="24" y="699" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Borrar datos del sitio queda fuera de la UI.</text>
+<text x="24" y="720" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">No cancela impresiones pendientes ni permite</text>
+<text x="24" y="741" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">perder la identidad de su solicitud. Factura</text>
+<text x="24" y="762" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">de Harbour: Office · A4. Hillside es aparte.</text>
+<text x="442" y="674" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600">M · Un ajuste existente para Factura</text>
+<text x="442" y="699" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Office · A4 y Terrace belt están en la lista</text>
+<text x="442" y="720" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">de facturas del perfil actual. Recibo sigue</text>
+<text x="442" y="741" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">en Bar receipt en ambas opciones. Guardado,</text>
+<text x="442" y="762" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">permisos y concurrencia quedan por diseñar.</text>
+<text x="860" y="674" fill="#16181d" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600">Elegir y guardar nunca imprimen</text>
+<text x="860" y="699" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Guardando: sin confirmar. No se</text>
+<text x="860" y="720" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">promete guardar e imprimir de forma atómica.</text>
+<text x="860" y="741" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Otro ajuste no redirige F/1042 ya enviada.</text>
+<text x="860" y="762" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">M no concede nuevos permisos de Equipo.</text>
+<text x="24" y="826" fill="#5c626e" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Propuesta estática · A–L conservan su alcance · No afirma comportamiento existente ni habilita F1 pública.</text>
+</svg>

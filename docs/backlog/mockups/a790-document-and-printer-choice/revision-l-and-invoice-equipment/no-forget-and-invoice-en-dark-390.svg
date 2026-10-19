@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="390" height="1490" viewBox="0 0 390 1490" role="img" aria-labelledby="title desc" xml:lang="en">
+<title id="title">No Forget button. One Invoice setting?</title>
+<desc id="desc">L agreed · M proposed only · 19 Oct 2026. Static design snapshots: dashboard has no Forget control; proposed device Invoice setting alternatives. UI cards and design explanation are labelled separately. No runtime verification.</desc>
+<!-- Static palette snapshot from packages/ui-core/src/tokens/colors.css; no external assets. -->
+<rect x="0" y="0" width="390" height="1490" rx="0" fill="#101216"/>
+<text x="16" y="28" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">L agreed · M proposed only · 19 Oct 2026</text>
+<text x="16" y="62" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700">No Forget button.</text>
+<text x="16" y="94" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700">One Invoice setting?</text>
+<text x="16" y="115" fill="#f2b24c" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">Full design/plan/build unapproved.</text>
+<path d="M16 126h358" stroke="#333945" fill="none"/>
+<text x="16" y="142" fill="#4ac08d" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700">L · AGREED / DASHBOARD</text>
+<text x="16" y="169" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Patio was accepted and completed.</text>
+<text x="16" y="187" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Luis can also choose Bar in this browser.</text>
+<rect x="16" y="207" width="358" height="96" rx="12" fill="#191c22" stroke="#333945"/>
+<text x="30" y="228" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Opened by Luis · Harbour</text>
+<text x="30" y="253" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Receipt · F/1042</text>
+<text x="30" y="285" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600">Printer * Patio receipt</text>
+<path d="M346 276l5 5 5 -5" fill="none" stroke="#a1a7b3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="16" y="315" width="358" height="164" rx="12" fill="#191c22" stroke="#333945"/>
+<text x="30" y="338" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · After Luis chooses Bar receipt</text>
+<text x="30" y="362" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">Printer *</text>
+<rect x="30" y="372" width="330" height="42" rx="7" fill="#262a33" stroke="#7a8291"/>
+<text x="42" y="398" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600">Bar receipt</text>
+<path d="M334 390l5 5 5 -5" fill="none" stroke="#a1a7b3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="30" y="452" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Cancel</text>
+<rect x="142" y="422" width="218" height="52" rx="8" fill="#4c8dff"/>
+<text x="156" y="443" fill="#06101f" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Print a copy on</text>
+<text x="156" y="461" fill="#06101f" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Bar receipt</text>
+<text x="16" y="497" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Design · Only acceptance remembers Bar.</text>
+<text x="16" y="515" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Cancel/refusal do not. Unknown: same ID.</text>
+<text x="16" y="533" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Invoice Office / Hillside stay separate.</text>
+<text x="16" y="566" fill="#f2b24c" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700">M · PROPOSED / RECOMMENDED</text>
+<text x="16" y="593" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Ana · authenticated Harbour phone</text>
+<text x="16" y="611" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Before: Equipment Invoice = Office · A4.</text>
+<rect x="16" y="631" width="358" height="148" rx="12" fill="#191c22" stroke="#333945"/>
+<text x="30" y="652" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Expanded Invoice row (detail)</text>
+<text x="30" y="676" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Invoice · F/1042</text>
+<text x="30" y="696" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">Printer *</text>
+<circle cx="37" cy="714" r="7" fill="#191c22" stroke="#7a8291" stroke-width="1.5"/>
+<text x="53" y="719" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Office · A4</text>
+<circle cx="37" cy="739" r="7" fill="#191c22" stroke="#4c8dff" stroke-width="1.5"/>
+<circle cx="37" cy="739" r="3.5" fill="#4c8dff"/>
+<text x="53" y="744" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Terrace belt · Receipt paper</text>
+<text x="30" y="767" fill="#f2b24c" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600">Saving… · Not yet confirmed</text>
+<text x="16" y="801" fill="#78a9ff" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600">Design · After a successful save</text>
+<rect x="16" y="813" width="358" height="74" rx="12" fill="#191c22" stroke="#333945"/>
+<text x="30" y="834" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Equipment</text>
+<text x="30" y="856" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Invoice · Terrace belt</text>
+<text x="30" y="876" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Receipt · Bar receipt · unchanged</text>
+<rect x="16" y="899" width="358" height="58" rx="12" fill="#191c22" stroke="#333945"/>
+<text x="30" y="919" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Next NEW Invoice · F/1043</text>
+<text x="30" y="942" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Printer * Terrace belt</text>
+<text x="16" y="990" fill="#f2b24c" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700">M · PROPOSED / ALTERNATIVE</text>
+<text x="16" y="1017" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Use Terrace for this invoice only.</text>
+<text x="16" y="1035" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400">Profile permits Office and Terrace belt.</text>
+<rect x="16" y="1055" width="358" height="192" rx="12" fill="#191c22" stroke="#333945"/>
+<text x="30" y="1077" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Invoice form · Harbour</text>
+<text x="30" y="1101" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Invoice · F/1042</text>
+<text x="30" y="1121" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">Printer *</text>
+<rect x="30" y="1130" width="330" height="42" rx="7" fill="#262a33" stroke="#7a8291"/>
+<text x="42" y="1156" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600">Terrace belt</text>
+<path d="M334 1148l5 5 5 -5" fill="none" stroke="#a1a7b3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="30" y="1212" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Cancel</text>
+<rect x="142" y="1182" width="218" height="52" rx="8" fill="#4c8dff"/>
+<text x="156" y="1203" fill="#06101f" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Print a copy on</text>
+<text x="156" y="1221" fill="#06101f" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Terrace belt</text>
+<text x="16" y="1268" fill="#78a9ff" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="600">Design · Equipment stays as it was</text>
+<rect x="16" y="1280" width="358" height="74" rx="12" fill="#191c22" stroke="#333945"/>
+<text x="30" y="1301" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Equipment</text>
+<text x="30" y="1323" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Invoice · Office · A4</text>
+<text x="30" y="1343" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Receipt · Bar receipt · unchanged</text>
+<rect x="16" y="1366" width="358" height="58" rx="12" fill="#191c22" stroke="#333945"/>
+<text x="30" y="1386" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600">UI · Next NEW Invoice · F/1043</text>
+<text x="30" y="1409" fill="#eceef2" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600">Printer * Office · A4</text>
+<text x="16" y="1444" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Design · Choosing/saving never prints.</text>
+<text x="16" y="1462" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Saving: unconfirmed. Refused: not saved.</text>
+<text x="16" y="1480" fill="#a1a7b3" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400">Submitted F/1042 cannot be rerouted.</text>
+</svg>
