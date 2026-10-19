@@ -570,7 +570,7 @@ describe("adjusting an owned recalled family", () => {
     expect(await frozen()).toEqual(before);
   });
 
-  it("retains the ordinary required note and manager approval before cancelling a recalled source", async () => {
+  it("retains the ordinary required note and refund approval before cancelling a recalled source", async () => {
     const p = await setup("fire");
     const [owner] = await venue.db.select().from(persons).where(eq(persons.id, venue.staffId));
     const reason = await inTx(venue, (tx) =>

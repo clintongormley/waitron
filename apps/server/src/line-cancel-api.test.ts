@@ -137,11 +137,11 @@ async function frozen() {
     payments: await venue.db.select().from(billPayments).orderBy(billPayments.id),
   };
 }
-async function managerReason() {
+async function notedVoidReason() {
   return inTx(venue, (tx) =>
     createAdjustmentReason(tx, {
       name: `Cancel-key-${randomUUID()}`,
-      names: { en: "Manager reason", es: "Motivo gerente" },
+      names: { en: "Noted void", es: "Cancelación con nota" },
       kind: "void",
       actions: ["cancel"],
       maxPercentBp: null,
@@ -355,9 +355,9 @@ describe("the public cancellation read and command", () => {
     expect(await frozen()).toEqual(after);
   });
 
-  it("checks the reason's PIN before the write lock after preparation Yes", async () => {
+  it("checks the refund approver's PIN before the write lock after preparation Yes", async () => {
     const p = await fixture("fire");
-    const reason = await managerReason();
+    const reason = await notedVoidReason();
     const body = await bodyFor(p, {
       preparationStarted: true,
       reasonId: reason.id,
@@ -450,7 +450,7 @@ describe("the public cancellation read and command", () => {
 
   it("does not check a supplied reason's PIN for removing unpaid unstarted food", async () => {
     const p = await fixture();
-    const reason = await managerReason();
+    const reason = await notedVoidReason();
     watchDerivationsAndLock(venue.db, "9999", async () => {});
     const answer = await post(
       p,
@@ -775,9 +775,9 @@ describe("the public cancellation read and command", () => {
     },
   );
 
-  it("derives a required manager PIN once outside the write lock", async () => {
+  it("derives a required refund approver's PIN once outside the write lock", async () => {
     const p = await startedFixture();
-    const reason = await managerReason();
+    const reason = await notedVoidReason();
     const body = await bodyFor(p, {
       reasonId: reason.id,
       note: "guest changed their mind",
@@ -797,7 +797,7 @@ describe("the public cancellation read and command", () => {
 
   it("counts wrong manager PINs on the existing device throttle", async () => {
     const p = await startedFixture();
-    const reason = await managerReason();
+    const reason = await notedVoidReason();
     const throttle = createPinThrottle({ now: () => 1_000_000 });
     const app = new Hono();
     mountTillApi(
@@ -955,7 +955,7 @@ describe("the public cancellation read and command", () => {
 
   it("uses the venue language for the recorded reason when the request configuration differs", async () => {
     const p = await startedFixture();
-    const reason = await managerReason();
+    const reason = await notedVoidReason();
     const app = new Hono();
     mountTillApi(
       app,
@@ -982,12 +982,12 @@ describe("the public cancellation read and command", () => {
     expect(answer.status).toBe(200);
     expect(
       (await frozen()).adjustments.find((a) => a.workingOrderId === p.billId)?.reasonName,
-    ).toBe("Manager reason");
+    ).toBe("Noted void");
   });
 
   it("refuses a session ended while its manager PIN is being checked", async () => {
     const p = await startedFixture();
-    const reason = await managerReason();
+    const reason = await notedVoidReason();
     const body = await bodyFor(p, {
       reasonId: reason.id,
       note: "test",
@@ -1019,7 +1019,7 @@ describe("the public cancellation read and command", () => {
 
   it("checks the new profile's zones when the device changes profile during its PIN check", async () => {
     const p = await startedFixture();
-    const reason = await managerReason();
+    const reason = await notedVoidReason();
     const body = await bodyFor(p, {
       reasonId: reason.id,
       note: "test",
@@ -1167,7 +1167,7 @@ describe("the public cancellation read and command", () => {
 
   it("refuses take-orders revoked during a manager PIN check", async () => {
     const p = await startedFixture();
-    const reason = await managerReason();
+    const reason = await notedVoidReason();
     const body = await bodyFor(p, {
       reasonId: reason.id,
       note: "test",

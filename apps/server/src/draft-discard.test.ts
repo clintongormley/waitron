@@ -604,7 +604,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
     expect(await frozen()).toEqual(before);
   });
 
-  it("retains reason, required-note and manager-PIN policy for the whole Discard", async () => {
+  it("retains reason, required-note and refund-approval policy for the whole Discard", async () => {
     const p = await setup(false, false, false, "fire");
     const reason = await inTx(venue, (tx) =>
       createAdjustmentReason(tx, {
