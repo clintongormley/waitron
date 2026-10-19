@@ -2613,6 +2613,220 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
   });
 });
 
+describe("till-app: a balance read that shows the held payment (A796 default 7)", () => {
+  // The read that does not show the payment changes nothing: A773's "A773 an unanswered partial
+  // payment remains the only request across operator changes" pins it.
+  let shows: Partial<BillPaymentView> | null;
+  let showsBill: Partial<BillBalance>;
+
+  function shown(): BillBalance {
+    if (shows === null) return balanceOf();
+    return balanceOf({
+      received: "40.00",
+      outstanding: "80.00",
+      ...showsBill,
+      payments: [
+        paymentOf({
+          submissionId: sent()[0]!.submissionId,
+          applied: "40.00",
+          tendered: "50.00",
+          change: "10.00",
+          ...shows,
+        }),
+      ],
+    });
+  }
+
+  async function mountUnanswered(): Promise<{ el: TillApp; original: BillPaymentRequest }> {
+    shows = null;
+    showsBill = {};
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({
+      takeBillPayment,
+      getBillBalance: vi.fn(async () => shown()),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    return { el, original: structuredClone(sent()[0]!) };
+  }
+
+  async function reopen(el: TillApp): Promise<void> {
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    await openDialog(el, "contribution");
+    await flush(el);
+  }
+
+  it.each(["received", "pending", "declined", "failed"] as const)(
+    "frees the bill and shows the payment %s",
+    async (state) => {
+      const { el, original } = await mountUnanswered();
+      expect(dialog(el)!.confirmationLocked).toBe(true);
+      shows = { state };
+
+      await reopen(el);
+
+      expect(dialog(el)!.confirmationLocked).toBe(false);
+      expect(dialog(el)!.asked).toBeNull();
+      expect(dialog(el)!.preview).toBeNull();
+      expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+      if (state === "received") {
+        expect(dialog(el)!.taken).toEqual({ change: "10.00" });
+        expect(dialog(el)!.refusal).toBeNull();
+      } else if (state === "pending") {
+        expect(dialog(el)!.taken).toEqual({ change: null, pending: "40.00" });
+        expect(dialog(el)!.refusal).toBeNull();
+      } else {
+        expect(dialog(el)!.taken).toBeNull();
+        expect(inDialog(el, "wt-form-actions")!.error).toBe(
+          t(state === "declined" ? "bill_pay.card_declined" : "bill_pay.payment_failed"),
+        );
+      }
+
+      const before = sent().length;
+      vi.mocked(api.takeBillPayment).mockResolvedValueOnce(
+        takenOf({ applied: "40.00", change: "10.00" }, { received: "80.00", outstanding: "40.00" }),
+      );
+      await type(el, "amount", "40");
+      await type(el, "tendered", "50");
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      expect(sent().length).toBe(before + 1);
+      expect(sent().at(-1)!.submissionId).not.toBe(original.submissionId);
+    },
+  );
+
+  it("frees the bill when the dialog closed before the read that shows the payment answered", async () => {
+    const { el } = await mountUnanswered();
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    let answer: () => void = () => {};
+    vi.mocked(api.getBillBalance).mockImplementationOnce(
+      () => new Promise<BillBalance>((resolve) => (answer = () => resolve(shown()))),
+    );
+    await openDialog(el, "contribution");
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    shows = { state: "pending" };
+
+    answer();
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "120.00", guests: 4 });
+    await flush(el);
+    expect(api.recordSale).toHaveBeenCalledOnce();
+  });
+
+  it("the read straight after a send that got no answer counts, and frees the bill when it shows the payment", async () => {
+    shows = null;
+    showsBill = {};
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ takeBillPayment, getBillBalance: vi.fn(async () => shown()) });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    shows = { state: "pending" };
+    await press(el, "[data-pay-confirm]");
+
+    await expect
+      .poll(() => dialog(el)!.taken, { timeout: 10_000 })
+      .toEqual({
+        change: null,
+        pending: "40.00",
+      });
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+  });
+
+  it("keeps the locked confirmation when the payment settled the bill, and Comprobar de nuevo shows the ticket", async () => {
+    const { el, original } = await mountUnanswered();
+    shows = { state: "received" };
+    showsBill = { status: "settled", received: "120.00", outstanding: "0.00" };
+
+    await reopen(el);
+
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+    const confirm = inDialog(el, "[data-pay-confirm]")!;
+    expect(text(confirm)).toBe(t("bill_pay.recheck"));
+    vi.mocked(api.takeBillPayment).mockResolvedValueOnce(
+      takenOf(
+        { applied: "40.00", change: "10.00" },
+        { status: "settled", received: "120.00", outstanding: "0.00" },
+        invoiceOf("120.00"),
+      ),
+    );
+    await press(el, "[data-pay-confirm]");
+    await flush(el);
+
+    expect(sent().at(-1)).toEqual(original);
+    expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+  });
+
+  it("changes nothing while a resend of it is still out", async () => {
+    const { el, original } = await mountUnanswered();
+    vi.mocked(api.takeBillPayment).mockImplementation(
+      () => new Promise<BillPaymentResult>(() => {}),
+    );
+    await press(el, "[data-pay-confirm]");
+    expect(sent().at(-1)).toEqual(original);
+    shows = { state: "pending" };
+
+    await reopen(el);
+
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(dialog(el)!.busy).toBe(true);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.sending"));
+    expect(dialog(el)!.taken).toBeNull();
+  });
+
+  it("a read sent before the send ended changes nothing, even when it answers after and shows the payment", async () => {
+    shows = null;
+    showsBill = {};
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    let answer: () => void = () => {};
+    const getBillBalance = vi.fn(async () => shown());
+    const { el } = await mountApp({ takeBillPayment, getBillBalance });
+    await openTable(el);
+    getBillBalance.mockImplementationOnce(
+      () => new Promise<BillBalance>((resolve) => (answer = () => resolve(shown()))),
+    );
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    const reads = getBillBalance.mock.calls.length;
+    shows = { state: "pending" };
+
+    answer();
+    await flush(el);
+
+    expect(getBillBalance.mock.calls.length).toBe(reads);
+    expect(dialog(el)!.balance!.payments).toHaveLength(1);
+    expect(dialog(el)!.confirmationLocked).toBe(true);
+    expect(dialog(el)!.taken).toBeNull();
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
+  });
+});
+
 describe("till-app: the bill's balance is read once for each answer", () => {
   const partly = billOf({ outstanding: "70.00", hasPayments: true });
   const heldMoney = balanceOf({ received: "50.00", outstanding: "70.00", payments: [paymentOf()] });

@@ -2961,6 +2961,10 @@ export class TillApp extends LitElement {
   #paymentSends = new Map<string, number>();
   /** The bill payment being sent on each bill, and the dialog that sent it. */
   #paymentsOut = new Map<string, { dialogId: number; shown: PendingBillPayment["shown"] }>();
+  /** One count for both balance reads sent and payment sends ended, so a read can tell whether it
+   * was sent after the bill's last send ended. */
+  #payTicks = 0;
+  #sendEndedAt = new Map<string, number>();
 
   /** No payment may start on a bill while one is out on it, or one A773-1 holds has no answer. */
   #billPaymentHeld(billId: string): boolean {
@@ -15763,11 +15767,13 @@ export class TillApp extends LitElement {
   /** The bill's balance read again into the dialog `id` and the screen, and returned. A failed read
    * says so above the dialog's action unless it already shows a refusal. */
   async #rereadBillPaying(id: number, billId: string): Promise<BillBalance | undefined> {
+    const sentAt = ++this.#payTicks;
     try {
       const balance = await this.api.getBillBalance(billId);
       if (this.activeTabId === billId) this.billBalance = balance;
       const now = this.#billPayingNow(id);
       if (now !== null) this.billPaying = { ...now, balance };
+      if (sentAt > (this.#sendEndedAt.get(billId) ?? 0)) this.#freeShownPayment(billId, balance);
       return balance;
     } catch {
       const now = this.#billPayingNow(id);
@@ -15775,6 +15781,35 @@ export class TillApp extends LitElement {
         this.billPaying = { ...now, refusal: { code: "unread" } };
       return undefined;
     }
+  }
+
+  /**
+   * A payment A773-1 holds that a balance read shows frees its bill, and an open dialog on the bill
+   * goes to the form saying what the bill records of it. One that settled the bill stays held: its
+   * Check again replays it and shows the ticket. A read sent while a send was out may show the
+   * payment as it stood before that send settled it, so the caller passes only reads sent after.
+   */
+  #freeShownPayment(billId: string, balance: BillBalance): void {
+    const entry = this.#unansweredPayments.get(billId);
+    if (entry?.unconfirmed !== true || this.#paymentsOut.has(billId)) return;
+    const payment = balance.payments.find(
+      (shown) => shown.submissionId === entry.request.submissionId,
+    );
+    if (payment === undefined) return;
+    if (payment.state === "received" && balance.status === "settled") return;
+    this.#unansweredPayments.delete(billId);
+    const open = this.billPaying;
+    if (open === null || open.billId !== billId) return;
+    const outcome: Pick<BillPaying, "taken" | "refusal"> =
+      payment.state === "received"
+        ? { taken: { change: payment.change }, refusal: null }
+        : payment.state === "pending"
+          ? { taken: { change: null, pending: payment.applied }, refusal: null }
+          : {
+              taken: null,
+              refusal: { code: payment.state === "declined" ? "declined" : "payment_failed" },
+            };
+    this.billPaying = { ...open, asked: null, preview: null, ...outcome };
   }
 
   async #onBillPayPreview(event: Event): Promise<void> {
@@ -15862,6 +15897,7 @@ export class TillApp extends LitElement {
     };
     const settle = (error?: unknown) => {
       if (!isLatestSend(this.#paymentSends, key, turn)) return;
+      this.#sendEndedAt.set(key, ++this.#payTicks);
       const unanswered = unansweredAfter(submission, error);
       if (unanswered === null) this.#unansweredPayments.delete(key);
       else this.#unansweredPayments.set(key, unanswered);
