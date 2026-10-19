@@ -640,12 +640,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Still open from W109-5's Barcelona look (2026-10-07):** product groups and prep stations
   stay English under Spanish staff-facing dish names (the plan's known limit).
 
-- **A835. Check whether the demo's stored practice sales can be reprinted and looked up on the
-  till.** W109-5's Barcelona look read that both look a sale up through its till order, which a
-  practice sale does not have; nobody checked it against the code. One run on the demo: if it is
-  real, seed those sales with till orders like real sales so reprint and look-up work; if both
-  already work, delete this entry.
-
 - **The demo’s Catalan and Galician text needs a speaker’s check** (W109-3, #1321,
   owner decision 4, 2026-10-06). A speaker of each
   should read it. The demo's Drinks section labels in Catalan and Galician are drafts awaiting the
