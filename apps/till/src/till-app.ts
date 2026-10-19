@@ -10515,18 +10515,32 @@ export class TillApp extends LitElement {
   }
 
   async #onSplitGroupLine(event: Event): Promise<void> {
+    if (this.groupCommandBusy) return;
+    if (this.orderParty === null) {
+      this.errorKey = "table.error";
+      return;
+    }
     const { lineId } = (event as CustomEvent<SplitGroupLineDetail>).detail;
-    await this.#onGroupRequest((party, command) => {
-      const row = this.currentOrders?.groups
-        .flatMap((group) => group.rows)
-        .find((row) => row.lineId === lineId);
-      const billId =
-        row?.workingOrderId ??
-        (this.tabLines.some((line) => line.id === lineId) ? this.activeTabId : undefined);
-      const expectedEdit = billId === undefined ? null : this.#draftSync?.expectedEditFor(billId);
-      if (expectedEdit == null) throw { code: "draft.out_of_date" };
-      return this.api.splitHeldLineIntoUnits(party.id, lineId, { ...command, expectedEdit });
-    });
+    const row = this.currentOrders?.groups
+      .flatMap((group) => group.rows)
+      .find((row) => row.lineId === lineId);
+    const billId =
+      row?.workingOrderId ??
+      (this.tabLines.some((line) => line.id === lineId) ? this.activeTabId : undefined);
+    const expectedEdit = billId === undefined ? null : this.#billChoiceEdit(billId);
+    if (billId === undefined || expectedEdit == null) {
+      this.errorKey = { code: "draft.out_of_date" };
+      return;
+    }
+    const composition = this.#billComposition([billId]);
+    if (composition === null) return;
+    const live = () =>
+      this.#billCompositionCurrent(composition) && this.#billChoiceCurrent(expectedEdit);
+    await this.#onGroupRequest(
+      (party, command) =>
+        composition.api.splitHeldLineIntoUnits(party.id, lineId, { ...command, expectedEdit }),
+      live,
+    );
   }
 
   async #onSplitDraftSource(event: Event): Promise<void> {

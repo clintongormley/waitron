@@ -2317,6 +2317,12 @@ stages, a late reasons answer, the delayed command, a paused Discard preview and
 bill's changed version. These checks concern the confirmation's editing state; the revised cancellation and
 Finish-table policies still wait for A758 above.
 
+The app's held-dish split handler captures the dish's bill observation and API client before
+waiting for a kitchen-note save. It checks that context before sending the split.
+The Current orders cases in `till-app-parties.test.ts` cover changed editor versions,
+draft identity and revision, an API replacement, and an allowed split when only another bill
+changes. These checks cover that existing command handler; whole-item acceptance remains open.
+
 The mixed fresh/recalled draft journey in `apps/server/src/draft-recall.modifiers.test.ts`
 uses the authenticated routes and a real venue database. A fresh route instance reads the saved
 arrangement before another person takes it over. Sending only the fresh beer leaves the measured

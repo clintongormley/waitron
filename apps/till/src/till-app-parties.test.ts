@@ -7316,6 +7316,169 @@ describe("till-app: Current orders", () => {
     },
   );
 
+  it.each(["editor version", "draft identity", "draft revision", "API replacement"])(
+    "does not renew a held split's observation after %s while its kitchen note saves",
+    async (changed) => {
+      const current = structuredClone(orders);
+      current.groups[0]!.state = "held";
+      if (changed === "draft identity" || changed === "draft revision")
+        drafts.save("v1", {
+          billId: "wo-4",
+          draftId: null,
+          revision: 0,
+          lines: [
+            {
+              menuItemId: "retired-offer",
+              quantity: "1",
+              variantId: null,
+              menuVersionId: null,
+              courseId: null,
+              makeAt: null,
+              slot: 0,
+              joinGroupId: null,
+              afterGroupId: null,
+              note: null,
+              options: [],
+              extras: [],
+              noMerge: false,
+            },
+          ],
+        });
+      let changeObservation = false;
+      const listDrafts = vi.fn(async (partyId: string) => {
+        const snapshot = await drafts.listDrafts(partyId);
+        if (changeObservation) {
+          const edit = snapshot.billEdits.find((row) => row.billId === "wo-4")!;
+          if (changed === "editor version") edit.editorVersion = 2;
+          if (changed === "draft identity") {
+            snapshot.drafts[0]!.id = "new-draft";
+            edit.draftId = "new-draft";
+            edit.editorVersion += 1;
+          }
+          if (changed === "draft revision") {
+            snapshot.drafts[0]!.revision = 5;
+            edit.draftRevision = 5;
+          }
+        }
+        return snapshot;
+      });
+      let finish!: () => void;
+      const split = vi.fn().mockResolvedValue({ revision: 5 });
+      const setKitchenNote = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = () =>
+              resolve({
+                scope: { partyId: "v1" },
+                revision: 1,
+                ownerRevision: 4,
+                note: "Together",
+              });
+          }),
+      );
+      const { el } = await mountApp({
+        readCurrentOrders: vi.fn().mockResolvedValue(current),
+        splitHeldLineIntoUnits: split,
+        listDrafts,
+        setKitchenNote,
+      });
+      const order = await openMesa(el);
+      const editor = order.shadowRoot!.querySelector("till-order-kitchen-note")!;
+      emit(editor, "save-kitchen-note", {
+        scopeKey: "party:v1",
+        revision: 0,
+        visit: editor.visit,
+        note: "Together",
+      });
+      await flush(el);
+      expect(setKitchenNote).toHaveBeenCalledOnce();
+      emit(order, "split-group-line", { lineId: "line-1" });
+      await flush(el);
+      expect(split).not.toHaveBeenCalled();
+      try {
+        if (changed === "API replacement") el.api = stubApi({ ...api });
+        else {
+          changeObservation = true;
+          const reads = listDrafts.mock.calls.length;
+          window.dispatchEvent(new Event("focus"));
+          await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+        }
+        await flush(el, 6);
+        if (changed === "editor version") expect(order.billEdit?.editorVersion).toBe(2);
+        if (changed === "draft identity") expect(order.billEdit?.draftId).toBe("new-draft");
+        if (changed === "draft revision") expect(order.billEdit?.draftRevision).toBe(5);
+      } finally {
+        finish();
+      }
+      await flush(el, 6);
+      expect(split).not.toHaveBeenCalled();
+      expect(order.groupCommandBusy).toBe(false);
+      expect(order.orderId).toBe("wo-4");
+      expect(drafts.saveDraft).not.toHaveBeenCalled();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the held split's original bill observation when only another bill changes", async () => {
+    const current = structuredClone(orders);
+    current.groups[0]!.state = "held";
+    let changed = false;
+    let finish!: () => void;
+    const listDrafts = vi.fn(async (partyId: string) => {
+      const snapshot = await drafts.listDrafts(partyId);
+      if (changed) snapshot.billEdits.find((row) => row.billId === "wo-check")!.editorVersion = 8;
+      return snapshot;
+    });
+    const split = vi.fn().mockResolvedValue({ revision: 5 });
+    const { el } = await mountApp({
+      readCurrentOrders: vi.fn().mockResolvedValue(current),
+      splitHeldLineIntoUnits: split,
+      listDrafts,
+      setKitchenNote: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = () =>
+              resolve({
+                scope: { partyId: "v1" },
+                revision: 1,
+                ownerRevision: 4,
+                note: "Together",
+              });
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    const editor = order.shadowRoot!.querySelector("till-order-kitchen-note")!;
+    emit(editor, "save-kitchen-note", {
+      scopeKey: "party:v1",
+      revision: 0,
+      visit: editor.visit,
+      note: "Together",
+    });
+    await flush(el);
+    emit(order, "split-group-line", { lineId: "line-1" });
+    await flush(el);
+    expect(split).not.toHaveBeenCalled();
+    try {
+      changed = true;
+      const reads = listDrafts.mock.calls.length;
+      window.dispatchEvent(new Event("focus"));
+      await expect.poll(() => listDrafts.mock.calls.length).toBeGreaterThan(reads);
+      await flush(el, 6);
+    } finally {
+      finish();
+    }
+    await flush(el, 6);
+    expect(split).toHaveBeenCalledExactlyOnceWith("v1", "line-1", {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 4,
+      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
+    });
+    expect(order.groupCommandBusy).toBe(false);
+    expect(drafts.saveDraft).not.toHaveBeenCalled();
+    expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+  });
+
   it("keeps another bill's newer observation when a refresh reports a lower version", async () => {
     const current = structuredClone(orders);
     current.groups[0]!.rows[0]!.workingOrderId = "wo-check";
