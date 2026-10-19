@@ -131,9 +131,8 @@ page, or a restart part-way through the pages, fetches again from the saved posi
 A job that ends after at least one of its items has been accounted for, but before its last page,
 because Cloud answers that it has expired or that it has no such job, because the box's own
 24-hour clock runs out, or because the service is no longer on, keeps the suggestions already
-stored. Every item not yet accounted for is counted as one that could not be done, so the alerts
-bell's Translate all notice, raised while any suggestion is waiting, says how many could not be
-done. No release is sent for such a job.
+stored. Every item not yet accounted for is counted as one that could not be done, so when the
+alerts bell's Translate all notice appears, it says how many could not be done. No release is sent for such a job.
 
 The box also ends a job itself, without asking Cloud. It does so when the job is 24 hours old,
 counted from when the box recorded it; when Cloud's last configuration reply no longer lists the

@@ -739,8 +739,8 @@ is that plan's PR 2:
 - **Translate all: a job that ends before any item is accounted for does not count its items as lost.**
   When a job ends after at least one of its items has been accounted for (`collected_refs` is not
   empty), `recordSuggestionJobEnded` (`packages/catalogue/src/content-suggestion-jobs.ts`) counts
-  every item not yet accounted for as one that could not be done, so the notice, raised while any
-  suggestion is waiting, says so. A job that ends before any item is accounted for (Cloud expired
+  every item not yet accounted for as one that could not be done, so when the notice appears, it
+  says so. A job that ends before any item is accounted for (Cloud expired
   it, the box's 24-hour clock ran out, or the service went off) keeps the counts of its last
   progress reading, usually no failures. Such a job has stored no suggestions, so the notice
   appears only for an earlier job's waiting ones, and it does not mention this job's lost items.
