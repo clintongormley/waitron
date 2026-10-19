@@ -134,7 +134,7 @@ along with Tap-to-Pay._
 
 _2026-10-19: the handheld payment flow is designed as A796 and revised to the owner's answer (no
 reader question; the form carries the phone's last-chosen reader and receipt printer, folded away).
-Five smaller questions are open in its §9:
+Six smaller questions are open in its §9:
 [2026-10-19-a796-handheld-payments-design.md](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md)._
 
 ## Check NFC pick-up on the box's address

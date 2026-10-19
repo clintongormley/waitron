@@ -1,6 +1,6 @@
 # A796 — Paying at the table from a handheld (payments slice 2)
 
-Status: **design, with five small owner questions open (§9). Nothing is built.** Revision 3,
+Status: **design, with six small owner questions open (§9). Nothing is built.** Revision 3,
 2026-10-19: the owner answered Revision 2's one question — don't ask which reader is in the
 waiter's hand; put a card reader drop-down and a receipt printer drop-down in the payment form, each
 with the last one used selected, folded away until the waiter wants to change one (§8, default 4).
@@ -51,10 +51,10 @@ guest's (§2.3). This design fills those gaps with no database change. Following
 of 2026-10-19, the payment form carries the phone's card reader and receipt printer, each already
 set to the one this phone last chose, in a row that stays folded until the waiter opens it; nothing
 asks the waiter to confirm either. Those two drop-downs are the phone's existing equipment choices,
-so changing one is today's pick-up, under today's takeover rules. Five small questions are left
-(§9): whether the folded row names the reader, what the form does on a phone's first payment and
-when the reader or printer used last has gone, and whether a printer changed in the form becomes
-the phone's printer for everything after.
+so changing one is today's pick-up, under today's takeover rules. Six small questions are left
+(§9): where the screen names the reader; what the form does on a phone's first payment and when the
+reader or printer used last has gone; whether the form's printer is the phone's printer or a
+separate memory, as A790 proposes; and whether taking a reader from another phone still asks.
 
 ## 2. What works today
 
@@ -196,7 +196,9 @@ the phone's printer for everything after.
   committed. A refusal there (`reader.not_held`, `reader.payment_in_progress`) fails that pending row
   (`REFUSED_START`, `bill-payments.ts:1302-1306`): nothing is charged. The busy check skips the
   phone's own payments (`device-readers.ts:97-112`), so one phone could start a second charge on its
-  own reader; that is W100's Q6 default, which the owner kept on 2026-10-07.
+  own reader. That is the default W100 (the work that built reader holding, #1332) took on its
+  sixth question — the server stops other phones, not the holding phone starting two — and the
+  owner kept it on 2026-10-07.
 
 ### 2.4 Receipts, cash and the drawer
 
@@ -255,21 +257,30 @@ phone last chose Lector 2 and the Barra receipt printer.
    chosen on purpose; default 3).
 3. **The reader and the printer are already set, and folded away** (picture 2). One closed row,
    "Lector e impresora — Lector 2 · ticket en Barra — Cambiar", shows what this phone last chose
-   (default 6). Nothing asks Ana to confirm either. Whether the closed row names them is question 1.
+   (default 6). Nothing asks Ana to confirm either. Whether the closed row and the charge button
+   name the reader is question 1.
 4. **Changing one** (picture 3). Cambiar opens the row in place: a **Lector de tarjetas** drop-down
    with Escanear código QR beneath it, and an **Impresora de tickets** drop-down. The reader list is
-   today's Equipment list — who has each reader, and which are busy — and picking a reader picks it
-   up at once, as Equipment does today; picking one another phone has asks today's "¿Quitar Lector 1
-   a Caja 1 (Marc)?" (default 5). With NFC allowed, tapping a reader's sticker anywhere in the app
-   picks it up, as today, and the drop-down then shows it. The printer list is the profile's receipt
-   printers at this location. The row is closed again the next time the sheet opens.
+   today's Equipment list with today's words ("Lector 1, lo lleva Móvil 2", "Lector 3, ocupado"),
+   and picking a reader picks it up at once, as Equipment does today. Picking one another phone
+   holds asks today's "¿Quitar Lector 1 a Móvil 2 (Marc)?" — the one question left in the form,
+   asked only when taking a reader from someone else (default 5; question 6 asks whether to drop
+   it). With NFC allowed, tapping a reader's sticker anywhere in the app picks it up, as today, and
+   the drop-down then shows it. The printer list is the profile's receipt printers at this
+   location. Neither list offers Equipment's "Usar el predeterminado: {name}"
+   (`apps/till/src/i18n/strings.ts:2286`): that setting means "follow whatever the manager makes
+   the default", and stays in Equipment; where the phone is on it, the field shows the item it
+   resolves to, marked "Predeterminada del perfil". The row is closed again the next time the sheet
+   opens.
 5. **Tip.** Unchanged: where tips are on, the card form has "Propina con tarjeta (opcional)" and
    cash offers "Dejar de propina". Everything else about tips is A793's design (not approved; back
    to brainstorm, [2026-10-18-a793-tips-design.md](2026-10-18-a793-tips-design.md)). This design
    keeps only the seam: the till asks for the tip before the card is charged.
-6. **Confirm** (picture 2, right): today's confirmation step, with the amounts and a button that
-   names the reader: "Cobrar 20,80 € en Lector 2". The phone always sends that reader's id, so the
-   server never falls back to a chosen-or-default reader (default 16).
+6. **Today's confirmation step** (picture 2, right): the amounts and the charge button. There is
+   no separate step to confirm the reader. The pictures draw the button as "Cobrar 20,80 € en
+   Lector 2"; whether the button names the reader is question 1. Whatever it says, the request
+   always carries that reader's id, so the server never falls back to a chosen-or-default reader
+   (default 16).
 7. **The card at the table** (picture 6, left). Ana hands the reader to the guest. The sheet shows
    "Acerca o inserta la tarjeta…", the amount and the reader in large type, and how long it has been
    waiting. A decline keeps today's words and offers "Reintentar en Lector 2" (picture 6, right).
@@ -278,23 +289,27 @@ phone last chose Lector 2 and the Barra receipt printer.
 9. **The next guest** (picture 8, left): "Cobrar al siguiente (2 de 3)" keeps the split and lowers
    the count (default 10). The reader and printer stay as they were.
 10. **The table paid** (picture 8, right). The payment that completes the bill issues the invoice,
-    as today, and its receipt prints on the receipt printer of the phone that took that payment
-    (§2.4). On a handheld a short paid screen replaces the full ticket view: the payments, whether a
-    receipt printed, and **Cerrar mesa**, which the waiter presses as the guests leave — paying never
-    frees the table by itself (default 11). Once A758's not-served check is built, Cerrar mesa opens
+    as today, and its receipt goes to the receipt printer the phone that took that payment has at
+    the moment the payment settles (§2.4, default 12). On a handheld a short paid screen replaces
+    today's full ticket view (picture 9): the payments, whether a receipt was sent to a printer,
+    and **Cerrar mesa**, which the waiter presses as the guests leave — paying never frees the table
+    by itself (default 11). Once A758's not-served check is built, Cerrar mesa opens
     it first.
 
 **First payment on a phone, and a reader or printer that has gone** (pictures 4 and 5). Proposed,
 and asked as questions 2–4: when this phone has no usable reader the row opens by itself with the
-reader field empty and Continuar waits for a pick, saying why in one line where the phone knows; a
-printer that has gone opens the row with a warning but holds nothing up.
+reader field empty and Continuar greyed out until a reader is picked, saying why in one line where
+the phone knows; a switched-off printer opens the row with a warning but holds nothing up.
 
 ## 4. Edge cases
 
-- **Two waiters want the same reader.** Today's rules stay (default 5). If Marc scanned Lector 2
-  after Ana's phone last held it, Lector 2 is now Marc's and Ana's phone no longer has a reader:
-  her form shows question 3's state (picture 5, left) rather than a reader she cannot charge. If her
-  Cobrar was already on its way, it is refused before anything is charged (§2.3), and today's words
+- **Two waiters want the same reader.** Today's rules stay (default 5). If Marc's phone, Móvil 2,
+  scanned Lector 2 after Ana's phone last held it, Lector 2 is now Marc's and Ana's phone no longer
+  has a reader. Her phone learns this on its next equipment read: today every 15 seconds while
+  someone is signed in (`apps/till/src/state/equipment-poll.ts:4`), and, proposed, whenever the
+  sheet opens. From then on her form shows question 3's state (picture 5, left) rather than a reader
+  she cannot charge. A Cobrar sent before her phone learns it is refused by the server before
+  anything is charged (§2.3), and today's words
   "Elige un lector en Equipo" (`apps/till/src/i18n/codes.ts:699`) change to point at the form's own
   reader drop-down.
 - **Marc walks off with Lector 2 without scanning it.** The server still has Lector 2 as Ana's, so
@@ -315,7 +330,7 @@ printer that has gone opens the row with a warning but holds nothing up.
   phone, which closes the defect in §2.3 (default 7). If the browser was killed and the id lost, the
   reopened sheet shows the payment "En curso" with its amount reserved, and asks "Hay un pago con
   tarjeta en curso en esta cuenta. ¿Cobrar otro?" before another card on the same bill. The server
-  is unchanged here: the owner kept W100's Q6 default (no rule against the holding phone starting
+  is unchanged here: the owner kept W100's sixth-question default (no rule against the holding phone starting
   two).
 - **Changing the reader or printer while a card is at the reader**: not possible; the sheet's
   controls are disabled while the card is asked, as today's dialog's are (§2.2).
@@ -341,9 +356,11 @@ printer that has gone opens the row with a warning but holds nothing up.
 **No migration, and nothing new kept on the phone.** "Last used on this device" is what the server
 already stores as the device's equipment choice: its reader (`device_card_readers`, one per device,
 §2.1) and its receipt printer (`receiptPrinterId`, §2.4). The drop-downs show those and change them.
-The one thing the server forgets is a reader taken by another phone; the reason line in picture 5
-comes from the comparison the till already makes between two equipment reads in memory
-(`takenFrom`, §2.1), so after a reload it is not shown and the form looks like a first use.
+The server forgets the old reader when another phone takes it or it is deleted or taken off the
+list, and the old printer when it is deleted or taken off the list (§2.4); it keeps both when they
+are only switched off. The "taken" line in picture 5 comes from the comparison the till already
+makes between two equipment reads in memory (`takenFrom`, §2.1), so after a reload it is not shown
+and the form looks like a first use.
 
 **Routes, all existing.** Changing either drop-down, or a scan: `PUT /api/device/equipment` with
 role `card_terminal` or `receipt` (§2.1), then `GET /api/device/equipment` to redraw. Open bills:
@@ -354,8 +371,11 @@ bills: `POST /api/pay` for the reader, which accepts a `placed` order (`till-sal
 (`till-api.ts:2719-2738`, which needs the `take-orders` action). **No payment route gains a printer
 field**: the receipt prints when the invoice is issued, under the device that took the payment
 (`bill-payments.ts:1259-1260`) and possibly minutes later, when the bill payment loop settles a
-pending card through the same code (`completeBillPayment`, `bill-payments-loop.ts:143-149`), so a printer named only in the request would have to be stored on the payment row to be
-there at that moment — a migration. Using the device's choice needs none (default 12).
+pending card through the same code (`completeBillPayment`, `bill-payments-loop.ts:143-149`). That
+path passes no printer, so `enqueueSaleReceipt` looks up the device's receipt printer at that moment
+(`bill-payments.ts:1256`, `:784`; `printerLookup` default, `receipt-print.ts:255-260`). A printer
+named only in the request would have to be stored with the payment to still be known then — new
+storage. Using the device's choice needs none (default 12; question 5).
 
 **Server changes.** Only the seed: Móvil's actions (default 15) and no default reader (default 16);
 and adopting a reader adds it to the list of every profile that takes reader payments, never as that
@@ -410,7 +430,7 @@ acceptance "until the Tap to Pay work enables it" (`bill-payments-api.ts:133-135
 
 - Change how tips work (A793), refunds, or the counter's payment window (A739).
 - Add a digital receipt, or a guest paying from their own phone (A508, parked).
-- Show a reader's battery or reachability (W100's Q7 default stands).
+- Show a reader's battery or reachability (W100's seventh question kept today's answer: not shown).
 - Cancel a card at the reader from the phone (default 9).
 - Split a presented bill, or change when any invoice is issued.
 - Change the bill and table model (A803) or the handheld's screens (A797); it uses both.
@@ -432,8 +452,8 @@ are given.
 2. **On a handheld, an open bill is paid through the bill payment path**, with a new way, **Toda la
    cuenta**, for the whole remaining bill, so the reader is reachable for a whole bill.
 3. **A typed card is an explicit method, "Otro datáfono"**, never a silent fallback.
-4. **Settled (owner, 2026-10-19): no confirm step; the reader and receipt printer sit in the
-   payment form, preselected, folded away.** The owner's words: "Don't ask. Include the card reader
+4. **Settled (owner, 2026-10-19): no step to confirm the reader; the reader and receipt printer
+   sit in the payment form, preselected, folded away.** The owner's words: "Don't ask. Include the card reader
    drop-down and the receipt printers drop down in the payment form, with the last used one
    selected. In fact it could even be collapsed so you can't see it. The waiter will change the
    selection when they need to." (campaign watcher, 2026-10-19 about 05:00). For this form this
@@ -442,9 +462,11 @@ are given.
    drop-down "fallback that always exists" is the reader drop-down itself. What is left to catch a
    reader that changed hands unseen is §4's second case.
 5. **Takeover rules stay as built**: scan takes, list asks, busy refuses (W100, kept by the owner
-   2026-10-07). The reader drop-down is a list, so picking a reader another phone has asks today's
-   "¿Quitar …?", and a busy reader is shown but cannot be picked. That question appears only when
-   taking a reader from someone else, never as a check on the reader the form already shows.
+   2026-10-07). The reader drop-down is a list, so picking a reader another phone holds asks today's
+   "¿Quitar …?". That is the only question left in the form, and it appears only when taking a reader
+   from someone else, never as a check on the reader the form already shows; question 6 asks whether
+   to drop it. New: a busy reader is shown greyed out and cannot be picked, where today's Equipment
+   dialog sends the pick and shows the server's refusal (`equipment-dialog.ts:377-385`).
 6. **"Last used" means last chosen on this device, and it is the device's existing equipment choice
    on the server.** Last chosen, not last charged: a waiter who picks up Lector 3 at the bar and walks
    to a table expects Lector 3, and "last charged" would put Lector 2 back. Choosing already has to
@@ -452,17 +474,23 @@ are given.
    form shows is the one the next charge will use. The printer works the same way: the drop-down
    shows and sets the device's receipt-printer choice, else its profile's default, which is also what
    reprints use (§2.4). **Per device, not per person**: the server keeps both per device, and a
-   reader is held by a device, not a person (§2.1); signing out does not let go of it — only
-   disabling or deleting the device does (`releaseDevice` is called only at `device-delete.ts:183`
-   and `:201`; `git grep -n "releaseDevice(" -- apps/server/src`, read). So when Marc signs in on the
-   phone Ana used, the form shows the reader that phone still holds. Per person would need new storage and could name a reader another phone holds.
-   Kept on the server, it needs no new storage on the phone, survives a reload, and is what
-   Equipment shows (§5). After a takeover the server has forgotten the reader;
-   the form then shows question 3's state.
+   reader is held by a device, not a person (§2.1); signing in or out does not let go of it. What
+   does is equipment and device changes — a takeover (`device-readers.ts:319-328`), deleting the
+   reader (`card-reader-delete.ts:277-279`), a profile list edit (`settleProfileReaderDevices`,
+   `device-readers.ts:414-455`), a profile move or a device coming back (`settleDevice`,
+   `apps/server/src/device-equipment.ts:72-82`, from `device.ts:116-119`), a join
+   (`join-requests.ts:559`), disabling or deleting the device (`device-delete.ts:183`, `:201`), or
+   the phone picking another reader or Use default. None of those callers is on a sign-in or
+   sign-out path (`git grep` for the release and settle functions across `apps/server/src` and
+   `packages`, read). So when Marc signs in on the phone Ana used, the form shows the reader that
+   phone still holds. Per person would need new storage and could name a reader another phone
+   holds. Kept on the server, it needs no new storage on the phone, survives a reload, and is what
+   Equipment shows (§5). Where the server has forgotten the reader, the form shows question 3's
+   state.
 7. **While a bill payment of any way or method is unanswered, the sheet offers only "Comprobar de
    nuevo"** (same id) for that bill — no new payment, and the kept id is dropped only when an answer
    comes — and before a second card on a bill with a card in progress it asks first. This closes the §2.3 defect on the
-   phone. **The server is unchanged**: W100's Q6 default ("app-level checks stop OTHER devices, not
+   phone. **The server is unchanged**: W100's sixth-question default ("app-level checks stop OTHER devices, not
    the holder starting two at once") was kept by the owner on 2026-10-07 ("Ok", keep every default;
    lane C's questions file, 2026-10-07 ~08:50).
 8. **An uncertain payment re-reads itself** every 5 seconds while the sheet shows it, and says not to
@@ -476,15 +504,17 @@ are given.
     default, **Finish table** closes the visit." Once built, it first runs A758's check (D12, owner
     answer Q40, 2026-10-18): "Finish table warns about dishes not served and offers 'Cancel and
     refund' or 'Cancel, no refund'".
-12. **Receipts keep today's printing rules, on the printer the form shows.** On paying, the phone
-    that took the completing payment prints on its receipt printer automatically where the bill's
-    zone (or its department) prints automatically; a presented bill whose invoice was already issued
-    prints nothing on payment. Changing the printer in the form changes that phone's receipt printer
-    for what follows too — reprints included — as choosing it in Equipment does; no payment route
-    gains a printer field (§5). New: with nothing printed, the paid screen says so, and that a device
-    whose profile may print receipts can reprint it. No digital receipt. A790's design proposes
-    instead a separate last-used receipt memory that leaves the device's choice alone; the two
-    designs must agree before either is planned (question 5).
+12. **Receipts keep today's printing rules, on the phone's receipt printer at the moment the
+    bill's last payment settles.** The phone that took the completing payment prints on its receipt
+    printer automatically where the bill's zone (or its department) prints automatically; a
+    presented bill whose invoice was already issued prints nothing on payment. Usually that is the
+    printer the form showed. A card that settles later uses whatever the phone has by then (§5): if
+    Mesa 4's last card is still pending when Ana switches to Terraza for Mesa 9, Mesa 4's ticket
+    prints on Terraza. Changing the printer in the form changes that phone's receipt printer for what
+    follows too — reprints included — as choosing it in Equipment does; no payment route gains a
+    printer field (§5). New: the paid screen says where the ticket was sent, or that none was and
+    that a device whose profile may print receipts can reprint it. No digital receipt. A790's design
+    proposes a separate receipt memory instead; question 5 sets out the difference.
 13. **Tips: A793's seam only.**
 14. **Whether the sheet sits at the foot of the screen** (as drawn) or stays a centred dialog is left
     to the plan; it is the shared `wt-dialog` either way.
@@ -497,7 +527,8 @@ are given.
     without giving change", and "The owner expected a Prepare or Live venue to start with no devices
     and add each one". Today's list is
     W97's carry-over (§2.5), not a choice. Picture 10.
-16. **Móvil gets no default reader, and the phone always names the reader it charges.** So joining,
+16. **Móvil gets no default reader, and every charge request names the reader it charges.** This
+    is about the request the phone sends, not the button's words (question 1). So joining,
     returning or a profile move never hands a phone a reader silently (§2.1), and `resolvePayReader`'s
     fallback is never used from a handheld. A newly adopted reader joins the list of every profile that
     takes reader payments, never as its default; a manager can take it off.
@@ -506,64 +537,99 @@ are given.
 
 ## 9. Questions for the owner
 
-Each has a recommended answer first. None changes the database or a route.
+Each has a recommended answer first. None needs a database change.
 
-**Q1. Should the folded row name the reader and printer, as the charge button names the reader?**
-Example: Mesa 4. Ana's form opens with the row closed. (a) It reads "Lector 2 · ticket en Barra"
-(picture 2), and the button "Cobrar 20,80 € en Lector 2". (b) It reads only "Lector e impresora",
-and the name appears on the button alone.
-Recommended: **(a)**. Since nothing asks which reader is in Ana's hand, reading "Lector 2" on the
-screen against the label on the reader is the one thing that catches Marc having walked off with it
-(§4). It costs one line. This was the campaign watcher's suggestion.
+**Q1. Where should the phone show which reader it is about to charge?**
+The owner said the choices "could even be collapsed so you can't see it". Example: Mesa 4; Ana's
+form opens with the row closed. (a) **On both** the closed row ("Lector 2 · ticket en Barra") and
+the charge button ("Cobrar 20,80 € en Lector 2") — pictures 2, 6 and 11 draw this. (b) On the
+button only; the closed row reads "Lector e impresora". (c) On the closed row only; the button reads
+"Cobrar 20,80 €". (d) Neither, as the owner's words allow: the row reads "Lector e impresora" and
+the button "Cobrar 20,80 €", and the name appears only when the row is opened. Whichever is chosen,
+the request still names the reader (default 16).
+Recommended: **(a)**, the campaign watcher's suggestion. Nothing asks which reader is in Ana's hand,
+so reading "Lector 2" on the screen against the label on the reader is the one thing that catches
+Marc having walked off with it (§4); it costs a line, and the row stays closed.
 
 **Q2. What does the form do on a phone that has never chosen a reader?**
 Example: Ana's new phone joins on Móvil, which has no default reader (default 16). Her first card
 is Mesa 4's 20,80 €. (a) The row opens by itself, the reader field reads "Elige el lector que tienes
-en la mano", and Continuar stays quiet until she picks one from the list, scans one or taps a
-sticker (picture 4); cash and Otro datáfono work meanwhile. The printer shows the profile's default
-receipt printer where the venue set one. (b) As (a), except that when the profile lists exactly one
-reader the form chooses it and stays closed.
+en la mano", and Continuar is greyed out until she picks one from the list, scans one or taps a
+sticker (picture 4); cash and Otro datáfono work meanwhile. The printer field shows what the phone
+already resolves to — its profile's default receipt printer, where the venue set one — marked
+"Predeterminada del perfil". (b) As (a), except that when the profile lists exactly one reader the
+form selects it and stays closed.
 Recommended: **(a)** — the owner's answer is about the *last used* reader, and a phone that has used
-none has nothing to preselect; picking one is a single tap that then never comes back on that phone.
-(b) saves that tap only in a venue with one reader, where it is also least needed. If the venue set
-a default reader on the profile, the server already gives it to the phone when it is free (§2.1),
-and the form shows it as chosen.
+none has nothing to preselect; picking one is a single tap that does not come back on that phone.
+(b) saves that tap only in a venue with one reader. Where a venue does give a profile a default
+reader, the server hands it to a phone only when the phone joins, comes back, moves profile or picks
+Use default, and only if it is free (`settleDeviceReader`, `device-readers.ts:345-384`, called with
+`acquire` from `apps/server/src/device-equipment.ts:72-82` and `device-readers.ts:335`); editing the
+profile's list hands out nothing (`device-readers.ts:410-413`; test "a profile list edit takes
+nothing for a device on Use default", `packages/payments/src/device-readers.test.ts:378`). When the
+phone has it, the form shows it marked "Predeterminado del perfil".
 
-**Q3. What does the form do when the reader this phone last chose can no longer be charged?**
-Example: Ana put Lector 2 on the bar; Marc scanned its sticker and took it, so the server moved it
-to his phone (§2.1). Ana then opens Mesa 4. The same applies when a manager switched Lector 2 off,
-deleted it or took it off Móvil's list. (a) The row opens by itself with the reader field empty, a
-line says why ("Móvil 2 (Marc) se ha llevado Lector 2", "Lector 2 está desactivado"), and Continuar
-waits for a pick (picture 5, left); picking Lector 2 again asks today's "¿Quitar Lector 2 a Móvil 2
-(Marc)?". After a reload the phone no longer knows why, so the line is left out (§5). (b) The row
-stays closed showing "Lector 2", and pressing Cobrar is refused with a message pointing at the
-row.
-Recommended: **(a)** — it shows the problem before the waiter has asked the guest for a card, and it
-never takes Lector 2 back from Marc's table silently. (b) would mean every case ends in a refused
-charge.
+**Q3. What does the form do when the reader this phone last used can no longer be charged?**
+Example: Ana put Lector 2 on the bar; Marc's phone, Móvil 2, scanned its sticker and took it
+(§2.1). Ana then opens Mesa 4. Or a manager switched Lector 2 off, deleted it, or took it off
+Móvil's list. (a) The row opens by itself with the reader field empty and Continuar greyed out until
+a reader is picked (picture 5, left). One line says why where the phone knows: "Móvil 2 (Marc) se
+ha llevado Lector 2" when the phone saw the takeover in this session, "Lector 2 está desactivado"
+for a switched-off reader, whose choice the server keeps (§2.1). A deleted or de-listed reader, or
+a takeover the phone did not see, gets no reason line, because the server has forgotten it.
+Picking Lector 2 again asks today's "¿Quitar Lector 2 a Móvil 2 (Marc)?". (b) The row stays closed
+showing the old reader where the phone still knows it, and pressing Cobrar is refused with a
+message pointing at the row.
+Recommended: **(a)** — it shows the problem before the waiter asks the guest for a card, and it
+never takes Lector 2 back from Marc's table silently.
 
-**Q4. What does the form do when the receipt printer this phone last chose can no longer print?**
-Example: the Barra printer was switched off at the end of lunch; at dinner Ana takes Mesa 4's last
-share. Today such a printer prints nothing, silently, and the profile's default does not stand in
-(§2.4). (a) The row opens with the printer field empty and a warning, "Barra está desactivada: si
-no eliges otra, no se imprimirá el ticket", but Continuar works: the payment goes ahead and, if she
-changes nothing, no ticket prints and the paid screen says so (picture 5, right). (b) The form falls
-back to the profile's default receipt printer without saying so.
-Recommended: **(a)** — a printer must never hold up a payment, and printing on a printer nobody
-chose would put the guest's ticket somewhere the waiter is not looking.
+**Q4. What does the form do when the receipt printer this phone last used can no longer print?**
+Today it depends on how the printer went. *Switched off*: the phone keeps it as its choice and
+prints nothing, silently; the profile's default does not stand in (§2.4). *Deleted or taken off
+the profile's list*: the server clears the phone's choice — deletion at
+`apps/server/src/printer-delete.ts:182-187`, a list edit through `settleProfilePrinterDevices`
+(`packages/layouts/src/device-printers.ts:151`, `packages/layouts/src/device-equipment.ts:588-626`), a profile move
+through `clearUnlistedPrinterChoices` (`apps/server/src/device-equipment.ts:77`) — so the phone
+falls back to the profile's default receipt printer without saying so. Example: the Barra printer
+was switched off at the end of lunch; at dinner Ana takes Mesa 4's last share. (a) The row opens with
+the printer field empty and a warning, "Barra está desactivada: si no eliges otra, no se imprimirá
+el ticket", but Continuar works: the payment goes ahead and, if she changes nothing, no ticket prints
+and the paid screen says so (picture 5, right). For a deleted or de-listed printer (a) cannot warn,
+because the server no longer knows which printer it was; the form shows today's fallback, marked
+"Predeterminada del perfil", or an empty field where the profile has no default. (b) Keep today's
+behaviour for all three: silence for a switched-off printer, the default for the others.
+Recommended: **(a)** — a printer must never hold up a payment, and a ticket sent nowhere, or to a
+printer nobody chose, should at least be visible on screen. A790's design proposes instead that a
+printer that is no longer usable falls back to the phone's own choice, then the profile's default,
+shown in the field (A790 revision, "Eligibility, fallback and memory"); that is (b) made visible,
+and question 5 decides which design's memory applies.
 
-**Q5. When Ana changes the printer in the payment form, is that her phone's printer from then on?**
-Example: Ana sends Mesa 4's ticket to Terraza instead of Barra. Ten minutes later she reprints Mesa
-9's ticket from the same phone. (a) It prints on Terraza: the form's printer is the phone's receipt
-printer, the same setting Equipment changes, and the next payment form opens on Terraza too (default
-12). (b) It prints on Barra: the form keeps its own "last used for a payment" memory and leaves the
-phone's Equipment setting alone, which is what A790's design proposes for receipts
-([A790 revision](2026-10-19-a790-document-and-printer-choice-design.md), "Eligibility, fallback and
-memory").
-Recommended: **(a)** — one printer per phone that the waiter can see and change in one place, and
-no database change: (b) has to store the chosen printer on the payment row, because the ticket is
-printed when the bill's last payment settles, which for a card can be minutes later (§5). Whichever
-is chosen, A790 and A796 then follow the same rule.
+**Q5. Is the printer chosen in the form the phone's printer, or a separate receipt memory?**
+Example: Ana opens Mesa 4, changes the printer from Barra to Terraza, and takes the first of three
+shares; no ticket prints yet, because only the last share issues the invoice. She then opens Mesa
+9. (a) **The form's printer is the phone's receipt printer**, the setting Equipment changes: Mesa
+9's form offers Terraza, Equipment shows Terraza, and reprints and every later ticket from this
+phone go there — including Mesa 4's, even if Mesa 4's last card is still pending and settles after
+she switches again (default 12). (b) **A790's proposal**: one receipt "last used" memory per phone,
+shared by the payment form and later receipt and reprint forms, which each have their own selector.
+It moves only when the server accepts a print request, never on a selection alone, and it leaves the
+phone's Equipment setting alone. Mesa 9's form offers Barra, because no print was accepted, and
+Equipment still shows Barra; when Mesa 4's last share prints on Terraza, the memory moves to
+Terraza.
+Recommended: **(a)** — one printer per phone, which the waiter sees and changes in one place, and no
+new storage. (b) needs the memory stored somewhere new, and the printer chosen for a bill stored
+with its payments until the invoice issues, which for a card can be minutes later (§5). Whichever is
+chosen, A790 and A796 then follow the same rule.
+
+**Q6. Should picking a reader another phone holds still ask first?**
+Example: Lector 1 is on Marc's phone, Móvil 2. Ana opens the reader drop-down and picks Lector 1.
+(a) Today's question appears: "¿Quitar Lector 1 a Móvil 2 (Marc)?" (picture 3, right); Quitárselo
+takes it. (b) No question: the pick takes Lector 1 at once, as scanning its sticker does today. This
+would reverse W100's "a list pick asks" rule, which the owner kept on 2026-10-07.
+Recommended: **(a)** — it appears only when taking a reader from someone else, never on the reader
+already shown, so it does not bring back the question the owner removed; and a list pick, unlike a
+scan, can be a slip of the finger that takes the reader from Marc without his knowing until his
+phone's next equipment read, or his next charge is refused.
 
 ## 10. Provenance
 
