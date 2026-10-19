@@ -845,26 +845,11 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
   [Detail](backlog/catalogue.md#menus-list-changes-column-and-top-aligned-rows-w87-1191-left-open)
 
-- **A813 — a click beside the Menus list's Unpublished changes link stops opening the menu**
-  (owner, 2026-10-17: fix it, to match the other lists). In the middle layout the Status column,
-  and on a phone the Name column, hold the link but do not set `activatesRow: false`
-  (`apps/dashboard/src/screens/menus-screen.ts`), so a click beside the link opens the menu. Set it
-  on both, change the "opens the menu once from a click on the Status cell's blank space" cases in
-  `menus-screen.test.ts` to expect nothing to open, and delete the deviation paragraph in
-  [design-system.md](developers/design-system.md). Done when a test at each of the two widths
-  clicks beside the link and the menu stays closed.
-
 - **A menu's Structure tab is one tree (W88, #1209): not checked** — in Spanish at 390 px the Type
   column scrolls partly under the pinned Actions column, which is the table's own sideways scroll;
   the heading's height with "Checking…" or "Could not be checked" was not measured against the other
   states.
   [Detail](backlog/catalogue.md#a-menus-structure-tab-is-one-tree-w88-1209-not-checked)
-
-- **A814 — a menu never published shows "Preview*" on its Preview tab** (owner, 2026-10-17: none of
-  it is live, so it gets the star). Today only a menu whose working copy differs from a live version
-  is marked (`#hasUnpublishedChanges`, `apps/dashboard/src/screens/menus-screen.ts`). Done when a
-  test opens a menu that has never been published and finds its Preview tab marked. Left open by
-  A335 (#1457).
 
 - **A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions"
   shows only when something is scheduled** (owner, 2026-10-12). Wanted: the two buttons on one
@@ -4440,6 +4425,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   answers false for a row the table draws open** (`aria-expanded="true"`) — OPEN, found by A539's
   mutation tests, not fixed. Outside a search it answers true for the same row
   (`packages/ui/src/components/wt-data-table.ts`).
+
+- **A890. A tree `wt-data-table` draws a row's activator in its first column even when that column
+  sets `activatesRow: false`** — OPEN, left by A813. A flat table now draws it in the first shown
+  column that does not opt out; tree mode still draws it at `ci === 0`
+  (`packages/ui/src/components/wt-data-table.ts`). No tree table sets the option on its first
+  column today; what a click on that cell's blank space then does was not tested.
 
 ### Interface languages
 

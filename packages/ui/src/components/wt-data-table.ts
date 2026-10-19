@@ -59,7 +59,8 @@ export interface DataTableColumn<Row> {
   /** On the table's last column, keeps it at the box's trailing edge while the other columns scroll
    * sideways under it. */
   pinned?: "end";
-  /** Keep the whole cell outside row activation, including blank space beside its action. */
+  /** Keep the whole cell outside row activation, including blank space beside its action. Tree mode
+   * still draws the row's activator in its first column whatever that column sets (A890). */
   activatesRow?: false;
   /** A help-mode badge over the heading's label; `label` is the badge's whole accessible name. */
   help?: { text: string; label: string };
@@ -331,9 +332,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         position: relative;
       }
 
-      /* The stretched activator covers the whole row so a mouse user can click anywhere; it is a
-         real focusable button so keyboard/AT users tab to it and Enter/Space activate the row. It
-         sits at the base layer… */
+      /* The stretched activator covers the row, or only the pinned cell when it is drawn there, so
+         a click on blank space outside an opted-out cell opens the row; it is a real focusable
+         button so keyboard/AT users tab to it and Enter/Space activate the row. It sits at the base
+         layer… */
       .row-activate {
         position: absolute;
         inset: 0;
@@ -864,9 +866,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * sort. */
   @property({ attribute: false }) rowKeepsChildOrder: (row: Row) => boolean = () => false;
   /** When set, each row becomes activatable, except on a flat table a row `rowClickable` refuses: a
-   * stretched, focusable button covers the row and calls this on click. Per-row controls (the
-   * selection checkbox, the Edit/Delete menu) sit above the activator, so they are never swallowed.
-   * In a tree, `rowActivation` can give a row a toggle instead. */
+   * stretched, focusable button covers the row and calls this on click; on a flat table it is drawn
+   * in the first shown column that does not set `activatesRow: false`, and none when every column
+   * sets it; drawn in the pinned column, it covers that cell only. Per-row controls (the selection
+   * checkbox, the Edit/Delete menu) sit above the activator, so they are never swallowed. In a
+   * tree, `rowActivation` can give a row a toggle instead. */
   @property({ attribute: false }) rowClick?: (row: Row) => void;
   @property({ attribute: false }) rowClickLabel: (row: Row) => string = () => "Open row";
   /** On a flat table, a row this returns false for draws no activator and does not open from a
@@ -1216,6 +1220,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   protected override updated(changed: PropertyValues): void {
     super.updated(changed);
+    this.#refocusActivator();
     this.#observeScroll();
     this.#observeHead();
     if (changed.has("columns") || changed.has("searchable")) this.#observeHost();
@@ -1252,7 +1257,22 @@ export class WtDataTable<Row = unknown> extends LitElement {
     );
   }
 
+  // A render can move a row's activator to another cell, which drops the focus it held.
+  #focusedActivatorRow: string | undefined;
+
+  #refocusActivator(): void {
+    const key = this.#focusedActivatorRow;
+    if (key === undefined) return;
+    const activator = this.renderRoot.querySelector<HTMLButtonElement>(
+      `tr[data-row-key="${CSS.escape(key)}"] .row-activate`,
+    );
+    if (activator !== this.shadowRoot!.activeElement) activator?.focus();
+  }
+
   protected override willUpdate(changed: PropertyValues<this>): void {
+    this.#focusedActivatorRow = this.shadowRoot?.activeElement?.matches(".row-activate")
+      ? this.shadowRoot.activeElement.closest<HTMLElement>("tr")!.dataset.rowKey
+      : undefined;
     this.#searchMemo = undefined;
     const query = this.#flatSearching()
       ? this.searchable
@@ -3085,6 +3105,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const lockedWidth = widths?.reduce((sum, width) => sum + width, 0);
     const sortColumn = this.#sortColumn(shown);
     if (!isTree) {
+      const activatorColumn = shown.findIndex((column) => column.activatesRow !== false);
       const sorted = this.#sortedRows(visible, sortColumn, searchRanks);
       const rowKeys = sorted.map((row, index) => this.rowKey(row, index));
       const visibleKeys = sorted.flatMap((row, index) =>
@@ -3129,7 +3150,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                           }
                         >
                           ${
-                            ci === 0 && clicks
+                            ci === activatorColumn && clicks
                               ? html`<button
                                     class="row-activate"
                                     aria-label=${this.rowClickLabel(row)}

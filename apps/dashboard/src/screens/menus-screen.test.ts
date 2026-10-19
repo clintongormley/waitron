@@ -1838,32 +1838,91 @@ describe("the menus list's Changes column", () => {
     });
   });
 
-  it.each(["corner", "beside the link"] as const)(
-    "opens the menu once from a click on the Status cell's blank space (%s)",
-    async (where) => {
-      await at([700, 900], "en-GB", async () => {
+  it.each([
+    ["Status", [700, 900], 1],
+    ["phone-width Name", [390, 844], 0],
+  ] as const)(
+    "opens nothing from a click on the %s cell's blank space beside its link",
+    async (_, size, column) => {
+      await at([...size], "en-GB", async () => {
         const opens = opened();
         const el = await listed(mixed());
-        await threeColumns(el);
-        const cell = row(el, "menu-lunch").querySelectorAll("td")[1]!;
+        if (column === 1) await threeColumns(el);
+        else await vi.waitFor(() => expect(heads(el)).not.toContain(t("menus.status")));
+        const cell = row(el, "menu-lunch").querySelectorAll("td")[column]!;
         const box = cell.getBoundingClientRect();
         const anchor = link(el, "menu-lunch")!;
+        expect(anchor.closest("td")).toBe(cell);
         const at = anchor.getBoundingClientRect();
         expect(at.right).toBeLessThan(box.right - 4);
-        const position =
-          where === "corner"
-            ? { x: 2, y: 2 }
-            : { x: (at.right + box.right) / 2 - box.x, y: at.top + at.height / 2 - box.y };
-        const hit = table(el).shadowRoot.elementFromPoint(box.x + position.x, box.y + position.y);
-        expect(anchor.contains(hit)).toBe(false);
-        // Forced, because the blank space lies under the row's stretched button, which takes it.
-        await userEvent.click(cell, { position, force: true });
-        const structure = "/manage/menus/menu/menu-lunch/view/structure";
-        await vi.waitFor(() => expect(location.pathname).toBe(structure));
-        expect(opens()).toEqual([structure]);
+        // The cell's padding corner, and the padding past the link's end on its line.
+        const points = [
+          { x: 2, y: 2 },
+          { x: (at.right + box.right) / 2 - box.x, y: at.top + at.height / 2 - box.y },
+        ];
+        for (const position of points) {
+          const label = JSON.stringify(position);
+          const hit = table(el).shadowRoot.elementFromPoint(box.x + position.x, box.y + position.y);
+          expect(cell.contains(hit), label).toBe(true);
+          expect(anchor.contains(hit), label).toBe(false);
+          expect(hit?.closest("wt-button"), label).toBeNull();
+          // Forced, so a row activator lying over the point takes the click rather than stalling it.
+          await userEvent.click(cell, { position, force: true });
+          await el.updateComplete;
+          expect(location.pathname, label).toBe("/manage/menus");
+        }
+        expect(opens()).toEqual([]);
       });
     },
   );
+
+  it("keeps the focus on a row's open button when the list narrows to the phone layout", async () => {
+    await at([700, 900], "en-GB", async () => {
+      const opens = opened();
+      const el = await listed(mixed());
+      await threeColumns(el);
+      const before = row(el, "menu-lunch").querySelector<HTMLButtonElement>(".row-activate")!;
+      expect(before.getAttribute("aria-label")).toContain("Lunch Menu");
+      expect(before.closest("td")).toBe(row(el, "menu-lunch").querySelectorAll("td")[0]);
+      before.focus();
+      await page.viewport(390, 844);
+      await vi.waitFor(() => expect(heads(el)).not.toContain(t("menus.status")));
+      await table(el).updateComplete;
+      const after = row(el, "menu-lunch").querySelector<HTMLButtonElement>(".row-activate")!;
+      expect(after).not.toBe(before);
+      expect(table(el).shadowRoot.activeElement).toBe(after);
+      await userEvent.keyboard("{Enter}");
+      const structure = "/manage/menus/menu/menu-lunch/view/structure";
+      await vi.waitFor(() => expect(location.pathname).toBe(structure));
+      expect(opens()).toEqual([structure]);
+    });
+  });
+
+  it("opens the menu once from a real click on the phone-width Actions cell's blank space", async () => {
+    await at([390, 844], "en-GB", async () => {
+      const opens = opened();
+      const el = await listed(mixed());
+      await vi.waitFor(() => expect(heads(el)).not.toContain(t("menus.status")));
+      const cell = row(el, "menu-lunch").querySelector<HTMLElement>("td[data-pinned]")!;
+      const activator = cell.querySelector<HTMLButtonElement>(".row-activate")!;
+      expect(activator.getAttribute("aria-label")).toContain("Lunch Menu");
+      const box = cell.getBoundingClientRect();
+      const menu = cell
+        .querySelector("wt-row-actions")!
+        .shadowRoot!.querySelector("button")!
+        .getBoundingClientRect();
+      // Below the row menu's button, in the cell's bottom padding.
+      const position = { x: box.width / 2, y: box.height - 3 };
+      expect(box.y + position.y).toBeGreaterThan(menu.bottom + 4);
+      expect(table(el).shadowRoot.elementFromPoint(box.x + position.x, box.y + position.y)).toBe(
+        activator,
+      );
+      await userEvent.click(cell, { position });
+      const structure = "/manage/menus/menu/menu-lunch/view/structure";
+      await vi.waitFor(() => expect(location.pathname).toBe(structure));
+      expect(opens()).toEqual([structure]);
+    });
+  });
 
   it.each([
     ["Status hidden", { columns: { status: false } }],

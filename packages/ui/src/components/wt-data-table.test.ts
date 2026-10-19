@@ -4267,7 +4267,7 @@ test("a real pointer click on an in-cell control does not fall through to the ro
   expect(clicked).toEqual([]); // the click reached Edit, not the activator beneath it
 });
 
-test("a clickable row gets exactly one activator, and it sits in the row's first cell", async () => {
+test("a clickable row gets exactly one activator, and it sits in the row's first cell when that column does not opt out", async () => {
   const el = await table({ rowClick: (row: Row) => row.id });
   const firstRow = el.shadowRoot!.querySelector("tbody tr")!;
   expect(firstRow.querySelectorAll(".row-activate").length).toBe(1);
@@ -5963,6 +5963,178 @@ test.each([
   const box = cell.getBoundingClientRect();
   expect(el.shadowRoot!.elementFromPoint(box.x + 2, box.y + 2)).toBe(cell);
   await userEvent.click(cell, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual([]);
+});
+
+test("a first column that keeps its blank space outside row activation leaves the activator to the next", async () => {
+  const clicked: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => clicked.push(row.id),
+    columns: [{ ...columns[0]!, activatesRow: false }, columns[1]!, columns[2]!],
+  });
+  const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="b"] td')];
+  expect(cells.map((cell) => cell.querySelectorAll(".row-activate").length)).toEqual([0, 1, 0]);
+  const activator = cells[1]!.querySelector<HTMLButtonElement>(".row-activate")!;
+  const corner = (cell: HTMLElement) => {
+    const box = cell.getBoundingClientRect();
+    return el.shadowRoot!.elementFromPoint(box.x + 2, box.y + 2);
+  };
+  expect(corner(cells[0]!)).toBe(cells[0]);
+  await userEvent.click(cells[0]!, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual([]);
+  expect(corner(cells[1]!)).toBe(activator);
+  await userEvent.click(cells[1]!, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual(["b"]);
+  activator.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(clicked).toEqual(["b", "b"]);
+});
+
+test("when only a pinned column leaves its blank space to the row, the activator sits in that pinned cell", async () => {
+  const clicked: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => clicked.push(row.id),
+    columns: [
+      { ...columns[0]!, activatesRow: false },
+      { ...columns[1]!, activatesRow: false },
+      { ...columns[2]!, pinned: "end" },
+    ],
+  });
+  const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="b"] td')];
+  expect(cells.map((cell) => cell.querySelectorAll(".row-activate").length)).toEqual([0, 0, 1]);
+  const activator = cells[2]!.querySelector<HTMLButtonElement>(".row-activate")!;
+  const corner = (cell: HTMLElement) => {
+    const box = cell.getBoundingClientRect();
+    return el.shadowRoot!.elementFromPoint(box.x + 2, box.y + 2);
+  };
+  expect(corner(cells[0]!)).toBe(cells[0]);
+  expect(corner(cells[1]!)).toBe(cells[1]);
+  await userEvent.click(cells[0]!, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual([]);
+  expect(corner(cells[2]!)).toBe(activator);
+  const box = activator.getBoundingClientRect();
+  const pinned = cells[2]!.getBoundingClientRect();
+  expect([box.left, box.right]).toEqual([pinned.left, pinned.right]);
+  await userEvent.click(cells[2]!, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual(["b"]);
+  activator.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(clicked).toEqual(["b", "b"]);
+});
+
+test.each([
+  {
+    change: "its column stops activating the row",
+    next: [{ ...columns[0]!, activatesRow: false as const }, columns[1]!, columns[2]!],
+  },
+  {
+    change: "a new first column that keeps its blank space arrives",
+    next: [
+      { key: "note", label: "Note", cell: () => "", activatesRow: false as const },
+      ...columns,
+    ],
+  },
+])(
+  "a focused row activator keeps the row's focus when $change and moves it to another cell",
+  async ({ next }) => {
+    const clicked: string[] = [];
+    const el = await table({ rowClick: (row: Row) => clicked.push(row.id) });
+    const activatorIn = (key: string) =>
+      el.shadowRoot!.querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] .row-activate`)!;
+    const before = activatorIn("b");
+    const beforeCell = before.closest("td")!.cellIndex;
+    before.focus();
+    el.columns = next;
+    await el.updateComplete;
+    const after = activatorIn("b");
+    expect(after).not.toBe(before);
+    expect(after.closest("td")!.cellIndex).not.toBe(beforeCell);
+    expect(el.shadowRoot!.activeElement).toBe(after);
+    await userEvent.keyboard("{Enter}");
+    expect(clicked).toEqual(["b"]);
+  },
+);
+
+test("a moved row activator leaves focus that is elsewhere where it is", async () => {
+  const el = await table({ rowClick: () => undefined });
+  const outside = document.createElement("button");
+  host.append(outside);
+  outside.focus();
+  el.columns = [{ ...columns[0]!, activatesRow: false }, columns[1]!, columns[2]!];
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="b"] td:nth-child(2) .row-activate'),
+  ).not.toBeNull();
+  expect(document.activeElement).toBe(outside);
+  expect(el.shadowRoot!.activeElement).toBeNull();
+});
+
+test("a focused row activator whose row leaves the table takes the focus nowhere", async () => {
+  const el = await table({ rowClick: () => undefined });
+  el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="b"] .row-activate')!.focus();
+  el.rows = rows.filter((row) => row.id !== "b");
+  el.columns = [{ ...columns[0]!, activatesRow: false }, columns[1]!, columns[2]!];
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector('tr[data-row-key="a"] td:nth-child(2) .row-activate'),
+  ).not.toBeNull();
+  expect(el.shadowRoot!.activeElement).toBeNull();
+});
+
+test.each([
+  { box: "the table's own sticky-header box", sticky: true },
+  { box: "a fixed-height container around the table", sticky: false },
+])(
+  "a focused row activator scrolled out of view inside $box stays out of view when a render keeps it in place",
+  async ({ sticky }) => {
+    const many: Row[] = Array.from({ length: 40 }, (_, i) => ({
+      id: `r${i}`,
+      name: `Row ${i}`,
+      count: i,
+    }));
+    const el = await table({ rows: many, rowClick: () => undefined, stickyHeader: sticky });
+    let box = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    if (sticky) {
+      el.style.height = "300px";
+    } else {
+      const outer = document.createElement("div");
+      outer.style.cssText = "height: 300px; overflow-y: auto";
+      el.before(outer);
+      outer.append(el);
+      box = outer;
+    }
+    await settle();
+    expect(box.scrollHeight).toBeGreaterThan(box.clientHeight + 600);
+    const activator = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      'tr[data-row-key="r0"] .row-activate',
+    )!;
+    activator.focus();
+    box.scrollTop = box.scrollHeight;
+    await settle();
+    const scrolled = box.scrollTop;
+    expect(scrolled).toBeGreaterThan(600);
+    expect(activator.getBoundingClientRect().bottom).toBeLessThan(box.getBoundingClientRect().top);
+    el.rows = [...many];
+    await el.updateComplete;
+    await settle();
+    expect(box.scrollTop).toBe(scrolled);
+    expect(el.shadowRoot!.querySelector('tr[data-row-key="r0"] .row-activate')).toBe(activator);
+    expect(el.shadowRoot!.activeElement).toBe(activator);
+  },
+);
+
+test("a row whose every column keeps its blank space outside row activation draws no activator", async () => {
+  const clicked: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => clicked.push(row.id),
+    columns: columns.map((column) => ({ ...column, activatesRow: false as const })),
+  });
+  expect(el.shadowRoot!.querySelectorAll(".row-activate")).toHaveLength(0);
+  const cell = el.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="b"] td')!;
+  await userEvent.click(cell, { position: { x: 2, y: 2 } });
+  await userEvent.click(
+    el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Edit Bea"]')!,
+  );
   expect(clicked).toEqual([]);
 });
 

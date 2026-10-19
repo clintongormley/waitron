@@ -2148,6 +2148,7 @@ export class MenusScreen extends LitElement {
         label: t("menus.name"),
         sortValue: (menu) => menu.name,
         searchValue: (menu) => menu.name,
+        ...(narrow ? { activatesRow: false as const } : {}),
         cell: narrow
           ? (menu) => {
               const changes = this.#changesCell(menu);
@@ -2164,6 +2165,7 @@ export class MenusScreen extends LitElement {
               key: "status",
               label: t("menus.status"),
               choosable: "shown" as const,
+              ...(layout === "middle" ? { activatesRow: false as const } : {}),
               sortValue: (menu: MenuRow) =>
                 STATUS_ORDER.indexOf(
                   typeof menu.status === "string" ? menu.status : menu.status.state,
@@ -3164,8 +3166,12 @@ export class MenusScreen extends LitElement {
     return html`<span class="live" data-test="menu-status">(${words})</span>`;
   }
 
-  #hasUnpublishedChanges(): boolean {
-    return !this.statusError && this.status?.state === "changed";
+  /** A menu never published has none of it live, so it is marked as well. */
+  #marksPreview(): boolean {
+    return (
+      !this.statusError &&
+      (this.status?.state === "changed" || this.status?.state === "unpublished")
+    );
   }
 
   /** On the Prices tab the clash words stay plain words, since a link would only open it again. */
@@ -3534,7 +3540,7 @@ export class MenusScreen extends LitElement {
           {
             key: "preview",
             label: t("menus.tab_preview"),
-            marked: this.#hasUnpublishedChanges() ? t("menus.tab_preview_unpublished") : undefined,
+            marked: this.#marksPreview() ? t("menus.tab_preview_unpublished") : undefined,
           },
         ]}
         @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
