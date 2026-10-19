@@ -2287,8 +2287,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/till.md#a738-the-counter-screen-fewer-distractions), [mockups](backlog/mockups/a737-a740-till-counter-redesign/)
   [Implementation plan](superpowers/plans/2026-10-19-a738-counter-cleanup.md). Implementation is in
   progress: shared filtering, the fixed top bar, selected Parked/Waiting views and stored-item
-  previews are implemented. Line windows, the last-added/status layout and the Park dialog remain open,
-  and custom-item permission and reporting identity remain undecided.
+  previews are implemented. Line-window work now includes shared entry points, read-only collection
+  inspection, staged quantity/extras/note edits and aligned amount columns. Its remaining note
+  interaction and acceptance checks, the last-added/status layout and the Park dialog remain open;
+  custom-item permission and reporting identity remain undecided.
 
 - **A739 — paying: Hold · Pay and one payment window (owner, 2026-10-15; open).** Pay opens one
   window: how much (An amount, Split equally, Items, Whole bill), the reader and printer (Change,

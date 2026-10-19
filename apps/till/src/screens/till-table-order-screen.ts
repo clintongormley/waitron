@@ -36,7 +36,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
-import { type ComboboxOption, baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
@@ -62,6 +62,7 @@ import {
 import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
+import { lineNutrition } from "../widgets/line-nutrition.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import "../widgets/basket.js";
 import "../widgets/menu-browser.js";
@@ -2015,41 +2016,6 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  #makeAtPicker(
-    store: WorkingOrderStore,
-    line: OrderLine,
-    index: number,
-    name: string,
-  ): TemplateResult {
-    const rules = "__make_at_rules__";
-    const options: ComboboxOption[] = [
-      { value: rules, label: t("move_station.rules") },
-      ...this.stations.map((station) => ({
-        value: station.id,
-        label: station.open
-          ? station.name
-          : t("dead_end.station_closed").replace("{station}", () => station.name),
-      })),
-    ];
-    return html`<wt-combobox
-      data-make-at=${index}
-      name="make-at"
-      label=${`${t("move_station.make_at")} · ${name}`}
-      ?disabled=${!this.#canEditDraftLine(store, line)}
-      search="never"
-      .options=${options}
-      .value=${this.stations.some((station) => station.id === line.makeAt) ? line.makeAt! : rules}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        if (!this.#canEditDraftLine(store, line)) return;
-        store.setLineMakeAt(
-          store.lines.indexOf(line),
-          event.detail.value === rules ? undefined : event.detail.value,
-        );
-      }}
-    ></wt-combobox>`;
-  }
-
   #canRecall(line: TabLine): boolean {
     const served = (row: CurrentOrderRow) =>
       row.lineId === line.id && compareDecimal(decimal(row.servedQuantity), decimal("0")) > 0;
@@ -2753,6 +2719,7 @@ export class TillTableOrderScreen extends LitElement {
                 ${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}
                 ${this.#sentDetails(row)}
               </p>
+              ${lineNutrition(row.nutrition)}
               ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
               <div class="total-row">
                 <span>${row.name}</span
@@ -3317,7 +3284,6 @@ export class TillTableOrderScreen extends LitElement {
       Number(line.quantity) > 1;
     const isFlagged = flagged(line);
     const tools = [
-      ...(this.stations.length > 1 ? [this.#makeAtPicker(store, line, index, name)] : []),
       ...(isFlagged && line.source === undefined ? [this.#flagChoice(store, line, index)] : []),
       this.#draftRoutingWarning(store, line, index, true),
     ];

@@ -372,6 +372,10 @@ export class TillCounterScreen extends LitElement {
           <till-basket
             ?stacked=${this.#phone.matches}
             .store=${this.store}
+            .lineDetails=${true}
+            .allowPickRemoval=${true}
+            .draftParent=${this}
+            .readOnly=${this.stage === "collect"}
             .storedLines=${this.storedLines}
             .makeAtStations=${this.makeAtStations}
             .orderInFlight=${this.orderInFlight}

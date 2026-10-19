@@ -619,6 +619,49 @@ it("the recalled line window changes note and course without replacing its recor
 });
 
 describe("table line windows after editing authority changes", () => {
+  it("A738 a recalled counter line saves quantity and note in one change", async () => {
+    const store = storeWith([options, extras]);
+    const { el, picker } = await openPicker(store, true);
+    const field = picker.shadowRoot!.querySelector('[name="quantity"]');
+    expect(field).not.toBeNull();
+    field!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "1" } }));
+    picker
+      .shadowRoot!.querySelector("wt-textarea")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "No salt" } }));
+    await picker.updateComplete;
+    const states: unknown[] = [];
+    store.on("changed", () =>
+      states.push({ quantity: store.lines[0]!.quantity, note: store.lines[0]!.note }),
+    );
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+    await el.updateComplete;
+    expect(states).toEqual([{ quantity: "1", note: "No salt" }]);
+    expect(store.lines[0]!.source!.line.quantity).toBe("2.000");
+    expect(store.lines[0]!.product.unitPrice).toBe("7.50");
+    expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+  });
+
+  it("A738 a recalled table reduction uses its cancellation path without saving other edits", async () => {
+    const store = new DraftStore();
+    store.loadFrom("draft", [
+      fromDraftLine(source(), new Map([["offer-burger", offer([options, extras])]])),
+    ]);
+    const cancelled: unknown[] = [];
+    store.cancelSource = (line, quantity) => cancelled.push({ id: line.source!.line.id, quantity });
+    const { picker } = await openPicker(store, true);
+    const field = picker.shadowRoot!.querySelector('[name="quantity"]');
+    expect(field).not.toBeNull();
+    field!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "1" } }));
+    picker
+      .shadowRoot!.querySelector("wt-textarea")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "No salt" } }));
+    await picker.updateComplete;
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+    expect(cancelled).toEqual([{ id: "sent-burger", quantity: "1" }]);
+    expect(store.lines[0]!.quantity).toBe("2");
+    expect(store.lines[0]!.note).toBeUndefined();
+  });
+
   async function opening(recalled: boolean) {
     const store = new DraftStore();
     if (recalled) {

@@ -133,6 +133,8 @@ class ModifierLeaveApp extends LitElement {
   product = product;
   initialSelections?: LineSelection;
   withNote = false;
+  lineDetails = false;
+  quantity = "1";
   initialCourse?: string;
   courseChoices: readonly ComboboxOption[] = [];
   closes = 0;
@@ -142,6 +144,8 @@ class ModifierLeaveApp extends LitElement {
         .product=${this.product}
         .initialSelections=${this.initialSelections}
         .withNote=${this.withNote}
+        .lineDetails=${this.lineDetails}
+        .quantity=${this.quantity}
         .initialCourse=${this.initialCourse}
         .courseChoices=${this.courseChoices}
         @wt-modifier-cancel=${() => this.closes++}
@@ -216,6 +220,37 @@ const edits = {
     await note(form, "No salt");
   },
 };
+
+it.each(["Cancel", "Escape"])(
+  "A738 quantity %s protects Keep and restores the initial quantity on Discard",
+  async (action) => {
+    const { app, form } = await mount({
+      product: { ...product, variants: undefined },
+      lineDetails: true,
+      quantity: "2",
+      initialSelections: {},
+    });
+    const field = form.shadowRoot!.querySelector("wt-input")!;
+    expect(field).not.toBeNull();
+    await userEvent.fill(field.shadowRoot!.querySelector("input")!, "3");
+    await form.updateComplete;
+    expect(unload()).toBe(true);
+    if (action === "Cancel") cancel(form);
+    else await userEvent.keyboard("{Escape}");
+    const q = await question(app);
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => q.open).toBe(false);
+    expect(field.value).toBe("3");
+    expect(app.closes).toBe(0);
+    cancel(form);
+    await expect.poll(() => q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => app.closes).toBe(1);
+    expect(field.value).toBe("2");
+    expect(app.submitted).toEqual([]);
+  },
+);
 for (const [name, edit] of Object.entries(edits)) {
   for (const action of ["Cancel", "Escape"]) {
     it(`modifier ${name} ${action} preserves edits on Keep and restores only this picker on Discard`, async () => {

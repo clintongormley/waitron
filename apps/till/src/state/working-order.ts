@@ -567,6 +567,68 @@ export class WorkingOrderStore {
     this.#changedLines();
   }
 
+  /** Validate the whole line before changing it, so a refused total cannot save only its note. */
+  setLineDetails(
+    index: number,
+    update: {
+      quantity: string;
+      note: string;
+      selection: LineSelection;
+      course?: { id: string | undefined; value: TillCourse | undefined };
+    },
+  ): boolean {
+    if (this.#refusesEdits) return false;
+    const line = this.#lines[index];
+    if (line === undefined) return false;
+    assertQuantityPrecision(update.quantity, productUnit(line.product).precision, {
+      positive: true,
+    });
+    const change = compareDecimal(decimal(update.quantity), decimal(line.quantity));
+    if (change > 0 && this.#refusesSelection(line.product)) return false;
+    const candidate: OrderLine = { ...line, quantity: update.quantity };
+    if (line.source === undefined || update.selection.extras !== undefined) {
+      delete candidate.extras;
+      delete candidate.notOfferedExtras;
+    }
+    if (line.source === undefined || update.selection.options !== undefined) {
+      delete candidate.options;
+      delete candidate.optionSnapshots;
+    }
+    applySelection(candidate, update.selection);
+    if (line.source !== undefined)
+      candidate.sourceSelection = { ...line.sourceSelection, ...update.selection };
+    const note = update.note.trim();
+    if (note === "") delete candidate.note;
+    else candidate.note = note;
+    if (update.course !== undefined) {
+      delete candidate.course;
+      delete candidate.courseId;
+      if (update.course.id !== undefined) candidate.courseId = update.course.id;
+      if (update.course.value !== undefined) candidate.course = update.course.value;
+    }
+    if (this.#passesLimit(lineGross(line), lineGross(candidate))) return false;
+    for (const key of [
+      "extras",
+      "notOfferedExtras",
+      "options",
+      "optionSnapshots",
+      "note",
+      "course",
+      "courseId",
+    ] as const)
+      delete line[key];
+    Object.assign(line, candidate);
+    if (update.course !== undefined) {
+      const placement = this.placer?.(update.course.id ?? line.product.courseId ?? null, index);
+      if (placement !== undefined) {
+        if (placement.shift !== undefined) this.#shiftSlots(placement.shift.from);
+        line.place = { ...placement.place };
+      }
+    }
+    this.#changedLines();
+    return true;
+  }
+
   /** Never merges lines: stepping one line's count never folds it into an identical sibling. */
   setLineQuantity(index: number, quantity: string): void {
     if (this.#refusesEdits) return;

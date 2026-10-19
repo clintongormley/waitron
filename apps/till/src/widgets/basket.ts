@@ -1,9 +1,9 @@
 import "./modifier-picker.js";
 import "./order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "./order-kitchen-note.js";
-import type { ModifierConfirmDetail } from "./modifier-picker.js";
+import type { ModifierConfirmDetail, StagedRemoval } from "./modifier-picker.js";
 import type { ProductAllergens } from "@waitron/catalogue/src/allergens.js";
-import { ContentLanguageController } from "@waitron/ui";
+import { ContentLanguageController, formatDecimalInput, Gestures } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -94,6 +94,7 @@ export class TillBasket extends LitElement {
     css`
       :host {
         display: block;
+        container-type: inline-size;
       }
 
       .entry {
@@ -154,6 +155,105 @@ export class TillBasket extends LitElement {
 
       :host([stacked]) .line .qty {
         margin-inline-end: auto;
+      }
+
+      :host([line-details]) .order-lines {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto max-content auto auto auto;
+        column-gap: var(--wt-space-2);
+      }
+      :host([line-details]) .order-lines > slot {
+        grid-column: 1 / -1;
+      }
+      :host([line-details]) .entry,
+      :host([line-details]) .entry-body,
+      :host([line-details]) .line,
+      :host([line-details]) .option {
+        display: grid;
+        grid-template-columns: subgrid;
+        column-gap: var(--wt-space-2);
+      }
+      :host([line-details]) .entry {
+        grid-column: 1 / -1;
+      }
+      :host([line-details]) .entry-body {
+        grid-column: 1 / 6;
+      }
+      :host([line-details]) .entry-end {
+        grid-column: 6;
+        grid-row: 1;
+      }
+      :host([line-details]) .entry-body > * {
+        grid-column: 1 / -1;
+      }
+      :host([line-details]) .line .name {
+        grid-column: 1;
+        min-width: 0;
+      }
+      :host([line-details]) .line .qty {
+        grid-column: 2;
+        margin-inline-end: 0;
+      }
+      :host([line-details]) .line-total,
+      :host([line-details]) .option-total {
+        grid-column: 3;
+        text-align: end;
+      }
+      :host([line-details]) [data-line-detail] {
+        grid-column: 4;
+      }
+      :host([line-details]) .remove,
+      :host([line-details]) .remove-gap,
+      :host([line-details]) [data-remove-extra] {
+        grid-column: 5;
+      }
+      :host([line-details]) .option .name {
+        grid-column: 1;
+        min-width: 0;
+      }
+      :host([line-details]) .option .qty {
+        grid-column: 2;
+      }
+      :host([line-details][stacked]) .line .name {
+        grid-column: 1 / -1;
+      }
+      :host([line-details][stacked]) .line .qty {
+        grid-column: 1 / 3;
+        justify-self: start;
+      }
+      :host([line-details][stacked]) .option .name {
+        grid-column: 1 / -1;
+      }
+      :host([line-details][stacked]) .option .qty {
+        grid-column: 1 / 3;
+      }
+      @container (width < 360px) {
+        :host([line-details]) .order-lines {
+          grid-template-columns: minmax(0, 1fr) auto max-content;
+        }
+        :host([line-details]) .entry-body {
+          grid-column: 1 / -1;
+        }
+        :host([line-details]) .entry-end {
+          grid-column: 1 / -1;
+          grid-row: auto;
+        }
+        :host([line-details]) .line .name,
+        :host([line-details]) .option .name {
+          grid-column: 1 / -1;
+        }
+        :host([line-details]) .line .qty,
+        :host([line-details]) .option .qty {
+          grid-column: 1 / 3;
+        }
+        :host([line-details]) [data-line-detail] {
+          grid-column: 2;
+        }
+        :host([line-details]) .remove,
+        :host([line-details]) .remove-gap,
+        :host([line-details]) [data-remove-extra] {
+          grid-column: 3;
+        }
       }
 
       .line-after {
@@ -295,7 +395,9 @@ export class TillBasket extends LitElement {
   @property({ attribute: false }) lineIndexes?: readonly number[];
 
   @property({ type: Boolean, reflect: true }) stacked = false;
-  @property({ type: Boolean }) lineDetails = false;
+  @property({ type: Boolean, reflect: true, attribute: "line-details" }) lineDetails = false;
+  @property({ type: Boolean }) readOnly = false;
+  @property({ type: Boolean }) allowPickRemoval = false;
   @property({ attribute: false }) draftParent?: object;
   @property({ attribute: false }) courses: readonly TillCourse[] = [];
 
@@ -329,13 +431,34 @@ export class TillBasket extends LitElement {
   #modifierSelection: LineSelection | null = null;
   #modifierProduct?: TillProduct;
   #modifierCourse?: string;
+  #modifierRemoval?: StagedRemoval;
 
   /** Detects a whole-basket swap: `clear` mints a fresh id and `loadFrom` adopts the retrieved order's,
    * while an in-basket add / remove / edit keeps it. */
   #lastStoreId?: string;
+  #gestures?: Gestures;
+  #pressedLine: OrderLine | null = null;
+  readonly #clearPress = () => {
+    this.#pressedLine = null;
+  };
+
+  openLineDetails(line: OrderLine): void {
+    if (!this.isConnected || !this.store.lines.includes(line)) return;
+    this.#openModifierPicker(line);
+  }
+
+  #lineReadOnly(line: OrderLine): boolean {
+    const listed = this.#listed(line, storedListing(this.store, this.storedLines));
+    return (
+      this.readOnly ||
+      this.store.editsLocked ||
+      (listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null))
+    );
+  }
 
   #openModifierPicker(line: OrderLine): void {
-    if (this.store.sending || this.store.editsLocked || this.orderInFlight) return;
+    if (this.store.sending || (!this.lineDetails && this.store.editsLocked) || this.orderInFlight)
+      return;
     this.#modifierCourse =
       this.lineDetails &&
       (this.courses.length > 0 || (line.course !== undefined && line.course.id === line.courseId))
@@ -347,6 +470,7 @@ export class TillBasket extends LitElement {
       this.#modifierSelection = {
         extras: line.extras ?? [],
         options: line.options ?? [],
+        optionSnapshots: line.optionSnapshots,
         ...(this.lineDetails ? { note: line.note ?? "" } : {}),
       };
       return;
@@ -391,6 +515,7 @@ export class TillBasket extends LitElement {
           : [];
     });
     this.#modifierSelection = {
+      optionSnapshots: line.optionSnapshots,
       ...(this.lineDetails ? { note: line.note ?? "" } : {}),
       extras: line.sourceSelection?.extras ?? derived,
       options:
@@ -404,6 +529,13 @@ export class TillBasket extends LitElement {
     this.#modifierSelection = null;
     this.#modifierProduct = undefined;
     this.#modifierCourse = undefined;
+    this.#modifierRemoval = undefined;
+  }
+
+  #stageRemoval(line: OrderLine, removal: StagedRemoval): void {
+    if (this.#lineReadOnly(line) || this.store.sending || this.orderInFlight) return;
+    this.openLineDetails(line);
+    if (this.modifierLine === line) this.#modifierRemoval = removal;
   }
 
   #recordedExtra(line: OrderLine, listId: string, productId: string): TabLine | undefined {
@@ -414,18 +546,19 @@ export class TillBasket extends LitElement {
     );
   }
 
-  #confirmModifiers(detail: ModifierConfirmDetail): void {
+  #confirmModifiers(detail: ModifierConfirmDetail): boolean {
     const line = this.modifierLine;
     if (
       line === null ||
       !this.isConnected ||
       this.store.sending ||
       this.store.editsLocked ||
-      this.orderInFlight
+      this.orderInFlight ||
+      this.#lineReadOnly(line)
     )
-      return;
+      return false;
     const index = this.store.lines.indexOf(line);
-    if (index < 0) return;
+    if (index < 0) return false;
     const courseChanged =
       this.lineDetails && detail.courseId !== undefined && detail.courseId !== this.#modifierCourse;
     if (
@@ -433,22 +566,32 @@ export class TillBasket extends LitElement {
       detail.courseId !== "" &&
       !this.courses.some((course) => course.id === detail.courseId)
     )
-      return;
-    const finishPlacement = () => {
-      if (!this.lineDetails) return;
-      this.store.setLineExtras(index, { note: detail.note ?? "" });
-      if (courseChanged)
-        this.store.setLineCourse(
-          index,
-          detail.courseId || undefined,
-          this.courses.find((course) => course.id === detail.courseId),
-        );
+      return false;
+    const finish = (selection: LineSelection) => {
+      if (!this.lineDetails) {
+        if (line.source === undefined) this.store.setLineModifiers(index, selection);
+        else this.store.patchRecalledLineModifiers(index, selection);
+        this.#closeModifierPicker();
+        return true;
+      }
+      const applied = this.store.setLineDetails(index, {
+        quantity: detail.quantity ?? line.quantity,
+        note: detail.note ?? "",
+        selection,
+        ...(courseChanged
+          ? {
+              course: {
+                id: detail.courseId || undefined,
+                value: this.courses.find((course) => course.id === detail.courseId),
+              },
+            }
+          : {}),
+      });
+      if (applied) this.#closeModifierPicker();
+      return applied;
     };
     if (line.source === undefined) {
-      this.#closeModifierPicker();
-      this.store.setLineModifiers(index, detail);
-      finishPlacement();
-      return;
+      return finish(detail);
     }
     const offered = offeredListsOf(line.product);
     const selection: LineSelection = {};
@@ -475,9 +618,7 @@ export class TillBasket extends LitElement {
           ? pick
           : { ...pick, name: stored.name ?? pick.name, price: stored.unitPriceGross };
       });
-    this.#closeModifierPicker();
-    this.store.patchRecalledLineModifiers(index, selection);
-    finishPlacement();
+    return finish(selection);
   }
 
   constructor() {
@@ -493,8 +634,22 @@ export class TillBasket extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.addEventListener("pointerdown", this.#clearPress, true);
+    this.#gestures = new Gestures(this, {
+      longPress: () => {
+        if (this.#pressedLine !== null) this.openLineDetails(this.#pressedLine);
+      },
+    });
     // Without this the first `"changed"` would read the unchanged id as a swap and close an open editor.
     this.#lastStoreId = this.store.id;
+  }
+
+  override disconnectedCallback(): void {
+    this.removeEventListener("pointerdown", this.#clearPress, true);
+    this.#gestures?.disconnect();
+    this.#gestures = undefined;
+    this.#pressedLine = null;
+    super.disconnectedCallback();
   }
 
   #onStoreChanged(): void {
@@ -590,151 +745,202 @@ export class TillBasket extends LitElement {
       return line === undefined ? [] : [[line, index] as const];
     });
     const listing = storedListing(this.store, this.storedLines);
-    const adjustable = adjustableListing(this.store, listing, this.orderInFlight);
+    const adjustable = this.readOnly
+      ? null
+      : adjustableListing(this.store, listing, this.orderInFlight);
     return html`
       ${this.#kitchenHeading()}
-      ${shown.map(([line, index]) => {
-        const listed = this.#listed(line, listing);
-        const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);
-        return html`
-          <slot name=${`before-${index}`}></slot>
-          <div class="entry">
-            <div class="entry-body">
-              <div class="line">
-                <span class="name" part="name"
-                  ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot
-                  >${this.#nutrition(line)}${
-                    line.notOffered ? notOfferedMarker() : nothing
-                  }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
-                    line.unavailableOnServer === true &&
-                    line.blocked === undefined &&
-                    line.notOffered === undefined
-                      ? html` <span class="not-offered">${t("basket.blocked.server")}</span>`
-                      : nothing
-                  }</span
+      <div class="order-lines">
+        ${shown.map(([line, index]) => {
+          const listed = this.#listed(line, listing);
+          const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);
+          return html`
+            <slot name=${`before-${index}`}></slot>
+            <div class="entry">
+              <div class="entry-body">
+                <div
+                  class="line"
+                  @pointerdown=${(event: PointerEvent) => {
+                    this.#pressedLine =
+                      this.lineDetails &&
+                      !event
+                        .composedPath()
+                        .some(
+                          (node) =>
+                            node instanceof Element &&
+                            node.matches("wt-button, button, input, wt-input"),
+                        )
+                        ? line
+                        : null;
+                  }}
+                  @dblclick=${(event: MouseEvent) => {
+                    if (
+                      this.lineDetails &&
+                      !event
+                        .composedPath()
+                        .some(
+                          (node) =>
+                            node instanceof Element &&
+                            node.matches(
+                              "wt-button, button:not([data-draft-select]), input, wt-input",
+                            ),
+                        )
+                    )
+                      this.openLineDetails(line);
+                  }}
                 >
-                ${this.#quantityCell(line, index, sent)} ${this.#dishTotal(line, listed)}
+                  <span class="name" part="name"
+                    ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot
+                    >${this.#nutrition(line)}${
+                      line.notOffered ? notOfferedMarker() : nothing
+                    }${line.blocked === undefined ? nothing : blockedMarker(line.blocked)}${
+                      line.unavailableOnServer === true &&
+                      line.blocked === undefined &&
+                      line.notOffered === undefined
+                        ? html` <span class="not-offered">${t("basket.blocked.server")}</span>`
+                        : nothing
+                    }</span
+                  >
+                  ${this.#quantityCell(line, index, sent)} ${this.#dishTotal(line, listed)}
+                  ${
+                    this.lineDetails
+                      ? html`<wt-button
+                          variant="ghost"
+                          size="md"
+                          data-line-detail=${index}
+                          aria-label=${`${t("modifier.edit")} · ${this.#lineName(line)}`}
+                          ?disabled=${this.store.sending || this.store.editsLocked || this.orderInFlight}
+                          @click=${() => this.openLineDetails(line)}
+                          ><span aria-hidden="true">ⓘ</span></wt-button
+                        >`
+                      : html`<wt-button
+                          class="note-toggle"
+                          variant="ghost"
+                          size="md"
+                          data-test=${`line-note-button-${index}`}
+                          aria-expanded=${this.editingLine === line}
+                          aria-label=${`${t("line.note.button")} ${this.#lineName(line)}`}
+                          @click=${() => this.#toggleEditor(line)}
+                        >
+                          ${t("line.note.button")}
+                        </wt-button>`
+                  }
+                  ${
+                    sent || this.readOnly || this.store.editsLocked
+                      ? html`<wt-button class="remove-gap" variant="ghost" size="md" inert
+                          ><span aria-hidden="true">×</span></wt-button
+                        >`
+                      : html`<wt-button
+                          class="remove"
+                          variant="ghost"
+                          size="md"
+                          aria-label=${`${t("action.remove")} ${this.#lineName(line)}`}
+                          @click=${() => {
+                            if (!this.#lineReadOnly(line) && !this.orderInFlight)
+                              this.store.removeLine(index);
+                          }}
+                        >
+                          <span aria-hidden="true">×</span>
+                        </wt-button>`
+                  }
+                </div>
                 ${
-                  this.lineDetails
+                  !this.lineDetails && !sent && this.makeAtStations.length > 1
+                    ? html`<div class="line-actions">
+                        <wt-button
+                          size="sm"
+                          variant="ghost"
+                          data-make-at=${index}
+                          @click=${() => this.dispatchEvent(new CustomEvent("open-make-at", { detail: index, bubbles: true, composed: true }))}
+                          >${this.#makeAtLabel(line)}</wt-button
+                        >
+                      </div>`
+                    : nothing
+                }
+                ${
+                  // Each row's actions sit straight under it, so a dish's are not read as its extra's.
+                  adjustable !== null && listed !== undefined
+                    ? this.#lineActions(line, index, listed, sent, adjustable)
+                    : nothing
+                }
+                ${
+                  // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
+                  // answers and never its product, so a dish whose only question is its variant gets no
+                  // Edit button rather than a dialog whose save would carry nothing. The MIXED case —
+                  // variants AND an offered list — still re-asks the variant and discards it; open in
+                  // `docs/backlog.md`.
+                  !this.lineDetails && offeredListsOf(line.product).length > 0
                     ? html`<wt-button
-                        variant="ghost"
-                        size="md"
-                        data-line-detail=${index}
-                        aria-label=${`${t("modifier.edit")} · ${this.#lineName(line)}`}
-                        ?disabled=${this.store.sending || this.store.editsLocked || this.orderInFlight}
-                        @click=${() => this.#openModifierPicker(line)}
-                        ><span aria-hidden="true">ⓘ</span></wt-button
-                      >`
-                    : html`<wt-button
-                        class="note-toggle"
-                        variant="ghost"
-                        size="md"
-                        data-test=${`line-note-button-${index}`}
-                        aria-expanded=${this.editingLine === line}
-                        aria-label=${`${t("line.note.button")} ${this.#lineName(line)}`}
-                        @click=${() => this.#toggleEditor(line)}
-                      >
-                        ${t("line.note.button")}
-                      </wt-button>`
-                }
-                ${
-                  sent
-                    ? html`<wt-button class="remove-gap" variant="ghost" size="md" inert
-                        ><span aria-hidden="true">×</span></wt-button
-                      >`
-                    : html`<wt-button
-                        class="remove"
-                        variant="ghost"
-                        size="md"
-                        aria-label=${`${t("action.remove")} ${this.#lineName(line)}`}
-                        @click=${() => this.store.removeLine(index)}
-                      >
-                        <span aria-hidden="true">×</span>
-                      </wt-button>`
-                }
-              </div>
-              ${
-                !sent && this.makeAtStations.length > 1
-                  ? html`<div class="line-actions">
-                      <wt-button
+                        class="edit-modifiers"
                         size="sm"
                         variant="ghost"
-                        data-make-at=${index}
-                        @click=${() => this.dispatchEvent(new CustomEvent("open-make-at", { detail: index, bubbles: true, composed: true }))}
-                        >${this.#makeAtLabel(line)}</wt-button
-                      >
-                    </div>`
-                  : nothing
-              }
-              ${
-                // Each row's actions sit straight under it, so a dish's are not read as its extra's.
-                adjustable !== null && listed !== undefined
-                  ? this.#lineActions(line, index, listed, sent, adjustable)
-                  : nothing
-              }
-              ${
-                // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
-                // answers and never its product, so a dish whose only question is its variant gets no
-                // Edit button rather than a dialog whose save would carry nothing. The MIXED case —
-                // variants AND an offered list — still re-asks the variant and discards it; open in
-                // `docs/backlog.md`.
-                !this.lineDetails && offeredListsOf(line.product).length > 0
-                  ? html`<wt-button
-                      class="edit-modifiers"
-                      size="sm"
-                      variant="ghost"
-                      @click=${() => this.#openModifierPicker(line)}
-                      >${t("modifier.edit")}</wt-button
-                    >`
-                  : nothing
-              }
-              ${this.#extrasRow(line, index)} ${this.#extrasEditor(line)}
-              ${(line.extras ?? []).map(
-                // No remove control: a pick goes only with its dish. Its own allergens and diet sit
-                // beside the dish's rows, never folded into them.
-                (extra, i) => {
-                  const own = this.#extraOwnNutrition(line, extra.productId);
-                  const listedExtra = this.#listedExtra(listed, extra);
-                  return html`
+                        @click=${() => this.#openModifierPicker(line)}
+                        >${t("modifier.edit")}</wt-button
+                      >`
+                    : nothing
+                }
+                ${this.#extrasRow(line, index)} ${this.#extrasEditor(line)}
+                ${(line.extras ?? []).map(
+                  // No remove control: a pick goes only with its dish. Its own allergens and diet sit
+                  // beside the dish's rows, never folded into them.
+                  (extra, i) => {
+                    const own = this.#extraOwnNutrition(line, extra.productId);
+                    const listedExtra = this.#listedExtra(listed, extra);
+                    return html`
+                      <div class="option">
+                        <span class="name"
+                          >${extra.name}${this.lineDetails ? nothing : pickQuantityBadge(extra.quantity)}</span
+                        >
+                        ${this.lineDetails ? html`<span class="qty">${formatDecimalInput(multiplyDecimal(decimal(line.quantity), decimal(String(extra.quantity))), currentLocale())}</span>` : nothing}
+                        ${this.#extraTotal(line, extra, listedExtra)}
+                        ${
+                          this.lineDetails && this.allowPickRemoval && !this.#lineReadOnly(line)
+                            ? html`<wt-button
+                                data-remove-extra=${`${extra.listId}/${extra.productId}`}
+                                variant="ghost"
+                                aria-label=${`${t("action.remove")} ${extra.name}`}
+                                @click=${() => this.#stageRemoval(line, { listId: extra.listId, productId: extra.productId })}
+                                >×</wt-button
+                              >`
+                            : nothing
+                        }
+                      </div>
+                      ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
+                      ${
+                        adjustable !== null && listedExtra !== undefined
+                          ? this.#extraActions(
+                              line,
+                              extra,
+                              `${index}-${i}`,
+                              listedExtra,
+                              sent,
+                              adjustable,
+                            )
+                          : nothing
+                      }
+                    `;
+                  },
+                )}
+                ${(line.notOfferedExtras ?? []).map(
+                  (extra) => html`
                     <div class="option">
-                      <span class="name">${extra.name}${pickQuantityBadge(extra.quantity)}</span>
-                      ${this.#extraTotal(line, extra, listedExtra)}
+                      <span class="name"
+                        >${extra.name}${pickQuantityBadge(extra.quantity)}${notOfferedMarker()}</span
+                      >
+                      <span class="option-total"
+                        >${formatMoney(extraGross(line, extra), currentLocale())}</span
+                      >
                     </div>
-                    ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
-                    ${
-                      adjustable !== null && listedExtra !== undefined
-                        ? this.#extraActions(
-                            line,
-                            extra,
-                            `${index}-${i}`,
-                            listedExtra,
-                            sent,
-                            adjustable,
-                          )
-                        : nothing
-                    }
-                  `;
-                },
-              )}
-              ${(line.notOfferedExtras ?? []).map(
-                (extra) => html`
-                  <div class="option">
-                    <span class="name"
-                      >${extra.name}${pickQuantityBadge(extra.quantity)}${notOfferedMarker()}</span
-                    >
-                    <span class="option-total"
-                      >${formatMoney(extraGross(line, extra), currentLocale())}</span
-                    >
-                  </div>
-                `,
-              )}
-              ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
-              <div class="line-after"><slot name=${`after-${index}`}></slot></div>
+                  `,
+                )}
+                ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
+                <div class="line-after"><slot name=${`after-${index}`}></slot></div>
+              </div>
+              <slot class="entry-end" name=${`end-${index}`}></slot>
             </div>
-            <slot class="entry-end" name=${`end-${index}`}></slot>
-          </div>
-        `;
-      })}
+          `;
+        })}
+      </div>
       ${adjustable === null ? nothing : this.#billAdjust()}
       ${
         this.modifierLine && this.#modifierSelection
@@ -743,6 +949,18 @@ export class TillBasket extends LitElement {
               .product=${this.#modifierProduct}
               .lineDetails=${this.lineDetails}
               .withNote=${this.lineDetails}
+              .readOnly=${this.lineDetails && this.#lineReadOnly(this.modifierLine)}
+              .nutrition=${
+                this.lineDetails
+                  ? {
+                      allergens: this.modifierLine.product.allergens,
+                      dietaryDeclarations: nutritionDietLabels(
+                        asServedDiet(this.modifierLine),
+                        this.modifierLine.product.dietaryDeclarations,
+                      ),
+                    }
+                  : null
+              }
               .initialCourse=${this.#modifierCourse}
               .coursePlaceholder=${
                 this.modifierLine.course !== undefined &&
@@ -759,9 +977,10 @@ export class TillBasket extends LitElement {
               .quantity=${this.modifierLine.quantity}
               .showTotal=${this.modifierLine.source === undefined}
               .initialSelections=${this.#modifierSelection}
+              .stagedRemoval=${this.#modifierRemoval}
               @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
                 event.stopPropagation();
-                this.#confirmModifiers(event.detail);
+                if (!this.#confirmModifiers(event.detail)) event.preventDefault();
               }}
               @wt-modifier-cancel=${(event: Event) => {
                 event.stopPropagation();
@@ -792,9 +1011,29 @@ export class TillBasket extends LitElement {
     if (line.note === undefined) return nothing;
     return html`
       <div class="line-extras" data-test=${`line-extras-${index}`}>
-        <span class="line-extras-note"
-          ><span class="line-extras-label">${t("line.note.label")}:</span> ${line.note}</span
-        >
+        ${
+          this.lineDetails
+            ? html`<wt-button
+                  class="line-extras-note"
+                  variant="ghost"
+                  @click=${() => this.openLineDetails(line)}
+                  >${line.note}</wt-button
+                >
+                ${
+                  !this.#lineReadOnly(line)
+                    ? html`<wt-button
+                        data-remove-note
+                        variant="ghost"
+                        aria-label=${`${t("action.remove")} ${t("line.note.label")}`}
+                        @click=${() => this.#stageRemoval(line, "note")}
+                        >×</wt-button
+                      >`
+                    : nothing
+                } `
+            : html`<span class="line-extras-note"
+                ><span class="line-extras-label">${t("line.note.label")}:</span> ${line.note}</span
+              >`
+        }
       </div>
     `;
   }
@@ -815,6 +1054,7 @@ export class TillBasket extends LitElement {
   /** `−` is disabled at 1: removing a line is the × control's job, never the stepper's. A dish the
    * kitchen has has no `−`: less of it leaves only through Cancel. */
   #quantityCell(line: OrderLine, index: number, sent: boolean) {
+    if (this.readOnly) return html`<span class="qty">${quantityLabel(line)}</span>`;
     const unit = productUnit(line.product);
     if (unit.hardwareUnit !== null || unit.precision > 0) {
       return html`<span class="qty">${quantityLabel(line)}</span>`;
@@ -833,7 +1073,7 @@ export class TillBasket extends LitElement {
                 variant="ghost"
                 size="sm"
                 aria-label=${`${t("basket.decrease")} ${name}`}
-                ?disabled=${count <= 1}
+                ?disabled=${count <= 1 || this.store.editsLocked || this.orderInFlight}
                 @click=${() => this.store.setLineQuantity(index, String(count - 1))}
               >
                 <span aria-hidden="true">−</span>
@@ -842,7 +1082,7 @@ export class TillBasket extends LitElement {
         <span class="count">${line.quantity}</span>
         <wt-button
           class="step step-inc"
-          ?disabled=${this.store.canSelectProduct?.(line.product) === false}
+          ?disabled=${this.store.editsLocked || this.orderInFlight || this.store.canSelectProduct?.(line.product) === false}
           variant="ghost"
           size="sm"
           aria-label=${`${t("basket.increase")} ${name}`}
