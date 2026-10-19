@@ -8986,6 +8986,49 @@ describe("A773 Pay saves the bill's New order before payment", () => {
     expect(banner(el)!.textContent).toContain("Send or remove the unsent dishes before paying.");
     expect(tableOrder(el)!.orderId).toBe("wo-4");
   });
+
+  it("opens a bill payment without saving the draft while a part payment on the bill is out", async () => {
+    const takeBillPayment = vi.fn(() => new Promise<never>(() => {}));
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue(bills()),
+      previewBillPayment: vi.fn().mockResolvedValue({
+        kind: "allocated",
+        choice: null,
+        applied: "3.00",
+        tip: "0.00",
+        change: "0.00",
+        charged: null,
+      }),
+      takeBillPayment,
+    });
+    const order = await openMesa(el);
+    const payDialog = () => el.shadowRoot!.querySelector<HTMLElement>("till-bill-pay-dialog");
+    const inPay = (selector: string) =>
+      payDialog()!.shadowRoot!.querySelector<HTMLElement>(selector);
+    emit(order, "bill-pay", { way: "contribution", lines: [], amount: "3.00" });
+    await flush(el, 8);
+    const reference = inPay('wt-input[name="externalRef"]')!.shadowRoot!.querySelector("input")!;
+    reference.value = "manual-1";
+    reference.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+    inPay("[data-pay-continue]")!.click();
+    await flush(el, 8);
+    inPay("[data-pay-confirm]")!.click();
+    await flush(el);
+    expect(takeBillPayment).toHaveBeenCalledOnce();
+    emit(payDialog()!, "bill-pay-close");
+    await flush(el);
+    await tap(el, "Beer");
+    const saves = api.saveDraft.mock.calls.length;
+
+    emit(tableOrder(el)!, "bill-pay", { way: "contribution", lines: [], amount: "3.00" });
+    await flush(el, 8);
+
+    expect(api.saveDraft).toHaveBeenCalledTimes(saves);
+    expect(payDialog()).not.toBeNull();
+    expect((payDialog() as HTMLElement & { busy: boolean }).busy).toBe(true);
+    expect(takeBillPayment).toHaveBeenCalledOnce();
+  });
 });
 
 describe("A773 non-open bill draft restrictions", () => {

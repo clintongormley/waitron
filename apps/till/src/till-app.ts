@@ -15845,11 +15845,19 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const api = this.api;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    // The hold ends when the send settles, not after the reads that follow its answer, which have no
+    // time limit. The `finally` calls this too, in case `settle` throws; only the first call
+    // releases.
+    const release = () => {
+      if (!isLatestSend(this.#paymentSends, key, turn) || !this.#paymentsOut.delete(key)) return;
+      void this.#afterPaymentOut(open.id, key);
+    };
     const settle = (error?: unknown) => {
       if (!isLatestSend(this.#paymentSends, key, turn)) return;
       const unanswered = unansweredAfter(submission, error);
       if (unanswered === null) this.#unansweredPayments.delete(key);
       else this.#unansweredPayments.set(key, unanswered);
+      release();
     };
     this.#paymentsOut.set(key, { dialogId: open.id, shown: submission.shown });
     await this.#holdingReload(async () => {
@@ -15868,10 +15876,7 @@ export class TillApp extends LitElement {
         await this.#onBillPayRefused(open.id, error, asked, "take");
       } finally {
         limit.done();
-        if (isLatestSend(this.#paymentSends, key, turn)) {
-          this.#paymentsOut.delete(key);
-          await this.#afterPaymentOut(open.id, key);
-        }
+        release();
       }
     });
   }

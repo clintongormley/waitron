@@ -2558,6 +2558,31 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.sending"));
   });
 
+  it("an answered payment holds the bill no longer, even while the reads after its answer never finish", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValue(
+        takenOf({ applied: "40.00", change: "10.00" }, { received: "40.00", outstanding: "80.00" }),
+      );
+    const { el } = await mountApp({ takeBillPayment });
+    await openTable(el);
+    vi.mocked(api.getTablesState).mockImplementation(() => new Promise<TableState[]>(() => {}));
+    await contribute(el);
+    expect(takeBillPayment).toHaveBeenCalledOnce();
+
+    await reopen(el);
+
+    expect(dialog(el)!.busy).toBe(false);
+    expect(dialog(el)!.confirmationLocked).toBe(false);
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    emit(dialog(el)!, "bill-pay-close");
+    await flush(el);
+    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "120.00", guests: 4 });
+    await flush(el);
+    expect(el.shadowRoot!.textContent).not.toContain(t("bill_pay.sending"));
+    expect(api.recordSale).toHaveBeenCalledOnce();
+  });
+
   it("a payment out on one bill holds no other bill", async () => {
     const takeBillPayment = vi.fn(async (billId: string) => {
       if (billId === "wo-4") return new Promise<BillPaymentResult>(() => {});
