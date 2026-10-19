@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./equipment-scanner.js";
 import { trackDialog } from "./track-dialog.js";
+import { fill, optionLabel } from "./equipment-labels.js";
 import { carriedText, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -49,17 +50,6 @@ const ROWS: { role: EquipmentRole; field: Field; scan: "printer" | "reader" | nu
   { role: "cash_drawer", field: "cashDrawerPrinterId", scan: null },
   { role: "invoice", field: "invoicePrinterId", scan: null },
 ];
-
-const fill = (text: string, values: Record<string, string>) =>
-  text.replace(/\{(\w+)\}/g, (whole, key: string) => values[key] ?? whole);
-
-function optionLabel(item: EquipmentItem): string {
-  if (item.busy) return fill(t("equipment.option_busy"), { item: item.name });
-  if (item.heldBy !== null)
-    return fill(t("equipment.option_held"), { item: item.name, device: item.heldBy.deviceName });
-  if (!item.available) return fill(t("equipment.switched_off"), { item: item.name });
-  return item.kind === "a4" ? fill(t("equipment.option_a4"), { item: item.name }) : item.name;
-}
 
 function canScan(): boolean {
   return (navigator.mediaDevices as MediaDevices | undefined)?.getUserMedia !== undefined;

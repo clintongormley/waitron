@@ -431,7 +431,7 @@ registerIcons({
 const MOVE_STATION_MAX_LINES = 100;
 
 /** The reader the device pays on now: switched on, and on a provider the till can pay through. */
-function payReaderOf(equipment: DeviceEquipment): TillActiveReader | null {
+function activeReaderOf(equipment: DeviceEquipment): TillActiveReader | null {
   const resolved = equipment.roles.find((role) => role.role === "card_terminal")?.resolved;
   const provider = resolved?.available ? tillProviderForReader(resolved.provider) : undefined;
   return provider === undefined ? null : { id: resolved!.id, name: resolved!.name, provider };
@@ -8942,18 +8942,18 @@ export class TillApp extends LitElement {
 
   #payReaders(): TillActiveReader[] {
     if (this.#paysFromBoot()) return this.activeReaders;
-    const reader = payReaderOf(this.deviceEquipment!);
+    const reader = activeReaderOf(this.deviceEquipment!);
     return reader === null ? [] : [reader];
   }
 
   #payDefaultReaderId(): string | undefined {
-    return this.#paysFromBoot() ? this.defaultReaderId : payReaderOf(this.deviceEquipment!)?.id;
+    return this.#paysFromBoot() ? this.defaultReaderId : activeReaderOf(this.deviceEquipment!)?.id;
   }
 
   #payCardProvider(): TillInfo["cardProvider"] {
     return this.#paysFromBoot()
       ? this.cardProvider
-      : (payReaderOf(this.deviceEquipment!)?.provider ?? "none");
+      : (activeReaderOf(this.deviceEquipment!)?.provider ?? "none");
   }
 
   /** Reads the device again; a failed read keeps the profiles last known. */

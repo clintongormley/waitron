@@ -652,6 +652,84 @@ describe("readDeviceEquipment", () => {
     expect(roles[0]!.choices[0]).not.toHaveProperty("provider");
   });
 
+  it("reads a profile-default printer that was switched off as the default, unavailable printer", async () => {
+    const venue = await setupVenue(suite.db);
+    const profile = await seedProfile();
+    const bar = await seedPrinter(venue, "Bar");
+    await printerLists(profile, { receiptPrinterIds: [bar], receiptPrinterDefaultId: bar });
+    const a = await enrol(venue, "Caja A", profile);
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, bar));
+
+    const receipt = (await inTx((tx) => readDeviceEquipment(tx, a))).roles[0]!;
+
+    expect(receipt).toMatchObject({
+      role: "receipt",
+      selection: "default",
+      chosenId: null,
+      resolved: { id: bar, name: "Bar", available: false },
+      chosen: null,
+      default: { id: bar, available: false },
+      choices: [],
+    });
+  });
+
+  it("reads a portable default printer another device holds as resolving to nothing", async () => {
+    const venue = await setupVenue(suite.db);
+    const profile = await seedProfile();
+    const handheld = await seedPrinter(venue, "Handheld", { portable: true });
+    await printerLists(profile, {
+      receiptPrinterIds: [handheld],
+      receiptPrinterDefaultId: handheld,
+    });
+    const b = await enrol(venue, "Caja B", profile);
+    const a = await enrol(venue, "Caja A", profile);
+
+    const receipt = (await inTx((tx) => readDeviceEquipment(tx, a))).roles[0]!;
+
+    expect(await printerHoldersOf([handheld])).toEqual({ [handheld]: b });
+    expect(receipt).toMatchObject({
+      selection: "default",
+      chosenId: null,
+      resolved: null,
+      chosen: null,
+      default: { id: handheld, available: true, heldBy: { deviceId: b } },
+    });
+  });
+
+  it.each(["switched off", "unpaired"] as const)(
+    "reads a chosen reader that was %s as the chosen, unavailable reader",
+    async (shape) => {
+      const venue = await setupVenue(suite.db);
+      const profile = await seedProfile();
+      const reader = await seedReader("Lector");
+      await readerList(profile, [reader], null);
+      const a = await enrol(venue, "Caja A", profile);
+      await inTx((tx) =>
+        selectDeviceReader(tx, { deviceId: a, selection: { id: reader }, via: "list" }),
+      );
+      const at = new Date().toISOString();
+      await suite.db
+        .update(cardReaders)
+        .set(
+          shape === "switched off"
+            ? { active: false }
+            : { active: false, disabledAt: at, unpairedAt: at },
+        )
+        .where(eq(cardReaders.id, reader));
+
+      const terminal = (await inTx((tx) => readDeviceEquipment(tx, a))).roles[4]!;
+
+      expect(terminal).toMatchObject({
+        role: "card_terminal",
+        selection: "item",
+        chosenId: reader,
+        resolved: { id: reader, name: "Lector", available: false, provider: "sumup" },
+        chosen: { id: reader, available: false },
+        choices: [],
+      });
+    },
+  );
+
   it("takes nine reads for one device's equipment and six for the devices list of two", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
