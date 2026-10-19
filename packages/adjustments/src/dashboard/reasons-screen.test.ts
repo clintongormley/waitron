@@ -2171,7 +2171,7 @@ describe("the bill comp limit", () => {
     await press(el, "save-limit");
     expect(api.saveSettings).toHaveBeenCalledTimes(1);
     expect(limitBottom(el)).toBe("");
-    expect(limitAlert(el)).toBe("The bill discount limit could not be loaded.");
+    expect(limitAlert(el)).toBe("The bill's comp limit could not be loaded.");
     expect(alert(el)).toBe("");
     expect(limit(el).value).toBe("20.00");
   });
@@ -2180,7 +2180,7 @@ describe("the bill comp limit", () => {
     const el = await mount(
       withLimit(null, { getSettings: vi.fn().mockRejectedValue({ code: "x" }) }),
     );
-    expect(limitAlert(el)).toBe("The bill discount limit could not be loaded.");
+    expect(limitAlert(el)).toBe("The bill's comp limit could not be loaded.");
     expect(el.shadowRoot!.querySelector('[data-test="limit-alert"]')!.getAttribute("role")).toBe(
       "alert",
     );
@@ -2245,7 +2245,7 @@ describe("the bill comp limit", () => {
     const el = await mount(api);
     await type(el, "maxBillComp", "20");
     await press(el, "save-limit");
-    expect(limitAlert(el)).toBe("The bill discount limit could not be loaded.");
+    expect(limitAlert(el)).toBe("The bill's comp limit could not be loaded.");
     await type(el, "maxBillComp", "25");
     await press(el, "save-limit");
     expect(limitAlert(el)).toBe("");

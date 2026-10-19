@@ -100,7 +100,7 @@ const en = {
   "adjustments.limit.approvers": "Who can approve past it",
   "adjustments.limit.save": "Save limit",
   "adjustments.limit.saved": "Limit saved.",
-  "adjustments.limit.load_error": "The bill discount limit could not be loaded.",
+  "adjustments.limit.load_error": "The bill's comp limit could not be loaded.",
   "adjustments.limit.invalid": "Enter an amount above 0 with at most two decimals, such as 40.00.",
   "nav.adjustment_report": "Adjustment report",
   "adjustment_report.title": "Adjustment report",
