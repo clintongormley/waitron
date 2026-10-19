@@ -5724,7 +5724,7 @@ describe("mountCatalogueApi — sections", () => {
       ["POST", `/management-api/sections/${id}/sections`, { internalName: "X" }],
       ["GET", `/management-api/sections/${id}`],
       ["PATCH", `/management-api/sections/${id}`, { internalName: "X" }],
-      ["DELETE", `/management-api/sections/${id}`],
+      ["DELETE", `/management-api/sections/${owned}`],
       ["GET", `/management-api/sections/${id}/members`],
       [
         "POST",

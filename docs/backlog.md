@@ -1069,12 +1069,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   A337). Fix: note the menu id before the request, skip the focus move afterwards if it changed,
   and show a refusal beside the list as this screen's other writes do. Left open by A817.
 
-- **The section routes' signed-out and staff check cannot see a wrongly allowed single delete.** In
-  `apps/server/src/catalogue-api.test.ts`'s "requires a management session and refuses staff on
-  every section route", the `DELETE /management-api/sections/:id` row names the menu's root section,
-  which `deleteSection` refuses whoever asks, so "nothing was written" holds either way. Name an
-  owned section there, as the bulk delete's row does. Left open by A817.
-
 - **A682. Translations: every missing name reported, all languages side by side
   (owner, 2026-10-14; design decisions closed, 2026-10-17).** The translations dialog shows one
   field per enabled language on each row. Translate all and its "Use fix" action use the same editor.

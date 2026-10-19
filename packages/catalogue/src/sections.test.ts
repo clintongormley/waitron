@@ -734,7 +734,8 @@ describe("deleting several sections", () => {
     const b = await owned("B");
     const before = await rootMembers(f);
     const missing = crypto.randomUUID();
-    // Read inside the refused call's own transaction, before its rollback could hide a write.
+    // Caught inside the transaction, against the outside-the-call habit (conventions-data.md, "The
+    // test corollary"), so these reads see any write before the rollback hides it.
     await app(async (tx) => {
       await expect(deleteSections(tx, [a.id, missing, b.id])).rejects.toMatchObject({
         code: "menu_section.not_found",
@@ -752,6 +753,7 @@ describe("deleting several sections", () => {
     const before = await rootMembers(f);
     for (const role of ["menu_root", "home_layout"] as const) {
       const listId = await menuOwned(role, f.dinnerMenu);
+      // Caught inside the transaction for the same reason as the unknown-id case above.
       await app(async (tx) => {
         await expect(deleteSections(tx, [a.id, listId])).rejects.toMatchObject({
           code: "menu_section.wrong_role",

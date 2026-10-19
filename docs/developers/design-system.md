@@ -1403,7 +1403,7 @@ rows show and lists their own matches with inline paths, and the Available colum
 section or an included menu answers neither, so it stays only on the way to a match. There is no
 filter on Type: its three values are already told apart by the folder frame and the arrow.
 Dragging remains available during search and carries only visible ticks; hidden ticks remain
-selected. Move and Remove use all ticks. A changed query cancels a held drag. While search or
+selected. Move, Remove and Delete use all ticks. A changed query cancels a held drag. While search or
 the Available filter hides rows, ArrowUp and ArrowDown move past the next drawn sibling.
 The search clears when another menu opens or the menu empties.
 
@@ -1420,7 +1420,7 @@ mode turns off, another menu opens, or a bulk change succeeds. A re-read drops r
 no longer owned by this menu from the selection and open operation; a rename or availability change
 keeps them. The operation closes once nothing is left. Only the outermost selected rows are acted on: a row inside a selected section
 travels with it, wherever that section is shown, and a member ticked in two places is sent once, so
-the confirm and the dialog count what is sent. Remove from menu and Delete are judged on the rows sent, so a row inside a selected section does
+the confirms and the dialog count what is sent. Remove from menu and Delete are judged on the rows sent, so a row inside a selected section does
 not count. Delete is enabled when every sent row is a section the menu owns, and Remove from menu
 when none is, because a section the menu owns is deleted, never removed; each is quiet while its
 rule rules it out. A selection that mixes a section the menu owns with anything else disables both,
