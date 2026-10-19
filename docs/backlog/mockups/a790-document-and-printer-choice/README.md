@@ -1,3 +1,77 @@
+# A790: G approved; H proposed, 2026-10-19, after the 14:01 answer
+
+**A–G retain only their precise answered scope; H alone is proposed next. Full design,
+plan and build remain unapproved.** This brief and the
+[latest design addendum](../../../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+take precedence over conflicting text/boards. All existing bytes remain an exact
+historical suffix, including earlier questions and inspection statements.
+
+G authority: the owner's **“CHOOSE IT FOR ME”** answer in lane F's `questions.md`,
+2026-10-19 about 14:01. With no usable remembered printer and exactly one eligible
+printer, a **newly opened device-free dashboard form preselects it**. Show Harbour's
+`F/1042` Receipt: remembered Bar receipt is disabled, Patio receipt alone is eligible.
+Explain why Bar is unavailable, show Patio selected, and retain **Print a copy on Patio
+receipt** when server-designated. First use shows no invented missing-printer warning.
+Office · A4 would also count for Receipt if eligible, making this a several-printer case.
+G approves no arbitrary first selection among several, zero-option behavior, open-form
+selection replacement, rerouting or automatic printing. Suggestion/selection updates no
+memory; F requires an accepted print request.
+
+**H, proposal only: On the dashboard without a device profile, should remembered printers
+in this browser be shared by everyone who signs in (recommended), or kept separately for
+each person?** B/E did not settle login sharing. Recommend shared browser memory because
+the destination belongs to the workstation and venue, so a handover keeps the last
+accepted destination. Per-person memory instead preserves individual choices.
+
+Draw the **same browser**, Harbour's `F/1042`, **Receipt**: Luis earlier printed on
+**Bar receipt**; Ana later explicitly prints on **Patio receipt**, and the server accepts
+before she logs out. Luis then signs in. **Both printers remain active and eligible to
+Luis.** Show both unapproved alternatives:
+
+| H alternative                      | Luis's newly opened Receipt form | Named final action when server-designated as a copy |
+| ---------------------------------- | -------------------------------- | --------------------------------------------------- |
+| Shared browser memory, recommended | Patio receipt selected.          | Print a copy on Patio receipt                       |
+| Separate memory per person         | Bar receipt selected.            | Print a copy on Bar receipt                         |
+
+Both require **Print a copy on <selected printer>** when server-designated; no print on
+login. Invoice's **Office · A4** and Hillside stay separate under E. G does not settle H:
+both printers are eligible here. Shared memory grants no permission and reveals no other
+person's inaccessible printer. Recheck current-person authorization/offers, sale location
+and any device restrictions. Invalid/no memory follows G only with exactly one eligible
+printer; several/zero fallback stays proposed.
+
+Retain A's same recorded invoice/customer details, C's inline foldable Invoice row and
+named confirmation, D's direct Receipt for `S/318` (€14.50, Spanish, one guest), recorded
+facts and offered language. B lists **every active sale-venue printer for both documents,
+A4 and portable included**, bypassing dashboard profile lists; exclude disabled/deleted/
+other-venue equipment. Keep Orders visibility and permissions. E separates browser memory
+by sale venue/document; F requires server acceptance, not selection or physical paper.
+Cancel before submission/refusal leaves memory alone; later paper failure does not undo
+acceptance. Device lists remain by role. The phone's one Equipment receipt setting and
+[A796 Revision 4](../../../superpowers/specs/2026-10-19-a796-handheld-payments-design.md)
+save/concurrency design, including overridable defaults, remain unchanged. No separate
+phone receipt memory/storage. Do not re-ask A–G/A796. Q1–Q6 otherwise remain, subject to
+explicit A–G overrides; Q4 adds no exclusive invoice-role holder check.
+
+H decides no storage, login retention, expiry/reset, concurrency/late accepted-intent
+ordering, account-transition ordering or late-request writes across accounts. All remain
+open, as do device Invoice memory, portable receipt holding, multiple/zero fallback,
+wider document steps, remaining persistence, A790 integration and full design/plan/build.
+Fix sale/document/printer/language/context per request; recheck authorization/location
+in the reservation transaction. Reconcile unknown/late outcomes against the same request
+before fresh work; logout/close resolves no unanswered submission. Separate accepted write
+from failed refresh. Retain server-derived original/copy, shared F1 delivery guard and
+closed public F1. No implicit print/rerouting or payment, fiscal or drawer effects.
+
+[Eight static G/H boards](revision-g-and-login-memory/README.md)
+cover EN/ES, light/dark, at 390/1280 px. The final PNGs were rendered in headless
+Chromium and visually inspected; native SVG text boxes were checked within each drawing.
+Earlier conflicting boards remain historical; the source map stays historical and
+runtime-unverified. No legal, runtime, proof, accessibility, test or physical-output
+claim follows from this docs-only revision.
+
+---
+
 # A790: F approved; G proposed, 2026-10-19, after the 13:48 answer
 
 **A–F are approved only in their precise answered scope; propose G alone next.

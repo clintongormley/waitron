@@ -3402,7 +3402,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A790. Choose a document and its permitted printer.** The owner's A661 Q1–Q6 answers
   and latest 2026-10-19 decisions are recorded in the [design addendum](superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md),
   with [mock-ups](backlog/mockups/a790-document-and-printer-choice/README.md).
-  **A–F approved only in their precise answered scope:** Receipt and Invoice retain
+  **A–G approved only in their precise answered scope:** Receipt and Invoice retain
   the same recorded full invoice; C keeps Invoice's printer row inline and foldable with
   its named final button, matching Receipt/payment. D's 2026-10-19 ~13:20 **“STRAIGHT TO
   RECEIPT”** skips the one-document choice for simplified-sale Print/reprint: `S/318`,
@@ -3427,33 +3427,48 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   if physical output later fails; it does not establish that paper printed.
   An unknown response is not presumed accepted/refused: reconcile the same request before
   claiming an update or offering a fresh request; closing the form resolves no unanswered
-  submission. Ask **G only** next, as a proposal: on opening a dashboard print form with
-  no usable remembered printer and only one eligible printer, preselect it (recommended)
-  or always ask for selection? Harbour's `F/1042` Receipt remembers Bar, now disabled;
-  Patio receipt is the only eligible destination. Recommend Patio selected with a clear
-  previous-printer-unavailable explanation, then require **Print a copy on Patio receipt**
-  when server-designated. The alternative keeps the field empty until Patio is selected.
+  submission. G's 2026-10-19 ~14:01 **“CHOOSE IT FOR ME”** approves preselection on a
+  **newly opened device-free dashboard form** with no usable remembered printer and
+  exactly one eligible printer. Harbour's `F/1042` Receipt remembers Bar, now disabled;
+  Patio receipt alone is eligible, so select Patio and explain why Bar is unavailable.
+  Retain **Print a copy on Patio receipt** when server-designated.
   First use follows the same no-memory rule, without a fictitious previous-printer warning.
   An active eligible Office · A4 also counts for Receipt, so it would make this a
   multiple-printer case; Invoice's Office memory and Hillside remain separate under E.
-  Supporting G proposals: several eligible/no usable memory requires a choice, never an
+  Still proposed: several eligible/no usable memory requires a choice, never an
   arbitrary first printer; zero eligible explains, disables print and allows an offers-read
-  retry, distinct from loading/read failure. No sole/zero/fallback approval is assumed.
-  G applies only on a newly opened form, with no automatic print, submitted-request rerouting
-  or mid-form selection change. Existing selection invalidation still requires explicit
+  retry, distinct from loading/read failure. G approves neither multiple/zero fallback nor
+  automatic print, submitted-request rerouting or open-form selection replacement.
+  Existing selection invalidation still requires explicit
   reselection and confirmation, even with one option. Suggestion/selection updates no memory;
   F requires acceptance. Selection, folding and reads never print; final confirmation stays.
-  Storage/expiry/reset/login sharing, concurrent/late-intent memory ordering, device invoice
-  memory, wider document-step/fallback and remaining persistence stay open. A796 Revision 4
+  Ask **H only** next, as an unapproved proposal: on the dashboard without a device profile,
+  should remembered printers in this browser be shared by everyone who signs in
+  (recommended), or kept separately for each person? B/E settle browser/sale-venue/document
+  scope, not login sharing. Recommend shared browser memory because the destination belongs
+  to the workstation/venue, so a handover keeps the last accepted destination; per-person
+  memory preserves individual choices. Same browser, Harbour's `F/1042` Receipt: Luis
+  earlier printed on Bar receipt; Ana later explicitly prints on Patio receipt, accepted
+  before logout. Ana logs out; Luis signs in. Both printers remain active and eligible to
+  Luis. Shared proposal opens Receipt with Patio selected; per-person alternative opens
+  Bar. Both require **Print a copy on <selected printer>** when server-designated; no print
+  on login. Invoice's Office and Hillside stay separate under E. Both printers are eligible,
+  so G does not settle H. Shared memory grants no permission or disclosure of another
+  person's inaccessible printer: recheck current-person authorization/offers, sale location
+  and device restrictions. Invalid/no memory follows G only with exactly one eligible;
+  multiple/zero fallback remains proposed. H prescribes no storage, login retention,
+  expiry/reset, concurrency/late accepted-intent ordering, account-transition ordering or
+  late-request writes across accounts. Those, device Invoice memory, portable receipt
+  holding, wider document steps and remaining persistence stay open. A796 Revision 4
   owns phone Equipment save/concurrency design, with overridable defaults; do not re-ask
-  A–F/A796. A790 integration, portable receipt-holder enforcement and complete design/plan/build
-  agreement remain owed. Q1–Q6 otherwise remain settled, subject to explicit A–F overrides.
+  A–G/A796. A790 integration and complete design/plan/build agreement remain owed.
+  Q1–Q6 otherwise remain settled, subject to explicit A–G overrides.
   Preserve authorization and sale-location rechecks in the reservation transaction;
   freeze sale/document/printer/language/context under request identity; retain uncertain/late
   outcome reconciliation before a fresh request, separate successful-write/failed-refresh,
   server-derived original/copy, shared F1 delivery guard and closed public-F1 gate. No silent
   destination replacement, implicit print, payment, fiscal or drawer side effects.
-  [Eight static F/G boards](backlog/mockups/a790-document-and-printer-choice/revision-f-and-fallback/README.md)
+  [Eight static G/H boards](backlog/mockups/a790-document-and-printer-choice/revision-g-and-login-memory/README.md)
   cover EN/ES, light/dark, at 390/1280 px. The final PNGs were rendered in headless Chromium
   and visually inspected; native SVG text boxes were checked within each drawing.
   All previous design/README bytes and conflicting boards remain history. Docs only,
