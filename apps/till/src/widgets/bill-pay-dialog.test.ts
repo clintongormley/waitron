@@ -1793,6 +1793,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
       handheld: true,
       way: undefined,
       cardReader: "stripe_terminal",
+      takesReaderCard: true,
       takesCash: true,
       takesManualCard: true,
       ...over,
@@ -1876,7 +1877,7 @@ describe("till-bill-pay-dialog: on a handheld", () => {
     "with reader card %s, cash %s and another card machine %s offers %j, chosen %s",
     async (card, cash, manual, offeredMethods, chosen) => {
       const el = await handheld({
-        cardReader: card ? "stripe_terminal" : "none",
+        takesReaderCard: card,
         takesCash: cash,
         takesManualCard: manual,
       });
@@ -1896,6 +1897,49 @@ describe("till-bill-pay-dialog: on a handheld", () => {
       }
     },
   );
+
+  it("offers and chooses a reader card where the profile takes one but no reader is held yet", async () => {
+    const el = await handheld({ cardReader: "none", takesCash: false });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    expect(radios(el, "method").map(({ value, checked }) => [value, checked])).toEqual([
+      ["card", true],
+      ["manual", false],
+    ]);
+    expect(field(el, "externalRef")).toBeNull();
+    await click(el, "[data-pay-continue]");
+
+    expect(asked).toEqual([
+      {
+        choice: { kind: "contribution", amount: "120.00" },
+        pay: { method: "card" },
+        card: { entry: "reader" },
+      },
+    ]);
+  });
+
+  it("keeps Continue disabled on Whole bill while nothing is left to pay", async () => {
+    const el = await handheld({ balance: balanceOf({ outstanding: "0.00" }) });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+    await click(el, "[data-pay-continue]");
+    expect(asked).toEqual([]);
+
+    await pick(el, "way", "contribution");
+    await type(el, "amount", "5");
+    expect(button(el, "[data-pay-continue]").disabled).toBe(false);
+  });
+
+  it("marks no field for a refused amount on Whole bill, which shows none, and says it at the bottom", async () => {
+    const el = await handheld({
+      refusal: { code: "management.request_invalid", field: "amount" },
+    });
+    expect(actions(el).error).toBe(codeMessage("management.request_invalid"));
+
+    await pick(el, "way", "contribution");
+    el.refusal = { code: "management.request_invalid", field: "amount" };
+    await el.updateComplete;
+    expect(field(el, "amount")!.error).not.toBe("");
+  });
 
   it("takes another card machine with its operation number, as a hand-keyed card", async () => {
     const el = await handheld();

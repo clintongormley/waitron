@@ -155,7 +155,7 @@ function refusalField(refusal: PayRefusal, method: Method, way: PayWay): Field |
   if (refusal.code !== "management.request_invalid") return null;
   switch (refusal.field) {
     case "amount":
-      return "amount";
+      return way === "contribution" ? "amount" : null;
     case "shareOf":
       return "people";
     case "tendered":
@@ -492,6 +492,8 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) unanswered: UnansweredPayment | null = null;
   /** A handheld offers Whole bill, and a card on a separate terminal as a method of its own. */
   @property({ type: Boolean }) handheld = false;
+  /** On a handheld, whether the profile takes a card on a reader, whether or not one is held. */
+  @property({ type: Boolean }) takesReaderCard = false;
   /** On a handheld, whether the profile takes a card keyed on a separate terminal. */
   @property({ type: Boolean }) takesManualCard = false;
   /** On a handheld, the table the title names. */
@@ -808,16 +810,21 @@ export class TillBillPayDialog extends LitElement {
   /** The methods a handheld offers, in the order shown. */
   #methods(): Method[] {
     return [
-      ...(this.cardReader === "none" ? [] : (["card"] as const)),
+      ...(this.takesReaderCard ? (["card"] as const) : []),
       ...(this.takesCash ? (["cash"] as const) : []),
       ...(this.takesManualCard ? (["manual"] as const) : []),
     ];
   }
 
-  /** Whether Continue can ask: a handheld offers a method, and Whole bill has a balance to pay. */
+  /** Whether Continue can ask: a handheld offers a method, and Whole bill has something to pay. */
   #canAsk(): boolean {
     if (!this.handheld) return true;
-    return this.#methods().length > 0 && (this.chosenWay !== "whole" || this.balance !== null);
+    return (
+      this.#methods().length > 0 &&
+      (this.chosenWay !== "whole" ||
+        (this.balance !== null &&
+          compareDecimal(decimal(this.balance.outstanding), decimal("0")) > 0))
+    );
   }
 
   #readerEntry(): CardEntry {

@@ -22,6 +22,7 @@ class BillPayLeaveApp extends LitElement {
         .handheld=${this.handheld}
         .cardReader=${this.handheld ? "stripe_terminal" : "none"}
         .takesManualCard=${this.handheld}
+        .takesReaderCard=${this.handheld}
         @bill-pay-close=${() => this.closes++}
         @bill-pay-edit=${() => this.edits++}
         @bill-pay-confirm=${() => this.confirms++}

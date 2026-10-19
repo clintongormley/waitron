@@ -388,6 +388,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       way: undefined,
       tableName: "Mesa 4",
       cardReader: "stripe_terminal",
+      takesReaderCard: true,
       takesCash: true,
       takesManualCard: true,
     });
