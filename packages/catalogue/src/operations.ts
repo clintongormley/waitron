@@ -53,6 +53,7 @@ import {
   EACH_UNIT,
   getSeededUnit,
   getSellableUnit,
+  unitMeasure,
   type SellableUnit,
 } from "./units.js";
 import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
@@ -203,6 +204,7 @@ const PRODUCT_COLUMNS = {
   unitAbbreviation: units.abbreviation,
   unitPrecision: units.precision,
   hardwareUnit: units.hardwareUnit,
+  unitMeasure: units.measure,
 };
 
 interface RawProduct {
@@ -241,13 +243,21 @@ interface RawProduct {
   } | null;
   dietDerivation: { origins: string[]; pending: boolean } | null;
   image: string | null;
+  unitMeasure: boolean | null;
 }
 
 // `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), which is
 // what makes the casts below safe.
 function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
-  const { unitName, unitAbbreviation, unitPrecision, hardwareUnit, ...product } = row;
-  const unit = sellableUnit(row.unitId, unitName, unitPrecision, hardwareUnit, unitAbbreviation);
+  const { unitName, unitAbbreviation, unitPrecision, hardwareUnit, unitMeasure, ...product } = row;
+  const unit = sellableUnit(
+    row.unitId,
+    unitName,
+    unitPrecision,
+    hardwareUnit,
+    unitAbbreviation,
+    unitMeasure,
+  );
   return {
     ...product,
     unitPrice: centsToDecimal(row.unitPrice),
@@ -270,6 +280,7 @@ function sellableUnit(
   precision: number | null,
   hardwareUnit: string | null | undefined,
   abbreviation: Record<string, string> | null,
+  measure: boolean | null,
 ): SellableUnit {
   if (id !== null && name !== null && precision !== null) {
     return {
@@ -278,6 +289,7 @@ function sellableUnit(
       precision,
       abbreviation: abbreviation ?? {},
       hardwareUnit: hardwareUnit as SellableUnit["hardwareUnit"],
+      ...unitMeasure(measure ?? false),
     };
   }
   // A product with no stored unit reads as Each (never stored).
@@ -405,6 +417,7 @@ const offerLineColumns = {
   dietOverride: effective.dietOverride,
   dietaryDeclarations: effective.dietaryDeclarations,
   courseId: effective.courseId,
+  unitMeasure: units.measure,
 };
 
 type ProductRow = typeof products.$inferSelect;
@@ -426,6 +439,7 @@ interface OfferLineRow {
   dietOverride: ProductRow["dietOverride"];
   dietaryDeclarations: NonNullable<ProductRow["dietaryDeclarations"]>;
   courseId: ProductRow["courseId"];
+  unitMeasure: UnitRow["measure"] | null;
 }
 
 function offerLineValues(row: OfferLineRow) {
@@ -436,6 +450,7 @@ function offerLineValues(row: OfferLineRow) {
       row.unitPrecision,
       row.hardwareUnit,
       row.unitAbbreviation,
+      row.unitMeasure,
     ),
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
@@ -1442,6 +1457,7 @@ export async function listAvailableProducts(
       courseId: effective.courseId,
       catalogueId: catalogues.id,
       catalogueName: catalogues.name,
+      unitMeasure: units.measure,
     })
     .from(products)
     .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
@@ -1479,6 +1495,7 @@ export async function listAvailableProducts(
       row.unitPrecision,
       row.hardwareUnit,
       row.unitAbbreviation,
+      row.unitMeasure,
     ),
     pricingUnit: row.pricingUnit as PricingUnit,
     unitPrice: centsToDecimal(row.unitPrice),

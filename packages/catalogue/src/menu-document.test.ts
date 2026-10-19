@@ -1388,6 +1388,63 @@ describe("diffMenuDocuments", () => {
     );
   });
 
+  it("freezes a measure unit's switch with the dish sold in it", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "Millilitre" }, abbreviation: { en: "ml" }, precision: 0, measure: true },
+        "en",
+      );
+      await updateProduct(tx, f.lemonade, { unitId: unit.id });
+    });
+
+    const document = await build(f.dinner);
+    const offer = document.offers[await app((tx) => offerOf(tx, f.dinner, f.lemonade))]!;
+    expect(offer.unit.measure).toBe(true);
+  });
+
+  it("freezes no measure key for a unit with the switch off", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "Portion" }, abbreviation: { en: "pt" }, precision: 0 },
+        "en",
+      );
+      await updateProduct(tx, f.lemonade, { unitId: unit.id });
+    });
+
+    const document = await build(f.dinner);
+    const offer = document.offers[await app((tx) => offerOf(tx, f.dinner, f.lemonade))]!;
+    expect(offer.unit).not.toHaveProperty("measure");
+  });
+
+  it("names the unit as changed when its measure switch is turned on", async () => {
+    const f = await menusFixture(fx.db);
+    const unitId = await app(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "Millilitre" }, abbreviation: { en: "ml" }, precision: 0 },
+        "en",
+      );
+      await updateProduct(tx, f.lemonade, { unitId: unit.id });
+      return unit.id;
+    });
+    const live = await build(f.dinner);
+    await app((tx) => updateUnit(tx, unitId, { measure: true }, "en"));
+
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        fields: ["unit"],
+        source: "shared_product",
+      },
+    ]);
+  });
+
   it("names the fields of a product that changed, the menu's variant settings apart", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.dinner);

@@ -215,6 +215,8 @@ export interface ZoneMenuOffer {
     readonly abbreviation: Readonly<Record<string, string>>;
     readonly precision: number;
     readonly hardwareUnit: "kg" | "g" | "mg" | null;
+    /** Present only on a unit that measures an amount (ml, g…); a dish sold in one takes no extras. */
+    readonly measure?: true;
   };
   /** The VAT class the live version froze. */
   readonly vatClass: string;
