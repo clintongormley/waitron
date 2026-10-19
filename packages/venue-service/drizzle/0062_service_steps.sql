@@ -13,4 +13,5 @@ CREATE TABLE `service_steps` (
 	CONSTRAINT "service_steps_minutes_ck" CHECK("service_steps"."minutes" between 0 and 120 and ("service_steps"."start" <> 'since_last_order' or "service_steps"."minutes" >= 1))
 );
 --> statement-breakpoint
-CREATE INDEX `service_steps_department_position_idx` ON `service_steps` (`department_id`,`position`);
+CREATE INDEX `service_steps_department_position_idx` ON `service_steps` (`department_id`,`position`);--> statement-breakpoint
+CREATE INDEX `service_steps_course_idx` ON `service_steps` (`course_id`);

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f9e61780-d462-4202-91b6-0128c54a017c",
+  "id": "00408e78-20ca-47fe-865c-84314b8521ba",
   "prevId": "896f3816-1562-439d-9811-c45963372a52",
   "tables": {
     "department_sale_policies": {
@@ -4160,6 +4160,13 @@
           "columns": [
             "department_id",
             "position"
+          ],
+          "isUnique": false
+        },
+        "service_steps_course_idx": {
+          "name": "service_steps_course_idx",
+          "columns": [
+            "course_id"
           ],
           "isUnique": false
         }

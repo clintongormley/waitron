@@ -37,6 +37,7 @@ export const serviceSteps = table(
       name: "service_steps_course_fk",
     }),
     index("service_steps_department_position_idx").on(t.departmentId, t.position),
+    index("service_steps_course_idx").on(t.courseId),
     check("service_steps_start_ck", enumCheck(t.start)),
     check(
       "service_steps_course_ck",
