@@ -1424,6 +1424,7 @@ it("a refusal naming the switch, sent while Details shows, brings back Service a
   const control = needsClearing(el);
   expect(shownPanel(el).contains(control)).toBe(true);
   expect(control.getAttribute("aria-invalid")).toBe("true");
+  expect(control.description).toContain("This value was not accepted. Change it and save again.");
   expect(
     shownPanel(el).querySelector("[data-field-error=needsClearing]")!.textContent!.trim(),
   ).toBe("This value was not accepted. Change it and save again.");

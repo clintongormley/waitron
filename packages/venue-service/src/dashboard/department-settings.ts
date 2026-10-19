@@ -697,7 +697,7 @@ export class DepartmentSettings extends LitElement {
               <wt-switch
                 name="needsClearing"
                 label=${t("venue.needs_clearing")}
-                .description=${t("venue.needs_clearing_hint")}
+                .description=${errors.needsClearing ? `${errors.needsClearing} ${t("venue.needs_clearing_hint")}` : t("venue.needs_clearing_hint")}
                 .checked=${draft.needsClearing}
                 ?disabled=${disabled}
                 aria-invalid=${errors.needsClearing ? "true" : nothing}
