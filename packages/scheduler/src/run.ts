@@ -53,7 +53,7 @@ export interface TickResult {
    * `now` when work is available immediately — the per-tick cap deferred some. `now + skipRetryMs`
    * when a pair was skipped and nothing earlier is known, folded as a MINIMUM against the earliest
    * FUTURE time work appears as the ledger stands at the END of this tick: the derivation's own
-   * answer, together with the backoff and re-sweep times this tick's own runs just wrote.
+   * answer, together with the backoff and successor times this tick's own runs just wrote.
    *
    * Null only when there is no duty at all.
    */
@@ -92,7 +92,7 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
         if (completed === null) continue;
         result.ran.push(completed.record);
         // The derivation above was computed from a snapshot taken BEFORE any duty ran, so it
-        // cannot know about the backoff a failure just wrote or the re-sweep a success just
+        // cannot know about the backoff a failure just wrote or the successor a success or a park just
         // enqueued.
         if (completed.nextDueAt !== null) {
           earliestFuture = Math.min(earliestFuture, completed.nextDueAt.getTime());

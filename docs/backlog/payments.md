@@ -59,7 +59,8 @@ their full text.
 
 ## A846's points for the owner at land: held card payments
 
-Each stays open until the owner answers it.
+Each stays open until the owner answers it. "The picture" is
+`mockups/a846-held-card-payments/01-record-what-was-done.png` (also `-dark`).
 
 1. **"Kept: the money was owed" leaves money with no invoice.** The payment stays captured on an
    abandoned order with no sale, and Waitron files nothing for it. Whether the money needs an
