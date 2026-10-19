@@ -4023,6 +4023,17 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
     toggles are hand-built icon buttons for the same reason.
   [Detail](backlog/catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
 
+- **A895. A dialog footer's long form message: the field it hides, its scroll cue and its name.**
+  Left open by A849 (#1882), which moved a `wt-dialog` footer row's message into the footer and
+  lets a message too long for the dialog scroll inside itself. Seen in its LOOK at 390×500 (scratch
+  browser test): a 14-sentence message shrinks the body until the form's only field is cut off; at
+  21 sentences the message scrolls, but the headless browser draws no scrollbar, so the only cue is
+  a half-cut line, and its focus ring sits tight against the text. The message is a Tab stop while
+  it overflows, but what a screen reader announces when it gets there was not checked. Messages
+  are meant to be one sentence, so this needs a long message to show. **Next action:** decide
+  whether the message should get a height cap (so the body keeps room for a field), padding inside
+  its focus ring and an accessible name, then check them in a real browser.
+
 - **A827. Check that row menus in plain `<table>`s stay on screen at 390 px (owner, 2026-10-17).**
   At 390 px the variant table's menus are held on screen through the product editor
   (`product-editor.test.ts`, "keeps every variant row's menu on screen at phone width"); the option
